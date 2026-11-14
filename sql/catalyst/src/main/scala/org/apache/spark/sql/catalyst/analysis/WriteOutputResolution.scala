@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
-import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, V2WriteCommand}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
@@ -46,23 +46,31 @@ private[sql] object WriteOutputResolution {
     val defaultValueFillMode =
       if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
       else FILL
-    // Generation expressions live on the table's columns, so attach them to the expected
-    // output for TableOutputResolver, which auto-fills the generated columns the query is
-    // missing.
-    val expected = v2Write.table match {
-      case r: DataSourceV2Relation => GeneratedColumn.attachGenerationExpressions(r)
-      case _ => v2Write.table.output
-    }
     val schemaAlignmentConfig = v2Write.table match {
       case ExtractV2Table(table: SupportsConfigurableSchemaAlignment) =>
         table.schemaAlignmentConfig()
       case _ => SchemaAlignmentConfig.DEFAULT
     }
-    def resolveOutput(readGenerationExpr: String => Expression) =
+    // Read directly from the V2 columns so modeled expressions do not pass through SQL text
+    // or schema metadata. Reuse the readers when SQL text needs the session fallback pass.
+    val generationExpressions: Map[String, GeneratedColumn.ExpressionReader] = v2Write.table match {
+      case r: DataSourceV2Relation if GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table) =>
+        r.table.columns().flatMap { col =>
+          GeneratedColumn.columnGenerationExpression(col).map { expr =>
+            col.name -> new GeneratedColumn.ExpressionReader(r, col.name, expr)
+          }
+        }.toMap
+      case _ => Map.empty
+    }
+    def resolveOutput(readSql: String => Expression) = {
+      val readGenerationExpr: Attribute => Option[() => Expression] = attr => {
+        generationExpressions.get(attr.name).map(reader => () => reader.toCatalyst(readSql))
+      }
       TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
-        v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
+        v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
         defaultValueFillMode, schemaAlignmentConfig.ansiStoreAssignmentCastCheck(),
         readGenerationExpr)
+    }
     val (projection, autoFilledGenCols) = resolveOutput(StoredExpressionText.parse)
     if (projection != v2Write.query) {
       val cleanedTable = v2Write.table match {
@@ -78,6 +86,7 @@ private[sql] object WriteOutputResolution {
         .withNewQuery(analyzeAutoFilledGeneratedColumns(
           projection,
           autoFilledGenCols,
+          generationExpressions,
           resolveOutput(StoredExpressionText.parseWithSessionAnsi)._1,
           analyze))
         .withNewTable(cleanedTable)
@@ -91,13 +100,14 @@ private[sql] object WriteOutputResolution {
    * is read under, so that the implicit casts and the functions of a generation expression do
    * not follow the session that writes.
    *
-   * A column these settings cannot resolve comes from `readInSession`, where its text is read
-   * with the ANSI value of the session, and the analysis of the write resolves it under the
+   * Only SQL text may fall back to `readInSession` when these settings cannot resolve it. The text
+   * is read with the ANSI value of the session, and the analysis of the write resolves it under the
    * session. So does a text a catalog stores that analyzes to another plan.
    */
   private def analyzeAutoFilledGeneratedColumns(
       projection: LogicalPlan,
       autoFilled: Set[String],
+      generationExpressions: Map[String, GeneratedColumn.ExpressionReader],
       readInSession: => LogicalPlan,
       analyze: LogicalPlan => LogicalPlan): LogicalPlan = projection match {
     case p @ Project(projectList, child) if autoFilled.nonEmpty =>
@@ -106,7 +116,7 @@ private[sql] object WriteOutputResolution {
       }.toMap
       p.copy(projectList = projectList.map {
         case c if autoFilled.contains(c.name) =>
-          StoredExpressionText.analyze(c, sessionCols(c.name), child.output, analyze)
+          generationExpressions(c.name).analyze(c, sessionCols(c.name), child.output, analyze)
         case c => c
       })
     case other => other

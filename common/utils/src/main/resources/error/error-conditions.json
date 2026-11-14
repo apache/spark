@@ -4654,6 +4654,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_GENERATED_COLUMN_EXPRESSION" : {
+    "message" : [
+      "Cannot analyze the generation expression <expression> for column <columnName> in table <tableName>: <reason>"
+    ],
+    "sqlState" : "42621"
+  },
   "INVALID_HANDLE" : {
     "message" : [
       "The handle <handle> is invalid."
