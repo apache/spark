@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
+import org.apache.spark.sql.catalyst.analysis.{EventTimeCopies, StreamingJoinHelper}
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BoundReference, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
@@ -138,6 +138,10 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  * @param outputWatermarkSides Inputs whose event time reaches the next stateful operator; the
  *                             output watermark is held back only for their state. None when
  *                             unknown, which holds it back for both inputs.
+ * @param eventTimeCopies In legacy mode, the equality keys that copy an input's late-filtered
+ *                        column or are a time window over it, as the analyzed plan shows; see
+ *                        [[StreamingJoinHelper.findEventTimeCopies]]. The V4 key ordinals use
+ *                        them as [[stateWatermarkPredicates]] did.
  */
 case class StreamingSymmetricHashJoinExec(
     leftKeys: Seq[Expression],
@@ -152,7 +156,8 @@ case class StreamingSymmetricHashJoinExec(
     left: SparkPlan,
     right: SparkPlan,
     outputMode: Option[OutputMode],
-    outputWatermarkSides: Option[Set[JoinSide]] = None)
+    outputWatermarkSides: Option[Set[JoinSide]] = None,
+    eventTimeCopies: EventTimeCopies = EventTimeCopies.empty)
     extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
 
   def this(
@@ -239,10 +244,10 @@ case class StreamingSymmetricHashJoinExec(
   // doExecute computes them once on the driver instead of in every task.
   private lazy val stateKeyOrdinalsForLookup: (Option[Int], Option[Int]) =
     if (stateFormatVersion >= 4) {
-      (getStateKeyOrdinalForLookup(
-        left.output, leftKeys, right.output, rightKeys, stateWatermarkPredicates.left),
-        getStateKeyOrdinalForLookup(
-          right.output, rightKeys, left.output, leftKeys, stateWatermarkPredicates.right))
+      (getStateKeyOrdinalForLookup(left.output, leftKeys, right.output, rightKeys,
+        stateWatermarkPredicates.left, eventTimeCopies),
+        getStateKeyOrdinalForLookup(right.output, rightKeys, left.output, leftKeys,
+          stateWatermarkPredicates.right, eventTimeCopies))
     } else {
       (None, None)
     }
