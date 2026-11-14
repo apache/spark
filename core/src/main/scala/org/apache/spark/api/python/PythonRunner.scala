@@ -594,9 +594,22 @@ private[spark] object BasePythonRunner extends Logging {
   }
 
   /**
+   * Returns `message`, followed by the post-mortem diagnostics of the terminated worker if
+   * `handle` has any.
+   */
+  private[spark] def withTerminationDiagnostics(
+      message: String,
+      handle: Option[PythonWorkerHandle]): String = {
+    handle.flatMap(_.terminationDiagnostics())
+      .map(error => s"$message: $error")
+      .getOrElse(message)
+  }
+
+  /**
    * Handles the idle timeout of a Python worker on behalf of one stream that reads from it:
-   * logs every timeout, kills the worker on the first one if `killOnIdleTimeout` is set, and
-   * fails the read once the killed worker has closed the connection.
+   * logs every timeout, kills the worker if `killOnIdleTimeout` is set, trying again on later
+   * timeouts until a termination request has been issued, and fails the read once the killed
+   * worker has closed the connection.
    *
    * The caller decides how a timeout is detected. Streams that wait on the worker's selector
    * use `select`; a stream that relies on the socket read timeout calls `onIdleTimeout` when
@@ -606,8 +619,9 @@ private[spark] object BasePythonRunner extends Logging {
    * This class is not thread-safe. Use an instance only from the thread that reads from the
    * worker.
    *
-   * @param context the task that reads from the worker, or None on the driver. It is only used
-   *                to identify the task in the log messages.
+   * @param context the task that reads from the worker, or None on the driver. It only affects
+   *                the log messages: with a task, they end with the task and separate the worker
+   *                status with " - "; without one, the status follows ": ".
    * @param loggerName the name of the logger to use, so that the messages stay under the logger
    *                   of the runner that owns the stream.
    * @param workerName how the log messages refer to the worker.
@@ -634,7 +648,7 @@ private[spark] object BasePythonRunner extends Logging {
      *
      * @param hasInputs whether there is still input to send to the worker, for the log message.
      */
-    def select(hasInputs: => Boolean): Unit = {
+    def select(hasInputs: Boolean): Unit = {
       val start = System.currentTimeMillis()
       val selected = worker.selector.select(idleTimeoutMillis)
       val end = System.currentTimeMillis()
@@ -651,7 +665,7 @@ private[spark] object BasePythonRunner extends Logging {
      *
      * @param hasInputs whether there is still input to send to the worker, for the log message.
      */
-    def onIdleTimeout(hasInputs: => Boolean): Unit = {
+    def onIdleTimeout(hasInputs: Boolean): Unit = {
       if (pythonWorkerKilled) {
         logWarning(
           log"Waiting for " + workerNameMessage +
@@ -693,12 +707,9 @@ private[spark] object BasePythonRunner extends Logging {
      */
     def throwIfKilled(n: Int): Unit = {
       if (n == -1 && pythonWorkerKilled) {
-        val base = "Python worker process terminated due to idle timeout " +
-          s"(timeout: $idleTimeoutSeconds seconds)"
-        val msg = handle.flatMap(_.terminationDiagnostics())
-          .map(error => s"$base: $error")
-          .getOrElse(base)
-        throw new PythonWorkerException(msg)
+        throw new PythonWorkerException(withTerminationDiagnostics(
+          "Python worker process terminated due to idle timeout " +
+            s"(timeout: $idleTimeoutSeconds seconds)", handle))
       }
     }
   }
@@ -1388,11 +1399,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             "the better Python traceback.", e)
 
       case e: IOException =>
-        val base = "Python worker exited unexpectedly (crashed)"
-        val msg = handle.flatMap(_.terminationDiagnostics())
-          .map(error => s"$base: $error")
-          .getOrElse(base)
-        throw new SparkException(msg, e)
+        throw new SparkException(
+          withTerminationDiagnostics("Python worker exited unexpectedly (crashed)", handle), e)
     }
   }
 

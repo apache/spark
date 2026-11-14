@@ -886,10 +886,11 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
   /** A worker handle that records how often it was asked to terminate the worker. */
   private class RecordingWorkerHandle(
+      alive: Boolean = true,
       destroyIssued: Boolean = true,
       diagnostics: Option[String] = None) extends PythonWorkerHandle {
     val destroyCalls = new AtomicInteger(0)
-    override def isAlive(): Boolean = true
+    override def isAlive(): Boolean = alive
     override def destroy(): Boolean = {
       destroyCalls.incrementAndGet()
       destroyIssued
@@ -904,19 +905,25 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
    */
   private def withIdleWorker(blocking: Boolean)(f: (PythonWorker, SocketChannel) => Unit): Unit = {
     val server = ServerSocketChannel.open()
-    server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
-    val client = SocketChannel.open(server.getLocalAddress)
-    val accepted = server.accept()
-    client.configureBlocking(blocking)
-    val worker = PythonWorker(client).refresh()
     try {
-      if (!blocking) {
-        worker.selectionKey.interestOps(SelectionKey.OP_READ)
+      server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+      val worker = PythonWorker(SocketChannel.open(server.getLocalAddress))
+      try {
+        val accepted = server.accept()
+        try {
+          worker.channel.configureBlocking(blocking)
+          worker.refresh()
+          if (!blocking) {
+            worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          }
+          f(worker, accepted)
+        } finally {
+          accepted.close()
+        }
+      } finally {
+        worker.stop()
       }
-      f(worker, accepted)
     } finally {
-      worker.stop()
-      accepted.close()
       server.close()
     }
   }
@@ -961,7 +968,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
       // Until the worker closes the connection, later timeouts are only logged.
       val secondTimeout = idleTimeoutWarnings {
-        handler.select(hasInputs = true)
+        handler.onIdleTimeout(hasInputs = true)
       }
       assert(secondTimeout === Seq(
         "Waiting for Python worker process to terminate after idle timeout: " +
@@ -1012,8 +1019,8 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
         "No data received from the worker process: " + nonBlockingWorkerStatus +
         "hasInputs = true"
       // Every timeout is logged the same way, since the worker is never killed.
-      assert(idleTimeoutWarnings(handler.select(hasInputs = true)) === Seq(expected))
-      assert(idleTimeoutWarnings(handler.select(hasInputs = true)) === Seq(expected))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
       assert(handle.destroyCalls.get() === 0)
       handler.throwIfKilled(-1)
     }
@@ -1023,12 +1030,12 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       val handler = new BasePythonRunner.IdleTimeoutHandler(
         worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
         None, idleTimeoutLoggerName, workerName = "Python planner worker")
-      assert(idleTimeoutWarnings(handler.select(hasInputs = false)) === Seq(
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = false)) === Seq(
         "Idle timeout reached for Python planner worker (timeout: 1 seconds). " +
           "No data received from the worker process: " + nonBlockingWorkerStatus +
           "hasInputs = false",
         "Terminating Python planner worker process due to idle timeout (timeout: 1 seconds)"))
-      assert(idleTimeoutWarnings(handler.select(hasInputs = false)) === Seq(
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = false)) === Seq(
         "Waiting for Python planner worker process to terminate after idle timeout: " +
           nonBlockingWorkerStatus + "hasInputs = false"))
       assert(handle.destroyCalls.get() === 1)
@@ -1075,6 +1082,20 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
       assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
       assert(handle.destroyCalls.get() === 2)
+      handler.throwIfKilled(-1)
+    }
+
+    // A worker that has already exited is not asked to terminate and does not count as killed.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle(alive = false)
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Idle timeout reached for Python worker (timeout: 3 seconds). " +
+          "No data received from the worker process - handle.map(_.isAlive) = Some(false), " +
+          s"$blockingWorkerStatus - $task"))
+      assert(handle.destroyCalls.get() === 0)
       handler.throwIfKilled(-1)
     }
 

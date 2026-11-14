@@ -252,7 +252,11 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             self.spark.range(10).select(bad_udf(col("id"))).collect()
 
     def test_udf_kill_on_idle_timeout(self):
-        """A worker that produces no output within the idle timeout is killed."""
+        """A worker that produces no output within the idle timeout is killed.
+
+        All input has been sent to the worker by the time it is killed, so the failure comes
+        from the reader. The timeout leaves room for a worker that still has to initialize.
+        """
         uds_enabled = self.spark.conf.get(
             "spark.python.unix.domain.socket.enabled", os.environ.get("PYSPARK_UDS_MODE", "false")
         )
@@ -261,7 +265,7 @@ class PipelinedUDFTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "1s",
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "3s",
                 "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
             }
         ):
@@ -273,7 +277,7 @@ class PipelinedUDFTests(ReusedSQLTestCase):
 
             with self.assertRaisesRegex(
                 Exception,
-                "Python worker process terminated due to idle timeout \\(timeout: 1 seconds\\)",
+                "Python worker process terminated due to idle timeout \\(timeout: 3 seconds\\)",
             ):
                 self.spark.range(1).select(slow_udf(col("id"))).collect()
 

@@ -165,11 +165,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
             "the better Python traceback.", e)
 
       case e: IOException =>
-        val base = "Python worker exited unexpectedly (crashed)"
-        val msg = handle.flatMap(_.terminationDiagnostics())
-          .map(error => s"$base: $error")
-          .getOrElse(base)
-        throw new SparkException(msg, e)
+        throw new SparkException(
+          withTerminationDiagnostics("Python worker exited unexpectedly (crashed)", handle), e)
     } finally {
       try {
         bufferStream.close()
