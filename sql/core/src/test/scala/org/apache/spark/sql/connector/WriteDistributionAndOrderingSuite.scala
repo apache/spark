@@ -43,9 +43,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.{DateType, IntegerType, LongType, ObjectType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
-@SlowSQLTest
+@DataSourceV2Test
 class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase {
   import testImplicits._
 

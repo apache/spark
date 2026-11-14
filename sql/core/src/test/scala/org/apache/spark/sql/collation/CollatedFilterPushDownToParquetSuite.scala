@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.{EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
 abstract class CollatedFilterPushDownToParquetSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -249,7 +249,7 @@ class CollatedFilterPushDownToParquetV1Suite extends CollatedFilterPushDownToPar
   }
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class CollatedFilterPushDownToParquetV2Suite extends CollatedFilterPushDownToParquetSuite {
   override protected def sparkConf: SparkConf =
     super

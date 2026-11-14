@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Scan merging for the built-in file sources on their DSv2 read path (SPARK-57205).
@@ -46,6 +47,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * `spark.sql.sources.useV1SourceList`, so every test goes through `DataFrameReader` and asserts
  * which read path the plan took before asserting anything about merging.
  */
+@DataSourceV2Test
 class FileSourceV2PlanMergingSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper with V2ScanMergingTestHelper {
   import testImplicits._

@@ -22,10 +22,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils
 import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `SHOW CREATE TABLE` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with CommandSuiteBase {
 
   override def sparkConf: SparkConf = super.sparkConf

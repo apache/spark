@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.Changelog.{
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -399,6 +400,7 @@ trait ResolveChangelogTableNetChangesTestsBase extends SharedSparkSession {
  * `existedBefore=true, existsAfter=true` partitions emit `update_preimage` +
  * `update_postimage`.
  */
+@DataSourceV2Test
 class ResolveChangelogTableNetChangesWithComputeUpdatesSuite
     extends ResolveChangelogTableNetChangesTestsBase {
   override protected def computeUpdates: Boolean = true
@@ -409,6 +411,7 @@ class ResolveChangelogTableNetChangesWithComputeUpdatesSuite
  * `existedBefore=true, existsAfter=true` partitions emit `delete` + `insert`
  * (per SQL Ref Spec footnote).
  */
+@DataSourceV2Test
 class ResolveChangelogTableNetChangesWithoutComputeUpdatesSuite
     extends ResolveChangelogTableNetChangesTestsBase {
   override protected def computeUpdates: Boolean = false
@@ -422,6 +425,7 @@ class ResolveChangelogTableNetChangesWithoutComputeUpdatesSuite
  * `delete` / `insert` events that update detection relabels back to update pre/post
  * before netChanges sees them, so the same expected outputs hold.
  */
+@DataSourceV2Test
 class ResolveChangelogTableNetChangesWithUpdateDetectionSuite
     extends ResolveChangelogTableNetChangesTestsBase {
   override protected def computeUpdates: Boolean = true

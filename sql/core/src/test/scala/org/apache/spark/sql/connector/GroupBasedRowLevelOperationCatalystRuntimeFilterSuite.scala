@@ -22,7 +22,9 @@ import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.DeleteSummary
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupBasedRowLevelOperationCatalystRuntimeFilterSuite
   extends RowLevelOperationCatalystRuntimeFilterSuiteBase {
 

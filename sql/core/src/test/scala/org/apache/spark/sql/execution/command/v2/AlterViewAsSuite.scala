@@ -22,7 +22,9 @@ import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, TableC
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class AlterViewAsSuite extends command.AlterViewAsSuiteBase with ViewCommandSuiteBase {
 
   test("V2: ALTER NAMESPACE DEFAULT COLLATION does not retroactively change a view's collation") {

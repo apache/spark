@@ -20,8 +20,10 @@ import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
+@DataSourceV2Test
 class DerbyTableCatalogSuite extends SharedSparkSession {
 
   val tempDir = Utils.createTempDir()

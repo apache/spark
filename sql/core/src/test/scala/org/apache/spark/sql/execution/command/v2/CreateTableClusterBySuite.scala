@@ -21,11 +21,13 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryPartitionTabl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `CREATE TABLE ... CLUSTER BY` command to check V2 table
  * catalogs.
  */
+@DataSourceV2Test
 class CreateTableClusterBySuite extends command.CreateTableClusterBySuiteBase
   with CommandSuiteBase {
   override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {

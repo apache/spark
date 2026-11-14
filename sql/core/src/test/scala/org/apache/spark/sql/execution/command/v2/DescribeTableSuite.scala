@@ -22,11 +22,13 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 /**
  * The class contains tests for the `DESCRIBE TABLE` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class DescribeTableSuite extends command.DescribeTableSuiteBase
   with CommandSuiteBase {
   import testImplicits._

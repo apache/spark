@@ -60,6 +60,7 @@ import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 class LoadCountingInMemoryCatalog extends InMemoryCatalog {
   val singleArgLoads = new AtomicInteger(0)
@@ -214,6 +215,7 @@ class DispatchTrackingRelationCatalog extends InMemoryRelationCatalog {
   }
 }
 
+@DataSourceV2Test
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
 

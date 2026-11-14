@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
@@ -4381,6 +4382,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   }
 }
 
+@DataSourceV2Test
 class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
   with SharedSparkSession {
   override def format: String = "foo"

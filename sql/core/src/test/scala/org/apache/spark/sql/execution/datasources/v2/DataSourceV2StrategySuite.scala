@@ -46,9 +46,11 @@ import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class DataSourceV2StrategySuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf

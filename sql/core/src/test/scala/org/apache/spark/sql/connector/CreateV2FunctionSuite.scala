@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, SimpleFunction, UnboundFunction}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SparkTestUtils, Utils}
 
@@ -38,6 +39,7 @@ import org.apache.spark.util.{SparkTestUtils, Utils}
  * Tests `CREATE [TEMPORARY] FUNCTION name AS 'class'` where the class is a V2 function, i.e. it
  * implements [[UnboundFunction]].
  */
+@DataSourceV2Test
 class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
 
   private val strLenClass = classOf[V2StrLen].getName

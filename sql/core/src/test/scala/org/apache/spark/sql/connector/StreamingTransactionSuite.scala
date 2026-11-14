@@ -24,7 +24,9 @@ import org.apache.spark.sql.connector.catalog.{Aborted, CatalogV2Util, Committed
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
 
   import testImplicits._

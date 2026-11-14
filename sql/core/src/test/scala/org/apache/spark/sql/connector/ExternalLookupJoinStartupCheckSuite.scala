@@ -49,8 +49,10 @@ import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DateType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /** Which errors of an external lookup join stop a streaming query when it starts. */
+@DataSourceV2Test
 class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 

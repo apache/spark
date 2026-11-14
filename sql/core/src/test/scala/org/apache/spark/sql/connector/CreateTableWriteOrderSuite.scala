@@ -46,12 +46,14 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests the create-time write distribution and ordering clauses: CREATE/REPLACE TABLE ...
  * DISTRIBUTED BY PARTITION ... [LOCALLY] ORDERED BY ... | UNORDERED. Covers what the parser
  * produces, what reaches the catalog, and how a catalog without the capability is rejected.
  */
+@DataSourceV2Test
 class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
   // The catalog manager caches catalogs for the session; reset it so tests don't share tables.

@@ -55,6 +55,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -62,6 +63,7 @@ import org.apache.spark.util.Utils
  * Tests the Data Source V2 adapter of [[ColumnarDataSource]] with a data source implemented on the
  * JVM. `NativeDataSourceSuite` tests the native data sources, which implement it.
  */
+@DataSourceV2Test
 class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper with PredicateHelper {
   import testImplicits._

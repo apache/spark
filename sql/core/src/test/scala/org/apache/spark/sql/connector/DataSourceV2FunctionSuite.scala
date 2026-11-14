@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 object IntAverage extends AggregateFunction[(Int, Int), Int] {
@@ -153,6 +154,7 @@ case class BoundConstantString(argTypes: Seq[DataType], result: String)
   override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString(result)
 }
 
+@DataSourceV2Test
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 

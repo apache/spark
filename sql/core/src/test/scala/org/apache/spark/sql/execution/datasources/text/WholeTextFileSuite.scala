@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
 abstract class WholeTextFileSuite extends SharedSparkSession {
 
@@ -114,7 +114,7 @@ class WholeTextFileV1Suite extends WholeTextFileSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "text")
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class WholeTextFileV2Suite extends WholeTextFileSuite {
   override protected def sparkConf: SparkConf =
     super

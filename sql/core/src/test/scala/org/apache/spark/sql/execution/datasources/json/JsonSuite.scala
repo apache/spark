@@ -58,7 +58,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.TestUDT.{MyDenseVector, MyDenseVectorUDT}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -5035,7 +5035,7 @@ class JsonV1Suite extends JsonSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "json")
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class JsonV2Suite extends JsonSuite {
   override protected def sparkConf: SparkConf =
     super

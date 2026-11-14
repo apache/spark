@@ -20,7 +20,9 @@ import java.io.FileNotFoundException
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class FileDataSourceV2Suite extends SparkFunSuite {
 
   private val testFilePath = "/test/path/file.parquet"

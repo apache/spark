@@ -20,7 +20,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
 // Datasource tests for nested schemas
 trait NestedDataSourceSuiteBase extends SharedSparkSession {
@@ -84,7 +84,7 @@ class NestedDataSourceV1Suite extends NestedDataSourceSuiteBase {
       .set(SQLConf.USE_V1_SOURCE_LIST, nestedDataSources.mkString(","))
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class NestedDataSourceV2Suite extends NestedDataSourceSuiteBase {
   override protected def sparkConf: SparkConf =
     super

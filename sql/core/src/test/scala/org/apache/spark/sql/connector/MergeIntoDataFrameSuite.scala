@@ -38,7 +38,9 @@ import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   override protected def sparkConf: SparkConf = super.sparkConf

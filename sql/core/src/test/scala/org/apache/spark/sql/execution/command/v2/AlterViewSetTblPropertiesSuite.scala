@@ -18,11 +18,13 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `ALTER VIEW ... SET TBLPROPERTIES` command on V2 view
  * catalogs (`AlterV2ViewSetPropertiesExec`).
  */
+@DataSourceV2Test
 class AlterViewSetTblPropertiesSuite
   extends command.AlterViewSetTblPropertiesSuiteBase with ViewCommandSuiteBase {
 

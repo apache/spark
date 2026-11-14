@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, IntegerType, LongType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 // A V2 function that a test binds to the name of a built-in function to shadow it.
@@ -49,6 +50,7 @@ private object ConstantString extends ScalarFunction[UTF8String] {
 /**
  * Tests for generated column auto-fill and constraint enforcement during writes.
  */
+@DataSourceV2Test
 class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
 
   private val rowLevelCat = "rowlevelcat"

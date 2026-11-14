@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, SQLUserDefinedType, UserDefinedType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -690,6 +691,7 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
 
 }
 
+@DataSourceV2Test
 class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
 
   override def format: String = "foo"

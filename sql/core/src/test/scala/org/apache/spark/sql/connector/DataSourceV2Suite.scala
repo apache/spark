@@ -69,8 +69,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.ArrayImplicits._
 
+@DataSourceV2Test
 class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 

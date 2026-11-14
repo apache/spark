@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class ShowViewsSuite extends command.ShowViewsSuiteBase with ViewCommandSuiteBase {
 
   test("V2: SHOW VIEWS on a non-ViewCatalog catalog fails") {

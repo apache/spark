@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.ChangelogTable
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
   BinaryType, BooleanType, DoubleType, LongType, StringType, StructField, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -45,6 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * paths (carry-over removal, update detection) and then verifies that Spark's analyzer rule
  * correctly transforms the plan and produces the expected output.
  */
+@DataSourceV2Test
 class ResolveChangelogTablePostProcessingSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_test_catalog"

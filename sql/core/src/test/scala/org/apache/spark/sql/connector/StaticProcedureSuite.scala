@@ -20,7 +20,9 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{SparkSessionBuilder, StaticProcedureSuiteBase}
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class StaticProcedureSuite extends SharedSparkSession with StaticProcedureSuiteBase {
 
   override protected def configure(builder: SparkSessionBuilder): builder.type = {

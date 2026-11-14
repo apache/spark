@@ -24,7 +24,9 @@ import org.apache.spark.sql.connector.expressions.filter.{AlwaysTrue, Predicate 
 import org.apache.spark.sql.execution.datasources.v2.PushablePredicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, TimestampType}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class PushablePredicateSuite extends SparkFunSuite with SQLConfHelper {
 
   test("simple boolean expression should always return v2 Predicate") {
