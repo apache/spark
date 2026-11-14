@@ -34,4 +34,10 @@ object GraphElementTypeUtils {
       DatasetType.MATERIALIZED_VIEW
     }
   }
+
+  /** Whether `flow` is an AUTO CDC flow, in either its unresolved or resolved form. */
+  def isAutoCdcFlow(flow: Flow): Boolean = flow match {
+    case _: AutoCdcFlow | _: AutoCdcMergeFlow => true
+    case _ => false
+  }
 }
