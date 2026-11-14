@@ -85,7 +85,7 @@ private[connect] object ErrorUtils extends Logging {
     while (buffer.size < MAX_ERROR_CHAIN_LENGTH && currentError != null) {
       val builder = FetchErrorDetailsResponse.Error
         .newBuilder()
-        .setMessage(currentError.getMessage)
+        .setMessage(Option(currentError.getMessage).getOrElse(""))
         .addAllErrorTypeHierarchy(
           ErrorUtils.allClasses(currentError.getClass).map(_.getName).asJava)
 
@@ -353,6 +353,10 @@ private[connect] object ErrorUtils extends Logging {
           buildStatusFromThrowable(se.getCause, sessionHolderOpt))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
+        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+
+      // Linkage errors are excluded by NonFatal but still need structured JVM error details.
+      case e: LinkageError =>
         StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
 
       case e: Throwable =>

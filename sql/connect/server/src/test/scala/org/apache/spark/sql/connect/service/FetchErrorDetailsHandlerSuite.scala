@@ -22,6 +22,9 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.Try
 
+import com.google.rpc.ErrorInfo
+import io.grpc.{Status, StatusRuntimeException}
+import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{BreakingChangeInfo, MitigationConfig, SparkThrowable}
@@ -91,6 +94,54 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       .build()
     handler.handle(request)
     ThreadUtils.awaitResult(promise.future, 5.seconds)
+  }
+
+  for (testError <- Seq(
+      new NoClassDefFoundError("missing/Provider")
+        .initCause(new ClassNotFoundException("missing.Provider")),
+      new ExceptionInInitializerError(new ClassNotFoundException("missing.Provider")),
+      new NoSuchMethodError("missing method"))) {
+    test(s"handleError preserves JVM details for ${testError.getClass.getSimpleName}") {
+      val sessionHolder = SparkConnectService
+        .getOrCreateIsolatedSession(userId, sessionId, None)
+      sessionHolder.session.conf.set(Connect.CONNECT_ENRICH_ERROR_ENABLED.key, true)
+      sessionHolder.session.conf.set(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED.key, false)
+      try {
+        val observer = new StreamObserver[Unit] {
+          override def onNext(value: Unit): Unit = fail("Unexpected response")
+          override def onError(t: Throwable): Unit = throw t
+          override def onCompleted(): Unit = fail("Unexpected completion")
+        }
+        val converted = intercept[StatusRuntimeException] {
+          ErrorUtils.handleError("execute", observer, userId, sessionId)(testError)
+        }
+        assert(converted.getStatus.getCode == Status.Code.INTERNAL)
+        val info = StatusProto.fromThrowable(converted).getDetails(0).unpack(classOf[ErrorInfo])
+        assert(info.getReason == testError.getClass.getName)
+        assert(info.getMetadataMap.containsKey("errorId"))
+        val response = fetchErrorDetails(userId, sessionId, info.getMetadataOrThrow("errorId"))
+        val expectedErrors = Seq(testError) ++ Option(testError.getCause)
+        assert(response.getRootErrorIdx == 0)
+        assert(response.getErrorsCount == expectedErrors.size)
+        expectedErrors.zipWithIndex.foreach { case (expected, index) =>
+          val actual = response.getErrors(index)
+          assert(actual.getErrorTypeHierarchy(0) == expected.getClass.getName)
+          assert(actual.getMessage == Option(expected.getMessage).getOrElse(""))
+          assert(actual.getStackTraceCount == expected.getStackTrace.length)
+          expected.getStackTrace.zipWithIndex.foreach { case (frame, frameIndex) =>
+            val actualFrame = actual.getStackTrace(frameIndex)
+            assert(actualFrame.getDeclaringClass == frame.getClassName)
+            assert(actualFrame.getMethodName == frame.getMethodName)
+            assert(actualFrame.getLineNumber == frame.getLineNumber)
+          }
+          assert(actual.hasCauseIdx == (index + 1 < expectedErrors.size))
+          if (actual.hasCauseIdx) assert(actual.getCauseIdx == index + 1)
+        }
+      } finally {
+        sessionHolder.session.conf.unset(Connect.CONNECT_ENRICH_ERROR_ENABLED.key)
+        sessionHolder.session.conf.unset(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED.key)
+      }
+    }
   }
 
   for (serverStacktraceEnabled <- Seq(false, true)) {
