@@ -310,6 +310,38 @@ class StreamingInnerJoinV4Suite
   }
 
   testWithVirtualColumnFamilyJoins(
+    "SPARK-60850: retained event time does not populate an unevictable secondary index") {
+    withTempDir { checkpointDir =>
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("key", "seconds")
+        .select($"key", timestamp_seconds($"seconds").as("leftTime"))
+        .withWatermark("leftTime", "5 seconds")
+      val right = rightInput.toDF().toDF("key", "seconds")
+        .select($"key", timestamp_seconds($"seconds").as("rightTime"))
+        .withWatermark("rightTime", "5 seconds")
+      val joined = left.join(right, "key").select("key")
+
+      testStream(joined)(
+        StartStream(
+          additionalConfs = Map(
+            SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "1"),
+          checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, (1, 20)),
+        AddData(rightInput, (2, 20)),
+        CheckAnswer(),
+        Execute { _ =>
+          val checkpointLoc = checkpointDir.getCanonicalPath
+          assert(readStateStore(checkpointLoc, "left-keyWithTsToValues") > 0)
+          assert(readStateStore(checkpointLoc, "right-keyWithTsToValues") > 0)
+          assert(readStateStore(checkpointLoc, "left-tsWithKey") === 0)
+          assert(readStateStore(checkpointLoc, "right-tsWithKey") === 0)
+        },
+        StopStream)
+    }
+  }
+
+  testWithVirtualColumnFamilyJoins(
     "SPARK-56406: secondary index populated on both sides when watermark is on join key") {
     withTempDir { checkpointDir =>
       val input1 = MemoryStream[(Int, Int)]
@@ -373,10 +405,8 @@ class StreamingInnerJoinV4Suite
         .select($"rightKey", timestamp_seconds($"time") as "rightTime",
           ($"rightKey" * 3) as "rightValue")
       // Only left side has watermark; watermark is on a value column, not the join key.
-      // joinKeyOrdinalForWatermark is None -> only left has hasEventTime = true.
-      // Neither side can actually evict: the left state watermark is derived from the right
-      // side's watermark via the join condition, which is absent here. The left secondary
-      // index is populated but never used for eviction.
+      // Neither side can actually evict because the right input has no watermark. The secondary
+      // indexes therefore remain empty even though the left input has an event-time attribute.
 
       val joined = df1.join(df2,
         expr("leftKey = rightKey AND " +
@@ -397,15 +427,45 @@ class StreamingInnerJoinV4Suite
           assert(readStateStore(checkpointLoc, "right-keyWithTsToValues") > 0,
             "right primary store should have rows")
 
-          // Left has watermark on a value column -> hasEventTime = true, secondary index populated.
-          assert(readStateStore(checkpointLoc, "left-tsWithKey") > 0,
-            "left secondary index should be populated (watermark on left value column)")
-          // Right has no watermark -> hasEventTime = false, secondary index empty.
+          assert(readStateStore(checkpointLoc, "left-tsWithKey") === 0,
+            "left secondary index should be empty without an eviction predicate")
           assert(readStateStore(checkpointLoc, "right-tsWithKey") === 0,
-            "right secondary index should be empty (no watermark on right side)")
+            "right secondary index should be empty without an eviction predicate")
         },
         StopStream
       )
+    }
+  }
+
+  testWithVirtualColumnFamilyJoins(
+    "SPARK-60850: retention version 0 preserves the legacy secondary index layout") {
+    withSQLConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key -> "0") {
+      withTempDir { checkpointDir =>
+        val leftInput = MemoryStream[(Int, Int)]
+        val rightInput = MemoryStream[(Int, Int)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+          .withWatermark("leftTime", "10 seconds")
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+        val joined = left.join(right,
+          expr("leftKey = rightKey AND " +
+            "leftTime BETWEEN rightTime - interval 5 seconds AND rightTime + interval 5 seconds"))
+          .select($"leftKey")
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(leftInput, (1, 10), (2, 20)),
+          CheckAnswer(),
+          AddData(rightInput, (1, 12)),
+          CheckNewAnswer(1),
+          Execute { _ =>
+            val checkpointLoc = checkpointDir.getCanonicalPath
+            assert(readStateStore(checkpointLoc, "left-tsWithKey") > 0)
+            assert(readStateStore(checkpointLoc, "right-tsWithKey") === 0)
+          },
+          StopStream)
+      }
     }
   }
 

@@ -135,6 +135,35 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     assert(split.full.contains(predicate))
   }
 
+  test("SPARK-60850: state eviction derivation follows the retention version") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
+    val leftKey = AttributeReference("leftKey", IntegerType)()
+    val leftEventTime = AttributeReference("leftEventTime", TimestampType,
+      metadata = watermark)()
+    val leftJoinTime = AttributeReference("leftJoinTime", TimestampType)()
+    val rightKey = AttributeReference("rightKey", IntegerType)()
+    val rightEventTime = AttributeReference("rightEventTime", TimestampType,
+      metadata = watermark)()
+    val condition = leftKey === rightKey && leftJoinTime > rightEventTime
+    val leftAttributes = Seq(leftKey, leftEventTime, leftJoinTime)
+    val rightAttributes = Seq(rightKey, rightEventTime)
+
+    Seq(false, true).foreach { useRetainedEventTimeColumn =>
+      val watermarks = StreamingSymmetricHashJoinHelper.getStateWatermark(
+        leftAttributes, rightAttributes, Seq(leftKey), Seq(rightKey), Some(condition),
+        Some(95000L), allowMultipleEventTimeColumns = false,
+        useRetainedEventTimeColumn = useRetainedEventTimeColumn)
+      assert(watermarks == (if (useRetainedEventTimeColumn) (None, None) else (Some(95000L), None)))
+
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        leftAttributes, rightAttributes, Seq(leftKey), Seq(rightKey), Some(condition),
+        Some(95000L), Some(95000L), useFirstEventTimeColumn = false,
+        useRetainedEventTimeColumn = useRetainedEventTimeColumn)
+      assert(predicates.left.isDefined != useRetainedEventTimeColumn)
+      assert(predicates.right.isEmpty)
+    }
+  }
+
   for (watermarkColumn <- WatermarkColumn.values) {
     test(s"SPARK-60378: previous key scan bound with watermark on $watermarkColumn") {
       val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000L).build()
@@ -145,7 +174,7 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
       val rightKey = AttributeReference("rightKey", TimestampType, metadata = watermark)()
       val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
         Seq(key, other), Seq(rightKey), Seq(key), Seq(rightKey), None,
-        Some(20000L), Some(10000L), false)
+        Some(20000L), Some(10000L), false, useRetainedEventTimeColumn = false)
       val expectedPrevious =
         if (watermarkColumn == WatermarkColumn.JoinKey) Some(10000L) else None
       assert(predicates.left.exists {

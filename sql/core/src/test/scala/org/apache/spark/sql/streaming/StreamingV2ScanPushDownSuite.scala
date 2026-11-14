@@ -45,6 +45,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Strategy, MicroBatchScanExec, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamBaseClass, StreamExecution, StreamingQueryWrapper, StreamingV2ScanPushDown}
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
@@ -1870,6 +1871,25 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
         ProcessAllAvailable(),
         assertPushedFilters("EqualTo(p.id,5)"),
         CheckAnswer(Row(1L)))
+    }
+  }
+
+  test("SPARK-60850: startup optimizer restores the checkpoint's join retention mode") {
+    withTable(tbl) {
+      createTable(tbl, "id bigint, data string")
+      val plan = spark.readStream.table(tbl).queryExecution.analyzed
+      val entry = SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION
+      val metadata = OffsetSeqMetadata(0, 0, spark.conf)
+      Seq(None, Some(0), Some(1)).foreach { recorded =>
+        val expected = recorded.getOrElse(0)
+        val checkpoint = metadata.copy(conf = recorded
+          .map(value => Map(entry.key -> value.toString)).getOrElse(Map.empty))
+        withSQLConf(entry.key -> (1 - expected).toString) {
+          val startup = StreamingV2ScanPushDown.startupConf(spark, plan, Some(checkpoint)).get
+          assert(startup.getConf(entry) == expected)
+          assert(spark.sessionState.conf.getConf(entry) == 1 - expected)
+        }
+      }
     }
   }
 

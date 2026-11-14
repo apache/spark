@@ -73,7 +73,10 @@ class StreamingQueryCheckpointMetadata(
             .missingMetadataFile(resolvedCheckpointRoot)
         }
       }
-      val newMetadata = new StreamMetadata(UUID.randomUUID.toString)
+      val newMetadata = StreamMetadata(
+        UUID.randomUUID.toString,
+        Some(sparkSession.sessionState.conf.getConf(
+          SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION)))
       StreamMetadata.write(newMetadata, metadataPath, hadoopConf)
       newMetadata
     }

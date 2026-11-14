@@ -242,6 +242,7 @@ class SymmetricHashJoinStateManagerV4(
     snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator,
     joinKeyOrdinalForWatermark: Option[Int] = None,
+    useEventTimeIndex: Option[Boolean] = None,
     readOnly: Boolean = false)
   extends SymmetricHashJoinStateManager with SupportsEvictByTimestamp with Logging {
 
@@ -260,20 +261,15 @@ class SymmetricHashJoinStateManagerV4(
     // pass the information. The information is in SQLConf.
     allowMultipleEventTimeColumns = false)
 
-  // When there is no event time column in the value and no watermark ordinal in the key,
-  // the secondary index (TsWithKey) will never be used for eviction. Skip writing to it
-  // to avoid unnecessary RocksDB merge overhead.
-  // TODO(SPARK-56536): This could be further optimized by also considering whether the state
-  //   watermark predicate is defined. Even when an event time column exists, the secondary index
-  //   is unused if eviction is not possible (e.g., only one side defines a watermark in a time
-  //   interval join). That would require propagating the predicate information here.
-  private val hasEventTime: Boolean =
-    eventTimeColIdxOpt.isDefined || joinKeyOrdinalForWatermark.isDefined
+  // The execution operator knows whether this side has an eviction predicate. Other callers that
+  // do not have that information keep the legacy inference from the available event-time fields.
+  private val hasEventTime: Boolean = useEventTimeIndex.getOrElse(
+    eventTimeColIdxOpt.isDefined || joinKeyOrdinalForWatermark.isDefined)
 
   private val random = new scala.util.Random(System.currentTimeMillis())
   private val bucketCountForNoEventTime = 1024
   private val extractEventTimeFn: UnsafeRow => Long = { row =>
-    eventTimeColIdxOpt match {
+    eventTimeColIdxOpt.filter(_ => hasEventTime) match {
       case Some(idx) =>
         val attr = inputValueAttributes(idx)
 
@@ -294,7 +290,7 @@ class SymmetricHashJoinStateManagerV4(
   }
 
   private val extractEventTimeFnFromKey: UnsafeRow => Option[Long] = { row =>
-    joinKeyOrdinalForWatermark.map { idx =>
+    joinKeyOrdinalForWatermark.filter(_ => hasEventTime).map { idx =>
       val attr = keyAttributes(idx)
       if (attr.dataType.isInstanceOf[StructType]) {
         // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
@@ -2183,13 +2179,14 @@ object SymmetricHashJoinStateManager {
       snapshotOptions: Option[SnapshotOptions] = None,
       joinStoreGenerator: JoinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark: Option[Int] = None,
+      useEventTimeIndex: Option[Boolean] = None,
       readOnly: Boolean = false): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 4) {
       new SymmetricHashJoinStateManagerV4(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator, joinKeyOrdinalForWatermark, readOnly
+        joinStoreGenerator, joinKeyOrdinalForWatermark, useEventTimeIndex, readOnly
       )
     } else if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(

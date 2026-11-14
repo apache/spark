@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase, OffsetSeqMetadataV2, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase, OffsetSeqMetadataV2, SinkMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -205,13 +205,31 @@ class MicroBatchExecution(
    * `offsets/` directory during stream startup. Safe to cache: between construction
    * and `initializeExecution`, nothing else writes the offset log on the query thread.
    */
-  private lazy val initialLatestOffsetSeq: Option[(Long, OffsetSeqBase)] =
-    offsetLog.getLatest()
+  private lazy val initialLatestOffsetSeq: Option[(Long, OffsetSeqBase)] = {
+    val retentionVersion = streamMetadata.joinEventTimeColumnRetentionVersion.getOrElse(0)
+    val key = SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION.key
+    offsetLog.getLatest().map { case (batchId, offsets) =>
+      val updatedOffsets = offsets match {
+        case seq: OffsetSeq =>
+          seq.copy(metadataOpt = seq.metadataOpt.map { metadata =>
+            metadata.copy(conf = metadata.conf.updated(key, retentionVersion.toString))
+          })
+        case map: OffsetMap =>
+          map.copy(metadata = map.metadata.copy(
+            conf = map.metadata.conf.updated(key, retentionVersion.toString)))
+      }
+      batchId -> updatedOffsets
+    }
+  }
 
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
       "logicalPlan must be initialized in QueryExecutionThread " +
         s"but the current thread was ${Thread.currentThread}")
+    val streamConf = sparkSessionForStream.sessionState.conf
+    streamConf.setConf(
+      SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION,
+      streamMetadata.joinEventTimeColumnRetentionVersion.getOrElse(0))
     val nextSourceId = new AtomicLong(0L)
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
@@ -242,7 +260,6 @@ class MicroBatchExecution(
     // (legacy) key order, so recompute the keys from the recipe carried on the resolved node using
     // the order pinned in the offset log (mirroring how `enforceNamed` is read above). For a new
     // query the offset log has no entry yet, so the session value is used and pinned at batch 0.
-    val streamConf = sparkSessionForStream.sessionState.conf
     applyJoinStateConfigGuardrails(streamConf)
     val orderDeterministically = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
@@ -856,7 +873,7 @@ class MicroBatchExecution(
       execCtx: MicroBatchExecutionContext,
       sparkSessionToRunBatches: SparkSession): Unit = {
     execCtx.sinkCommitProgress = None
-    offsetLog.getLatest() match {
+    initialLatestOffsetSeq match {
       case Some((latestBatchId, nextOffsets)) =>
         /* First assume that we are re-executing the latest known batch
          * in the offset log */

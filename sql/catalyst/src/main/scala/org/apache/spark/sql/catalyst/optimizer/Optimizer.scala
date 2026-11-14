@@ -1514,8 +1514,14 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
  */
 object ColumnPruning extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(
-    plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // Multiple stateful joins can emit buffered rows behind their output watermark. Retaining
+    // an event-time column at a downstream join would incorrectly classify such rows as late.
+    val preserveJoinEventTime =
+      conf.getConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION) == 1 &&
+        plan.collect { case join: Join if join.isStateful => join }.size == 1
+
+    removeProjectBeforeFilter(plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
@@ -1575,7 +1581,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
-      j.copy(right = prunedChild(right, j.references))
+      j.copy(right = prunedChild(right, requiredInputReferences(j, preserveJoinEventTime)))
 
     // An external lookup join keeps only the lookup columns that its parent reads. Its lookup side
     // is pruned to them in the next pass, once the join no longer references the others.
@@ -1644,14 +1650,35 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>
-      val required = child.references ++ p.references
+      val required = requiredInputReferences(child, preserveJoinEventTime) ++ p.references
       if (!child.inputSet.subsetOf(required)) {
         val newChildren = child.children.map(c => prunedChild(c, required))
         p.copy(child = child.withNewChildren(newChildren))
       } else {
         p
       }
-  })
+    })
+  }
+
+  private def requiredInputReferences(
+      plan: LogicalPlan,
+      preserveJoinEventTime: Boolean): AttributeSet = {
+    val eventTimeAttributes = plan match {
+      case join: Join if join.isStateful && preserveJoinEventTime =>
+        join.children.flatMap { child =>
+          val eventTimeColumns = child.output.filter(
+            _.metadata.contains(EventTimeWatermark.delayKey))
+          if (eventTimeColumns.map(_.exprId).distinct.size == 1 &&
+              eventTimeColumns.head.dataType == TimestampType) {
+            eventTimeColumns
+          } else {
+            Nil
+          }
+        }
+      case _ => Nil
+    }
+    plan.references ++ AttributeSet(eventTimeAttributes)
+  }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =

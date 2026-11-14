@@ -89,6 +89,8 @@ class StreamingQueryCheckpointMetadataSuite extends StreamTest {
     assert(metadata != null)
     assert(metadata.id != null)
     assert(UUID.fromString(metadata.id) != null) // Should be a valid UUID
+    assert(metadata.joinEventTimeColumnRetentionVersion.contains(
+      SQLConf.get.getConf(SQLConf.STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION)))
     metadata
   }
 

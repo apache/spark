@@ -147,7 +147,8 @@ case class StreamingSymmetricHashJoinExec(
     stateFormatVersion: Int,
     left: SparkPlan,
     right: SparkPlan,
-    outputMode: Option[OutputMode])
+    outputMode: Option[OutputMode],
+    useRetainedEventTimeColumn: Boolean = false)
     extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
 
   def this(
@@ -164,7 +165,7 @@ case class StreamingSymmetricHashJoinExec(
       stateInfo = None,
       eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right,
-      None)
+      None, useRetainedEventTimeColumn = false)
   }
 
   if (stateFormatVersion < 2 && joinType != Inner) {
@@ -697,7 +698,12 @@ case class StreamingSymmetricHashJoinExec(
       stateFormatVersion = stateFormatVersion,
       skippedNullValueCount = skippedNullValueCount,
       joinStoreGenerator = joinStateManagerStoreGenerator,
-      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
+      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark,
+      useEventTimeIndex = if (useRetainedEventTimeColumn) {
+        Some(stateWatermarkPredicate.isDefined)
+      } else {
+        None
+      })
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
@@ -1129,7 +1135,8 @@ case class StreamingSymmetricHashJoinExec(
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
         left.output, right.output, leftKeys, rightKeys, condition.full, Some(inputWatermarkMs),
-        !allowMultipleStatefulOperators)
+        !allowMultipleStatefulOperators,
+        useRetainedEventTimeColumn)
 
     if (joinType == LeftSemi) {
       // Only left columns are output. Without a watermarked left column, the watermark is lost;

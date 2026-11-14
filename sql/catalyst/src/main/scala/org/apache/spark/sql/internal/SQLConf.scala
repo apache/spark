@@ -4294,6 +4294,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val STREAMING_JOIN_EVENT_TIME_COLUMN_RETENTION_VERSION =
+    buildConf("spark.sql.streaming.join.eventTimeColumnRetentionVersion")
+      .internal()
+      .doc("Version of stream-stream join event-time column retention. Version 0 keeps legacy " +
+        "column pruning. Version 1 preserves one unambiguous watermark timestamp in each input " +
+        "of a single stream-stream join for late-event filtering. The timestamp is stored as " +
+        "part of the ordinary input row, without a separate state projection. The value is " +
+        "pinned in the checkpoint and cannot be changed across restarts. Existing checkpoints " +
+        "without this setting use version 0 to preserve their state schemas and behavior.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValues(Set(0, 1))
+      .createWithDefault(1)
+
   val STREAMING_JOIN_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.join.stateFormatVersion")
       .internal()

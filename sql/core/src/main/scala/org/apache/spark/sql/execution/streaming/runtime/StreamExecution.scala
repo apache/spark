@@ -169,7 +169,7 @@ abstract class StreamExecution(
   protected val checkpointMetadata =
     new StreamingQueryCheckpointMetadata(sparkSessionForStream, resolvedCheckpointRoot)
 
-  private val streamMetadata: StreamMetadata = checkpointMetadata.streamMetadata
+  private[sql] val streamMetadata: StreamMetadata = checkpointMetadata.streamMetadata
 
   lazy val offsetLog: OffsetSeqLog = checkpointMetadata.offsetLog
 
