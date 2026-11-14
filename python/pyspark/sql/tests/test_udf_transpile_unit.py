@@ -2921,22 +2921,54 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self._raises(absolute, "a string", [("-5",)], needle="")
 
     def test_udf_transpile_repeat_count_must_be_integral(self):
-        # `"ab" * n` needs an int count -- `"ab" * 2.5` is a TypeError in Python,
-        # not the "abab" the cast would give. A float literal is visible here; for
-        # a parameter only the JVM knows, so the count is narrowed to integral32
-        # and a double or bigint column drops the option (a bigint above
-        # Int.MaxValue would overflow the cast to int where Python returns "").
         S = StringType()
         mul = lambda a, b: a * b  # noqa: E731
         self._assert_runs_as_python(mul, S, "a string, b double")
         self._assert_runs_as_python(mul, S, "a double, b string")
-        # A bigint count would overflow the cast to int (Python returns "" for
-        # negative counts, or a huge string), so it falls back too.
-        self._assert_runs_as_python(mul, S, "a string, b long")
-        self._assert_runs_as_python(mul, S, "a long, b string")
-        # An int32 count still lowers, in both operand orders.
-        self.assertEqual(self._native_vals(mul, S, "a string, b int", [("ab", 3)]), ["ababab"])
-        self.assertEqual(self._native_vals(mul, S, "a int, b string", [(3, "ab")]), ["ababab"])
+        for width in ("int", "long"):
+            counts = [3, 0, -1] if width == "int" else [3, 0, -1, -(2**40)]
+            expected = ["ab" * n for n in counts]
+            self.assertEqual(
+                self._native_vals(mul, S, f"a string, b {width}", [("ab", n) for n in counts]),
+                expected,
+            )
+            self.assertEqual(
+                self._native_vals(mul, S, f"a {width}, b string", [(n, "ab") for n in counts]),
+                expected,
+            )
+        self.assertEqual(self._native_vals(mul, S, "a string, b long", [("", 2**40)]), [""])
+        self.assertEqual(self._native_vals(mul, S, "a long, b string", [(2**40, "")]), [""])
+        self._raises(mul, "a string, b long", [("", None)], "null", S)
+        self._raises(mul, "a long, b string", [(None, "")], "null", S)
+        self._raises(mul, "a string, b long", [("ab", None)], "null", S)
+        self._raises(mul, "a long, b string", [(None, "ab")], "null", S)
+
+    def test_refined_combos_keep_three_mixed_untyped_inputs(self):
+        import ast
+
+        from pyspark.sql.transpile import _param_category_combos
+
+        fn = ast.parse("def f(a, b, c): return a + b > c").body[0]
+        self.assertEqual(len(_param_category_combos(fn, ["a", "b", "c"])), 27)
+        fn = ast.parse("def f(a, b, c, d): return a + b > c + d").body[0]
+        self.assertEqual(len(_param_category_combos(fn, ["a", "b", "c", "d"])), 3)
+
+        def compared(a, b, c):
+            return a + b > c
+
+        def conditional_repeat(s, n, m):
+            return s * n if n > m else s
+
+        self.assertEqual(
+            self._native_vals(compared, BooleanType(), "a int, b double, c int", [(1, 2.5, 3)]),
+            [True],
+        )
+        self.assertEqual(
+            self._native_vals(
+                conditional_repeat, StringType(), "a string, b int, c int", [("ab", 3, 2)]
+            ),
+            ["ababab"],
+        )
 
     def test_udf_transpile_pow_zero_keeps_the_base(self):
         # `x ** 0` is 1 for every x in Python -- but `None ** 0` raises TypeError,

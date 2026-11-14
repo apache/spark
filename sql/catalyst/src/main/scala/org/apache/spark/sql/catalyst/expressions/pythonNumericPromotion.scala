@@ -82,9 +82,8 @@ object PythonNumericPromotion {
     // honest but was worse than declining: a decimal(18,0) pair promoted to bigint, silently
     // losing the decimal type, while decimal(19,0) and any non-zero scale fell through to an
     // unaligned replacement and INTERNAL_ERROR. Returning None sends every decimal to `plain`,
-    // which keeps its type. (A decimal column cannot reach a transpiled UDF anyway --
-    // ResolveTranspiledPythonUDFOptions excludes it from every numeric category -- so this only
-    // matters for a direct SQL call.)
+    // which keeps its type. Decimal columns are excluded from transpiled UDF options;
+    // this fallback also supports internally constructed expressions.
     case _ => None
   }
 
@@ -236,10 +235,8 @@ object PythonNumericPromotion {
 /**
  * Arithmetic that evaluates at a width wide enough for Python's semantics, per
  * [[PythonNumericPromotion]]. Only meant to be emitted by the Python UDF transpiler, which
- * reaches them through `call_function` the same way it reaches `div` -- hence the registry
- * entries. Hand-written SQL should stay away: there, `a + b` overflowing is the documented ANSI
- * contract, and quietly getting a decimal back instead would be a surprise, which is why the
- * names are deliberately unlovely rather than `python_add`.
+ * reaches them through InternalFunction. They are registered as internal expressions,
+ * so neither SQL nor call_function resolves them. Promotion stops at LongType.
  *
  * These are [[RuntimeReplaceable]] rather than hand-written arithmetic because the whole point is
  * to run the *existing* operator at a wider type -- writing fresh `eval` and `doGenCode` bodies
@@ -306,9 +303,8 @@ trait PythonPromotingArithmetic extends RuntimeReplaceable {
    * `UnresolvedAttribute` sense: `plain` asks its operands for `dataType`, so such a child would
    * throw `UnresolvedException` rather than be reported around. The case this actually serves is
    * a child that is unresolved because its *own* type check failed while still reporting a
-   * dataType -- `ShiftLeft(tinyint, tinyint)`, say. Nothing reaches the throwing path through the
-   * SQL parser today, since `ResolveFunctions` waits for `childrenResolved`, but it is a trap for
-   * a single-pass resolver or a hand-built plan.
+   * dataType -- `ShiftLeft(tinyint, tinyint)`, say. These internal expressions can be
+   * inspected by a single-pass resolver or a hand-built plan before their children resolve.
    */
   protected def unpromoted: Expression
 }
