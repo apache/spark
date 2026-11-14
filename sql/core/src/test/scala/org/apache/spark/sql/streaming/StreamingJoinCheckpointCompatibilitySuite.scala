@@ -504,9 +504,8 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     withJoinConf(version = 4, logVersion = 1) {
       val (leftInput, rightInput, joined) = nullableAlignedJoinInputs()
       withTempDir { checkpointDir =>
-        val resource = getClass.getResource(
-          "/structured-streaming/checkpoint-version-4.3.0-streaming-join-null-equality-key/").toURI
-        Utils.copyDirectory(new File(resource), checkpointDir)
+        copyCheckpointFixture("checkpoint-version-4.3.0-streaming-join-null-equality-key",
+          checkpointDir)
         // One call per batch of the fixture, because a memory stream's offset counts the calls.
         Seq(Seq(150), Seq(-1, 160), Seq(220)).foreach(leftInput.addData(_: _*))
         Seq(Seq(150), Seq(170), Seq(220)).foreach(rightInput.addData(_: _*))

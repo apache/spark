@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, Expression, GetStructField, IsNotNull, LessThan, Literal, NamedExpression, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, Expression, ExprId, GetStructField, IsNotNull, LessThan, Literal, NamedExpression, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{CalendarIntervalType, DataType, LongType, Metadata, MetadataBuilder}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -39,6 +40,13 @@ object TimeWindowResolution {
   final val WINDOW_END = "end"
   final val SESSION_START = "start"
   final val SESSION_END = "end"
+
+  /**
+   * Set by [[buildTimeWindowRewrite]] on the [[Project]] or [[Expand]] that computes a time window
+   * over a time column that is an attribute: the expression IDs of the window and of that
+   * column. A window over any other expression, such as a shifted time, has no tag.
+   */
+  val TIME_WINDOW_SOURCE_TAG = TreeNodeTag[(ExprId, ExprId)]("timeWindowSource")
 
   /**
    * Synthesizes the [[Project]]/[[Expand]]+[[Filter]] sub-plan for a resolved [[TimeWindow]] and
@@ -80,6 +88,11 @@ object TimeWindowResolution {
     val windowAttr = AttributeReference(
       WINDOW_COL_NAME, window.dataType, metadata = newMetadata)()
 
+    def tagTimeWindowSource(plan: LogicalPlan): Unit = window.timeColumn match {
+      case a: Attribute => plan.setTagValue(TIME_WINDOW_SOURCE_TAG, (windowAttr.exprId, a.exprId))
+      case _ =>
+    }
+
     val newChild = if (window.windowDuration == window.slideDuration) {
       val windowStruct = Alias(getWindow(0, window.timeColumn.dataType), WINDOW_COL_NAME)(
         exprId = windowAttr.exprId, explicitMetadata = Some(newMetadata))
@@ -87,8 +100,9 @@ object TimeWindowResolution {
       // For backwards compatibility we add a filter to filter out nulls
       val filterExpr = IsNotNull(window.timeColumn)
 
-      Project(windowStruct +: child.output,
-        Filter(filterExpr, child))
+      val project = Project(windowStruct +: child.output, Filter(filterExpr, child))
+      tagTimeWindowSource(project)
+      project
     } else {
       val overlappingWindows = overlappingWindowCount(window)
       val windows =
@@ -108,8 +122,9 @@ object TimeWindowResolution {
           window.timeColumn < windowAttr.getField(WINDOW_END)
       }
 
-      Filter(filterExpr,
-        Expand(projections, windowAttr +: child.output, child))
+      val expand = Expand(projections, windowAttr +: child.output, child)
+      tagTimeWindowSource(expand)
+      Filter(filterExpr, expand)
     }
 
     (windowAttr, newChild)
