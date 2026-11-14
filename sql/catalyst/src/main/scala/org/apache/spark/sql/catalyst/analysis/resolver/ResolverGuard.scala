@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{
   SQLConfHelper
 }
 import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
   FunctionRegistry,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
@@ -526,8 +527,12 @@ class ResolverGuard(
       }
     } else if (FunctionResolution.sessionNamespaceKind(nameParts)
         .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin)) {
-      // Explicitly builtin-qualified: reject if unsupported, else check children
-      if (isUnsupportedFunction(funcName)) {
+      // A 3-part system.builtin name is fully qualified. A 2-part builtin name is only a
+      // built-in when the catalog portion of PATH selects system first; otherwise the fixed-point
+      // analyzer must resolve it because a persistent catalog may own the name.
+      if (nameParts.length == 2 && !twoPartBuiltinUsesSystemCatalog(nameParts)) {
+        Some("multi-part function name")
+      } else if (isUnsupportedFunction(funcName)) {
         Some(s"unsupported function ${funcName}")
       } else {
         unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
@@ -667,8 +672,6 @@ class ResolverGuard(
       Some("legacyCTEPrecedencePolicy")
     } else if (!conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT)) {
       Some("prioritizeOrdinalResolutionInSortDisabled")
-    } else if (conf.getConf(SQLConf.PERSISTENT_CATALOG_FIRST)) {
-      Some("persistentCatalogFirst")
     } else {
       None
     }
@@ -693,6 +696,18 @@ class ResolverGuard(
       FunctionRegistry.builtinFunctionIdentifier(singlePartName)) && v1SessionCatalog
       .lookupBuiltinOrTempFunction(singlePartName)
       .exists(info => info.getSource == "built-in")
+  }
+
+  private def twoPartBuiltinUsesSystemCatalog(nameParts: Seq[String]): Boolean = {
+    val context = AnalysisContext.get
+    val pathEntries = catalogManager.resolutionPathEntriesForAnalysis(
+      context.resolutionPathEntries, context.catalogAndNamespace)
+    CatalogManager.identifierPathCandidates(
+      pathEntries, nameParts, catalogManager.isCatalogRegistered).headOption.exists { candidate =>
+      candidate.length == 3 &&
+        candidate.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        candidate(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+    }
   }
 
   private def tryThrowUnsupportedSinglePassAnalyzerFeature(reason: Option[String]): Unit = {

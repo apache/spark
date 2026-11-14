@@ -59,7 +59,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -262,6 +261,10 @@ object AnalysisContext {
   private def set(context: AnalysisContext): Unit = value.set(context)
 
   def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
+    withAnalysisContext(viewDesc, SQLConf.get)(f)
+  }
+
+  def withAnalysisContext[A](viewDesc: CatalogTable, resolutionConf: SQLConf)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
       SQLConf.get.maxNestedViewDepth
@@ -272,8 +275,13 @@ object AnalysisContext {
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
       resolutionPathEntries = viewDesc.viewStoredResolutionPath
-        .map(CatalogManager.deserializePathEntriesOrFail(
-          _, "view", viewDesc.identifier.unquotedString)),
+        .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
+          _,
+          viewDesc.viewStoredResolutionPathVersion,
+          viewDesc.viewCatalogAndNamespace.headOption,
+          resolutionConf.persistentCatalogFirst,
+          "view",
+          viewDesc.identifier.unquotedString)),
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
@@ -297,8 +305,13 @@ object AnalysisContext {
     // Function body analysis should not inherit any caller-pinned path; use only function metadata.
     val context = originContext.copy(
       resolutionPathEntries = function.functionStoredResolutionPath
-        .map(CatalogManager.deserializePathEntriesOrFail(
-          _, "SQL function", function.name.unquotedString)),
+        .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
+          _,
+          function.functionStoredResolutionPathVersion,
+          function.functionCreationCatalog,
+          SQLConf.get.persistentCatalogFirst,
+          "SQL function",
+          function.name.unquotedString)),
       // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator by default. A SQL
       // function has no IDENTIFIER-variable metadata of its own that is consulted on resolution, so
       // a variable its body reads through an IDENTIFIER clause is part of the enclosing object's
@@ -2105,8 +2118,8 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * Mirrors function resolution precedence, including SQL PATH shadowing for unqualified names
-     * and `spark.sql.legacy.persistentCatalogFirst` for two-part `builtin.name` references.
+     * Mirrors function resolution precedence, including SQL PATH shadowing for one- and two-part
+     * names.
      */
     private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean =
       functionResolution.functionNameResolvesToBuiltin(nameParts, expectedName)
@@ -2347,7 +2360,7 @@ class Analyzer(
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _) =>
           // For builtin/temp functions, we can do a quick check without catalog lookup
-          val quickCheck = if (nameParts.size == 1 ||
+          val quickCheck = if (nameParts.size == 1 || nameParts.size == 3 &&
               FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
             functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
           } else {
@@ -2375,10 +2388,7 @@ class Analyzer(
 
               functionType match {
                 case FunctionType.Local =>
-                  throw SparkException.internalError(
-                    s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
-                    s"classified as $functionType by full lookup but not found by quick check. " +
-                    s"Check sessionNamespaceKind logic.")
+                  f
 
                 case FunctionType.Persistent =>
                   externalFunctionNameSet.add(fullName)
@@ -2388,11 +2398,9 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val searchPath =
-                    functionResolution.sqlResolutionPathEntriesForAnalysis.map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
-                    searchPath,
+                    functionResolution.resolutionSearchPathForError(nameParts),
                     f.origin)
               }
             }
@@ -2422,18 +2430,8 @@ class Analyzer(
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES, UNRESOLVED_JSON_CONSTRUCTOR),
       ruleId) {
       // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
-      case u @ UnresolvedFunctionName(nameParts, _, _) =>
-        functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
-          .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
-          ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
-        }.getOrElse {
-          val CatalogAndIdentifier(catalog, ident) =
-            relationResolution.expandIdentifier(nameParts)
-          val fullName = catalog.name +: ident.namespace :+ ident.name
-          CatalogV2Util.loadFunction(catalog, ident).map { func =>
-            ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
-          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName.toImmutableArraySeq)))
-        }
+      case u: UnresolvedFunctionName =>
+        functionResolution.resolveFunctionName(u)
 
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>

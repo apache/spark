@@ -602,7 +602,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
           "RETURN 'shadowed'")
         sql("CREATE TEMPORARY FUNCTION json_exists(a STRING, b STRING) RETURNS BOOLEAN " +
           "RETURN false")
-        sql("SET PATH = system.session, system.builtin")
+        sql("SET PATH = system.session, system.builtin, system")
         // A plain call is an ordinary function call, so the temporary routine (ahead of
         // system.builtin on the path) shadows the built-in constructor.
         checkAnswer(sql("SELECT json_array(1, 'x')"), Row("shadowed"))
@@ -852,7 +852,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
       try {
         sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
-        sql("SET PATH = system.session, system.builtin")
+        sql("SET PATH = system.session, system.builtin, system")
         // Both clause-free calls route, so the temp shadows each of them.
         checkAnswer(sql("SELECT json_array(json_array(1))"), Row("shadowed"))
         // Strict single-pass routes the outer clause-free call to the shadow too. The built-in owns
@@ -1402,24 +1402,25 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("two-part builtin JSON_ARRAY respects persistentCatalogFirst before rejecting star") {
-    withDatabase("builtin") {
-      sql("CREATE DATABASE builtin")
-      sql("CREATE FUNCTION builtin.json_array(a INT, b STRING) RETURNS STRING " +
-        "RETURN 'persistent'")
-      try {
-        val query = "SELECT builtin.json_array(*) FROM VALUES (1, 'x') AS t(a, b)"
-        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "false") {
+  test("two-part builtin JSON_ARRAY follows catalog PATH before rejecting star") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.json_array(a INT, b STRING) RETURNS STRING " +
+          "RETURN 'persistent'")
+        try {
+          val query = "SELECT builtin.json_array(*) FROM VALUES (1, 'x') AS t(a, b)"
+          sql("SET PATH = system, current_catalog")
           val e = intercept[AnalysisException] {
             sql(query).collect()
           }
           assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX")
-        }
-        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          sql("SET PATH = current_catalog, system")
           checkAnswer(sql(query), Row("persistent"))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS builtin.json_array")
         }
-      } finally {
-        sql("DROP FUNCTION IF EXISTS builtin.json_array")
       }
     }
   }
@@ -1457,13 +1458,14 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // and wrongly rejects the star.
     withSQLConf(
       "spark.sql.catalog.other_cat" -> classOf[InMemoryCatalog].getName,
-      SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+      SQLConf.PATH_ENABLED.key -> "true") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.json_array(a INT, b STRING) RETURNS STRING " +
           "RETURN 'persistent'")
         try {
           sql("SET CATALOG spark_catalog")
+          sql("SET PATH = current_catalog, system")
           sql("CREATE VIEW spark_catalog.default.json_array_shadow_view AS " +
             "SELECT builtin.json_array(*) AS r FROM VALUES (1, 'x') AS t(a, b)")
           // Read the view while a different catalog is current: resolution must still find the
@@ -1474,6 +1476,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
             Row("persistent"))
         } finally {
           sql("SET CATALOG spark_catalog")
+          sql("SET PATH = DEFAULT_PATH")
           sql("DROP VIEW IF EXISTS spark_catalog.default.json_array_shadow_view")
           sql("DROP FUNCTION IF EXISTS builtin.json_array")
         }

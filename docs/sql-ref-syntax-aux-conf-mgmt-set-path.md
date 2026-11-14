@@ -23,9 +23,10 @@ license: |
 
 `SET PATH` changes the **SQL Path** of the current session.
 
-The SQL Path is an ordered list of catalog-qualified schema names that Spark walks when
-resolving unqualified references to functions, tables, views, and session variables in queries
-and DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`). The first match wins. DDL
+The SQL Path is an ordered list of catalog and catalog-qualified schema names that Spark walks
+when resolving one- and two-part references to functions, tables, views, and session variables
+in queries and DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`). Schema entries qualify
+one-part names, and catalog entries qualify two-part names. The first match wins. DDL
 (`CREATE TABLE`, `CREATE VIEW`, `CREATE FUNCTION`, `DROP`, `ALTER`, ...) resolves unqualified
 object names against `current_catalog.current_schema`, not the path; so `CREATE TABLE t` always
 creates `t` in the current schema regardless of the path.
@@ -43,7 +44,9 @@ The path can include two virtual namespaces in the `system` catalog:
 
 The initial value of `PATH` in a session is `DEFAULT_PATH`. `DEFAULT_PATH` is either the value of
 `spark.sql.defaultPath`, or, when that configuration is empty, a built-in value composed of
-`system.builtin`, `system.session`, and the current schema. To override, set
+`system.builtin`, `system.session`, the current schema, `system`, and the current catalog. Setting
+`spark.sql.legacy.persistentCatalogFirst` to `true` places the current catalog before `system` in
+this built-in value. To override the complete path, set
 `spark.sql.defaultPath`. See the [`DEFAULT_PATH` parameter](#parameters) for the exact derivation
 rules.
 
@@ -57,7 +60,7 @@ Persistent views and SQL UDFs capture the path at `CREATE` time into the object'
 Each invocation resolves the body against that frozen path, not the invoker's current path;
 `current_schema()` and `current_path()` inside the body still return the invoker's context.
 
-The leading names `session` and `builtin` have special meaning in 2-part references; see
+The `system` catalog provides the `session` and `builtin` schemas; see
 [Reserved system names](sql-ref-identifier.html#reserved-system-names).
 
 ### Syntax
@@ -69,8 +72,10 @@ path_element
     { DEFAULT_PATH |
       SYSTEM_PATH |
       PATH |
+      CURRENT_CATALOG |
       CURRENT_SCHEMA |
       CURRENT_DATABASE |
+      catalog_name |
       catalog_name . namespace [ . namespace ... ] }
 ```
 
@@ -91,8 +96,10 @@ path_element
      below to avoid a cycle, rather than recursing.
 
   2. If `spark.sql.defaultPath` is empty (the factory setting), the spark-built-in default
-     applies: `system.builtin`, `system.session`, and the current schema
-     (`current_catalog.current_schema`), in that order.
+     applies: `system.builtin`, `system.session`, the current schema
+     (`current_catalog.current_schema`), `system`, and the current catalog. Setting
+     `spark.sql.legacy.persistentCatalogFirst` to `true` reverses the final two catalog entries,
+     placing the current catalog before `system`.
 
   To change the default path, set `spark.sql.defaultPath` via any of the usual mechanisms
   (`SET spark.sql.defaultPath = ...` at runtime, `--conf` on `spark-submit`, `SparkConf`, or
@@ -118,10 +125,21 @@ path_element
   `USE SCHEMA` statements are picked up without re-issuing `SET PATH`.
   `CURRENT_DATABASE` is a synonym for `CURRENT_SCHEMA`.
 
+* **`CURRENT_CATALOG`**
+
+  A virtual marker that resolves to the current catalog every time the path is consulted. This
+  means subsequent `USE CATALOG` statements are picked up without re-issuing `SET PATH`.
+
+* **`catalog_name`**
+
+  A catalog reference used to qualify two-part object names. For example, with
+  `SET PATH = system, current_catalog`, `session.x` tries `system.session.x` before
+  `current_catalog.session.x`.
+
 * **`catalog_name . namespace [ . namespace ... ]`**
 
   An explicit catalog-qualified namespace reference (`catalog.schema` or, for catalogs with
-  multi-level namespaces, `catalog.ns1.ns2...`). At least two parts are required.
+  multi-level namespaces, `catalog.ns1.ns2...`).
   The catalog and namespace do not need to exist at the time of `SET PATH`; non-existent entries
   are silently skipped during name resolution.
 
@@ -132,6 +150,8 @@ path_element
 
 * Setting the path takes effect immediately.
 * Identifier case is preserved in storage and in `current_path()` output.
+* Catalog entries are ignored for one-part names, and schema entries are ignored for two-part
+  names.
 * Duplicate entries are detected after expansion and raise `DUPLICATE_SQL_PATH_ENTRY`.
   Comparisons honor the session's case sensitivity setting. Because `CURRENT_DATABASE` is an
   alias for `CURRENT_SCHEMA`, listing both is flagged as a duplicate.
@@ -141,7 +161,6 @@ path_element
 | Condition | Cause |
 | :-------- | :---- |
 | `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED` | `SET PATH` was issued while `spark.sql.path.enabled` is `false`. |
-| `INVALID_SQL_PATH_SCHEMA_REFERENCE` | An entry with fewer than two parts was given. |
 | `DUPLICATE_SQL_PATH_ENTRY` | Two entries collapsed to the same concrete namespace after expansion. |
 
 ### Examples
@@ -152,7 +171,7 @@ path_element
 
 -- Observe the default path.
 > SELECT current_path();
- system.builtin,system.session,spark_catalog.default
+ system.builtin,system.session,spark_catalog.default,system,spark_catalog
 
 -- Replace the path with explicit entries.
 > SET PATH = spark_catalog.default, system.builtin;
@@ -172,7 +191,7 @@ path_element
 -- DEFAULT_PATH and SYSTEM_PATH shortcuts.
 > SET PATH = DEFAULT_PATH;
 > SELECT current_path();
- system.builtin,system.session,spark_catalog.default
+ system.builtin,system.session,spark_catalog.default,system,spark_catalog
 > SET PATH = SYSTEM_PATH;
 > SELECT current_path();
  system.builtin
@@ -197,6 +216,11 @@ path_element
 > SELECT current_path();
  spark_catalog.default,system.builtin
 
+-- CURRENT_CATALOG is re-evaluated each time and controls two-part resolution.
+> SET PATH = system, CURRENT_CATALOG;
+> SELECT current_path();
+ system,spark_catalog
+
 -- DEFAULT_PATH can be customized via the conf.
 > SET spark.sql.defaultPath = system.session, system.builtin, current_schema;
 > SET PATH = DEFAULT_PATH;
@@ -216,7 +240,7 @@ path_element
 > CREATE TEMPORARY FUNCTION revenue() RETURNS INT RETURN 42;
 > SELECT revenue();                  -- resolves via the default path
  42
-> SET PATH = system.builtin, current_schema;
+> SET PATH = system.builtin, current_schema, system, current_catalog;
 > SELECT revenue();                  -- now must be qualified
  [UNRESOLVED_ROUTINE] `revenue` ...
 > SELECT session.revenue();
@@ -225,9 +249,6 @@ path_element
 -- Error cases.
 > SET PATH = spark_catalog.default, spark_catalog.default;
   [DUPLICATE_SQL_PATH_ENTRY]
-
-> SET PATH = my_schema_no_catalog;
-  [INVALID_SQL_PATH_SCHEMA_REFERENCE]
 
 -- PATH is rejected as a value of the DEFAULT_PATH conf (would cycle).
 > SET spark.sql.defaultPath = PATH, system.builtin;

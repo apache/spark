@@ -98,8 +98,6 @@ private[sql] class TransactionAwareCatalogManager(
       currentNamespace: Seq[String]): Seq[Seq[String]] =
     delegate.sqlResolutionPathEntries(currentCatalog, currentNamespace)
 
-  override def isSystemSessionOnPath: Boolean = delegate.isSystemSessionOnPath
-
   override def resolutionPathEntriesForAnalysis(
       pinnedEntries: Option[Seq[Seq[String]]],
       viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]] =

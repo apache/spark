@@ -48,8 +48,12 @@ case class AnalyzerBridgeState(
       new AnalyzerBridgeState.HiveRelationsWithResolvedMetadata
 ) {
   def addUnresolvedRelation(unresolvedRelation: UnresolvedRelation, relation: LogicalPlan): Unit = {
+    val context = AnalysisContext.get
     relationsWithResolvedMetadata.put(
-      BridgedRelationId(unresolvedRelation, AnalysisContext.get.catalogAndNamespace),
+      BridgedRelationId(
+        unresolvedRelation,
+        context.catalogAndNamespace,
+        context.resolutionPathEntries),
       relation
     )
   }

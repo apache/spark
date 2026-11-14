@@ -79,10 +79,7 @@ class FunctionResolution(
    * 1. Single-part names: expanded via [[CatalogManager.sqlResolutionPathEntries]] (same list as
    *    relation resolution), where each path entry is fully qualified so appending the name
    *    produces fully qualified candidates.
-   * 2. `builtin.name` or `session.name`: prepending `system` creates a fully qualified
-   *    system catalog candidate. The original 2-part name is also kept as a persistent
-   *    catalog candidate (qualified downstream). Order is controlled by
-   *    the `persistentCatalogFirst` config.
+   * 2. Two-part names: catalog path entries are prepended to create fully qualified candidates.
    *
    * All other multi-part names are returned as-is for downstream resolution.
    *
@@ -124,21 +121,42 @@ class FunctionResolution(
     CatalogManager.isBuiltinFirstOnPath(sqlResolutionPathEntriesForAnalysis)
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
-    if (nameParts.size == 1) {
-      // Built lazily so an early-returning consumer (built-in hit, routed direct-star owner walk)
-      // skips concatenating the unused PATH suffix; consumers walk candidates in order.
-      sqlResolutionPathEntriesForAnalysis.to(LazyList).map(_ ++ nameParts)
-    } else if (nameParts.size == 2 &&
-        FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-      val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
-      if (conf.prioritizeSystemCatalog) {
-        Seq(systemCandidate, nameParts)
+    CatalogManager.identifierPathCandidates(
+      sqlResolutionPathEntriesForAnalysis,
+      nameParts,
+      catalogManager.isCatalogRegistered)
+  }
+
+  private[analysis] def resolutionSearchPathForError(nameParts: Seq[String]): Seq[String] = {
+    CatalogManager.identifierPathEntries(
+      sqlResolutionPathEntriesForAnalysis,
+      nameParts,
+      catalogManager.isCatalogRegistered)
+      .map(toSQLId)
+  }
+
+  /** Resolve function metadata commands, such as DESCRIBE FUNCTION, through SQL PATH. */
+  def resolveFunctionName(unresolved: UnresolvedFunctionName): LogicalPlan = {
+    var possibleQualifiedName: Option[Seq[String]] = None
+    for (candidate <- resolutionCandidates(unresolved.multipartIdentifier)) {
+      if (isSystemCatalogQualified(candidate)) {
+        lookupBuiltinOrTempFunction(candidate, None)
+          .orElse(lookupBuiltinOrTempTableFunction(candidate))
+          .foreach { info =>
+            return ResolvedNonPersistentFunc(candidate.last, V1Function.metadataOnly(info))
+          }
       } else {
-        Seq(nameParts, systemCandidate)
+        val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(candidate)
+        val fullName = catalog.name +: ident.asMultipartIdentifier
+        if (possibleQualifiedName.isEmpty) {
+          possibleQualifiedName = Some(fullName)
+        }
+        CatalogV2Util.loadFunction(catalog, ident).foreach { func =>
+          return ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
+        }
       }
-    } else {
-      Seq(nameParts)
     }
+    unresolved.copy(possibleQualifiedName = possibleQualifiedName)
   }
 
   private def resolveFunctionCandidate(
@@ -197,7 +215,7 @@ class FunctionResolution(
           return resolveFunctionCandidate(candidate, unresolvedFunc).getOrElse {
             throw QueryCompilationErrors.unresolvedRoutineError(
               unresolvedFunc.nameParts,
-              sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+              resolutionSearchPathForError(unresolvedFunc.nameParts),
               unresolvedFunc.origin)
           }
         case None =>
@@ -245,7 +263,7 @@ class FunctionResolution(
       }
       throw QueryCompilationErrors.unresolvedRoutineError(
         unresolvedFunc.nameParts,
-        sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+        resolutionSearchPathForError(unresolvedFunc.nameParts),
         unresolvedFunc.origin)
     }
   }
@@ -437,8 +455,7 @@ class FunctionResolution(
     // system.builtin first, so the common case returns on the first entry with no catalog lookup;
     // only a custom PATH that lists a persistent catalog ahead of system.builtin reaches the probe
     // below (one lookup per such preceding entry, recomputed on each call -- not cached).
-    sqlResolutionPathEntriesForAnalysis.foreach { pathEntry =>
-      val candidate = pathEntry :+ functionName
+    resolutionCandidates(Seq(functionName)).foreach { candidate =>
       FunctionResolution.sessionNamespaceKind(candidate) match {
         case Some(SessionCatalog.Builtin) =>
           return Some(SessionCatalog.Builtin)
@@ -463,9 +480,8 @@ class FunctionResolution(
   /**
    * Returns true when a function reference resolves to the system built-in with the requested name.
    * This mirrors [[resolveFunction]] for special parser/analyzer rewrites that must run only for
-   * Spark's built-ins. In particular, two-part `builtin.name` is not always a system built-in:
-   * with `spark.sql.legacy.persistentCatalogFirst=true`, an existing persistent
-   * `current_catalog.builtin.name` takes precedence.
+   * Spark's built-ins. In particular, two-part `builtin.name` is resolved using catalog entries
+   * in the SQL path and is not always a system built-in.
    */
   def functionNameResolvesToBuiltin(nameParts: Seq[String], expectedName: String): Boolean = {
     if (!FunctionRegistry.functionSet.contains(
@@ -477,7 +493,10 @@ class FunctionResolution(
       case 1 =>
         unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(nameParts.head)
       case 2 =>
-        conf.prioritizeSystemCatalog || !persistentFunctionExists(nameParts)
+        resolutionCandidates(nameParts).iterator.find(candidateOwnsFunction) match {
+          case Some(candidate) => isSystemBuiltinCandidate(candidate)
+          case None => false
+        }
       case 3 =>
         true
       case _ =>
@@ -600,34 +619,16 @@ class FunctionResolution(
   def lookupFunctionType(
       nameParts: Seq[String],
       unresolvedFunc: Option[UnresolvedFunction] = None): FunctionType = {
-
-    if (lookupBuiltinOrTempFunction(nameParts, unresolvedFunc).isDefined) {
-      return FunctionType.Local
-    }
-
-    // Check if function exists as table function only
-    if (lookupBuiltinOrTempTableFunction(nameParts).isDefined) {
-      return FunctionType.TableOnly
-    }
-
-    // Check external catalog for persistent functions
-    if (nameParts.length == 1) {
-      // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
-      // session order, not only the current namespace (LookupCatalog single-part rule).
-      // `system.session.<name>` and `system.builtin.<name>` candidates were already resolved by
-      // [[lookupBuiltinOrTempFunction]] / [[lookupBuiltinOrTempTableFunction]] above (they
-      // route through `identifierFromSystemNameParts`, which only accepts those two
-      // namespaces); skip them here to avoid redundant catalog calls. Other `system.<x>`
-      // namespaces -- if any are ever added -- still go through persistent lookup.
-      val persistentCandidates = resolutionCandidates(nameParts).filterNot { c =>
-        c.length >= 2 &&
-          c.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) && {
-            val ns = c(1)
-            ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
-              ns.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-          }
+    for (candidate <- resolutionCandidates(nameParts)) {
+      if (isSystemCatalogQualified(candidate) &&
+          lookupBuiltinOrTempFunction(candidate, unresolvedFunc).isDefined) {
+        return FunctionType.Local
       }
-      for (candidate <- persistentCandidates) {
+      if (isSystemCatalogQualified(candidate) &&
+          lookupBuiltinOrTempTableFunction(candidate).isDefined) {
+        return FunctionType.TableOnly
+      }
+      if (!isSystemCatalogQualified(candidate)) {
         try {
           candidate match {
             case CatalogAndIdentifier(catalog, ident) =>
@@ -645,15 +646,7 @@ class FunctionResolution(
           case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
         }
       }
-      return FunctionType.NotFound
     }
-
-    val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
-    if (catalog.asFunctionCatalog.functionExists(ident)) {
-      return FunctionType.Persistent
-    }
-
-    // Function doesn't exist anywhere
     FunctionType.NotFound
   }
 
@@ -853,12 +846,19 @@ class FunctionResolution(
    * Resolves [[UnresolvedProcedure]] for `CALL` / `DESCRIBE PROCEDURE` using the same multipart
    * candidates as SQL functions and relations ([[resolutionCandidates]] /
    * [[sqlResolutionPathEntriesForAnalysis]]). Catalogs that do not implement
-   * [[ProcedureCatalog]] are skipped for unqualified names; an explicitly catalog-qualified name
-   * that targets a non-[[ProcedureCatalog]] still raises
+   * [[ProcedureCatalog]] are skipped for one- and two-part names resolved through PATH; an
+   * explicitly catalog-qualified name that targets a non-[[ProcedureCatalog]] still raises
    * [[QueryCompilationErrors.missingCatalogProceduresAbilityError]].
    */
   def resolveProcedure(unresolved: UnresolvedProcedure): LogicalPlan = {
     val candidates = resolutionCandidates(unresolved.nameParts)
+    val usesPath = CatalogManager.identifierUsesPath(
+      unresolved.nameParts, catalogManager.isCatalogRegistered)
+    val safelyProbeCandidateExistence = usesPath && unresolved.nameParts.length == 2
+    // Preserve the legacy fallback for unqualified procedures. For newly PATH-resolved two-part
+    // names, listProcedures provides a safe miss check because ProcedureCatalog does not define a
+    // standard not-found exception. Propagate other failures instead of masking authorization or
+    // catalog availability errors and executing a later candidate.
     val skipCandidateFailures = unresolved.nameParts.length == 1
     for (multipart <- candidates) {
       val expandedOpt =
@@ -871,31 +871,33 @@ class FunctionResolution(
         CatalogAndIdentifier.unapply(expanded).foreach { case (catalog, ident) =>
           catalog match {
             case pc: ProcedureCatalog =>
-              try {
-                val procedure = pc.loadProcedure(ident)
-                // A null means the catalog has no such procedure. Treat it as a miss, so an
-                // unqualified name keeps searching PATH and a qualified one fails as unresolved.
-                if (procedure != null) {
-                  return ResolvedProcedure(pc, ident, procedure)
-                }
-              } catch {
-                // ProcedureCatalog has no standard "not found" exception type today. For
-                // unqualified names searched through PATH, treat candidate failures as misses and
-                // continue to the next entry (matching table/function PATH iteration semantics).
-                // Explicitly catalog-qualified names still preserve existing error behavior.
-                case _: AnalysisException if skipCandidateFailures =>
-                case _: SparkThrowable if skipCandidateFailures =>
-                case NonFatal(_) if skipCandidateFailures =>
-                case e: AnalysisException => throw e
-                case e: SparkThrowable => throw e
-                case NonFatal(e) =>
-                  val cause = e match {
-                    case ex: Exception => ex
-                    case th => new RuntimeException(th)
+              if (!safelyProbeCandidateExistence || procedureExists(pc, ident)) {
+                try {
+                  val procedure = pc.loadProcedure(ident)
+                  // A null means the catalog has no such procedure. Treat it as a miss, so an
+                  // PATH-resolved name keeps searching and a fully qualified one fails unresolved.
+                  if (procedure != null) {
+                    return ResolvedProcedure(pc, ident, procedure)
                   }
-                  throw QueryCompilationErrors.failedToLoadRoutineError(
-                    catalog.name +: ident.asMultipartIdentifier,
-                    cause)
+                } catch {
+                  // ProcedureCatalog has no standard "not found" exception type today. For
+                  // legacy unqualified names searched through PATH, treat candidate failures as
+                  // misses and continue. Two-part PATH names and explicitly catalog-qualified
+                  // names preserve candidate errors.
+                  case _: AnalysisException if skipCandidateFailures =>
+                  case _: SparkThrowable if skipCandidateFailures =>
+                  case NonFatal(_) if skipCandidateFailures =>
+                  case e: AnalysisException => throw e
+                  case e: SparkThrowable => throw e
+                  case NonFatal(e) =>
+                    val cause = e match {
+                      case ex: Exception => ex
+                      case th => new RuntimeException(th)
+                    }
+                    throw QueryCompilationErrors.failedToLoadRoutineError(
+                      catalog.name +: ident.asMultipartIdentifier,
+                      cause)
+                }
               }
             case _ =>
               if (unresolved.nameParts.length > 1 &&
@@ -909,8 +911,16 @@ class FunctionResolution(
     }
     throw QueryCompilationErrors.unresolvedRoutineError(
       unresolved.nameParts,
-      sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+      resolutionSearchPathForError(unresolved.nameParts),
       unresolved.origin)
+  }
+
+  private def procedureExists(catalog: ProcedureCatalog, ident: Identifier): Boolean = {
+    try {
+      catalog.listProcedures(ident.namespace()).exists(_.name() == ident.name())
+    } catch {
+      case _: NoSuchNamespaceException => false
+    }
   }
 }
 

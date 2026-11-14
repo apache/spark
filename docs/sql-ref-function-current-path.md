@@ -40,20 +40,19 @@ This function takes no arguments. The parentheses may be omitted.
 A non-nullable `STRING`. Each path entry is written as a dotted name with backticks added only
 where required by Spark's identifier rules. Entries are separated by a single comma.
 
-When the path contains the virtual `CURRENT_SCHEMA` marker, the marker is materialized as the
-catalog-qualified current schema (`current_catalog.current_schema`) each time
-`current_path()` is evaluated, so subsequent `USE SCHEMA` statements are reflected without
-re-issuing `SET PATH`.
+When the path contains the virtual `CURRENT_SCHEMA` or `CURRENT_CATALOG` marker, the marker is
+materialized each time `current_path()` is evaluated, so subsequent `USE SCHEMA` or
+`USE CATALOG` statements are reflected without re-issuing `SET PATH`.
 
 ### Examples
 
 ```sql
 > SELECT current_path();
- system.builtin,system.session,spark_catalog.default
+ system.builtin,system.session,spark_catalog.default,system,spark_catalog
 
 -- ANSI no-parens form returns the same value.
 > SELECT CURRENT_PATH;
- system.builtin,system.session,spark_catalog.default
+ system.builtin,system.session,spark_catalog.default,system,spark_catalog
 
 -- The output reflects the latest SET PATH.
 > SET PATH = spark_catalog.default, system.builtin;

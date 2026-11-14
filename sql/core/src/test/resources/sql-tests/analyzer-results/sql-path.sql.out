@@ -9,7 +9,7 @@ Project [current_path() AS current_path()#x]
 -- !query
 SET PATH = spark_catalog.default, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, default)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -22,7 +22,7 @@ Project [current_path() AS current_path()#x]
 -- !query
 SET PATH = Spark_Catalog.Default, System.Builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(Spark_Catalog, Default)), SchemaInPath(List(System, Builtin))]
+SetPathCommand [IdentifierInPath(List(Spark_Catalog, Default)), IdentifierInPath(List(System, Builtin))]
 
 
 -- !query
@@ -35,7 +35,7 @@ Project [current_path() AS current_path()#x]
 -- !query
 SET PATH = spark_catalog.`sch.b`, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sch.b)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sch.b)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -106,13 +106,13 @@ SetPathCommand [DefaultPath]
 -- !query
 SET PATH = spark_catalog.default, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, default)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
 SET PATH = PATH, system.session
 -- !query analysis
-SetPathCommand [PathRef, SchemaInPath(List(system, session))]
+SetPathCommand [PathRef, IdentifierInPath(List(system, session))]
 
 
 -- !query
@@ -132,7 +132,7 @@ SetCatalogAndNamespace
 -- !query
 SET PATH = current_schema, system.builtin
 -- !query analysis
-SetPathCommand [CurrentSchema, SchemaInPath(List(system, builtin))]
+SetPathCommand [CurrentSchema, IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -145,7 +145,7 @@ Project [current_path() AS current_path()#x]
 -- !query
 SET PATH = current_database, system.builtin
 -- !query analysis
-SetPathCommand [CurrentSchema, SchemaInPath(List(system, builtin))]
+SetPathCommand [CurrentSchema, IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -164,7 +164,7 @@ SetPathCommand [DefaultPath]
 -- !query
 SET PATH = spark_catalog.default, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, default)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -269,16 +269,22 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SET PATH = my_schema_no_catalog
+SET PATH = spark_catalog, system
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_PATH_SCHEMA_REFERENCE",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "qualifiedName" : "my_schema_no_catalog"
-  }
-}
+SetPathCommand [IdentifierInPath(List(spark_catalog)), IdentifierInPath(List(system))]
+
+
+-- !query
+SELECT system.builtin.current_path()
+-- !query analysis
+Project [current_path() AS current_path()#x]
++- OneRowRelation
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
 
 
 -- !query
@@ -297,7 +303,7 @@ CreateSQLFunctionCommand spark_catalog.sql_path_routines.pick, INT, 7, false, fa
 -- !query
 SET PATH = spark_catalog.sql_path_routines, spark_catalog.default, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_routines)), SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_routines)), IdentifierInPath(List(spark_catalog, default)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -325,7 +331,7 @@ CreateSQLFunctionCommand spark_catalog.sql_path_routines.pick_tvf, val INT, SELE
 -- !query
 SET PATH = spark_catalog.sql_path_routines, spark_catalog.default, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_routines)), SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_routines)), IdentifierInPath(List(spark_catalog, default)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -361,7 +367,7 @@ CreateSQLFunctionCommand spark_catalog.sql_path_routines_b.pick, INT, 11, false,
 -- !query
 SET PATH = spark_catalog.sql_path_routines, spark_catalog.sql_path_routines_b, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_routines)), SchemaInPath(List(spark_catalog, sql_path_routines_b)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_routines)), IdentifierInPath(List(spark_catalog, sql_path_routines_b)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -375,7 +381,7 @@ Project [spark_catalog.sql_path_routines.pick() AS from_first_schema#x]
 -- !query
 SET PATH = spark_catalog.sql_path_routines_b, spark_catalog.sql_path_routines, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_routines_b)), SchemaInPath(List(spark_catalog, sql_path_routines)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_routines_b)), IdentifierInPath(List(spark_catalog, sql_path_routines)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -395,7 +401,7 @@ SetPathCommand [DefaultPath]
 -- !query
 SET PATH = spark_catalog.default, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, default)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -490,7 +496,7 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_relations_b`.`tbl
 -- !query
 SET PATH = spark_catalog.sql_path_relations_a, spark_catalog.sql_path_relations_b, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_relations_a)), SchemaInPath(List(spark_catalog, sql_path_relations_b)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_relations_a)), IdentifierInPath(List(spark_catalog, sql_path_relations_b)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -505,7 +511,7 @@ Project [id#x]
 -- !query
 SET PATH = spark_catalog.sql_path_relations_b, spark_catalog.sql_path_relations_a, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_relations_b)), SchemaInPath(List(spark_catalog, sql_path_relations_a)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_relations_b)), IdentifierInPath(List(spark_catalog, sql_path_relations_a)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -520,7 +526,7 @@ Project [id#x]
 -- !query
 SET PATH = spark_catalog.default, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, default)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -611,7 +617,7 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_views_b`.`frozen_
 -- !query
 SET PATH = spark_catalog.sql_path_views_a, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_views_a)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_views_a)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -626,7 +632,7 @@ CreateViewCommand `spark_catalog`.`default`.`v_path_frozen`, SELECT id FROM froz
 -- !query
 SET PATH = spark_catalog.sql_path_views_b, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_views_b)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_views_b)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -639,7 +645,7 @@ Project [id#x]
 
 
 -- !query
-SELECT id FROM default.v_path_frozen AS view_body_uses_frozen_path
+SELECT id FROM spark_catalog.default.v_path_frozen AS view_body_uses_frozen_path
 -- !query analysis
 Project [id#x]
 +- SubqueryAlias view_body_uses_frozen_path
@@ -777,7 +783,7 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_fn_b`.`frozen_t`,
 -- !query
 SET PATH = spark_catalog.sql_path_fn_a, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_a)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_fn_a)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -791,7 +797,7 @@ CreateSQLFunctionCommand spark_catalog.default.frozen_fn, INT, (SELECT MAX(id) F
 -- !query
 SET PATH = spark_catalog.sql_path_fn_b, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_b)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_fn_b)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -804,7 +810,7 @@ Aggregate [max(id#x) AS max(id)#x]
 
 
 -- !query
-SELECT default.frozen_fn() AS scalar_body_uses_frozen_path
+SELECT spark_catalog.default.frozen_fn() AS scalar_body_uses_frozen_path
 -- !query analysis
 Project [spark_catalog.default.frozen_fn() AS scalar_body_uses_frozen_path#x]
 :  +- Aggregate [max(id#x) AS max(id)#x]
@@ -817,7 +823,7 @@ Project [spark_catalog.default.frozen_fn() AS scalar_body_uses_frozen_path#x]
 -- !query
 SET PATH = spark_catalog.sql_path_fn_a, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_a)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_fn_a)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
@@ -831,11 +837,11 @@ CreateSQLFunctionCommand spark_catalog.default.frozen_tvf, id INT, SELECT MAX(id
 -- !query
 SET PATH = spark_catalog.sql_path_fn_b, system.builtin
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_b)), SchemaInPath(List(system, builtin))]
+SetPathCommand [IdentifierInPath(List(spark_catalog, sql_path_fn_b)), IdentifierInPath(List(system, builtin))]
 
 
 -- !query
-SELECT * FROM default.frozen_tvf() AS table_body_uses_frozen_path
+SELECT * FROM spark_catalog.default.frozen_tvf() AS table_body_uses_frozen_path
 -- !query analysis
 Project [id#x]
 +- SubqueryAlias table_body_uses_frozen_path
@@ -951,7 +957,7 @@ SetCommand (spark.sql.defaultPath,Some(system.session, system.builtin))
 -- !query
 SET PATH = system.builtin, system.session
 -- !query analysis
-SetPathCommand [SchemaInPath(List(system, builtin)), SchemaInPath(List(system, session))]
+SetPathCommand [IdentifierInPath(List(system, builtin)), IdentifierInPath(List(system, session))]
 
 
 -- !query

@@ -505,7 +505,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
    * Remove the frozen resolution path from `properties` so it can be recomputed.
    */
   private def removeResolutionPath(properties: Map[String, String]): Map[String, String] = {
-    properties.filterNot { case (key, _) => key == VIEW_RESOLUTION_PATH }
+    properties.filterNot { case (key, _) =>
+      key == VIEW_RESOLUTION_PATH || key == VIEW_RESOLUTION_PATH_VERSION
+    }
   }
 
   /**
@@ -573,14 +575,15 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       val expandedPathEntries = CatalogManager.pathEntriesForPersistence(
         manager, conf, stripSession = stripSystemSessionFromStoredPath)
       if (expandedPathEntries.nonEmpty) {
-        Map(VIEW_RESOLUTION_PATH -> CatalogManager.serializePathEntries(expandedPathEntries))
+        Map(
+          VIEW_RESOLUTION_PATH -> CatalogManager.serializePathEntries(expandedPathEntries),
+          VIEW_RESOLUTION_PATH_VERSION -> CatalogManager.CURRENT_RESOLUTION_PATH_VERSION)
       } else {
         Map.empty[String, String]
       }
     } else {
-      properties.get(VIEW_RESOLUTION_PATH) match {
-        case Some(v) => Map(VIEW_RESOLUTION_PATH -> v)
-        case None => Map.empty[String, String]
+      properties.filter { case (key, _) =>
+        key == VIEW_RESOLUTION_PATH || key == VIEW_RESOLUTION_PATH_VERSION
       }
     }
 

@@ -4,7 +4,7 @@ SELECT current_path()
 -- !query schema
 struct<current_path():string>
 -- !query output
-system.builtin,system.session,spark_catalog.default
+system.builtin,system.session,spark_catalog.default,system,spark_catalog
 
 
 -- !query
@@ -76,7 +76,7 @@ SELECT current_path()
 -- !query schema
 struct<current_path():string>
 -- !query output
-system.builtin,system.session,spark_catalog.default
+system.builtin,system.session,spark_catalog.default,system,spark_catalog
 
 
 -- !query
@@ -324,18 +324,27 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SET PATH = my_schema_no_catalog
+SET PATH = spark_catalog, system
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_PATH_SCHEMA_REFERENCE",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "qualifiedName" : "my_schema_no_catalog"
-  }
-}
+
+
+
+-- !query
+SELECT system.builtin.current_path()
+-- !query schema
+struct<current_path():string>
+-- !query output
+spark_catalog,system
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -747,7 +756,7 @@ struct<id:int>
 
 
 -- !query
-SELECT id FROM default.v_path_frozen AS view_body_uses_frozen_path
+SELECT id FROM spark_catalog.default.v_path_frozen AS view_body_uses_frozen_path
 -- !query schema
 struct<id:int>
 -- !query output
@@ -792,7 +801,7 @@ SELECT cs, cp FROM sql_path_views_a.v_ctx
 -- !query schema
 struct<cs:string,cp:string>
 -- !query output
-sql_path_views_b	system.builtin,system.session,spark_catalog.sql_path_views_b
+sql_path_views_b	system.builtin,system.session,spark_catalog.sql_path_views_b,system,spark_catalog
 
 
 -- !query
@@ -926,7 +935,7 @@ struct<max(id):int>
 
 
 -- !query
-SELECT default.frozen_fn() AS scalar_body_uses_frozen_path
+SELECT spark_catalog.default.frozen_fn() AS scalar_body_uses_frozen_path
 -- !query schema
 struct<scalar_body_uses_frozen_path:int>
 -- !query output
@@ -960,7 +969,7 @@ struct<>
 
 
 -- !query
-SELECT * FROM default.frozen_tvf() AS table_body_uses_frozen_path
+SELECT * FROM spark_catalog.default.frozen_tvf() AS table_body_uses_frozen_path
 -- !query schema
 struct<id:int>
 -- !query output
@@ -1006,7 +1015,7 @@ SELECT sql_path_fn_a.f_ctx() AS invoker_context
 -- !query schema
 struct<invoker_context:string>
 -- !query output
-sql_path_fn_b::system.builtin,system.session,spark_catalog.sql_path_fn_b
+sql_path_fn_b::system.builtin,system.session,spark_catalog.sql_path_fn_b,system,spark_catalog
 
 
 -- !query

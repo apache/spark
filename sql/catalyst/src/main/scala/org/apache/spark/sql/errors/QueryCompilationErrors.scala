@@ -2704,12 +2704,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
   }
 
-  def invalidSqlPathSchemaReferenceError(qualifiedName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "INVALID_SQL_PATH_SCHEMA_REFERENCE",
-      messageParameters = Map("qualifiedName" -> qualifiedName))
-  }
-
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
     DataTypeErrors.userSpecifiedSchemaUnsupportedError(operation)
   }

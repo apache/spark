@@ -39,20 +39,11 @@ class VariableResolution(
     extends SQLConfHelper {
 
   /**
-   * Unqualified session variables resolve only when SYSTEM.SESSION is on the SQL path
-   * (PATH enabled and explicitly set).
-   */
-  private def allowUnqualifiedSessionTempVariableLookup(nameParts: Seq[String]): Boolean = {
-    nameParts.length != 1 || catalogManager.isSystemSessionOnPath
-  }
-
-  /**
    * Search-path entries to report in `UNRESOLVED_VARIABLE` for DML lookups (`SET VAR`,
    * `FETCH ... INTO`). The full SQL path is reported regardless of how the name was
-   * qualified, matching the convention used by `TABLE_OR_VIEW_NOT_FOUND` and
-   * `UNRESOLVED_ROUTINE`. Keeping the rendering qualification-independent also avoids
-   * re-shaping the error if Spark ever grows struct-field assignment, where 2-part forms
-   * become genuinely ambiguous.
+   * qualified. Unlike routine and relation identifiers, variable names can include nested
+   * field access, so keeping the rendering qualification-independent avoids re-shaping the
+   * error if Spark grows struct-field assignment, where 2-part forms become genuinely ambiguous.
    *
    * DDL paths (`DECLARE` / `DROP` name validation in
    * [[org.apache.spark.sql.catalyst.analysis.ResolveCatalogs]]) do not consult the SQL path
@@ -154,8 +145,7 @@ class VariableResolution(
         )
       }
       .orElse(
-        if (maybeTempVariableName(nameParts) &&
-            allowUnqualifiedSessionTempVariableLookup(nameParts)) {
+        if (resolvesToTempVariable(nameParts)) {
           tempVariableManager
             .get(namePartsCaseAdjusted)
             .map { varDef =>
@@ -187,17 +177,15 @@ class VariableResolution(
     }
   }
 
-  // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
-  private def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 1 || {
-      if (nameParts.length == 2) {
-        nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      } else if (nameParts.length == 3) {
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      } else {
-        false
-      }
+  // The temp variables live in `SYSTEM.SESSION`. One- and two-part references use schema and
+  // catalog entries from the SQL path; the three-part form is fully qualified.
+  private def resolvesToTempVariable(nameParts: Seq[String]): Boolean = {
+    val candidates = CatalogManager.identifierPathCandidates(
+      searchPathEntriesForError, nameParts, catalogManager.isCatalogRegistered)
+    candidates.exists { candidate =>
+      candidate.length == 3 &&
+        candidate(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        candidate(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
     }
   }
 

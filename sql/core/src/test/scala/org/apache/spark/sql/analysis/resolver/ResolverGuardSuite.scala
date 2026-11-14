@@ -18,14 +18,18 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
   Resolver,
   ResolverGuard
 }
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{JsonArray, JsonObjectExpr, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -478,12 +482,56 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     }
   }
 
-  test("persistentCatalogFirst is unsupported") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
-      checkResolverGuard(
-        "SELECT 1",
-        unsupportedReason = Some("configuration: persistentCatalogFirst")
-      )
+  test("two-part builtin function follows catalog entries in PATH") {
+    val catalogManager = spark.sessionState.catalogManager
+    val previousPath = catalogManager.storedSessionPathEntries
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        sql("SET PATH = system, current_catalog")
+        checkResolverGuard("SELECT builtin.abs(-1)")
+
+        sql("SET PATH = current_catalog, system")
+        checkResolverGuard(
+          "SELECT builtin.abs(-1)",
+          unsupportedReason = Some("multi-part function name"))
+      } finally {
+        catalogManager.clearSessionPath()
+        previousPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("two-part builtin function follows the frozen view PATH") {
+    val catalogManager = spark.sessionState.catalogManager
+    val previousPath = catalogManager.storedSessionPathEntries
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withView("v") {
+        try {
+          sql("SET PATH = system, current_catalog")
+          sql("CREATE VIEW v AS SELECT builtin.abs(-1) AS result")
+
+          sql("SET PATH = current_catalog, system")
+          val view = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+          AnalysisContext.withAnalysisContext(view) {
+            checkResolverGuard("SELECT builtin.abs(-1)")
+          }
+
+          val legacyPath = CatalogManager.deserializePathEntries(
+            view.viewStoredResolutionPath.get).get.filter(_.length > 1)
+          val legacyView = view.copy(properties =
+            view.properties
+              .updated(
+                CatalogTable.VIEW_RESOLUTION_PATH,
+                CatalogManager.serializePathEntries(legacyPath))
+              .removed(CatalogTable.VIEW_RESOLUTION_PATH_VERSION))
+          AnalysisContext.withAnalysisContext(legacyView) {
+            checkResolverGuard("SELECT builtin.abs(-1)")
+          }
+        } finally {
+          catalogManager.clearSessionPath()
+          previousPath.foreach(catalogManager.setSessionPath)
+        }
+      }
     }
   }
 

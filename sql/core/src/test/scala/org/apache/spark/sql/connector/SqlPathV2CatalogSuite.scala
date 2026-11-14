@@ -33,8 +33,10 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  * Other path tests live in `SetPathSuite` (session catalog) and `ProcedureSuite`
  * (procedures via CALL). This suite specifically exercises:
  *   - unqualified table resolution across two V2 catalogs in SET PATH,
+ *   - partially qualified table resolution through catalog entries in SET PATH,
  *   - first-match ordering when both catalogs hold the same name,
  *   - unqualified V2 function resolution across two V2 catalogs in SET PATH,
+ *   - partially qualified function resolution through catalog entries in SET PATH,
  *   - the negative case where the unqualified name only lives in a catalog
  *     that is NOT on the path.
  */
@@ -46,6 +48,7 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
     super.beforeAll()
     spark.conf.set("spark.sql.catalog.pathcat", classOf[InMemoryCatalog].getName)
     spark.conf.set("spark.sql.catalog.pathcat2", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.session", classOf[InMemoryCatalog].getName)
   }
 
   override def afterAll(): Unit = {
@@ -53,6 +56,7 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
       spark.sessionState.catalogManager.reset()
       spark.sessionState.conf.unsetConf("spark.sql.catalog.pathcat")
       spark.sessionState.conf.unsetConf("spark.sql.catalog.pathcat2")
+      spark.sessionState.conf.unsetConf("spark.sql.catalog.session")
     } finally {
       super.afterAll()
     }
@@ -74,7 +78,7 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
     v2Catalog(catalog).createFunction(Identifier.of(Array(ns), name), fn)
   }
 
-  test("V2 catalogs on SET PATH: unqualified table follows first match") {
+  test("V2 catalogs on SET PATH: one- and two-part table names follow first match") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       // pathcat and pathcat2 each have a namespace `ns` and a table `path_v2_t` with
       // different contents, so we can tell which catalog supplied the row.
@@ -91,6 +95,12 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
 
         sql("SET PATH = pathcat2.ns, pathcat.ns, system.builtin")
         checkAnswer(sql("SELECT id FROM path_v2_t"), Row(20))
+
+        sql("SET PATH = pathcat, pathcat2, system")
+        checkAnswer(sql("SELECT id FROM ns.path_v2_t"), Row(10))
+
+        sql("SET PATH = pathcat2, pathcat, system")
+        checkAnswer(sql("SELECT id FROM ns.path_v2_t"), Row(20))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TABLE IF EXISTS pathcat.ns.path_v2_t")
@@ -119,7 +129,7 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
     }
   }
 
-  test("V2 catalogs on SET PATH: unqualified function follows first match") {
+  test("V2 catalogs on SET PATH: one- and two-part function names follow first match") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       // Two V2 catalogs each register a `strlen` function under the same name but with
       // distinguishable return values: pathcat returns the true length, pathcat2 returns
@@ -135,11 +145,30 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
 
         sql("SET PATH = pathcat2.fns, pathcat.fns, system.builtin")
         checkAnswer(sql("SELECT strlen('abc')"), Row(300))
+
+        sql("SET PATH = pathcat, pathcat2, system")
+        checkAnswer(sql("SELECT fns.strlen('abc')"), Row(3))
+
+        sql("SET PATH = pathcat2, pathcat, system")
+        checkAnswer(sql("SELECT fns.strlen('abc')"), Row(300))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         v2Catalog("pathcat").clearFunctions()
         v2Catalog("pathcat2").clearFunctions()
       }
+    }
+  }
+
+  test("catalog named session is not treated as the temp-function namespace") {
+    v2Catalog("session").createFunction(
+      Identifier.of(Array.empty[String], "strlen"),
+      StrLen(StrLenDefault))
+    sql("CREATE TEMPORARY FUNCTION strlen() RETURNS TABLE(value INT) RETURN SELECT 1")
+    try {
+      checkAnswer(sql("SELECT session.strlen('abc')"), Row(3))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION strlen")
+      v2Catalog("session").clearFunctions()
     }
   }
 }

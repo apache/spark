@@ -263,15 +263,15 @@ case class CurrentCatalog()
 }
 
 /**
- * Returns the current SQL path as a comma-separated list of qualified schema names
- * (catalog.schema). The result reflects the current catalog and schema context.
+ * Returns the current SQL path as a comma-separated list of catalog and qualified schema names.
+ * The result reflects the current catalog and schema context.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current SQL path (qualified schema names).",
+  usage = "_FUNC_() - Returns the current SQL path (catalog and qualified schema names).",
   examples = """
     Examples:
       > SELECT _FUNC_();
-       system.builtin,system.session,spark_catalog.default
+       system.builtin,system.session,spark_catalog.default,system,spark_catalog
   """,
   since = "4.2.0",
   group = "misc_funcs")

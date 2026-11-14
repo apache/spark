@@ -23,10 +23,23 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Test suite for temporary relation (view, and future temp table) qualification and resolution
  * search path. Tests session.v, system.session.v qualification and configurable resolution order
- * (spark.sql.functionResolution.sessionOrder for unqualified names;
- * spark.sql.legacy.persistentCatalogFirst for two-part session.name vs persistent schema session).
+ * (spark.sql.functionResolution.sessionOrder for unqualified names, SQL PATH catalog entries for
+ * two-part session.name vs persistent schema session, and persistentCatalogFirst for the built-in
+ * default path).
  */
 class RelationQualificationSuite extends SharedSparkSession {
+
+  private def withCatalogPath(path: String)(f: => Unit): Unit = {
+    val catalogManager = spark.sessionState.catalogManager
+    val previousPath = catalogManager.storedSessionPathEntries
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      sql(s"SET PATH = $path")
+      try f finally {
+        catalogManager.clearSessionPath()
+        previousPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
 
   test("SECTION 1: Basic qualification - SELECT from session.v and system.session.v") {
     sql("CREATE TEMPORARY VIEW v1 AS SELECT 1 AS c")
@@ -80,9 +93,7 @@ class RelationQualificationSuite extends SharedSparkSession {
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
           "relationName" -> "`session`.`nonexistent`",
-          "searchPath" -> (
-            "[`system`.`builtin`, `system`.`session`, " +
-            "`spark_catalog`.`default`]")),
+        "searchPath" -> "[`system`, `spark_catalog`]"),
         context = ExpectedContext("session.nonexistent"))
       // Unqualified check uses another missing name so we do not resolve to default.nonexistent.
       val missing = "missing_rel_rqs4"
@@ -222,28 +233,101 @@ class RelationQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 13: Two-part session.name - persistentCatalogFirst controls temp vs persistent") {
+  test("SECTION 13: Two-part session.name follows catalog entries in PATH") {
     // Persistent object is spark_catalog.session.order_probe_tbl; temp view is order_probe_tbl.
     withDatabase("session") {
       sql("CREATE DATABASE session")
-      sql("CREATE TABLE session.order_probe_tbl (id INT) USING parquet")
+      sql("CREATE TABLE session.order_probe_tbl (persistent_id INT) USING parquet")
       sql("INSERT INTO session.order_probe_tbl VALUES (100)")
-      sql("CREATE TEMPORARY VIEW order_probe_tbl AS SELECT 200 AS id")
+      sql("CREATE TEMPORARY VIEW order_probe_tbl AS SELECT 200 AS temp_id")
       try {
-        // Default: prioritize system session temp (local view) before persistent schema `session`.
-        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
-        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
-          checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(100))
+        withCatalogPath("system, current_catalog") {
+          checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            assert(sql("SELECT * FROM session.order_probe_tbl")
+              .queryExecution.analyzed.schema.fieldNames === Array("temp_id"))
+          }
         }
-        // Back to default inside the same session after nested conf block.
-        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
+        withCatalogPath("current_catalog, system") {
+          checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(100))
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            assert(sql("SELECT * FROM session.order_probe_tbl")
+              .queryExecution.analyzed.schema.fieldNames === Array("persistent_id"))
+          }
+        }
       } finally {
         sql("DROP VIEW IF EXISTS order_probe_tbl")
       }
     }
   }
 
-  test("SECTION 14: Three-part system.session.missing - search path lists temp scope only") {
+  test("SECTION 14: persistentCatalogFirst orders DEFAULT_PATH catalog entries") {
+    withDatabase("session") {
+      sql("CREATE DATABASE session")
+      sql("CREATE TABLE session.default_path_probe_tbl (id INT) USING parquet")
+      sql("INSERT INTO session.default_path_probe_tbl VALUES (100)")
+      sql("CREATE TEMPORARY VIEW default_path_probe_tbl AS SELECT 200 AS id")
+      try {
+        Seq(false -> Row(200), true -> Row(100)).foreach {
+          case (persistentCatalogFirst, expected) =>
+            withSQLConf(
+              SQLConf.PERSISTENT_CATALOG_FIRST.key -> persistentCatalogFirst.toString) {
+              withCatalogPath("DEFAULT_PATH") {
+                checkAnswer(sql("SELECT * FROM session.default_path_probe_tbl"), expected)
+              }
+            }
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS default_path_probe_tbl")
+      }
+    }
+  }
+
+  test("SECTION 15: Analyzer++ keeps PATH-resolved and explicit relations distinct") {
+    withDatabase("session") {
+      sql("CREATE DATABASE session")
+      sql("CREATE TABLE session.collision_probe (persistent_id INT) USING parquet")
+      sql("CREATE TEMPORARY VIEW collision_probe AS SELECT 1 AS temp_id")
+      try {
+        withCatalogPath("system, current_catalog") {
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            val analyzed = sql(
+              "SELECT partial.*, qualified.* " +
+                "FROM session.collision_probe partial " +
+                "CROSS JOIN spark_catalog.session.collision_probe qualified")
+              .queryExecution.analyzed
+            assert(analyzed.schema.fieldNames === Array("temp_id", "persistent_id"))
+          }
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS collision_probe")
+      }
+    }
+  }
+
+  test("SECTION 16: Analyzer++ keeps unqualified and explicit relations distinct") {
+    withTable("collision_probe") {
+      val currentDatabase = spark.catalog.currentDatabase
+      sql("CREATE TABLE collision_probe (persistent_id INT) USING parquet")
+      sql("CREATE TEMPORARY VIEW collision_probe AS SELECT 1 AS temp_id")
+      try {
+        withCatalogPath("DEFAULT_PATH") {
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            val analyzed = sql(
+              "SELECT partial.*, qualified.* " +
+                "FROM collision_probe partial " +
+                s"CROSS JOIN spark_catalog.$currentDatabase.collision_probe qualified")
+              .queryExecution.analyzed
+            assert(analyzed.schema.fieldNames === Array("temp_id", "persistent_id"))
+          }
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS collision_probe")
+      }
+    }
+  }
+
+  test("SECTION 17: Three-part system.session.missing - search path lists temp scope only") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT * FROM system.session.no_such_view_xyz")

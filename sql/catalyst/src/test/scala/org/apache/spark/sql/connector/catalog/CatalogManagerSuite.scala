@@ -26,7 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog => V1InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.connector.catalog.CatalogManager.{CurrentSchemaEntry, LiteralPathEntry}
+import org.apache.spark.sql.connector.catalog.CatalogManager.{CurrentCatalogEntry, CurrentSchemaEntry, LiteralPathEntry}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -177,6 +177,40 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(parsed === entries)
   }
 
+  test("legacy persisted path is enriched with catalog entries in configured order") {
+    val schemaEntries = Seq(
+      Seq("system", "builtin"),
+      Seq("spark_catalog", "default"))
+    val stored = CatalogManager.serializePathEntries(
+      schemaEntries ++ Seq(Seq("other_catalog"), Seq("system")))
+
+    def read(persistentCatalogFirst: Boolean): Seq[Seq[String]] =
+      CatalogManager.deserializePathEntriesForAnalysisOrFail(
+        stored,
+        storedPathVersion = None,
+        creationCatalog = Some("spark_catalog"),
+        persistentCatalogFirst = persistentCatalogFirst,
+        objectType = "view",
+        objectName = "v")
+
+    assert(read(persistentCatalogFirst = false) ===
+      schemaEntries ++ Seq(Seq("system"), Seq("spark_catalog")))
+    assert(read(persistentCatalogFirst = true) ===
+      schemaEntries ++ Seq(Seq("spark_catalog"), Seq("system")))
+  }
+
+  test("current persisted path version preserves an intentionally schema-only path") {
+    val entries = Seq(Seq("pathcat", "ns"))
+    val stored = CatalogManager.serializePathEntries(entries)
+    assert(CatalogManager.deserializePathEntriesForAnalysisOrFail(
+      stored,
+      storedPathVersion = Some(CatalogManager.CURRENT_RESOLUTION_PATH_VERSION),
+      creationCatalog = Some("spark_catalog"),
+      persistentCatalogFirst = false,
+      objectType = "view",
+      objectName = "v") === entries)
+  }
+
   test("deserializePathEntriesOrFail raises a clear AnalysisException for bad payloads") {
     val e = intercept[AnalysisException] {
       CatalogManager.deserializePathEntriesOrFail(
@@ -202,6 +236,8 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, session)))
     assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin)))
     assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, catalog, session)))
+    // Catalog-only entries do not participate in one-part function resolution.
+    assert(CatalogManager.isBuiltinFirstOnPath(Seq(Seq("spark_catalog"), builtin)))
     // Case-insensitive match on the well-known entry.
     assert(CatalogManager.isBuiltinFirstOnPath(Seq(Seq("System", "Builtin"), session)))
     // `first` mode (session before builtin) and custom `SET PATH` shapes that place any entry
@@ -210,6 +246,42 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(!CatalogManager.isBuiltinFirstOnPath(Seq(catalog, builtin)))
     assert(!CatalogManager.isBuiltinFirstOnPath(Seq(catalog)))
     assert(!CatalogManager.isBuiltinFirstOnPath(Seq.empty))
+  }
+
+  test("identifierPathCandidates selects PATH entries by identifier arity") {
+    val path = Seq(
+      Seq("system", "builtin"),
+      Seq("spark_catalog", "default"),
+      Seq("system"),
+      Seq("spark_catalog"))
+    val noCatalogs = (_: String) => false
+    val sparkCatalogRegistered = Set("spark_catalog").contains _
+    val catRegistered = Set("cat").contains _
+
+    assert(CatalogManager.identifierPathEntries(path, Seq("f"), noCatalogs) === path.take(2))
+    assert(CatalogManager.identifierPathEntries(
+      path, Seq("session", "f"), noCatalogs) === path.drop(2))
+    assert(CatalogManager.identifierPathEntries(
+      path, Seq("cat", "f"), catRegistered) === path.take(2))
+    assert(CatalogManager.identifierPathEntries(
+      path, Seq("cat", "ns", "f"), noCatalogs) === path.take(2))
+    assert(CatalogManager.identifierPathCandidates(path, Seq("f"), noCatalogs) === Seq(
+      Seq("system", "builtin", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      path, Seq("f"), sparkCatalogRegistered) === Seq(
+      Seq("system", "builtin", "f"),
+      Seq("spark_catalog", "default", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      path, Seq("session", "f"), sparkCatalogRegistered) === Seq(
+      Seq("system", "session", "f"),
+      Seq("spark_catalog", "session", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      path, Seq("session", "f"), noCatalogs) === Seq(
+      Seq("system", "session", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      path, Seq("cat", "f"), catRegistered) === Seq(Seq("cat", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      path, Seq("cat", "ns", "f"), noCatalogs) === Seq(Seq("cat", "ns", "f")))
   }
 
   // ---------------------------------------------------------------------------
@@ -254,6 +326,15 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     }
     assert(e.getCondition == "DUPLICATE_SQL_PATH_ENTRY")
     assert(e.getMessageParameters.get("pathEntry") == "current_schema")
+  }
+
+  test("validateNoStaticDuplicates: repeated CurrentCatalogEntry is rejected") {
+    val entries = Seq(CurrentCatalogEntry, CurrentCatalogEntry)
+    val e = intercept[AnalysisException] {
+      PathElement.validateNoStaticDuplicates(entries, caseSensitive = false)
+    }
+    assert(e.getCondition == "DUPLICATE_SQL_PATH_ENTRY")
+    assert(e.getMessageParameters.get("pathEntry") == "current_catalog")
   }
 
   test("validateNoStaticDuplicates: literal-vs-CurrentSchemaEntry collision is tolerated") {

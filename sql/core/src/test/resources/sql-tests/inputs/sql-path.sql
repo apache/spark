@@ -26,7 +26,7 @@
 --      4.2 DEFAULT_PATH expansion duplicate
 --      4.3 SYSTEM_PATH expansion duplicate
 --      4.4 current_database vs current_schema cross-alias duplicate
---      4.5 Single-part schema reference rejected
+--      4.5 Single-part catalog reference accepted
 --   5. Routine resolution via PATH
 --      5.1 Persistent scalar function follows PATH
 --      5.2 Persistent table function follows PATH
@@ -179,9 +179,11 @@ SET PATH = SYSTEM_PATH, SYSTEM_PATH;
 SET PATH = current_database, current_schema;
 
 
--- 4.5 Single-part schema reference rejected -----------------------------------
+-- 4.5 Single-part catalog reference accepted ----------------------------------
 
-SET PATH = my_schema_no_catalog;
+SET PATH = spark_catalog, system;
+SELECT system.builtin.current_path();
+SET PATH = DEFAULT_PATH;
 
 
 -- ============================================================================
@@ -283,7 +285,7 @@ CREATE VIEW default.v_path_frozen AS SELECT id FROM frozen_t;
 -- returns the other table's row (id=2).
 SET PATH = spark_catalog.sql_path_views_b, system.builtin;
 SELECT id FROM frozen_t AS bare_lookup_uses_live_path;
-SELECT id FROM default.v_path_frozen AS view_body_uses_frozen_path;
+SELECT id FROM spark_catalog.default.v_path_frozen AS view_body_uses_frozen_path;
 
 
 -- 7.2 current_schema / current_path in view body use invoker context ----------
@@ -329,7 +331,7 @@ RETURN (SELECT MAX(id) FROM frozen_t);
 
 SET PATH = spark_catalog.sql_path_fn_b, system.builtin;
 SELECT MAX(id) FROM frozen_t AS bare_lookup_uses_live_path;
-SELECT default.frozen_fn() AS scalar_body_uses_frozen_path;
+SELECT spark_catalog.default.frozen_fn() AS scalar_body_uses_frozen_path;
 
 
 -- 8.2 Table function body resolves via creation-time PATH ---------------------
@@ -340,7 +342,7 @@ RETURNS TABLE(id INT)
 RETURN SELECT MAX(id) AS id FROM frozen_t;
 
 SET PATH = spark_catalog.sql_path_fn_b, system.builtin;
-SELECT * FROM default.frozen_tvf() AS table_body_uses_frozen_path;
+SELECT * FROM spark_catalog.default.frozen_tvf() AS table_body_uses_frozen_path;
 
 
 -- 8.3 current_schema / current_path in function body use invoker context -----

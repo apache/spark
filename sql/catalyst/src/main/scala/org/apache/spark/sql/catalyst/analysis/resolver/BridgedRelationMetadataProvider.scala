@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.RelationResolution
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, RelationResolution}
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -32,17 +32,23 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 class BridgedRelationMetadataProvider(
     override val catalogManager: CatalogManager,
     override val relationResolution: RelationResolution,
-    analyzerBridgeState: AnalyzerBridgeState,
-    viewResolver: ViewResolver
+    analyzerBridgeState: AnalyzerBridgeState
 ) extends RelationMetadataProvider {
+  def this(
+      catalogManager: CatalogManager,
+      relationResolution: RelationResolution,
+      analyzerBridgeState: AnalyzerBridgeState,
+      viewResolver: ViewResolver) = {
+    this(catalogManager, relationResolution, analyzerBridgeState)
+  }
+
   override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
 
   /**
    * We update relations on each [[resolve]] call, because relation IDs might have changed.
-   * This can happen for the nested views, since catalog name may differ, and expanded table name
-   * will differ for the same [[UnresolvedRelation]]. In order to overcome this issue, we use
-   * [[viewResolver]]'s context to peek into the most recent context and to only resolve the
-   * relations which were created under this same context.
+   * This can happen for nested views because their catalog, namespace, or frozen SQL path may
+   * differ for the same [[UnresolvedRelation]]. We use the current [[AnalysisContext]] to only
+   * resolve relations that were created under the same context.
    *
    * See [[ViewResolver.resolve]] for more info on how SQL configs are propagated to nested views).
    */
@@ -51,12 +57,11 @@ class BridgedRelationMetadataProvider(
   }
 
   private def updateRelationsWithResolvedMetadata(): Unit = {
+    val analysisContext = AnalysisContext.get
     analyzerBridgeState.relationsWithResolvedMetadata.forEach(
       (bridgeRelationId, relationWithResolvedMetadata) => {
-        if (viewResolver.getViewResolutionContext
-            .flatMap(_.catalogAndNamespace)
-            .getOrElse(Seq.empty)
-          == bridgeRelationId.catalogAndNamespace) {
+        if (analysisContext.catalogAndNamespace == bridgeRelationId.catalogAndNamespace &&
+            analysisContext.resolutionPathEntries == bridgeRelationId.resolutionPathEntries) {
           relationsWithResolvedMetadata.put(
             relationIdFromUnresolvedRelation(bridgeRelationId.unresolvedRelation),
             visitUnderSubqueryAlias(relationWithResolvedMetadata)({ relation =>

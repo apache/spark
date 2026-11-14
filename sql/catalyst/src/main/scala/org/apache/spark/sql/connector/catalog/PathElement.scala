@@ -23,14 +23,14 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogManager.{
-  CurrentSchemaEntry, LiteralPathEntry, SessionPathEntry
+  CurrentCatalogEntry, CurrentSchemaEntry, LiteralPathEntry, SessionPathEntry
 }
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * One element on the right-hand side of `SET PATH = ...`: either a well-known shortcut
- * keyword (DEFAULT_PATH, SYSTEM_PATH, PATH, CURRENT_SCHEMA / CURRENT_DATABASE) or a
- * fully qualified schema reference (`catalog.namespace...` with at least 2 parts).
+ * keyword (DEFAULT_PATH, SYSTEM_PATH, PATH, CURRENT_CATALOG,
+ * CURRENT_SCHEMA / CURRENT_DATABASE) or a catalog/schema path reference.
  *
  * The same grammar is reused to parse the
  * [[org.apache.spark.sql.internal.SQLConf#DEFAULT_PATH()]] conf value, so this
@@ -51,8 +51,11 @@ private[sql] object PathElement {
    */
   case object CurrentSchema extends PathElement
 
-  /** Fully qualified schema reference (`catalog.namespace...`). Must have at least 2 parts. */
-  case class SchemaInPath(parts: Seq[String]) extends PathElement
+  /** Current catalog. Stored as a marker so it follows USE CATALOG. */
+  case object CurrentCatalog extends PathElement
+
+  /** Catalog or fully qualified schema reference. */
+  case class IdentifierInPath(parts: Seq[String]) extends PathElement
 
   /**
    * Expand a parsed [[PathElement]] list into concrete [[SessionPathEntry]] entries
@@ -73,14 +76,17 @@ private[sql] object PathElement {
       catalogManager: CatalogManager,
       isConfDefaultExpansion: Boolean = false): Seq[SessionPathEntry] = {
     val currentSchemaSentinel = Seq("__current_schema__")
+    val currentCatalogSentinel = Seq("__current_catalog__")
 
     def toEntries(parts: Seq[Seq[String]]): Seq[SessionPathEntry] = parts.map {
       case p if p == currentSchemaSentinel => CurrentSchemaEntry
+      case p if p == currentCatalogSentinel => CurrentCatalogEntry
       case p => LiteralPathEntry(p)
     }
 
     def builtinDefaultWithCurrentSchema: Seq[SessionPathEntry] =
-      toEntries(conf.defaultPathOrder(Seq(currentSchemaSentinel)))
+      toEntries(conf.defaultPathOrder(
+        Seq(currentSchemaSentinel), Seq(currentCatalogSentinel)))
 
     def defaultPathExpansion: Seq[SessionPathEntry] = {
       if (isConfDefaultExpansion) {
@@ -99,24 +105,22 @@ private[sql] object PathElement {
         toEntries(conf.systemPathOrder)
       case CurrentSchema =>
         Seq(CurrentSchemaEntry)
+      case CurrentCatalog =>
+        Seq(CurrentCatalogEntry)
       case PathRef =>
         catalogManager.storedSessionPathEntries.getOrElse(defaultPathExpansion)
-      case SchemaInPath(parts) =>
+      case IdentifierInPath(parts) =>
         Seq(LiteralPathEntry(parts))
     }
   }
 
   /**
-   * Reject *static* duplicates in a SET PATH entry list: identical
-   * [[CatalogManager#LiteralPathEntry]] parts and repeated
-   * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]] markers
-   * (the `current_schema` / `current_database`
-   * cross-alias case). Used for the interactive `SET PATH` form to surface user typos at
-   * statement time.
+   * Reject *static* duplicates in a SET PATH entry list: identical literal parts and repeated
+   * current-schema or current-catalog markers. Used for the interactive `SET PATH` form to
+   * surface user typos at statement time.
    *
-   * Deliberately does NOT compare a [[CatalogManager#LiteralPathEntry]] against a
-   * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]]: such a
-   * "duplicate" depends on the live `USE SCHEMA`
+   * Deliberately does NOT compare a literal entry against a dynamic marker: such a "duplicate"
+   * depends on the live `USE CATALOG` / `USE SCHEMA`
    * and is harmless at lookup (first-match resolution skips the dead literal).
    * [[org.apache.spark.sql.internal.SQLConf#DEFAULT_PATH()]] expansion skips this check
    * entirely so transient `USE`-induced
@@ -127,6 +131,7 @@ private[sql] object PathElement {
       caseSensitive: Boolean): Seq[SessionPathEntry] = {
     val seenLiterals = new mutable.HashSet[Seq[String]]
     var seenCurrentSchema = false
+    var seenCurrentCatalog = false
     entries.foreach {
       case CurrentSchemaEntry =>
         if (seenCurrentSchema) {
@@ -135,6 +140,13 @@ private[sql] object PathElement {
             messageParameters = Map("pathEntry" -> "current_schema"))
         }
         seenCurrentSchema = true
+      case CurrentCatalogEntry =>
+        if (seenCurrentCatalog) {
+          throw new AnalysisException(
+            errorClass = "DUPLICATE_SQL_PATH_ENTRY",
+            messageParameters = Map("pathEntry" -> "current_catalog"))
+        }
+        seenCurrentCatalog = true
       case LiteralPathEntry(parts) =>
         val key = if (caseSensitive) parts else parts.map(_.toLowerCase(Locale.ROOT))
         if (!seenLiterals.add(key)) {
