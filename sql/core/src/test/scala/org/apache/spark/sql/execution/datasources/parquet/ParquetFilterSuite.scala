@@ -43,7 +43,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
+import org.apache.spark.sql.catalyst.optimizer.{InferFiltersFromConstraints, OptimizeIn}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
@@ -263,6 +263,18 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       checkFilterPredicate(booleanAttr === true, classOf[Eq[_]], resultFun(true))
       checkFilterPredicate(booleanAttr <=> true, classOf[Eq[_]], resultFun(true))
       checkFilterPredicate(booleanAttr =!= true, classOf[NotEq[_]], resultFun(false))
+
+      // Above and below the IN filter threshold, an IN on a BOOLEAN column is pushed as an OR of
+      // equalities (see `makeInPredicate`).
+      Seq(1, 10).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(In(booleanAttr, Seq(Literal(true), Literal(false))),
+            classOf[Operators.Or], Seq(Row(resultFun(true)), Row(resultFun(false))))
+          checkFilterPredicate(
+            In(booleanAttr, Seq(Literal(true), Literal.create(null, BooleanType))),
+            classOf[Operators.Or], resultFun(true))
+        }
+      }
     }
   }
 
@@ -1892,6 +1904,92 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         None
       ) {
         parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3, 7))))
+      }
+    }
+  }
+
+  test("SPARK-60916: Pushdown IN predicate on a BOOLEAN column") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1") {
+      val parquetFilters = createParquetFilters(
+        new SparkToParquetSchemaConverter(conf).convert(StructType.fromDDL("b boolean")))
+
+      // An OR of equalities rather than `FilterApi.in`, which the bloom filter level of
+      // parquet-java cannot evaluate on a BOOLEAN column.
+      assertResult(Some(or(
+        FilterApi.eq(booleanColumn("b"), true: java.lang.Boolean),
+        FilterApi.eq(booleanColumn("b"), false: java.lang.Boolean)))) {
+        parquetFilters.createFilter(sources.In("b", Array(true, false, true)))
+      }
+
+      // The pushed filter must not be `eq(b, null)` (IS NULL) alone: the IN never keeps a NULL
+      // row, so IS NULL alone would drop the rows that are true.
+      assertResult(Some(or(
+        FilterApi.eq(booleanColumn("b"), null: java.lang.Boolean),
+        FilterApi.eq(booleanColumn("b"), true: java.lang.Boolean)))) {
+        parquetFilters.createFilter(sources.In("b", Array(true, null)))
+      }
+    }
+  }
+
+  test("SPARK-60916: IN with NULL on a BOOLEAN column above the IN filter threshold") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // Two files: one without NULLs, and one with only a NULL.
+      sql("SELECT * FROM VALUES (true), (false) AS t(b)").coalesce(1)
+        .write.parquet(path)
+      sql("SELECT CAST(NULL AS BOOLEAN) AS b").write.mode("append").parquet(path)
+      Seq(1, 10).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          val df = spark.read.parquet(path)
+          checkAnswer(df.where("b IN (true, NULL)"), Row(true))
+          checkAnswer(df.where("b IN (true, false, NULL)"), Seq(Row(true), Row(false)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60916: IN on a BOOLEAN column with a bloom filter above the IN filter threshold") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("SELECT b, named_struct('x', b) AS s FROM VALUES (true), (false) AS t(b)").coalesce(1)
+        .write.option(ParquetOutputFormat.BLOOM_FILTER_ENABLED, true).parquet(path)
+      withSQLConf(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1",
+          ParquetInputFormat.BLOOM_FILTERING_ENABLED -> "true") {
+        withAllParquetReaders {
+          val df = spark.read.parquet(path)
+          Seq("b", "s.x").foreach { col =>
+            checkAnswer(df.where(s"$col IN (true, false)").select("b"), Seq(Row(true), Row(false)))
+            checkAnswer(df.where(s"$col IN (true, NULL)").select("b"), Row(true))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60916: IN with only NULLs above the IN filter threshold") {
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1") {
+      val parquetFilters = createParquetFilters(new SparkToParquetSchemaConverter(conf)
+        .convert(StructType.fromDDL("b boolean, i int")))
+      // The IN matches no row, so its IS NULL disjunct alone is pushed, as below the threshold.
+      assertResult(Some(FilterApi.eq(booleanColumn("b"), null: java.lang.Boolean))) {
+        parquetFilters.createFilter(sources.In("b", Array(null, null)))
+      }
+      assertResult(Some(FilterApi.eq(intColumn("i"), null: Integer))) {
+        parquetFilters.createFilter(sources.In("i", Array(null, null)))
+      }
+    }
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("SELECT * FROM VALUES (true, 1), (NULL, NULL) AS t(b, i)").coalesce(1)
+        .write.parquet(path)
+      // OptimizeIn would otherwise replace the IN with NULL.
+      withSQLConf(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> OptimizeIn.ruleName) {
+        val df = spark.read.parquet(path)
+        checkAnswer(df.where("b IN (NULL, NULL)"), Seq.empty)
+        checkAnswer(df.where("i IN (NULL, NULL)"), Seq.empty)
       }
     }
   }
