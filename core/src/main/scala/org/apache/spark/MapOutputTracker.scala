@@ -925,8 +925,7 @@ private[spark] class MapOutputTrackerMaster(
         // MapStatuses and push-merger locations to find what the external shuffle service must
         // delete. Same ordering, same reason, as ContextCleaner.doCleanupShuffle.
         shuffleFileRemover.foreach(_(shuffleId))
-        // Drops the whole ShuffleStatus. The async RemoveShuffle broadcast would too; doing it here
-        // makes the outcome independent of when that lands.
+        // Drop the whole ShuffleStatus even if the storage implementation does not unregister it.
         unregisterShuffle(shuffleId)
         // Last, so a CleanerListener never observes shuffleCleaned while the shuffle is still
         // registered -- the order doCleanupShuffle establishes.

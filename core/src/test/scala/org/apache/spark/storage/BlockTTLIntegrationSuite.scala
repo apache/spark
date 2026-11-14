@@ -164,7 +164,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
     startCluster(rddTTL = true, shuffleTTL = true)
     assert(endpoint.rddAccessTime.isEmpty)
     val input = sc.parallelize(1.to(100)).groupBy(_ % 10).cache()
-    input.count()
+    assert(input.count() === 10)
     eventually { assert(endpoint.rddAccessTime.containsKey(input.id)) }
     val shuffleId = tracker.shuffleStatuses.keys.head
     eventually { assert(tracker.shuffleAccessTime.containsKey(shuffleId)) }
@@ -177,7 +177,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
     assert(tracker.shuffleAccessTime.isEmpty, "the reaped shuffle should no longer be tracked")
     assert(endpoint.rddAccessTime.isEmpty, "the reaped RDD should no longer be tracked")
     // Both are evictions, not unpersists: the job runs again and both come back tracked.
-    input.count()
+    assert(input.count() === 10)
     eventually {
       assert(endpoint.rddAccessTime.containsKey(input.id))
       assert(!tracker.shuffleAccessTime.isEmpty)
