@@ -120,6 +120,33 @@ def _validate_approx_quantile_probabilities(probabilities: Any) -> List[float]:
     return [float(p) for p in probabilities]
 
 
+def _validate_approx_quantile_relative_error(relativeError: Any) -> float:
+    """
+    Validate the ``relativeError`` argument of ``DataFrame.approxQuantile``, shared by the
+    classic and Connect implementations so both stay in sync. Returns it as a ``float``.
+    """
+    from pyspark.errors import PySparkTypeError, PySparkValueError
+
+    if isinstance(relativeError, bool) or not isinstance(relativeError, (float, int)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "float or int",
+                "arg_name": "relativeError",
+                "arg_type": type(relativeError).__name__,
+            },
+        )
+    if not relativeError >= 0:
+        raise PySparkValueError(
+            errorClass="NEGATIVE_VALUE",
+            messageParameters={
+                "arg_name": "relativeError",
+                "arg_value": str(relativeError),
+            },
+        )
+    return float(relativeError)
+
+
 class DataFrame:
     """A distributed collection of data grouped into named columns.
 

@@ -1746,6 +1746,35 @@ class FunctionsTestsMixin:
             },
         )
 
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, 0.5, 0.9], float("nan"))
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NEGATIVE_VALUE",
+            messageParameters={"arg_name": "relativeError", "arg_value": "nan"},
+        )
+
+        for relative_error in (True, False):
+            with self.subTest(relative_error=relative_error):
+                with self.assertRaises(PySparkTypeError) as pe:
+                    df.stat.approxQuantile("a", [0.5], relative_error)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "float or int",
+                        "arg_name": "relativeError",
+                        "arg_type": "bool",
+                    },
+                )
+
+        self.assertEqual(df.stat.approxQuantile("a", [0.5], 0), [4.0])
+
+        quantiles = df.stat.approxQuantile("a", [0.5], 1)
+        self.assertEqual(len(quantiles), 1)
+        self.assertEqual(quantiles, df.stat.approxQuantile("a", [0.5], 1.0))
+
     def test_sorting_functions_with_column(self):
         self.check_sorting_functions_with_column(Column)
 
