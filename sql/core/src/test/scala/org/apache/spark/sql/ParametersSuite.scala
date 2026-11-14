@@ -1434,7 +1434,7 @@ class ParametersSuite extends SharedSparkSession {
         checkAnswer(spark.sql("SELECT first(DISTINCT ?) AS f, ? AS g", Array(5, 6)), Row(5, 6))
         // In a statement with optional references, a `?` after a non-reserved keyword where the
         // syntax allows a reference is an optional reference, so the remaining markers would
-        // take the values of the following ones silently.
+        // take the values of the preceding ones silently.
         checkError(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT missing?, first(DISTINCT ?) AS f, ? AS g", Array(5, 6))
@@ -1449,6 +1449,48 @@ class ParametersSuite extends SharedSparkSession {
           parameters = Map("numMarkers" -> "0", "numValues" -> "1"))
         checkAnswer(spark.sql("SELECT missing?, ? AS g", Array(6)), Row(null, 6))
       }
+    }
+  }
+
+  test("positional parameter values that a statement with optional references that resolve " +
+    "does not use, in the legacy binding mode") {
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true"
+    ) {
+      withTempView("v") {
+        sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, 2 AS `distinct`")
+        // The parameters are bound after the references resolved, so the check must go by the
+        // statement as written.
+        val query = "SELECT id?, first(DISTINCT ?) AS f, ? AS g FROM v GROUP BY id"
+        checkError(
+          exception = intercept[AnalysisException](spark.sql(query, Array(5, 6))),
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(s"EXECUTE IMMEDIATE '$query' USING 5, 6")
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        checkAnswer(spark.sql(query, Array(6)), Row(1, 2, 6))
+        checkAnswer(spark.sql(s"EXECUTE IMMEDIATE '$query' USING 6"), Row(1, 2, 6))
+        // A statement without optional references ignores the extra values, as before.
+        checkAnswer(spark.sql("SELECT ? AS a FROM v", Array(1, 2)), Row(1))
+        checkAnswer(spark.sql("EXECUTE IMMEDIATE 'SELECT ? AS a FROM v' USING 1, 2"), Row(1))
+      }
+    }
+  }
+
+  test("optional named parameter marker after a supplementary character") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      // A code point of two UTF-16 units before the marker: the lookahead that decides whether
+      // the substituted NULL needs a space before the next token must count code points, or NULL
+      // and the keyword after it would form one identifier.
+      val smiley = new String(Character.toChars(0x1F600))
+      checkAnswer(spark.sql(s"SELECT '$smiley' AS e, :p?FROM range(1)"), Row(smiley, null))
+      checkAnswer(spark.sql(s"SELECT '$smiley' AS e, :p?FROM range(1)", Map("q" -> 1)),
+        Row(smiley, null))
     }
   }
 

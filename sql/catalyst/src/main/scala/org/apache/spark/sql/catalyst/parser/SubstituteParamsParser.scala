@@ -85,7 +85,8 @@ class SubstituteParamsParser extends Logging {
       // builds the plan can tell, so parse a statement with a `?` that is not a parameter marker
       // again with optional references.
       case (_, locations)
-          if AbstractParser.questions(tokenStream).length >
+          if parser.optional_references_enabled &&
+            AbstractParser.questions(tokenStream).length >
             locations.positionalParameterLocations.length &&
             AbstractParser.restartWithOptionalReferences(parser, tokenStream) =>
         parseParameterLocations()

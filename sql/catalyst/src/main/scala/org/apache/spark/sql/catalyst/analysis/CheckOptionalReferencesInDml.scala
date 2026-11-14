@@ -33,10 +33,13 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * Rejects optional references in the expressions of a statement that modifies table data and
  * that was built without the SQL parser, which rejects them in SQL text (see
  * `OptionalReferenceValidation`). A missing column must not silently change which rows a
- * statement deletes or updates.
+ * statement deletes or updates. The source of a MERGE is checked too, like the source query of
+ * the SQL statement: `Dataset.mergeInto` and the Spark Connect MERGE command put the unanalyzed
+ * plan of the source DataFrame there, so its references are resolved as part of the MERGE.
  *
  * {{{
  *   df.writeTo("t").overwrite(expr("deleted_at? IS NULL"))
+ *   spark.sql("SELECT pk, is_deleted? FROM s").mergeInto("t", $"s.pk" === $"t.pk")...
  * }}}
  */
 object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
@@ -46,6 +49,11 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
       plan.foreach { operator =>
         statementName(operator).foreach { statement =>
           operator.expressions.foreach(checkExpression(_, statement))
+        }
+        operator match {
+          case merge: MergeIntoTable =>
+            merge.sourceTable.foreach(_.expressions.foreach(checkExpression(_, "MERGE")))
+          case _ =>
         }
       }
     }

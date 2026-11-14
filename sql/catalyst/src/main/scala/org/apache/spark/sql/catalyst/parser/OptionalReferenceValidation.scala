@@ -31,15 +31,22 @@ object OptionalReferenceValidation {
    * Throws an error for the optional reference `ctx`, i.e. the parse tree of a reference with a
    * `?` after one of its name parts, if `ctx` is part of an UPDATE, DELETE, MERGE, or AUTO CDC
    * statement, of the condition of INSERT ... REPLACE, of a partition specification, or of an
-   * expression that defines a table object.
+   * expression that is stored in the definition of a table or a function.
    *
-   * The query of an INSERT, including INSERT OVERWRITE, and of a CREATE OR REPLACE TABLE AS
-   * SELECT is allowed to have optional references: like any query, it only reads data, and the
-   * rows that these statements replace do not depend on it.
+   * The boundary is the kind of statement. UPDATE, DELETE, MERGE, and AUTO CDC exist to modify
+   * existing rows, so they reject optional references everywhere, including in the source query of
+   * MERGE and in common table expressions. INSERT and CREATE OR REPLACE TABLE AS SELECT reject them
+   * only in the REPLACE condition, a predicate on the target table: their queries produce the rows
+   * to write, and a missing column in such a query makes the written rows differ in the same way as
+   * in any other query. This holds where the written rows also decide which existing rows are
+   * replaced: an INSERT OVERWRITE with dynamic partition overwrite replaces the partitions of the
+   * written rows, and INSERT ... REPLACE ON or REPLACE USING deletes the target rows that match
+   * them.
    *
    * {{{
    *   UPDATE t SET a = b?;                                  -- IN_DML
    *   WITH s AS (SELECT a? FROM u) DELETE FROM t WHERE ...; -- IN_DML
+   *   INSERT INTO t REPLACE WHERE a? IS NULL SELECT ...;    -- IN_DML
    *   TRUNCATE TABLE t PARTITION (p = :p?);                 -- IN_PARTITION_SPEC
    *   CREATE TABLE t (a INT, b INT DEFAULT a?);             -- IN_DDL
    *   INSERT OVERWRITE t SELECT a? FROM s;                  -- allowed

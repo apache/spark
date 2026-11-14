@@ -141,33 +141,6 @@ private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends 
 }
 
 /**
- * Counts the `?` tokens that a parse uses as positional parameter markers. A parse that uses a
- * `?` in another way, e.g. as the free text of a `SET` command, uses fewer of them than the
- * statement has. A parse can also use every `?` as a marker and still fail, as
- * `SELECT ? FROM t WHERE` does.
- */
-private class PositionalParameterMarkerCounter extends SqlBaseParserBaseListener {
-  var count: Int = 0
-
-  override def enterEveryRule(ctx: ParserRuleContext): Unit = {
-    // The parser enters a rule without a parent when it starts to parse the statement, which it
-    // does once in each stage of the two-stage parsing strategy.
-    if (ctx.getParent == null) {
-      count = 0
-    }
-  }
-
-  override def exitPosParameterLiteral(ctx: SqlBaseParser.PosParameterLiteralContext): Unit = {
-    count += 1
-  }
-
-  override def exitPositionalParameterMarkerRule(
-      ctx: SqlBaseParser.PositionalParameterMarkerRuleContext): Unit = {
-    count += 1
-  }
-}
-
-/**
  * The ParseErrorListener converts parse errors into ParseExceptions.
  */
 case object ParseErrorListener extends BaseErrorListener {
@@ -394,10 +367,38 @@ case object PostProcessor extends SqlBaseParserBaseListener {
 }
 
 /**
- * The post-processor checks the unclosed bracketed comment.
+ * The post-processor checks the unclosed bracketed comment. As the listener that every parse
+ * registers, it also counts the `?` tokens that the parse uses as positional parameter markers,
+ * see [[positionalParameterMarkerCount]], instead of a listener of its own for that, which would
+ * add a listener class to the dispatch of every parse event.
  */
 case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStream)
     extends SqlBaseParserBaseListener {
+
+  /**
+   * The number of `?` tokens that the parse used as positional parameter markers. A parse that
+   * uses a `?` in another way, e.g. as the free text of a `SET` command, uses fewer of them than
+   * the statement has. A parse can also use every `?` as a marker and still fail, as
+   * `SELECT ? FROM t WHERE` does. See [[AbstractParser.executeWithTwoStageStrategy]].
+   */
+  var positionalParameterMarkerCount: Int = 0
+
+  override def enterEveryRule(ctx: ParserRuleContext): Unit = {
+    // The parser enters a rule without a parent when it starts to parse the statement, which it
+    // does once in each attempt of a parsing strategy.
+    if (ctx.getParent == null) {
+      positionalParameterMarkerCount = 0
+    }
+  }
+
+  override def exitPosParameterLiteral(ctx: SqlBaseParser.PosParameterLiteralContext): Unit = {
+    positionalParameterMarkerCount += 1
+  }
+
+  override def exitPositionalParameterMarkerRule(
+      ctx: SqlBaseParser.PositionalParameterMarkerRuleContext): Unit = {
+    positionalParameterMarkerCount += 1
+  }
 
   override def exitSingleDataType(ctx: SqlBaseParser.SingleDataTypeContext): Unit = {
     checkUnclosedComment(tokenStream, command)
@@ -555,10 +556,7 @@ object AbstractParser extends Logging {
     if (!parser.optional_references_enabled) {
       executeWithSllThenLl(parser, tokenStream, parseOperation)
     } else {
-      val parameterMarkers = new PositionalParameterMarkerCounter
-      parser.addParseListener(parameterMarkers)
       val result = Try(executeWithSllThenLl(parser, tokenStream, parseOperation))
-      parser.removeParseListener(parameterMarkers)
       val hasOtherQuestion = result match {
         case Success(_) =>
           // A rule that does not end at the end of the statement stops before a `?` that it
@@ -570,7 +568,7 @@ object AbstractParser extends Logging {
         case Failure(_) =>
           // The statement has a syntax error at a `?`, or before it, or a rule that accepts any
           // tokens such as `SET .*?` parsed the `?` of a statement that is then not valid.
-          parameterMarkers.count < questions(tokenStream).length
+          positionalParameterMarkerCount(parser) < questions(tokenStream).length
       }
       if (hasOtherQuestion && restartWithOptionalReferences(parser, tokenStream)) {
         executeWithSllThenLl(parser, tokenStream, parseOperation)
@@ -578,6 +576,17 @@ object AbstractParser extends Logging {
         result.get
       }
     }
+  }
+
+  /** The number of positional parameter markers that the last parse of `parser` used. */
+  private def positionalParameterMarkerCount(parser: SqlBaseParser): Int = {
+    parser.getParseListeners.asScala
+      .collectFirst { case processor: UnclosedCommentProcessor =>
+        processor.positionalParameterMarkerCount
+      }
+      .getOrElse {
+        throw SparkException.internalError("The parser has no UnclosedCommentProcessor.")
+      }
   }
 
   /**

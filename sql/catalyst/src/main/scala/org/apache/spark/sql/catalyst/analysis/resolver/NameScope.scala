@@ -1445,7 +1445,8 @@ class NameScopeStack(
           nameParts = multipartName,
           optionalNamePartIndices = parameters.optionalNamePartIndices,
           attributes = attributes,
-          resolver = conf.resolver
+          resolver = conf.resolver,
+          resolvingView = parameters.resolvingView
         )) {
         Some(
           NameTarget(

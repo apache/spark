@@ -285,6 +285,29 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT named_struct('city', 'x') AS addr FROM people GROUP BY id ORDER BY addr.zip?
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`.`zip`",
+    "proposal" : "`addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 75,
+    "stopIndex" : 83,
+    "fragment" : "addr.zip?"
+  } ]
+}
+
+
+-- !query
 SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY addr HAVING addr.state? = 'CA'
 -- !query schema
 struct<addr:struct<state:string>>
@@ -555,6 +578,14 @@ NULL	NULL
 
 
 -- !query
+SELECT n.a, n.a? FROM VALUES (NULL) AS t(n)
+-- !query schema
+struct<a:void,a:void>
+-- !query output
+NULL	NULL
+
+
+-- !query
 SELECT struct(id?, missing?) AS s FROM orgs
 -- !query schema
 struct<s:struct<id:int,missing:void>>
@@ -641,6 +672,29 @@ NULL
 
 
 -- !query
+SELECT 1 AS c FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b ORDER BY x?
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`c`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 70,
+    "stopIndex" : 71,
+    "fragment" : "x?"
+  } ]
+}
+
+
+-- !query
 SELECT addr.zip? FROM people GROUP BY id
 -- !query schema
 struct<>
@@ -653,6 +707,77 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "expression" : "\"addr\"",
     "expressionAnyValue" : "\"any_value(addr)\""
   }
+}
+
+
+-- !query
+SELECT id FROM people GROUP BY id DISTRIBUTE BY addr?
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`",
+    "proposal" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 53,
+    "fragment" : "addr?"
+  } ]
+}
+
+
+-- !query
+SELECT (SELECT max(v) FROM VALUES (1, 2, 3) AS t(k, v, x) GROUP BY k HAVING x? > 0) AS m
+FROM people
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`max(v)`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 78,
+    "fragment" : "x?"
+  } ]
+}
+
+
+-- !query
+SELECT (SELECT max(v) FROM VALUES (1, 2, 3) AS t(k, v, x) GROUP BY k ORDER BY x? LIMIT 1) AS m
+FROM people
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`max(v)`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 79,
+    "stopIndex" : 80,
+    "fragment" : "x?"
+  } ]
 }
 
 
@@ -1101,6 +1226,79 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    FOR r AS SELECT id, addr FROM people WHERE id = 1 DO
+      SELECT lbl.missing?.f, LBL.y?, r.missing?.city, r.addr.state?.code;
+    END FOR;
+  END;
+END
+-- !query schema
+struct<f:void,y:void,city:void,code:void>
+-- !query output
+NULL	NULL	NULL	NULL
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
+    SELECT * FROM lbl_v;
+  END;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "lbl_v",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM lbl_v
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "lbl_v",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+DROP VIEW lbl_v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT id, (SELECT max(o.missing?) FROM people i WHERE i.id = o.id) AS m FROM people o ORDER BY id
 -- !query schema
 struct<id:int,m:void>
@@ -1151,6 +1349,17 @@ struct<id:int>
 -- !query
 SELECT id FROM people GROUP BY id
 HAVING (SELECT max(i.id) FROM people i WHERE i.id = people.id AND people.ghost? IS NULL) > 0
+ORDER BY id
+-- !query schema
+struct<id:int>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT id FROM people GROUP BY id
+HAVING (SELECT max(i.id) FROM people i WHERE i.id = people.id AND people.addr.state? IS NULL) > 0
 ORDER BY id
 -- !query schema
 struct<id:int>
@@ -1919,6 +2128,38 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "numMarkers" : "0",
     "numValues" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT p.missing?, ? AS g FROM people p' USING 1, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE "SELECT IDENTIFIER('miss' || 'ing')?, ? AS g FROM people" USING 1, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
   }
 }
 

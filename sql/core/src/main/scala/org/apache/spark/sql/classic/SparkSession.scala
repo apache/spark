@@ -41,7 +41,7 @@ import org.apache.spark.sql.{AnalysisException, Artifact, DataSourceRegistration
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, ParameterizedQueryArgumentsValidator, PosParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, OptionalReferences, ParameterizedQueryArgumentsValidator, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
@@ -552,7 +552,10 @@ class SparkSession private(
           }
           // In legacy mode, wrap with PosParameterizedQuery for analyzer binding
           if (args.nonEmpty && sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
-            PosParameterizedQuery(parsed, paramContext.params)
+            PosParameterizedQuery(
+              parsed,
+              paramContext.params,
+              hasOptionalReferences = OptionalReferences.hasOptionalReferences(parsed))
           } else {
             parsed
           }
@@ -698,7 +701,8 @@ class SparkSession private(
         GeneralParameterizedQuery(
           parsed,
           args.map(lit(_).expr).toImmutableArraySeq,
-          paramNames.toImmutableArraySeq
+          paramNames.toImmutableArraySeq,
+          hasOptionalReferences = OptionalReferences.hasOptionalReferences(parsed)
         )
       } else {
         parsed

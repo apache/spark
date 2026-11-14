@@ -164,7 +164,8 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
           nameParts = unresolvedAttribute.nameParts,
           optionalNamePartIndices = OptionalReferences.optionalNamePartIndices(unresolvedAttribute),
           attributes = attributes,
-          resolver = conf.resolver
+          resolver = conf.resolver,
+          resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
         ) =>
       val nullReference = OptionalReferences.nullReference()
       if (isTopLevel) {
@@ -284,12 +285,19 @@ object ResolveOptionalReferences {
 
   /**
    * Returns true if `plan` or the plan of one of its subquery expressions has an optional
-   * reference that is not resolved.
+   * reference that is not resolved and that the rule can still replace or wrap: an attribute, a
+   * named parameter marker, or a field extraction. Other unresolved nodes with an optional marker,
+   * such as a [[TempResolvedColumn]] that HAVING or ORDER BY tried, hold a reference that was
+   * found, and the rule leaves them to the rules that report their errors.
    */
   private def hasUnresolvedOptionalReferences(plan: LogicalPlan): Boolean = plan.exists {
     _.expressions.exists(_.exists {
       case subquery: SubqueryExpression => hasUnresolvedOptionalReferences(subquery.plan)
-      case expression => !expression.resolved && OptionalReferences.hasOptionalMarker(expression)
+      case attribute: UnresolvedAttribute =>
+        OptionalReferences.optionalNamePartIndices(attribute).nonEmpty
+      case namedParameter: NamedParameter => OptionalReferences.isOptional(namedParameter)
+      case extractValue: UnresolvedExtractValue => OptionalReferences.isOptional(extractValue)
+      case _ => false
     })
   }
 

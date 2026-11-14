@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   NonNullLiteral,
   SubqueryExpression
 }
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -70,12 +71,16 @@ object OptionalReferences {
    * Marks the NULL that an unresolvable optional reference resolves to, see [[nullReference]], and
    * the alias that names it, see [[implicitAlias]].
    *
-   * The three tags describe the statement: they are facts about the reference as written, which
-   * stay true in every analysis of the plan. The generic transforms of a tree copy them to the
-   * nodes that replace a tagged node; a rule that rebuilds a reference in another way forwards
-   * them with [[withOptionalNamePartsOf]]. The one decision that an analysis makes about an
-   * optional reference, that no resolution step of its operator can resolve a field extraction,
-   * is a node of the plan that the analysis builds, see [[LastResortExtractValue]].
+   * The two tags that the parser sets, [[OPTIONAL_NAME_PART_INDICES]] and [[OPTIONAL_REFERENCE]],
+   * describe the statement: they are facts about the reference as written, which stay true in
+   * every analysis of the plan. The generic transforms of a tree copy them to the nodes that
+   * replace a tagged node; a rule that rebuilds a reference in another way forwards them with
+   * [[withOptionalNamePartsOf]]. This tag records a decision of one analysis, that a reference
+   * matched nothing, on the NULL and the alias that this analysis creates. Only the analyzer sets
+   * it, and only on these nodes: the plan that the analyzer receives can be analyzed again later,
+   * e.g. from a plan cache, against a relation that has the column by then. The other decision of
+   * an analysis, that no resolution step of an operator can resolve a field extraction, is a node
+   * of the plan that the analysis builds, see [[LastResortExtractValue]].
    */
   val NULL_REFERENCE: TreeNodeTag[Unit] = TreeNodeTag[Unit]("optionalReferenceNull")
 
@@ -131,6 +136,20 @@ object OptionalReferences {
         .iterator
         .flatMap(_.flatMap(_.expressions).iterator.flatMap(unresolvedOptionalReference))
         .nextOption()
+    }
+  }
+
+  /**
+   * Returns true if the parsed `plan` has an optional reference, including in the plans of its
+   * subquery expressions and in its common table expressions, which are not children of the
+   * operator that defines them. Before the analysis, every optional reference of the statement is
+   * unresolved, so the answer does not depend on the data that the statement is analyzed against.
+   */
+  def hasOptionalReferences(plan: LogicalPlan): Boolean = plan.exists { operator =>
+    operator.expressions.exists(unresolvedOptionalReference(_).isDefined) ||
+    operator.innerChildren.exists {
+      case innerPlan: LogicalPlan => hasOptionalReferences(innerPlan)
+      case _ => false
     }
   }
 
@@ -218,9 +237,10 @@ object OptionalReferences {
       nameParts: Seq[String],
       optionalNamePartIndices: Set[Int],
       attributes: Seq[Attribute],
-      resolver: Resolver): Boolean = {
+      resolver: Resolver,
+      resolvingView: Boolean): Boolean = {
     optionalNamePartIndices.nonEmpty &&
-    firstUnmatchedNamePartIndex(nameParts, attributes, resolver).exists(
+    firstUnmatchedNamePartIndex(nameParts, attributes, resolver, resolvingView).exists(
       optionalNamePartIndices.contains
     )
   }
@@ -230,8 +250,9 @@ object OptionalReferences {
    * path to `attributes`, where a path is a suffix of the attribute qualifier, the attribute name,
    * and then the names of nested fields. The qualifiers of session variables and of the variables
    * of an active SQL scripting scope, i.e. the label of a compound statement or the variable of a
-   * FOR statement, are valid paths too. A qualifier is not a reference by itself, so the last name
-   * part never matches a qualifier.
+   * FOR statement, are valid paths too, the latter except while the body of a view is resolved
+   * (`resolvingView`), where variable lookup hides the variables of the script. A qualifier is not
+   * a reference by itself, so the last name part never matches a qualifier.
    * Returns None if the whole name matches a path, which means that the name was found but was not
    * usable, e.g. because it references a column that is not grouped.
    *
@@ -246,21 +267,23 @@ object OptionalReferences {
   def firstUnmatchedNamePartIndex(
       nameParts: Seq[String],
       attributes: Seq[Attribute],
-      resolver: Resolver): Option[Int] = {
+      resolver: Resolver,
+      resolvingView: Boolean): Option[Int] = {
     val matchedNamePartCounts =
       attributes.iterator.map(matchedNamePartCount(nameParts, _, resolver)) ++
       SESSION_VARIABLE_QUALIFIERS.iterator.map(matchedQualifierPartCount(nameParts, _, resolver)) ++
-      Iterator(matchedScriptingScopeLabelCount(nameParts))
+      Iterator(if (resolvingView) 0 else matchedScriptingScopeLabelCount(nameParts))
     val longestMatch = matchedNamePartCounts.max
     if (longestMatch < nameParts.length) Some(longestMatch) else None
   }
 
   /**
-   * Returns 1 if `nameParts` is a two-part name whose first part is the label of an active SQL
-   * scripting scope, so that the name can reference a variable of that scope, and 0 otherwise.
+   * Returns 1 if `nameParts` has at least two parts and its first part is the label of an active
+   * SQL scripting scope, so that the name can reference a variable of that scope and then the
+   * nested fields of that variable, and 0 otherwise.
    */
   private def matchedScriptingScopeLabelCount(nameParts: Seq[String]): Int = {
-    val isScopeLabel = nameParts.length == 2 && {
+    val isScopeLabel = nameParts.length >= 2 && {
       // Scope labels are normalized like variable names, see `VariableResolution.lookupVariable`.
       val label = if (SQLConf.get.caseSensitiveAnalysis) {
         nameParts.head

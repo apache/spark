@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Sort
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.internal.SQLConf
@@ -57,6 +58,20 @@ class OptionalReferencesSuite extends QueryTest with SharedSparkSession {
         val fresh = Dataset.ofRows(spark, spark.sessionState.sqlParser.parsePlan(sqlText))
         checkAnswer(reanalyzed, fresh.collect())
       }
+    }
+  }
+
+  test("SPARK-61494: optional references are not supported in the parameters of a SQL function") {
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      // The DEFAULT of a parameter is stored with the function, like the DEFAULT of a column. The
+      // parameter list is parsed from its own text, so the context is relative to it.
+      val sqlText = "CREATE TEMPORARY FUNCTION f(x INT DEFAULT a?) RETURNS INT RETURN x"
+      checkError(
+        exception = intercept[ParseException](sql(sqlText)),
+        condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
+        sqlState = "0A000",
+        parameters = Map("context" -> "DEFAULT"),
+        context = ExpectedContext(fragment = "a?", start = 14, stop = 15))
     }
   }
 }

@@ -323,6 +323,56 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("merge into fails if the source has an optional reference") {
+    withTempView("source", "source_v") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        // The unanalyzed plan of the source is analyzed as part of the MERGE, so a column that the
+        // source does not have must not make `is_deleted = true` false for every row, like in the
+        // source query of the SQL statement.
+        val sourceSql = "SELECT pk, is_deleted? AS is_deleted FROM source"
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(sourceSql)
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched(expr("is_deleted = true"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "is_deleted?", start = 11, stop = 21))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source").selectExpr("pk", "archived? AS archived")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched(expr("archived IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(fragment = "archived?", start = 0, stop = 8))
+
+        // A view resolves its own optional references, so a source that reads it is fine.
+        sql(s"CREATE TEMPORARY VIEW source_v AS $sourceSql")
+        spark.table("source_v")
+          .mergeInto(tableNameAsString, $"source_v.pk" === col(tableNameAsString + ".pk"))
+          .whenMatched(expr("source_v.is_deleted = true"))
+          .delete()
+          .merge()
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
   test("merge into with conditional WHEN MATCHED clause (delete)") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

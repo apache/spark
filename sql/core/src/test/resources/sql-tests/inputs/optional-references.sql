@@ -61,6 +61,7 @@ SELECT coalesce(rank?, id) AS rank FROM people ORDER BY rank? DESC;
 SELECT id, named_struct('city', addr.city) AS addr FROM people ORDER BY addr.zip?;
 SELECT id, named_struct('city', addr.city) AS addr FROM people ORDER BY addr.state?, id DESC;
 SELECT id, named_struct('city', addr.city) AS addr FROM people ORDER BY addr?.state;
+SELECT named_struct('city', 'x') AS addr FROM people GROUP BY id ORDER BY addr.zip?;
 SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY addr HAVING addr.state? = 'CA';
 SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY addr
 HAVING addr.country? IS NULL;
@@ -98,6 +99,8 @@ SELECT info.loc.city? FROM orgs;
 SELECT info?.addr.zip FROM orgs;
 SELECT a?.b?.c? FROM orgs;
 SELECT missing?.a.b, info.addr.geo?.x FROM orgs;
+-- The fields of a column of type VOID are NULL, like without `?`.
+SELECT n.a, n.a? FROM VALUES (NULL) AS t(n);
 SELECT struct(id?, missing?) AS s FROM orgs;
 
 -- Errors other than not-found are still raised.
@@ -105,9 +108,16 @@ SELECT x? FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b;
 SELECT addr.state? FROM people a JOIN people b ON a.id = b.id;
 SELECT id.missing? FROM people;
 SELECT missing? FROM people GROUP BY id;
+SELECT 1 AS c FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b ORDER BY x?;
 
--- An optional reference to an existing column is still subject to the usual rules.
+-- An optional reference to an existing column is still subject to the usual rules, also where
+-- the column is below the operator that references it, and in a subquery.
 SELECT addr.zip? FROM people GROUP BY id;
+SELECT id FROM people GROUP BY id DISTRIBUTE BY addr?;
+SELECT (SELECT max(v) FROM VALUES (1, 2, 3) AS t(k, v, x) GROUP BY k HAVING x? > 0) AS m
+FROM people;
+SELECT (SELECT max(v) FROM VALUES (1, 2, 3) AS t(k, v, x) GROUP BY k ORDER BY x? LIMIT 1) AS m
+FROM people;
 
 -- Lateral column aliases resolve as usual.
 SELECT id AS a, a? + 1 AS b, c? FROM people;
@@ -181,6 +191,31 @@ BEGIN
   END;
 END;
 --QUERY-DELIMITER-END
+-- A label also qualifies the nested fields of a variable, and it matches in any case.
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    FOR r AS SELECT id, addr FROM people WHERE id = 1 DO
+      SELECT lbl.missing?.f, LBL.y?, r.missing?.city, r.addr.state?.code;
+    END FOR;
+  END;
+END;
+--QUERY-DELIMITER-END
+-- The body of a view sees only the variables of a script that it referenced when it was created,
+-- so a label does not qualify a reference in it: a view created with `lbl.missing?` fails inside
+-- the block and after it alike.
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
+    SELECT * FROM lbl_v;
+  END;
+END;
+--QUERY-DELIMITER-END
+SELECT * FROM lbl_v;
+DROP VIEW lbl_v;
 
 -- Correlated subqueries resolve against the same scopes as without `?`.
 SELECT id, (SELECT max(o.missing?) FROM people i WHERE i.id = o.id) AS m FROM people o ORDER BY id;
@@ -193,6 +228,9 @@ SELECT id FROM people o WHERE EXISTS (
   SELECT 1 FROM people i WHERE i.id = o.id AND o.ghost? IS NULL) ORDER BY id;
 SELECT id FROM people GROUP BY id
 HAVING (SELECT max(i.id) FROM people i WHERE i.id = people.id AND people.ghost? IS NULL) > 0
+ORDER BY id;
+SELECT id FROM people GROUP BY id
+HAVING (SELECT max(i.id) FROM people i WHERE i.id = people.id AND people.addr.state? IS NULL) > 0
 ORDER BY id;
 SELECT p.id, l.next_id, l.m FROM people p, LATERAL (SELECT p.id + 1 AS next_id, p.missing? AS m) l
 ORDER BY p.id;
@@ -322,6 +360,8 @@ EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5;
 EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
 EXECUTE IMMEDIATE 'SELECT missing? FROM people' USING 5;
+EXECUTE IMMEDIATE 'SELECT p.missing?, ? AS g FROM people p' USING 1, 2;
+EXECUTE IMMEDIATE "SELECT IDENTIFIER('miss' || 'ing')?, ? AS g FROM people" USING 1, 2;
 -- A marker before an optional reference.
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = ? AND deleted? IS NULL' USING 1;
 
@@ -368,8 +408,11 @@ DROP VIEW events_strict_v;
 DROP TABLE events;
 
 -- The query of an INSERT, including INSERT OVERWRITE, VALUES lists, and the query of a CREATE
--- TABLE AS SELECT are allowed: like any query, they only read data, and the rows that an
--- overwrite replaces do not depend on the query.
+-- TABLE AS SELECT are allowed: they produce the rows to write, and a missing column makes the
+-- written rows differ as in any other query. That includes the forms whose written rows decide
+-- which existing rows are replaced, an INSERT OVERWRITE with dynamic partition overwrite and
+-- INSERT ... REPLACE ON or USING. Only the REPLACE condition, a predicate on the target table,
+-- rejects `?` like UPDATE, DELETE, and MERGE do.
 CREATE TABLE target (id INT, addr STRUCT<city: STRING, zip: STRING>) USING parquet;
 INSERT INTO target SELECT id?, addr
 FROM (SELECT named_struct('city', 'LA', 'zip', '90001') AS addr);

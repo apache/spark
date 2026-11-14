@@ -7046,7 +7046,7 @@
     "subClass" : {
       "IN_DDL" : {
         "message" : [
-          "Table definitions must not contain optional references."
+          "Definitions of tables and functions must not contain optional references."
         ]
       },
       "IN_DML" : {
@@ -10455,7 +10455,7 @@
   },
   "UNUSED_SQL_PARAMETER_VALUES" : {
     "message" : [
-      "The statement has <numMarkers> positional parameter marker(s) but <numValues> value(s) were supplied. In a statement with optional references, a `?` after an identifier or a non-reserved keyword is an optional reference, not a parameter marker."
+      "The statement has <numMarkers> positional parameter marker(s) but <numValues> value(s) were supplied. In a statement with optional references, a `?` that follows an identifier or a non-reserved keyword where the syntax allows a reference is an optional reference, not a parameter marker."
     ],
     "sqlState" : "07001"
   },

@@ -1796,7 +1796,12 @@ primaryExpression
 // `#dereference`) and the `#optionalIdentifierClause` alternative, an IDENTIFIER clause with any
 // expression as the name of a column that is a `#functionCall` without the `?`, are inlined there
 // instead of being rules of their own, because a rule of their own would cost every column
-// reference a rule invocation. The marker alternatives themselves still cost a lookahead check.
+// reference a rule invocation. The marker alternatives themselves still cost a lookahead check,
+// which every parse pays, with optional references enabled or not: from about 2% of the parse
+// time of the TPC-DS queries to about 9% for a statement with 1,000 nested field references.
+// Keeping them out of parses without optional references would take a second generated parser
+// for the parse with them, whose contexts `AstBuilder` cannot visit and whose grammar would have
+// to accept every statement without `?` exactly as this one does.
 overlayExpression
     : OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN

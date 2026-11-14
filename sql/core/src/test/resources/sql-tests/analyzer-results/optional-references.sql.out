@@ -432,6 +432,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT named_struct('city', 'x') AS addr FROM people GROUP BY id ORDER BY addr.zip?
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`.`zip`",
+    "proposal" : "`addr`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 75,
+    "stopIndex" : 83,
+    "fragment" : "addr.zip?"
+  } ]
+}
+
+
+-- !query
 SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY addr HAVING addr.state? = 'CA'
 -- !query analysis
 Filter (addr#x.state = CA)
@@ -783,6 +804,14 @@ Project [null AS b#x, null AS x#x]
 
 
 -- !query
+SELECT n.a, n.a? FROM VALUES (NULL) AS t(n)
+-- !query analysis
+Project [null AS a#x, null AS a#x]
++- SubqueryAlias t
+   +- LocalRelation [n#x]
+
+
+-- !query
 SELECT struct(id?, missing?) AS s FROM orgs
 -- !query analysis
 Project [struct(id, id#x, missing, null) AS s#x]
@@ -870,6 +899,27 @@ Aggregate [id#x], [null AS missing#x]
 
 
 -- !query
+SELECT 1 AS c FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b ORDER BY x?
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`c`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 70,
+    "stopIndex" : 71,
+    "fragment" : "x?"
+  } ]
+}
+
+
+-- !query
 SELECT addr.zip? FROM people GROUP BY id
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -880,6 +930,71 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "expression" : "\"addr\"",
     "expressionAnyValue" : "\"any_value(addr)\""
   }
+}
+
+
+-- !query
+SELECT id FROM people GROUP BY id DISTRIBUTE BY addr?
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`",
+    "proposal" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 53,
+    "fragment" : "addr?"
+  } ]
+}
+
+
+-- !query
+SELECT (SELECT max(v) FROM VALUES (1, 2, 3) AS t(k, v, x) GROUP BY k HAVING x? > 0) AS m
+FROM people
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`max(v)`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 78,
+    "fragment" : "x?"
+  } ]
+}
+
+
+-- !query
+SELECT (SELECT max(v) FROM VALUES (1, 2, 3) AS t(k, v, x) GROUP BY k ORDER BY x? LIMIT 1) AS m
+FROM people
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`",
+    "proposal" : "`max(v)`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 79,
+    "stopIndex" : 80,
+    "fragment" : "x?"
+  } ]
 }
 
 
@@ -1362,6 +1477,71 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    FOR r AS SELECT id, addr FROM people WHERE id = 1 DO
+      SELECT lbl.missing?.f, LBL.y?, r.missing?.city, r.addr.state?.code;
+    END FOR;
+  END;
+END
+-- !query analysis
+LocalRelation [f#x, y#x, city#x, code#x]
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
+    SELECT * FROM lbl_v;
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "lbl_v",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM lbl_v
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "lbl_v",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+DROP VIEW lbl_v
+-- !query analysis
+DropTempViewCommand lbl_v, false
+
+
+-- !query
 SELECT id, (SELECT max(o.missing?) FROM people i WHERE i.id = o.id) AS m FROM people o ORDER BY id
 -- !query analysis
 Sort [id#x ASC NULLS FIRST], true
@@ -1483,6 +1663,31 @@ Sort [id#x ASC NULLS FIRST], true
 -- !query
 SELECT id FROM people GROUP BY id
 HAVING (SELECT max(i.id) FROM people i WHERE i.id = people.id AND people.ghost? IS NULL) > 0
+ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Filter (scalar-subquery#x [id#x] > 0)
+   :  +- Aggregate [max(id#x) AS max(id)#x]
+   :     +- Filter ((id#x = outer(id#x)) AND isnull(null))
+   :        +- SubqueryAlias i
+   :           +- SubqueryAlias people
+   :              +- View (`people`, [id#x, addr#x])
+   :                 +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+   :                    +- Project [id#x, addr#x]
+   :                       +- SubqueryAlias t
+   :                          +- LocalRelation [id#x, addr#x]
+   +- Aggregate [id#x], [id#x]
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT id FROM people GROUP BY id
+HAVING (SELECT max(i.id) FROM people i WHERE i.id = people.id AND people.addr.state? IS NULL) > 0
 ORDER BY id
 -- !query analysis
 Sort [id#x ASC NULLS FIRST], true
@@ -2435,6 +2640,34 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "numMarkers" : "0",
     "numValues" : "1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT p.missing?, ? AS g FROM people p' USING 1, 2
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE "SELECT IDENTIFIER('miss' || 'ing')?, ? AS g FROM people" USING 1, 2
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
   }
 }
 
