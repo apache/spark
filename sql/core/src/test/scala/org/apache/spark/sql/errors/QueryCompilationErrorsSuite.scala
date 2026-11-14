@@ -23,7 +23,7 @@ import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUns
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResourceType, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTablePartition, CatalogTableType, FunctionResourceType, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
@@ -1157,6 +1157,19 @@ class QueryCompilationErrorsSuite
       },
       condition = "TABLE_LOCATION_URI_NOT_SPECIFIED",
       parameters = Map("identifier" -> identifier.toString)
+    )
+  }
+
+  test("SPARK-61686: PARTITION_LOCATION_URI_NOT_SPECIFIED: partition without locationUri") {
+    val partition = CatalogTablePartition(
+      spec = Map("a" -> "1", "b" -> "2"),
+      storage = CatalogStorageFormat.empty)
+    checkError(
+      exception = intercept[AnalysisException] {
+        partition.location
+      },
+      condition = "PARTITION_LOCATION_URI_NOT_SPECIFIED",
+      parameters = Map("specString" -> "a=1, b=2")
     )
   }
 
