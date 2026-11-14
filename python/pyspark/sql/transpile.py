@@ -70,8 +70,8 @@ only as a whole when pushdown applies. The divergences below are therefore the
   the original repro; it no longer reaches this path, since the chain now folds
   to an atomic CASE WHEN that cannot be split.)
 * Predicate pushdown through an AGGREGATE or WINDOW -- OPEN, and the reason the
-  bullet above says "through a JOIN". Only the three join sites test
-  ``!cond.throwable``; the Aggregate arm is explicit that it does not
+  bullet above says "through a JOIN". CombineFilters and the Filter-through-Project
+  arm also preserve throwable conditions. The Aggregate arm explicitly does not
   ("We can push down deterministic predicate through Aggregate, including
   throwable predicate"), and the Window / Union / EventTimeWatermark arms
   partition on ``_.deterministic`` alone. Measured:
@@ -231,13 +231,9 @@ def _wider_numeric(lc: str, rc: str) -> str:
     return "integer"
 
 
-# The most operators we will lower in one chained comparison (64 operators over
-# 65 operands); longer chains fall back to interpreted Python. For a FLAT chain
-# this is close to linear: each interior operand is lowered once per adjacent
-# pair, and only two options survive because every adjacent pair must share a
-# category, leaving all-numeric and all-string. Measured over three untyped
-# params: 2 options, one `raise_error` guard per operator, ~17 KB of expression
-# per option. Generous next to real code like ``0 <= x <= 100``.
+# At most 64 operators over 65 operands; longer chains fall back to Python.
+# A flat chain grows linearly. Over three untyped parameters, nine options
+# survive: eight integer/float combinations and one all-string combination.
 _MAX_COMPARISON_OPS = 64
 
 # Total comparison links we will lower for one function body, across every

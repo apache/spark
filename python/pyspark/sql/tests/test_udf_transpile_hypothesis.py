@@ -257,15 +257,10 @@ if _have_hypothesis:
 # the way a user would: idiomatic Python, including ``if x is not None``
 # guards and bare ``if x:`` truthiness checks.
 #
-# Where a template annotates its parameters, that is to pin the input category:
-# an untyped parameter emits both a numeric and a string variant, and these
-# tests bind Long columns, so the string one is dead weight (measured: 1 option
-# emitted instead of 2). It buys plan size, not wall clock -- measured 73s
-# untyped vs 76s typed over these five tests at 15 examples, because the cost is
-# the two Spark jobs ``_run`` executes per example against a fresh one-row
-# DataFrame. Batching rows per example is the lever that would matter. The
-# strategies still generate ``None`` -- an annotation pins the category, not
-# nullability.
+# An annotation pins the input category, not nullability. These tests bind Long
+# columns, so typing comparison inputs removes unused float and string variants:
+# a three-parameter chain keeps one option instead of nine. Strategies still
+# generate None, and the two Spark jobs per example dominate the runtime.
 
 
 def plus_four(x):

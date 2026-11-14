@@ -682,8 +682,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # the `And` and `PushPredicateThroughJoin` pushed the guard to one side of
         # the join, where it fired on rows Python short-circuits past and raised
         # USER_RAISED_EXCEPTION instead of returning False. Keep it: the override
-        # is what makes the `&` / `|` fold survive the optimizer, so this is the
-        # test that notices if it regresses.
+        # keeps the guard above the join. The other optimizer divergences listed
+        # in the module docstring remain open.
         #
         # The join case disables AQE and broadcast on purpose: otherwise whether
         # the pushed-down guard fires races AQE eliminating the empty join, and the
@@ -794,6 +794,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "a chain of four operators is well under the cap and must transpile",
         )
 
+    def test_udf_transpile_chain_interior_link_short_circuits(self):
+        def chain(a, b, c, d):
+            return a < b < c < d
+
+        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
+            conf = {**_TRANSPILE_ON, "spark.sql.codegen.factoryMode": factory_mode}
+            with self.subTest(factory_mode=factory_mode), self.sql_conf(conf):
+                schema = "a long, b long, c long, d long"
+                self.assertEqual(
+                    self._vals(chain, BooleanType(), schema, [(1, 2, 1, None)]), [False]
+                )
+                with self.assertRaisesRegex(Exception, "cannot compare NULL"):
+                    self._vals(chain, BooleanType(), schema, [(1, 2, 3, None)])
+
     def test_udf_transpile_comparison_fallbacks(self):
         # Comparison forms the transpiler must REFUSE. Each case asserts both that
         # nothing transpiled and that a query using the UDF still returns Python's
@@ -841,27 +855,24 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         expected,
                         f"{label}: interpreted result diverged",
                     )
-            # `0 < x < "z"` raises in interpreted Python too (cross-type ordering),
-            # so assert only the fallback for it. And a chained / `in` body is
-            # boolean, so a non-BooleanType declared return type must drop every
-            # variant rather than emit a cast the interpreted path never performs.
-            for func, rt, label in [
-                (cross_chain, BooleanType(), "a cross-category chain"),
-                (chain_long_rt, LongType(), "a chain with a LongType return type"),
-                (in_long_rt, LongType(), "an `in` with a LongType return type"),
+            # The cross-category chain short-circuits for non-positive inputs.
+            # Boolean bodies declared LongType return NULL through interpreted Python.
+            for func, rt, label, expected in [
+                (cross_chain, BooleanType(), "a cross-category chain", [False]),
+                (chain_long_rt, LongType(), "a chain with a LongType return type", [None]),
+                (in_long_rt, LongType(), "an `in` with a LongType return type", [None]),
             ]:
                 with self.subTest(label=label):
                     with _warnings.catch_warnings(record=True) as caught:
                         _warnings.simplefilter("always")
-                        self.assertEqual(
-                            [],
-                            UserDefinedFunction(func, rt).transpiled,
-                            f"{label} must NOT transpile",
-                        )
+                        pudf = UserDefinedFunction(func, rt)
+                        self.assertEqual([], pudf.transpiled, f"{label} must NOT transpile")
                     self.assertTrue(
                         _fallback_warnings(caught),
                         f"{label}: expected a fallback warning",
                     )
+                    df = self.spark.createDataFrame([(0,)], "a long")
+                    self.assertEqual([r[0] for r in df.select(pudf("a")).collect()], expected)
 
     def test_udf_transpile_boolean_body_requires_boolean_return_type(self):
         # A comparison body is boolean whatever its operands look like, so it must
@@ -882,7 +893,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             return (a < b) == True  # noqa: E712
 
         def chain_of_compare(a, b, c):
-            # ... and via a chained comparison over comparison operands.
+            # ... and via a comparison over comparison operands.
             return (a < b) <= (b < c)
 
         cases = [
@@ -1045,6 +1056,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         lower("(x < 0) < ((x < 1) if x > 0 else (x < 2))")
         # `is None` reads only its subject, so an identity nest stays linear.
         lower("(" * 20 + "x < 0" + ") is None" * 20)
+
+        # Modulo repeats its divisor five times, so right nesting must hit the
+        # materialized bound even with no nested comparison links.
+        modulo = "x"
+        for _ in range(10):
+            modulo = f"x % ({modulo})"
+        self.assertIn(weight_msg, refused(f"({modulo}) > 0"))
+        len_source = f"len('a' if ({right_nested_src(9)}) else 'b') > 0"
+        self.assertIn(weight_msg, refused(len_source))
 
         # `in` / `not in` are refused outright; membership needs its own NULL
         # analysis and is deferred to its own ticket.
