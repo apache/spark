@@ -256,6 +256,8 @@ done
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$SPARK_HOME/examples/src/main" "$DISTDIR/examples/src/"
+# The Rust examples only build in a source tree, against the SDK under sql/native/rust.
+rm -rf "$DISTDIR/examples/src/main/rust"
 
 # Copy license and ASF files
 if [ -e "$SPARK_HOME/LICENSE-binary" ]; then
