@@ -233,9 +233,10 @@ class UserDefinedFunction:
         # The kwargs rewrite in ``__call__`` must leave these alone rather than
         # silently coerce them to positional -- see the note there.
         self._positional_only_param_names: frozenset = frozenset()
-        # Per-option input-type categories ("numeric"/"string" per public param),
-        # parallel to ``self.transpiled``; the JVM picks the option matching the
-        # actual column types or falls back to interpreted Python.
+        # Per-option input-type categories (one per public param; vocabulary on
+        # ``AbstractTranspiler._transpile_from_ast``), parallel to ``self.transpiled``;
+        # the JVM picks the option matching the actual column types or falls back to
+        # interpreted Python.
         self._transpiled_input_categories: list = []
         # When we have a transpiled rewrite, ``__call__`` resolves any
         # user-supplied kwargs against this positional parameter list so
