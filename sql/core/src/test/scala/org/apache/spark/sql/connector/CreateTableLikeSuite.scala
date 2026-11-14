@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog, TableCatalog}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
 
 class CreateTableLikeSuite extends DatasourceV2SQLBase {
@@ -276,6 +279,45 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
       assert(schema("id").dataType === LongType)
       assert(schema("name").dataType === StringType)
       assert(schema("score").dataType === IntegerType)
+    }
+  }
+
+  test("v1 source defaults preserve escaped literals in the v2 target") {
+    val value = "a\\'b"
+    val defaultSQL = "concat('a', chr(92), chr(39), 'b')"
+    val expected = Map[String, Any](
+      "s" -> value,
+      "c" -> value,
+      "a" -> Seq(value),
+      "m" -> Map(value -> value),
+      "n" -> Row(Seq(value)))
+    for (escaped <- Seq(false, true)) {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString) {
+        withTable("src", "testcat.dst") {
+          sql(s"""CREATE TABLE src (
+                 |s STRING DEFAULT $defaultSQL,
+                 |c STRING COLLATE UTF8_LCASE DEFAULT ($defaultSQL COLLATE UTF8_LCASE),
+                 |a ARRAY<STRING> DEFAULT array($defaultSQL),
+                 |m MAP<STRING, STRING> DEFAULT map($defaultSQL, $defaultSQL),
+                 |n STRUCT<v: ARRAY<STRING COLLATE UTF8_LCASE>>
+                 |  DEFAULT named_struct('v', array($defaultSQL COLLATE UTF8_LCASE))
+                 |) USING parquet""".stripMargin)
+          val sourceSchema = spark.table("src").schema
+          sql("CREATE TABLE testcat.dst LIKE src")
+
+          val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+          for (column <- dst.columns()) {
+            withClue(s"escaped=$escaped, column=${column.name()}: ") {
+              val defaultValue = column.defaultValue()
+              val literal = defaultValue.getValue
+              assert(CatalystTypeConverters.convertToScala(literal.value(), literal.dataType()) ===
+                expected(column.name()))
+              val currentDefault = sourceSchema(column.name()).getCurrentDefaultValue().get
+              assert(defaultValue.getSql === currentDefault)
+            }
+          }
+        }
+      }
     }
   }
 

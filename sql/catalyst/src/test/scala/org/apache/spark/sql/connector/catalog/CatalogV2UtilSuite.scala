@@ -25,15 +25,104 @@ import org.mockito.Mockito.{mock, verify, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.{
   AsOfTimestamp, AsOfVersion, TableCacheKey, TimeTravelSpec, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, IntegerType, MapType, ShortType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class CatalogV2UtilSuite extends SparkFunSuite {
+class CatalogV2UtilSuite extends SparkFunSuite with SQLHelper {
+
+  for (escapedStringLiterals <- Seq(false, true)) {
+    test(s"V2 column conversion preserves existence default values ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        for (stringType <- Seq(StringType, StringType("UTF8_LCASE"))) {
+          val structType = StructType(Seq(StructField("s", stringType)))
+          val cases: Seq[(DataType, Any)] = Seq(
+            stringType -> "a\\b'c",
+            ArrayType(stringType) -> Seq("a\\b'c", "\\n", "\n", "plain", "", null),
+            MapType(StringType, stringType) -> Map("k\\'ey" -> "a\\b'c", "null" -> null),
+            structType -> Row("a\\b'c"),
+            ArrayType(structType) -> Seq(Row("a\\b'c"), Row(""), Row(null), null),
+            MapType(StringType, ArrayType(stringType)) ->
+              Map("k\\'ey" -> Seq("a\\b'c", "", null)),
+            stringType -> null)
+          val fields = cases.zipWithIndex.map { case ((dataType, expected), i) =>
+            val literal = Literal.create(expected, dataType)
+            StructField(s"c$i", dataType)
+              .withCurrentDefaultValue(s"CAST(NULL AS ${dataType.sql})")
+              .withExistenceDefaultValue(literal.sql)
+          }
+          val schema = DataType.fromJson(StructType(fields).json).asInstanceOf[StructType]
+          val readerValues = ResolveDefaultColumns.existenceDefaultValues(schema)
+          val columns = CatalogV2Util.structTypeToV2Columns(schema)
+          val restored = CatalogV2Util.v2ColumnsToStructType(columns)
+          val restoredValues = ResolveDefaultColumns.existenceDefaultValues(restored)
+
+          for ((((dataType, expected), field), i) <- cases.zip(schema.fields).zipWithIndex) {
+            withClue(s"dataType=$dataType, value=$expected: ") {
+              val toScala = CatalystTypeConverters.createToScalaConverter(dataType)
+              val defaultValue = columns(i).defaultValue()
+              assert(defaultValue.getSql == field.getCurrentDefaultValue().get)
+              assert(defaultValue.getValue.dataType == dataType)
+              assert(toScala(defaultValue.getValue.value) == expected)
+              assert(toScala(readerValues(i)) == expected)
+              assert(restored(i).getCurrentDefaultValue() == field.getCurrentDefaultValue())
+              assert(restored(i).hasExistenceDefaultValue)
+              assert(toScala(restoredValues(i)) == expected)
+            }
+          }
+        }
+      }
+    }
+
+    test(s"V2 existence defaults resolve context functions in casts ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        val cases: Seq[(DataType, String, Any)] = Seq(
+          (StringType, "CAST(current_catalog() AS STRING)", "spark_catalog"),
+          (ShortType, "CAST(if(current_catalog() = 'spark_catalog', 1, 2) AS INT)", 1.toShort))
+        for ((dataType, defaultSQL, expected) <- cases) {
+          withClue(s"dataType=$dataType, default=$defaultSQL: ") {
+            val field = StructField("c", dataType)
+              .withCurrentDefaultValue(defaultSQL)
+              .withExistenceDefaultValue(defaultSQL)
+            val schema = DataType.fromJson(StructType(Seq(field)).json).asInstanceOf[StructType]
+            val defaultValue = CatalogV2Util.structTypeToV2Columns(schema).head.defaultValue()
+
+            assert(defaultValue.getSql == defaultSQL)
+            assert(CatalystTypeConverters.createToScalaConverter(dataType)(
+              defaultValue.getValue.value) == expected)
+          }
+        }
+      }
+    }
+
+    test(s"V2 existence defaults reject nonconstant casts ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        val defaultSQL = "CAST(rand(0) AS DOUBLE)"
+        val field = StructField("c", DoubleType)
+          .withCurrentDefaultValue(defaultSQL)
+          .withExistenceDefaultValue(defaultSQL)
+        val schema = DataType.fromJson(StructType(Seq(field)).json).asInstanceOf[StructType]
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            CatalogV2Util.structTypeToV2Columns(schema)
+          },
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+          parameters = Map(
+            "statement" -> "COLUMN ANALYSIS",
+            "colName" -> "`c`",
+            "defaultValue" -> defaultSQL))
+      }
+    }
+  }
 
   test("tablePropertiesForDisplay preserves stored properties with no display properties") {
     val properties = java.util.Map.of(

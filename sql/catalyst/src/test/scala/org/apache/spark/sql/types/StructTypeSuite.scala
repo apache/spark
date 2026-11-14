@@ -18,14 +18,16 @@
 package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.apache.logging.log4j.Level
 import org.json4s.{JArray, JBool, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -1212,6 +1214,172 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       "PARSE_JSON('{\"k\":\"v\"}')")
     validateConvertedDefaults("c4", VariantType, "parse_json(null)", "CAST(NULL AS VARIANT)")
     validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
+  }
+
+  for (escapedStringLiterals <- Seq(false, true)) {
+    test(s"existence default strings preserve escaped literals ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        for {
+          dataType <- Seq(StringType, StringType("UTF8_LCASE"))
+          value <- Seq("a\\b", "a'b", "a\\nb", "a\nb", "", "plain", null)
+        } {
+          withClue(s"dataType=$dataType, value=$value: ") {
+            val literal = Literal.create(value, dataType)
+            val column = ColumnDefinition("s", dataType, true, None,
+              Some(DefaultValueExpression(literal, literal.sql)))
+            val schema = DataType.fromJson(StructType(Seq(column.toV1Column)).json)
+              .asInstanceOf[StructType]
+            assert(ResolveDefaultColumns.existenceDefaultValues(schema).toSeq ==
+              Seq(literal.value))
+            assert(SQLConf.get.escapedStringLiterals == escapedStringLiterals)
+          }
+        }
+      }
+    }
+
+    test(s"complex existence defaults preserve escaped literals ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        val logAppender = new LogAppender("complex existence defaults")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          for (stringType <- Seq(StringType, StringType("UTF8_LCASE"))) {
+            val structType = StructType(Seq(StructField("s", stringType)))
+            val cases: Seq[(DataType, Any)] = Seq(
+              ArrayType(stringType) -> Seq("a\\b'c", "\\n", "\n", "plain", "", null),
+              MapType(StringType, stringType) ->
+                Map("k\\'ey" -> "a\\b'c", "empty" -> "", "null" -> null),
+              structType -> Row("a\\b'c"),
+              ArrayType(structType) -> Seq(Row("a\\b'c"), Row(""), Row(null), null),
+              MapType(StringType, ArrayType(stringType)) ->
+                Map("k\\'ey" -> Seq("a\\b'c", "", null)),
+              ArrayType(stringType) -> Seq.empty[String],
+              MapType(StringType, stringType) -> Map.empty[String, String],
+              structType -> null)
+            for ((dataType, expected) <- cases) {
+              val literal = Literal.create(expected, dataType)
+              withClue(s"dataType=$dataType, default=${literal.sql}: ") {
+                val field = StructField("c", dataType).withExistenceDefaultValue(literal.sql)
+                val schema = DataType.fromJson(StructType(Seq(field)).json)
+                  .asInstanceOf[StructType]
+                val actual = ResolveDefaultColumns.existenceDefaultValues(schema).head
+                assert(CatalystTypeConverters.createToScalaConverter(dataType)(actual) == expected)
+              }
+            }
+          }
+        }
+        val fallbackWarnings = logAppender.loggingEvents.filter { event =>
+          event.getLevel == Level.WARN && event.getMessage.getFormattedMessage
+            .contains("Encountered unresolved exists default value")
+        }
+        assert(fallbackWarnings.isEmpty,
+          fallbackWarnings.map(_.getMessage.getFormattedMessage).mkString("\n"))
+      }
+    }
+  }
+
+  test("existence default decoding does not repeat deprecated configuration warnings") {
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+      val schema = StructType(Seq(
+        StructField("s", StringType).withExistenceDefaultValue(Literal("plain").sql),
+        StructField("i", IntegerType).withExistenceDefaultValue(Literal(42).sql)))
+      val logAppender = new LogAppender("existence default decoding")
+      withLogAppender(logAppender, level = Some(Level.WARN)) {
+        for (_ <- 1 to 5) {
+          assert(ResolveDefaultColumns.existenceDefaultValues(schema).toSeq ==
+            Seq(UTF8String.fromString("plain"), 42))
+        }
+      }
+      val warnings = logAppender.loggingEvents.filter { event =>
+        event.getLevel == Level.WARN &&
+          event.getMessage.getFormattedMessage.contains("has been deprecated")
+      }
+      assert(warnings.isEmpty,
+        warnings.map(_.getMessage.getFormattedMessage).mkString("\n"))
+    }
+  }
+
+  test("existence default timestamps retain the session time zone in legacy string mode") {
+    val callerConf = SQLConf.get
+    val originalSettings = callerConf.getAllConfs
+    withSQLConf(
+        SQLConf.ESCAPED_STRING_LITERALS.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kathmandu") {
+      val activeSettings = callerConf.getAllConfs
+      val literal = Literal(1577836800123456L, TimestampType)
+      assert(literal.sql == "TIMESTAMP '2020-01-01 05:45:00.123456'")
+      val field = StructField("t", TimestampType).withExistenceDefaultValue(literal.sql)
+      val schema = DataType.fromJson(StructType(Seq(field)).json).asInstanceOf[StructType]
+      assert(ResolveDefaultColumns.existenceDefaultValues(schema).toSeq == Seq(literal.value))
+      assert(SQLConf.get eq callerConf)
+      assert(callerConf.getAllConfs == activeSettings)
+    }
+    assert(SQLConf.get eq callerConf)
+    assert(callerConf.getAllConfs == originalSettings)
+  }
+
+  test("ordinary shared parsers retain dynamic string literal settings") {
+    val parser = CatalystSqlParser
+    for (escaped <- Seq(false, true, false)) {
+      withSQLConf(
+          SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString,
+          SQLConf.LEGACY_CONSECUTIVE_STRING_LITERALS.key -> "false") {
+        val expected = if (escaped) "\\n" else "\n"
+        assert(parser.parseExpression("""'\n'""").eval() == UTF8String.fromString(expected))
+        assert(Literal.fromSQL("""'\n'""").eval() == UTF8String.fromString(expected))
+      }
+    }
+    for (legacyConsecutive <- Seq(false, true, false)) {
+      withSQLConf(
+          SQLConf.ESCAPED_STRING_LITERALS.key -> "false",
+          SQLConf.LEGACY_CONSECUTIVE_STRING_LITERALS.key -> legacyConsecutive.toString) {
+        val expected = if (legacyConsecutive) "ab" else "a'b"
+        assert(parser.parseExpression("'a''b'").eval() == UTF8String.fromString(expected))
+      }
+    }
+  }
+
+  for (escapedStringLiterals <- Seq(false, true)) {
+    test(s"function existence defaults retain session parsing ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        val expected = if (escapedStringLiterals) "a\\n" else "a\n"
+        val structType = StructType(Seq(StructField("s", StringType)))
+        val cases: Seq[(DataType, String, Any)] = Seq(
+          (StringType, """concat('a', '\n')""", expected),
+          (StringType, """CAST(concat('a', '\n') AS STRING)""", expected),
+          (ArrayType(StringType), """array(concat('a', '\n'))""", Seq(expected)),
+          (MapType(StringType, StringType),
+            """map('key', concat('a', '\n'))""", Map("key" -> expected)),
+          (structType, """named_struct('s', concat('a', '\n'))""", Row(expected)),
+          (ArrayType(structType),
+            """array(named_struct('s', CAST(concat('a', '\n') AS STRING)))""",
+            Seq(Row(expected))),
+          (MapType(StringType, ArrayType(StringType)),
+            """map('key', array(concat('a', '\n')))""", Map("key" -> Seq(expected))),
+          (ArrayType(StringType),
+            """CAST(array(concat('a', '\n')) AS ARRAY<STRING>)""", Seq(expected)))
+        for ((dataType, defaultSQL, expectedValue) <- cases) {
+          withClue(s"dataType=$dataType, default=$defaultSQL: ") {
+            val field = StructField("c", dataType).withExistenceDefaultValue(defaultSQL)
+            val schema = DataType.fromJson(StructType(Seq(field)).json).asInstanceOf[StructType]
+            val actual = ResolveDefaultColumns.existenceDefaultValues(schema).head
+            assert(CatalystTypeConverters.createToScalaConverter(dataType)(actual) == expectedValue)
+          }
+        }
+        assert(SQLConf.get.escapedStringLiterals == escapedStringLiterals)
+      }
+    }
+
+    test(s"function existence casts retain the session time zone ($escapedStringLiterals)") {
+      withSQLConf(
+          SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kathmandu") {
+        val field = StructField("t", TimestampType).withExistenceDefaultValue(
+          """CAST(concat('2020-01-01 ', '00:00:00') AS TIMESTAMP)""")
+        val schema = DataType.fromJson(StructType(Seq(field)).json).asInstanceOf[StructType]
+        // Midnight in Kathmandu is 18:15 UTC on the preceding day.
+        assert(ResolveDefaultColumns.existenceDefaultValues(schema).toSeq ==
+          Seq(1577816100000000L))
+      }
+    }
   }
 
   test("SPARK-51119: Add fallback to process unresolved EXISTS_DEFAULT") {

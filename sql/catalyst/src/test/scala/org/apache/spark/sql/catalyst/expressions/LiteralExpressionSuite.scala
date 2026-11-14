@@ -743,6 +743,35 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("canonical SQL parsing preserves literal strings in both parser modes") {
+    val literals = Seq("a\\b'c", "\\n", "\n", "").map(Literal(_))
+    for (escaped <- Seq(false, true, false)) {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString) {
+        literals.foreach { literal =>
+          assert(Literal.fromSQLWithCanonicalEscaping(literal.sql) === literal)
+        }
+      }
+    }
+  }
+
+  test("canonical SQL parsing preserves the session configuration") {
+    val callerConf = SQLConf.get
+    val originalSettings = callerConf.getAllConfs
+    for (timeZone <- Seq("UTC", "Asia/Kathmandu", "UTC")) {
+      withSQLConf(
+          SQLConf.ESCAPED_STRING_LITERALS.key -> "true",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        val activeSettings = callerConf.getAllConfs
+        val literal = Literal(1577836800123456L, TimestampType)
+        assert(Literal.fromSQLWithCanonicalEscaping(literal.sql) === literal)
+        assert(SQLConf.get eq callerConf)
+        assert(callerConf.getAllConfs === activeSettings)
+      }
+    }
+    assert(SQLConf.get eq callerConf)
+    assert(callerConf.getAllConfs === originalSettings)
+  }
+
   test("context independent foldable literals") {
     val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val map = Literal.create(
