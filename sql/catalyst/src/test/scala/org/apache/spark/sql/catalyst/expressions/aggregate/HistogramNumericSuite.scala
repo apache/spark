@@ -82,6 +82,88 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-61525: NumericHistogram groups NaN values when adding input") {
+    for {
+      nBins <- Seq(2, 4)
+      values <- Seq(Double.NaN, Double.NaN, 1.0).permutations
+    } {
+      val buffer = new NumericHistogram()
+      buffer.allocate(nBins)
+      values.foreach(buffer.add)
+
+      assert(buffer.getUsedBins == 2)
+      assert(buffer.getBin(0).x == 1.0)
+      assert(buffer.getBin(0).y == 1.0)
+      assert(buffer.getBin(1).x.isNaN)
+      assert(buffer.getBin(1).y == 2.0)
+    }
+
+    val buffer = new NumericHistogram()
+    buffer.allocate(2)
+    Seq.fill(3)(Double.NaN).foreach(buffer.add)
+    assert(buffer.getUsedBins == 1)
+    assert(buffer.getBin(0).x.isNaN)
+    assert(buffer.getBin(0).y == 3.0)
+  }
+
+  test("SPARK-61525: NumericHistogram groups NaN values when merging partial histograms") {
+    for {
+      nBins <- Seq(2, 4)
+      partials <- Seq(Seq(1.0, Double.NaN), Seq(Double.NaN)).permutations
+    } {
+      val buffer = new NumericHistogram()
+      buffer.allocate(nBins)
+      partials.foreach { values =>
+        val partial = new NumericHistogram()
+        partial.allocate(nBins)
+        values.foreach(partial.add)
+        buffer.merge(NumericHistogramSerializer.deserialize(
+          NumericHistogramSerializer.serialize(partial)))
+      }
+
+      assert(buffer.getUsedBins == 2)
+      assert(buffer.getBin(0).x == 1.0)
+      assert(buffer.getBin(0).y == 1.0)
+      assert(buffer.getBin(1).x.isNaN)
+      assert(buffer.getBin(1).y == 2.0)
+    }
+
+    val buffer = new NumericHistogram()
+    buffer.allocate(2)
+    (1 to 3).foreach { _ =>
+      val partial = new NumericHistogram()
+      partial.allocate(2)
+      partial.add(Double.NaN)
+      buffer.merge(partial)
+    }
+    assert(buffer.getUsedBins == 1)
+    assert(buffer.getBin(0).x.isNaN)
+    assert(buffer.getBin(0).y == 3.0)
+  }
+
+  test("SPARK-61525: NumericHistogram preserves finite values and signed zero grouping") {
+    for (values <- Seq(Seq(1.0, 1.0), Seq(-0.0, 0.0), Seq(0.0, -0.0))) {
+      val buffer = new NumericHistogram()
+      buffer.allocate(2)
+      values.foreach(buffer.add)
+
+      assert(buffer.getUsedBins == 1)
+      assert(java.lang.Double.doubleToRawLongBits(buffer.getBin(0).x) ==
+        java.lang.Double.doubleToRawLongBits(values.head))
+      assert(buffer.getBin(0).y == 2.0)
+
+      val partial = new NumericHistogram()
+      partial.allocate(2)
+      partial.add(2.0)
+      buffer.merge(partial)
+      assert(buffer.getUsedBins == 2)
+      assert(buffer.getBin(0).x == values.head)
+      assert(buffer.getBin(0).y == 2.0)
+      assert(buffer.getBin(1).x == 2.0)
+      assert(buffer.getBin(1).y == 1.0)
+    }
+  }
+
   test("class HistogramNumeric, sql string") {
     assertEqual(s"histogram_numeric(a, 3)",
       new HistogramNumeric("a".attr, Literal(3)).sql: String)
