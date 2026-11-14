@@ -5983,7 +5983,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
   test("SPARK-60260: a storage-partitioned join keeps the planned keyed layout when v2 bucketing " +
     "is disabled after planning") {
-    // reportedKeyedPartitioning used to read spark.sql.sources.v2.bucketing.enabled at execution,
+    // outputPartitioning used to read spark.sql.sources.v2.bucketing.enabled at execution,
     // so turning it off between planning and execution dropped the keyed layout on the scan that
     // PlanAdaptiveDynamicPruningFilters rebuilds at stage creation, and the sort-merge join then
     // lined partitions up wrong. The decision is frozen at planning now. Covered across three
@@ -6076,6 +6076,28 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
             groupPartitions = false, shuffle = true)
           check("p.price > 5.0", Seq(6, 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
             groupPartitions = false, shuffle = true)
+        }
+      }
+
+      // Shape 4: a scalar subquery over the keyed column is a runtime filter of the keyed scan too.
+      // Without this fix it returns 1 of 3 rows with AQE off, or fails to zip with the Catalyst
+      // runtime filters. DPP stays off here, so the scalar subquery is the keyed scan's only
+      // runtime filter. The SPARK-60752 tests below cover a scalar subquery filter with DPP on.
+      Seq(true, false).foreach { aqe =>
+        withSQLConf(
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          withTable(s"testcat.ns.$items", s"testcat.ns.$purchases") {
+            createTable(items, itemsColumns, Array(identity("id")))
+            sql(s"INSERT INTO testcat.ns.$items VALUES " + (1 to 7).map(i =>
+              s"($i, '${letters(i - 1)}', 10.0, cast('2020-01-01' as timestamp))").mkString(", "))
+            createTable(purchases, purchasesColumns, Array(identity("item_id")))
+            sql(s"INSERT INTO testcat.ns.$purchases VALUES " + (1 to 7).map(i =>
+              s"($i, $i.0, cast('2020-01-01' as timestamp))").mkString(", "))
+            check(s"i.id >= (SELECT min(item_id) FROM testcat.ns.$purchases WHERE price > 4.0)",
+              (5 to 7).map(i => Row(i.toLong, letters(i - 1), i.toFloat)),
+              groupPartitions = false, shuffle = false)
+          }
         }
       }
     }
