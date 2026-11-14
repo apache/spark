@@ -1053,6 +1053,8 @@ private[spark] class Executor(
           task.context.invokePostStatusUpdateListeners()
         }
       } catch {
+        // Keep the branches below in sync with `Executor.isReportedAsError`, which logs the
+        // failure before the task listeners run.
         case t: TaskKilledException =>
           logInfo(log"Executor killed ${MDC(TASK_NAME, taskName)}," +
             log" reason: ${MDC(REASON, t.reason)}")
@@ -1661,6 +1663,29 @@ private[spark] object Executor extends Logging {
         case e if e.getCause != null => isFatalError(e.getCause, depthToCheck - 1)
         case _ => false
       }
+    }
+  }
+
+  /**
+   * Whether `TaskRunner.run` reports a task body failure as an error with its stack trace, as
+   * opposed to a killed task, a fetch failure or a denied commit. Mirrors the branches of its
+   * `catch`, except the one for a stopping executor, which the caller checks against its own
+   * `SparkEnv`. `TaskFailureLogger` uses this to log the failure before the task listeners run.
+   *
+   * @param killOnFatalErrorDepth see `isFatalError`.
+   */
+  def isReportedAsError(
+      error: Throwable,
+      context: TaskContext,
+      killOnFatalErrorDepth: Int): Boolean = {
+    error match {
+      case _: TaskKilledException => false
+      // `TaskRunner.run` checks the task's kill reason, which `Task.kill` sets together with
+      // interrupting the context, except while the context is not interruptible.
+      case _: InterruptedException | NonFatal(_) if context.isInterrupted() => false
+      case t if context.fetchFailed.isDefined && !isFatalError(t, killOnFatalErrorDepth) => false
+      case CausedBy(_: CommitDeniedException) => false
+      case _ => true
     }
   }
 }
