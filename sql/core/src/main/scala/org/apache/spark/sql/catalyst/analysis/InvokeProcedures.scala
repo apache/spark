@@ -43,18 +43,21 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
     // reject. The optimizer would rewrite the subquery into a join under the `Call`.
     case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess &&
         !c.args.exists(SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
+      val procedure = c.procedure match {
+        case ResolvedProcedure(_, _, p: BoundProcedure) => p
+      }
       session.sessionState.optimizer.execute(c) match {
-        case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) =>
+        case Call(_: ResolvedProcedure, args, _) =>
           invoke(procedure, args, c)
-        case Call(_, args, _) =>
+        case optimized =>
           // A rule such as `ExtractPythonUDFs` can add an operator under the `Call` to evaluate an
           // argument. Such an argument reads the output of that operator and does not fold.
-          c.procedure match {
-            case ResolvedProcedure(_, _, procedure: BoundProcedure) =>
-              checkFoldable(procedure, args)
+          optimized match {
+            case Call(_, args, _) => checkFoldable(procedure, args)
+            case _ =>
           }
-          throw SparkException.internalError("Unexpected plan for optimized CALL statement")
-        case _ =>
+          // Even if every argument folds, invoking the procedure would ignore the operator under
+          // the `Call`, so the plan is still unexpected.
           throw SparkException.internalError("Unexpected plan for optimized CALL statement")
       }
   }
