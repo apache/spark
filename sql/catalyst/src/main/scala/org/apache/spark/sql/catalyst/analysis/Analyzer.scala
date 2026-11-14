@@ -755,6 +755,7 @@ class Analyzer(
       ResolvePivot ::
       ResolveUnpivot ::
       ResolveBinBy ::
+      ResolveGapFill ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ExtractGenerator ::
       ResolveGenerate ::

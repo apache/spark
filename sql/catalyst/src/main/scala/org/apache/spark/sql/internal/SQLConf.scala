@@ -6552,6 +6552,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val GAP_FILL_ENABLED =
+    buildConf("spark.sql.gapFillRelationOperator.enabled")
+      .doc("Gate for the GAP FILL relation operator, which is under development. GAP FILL " +
+        "queries are rejected whatever the value. When true, the rejection waits until the " +
+        "input relation resolves, so errors that leave it unresolved, such as a missing " +
+        "table, are reported first.")
+      .internal()
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
   }

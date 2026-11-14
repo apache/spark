@@ -83,7 +83,9 @@ options { tokenVocab = SqlBaseLexer; }
            la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
-           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
+           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
+           // GAP starts a pipe step only before FILL (, so `a | gap` stays a bitwise OR.
+           (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN);
   }
 
   /**
@@ -1309,6 +1311,40 @@ binByClause
       RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
     ;
 
+gapFillClause
+    : GAP FILL LEFT_PAREN
+        (PARTITION BY partitionCol+=multipartIdentifier
+          (COMMA partitionCol+=multipartIdentifier)*)?
+        ORDER BY timeCol=multipartIdentifier
+        BIN WIDTH binWidth=expression
+        (ALIGN TO origin=expression
+          | FROM rangeStart=expression TO rangeEnd=expression
+          | gapFillFillClause
+          | MAX GAP maxGap=expression
+          | BIN_START (AS binStartAlias=errorCapturingIdentifier)?
+          | IS_GENERATED (AS isGeneratedAlias=errorCapturingIdentifier)?
+        )*
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
+    ;
+
+gapFillFillClause
+    : FILL LEFT_PAREN fillColumns+=gapFillColumn (COMMA fillColumns+=gapFillColumn)* RIGHT_PAREN
+    ;
+
+gapFillColumn
+    : multipartIdentifier gapFillMethod
+    ;
+
+gapFillMethod
+    : LINEAR
+    | FFILL
+    | FORWARD FILL
+    | BFILL
+    | BACKWARD FILL
+    | CONSTANT fillValue=expression
+    | NULL
+    ;
+
 lateralView
     : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
@@ -1331,6 +1367,7 @@ relationExtension
     | pivotClause
     | unpivotClause
     | binByClause
+    | gapFillClause
     ;
 
 joinRelation
@@ -1906,12 +1943,25 @@ booleanValue
     : TRUE | FALSE
     ;
 
+// The GAP FILL range `FROM start TO end` lets TO follow an expression. So the first (SLL)
+// parsing stage can see two readings of an interval literal: one that ends before TO, and one
+// that goes on through TO. ANTLR then picks the first viable alternative, so in `interval`,
+// `errorCapturingMultiUnitsInterval` and `errorCapturingUnitToUnitInterval` the alternative that
+// goes on through TO comes first.
 interval
-    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
+    : INTERVAL (errorCapturingUnitToUnitInterval | errorCapturingMultiUnitsInterval)
     ;
 
+// The first alternative captures units followed by a from-to part, such as
+// `INTERVAL '1' DAY '2' HOUR TO MINUTE`, which AstBuilder rejects.
 errorCapturingMultiUnitsInterval
-    : body=multiUnitsInterval unitToUnitInterval?
+    : multiUnitsBeforeUnitToUnit unitToUnitInterval
+    | body=multiUnitsInterval unitToUnitInterval?
+    ;
+
+// The non-greedy loop stops before the from-to part that follows it.
+multiUnitsBeforeUnitToUnit
+    : (intervalValue unitInMultiUnits)+?
     ;
 
 multiUnitsInterval
@@ -1919,7 +1969,7 @@ multiUnitsInterval
     ;
 
 errorCapturingUnitToUnitInterval
-    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
+    : body=unitToUnitInterval (error2=unitToUnitInterval | error1=multiUnitsInterval)?
     ;
 
 unitToUnitInterval
@@ -2395,6 +2445,7 @@ operatorPipeRightSide
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
     | binByClause
+    | gapFillClause
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
@@ -2443,9 +2494,11 @@ ansiNonReserved
     | AT
     | ATOMIC
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2485,6 +2538,7 @@ ansiNonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONTAINS
     | CONTINUE
     | COST
@@ -2545,18 +2599,22 @@ ansiNonReserved
     | EXTENDED
     | EXTERNAL
     | EXTRACT
+    | FFILL
     | FIELDS
     | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -2587,6 +2645,7 @@ ansiNonReserved
     | INTEGER
     | INTERVAL
     | INVOKER
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
@@ -2607,6 +2666,7 @@ ansiNonReserved
     | LIKE
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD
@@ -2866,9 +2926,11 @@ nonReserved
     | ATOMIC
     | AUTHORIZATION
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2917,6 +2979,7 @@ nonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -2992,10 +3055,12 @@ nonReserved
     | EXTRACT
     | FALSE
     | FETCH
+    | FFILL
     | FILTER
     | FIELDS
     | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
@@ -3004,10 +3069,12 @@ nonReserved
     | FOREIGN
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FROM
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -3044,6 +3111,7 @@ nonReserved
     | INTO
     | INVOKER
     | IS
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
@@ -3066,6 +3134,7 @@ nonReserved
     | LONG
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD

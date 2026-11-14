@@ -2523,6 +2523,65 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Add an [[UnresolvedGapFill]] to a logical plan. The feature gate is checked later, by the
+   * analyzer rule `ResolveGapFill`.
+   */
+  private def withGapFill(
+      ctx: GapFillClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.ALIGN, "ALIGN TO", ctx)
+    checkDuplicateClauses(ctx.FROM, "FROM", ctx)
+    checkDuplicateClauses(ctx.gapFillFillClause, "FILL", ctx)
+    checkDuplicateClauses(ctx.MAX, "MAX GAP", ctx)
+    checkDuplicateClauses(ctx.BIN_START, "BIN_START", ctx)
+    checkDuplicateClauses(ctx.IS_GENERATED, "IS_GENERATED", ctx)
+
+    val gapFill = UnresolvedGapFill(
+      partitionColumns = ctx.partitionCol.asScala.map(gapFillColumnRef).toSeq,
+      timeColumn = gapFillColumnRef(ctx.timeCol),
+      binWidthExpr = expression(ctx.binWidth),
+      originExpr = Option(ctx.origin).map(expression),
+      rangeStartExpr = Option(ctx.rangeStart).map(expression),
+      rangeEndExpr = Option(ctx.rangeEnd).map(expression),
+      fillColumns = ctx.gapFillFillClause.asScala.flatMap(_.fillColumns.asScala).map { c =>
+        GapFillColumn(gapFillColumnRef(c.multipartIdentifier), toGapFillMethod(c.gapFillMethod))
+      }.toSeq,
+      maxGapExpr = Option(ctx.maxGap).map(expression),
+      binStart = ctx.BIN_START.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.binStartAlias).map(getIdentifierText))
+      },
+      isGenerated = ctx.IS_GENERATED.asScala.headOption.map { _ =>
+        GapFillOutputColumn(Option(ctx.isGeneratedAlias).map(getIdentifierText))
+      },
+      child = query)
+
+    if (ctx.tblAlias != null) {
+      SubqueryAlias(getIdentifierText(ctx.tblAlias), gapFill)
+    } else {
+      gapFill
+    }
+  }
+
+  /** A GAP FILL column name with its own origin, so that an error about it points at it. */
+  private def gapFillColumnRef(ctx: MultipartIdentifierContext): Expression = withOrigin(ctx) {
+    UnresolvedAttribute(visitMultipartIdentifier(ctx))
+  }
+
+  private def toGapFillMethod(ctx: GapFillMethodContext): GapFillMethod = withOrigin(ctx) {
+    if (ctx.LINEAR != null) {
+      GapFillMethod.Linear
+    } else if (ctx.FFILL != null || ctx.FORWARD != null) {
+      GapFillMethod.ForwardFill
+    } else if (ctx.BFILL != null || ctx.BACKWARD != null) {
+      GapFillMethod.BackwardFill
+    } else if (ctx.fillValue != null) {
+      GapFillMethod.Constant(expression(ctx.fillValue))
+    } else {
+      GapFillMethod.Null
+    }
+  }
+
+  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -2587,6 +2646,8 @@ class AstBuilder extends DataTypeAstBuilder
         withPivot(extension.pivotClause(), left)
       } else if (extension.unpivotClause() != null) {
         withUnpivot(extension.unpivotClause(), left)
+      } else if (extension.gapFillClause() != null) {
+        withGapFill(extension.gapFillClause(), left)
       } else {
         assert(extension.binByClause() != null)
         withBinBy(extension.binByClause(), left)
@@ -8438,6 +8499,8 @@ class AstBuilder extends DataTypeAstBuilder
       withUnpivot(c, left)
     }.getOrElse(Option(ctx.binByClause()).map { c =>
       withBinBy(c, left)
+    }.getOrElse(Option(ctx.gapFillClause()).map { c =>
+      withGapFill(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
     }.getOrElse(Option(ctx.joinRelation()).map { c =>
@@ -8449,7 +8512,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, PipeOperator(left), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    )))))))))))))
+    ))))))))))))))
   }
 
   private def visitOperatorPipeSet(
