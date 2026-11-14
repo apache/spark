@@ -1630,7 +1630,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     None,
-                    Some(DefaultValueExpression(_, _, _)),
+                    Some(DefaultValueExpression(_, _, _, _)),
                     false,
                     false)),
                 _) =>

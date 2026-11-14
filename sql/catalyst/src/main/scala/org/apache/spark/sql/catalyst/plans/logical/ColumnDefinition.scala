@@ -24,12 +24,13 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{normalizeExistenceDefaultValue, validateDefaultValueExpr}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, DefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder, StructField}
 import org.apache.spark.sql.util.SchemaUtils
@@ -83,7 +84,7 @@ case class ColumnDefinition(
       dataType,
       nullable,
       comment.orNull,
-      defaultValue.map(_.toV2(statement, name)).orNull,
+      defaultValue.map(_.toV2(statement, name, dataType)).orNull,
       generationExpression.map(_.toV2).orNull,
       identityColumnSpec.orNull,
       if (metadata == Metadata.empty) null else metadata.json,
@@ -97,8 +98,12 @@ case class ColumnDefinition(
     }
     defaultValue.foreach { default =>
       metadataBuilder.putExpression(
-        CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL, Some(default.child))
+        CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL,
+        Some(default.uncoercedChild.getOrElse(default.child)))
       val existsSQL = default.child match {
+        case l: Literal if default.analyzedChild.isDefined =>
+          normalizeExistenceDefaultValue(
+            l, dataType, default.analyzedChild.getOrElse(default.child).foldable).sql
         case l: Literal => l.sql
         case _ => default.originalSQL
       }
@@ -258,11 +263,13 @@ object ColumnDefinition {
 
 /**
  * A fake expression to hold the column/variable default value expression and its original SQL text.
+ * `uncoercedChild` preserves resolved bindings before character assignment for current defaults.
  */
 case class DefaultValueExpression(
     child: Expression,
     originalSQL: String,
-    analyzedChild: Option[Expression] = None)
+    analyzedChild: Option[Expression] = None,
+    uncoercedChild: Option[Expression] = None)
   extends UnaryExpression
   with Unevaluable
   with AnalysisAwareExpression[DefaultValueExpression] {
@@ -279,19 +286,40 @@ case class DefaultValueExpression(
     copy(child = newChild)
 
   // Convert the default expression to ColumnDefaultValue, which is required by DS v2 APIs.
-  def toV2(statement: String, colName: String): ColumnDefaultValue = child match {
-    case Literal(value, dataType) =>
-      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
-      val existsDefault = LiteralValue(value, dataType)
-      new ColumnDefaultValue(originalSQL, currentDefault.orNull, existsDefault)
+  def toV2(
+      statement: String,
+      colName: String,
+      columnType: DataType): ColumnDefaultValue = child match {
+    case literal: Literal =>
+      // Only the existence value may freeze the definition session's CHAR/VARCHAR assignment.
+      val currentDefault = toV2CurrentDefault(statement, colName, columnType)
+      val assigned = normalizeExistenceDefaultValue(
+        literal, columnType, analyzedChild.getOrElse(child).foldable).asInstanceOf[Literal]
+      val existsDefault = LiteralValue(assigned.value, assigned.dataType)
+      new ColumnDefaultValue(originalSQL, currentDefault.getExpression, existsDefault)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)
   }
 
   // Convert the default expression to DefaultValue, which is required by DS v2 APIs.
-  def toV2CurrentDefault(statement: String, colName: String): DefaultValue = child match {
+  def toV2CurrentDefault(
+      statement: String,
+      colName: String,
+      columnType: DataType): DefaultValue = child match {
     case Literal(_, _) =>
-      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      val currentDefault = if (CharVarcharUtils.hasCharVarchar(columnType) &&
+          CharVarcharUtils.shouldApplyWriteSideLengthCheck(SQLConf.get)) {
+        // Keep pre-assignment values and types without folding through Literal.create, which
+        // can itself assign character values. Nested assignment still needs the original types.
+        uncoercedChild.filter { expr =>
+          expr.isInstanceOf[Literal] || expr.contextIndependentFoldable &&
+            SQLConf.get.getConfByKeyStrict[Boolean]("spark.sql.optimizer.datasourceV2ExprFolding")
+        }.map { expr =>
+          LiteralValue(expr.eval(), expr.dataType)
+        }
+      } else {
+        analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      }
       new DefaultValue(originalSQL, currentDefault.orNull)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)

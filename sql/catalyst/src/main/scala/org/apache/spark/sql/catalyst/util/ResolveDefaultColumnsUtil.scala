@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
@@ -439,11 +439,39 @@ object ResolveDefaultColumns extends QueryErrorsBase
           throw QueryCompilationErrors.defaultValuesDataTypeError(
             statementType, colName, defaultSQL, dataType, other.dataType))
     }
+    // TODO: Normalize persisted unpadded existence defaults in STRING-overlay schemas as well.
     if (CharVarcharUtils.hasCharVarchar(dataType) &&
         CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) && ret.foldable) {
-      CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
+      // Literalization must not hide forbidden dependencies from the later DDL validation.
+      validateDefaultValueExpr(
+        DefaultValueExpression(analyzed, defaultSQL), statementType, colName, None)
+      val checked = CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
+      Literal(checked, supplanted)
+    } else {
+      ret
     }
-    ret
+  }
+
+  /** Applies CHAR/VARCHAR assignment to a frozen existence value after FinishAnalysis. */
+  def normalizeExistenceDefaultValue(
+      expression: Expression,
+      dataType: DataType,
+      originallyFoldable: => Boolean): Expression = {
+    if (CharVarcharUtils.hasCharVarchar(dataType) &&
+        CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) && expression.foldable) {
+      try {
+        val checked = CharVarcharUtils.stringLengthCheck(expression, dataType).eval(EmptyRow)
+        Literal(checked, CharVarcharUtils.replaceCharVarcharWithString(dataType))
+      } catch {
+        case e: SparkRuntimeException
+            if e.getCondition == "EXCEED_LIMIT_LENGTH" && !originallyFoldable =>
+          // SPARK-57187 defers oversized nonfoldable defaults' length errors until INSERT.
+          // Preserve that timing while assigning valid values frozen by FinishAnalysis.
+          expression
+      }
+    } else {
+      expression
+    }
   }
 
   /**
@@ -545,6 +573,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * These define existence default values for the struct fields for efficiency purposes.
    * The caller should avoid using such methods in a loop for efficiency.
    */
+  // TODO: Precompute defaults per reader; expanded CHAR literals increase per-row parsing costs.
   def existenceDefaultValues(schema: StructType): Array[Any] =
     getExistenceDefaultValues(schema)
   def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =

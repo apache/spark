@@ -18,13 +18,15 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -263,6 +265,391 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     }
   }
 
+  for {
+    format <- Seq("parquet", "orc", "json")
+    padding <- Seq(None, Some("false"), Some("true"))
+  } {
+    test(s"CHAR existence defaults use write-side values: $format, padding=$padding") {
+      val conf = padding.map(SQLConf.READ_SIDE_CHAR_PADDING.key -> _).toSeq
+      withSQLConf(conf: _*) {
+        assert(spark.sessionState.conf.readSideCharPadding == padding.getOrElse("true").toBoolean)
+        withTable("t") {
+          sql(s"CREATE TABLE t(id INT) USING $format")
+          sql("INSERT INTO t VALUES (1)")
+          sql("ALTER TABLE t ADD COLUMNS (" +
+            "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'US', " +
+            "empty CHAR(3) DEFAULT '', missing CHAR(3) DEFAULT NULL, " +
+            "trimmed CHAR(3) DEFAULT 'EU  ', trimmed_v VARCHAR(3) DEFAULT 'US  ')")
+          sql("INSERT INTO t (id) VALUES (2)")
+
+          checkAnswer(sql("SELECT id, region, length(region), label, empty, missing, " +
+            "trimmed, trimmed_v FROM t"),
+            Seq(1, 2).map(Row(_, "EU ", 3, "US", "   ", null, "EU ", "US ")))
+          checkAnswer(sql("SELECT count(DISTINCT region) FROM t"), Row(1L))
+          checkAnswer(sql("SELECT region, count(*) FROM t GROUP BY region"), Row("EU ", 2L))
+          assert(spark.table("t").schema("region").getExistenceDefaultValue().contains("'EU '"))
+          assert(spark.table("t").schema("region").getCurrentDefaultValue().contains("'EU'"))
+        }
+      }
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "ADD", "SET")
+    preserve <- Seq(false, true)
+  } {
+    test(s"V1 character current defaults preserve resolved session functions: " +
+        s"$ddl, preserve=$preserve") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withUserDefinedFunction("default_type_probe" -> true) {
+          spark.udf.register("default_type_probe", () => "EU")
+          withTable("t") {
+            val default = "typeof(default_type_probe())"
+            val columns = s"c CHAR(6) DEFAULT $default, padded CHAR(8) DEFAULT $default"
+            ddl match {
+              case "CREATE" => sql(s"CREATE TABLE t(id INT, $columns) USING parquet")
+              case "ADD" =>
+                sql("CREATE TABLE t(id INT) USING parquet")
+                sql(s"ALTER TABLE t ADD COLUMNS ($columns)")
+              case "SET" =>
+                sql("CREATE TABLE t(id INT, c CHAR(6), padded CHAR(8)) USING parquet")
+                sql(s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default")
+                sql(s"ALTER TABLE t ALTER COLUMN padded SET DEFAULT $default")
+            }
+            // Both unchanged and padded defaults must retain the resolved function binding.
+            sql("INSERT INTO t (id) VALUES (1)")
+            checkAnswer(sql("SELECT id, c, length(c), padded, length(padded) FROM t"),
+              Row(1, "string", 6, "string  ", 8))
+            // Restore the definition before each write, since writes can invalidate table caches.
+            sql(s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default")
+            sql(s"ALTER TABLE t ALTER COLUMN padded SET DEFAULT $default")
+            sql("INSERT INTO t VALUES (2, DEFAULT, DEFAULT)")
+            checkAnswer(sql("SELECT id, c, length(c), padded, length(padded) FROM t"),
+              Seq(1, 2).map(Row(_, "string", 6, "string  ", 8)))
+          }
+        }
+      }
+    }
+  }
+
+  Seq("CREATE", "ALTER").foreach { ddl =>
+    test(s"CHAR/VARCHAR current defaults use insertion flags with cached metadata: $ddl") {
+      withSQLConf(
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withTable("t") {
+          val columns = "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'EU  '"
+          if (ddl == "CREATE") {
+            sql(s"CREATE TABLE t(id INT, $columns) USING parquet")
+          } else {
+            sql("CREATE TABLE t(id INT) USING parquet")
+            sql("INSERT INTO t VALUES (0)")
+            sql(s"ALTER TABLE t ADD COLUMNS ($columns)")
+          }
+          val historicalRows = if (ddl == "ALTER") {
+            Seq(Row(0, "EU ", 3, "EU ", 3))
+          } else {
+            Seq.empty[Row]
+          }
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+            sql("INSERT INTO t (id) VALUES (1)")
+            sql("INSERT INTO t VALUES (2, 'EU', 'EU  ')")
+            val query = "SELECT id, region, length(region), label, length(label) FROM t"
+            checkAnswer(sql(query), historicalRows ++
+              Seq(1, 2).map(Row(_, "EU", 2, "EU  ", 4)))
+
+            // Serialized schemas retain the SQL but drop cached expressions.
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val schema = StructType.fromString(table.schema.json)
+            spark.sessionState.catalog.alterTableDataSchema(TableIdentifier("t"), schema)
+            spark.catalog.refreshTable("t")
+            sql("INSERT INTO t (id) VALUES (3)")
+            checkAnswer(sql(query), historicalRows ++
+              Seq(1, 2, 3).map(Row(_, "EU", 2, "EU  ", 4)))
+          }
+        }
+      }
+    }
+  }
+
+  // Cover the overlay, both first-class modes (including legacy overrides), and pure legacy.
+  Seq(
+    (false, true, false),
+    (true, true, false),
+    (true, false, true),
+    (false, false, false),
+    (true, false, false)).foreach { case (legacy, preserve, standard) =>
+    test(s"V1 SET DEFAULT follows insertion flags: " +
+        s"legacy=$legacy, preserve=$preserve, standard=$standard") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withTable("t") {
+          val identifier = TableIdentifier("t")
+          val catalog = spark.sessionState.catalog
+          def schema: StructType = catalog.getTableRawMetadata(identifier).schema
+
+          sql("CREATE TABLE t(id INT) USING parquet")
+          sql("INSERT INTO t VALUES (0)")
+          sql("ALTER TABLE t ADD COLUMNS (" +
+            "region CHAR(3) DEFAULT 'US', label VARCHAR(3) DEFAULT 'US')")
+          val existenceDefaults = Seq("region", "label").map { name =>
+            schema(name).getExistenceDefaultValue()
+          }
+          assert(existenceDefaults == Seq(Some("'US '"), Some("'US'")))
+
+          // Under preserve-only semantics this returns CHAR(3) with a two-character value.
+          // SET must not retain its assigned three-character value for a later legacy INSERT.
+          val charDefault = "substring(CAST('EU' AS CHAR(3)), 1, 2)"
+          val varcharDefault = "'EU  '"
+          val definitionChecks = !legacy || preserve || standard
+          withSQLConf(
+            SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
+            sql(s"ALTER TABLE t ALTER COLUMN region SET DEFAULT $charDefault")
+            sql(s"ALTER TABLE t ALTER COLUMN label SET DEFAULT $varcharDefault")
+            sql("INSERT INTO t (id) VALUES (1)")
+          }
+
+          def checkMetadata(hasCurrentDefault: Boolean): Unit = {
+            val currentSchema = schema
+            Seq("region", "label").zip(existenceDefaults).foreach { case (name, default) =>
+              assert(currentSchema(name).getExistenceDefaultValue() == default)
+            }
+            assert(currentSchema("region").getCurrentDefaultValue() ==
+              Option.when(hasCurrentDefault)(charDefault))
+            assert(currentSchema("label").getCurrentDefaultValue() ==
+              Option.when(hasCurrentDefault)(varcharDefault))
+          }
+          checkMetadata(hasCurrentDefault = true)
+
+          val originalRows = Seq(
+            Row(0, "US ", 3, "US", 2),
+            if (definitionChecks) Row(1, "EU ", 3, "EU ", 3)
+            else Row(1, "EU", 2, "EU  ", 4))
+          // Reverse assignment policy at INSERT, keeping first-class types and read padding off.
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> definitionChecks.toString) {
+            val query = "SELECT id, region, length(region), label, length(label) FROM t"
+            checkAnswer(sql(s"SELECT $charDefault, length($charDefault)"), Row("EU", 2))
+            def insertDefaults(firstId: Int): Seq[Row] = {
+              sql(s"INSERT INTO t (id) VALUES ($firstId)")
+              sql(s"INSERT INTO t VALUES (${firstId + 1}, DEFAULT, DEFAULT), " +
+                s"(${firstId + 2}, $charDefault, $varcharDefault)")
+              (firstId until firstId + 3).map { id =>
+                if (definitionChecks) Row(id, "EU", 2, "EU  ", 4)
+                else Row(id, "EU ", 3, "EU ", 3)
+              }
+            }
+
+            // Exercise the production V1 catalog without first serializing away its expressions.
+            val retainedRows = insertDefaults(2)
+            checkAnswer(sql(query), originalRows ++ retainedRows)
+            checkMetadata(hasCurrentDefault = true)
+
+            // Reload the declared types, dropping expressions without changing CHAR to STRING.
+            val reloadedSchema = StructType.fromString(schema.json)
+            catalog.alterTableDataSchema(identifier, reloadedSchema)
+            spark.catalog.refreshTable("t")
+            checkMetadata(hasCurrentDefault = true)
+            val reloadedRows = insertDefaults(5)
+            checkAnswer(sql(query), originalRows ++ retainedRows ++ reloadedRows)
+
+            sql("ALTER TABLE t ALTER COLUMN region DROP DEFAULT")
+            sql("ALTER TABLE t ALTER COLUMN label DROP DEFAULT")
+            checkMetadata(hasCurrentDefault = false)
+            sql("INSERT INTO t (id) VALUES (8)")
+            sql("INSERT INTO t VALUES (9, DEFAULT, DEFAULT)")
+            checkAnswer(sql(query), originalRows ++ retainedRows ++ reloadedRows ++
+              Seq(Row(8, null, null, null, null), Row(9, null, null, null, null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("V1 SET DEFAULT follows insertion flags: replace a preexisting legacy current cache") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withTable("t") {
+        val identifier = TableIdentifier("t")
+        val catalog = spark.sessionState.catalog
+        val currentKey = ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+        sql("CREATE TABLE t(id INT) USING parquet")
+        sql("INSERT INTO t VALUES (0)")
+        sql("ALTER TABLE t ADD COLUMNS (region CHAR(3) DEFAULT 'US')")
+
+        val originalField = catalog.getTableRawMetadata(identifier).schema("region")
+        val existenceDefault = originalField.getExistenceDefaultValue()
+        assert(existenceDefault.contains("'US'"))
+        val (originalSQL, originalExpression) = originalField.metadata
+          .getExpression[Expression](currentKey)
+        assert(originalSQL == "'US'")
+        assert(originalExpression.exists(_.eval().toString == "US"))
+
+        val charDefault = "substring(CAST('EU' AS CHAR(3)), 1, 2)"
+        withSQLConf(
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"ALTER TABLE t ALTER COLUMN region SET DEFAULT $charDefault")
+        }
+        val updatedField = catalog.getTableRawMetadata(identifier).schema("region")
+        assert(updatedField.getCurrentDefaultValue().contains(charDefault))
+        assert(updatedField.getExistenceDefaultValue() == existenceDefault)
+
+        // Replacing the default must replace the previous US expression as well.
+        sql("INSERT INTO t (id) VALUES (1)")
+        sql(s"INSERT INTO t VALUES (2, DEFAULT), (3, $charDefault)")
+        val query = "SELECT id, region, length(region) FROM t"
+        val expectedRows = Seq(Row(0, "US", 2)) ++ Seq(1, 2, 3).map(Row(_, "EU", 2))
+        checkAnswer(sql(query), expectedRows)
+        assert(updatedField.metadata.getExpression[Expression](currentKey)._2
+          .exists(_.eval().toString == "EU"))
+
+        sql("ALTER TABLE t ALTER COLUMN region DROP DEFAULT")
+        val droppedField = catalog.getTableRawMetadata(identifier).schema("region")
+        assert(droppedField.getCurrentDefaultValue().isEmpty)
+        assert(droppedField.getExistenceDefaultValue() == existenceDefault)
+        sql("INSERT INTO t (id) VALUES (4)")
+        checkAnswer(sql(query), expectedRows :+ Row(4, null, null))
+      }
+    }
+  }
+
+  for {
+    (legacy, preserve) <- Seq((false, false), (true, false), (false, true))
+    ddl <- Seq("CREATE", "ADD", "SET")
+  } {
+    test(s"V1 character defaults reject session variables: " +
+        s"$ddl, legacy=$legacy, preserve=$preserve") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        sql("DECLARE VARIABLE char_default_var STRING DEFAULT 'EU'")
+        try {
+          val scalarDefaults = Seq(
+            "CHAR(3)" -> "char_default_var",
+            "VARCHAR(3)" -> "concat(char_default_var, ' ')")
+          val nestedDefaults = Seq(
+            "ARRAY<CHAR(3)>" -> "array(char_default_var)",
+            "STRUCT<region:CHAR(3)>" -> "named_struct('region', char_default_var)",
+            "MAP<STRING,VARCHAR(3)>" -> "map('region', concat(char_default_var, '  '))")
+          val defaults = scalarDefaults ++ (if (preserve) Nil else nestedDefaults)
+          defaults.foreach { case (dataType, default) =>
+            withClue(s"dataType=$dataType, default=$default: ") {
+              withTable("t") {
+                if (ddl == "ADD") {
+                  sql("CREATE TABLE t(id INT) USING parquet")
+                } else if (ddl == "SET") {
+                  sql(s"CREATE TABLE t(id INT, c $dataType) USING parquet")
+                }
+                val original = if (ddl == "CREATE") None else {
+                  Some(spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t")))
+                }
+                val statement = ddl match {
+                  case "CREATE" => s"CREATE TABLE t(c $dataType DEFAULT $default) USING parquet"
+                  case "ADD" => s"ALTER TABLE t ADD COLUMNS (c $dataType DEFAULT $default)"
+                  case "SET" => s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default"
+                }
+                val error = intercept[AnalysisException](sql(statement))
+                assert(error.getCondition == "INVALID_DEFAULT_VALUE.NOT_CONSTANT")
+                assert(error.getMessageParameters.get("defaultValue") == default)
+                if (ddl == "CREATE") {
+                  assert(!spark.catalog.tableExists("t"))
+                } else {
+                  val retained = spark.sessionState.catalog
+                    .getTableRawMetadata(TableIdentifier("t"))
+                  assert(retained.schema == original.get.schema)
+                }
+              }
+            }
+          }
+        } finally {
+          sql("DROP TEMPORARY VARIABLE char_default_var")
+        }
+      }
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "ADD", "SET")
+    (default, condition) <- Seq(
+      "typeof(rand())" -> "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC",
+      "typeof((SELECT 1))" -> "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+      "typeof((SELECT char_default_dependency_var))" ->
+        "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION")
+  } {
+    test(s"V1 character defaults preserve dependency validation: $ddl, $default") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withSessionVariable("char_default_dependency_var") {
+          sql("DECLARE VARIABLE char_default_dependency_var STRING DEFAULT 'EU'")
+          withTable("t") {
+            if (ddl == "ADD") {
+              sql("CREATE TABLE t(id INT) USING parquet")
+            } else if (ddl == "SET") {
+              sql("CREATE TABLE t(id INT, c CHAR(32)) USING parquet")
+            }
+            val before = if (ddl == "CREATE") None else {
+              Some(spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t")))
+            }
+            val statement = ddl match {
+              case "CREATE" => s"CREATE TABLE t(c CHAR(32) DEFAULT $default) USING parquet"
+              case "ADD" => s"ALTER TABLE t ADD COLUMNS (c CHAR(32) DEFAULT $default)"
+              case "SET" => s"ALTER TABLE t ALTER COLUMN c SET DEFAULT $default"
+            }
+            val error = intercept[AnalysisException](sql(statement))
+            assert(error.getCondition == condition)
+            assert(error.getMessageParameters.get("defaultValue") == default)
+            if (ddl == "CREATE") {
+              assert(!spark.catalog.tableExists("t"))
+            } else {
+              val after = spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t"))
+              assert(after.schema == before.get.schema)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("V1 character defaults allow foldable functions with valid dependencies") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+      withTable("t") {
+        sql("CREATE TABLE t(id INT) USING parquet")
+        sql("INSERT INTO t VALUES (0)")
+        sql("ALTER TABLE t ADD COLUMNS (c CHAR(8) DEFAULT typeof(1))")
+        sql("INSERT INTO t(id) VALUES (1)")
+        checkAnswer(sql("SELECT id, c, length(c) FROM t"),
+          Seq(Row(0, "int     ", 8), Row(1, "int     ", 8)))
+      }
+    }
+  }
+
   test("SPARK-46958: timestamp should have timezone for resolvable if default values castable") {
     val defaults = Seq("timestamp '2018-11-17'", "CAST(timestamp '2018-11-17' AS STRING)")
     defaults.foreach { default =>
@@ -349,6 +736,97 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
       assert(result.length == 1)
       assert(result.head.getInt(0) == 1)
       assert(result.head.getString(1) == user)
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "ALTER")
+    legacy <- Seq(false, true)
+  } {
+    test(s"CHAR late-folded existence defaults use write-side values: $ddl, legacy=$legacy") {
+      withSQLConf(
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val currentUser = sql("SELECT current_user(), length(current_user())").head()
+        val user = currentUser.getString(0)
+        val userLength = currentUser.getInt(1)
+        assert(userLength < 100)
+        val expectedUser = if (legacy) user else user + " " * (100 - userLength)
+        val expectedLength = if (legacy) userLength else 100
+        withTable("t") {
+          if (ddl == "CREATE") {
+            sql("CREATE TABLE t(id INT, region CHAR(100) DEFAULT current_user()) USING parquet")
+          } else {
+            sql("CREATE TABLE t(id INT) USING parquet")
+            sql("INSERT INTO t VALUES (1)")
+            sql("ALTER TABLE t ADD COLUMNS (region CHAR(100) DEFAULT current_user())")
+          }
+          sql("INSERT INTO t (id) VALUES (2)")
+          val ids = if (ddl == "ALTER") Seq(1, 2) else Seq(2)
+          val query = "SELECT id, region, length(region) FROM t"
+          val expectedRows = ids.map(Row(_, expectedUser, expectedLength))
+          checkAnswer(sql(query), expectedRows)
+          checkAnswer(sql("SELECT count(DISTINCT region) FROM t"), Row(1L))
+          checkAnswer(sql("SELECT region, count(*) FROM t GROUP BY region"),
+            Row(expectedUser, ids.size.toLong))
+
+          val field = spark.table("t").schema("region")
+          assert(field.getCurrentDefaultValue().contains("current_user()"))
+          val existenceSql = field.getExistenceDefaultValue().get
+          checkAnswer(sql(s"SELECT $existenceSql, length($existenceSql)"),
+            Row(expectedUser, expectedLength))
+
+          sql("ALTER TABLE t ALTER COLUMN region SET DEFAULT 'EU'")
+          val updatedField = spark.table("t").schema("region")
+          assert(updatedField.getCurrentDefaultValue().contains("'EU'"))
+          assert(updatedField.getExistenceDefaultValue().contains(existenceSql))
+          sql("INSERT INTO t (id) VALUES (3)")
+          val newDefault = if (legacy) "EU" else "EU" + " " * 98
+          checkAnswer(sql(query), expectedRows :+ Row(3, newDefault, if (legacy) 2 else 100))
+        }
+      }
+    }
+  }
+
+  for {
+    legacy <- Seq(false, true)
+    ddl <- Seq("CREATE", "ADD")
+  } {
+    test(s"Nested late-folded character existence defaults: $ddl, legacy=$legacy") {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val user = sql("SELECT current_user()").head().getString(0)
+        val width = user.length + 3
+        val valueType = s"ARRAY<STRUCT<region:CHAR($width),label:VARCHAR(${user.length + 1})>>"
+        val default = "array(named_struct('region', current_user(), " +
+          "'label', concat(current_user(), '  ')))"
+        val assigns = !legacy
+        val expected = Seq(Row(if (assigns) user + "   " else user,
+          if (assigns) user + " " else user + "  "))
+        withTable("t") {
+          if (ddl == "ADD") {
+            sql("CREATE TABLE t(id INT) USING parquet")
+            sql("INSERT INTO t VALUES (0)")
+            sql(s"ALTER TABLE t ADD COLUMNS (c $valueType DEFAULT $default)")
+          } else {
+            sql(s"CREATE TABLE t(id INT, c $valueType DEFAULT $default) USING parquet")
+          }
+          val schema = spark.sessionState.catalog.getTableRawMetadata(TableIdentifier("t")).schema
+          assert(schema("c").getCurrentDefaultValue().contains(default))
+          val existence = schema("c").getExistenceDefaultValue().get
+          checkAnswer(sql(s"SELECT $existence"), Row(expected))
+          sql("INSERT INTO t(id) VALUES (1)")
+          val ids = if (ddl == "ADD") Seq(0, 1) else Seq(1)
+          checkAnswer(sql("SELECT id, c FROM t"), ids.map(Row(_, expected)))
+          checkAnswer(sql("SELECT count(DISTINCT c) FROM t"), Row(1L))
+        }
+      }
     }
   }
 

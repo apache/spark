@@ -28,15 +28,15 @@ import scala.util.matching.Regex
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, GetStructField}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, Expression, GetStructField, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
@@ -51,7 +51,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -963,6 +963,618 @@ class DataSourceV2SQLSuiteV1Filter
         null /* no metadata */)
       assert(actual === expected,
         "Replaced table should have new schema with DEFAULT column metadata.")
+    }
+  }
+
+  Seq("CREATE", "REPLACE", "ADD").foreach { ddl =>
+    test(s"CHAR/VARCHAR V2 current defaults use insertion settings: $ddl") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val tableName = "default_expr.char_varchar_defaults"
+        withTable(tableName) {
+          val columns = "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'EU  '"
+          if (ddl == "ADD") {
+            sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+          } else {
+            if (ddl == "REPLACE") {
+              sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            }
+            sql(s"$ddl TABLE $tableName(id INT, $columns) USING foo")
+          }
+
+          // This catalog retains the supplied default, including any current expression.
+          val table = catalog("default_expr").asTableCatalog.loadTable(
+            Identifier.of(Array.empty, "char_varchar_defaults"))
+          val defaults = table.columns.map(c => c.name -> c.defaultValue()).toMap
+          val regionDefault = defaults("region")
+          val labelDefault = defaults("label")
+          assert(regionDefault.getSql == "'EU'")
+          assert(labelDefault.getSql == "'EU  '")
+          Seq(regionDefault, labelDefault).foreach { default =>
+            assert(default.getValue.dataType == StringType)
+            assert(default.getValue.value == UTF8String.fromString("EU "))
+          }
+
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+            sql(s"INSERT INTO $tableName(id) VALUES (1)")
+            sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT)")
+            sql(s"INSERT INTO $tableName VALUES (3, 'EU', 'EU  ')")
+            checkAnswer(sql(s"SELECT id, region, length(region), label, length(label) " +
+              s"FROM $tableName"), Seq(1, 2, 3).map(Row(_, "EU", 2, "EU  ", 4)))
+          }
+          assert(regionDefault.getExpression != null)
+          assert(labelDefault.getExpression != null)
+        }
+      }
+    }
+  }
+
+  test("V2 nested current defaults preserve first-class assignment types") {
+    withSQLConf(
+      "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+      SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+      SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      val tableName = "default_expr.nested_current_types"
+      withTable(tableName) {
+        // SET supplies only a current default, avoiding nested existence SQL serialization.
+        sql(s"CREATE TABLE $tableName(id INT, names ARRAY<CHAR(3)>, missing CHAR(3)) USING foo")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN names SET DEFAULT " +
+          "array(substring(CAST('EUX' AS CHAR(3)), 1, 2))")
+        sql(s"ALTER TABLE $tableName ALTER COLUMN missing SET DEFAULT CAST(NULL AS CHAR(3))")
+        sql(s"INSERT INTO $tableName VALUES (1, DEFAULT, DEFAULT)")
+        checkAnswer(sql(s"SELECT id, names, missing FROM $tableName"), Row(1, Seq("EU "), null))
+      }
+    }
+  }
+
+  Seq(false, true).foreach { definitionLegacy =>
+    test(s"V2 retained current defaults follow scalar and nested settings: $definitionLegacy") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> definitionLegacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val tableName = "default_expr.retained_current_defaults"
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName(id INT) USING foo")
+          sql(s"INSERT INTO $tableName VALUES (0)")
+          sql(s"ALTER TABLE $tableName ADD COLUMNS (region CHAR(3) DEFAULT 'EU', " +
+            "label VARCHAR(5) DEFAULT 'US', names ARRAY<CHAR(3)> DEFAULT array('EU', NULL))")
+          val table = getTableMetadata(tableName)
+          val fields = CatalogV2Util.v2ColumnsToStructType(table.columns()).fields
+          fields.filter(_.name != "id").foreach { field =>
+            val (_, expression) = field.metadata.getExpression[Expression](
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+            assert(expression.isDefined)
+          }
+          val defaults = table.columns().filter(_.name() != "id").map(_.defaultValue())
+          defaults.foreach(default => assert(default.getExpression != null))
+          val region = V2ExpressionUtils.toCatalyst(defaults.head.getExpression).get
+          assert(region.eval() == UTF8String.fromString("EU"))
+          val historical = if (definitionLegacy) "EU" else "EU "
+          assert(defaults.head.getValue.value == UTF8String.fromString(historical))
+          checkAnswer(sql(s"SELECT id, region, label, names FROM $tableName"),
+            Row(0, historical, "US", Seq(historical, null)))
+
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> (!definitionLegacy).toString) {
+            // The first write round-trips the test catalog's defaults through its schema.
+            // Exercise all cached DEFAULT cells together before that lossy boundary.
+            sql(s"INSERT INTO $tableName VALUES " +
+              "(1, DEFAULT, DEFAULT, DEFAULT), (2, DEFAULT, DEFAULT, DEFAULT)")
+            sql(s"INSERT INTO $tableName VALUES (3, 'EU', 'US', array('EU', NULL))")
+            val current = if (definitionLegacy) "EU " else "EU"
+            checkAnswer(sql(s"SELECT id, region, label, names FROM $tableName WHERE id > 0"),
+              Seq(1, 2, 3).map(Row(_, current, "US", Seq(current, null))))
+          }
+        }
+      }
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "REPLACE", "ADD", "SET")
+    preserve <- Seq(false, true)
+  } {
+    test(s"V2 character current defaults preserve resolved session functions: " +
+        s"$ddl, preserve=$preserve") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        withUserDefinedFunction("default_v2_type_probe" -> true) {
+          spark.udf.register("default_v2_type_probe", () => "EU")
+          val tableName = "default_expr.session_function_defaults"
+          withTable(tableName) {
+            val default = "typeof(default_v2_type_probe())"
+            val columns = s"c CHAR(6) DEFAULT $default, padded CHAR(8) DEFAULT $default"
+            ddl match {
+              case "CREATE" => sql(s"CREATE TABLE $tableName(id INT, $columns) USING foo")
+              case "REPLACE" =>
+                sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                sql(s"REPLACE TABLE $tableName(id INT, $columns) USING foo")
+              case "ADD" =>
+                sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+              case "SET" =>
+                sql(s"CREATE TABLE $tableName(id INT, c CHAR(6), padded CHAR(8)) USING foo")
+                sql(s"ALTER TABLE $tableName ALTER COLUMN c SET DEFAULT $default")
+                sql(s"ALTER TABLE $tableName ALTER COLUMN padded SET DEFAULT $default")
+            }
+            sql(s"INSERT INTO $tableName(id) VALUES (1)")
+            checkAnswer(sql(s"SELECT id, c, length(c), padded, length(padded) FROM $tableName"),
+              Row(1, "string", 6, "string  ", 8))
+            sql(s"ALTER TABLE $tableName ALTER COLUMN c SET DEFAULT $default")
+            sql(s"ALTER TABLE $tableName ALTER COLUMN padded SET DEFAULT $default")
+            sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT)")
+            checkAnswer(sql(s"SELECT id, c, length(c), padded, length(padded) FROM $tableName"),
+              Seq(1, 2).map(Row(_, "string", 6, "string  ", 8)))
+          }
+        }
+      }
+    }
+  }
+
+  Seq("CREATE", "REPLACE", "ADD").foreach { ddl =>
+    test(s"CHAR/VARCHAR V2 legacy current default cache eligibility: $ddl") {
+      Seq((false, false), (true, false), (false, true)).foreach { case (preserve, standard) =>
+        withSQLConf(
+          "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+          SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString,
+          SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+          withClue(s"preserve=$preserve, standard=$standard: ") {
+            val tableName = "default_expr.legacy_default_cache"
+            withTable(tableName) {
+              val columns = "region CHAR(3) DEFAULT 'EU', label VARCHAR(3) DEFAULT 'EU  ', " +
+                "n INT DEFAULT 7"
+              if (ddl == "ADD") {
+                sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+              } else {
+                if (ddl == "REPLACE") {
+                  sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                }
+                sql(s"$ddl TABLE $tableName(id INT, $columns) USING foo")
+              }
+              val defaults = getTableMetadata(tableName).columns()
+                .map(c => c.name() -> c.defaultValue()).toMap
+              val assigned = preserve || standard
+              Seq("region" -> "'EU'", "label" -> "'EU  '").foreach { case (name, expr) =>
+                val default = defaults(name)
+                assert(default.getSql == expr)
+                val current = V2ExpressionUtils.toCatalyst(default.getExpression).get
+                assert(current.dataType == StringType)
+                assert(current.eval().toString == (if (name == "region") "EU" else "EU  "))
+                val expected = if (assigned) "EU " else if (name == "region") "EU" else "EU  "
+                assert(default.getValue.value == UTF8String.fromString(expected))
+              }
+              assert(defaults("n").getExpression != null)
+              // Repeated explicit DEFAULTs must run before a write drops the cached expressions.
+              sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT, DEFAULT), " +
+                "(3, DEFAULT, DEFAULT, DEFAULT)")
+              sql(s"INSERT INTO $tableName(id) VALUES (1)")
+              val region = if (assigned) "EU " else "EU"
+              val label = if (assigned) "EU " else "EU  "
+              checkAnswer(sql(s"SELECT id, region, length(region), label, length(label), n " +
+                s"FROM $tableName"), Seq(1, 2, 3).map { id =>
+                Row(id, region, region.length, label, label.length, 7)
+              })
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Seq(
+    ("preserve", false, true, false),
+    ("legacy", true, false, false),
+    ("overlay", false, false, false),
+    ("preserve overrides legacy", true, true, false),
+    ("standard overrides legacy", true, false, true)).foreach {
+    case (mode, legacy, preserve, standard) =>
+      test(s"CHAR/VARCHAR V2 SET DEFAULT uses insertion settings: $mode") {
+        withSQLConf(
+          "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+          SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString,
+          SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+          val tableName = "default_expr.set_default_cache"
+          withTable(tableName) {
+            sql(s"CREATE TABLE $tableName(id INT, region CHAR(3) DEFAULT 'OLD', " +
+              "label VARCHAR(3) DEFAULT 'OLD', n INT DEFAULT 7) USING foo")
+            sql(s"INSERT INTO $tableName(id) VALUES (0)")
+            val originalDefaults = getTableMetadata(tableName).columns()
+              .filter(_.defaultValue() != null).map(c => c.name() -> c.defaultValue()).toMap
+            val regionSQL = "substring(CAST('EU' AS CHAR(3)), 1, 2)"
+            def setDefaults(): Unit = withSQLConf(
+              SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+              SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+              SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
+              sql(s"ALTER TABLE $tableName ALTER COLUMN region SET DEFAULT $regionSQL")
+              sql(s"ALTER TABLE $tableName ALTER COLUMN label SET DEFAULT 'EU  '")
+              sql(s"ALTER TABLE $tableName ALTER COLUMN n SET DEFAULT 9")
+            }
+            setDefaults()
+            val defaults = getTableMetadata(tableName).columns()
+              .filter(_.defaultValue() != null).map(c => c.name() -> c.defaultValue()).toMap
+            assert(defaults("region").getSql == regionSQL)
+            assert(defaults("label").getSql == "'EU  '")
+            defaults.foreach { case (name, default) =>
+              assert(default.getValue == originalDefaults(name).getValue)
+            }
+            // The first write must follow the settings switch: InMemoryTable rebuilds columns
+            // after each write, discarding current expressions during its schema round trip.
+            val assigned = !legacy || preserve || standard
+            withSQLConf(
+              SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+              SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+              SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+              // Exercise explicit CHAR DEFAULT with omitted VARCHAR against retained expressions.
+              sql(s"INSERT INTO $tableName(id, region) VALUES (1, DEFAULT)")
+              setDefaults()
+              // Exercise omitted CHAR with explicit VARCHAR DEFAULT in a fresh cache lifetime.
+              sql(s"INSERT INTO $tableName(id, label) VALUES (2, DEFAULT)")
+              sql(s"INSERT INTO $tableName VALUES (3, $regionSQL, 'EU  ', 9)")
+              // The previous writes have now round-tripped the schema and dropped expressions.
+              sql(s"INSERT INTO $tableName(id) VALUES (4)")
+              val expected = Seq(Row(0, "OLD", 3, "OLD", 3, 7)) ++
+                Seq(1, 2, 3, 4).map(Row(_, "EU", 2, "EU  ", 4, 9))
+              val query = s"SELECT id, region, length(region), label, length(label), n " +
+                s"FROM $tableName"
+              checkAnswer(sql(query), expected)
+              Seq("region", "label").foreach { name =>
+                assert(defaults(name).getExpression != null)
+                sql(s"ALTER TABLE $tableName ALTER COLUMN $name DROP DEFAULT")
+              }
+              assert(defaults("n").getExpression != null)
+              val dropped = getTableMetadata(tableName)
+              assert(dropped.columns().filter(c => Set("region", "label")(c.name()))
+                .forall(_.defaultValue() == null))
+              val fields = CatalogV2Util.v2ColumnsToStructType(dropped.columns())
+              Seq("region", "label").foreach { name =>
+                assert(fields(name).getCurrentDefaultValue().isEmpty)
+                assert(fields(name).getExistenceDefaultValue().contains("'OLD'"))
+              }
+              checkAnswer(sql(query), expected)
+              sql(s"INSERT INTO $tableName(id) VALUES (5)")
+              checkAnswer(sql(s"SELECT region, label, n FROM $tableName WHERE id = 5"),
+                Row(null, null, 9))
+            }
+          }
+        }
+      }
+  }
+
+  Seq("CREATE", "ADD", "SET").foreach { ddl =>
+    test(s"CHAR/VARCHAR V2 defaults reject session variables before catalog mutation: $ddl") {
+      withSQLConf(
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withSessionVariable("default_text") {
+          sql("DECLARE VARIABLE default_text STRING DEFAULT 'EU'")
+          val defaults = Seq(
+            "CHAR(3)" -> "default_text",
+            "VARCHAR(3)" -> "default_text",
+            "CHAR(3)" -> "concat(default_text, ' ')",
+            "VARCHAR(3)" -> "concat(default_text, '  ')",
+            "ARRAY<CHAR(3)>" -> "array(default_text)",
+            "STRUCT<c: CHAR(3), v: VARCHAR(3)>" ->
+              "named_struct('c', default_text, 'v', concat(default_text, '  '))",
+            "MAP<CHAR(3), VARCHAR(3)>" ->
+              "map(default_text, concat(default_text, '  '))")
+          defaults.foreach { case (columnType, defaultSQL) =>
+            withClue(s"$columnType DEFAULT $defaultSQL: ") {
+              val tableName = "testcat.variable_default"
+              val ident = Identifier.of(Array.empty, "variable_default")
+              val testCatalog = catalog("testcat").asTableCatalog
+              withTable(tableName) {
+                if (ddl == "ADD") {
+                  sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                } else if (ddl == "SET") {
+                  sql(s"CREATE TABLE $tableName(id INT, c $columnType DEFAULT NULL) USING foo")
+                }
+                val before = if (ddl == "CREATE") None else Some(testCatalog.loadTable(ident))
+                val beforeVersion = before.map(_.version())
+                val beforeSchema = before.map { table =>
+                  CatalogV2Util.v2ColumnsToStructType(table.columns()).json
+                }
+                val (statement, command) = ddl match {
+                  case "CREATE" =>
+                    "CREATE TABLE" ->
+                      s"CREATE TABLE $tableName(c $columnType DEFAULT $defaultSQL) USING foo"
+                  case "ADD" =>
+                    "ALTER TABLE ADD COLUMNS" ->
+                      s"ALTER TABLE $tableName ADD COLUMN c $columnType DEFAULT $defaultSQL"
+                  case "SET" =>
+                    "ALTER TABLE ALTER COLUMN" ->
+                      s"ALTER TABLE $tableName ALTER COLUMN c SET DEFAULT $defaultSQL"
+                }
+                checkError(
+                  exception = intercept[AnalysisException](sql(command)),
+                  condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+                  parameters = Map(
+                    "statement" -> statement,
+                    "colName" -> "`c`",
+                    "defaultValue" -> defaultSQL))
+                if (ddl == "CREATE") {
+                  assert(!testCatalog.tableExists(ident))
+                } else {
+                  val after = testCatalog.loadTable(ident)
+                  assert(after eq before.get)
+                  assert(after.version() == beforeVersion.get)
+                  val afterSchema = CatalogV2Util.v2ColumnsToStructType(after.columns()).json
+                  assert(afterSchema == beforeSchema.get)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "ADD", "SET")
+    (name, defaultSQL, condition) <- Seq(
+      ("nondeterministic", "typeof(rand())", Some("NON_DETERMINISTIC")),
+      ("subquery", "typeof((SELECT 1))", Some("SUBQUERY_EXPRESSION")),
+      ("variable in subquery", "typeof((SELECT default_text))", Some("SUBQUERY_EXPRESSION")),
+      ("subquery before variable", "concat(default_text, typeof((SELECT 1)))",
+        Some("SUBQUERY_EXPRESSION")),
+      ("literal", "typeof(1)", None))
+  } {
+    test(s"CHAR/VARCHAR V2 defaults validate typeof dependencies: $ddl, $name") {
+      withSQLConf(
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        withSessionVariable("default_text") {
+          sql("DECLARE VARIABLE default_text STRING DEFAULT 'EU'")
+          val tableName = "testcat.typeof_default"
+          val ident = Identifier.of(Array.empty, "typeof_default")
+          val testCatalog = catalog("testcat").asTableCatalog
+          withTable(tableName) {
+            if (ddl == "ADD") {
+              sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            } else if (ddl == "SET") {
+              sql(s"CREATE TABLE $tableName(id INT, c CHAR(32) DEFAULT NULL) USING foo")
+            }
+            val before = if (ddl == "CREATE") None else Some(testCatalog.loadTable(ident))
+            val beforeVersion = before.map(_.version())
+            val beforeSchema = before.map { table =>
+              CatalogV2Util.v2ColumnsToStructType(table.columns()).json
+            }
+            val (statement, command) = ddl match {
+              case "CREATE" =>
+                "CREATE TABLE" ->
+                  s"CREATE TABLE $tableName(id INT, c CHAR(32) DEFAULT $defaultSQL) USING foo"
+              case "ADD" =>
+                "ALTER TABLE ADD COLUMNS" ->
+                  s"ALTER TABLE $tableName ADD COLUMN c CHAR(32) DEFAULT $defaultSQL"
+              case "SET" =>
+                "ALTER TABLE ALTER COLUMN" ->
+                  s"ALTER TABLE $tableName ALTER COLUMN c SET DEFAULT $defaultSQL"
+            }
+            condition match {
+              case Some(error) =>
+                checkError(
+                  exception = intercept[AnalysisException](sql(command)),
+                  condition = s"INVALID_DEFAULT_VALUE.$error",
+                  parameters = Map(
+                    "statement" -> statement,
+                    "colName" -> "`c`",
+                    "defaultValue" -> defaultSQL))
+                if (ddl == "CREATE") {
+                  assert(!testCatalog.tableExists(ident))
+                } else {
+                  val after = testCatalog.loadTable(ident)
+                  assert(after eq before.get)
+                  assert(after.version() == beforeVersion.get)
+                  val afterSchema = CatalogV2Util.v2ColumnsToStructType(after.columns()).json
+                  assert(afterSchema == beforeSchema.get)
+                }
+              case None =>
+                sql(command)
+                val default = testCatalog.loadTable(ident).columns()
+                  .find(_.name() == "c").get.defaultValue()
+                assert(default.getSql == defaultSQL)
+                sql(s"INSERT INTO $tableName(id) VALUES (1)")
+                checkAnswer(sql(s"SELECT c, length(c) FROM $tableName"),
+                  Row("int" + " " * 29, 32))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for {
+    ddl <- Seq("CREATE", "REPLACE", "ADD")
+    legacy <- Seq(false, true)
+  } {
+    test("CHAR/VARCHAR V2 nested late-folded defaults retain assigned existence values: " +
+        s"$ddl, legacy=$legacy") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> legacy.toString,
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val currentUser = sql("SELECT current_user(), length(current_user())").head()
+        val user = currentUser.getString(0)
+        val width = currentUser.getInt(1) + 1
+        val charValue = if (legacy) user else user + " "
+        val varcharValue = if (legacy) user + "  " else user + " "
+        val defaults = Seq(
+          ("names", s"ARRAY<CHAR($width)>", "array(current_user(), NULL)",
+            ArrayType(StringType), Seq(charValue, null)),
+          ("details", s"STRUCT<c: CHAR($width), v: VARCHAR($width)>",
+            "named_struct('c', current_user(), 'v', concat(current_user(), '  '))",
+            new StructType().add("c", StringType).add("v", StringType),
+            Row(charValue, varcharValue)),
+          ("labels", s"MAP<CHAR($width), VARCHAR($width)>",
+            "map(current_user(), concat(current_user(), '  '))",
+            MapType(StringType, StringType), Map(charValue -> varcharValue)))
+        val columns = defaults.map { case (name, dataType, defaultSQL, _, _) =>
+          s"$name $dataType DEFAULT $defaultSQL"
+        }.mkString(", ")
+        val tableName = "default_expr.nested_late_folded_defaults"
+        withTable(tableName) {
+          if (ddl == "ADD") {
+            sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            sql(s"INSERT INTO $tableName VALUES (0)")
+            sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+          } else {
+            if (ddl == "REPLACE") {
+              sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            }
+            sql(s"$ddl TABLE $tableName(id INT, $columns) USING foo")
+          }
+
+          // Inspect the frozen values before INSERT round-trips away supplied expressions.
+          val actual = getTableMetadata(tableName).columns()
+            .filter(_.defaultValue() != null).map(c => c.name() -> c.defaultValue()).toMap
+          defaults.foreach { case (name, _, defaultSQL, dataType, expected) =>
+            withClue(s"$name: ") {
+              val default = actual(name)
+              assert(default.getSql == defaultSQL)
+              val literal = default.getValue
+              assert(literal.dataType == dataType)
+              val toScala = CatalystTypeConverters.createToScalaConverter(literal.dataType)
+              assert(toScala(literal.value) == expected)
+            }
+          }
+
+          sql(s"INSERT INTO $tableName(id) VALUES (1)")
+          sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT, DEFAULT)")
+          val expressions = defaults.map(_._3).mkString(", ")
+          sql(s"INSERT INTO $tableName VALUES (3, $expressions)")
+          val ids = if (ddl == "ADD") Seq(0, 1, 2, 3) else Seq(1, 2, 3)
+          checkAnswer(sql(s"SELECT id, names, details, labels FROM $tableName"), ids.map { id =>
+            Row(id, Seq(charValue, null), Row(charValue, varcharValue),
+              Map(charValue -> varcharValue))
+          })
+        }
+      }
+    }
+  }
+
+  Seq("CREATE", "REPLACE", "ADD").foreach { ddl =>
+    test(s"CHAR/VARCHAR V2 late-folded defaults retain assigned existence values: $ddl") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val currentUser = sql("SELECT current_user(), length(current_user())").head()
+        val width = currentUser.getInt(1) + 1
+        val expected = currentUser.getString(0) + " "
+        val tableName = "default_expr.late_folded_defaults"
+        withTable(tableName) {
+          val columns = s"region CHAR($width) DEFAULT current_user(), " +
+            s"label VARCHAR($width) DEFAULT concat(current_user(), '  ')"
+          if (ddl == "ADD") {
+            sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            sql(s"ALTER TABLE $tableName ADD COLUMNS ($columns)")
+          } else {
+            if (ddl == "REPLACE") {
+              sql(s"CREATE TABLE $tableName(id INT) USING foo")
+            }
+            sql(s"$ddl TABLE $tableName(id INT, $columns) USING foo")
+          }
+
+          val table = catalog("default_expr").asTableCatalog.loadTable(
+            Identifier.of(Array.empty, "late_folded_defaults"))
+          val defaults = table.columns.map(c => c.name -> c.defaultValue()).toMap
+          Seq("region" -> "current_user()", "label" -> "concat(current_user(), '  ')")
+            .foreach { case (name, originalSQL) =>
+              val default = defaults(name)
+              assert(default.getSql == originalSQL)
+              assert(default.getExpression == null)
+              assert(default.getValue.dataType == StringType)
+              assert(default.getValue.value == UTF8String.fromString(expected))
+            }
+
+          sql(s"INSERT INTO $tableName(id) VALUES (1)")
+          sql(s"INSERT INTO $tableName VALUES (2, DEFAULT, DEFAULT)")
+          sql(s"INSERT INTO $tableName VALUES (3, current_user(), concat(current_user(), '  '))")
+          checkAnswer(sql(s"SELECT id, region, length(region), label, length(label) " +
+            s"FROM $tableName"), Seq(1, 2, 3).map(Row(_, expected, width, expected, width)))
+        }
+      }
+    }
+
+    test(s"CHAR/VARCHAR V2 late-folded defaults retain INSERT-time overflow: $ddl") {
+      withSQLConf(
+        "spark.sql.catalog.default_expr" -> classOf[DefaultExpressionRetainingCatalog].getName,
+        SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "false",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val currentUser = sql("SELECT current_user(), length(current_user())").head()
+        val width = currentUser.getInt(1) + 1
+        val oversized = currentUser.getString(0) + "XX"
+        val originalSQL = "concat(current_user(), 'XX')"
+        val tableName = "default_expr.late_folded_overflow"
+        Seq("CHAR", "VARCHAR").foreach { dataType =>
+          withClue(s"$dataType($width): ") {
+            withTable(tableName) {
+              val column = s"region $dataType($width) DEFAULT $originalSQL"
+              if (ddl == "ADD") {
+                sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                sql(s"ALTER TABLE $tableName ADD COLUMNS ($column)")
+              } else {
+                if (ddl == "REPLACE") {
+                  sql(s"CREATE TABLE $tableName(id INT) USING foo")
+                }
+                sql(s"$ddl TABLE $tableName(id INT, $column) USING foo")
+              }
+
+              val table = catalog("default_expr").asTableCatalog.loadTable(
+                Identifier.of(Array.empty, "late_folded_overflow"))
+              val default = table.columns.find(_.name == "region").get.defaultValue()
+              assert(default.getSql == originalSQL)
+              assert(default.getValue.dataType == StringType)
+              assert(default.getValue.value == UTF8String.fromString(oversized))
+
+              Seq(s"INSERT INTO $tableName(id) VALUES (1)",
+                s"INSERT INTO $tableName VALUES (2, DEFAULT)").foreach { insert =>
+                checkError(
+                  exception = intercept[SparkRuntimeException](sql(insert)),
+                  condition = "EXCEED_LIMIT_LENGTH",
+                  parameters = Map("limit" -> width.toString))
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -5759,6 +6371,75 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
       val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
       assert(numPartitions == 1,
         s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
+}
+
+class DefaultExpressionRetainingCatalog extends InMemoryCatalog {
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    val original = loadTable(ident).asInstanceOf[InMemoryTable]
+    val addedDefaults = changes.collect {
+      case add: TableChange.AddColumn
+          if add.fieldNames().length == 1 && add.defaultValue() != null =>
+        add.fieldNames().head -> add.defaultValue()
+    }.toMap
+    val updatedDefaults = changes.collect {
+      case update: TableChange.UpdateColumnDefaultValue if update.fieldNames().length == 1 =>
+        update.fieldNames().head -> update.newCurrentDefault()
+    }.toMap
+    // Keep supplied defaults out of the schema round trip, which reparses frozen literals and
+    // cannot retain the original nonfoldable expression's INSERT-time validation policy.
+    val schemaChanges = changes.flatMap {
+      case add: TableChange.AddColumn
+          if add.fieldNames().length == 1 && addedDefaults.contains(add.fieldNames().head) =>
+        Some(TableChange.addColumn(
+          add.fieldNames(), add.dataType(), add.isNullable(), add.comment(), add.position(), null))
+      case update: TableChange.UpdateColumnDefaultValue if update.fieldNames().length == 1 =>
+        None
+      case change => Some(change)
+    }
+    val table = if (schemaChanges.isEmpty) {
+      original.increaseVersion()
+      original
+    } else {
+      super.alterTable(ident, schemaChanges: _*).asInstanceOf[InMemoryTable]
+    }
+    if (addedDefaults.isEmpty && updatedDefaults.isEmpty) {
+      table
+    } else {
+      val originalColumns = original.columns().map(c => c.name() -> c).toMap
+      val columns = table.columns().map { column =>
+        if (updatedDefaults.contains(column.name())) {
+          val update = updatedDefaults(column.name())
+          val previous = originalColumns(column.name())
+          val existence = Option(previous.defaultValue()).flatMap(d => Option(d.getValue))
+          val builder = ColumnV2.builderFrom(column)
+          if (update != null) {
+            // Retain the supplied current expression itself, with the old backfill literal.
+            builder.defaultValue(new ColumnDefaultValue(
+              update.getSql, update.getExpression, existence.orNull)).build()
+          } else {
+            // DROP removes only the current default. Keep the existence value in metadata.
+            val metadata = Option(previous.metadataInJSON())
+              .map(Metadata.fromJson).getOrElse(Metadata.empty)
+            val field = StructField(column.name(), column.dataType(), column.nullable(), metadata)
+            val retainedMetadata = existence.map { value =>
+              field.withExistenceDefaultValue(Literal(value.value, value.dataType).sql).metadata
+            }.getOrElse(metadata)
+            builder.defaultValue(null).metadata(retainedMetadata.json).build()
+          }
+        } else {
+          addedDefaults.get(column.name()).map { default =>
+            ColumnV2.builderFrom(column).defaultValue(default).build()
+          }.getOrElse(column)
+        }
+      }
+      val retained = new InMemoryTable(
+        table.name, columns, table.partitioning, table.properties, id = table.id)
+        .alterTableWithData(table.data, table.schema)
+      retained.copyTableStateFrom(table)
+      tables.put(ident, retained)
+      retained
     }
   }
 }

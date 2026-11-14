@@ -105,8 +105,8 @@ private[sql] object AlterTableHelper {
       // Validate the default value expression
       constantFoldDefaultValue(defaultValue, colName, dataType, "ALTER TABLE ALTER COLUMN")
       builder.putExpression(
-        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
-        Some(defaultValue.child))
+        CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+        Some(defaultValue.uncoercedChild.getOrElse(defaultValue.child)))
     }
     if (s.dropDefault) {
       // for legacy reasons, "" means clearing default value
@@ -165,10 +165,11 @@ private[sql] object AlterTableHelper {
       colName: String,
       colType: DataType,
       statementType: String): Unit = {
-    val existsDefaultSQL = constantFoldDefaultValue(defaultValue, colName, colType, statementType)
+    val existsDefaultSQL = constantFoldDefaultValue(
+      defaultValue, colName, colType, statementType, forExistenceDefault = true)
     builder.putExpression(
       DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
-      Some(defaultValue.child))
+      Some(defaultValue.uncoercedChild.getOrElse(defaultValue.child)))
     builder.putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL)
   }
 }

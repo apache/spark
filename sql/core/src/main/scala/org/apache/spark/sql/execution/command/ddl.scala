@@ -441,6 +441,7 @@ case class AlterTableChangeColumnCommand(
               CURRENT_DEFAULT_COLUMN_METADATA_KEY)
             val newMetadata = new MetadataBuilder()
               .withMetadata(withNewTypeAndComment.metadata)
+              .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
               .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, sql, expr)
               .build()
             withNewTypeAndComment.copy(metadata = newMetadata)
