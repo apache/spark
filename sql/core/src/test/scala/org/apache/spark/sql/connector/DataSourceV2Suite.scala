@@ -1991,6 +1991,25 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("SPARK-61173: a pushed join reads the same rows again unless a side took a sample") {
+    // The source does not sample, since only the plan is checked.
+    val format = classOf[CatalystFilterJoinSampleDataSourceV2].getName
+    def load(): DataFrame = spark.read.format(format).load()
+    def scanOf(df: DataFrame): DataSourceV2ScanRelation = {
+      val joins = df.queryExecution.optimizedPlan.collect { case j: Join => j }
+      assert(joins.isEmpty, s"join should be pushed:\n${df.queryExecution.optimizedPlan}")
+      getScanRelation(df)
+    }
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      assert(scanOf(load().join(load(), Seq("i"))).repeatableRead)
+      val sampled = load().sample(0.5, 1L).join(load().select("i"), Seq("i"))
+      assert(!scanOf(sampled).repeatableRead)
+      // A pushed join above it keeps the sample only with the inner join's pushed operators. The
+      // sampled side keeps all its columns, so the sample sits on its scan.
+      assert(!scanOf(sampled.join(load().select("i"), Seq("i"))).repeatableRead)
+    }
+  }
+
   test("inferred filters do not block limit pushdown") {
     val df = spark.read
       .format(classOf[CatalystFilterLimitDataSourceV2].getName)
@@ -2337,6 +2356,24 @@ class CatalystFilterJoinDataSourceV2 extends TestingV2Source {
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new CatalystFilterJoinScanBuilder(options)
+    }
+  }
+}
+
+class CatalystFilterJoinSampleDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new CatalystFilterJoinScanBuilder(options) with SupportsPushDownTableSample {
+        override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean =
+          other.isInstanceOf[CatalystFilterJoinScanBuilder]
+
+        override def pushTableSample(
+            lowerBound: Double,
+            upperBound: Double,
+            withReplacement: Boolean,
+            seed: Long): Boolean = true
+      }
     }
   }
 }

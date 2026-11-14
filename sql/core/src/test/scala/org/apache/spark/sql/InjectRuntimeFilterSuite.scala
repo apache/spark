@@ -19,9 +19,10 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal, ScalarSubquery, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, GreaterThan, Literal, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalLimit, LogicalPlan}
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.connector.{CatalystFilterLimitDataSourceV2, CatalystFilterScanBuilder, StorageFilterTestSource}
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
@@ -2136,9 +2137,9 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       }
 
       // The bloom filter's subquery reads the scan again, so a scan with a row-selecting pushdown,
-      // such as a limit, gives none on `f.part`, whether its selective filter is pushed or above
-      // it. In the last case the fact can give one on `d.i`, since the inferred `part > 3`
-      // filters it.
+      // such as a limit, is not a creation side, whether its selective filter is pushed into it or
+      // stays above it. Then `f.part` gets no bloom filter, and the fact, which the inferred
+      // `part > 3` filters, gives one on `d.i`.
       withTempView("rf_fact", "rf_lim") {
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
             SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
@@ -2149,15 +2150,48 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
             .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10").load()
             .createOrReplaceTempView("rf_lim")
+          // (dimension, whether its scan is row-wise and repeatable, whether it took `i > 3` in,
+          // the columns the bloom filters check, the fact partitions the join keeps)
           Seq(
-            ("SELECT i FROM rf_lim WHERE i > 3", true, 4 to 9),
-            ("SELECT i FROM rf_lim WHERE i > 3 LIMIT 3", false, 4 to 6),
-            ("SELECT i FROM (SELECT i FROM rf_lim LIMIT 5) WHERE i > 3", false, Seq(4))
-          ).foreach { case (dim, onPart, parts) =>
+            ("SELECT i FROM rf_lim WHERE i > 3", true, true, Seq("part"), 4 to 9),
+            ("SELECT i FROM rf_lim WHERE i > 3 LIMIT 3", false, true, Seq("i"), 4 to 6),
+            ("SELECT i FROM (SELECT i FROM rf_lim LIMIT 5) WHERE i > 3", false, false, Seq("i"),
+              Seq(4))
+          ).foreach { case (dim, rowWiseAndRepeatable, pushed, bloomFilterColumns, parts) =>
             val df = sql(s"SELECT f.id FROM rf_fact f JOIN ($dim) d ON f.part = d.i")
             val optimized = df.queryExecution.optimizedPlan
-            assert(keyNames(optimized).contains("part") == onPart, s"`$dim`:\n$optimized")
+            val clue = s"`$dim`:\n$optimized"
+            // The source takes the limit in fully, so no `Limit` stays above its scan.
+            assert(!optimized.exists(_.isInstanceOf[LocalLimit]), clue)
+            val scan = optimized.collectFirst {
+              case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") => r
+            }.getOrElse(fail(s"no dimension scan in $clue"))
+            assert(scan.onlyRowWisePushdowns == rowWiseAndRepeatable, clue)
+            assert(scan.repeatableRead == rowWiseAndRepeatable, clue)
+            assert(scan.pushedFilters.exists(_.isInstanceOf[GreaterThan]) == pushed, clue)
+            assert(keyNames(optimized) == bloomFilterColumns, clue)
             checkAnswer(df, factRows(p => parts.contains(p)))
+          }
+
+          // A scan that reads the same rows again but is not row-wise, as with a pushed aggregate
+          // or join or as the target read of a copy-on-write UPDATE, still counts under a selective
+          // `Filter`. The source keeps `i > 3` in a `Filter` above its scan here.
+          spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
+            .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+            .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, "true").load()
+            .createOrReplaceTempView("rf_lim")
+          val plan = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+            sql("SELECT f.id FROM rf_fact f JOIN rf_lim d ON f.part = d.i WHERE d.i > 3")
+              .queryExecution.optimizedPlan
+          }
+          Seq(true, false).foreach { repeatable =>
+            val rewritten = plan.transform {
+              case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
+                r.copy(onlyRowWisePushdowns = false, repeatableRead = repeatable)
+            }
+            val expected = if (repeatable) Seq("part") else Seq("i")
+            assert(keyNames(InjectRuntimeFilter(rewritten)) == expected,
+              s"repeatableRead = $repeatable:\n$rewritten")
           }
         }
       }

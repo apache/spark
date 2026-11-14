@@ -241,11 +241,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           case _ => None
         }
       // The bloom filter's subquery reads a DSv2 scan again, so only a scan marked with
-      // `onlyRowWisePushdowns` counts, with or without a selective `Filter` above it. A pushed
-      // limit, for example, lets the source pick other rows on a second read. Its pushed filters
+      // `repeatableRead` counts, with or without a selective `Filter` above it. A pushed limit, for
+      // example, lets the source pick other rows on a second read. The pushed filters it records
       // must be simple, as the condition of a `Filter` must.
       case scan: DataSourceV2ScanRelation
-          if !scan.onlyRowWisePushdowns || !scan.pushedFilters.forall(isSimpleExpression) => None
+          if !scan.repeatableRead || !scan.pushedFilters.forall(isSimpleExpression) => None
       // A filter that a DSv2 scan took in fully leaves no `Filter` for it, as a built-in file scan
       // does with its partition filters, so a selective one counts as a selective `Filter` does.
       // The size check still uses the scan's estimate, which for a V2 file scan covers all its
@@ -448,7 +448,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // reference hides the determinism of its plan, a cache only if Spark can tell that scanning it
   // again gives the same rows, and a V2 scan only if every operation pushed into it works on each
   // row by itself. A pushed limit or top-N, for example, lets the source pick other rows on a
-  // second read. It must not read a file metadata column either, such as
+  // second read. A scan with a pushed aggregate or join, or the target read of a copy-on-write
+  // operation, records no pushed filters for `cannotFail` below to check, so it does not count
+  // here even if it is `repeatableRead`. It must not read a file metadata column either, such as
   // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
   // split them differently. Its filters, including those pushed into a V2 scan, and the projections
   // that the key and the filters need, must pass `cannotFail`, which takes only expressions that

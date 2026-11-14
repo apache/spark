@@ -259,6 +259,12 @@ object ExternalLookupRelations {
  *                             false: a pushed limit, offset, top-N, sample, aggregate or join
  *                             decides which rows the scan returns, and a build site that does not
  *                             set it keeps storage filters away from its scan.
+ * @param repeatableRead whether reading the scan again returns the same rows, as a runtime bloom
+ *                       filter's subquery does. Unlike `onlyRowWisePushdowns`, it holds for a
+ *                       pushed aggregate or join and the target read of a copy-on-write operation,
+ *                       unless a limit, offset, top-N or sample is pushed too. Default false: those
+ *                       let the source pick other rows, and a build site that does not set it keeps
+ *                       its scan from being a bloom filter's creation side.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -269,7 +275,8 @@ case class DataSourceV2ScanRelation(
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false,
-    onlyRowWisePushdowns: Boolean = false)
+    onlyRowWisePushdowns: Boolean = false,
+    repeatableRead: Boolean = false)
   extends LeafNode with NamedRelation with PredicateHelper {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed

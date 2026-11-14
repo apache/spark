@@ -1014,6 +1014,20 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
   }
 
+  test("SPARK-61173: a scan with a pushed aggregate reads the same rows again, unless a top N " +
+    "follows it") {
+    def scanOf(df: DataFrame): DataSourceV2ScanRelation =
+      df.queryExecution.optimizedPlan.collectFirst { case r: DataSourceV2ScanRelation => r }
+        .getOrElse(fail(s"no scan in:\n${df.queryExecution.optimizedPlan}"))
+    val agg = spark.read.table("h2.test.employee").groupBy("DEPT").sum("SALARY")
+    checkAggregateRemoved(agg)
+    assert(scanOf(agg).repeatableRead && !scanOf(agg).onlyRowWisePushdowns)
+    val topN = agg.orderBy("DEPT").limit(1)
+    checkSortRemoved(topN)
+    checkLimitRemoved(topN)
+    assert(!scanOf(topN).repeatableRead)
+  }
+
   test("scan with aggregate push-down, top N push-down and offset push-down") {
     val df1 = spark.read
       .table("h2.test.employee")
