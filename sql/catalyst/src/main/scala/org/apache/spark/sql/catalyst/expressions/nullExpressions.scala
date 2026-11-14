@@ -58,7 +58,7 @@ import org.apache.spark.sql.types._
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class Coalesce(children: Seq[Expression])
-  extends ComplexTypeMergingExpression with ConditionalExpression {
+  extends ComplexTypeMergingExpression with ConditionalExpression with NoThrow {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = children.forall(_.nullable)
@@ -195,7 +195,7 @@ case class Coalesce(children: Seq[Expression])
   since = "2.0.0",
   group = "conditional_funcs")
 case class NullIf(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
+  extends RuntimeReplaceable with InheritAnalysisRules with NoThrow {
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
@@ -392,7 +392,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, replace
   since = "1.5.0",
   group = "predicate_funcs")
 case class IsNaN(child: Expression) extends UnaryExpression
-  with Predicate with ImplicitCastInputTypes {
+  with Predicate with ImplicitCastInputTypes with NoThrow {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(DoubleType, FloatType))
 
@@ -529,7 +529,7 @@ case class NaNvl(left: Expression, right: Expression)
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class IsNull(child: Expression) extends UnaryExpression with Predicate {
+case class IsNull(child: Expression) extends UnaryExpression with Predicate with NoThrow {
   override def nullable: Boolean = false
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
@@ -567,7 +567,8 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   """,
   since = "1.0.0",
   group = "predicate_funcs")
-case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
+case class IsNotNull(child: Expression)
+  extends UnaryExpression with Predicate with NoThrow {
   override def nullable: Boolean = false
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)

@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.File
+import java.lang.reflect.Modifier
+import java.util.jar.JarFile
+
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -24,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TestUDT, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
 
@@ -581,6 +588,156 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       evalRows(input, (IntegerType, positions), (IntegerType, positions))(c =>
         Substring(c(0), c(1), c(2)))
     }
+  }
+
+  test("isTotalOperator: the expressions that are always total are marked NoThrow") {
+    val s = AttributeReference("s", StringType)()
+    val b = AttributeReference("b", BooleanType)()
+    val d = AttributeReference("d", DoubleType)()
+    val date = AttributeReference("date", DateType)()
+    val ts = AttributeReference("ts", TimestampType)()
+    val field = StructField("f", LongType)
+    val struct = AttributeReference("st", StructType(Seq(field)))()
+    val arr = AttributeReference("arr", ArrayType(struct.dataType))()
+    val map = AttributeReference("m", MapType(LongType, LongType))()
+    val always = Seq[Expression](
+      GetStructField(struct, 0), GetArrayStructFields(arr, field, 0, 1, containsNull = true),
+      GetMapValue(map, a), CreateArray(Seq(a)), CreateNamedStruct(Seq(Literal("f"), a)),
+      Collate(s, ResolvedCollation("UNICODE_CI")),
+      And(b, b), Or(b, b), Not(b), EqualTo(a, a), EqualNullSafe(a, a), LessThan(a, a),
+      LessThanOrEqual(a, a), GreaterThan(a, a), GreaterThanOrEqual(a, a),
+      IsNull(a), IsNotNull(a), IsNaN(d), new NullIf(a, a), Coalesce(Seq(a, a)),
+      In(a, Seq(Literal(1L))), InSet(a, Set[Any](1L)),
+      Size(arr, legacySizeOfNull = true), Size(arr, legacySizeOfNull = false),
+      StartsWith(s, s), EndsWith(s, s), Contains(s, s), Length(s), OctetLength(s),
+      Substring(s, Literal(1), Literal(2)),
+      Year(date), YearOfWeek(date), Quarter(date), Month(date), DayOfMonth(date),
+      DayOfYear(date), DayOfWeek(date), WeekDay(date), WeekOfYear(date), MonthName(date),
+      DayName(date), Hour(ts, Some("UTC")), Minute(ts, Some("UTC")), Second(ts, Some("UTC")),
+      SecondWithFraction(ts, Some("UTC")))
+    always.foreach { e =>
+      assert(e.isInstanceOf[NoThrow], e)
+      assert(e.isTotal, e)
+      assert(ExprUtils.isTotalOperator(e), e)
+    }
+    // An expression that says nothing is not total, whatever it does. Neither are the leaves,
+    // which `canEvaluateUnconditionally` accepts by itself.
+    val undeclared = Seq[Expression](a, Literal(1L), GetArrayItem(arr, Literal(0)),
+      ElementAt(arr, Literal(1)), CreateMap(Seq(a, a)), Like(s, s, '\\'), RLike(s, s), Upper(s),
+      If(b, a, a), CaseWhen(Seq((b, a)), a), UnaryPositive(a), BitwiseAnd(a, a), BitwiseOr(a, a),
+      BitwiseXor(a, a), BitwiseNot(a), Rand(Literal(0L)))
+    undeclared.foreach { e =>
+      assert(!e.isInstanceOf[NoThrow], e)
+      assert(!e.isTotal, e)
+      assert(!ExprUtils.isTotalOperator(e), e)
+    }
+  }
+
+  test("isTotalOperator: the expressions that are total in some eval modes or over some types") {
+    val (legacyMode, ansiMode, tryCast) = (EvalMode.LEGACY, EvalMode.ANSI, EvalMode.TRY)
+    val d = AttributeReference("d", DoubleType)()
+    val dec = AttributeReference("dec", DecimalType(10, 2))()
+    val s = AttributeReference("s", StringType)()
+    val date = AttributeReference("date", DateType)()
+    val interval = AttributeReference("i", DayTimeIntervalType())()
+    def modesOf(build: EvalMode.Value => Expression): Set[EvalMode.Value] =
+      Seq(legacyMode, ansiMode, tryCast).filter { mode =>
+        val e = build(mode)
+        assert(!e.isInstanceOf[NoThrow], e)
+        assert(ExprUtils.isTotalOperator(e) === e.isTotal, e)
+        e.isTotal
+      }.toSet
+    val all = Set(legacyMode, ansiMode, tryCast)
+    val none = Set.empty[EvalMode.Value]
+    def ctx(mode: EvalMode.Value): NumericEvalContext = NumericEvalContext(mode)
+
+    // Add, Subtract and Multiply: outside ANSI mode, and over FLOAT and DOUBLE in every mode.
+    Seq[(Expression, Expression, NumericEvalContext) => Expression](Add(_, _, _),
+        Subtract(_, _, _), Multiply(_, _, _)).foreach { build =>
+      assert(modesOf(m => build(a, a, ctx(m))) === Set(legacyMode, tryCast))
+      assert(modesOf(m => build(dec, dec, ctx(m))) === Set(legacyMode, tryCast))
+      assert(modesOf(m => build(d, d, ctx(m))) === all)
+      assert(modesOf(m => build(interval, interval, ctx(m))) === none)
+    }
+    // Divide and Remainder: outside ANSI mode, also over FLOAT and DOUBLE.
+    Seq[(Expression, Expression, NumericEvalContext) => Expression](Divide(_, _, _),
+        Remainder(_, _, _)).foreach { build =>
+      assert(modesOf(m => build(d, d, ctx(m))) === Set(legacyMode, tryCast))
+      assert(modesOf(m => build(dec, dec, ctx(m))) === Set(legacyMode, tryCast))
+    }
+    // IntegralDivide and Pmod: only in LEGACY mode.
+    Seq[(Expression, Expression, NumericEvalContext) => Expression](IntegralDivide(_, _, _),
+        Pmod(_, _, _)).foreach { build =>
+      assert(modesOf(m => build(a, a, ctx(m))) === Set(legacyMode))
+      assert(modesOf(m => build(interval, a, ctx(m))) === none)
+    }
+    // UnaryMinus and Abs: over the integral types without `failOnError`, and over the fractional
+    // types with it too.
+    Seq[(Expression, Boolean) => Expression](UnaryMinus(_, _), Abs(_, _)).foreach { build =>
+      assert(build(a, false).isTotal && !build(a, true).isTotal)
+      Seq(d, dec).foreach(x => assert(build(x, false).isTotal && build(x, true).isTotal, x))
+      assert(!build(interval, false).isTotal && !build(interval, true).isTotal)
+    }
+    // Cast: by the types and the eval mode.
+    def castModes(from: Expression, to: DataType): Set[EvalMode.Value] =
+      modesOf(m => Cast(from, to, Some("UTC"), m))
+    assert(castModes(a, DecimalType(20, 0)) === all)
+    assert(castModes(dec, DoubleType) === all)
+    assert(castModes(a, StringType) === all)
+    assert(castModes(a, IntegerType) === Set(legacyMode, tryCast))
+    assert(castModes(s, LongType) === Set(legacyMode, tryCast))
+    assert(castModes(s, DateType) === Set(legacyMode, tryCast))
+    assert(castModes(date, TimestampType) === Set(tryCast))
+    assert(castModes(a, VarcharType(3)) === Set(tryCast))
+    assert(castModes(d, StringType) === none)
+    assert(castModes(AttributeReference("u", new TestUDT.MyDenseVectorUDT)(), StringType) === none)
+  }
+
+  test("isTotalOperator: the expression classes that declare themselves total") {
+    // Every expression class of catalyst, from its jar or its classes directory, in whichever
+    // package it is: a subclass of a marked class anywhere is marked too.
+    val source = Option(classOf[Expression].getProtectionDomain.getCodeSource)
+    assume(source.isDefined, "the classes of catalyst cannot be located")
+    val root = new File(source.get.getLocation.toURI)
+    val files: Seq[String] = if (root.isDirectory) {
+      def walk(f: File): Seq[File] =
+        if (f.isDirectory) f.listFiles().toSeq.flatMap(walk) else Seq(f)
+      walk(root).map(f => root.toURI.relativize(f.toURI).getPath)
+    } else {
+      SparkErrorUtils.tryWithResource(new JarFile(root))(_.entries().asScala.map(_.getName).toList)
+    }
+    val classes: Seq[Class[_]] = files.filter(_.endsWith(".class")).flatMap { path =>
+      val name = path.stripSuffix(".class").replace('/', '.')
+      // A class may not load for a reason that has nothing to do with this test, e.g. a stale
+      // class file of an incremental build, or a dependency that is not on the test classpath.
+      try {
+        Some(Utils.classForName[Any](name, initialize = false))
+      } catch {
+        case _: LinkageError | _: ClassNotFoundException => None
+      }
+    }.filter(c => classOf[Expression].isAssignableFrom(c) && !c.isAnonymousClass)
+    assert(classes.size > 500, classes.size)
+
+    // Adding a class to one of these lists is a promise that it is total, see
+    // `Expression.isTotal`. The lists also notice a class that becomes total only by extending
+    // another one: a subclass of a class marked `NoThrow` is marked too. `NoThrow` is mixed into
+    // concrete classes only, so that a new subclass of e.g. `BinaryComparison` is not.
+    val (always, others) = classes.partition(classOf[NoThrow].isAssignableFrom)
+    always.foreach(c => assert(!Modifier.isAbstract(c.getModifiers), c))
+    assert(always.map(_.getSimpleName).sorted === Seq(
+      "And", "Coalesce", "Collate", "Contains", "CreateArray", "CreateNamedStruct", "DayName",
+      "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith", "EqualNullSafe", "EqualTo",
+      "GetArrayStructFields", "GetMapValue", "GetStructField", "GreaterThan",
+      "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull", "Length",
+      "LessThan", "LessThanOrEqual", "Minute", "Month", "MonthName", "Not", "NullIf",
+      "OctetLength", "Or", "Quarter", "Second", "SecondWithFraction", "Size", "StartsWith",
+      "Substring", "WeekDay", "WeekOfYear", "Year", "YearOfWeek"))
+    // The ones that decide it by their input types or eval mode.
+    val conditional = others.filter { c =>
+      c != classOf[Expression] && c.getMethod("isTotal").getDeclaringClass != classOf[Expression]
+    }
+    assert(conditional.map(_.getSimpleName).sorted === Seq("Abs", "Add", "Cast", "Divide",
+      "IntegralDivide", "Multiply", "Pmod", "Remainder", "Subtract", "UnaryMinus"))
   }
 
   test("canEvaluateUnconditionally: non-deterministic expressions are excluded") {

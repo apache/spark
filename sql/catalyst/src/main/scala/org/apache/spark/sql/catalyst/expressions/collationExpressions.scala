@@ -72,7 +72,7 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  * Only type metadata will be updated.
  */
 case class Collate(child: Expression, collation: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with NoThrow {
   override def left: Expression = child
   override def right: Expression = collation
   override def dataType: DataType = collation.dataType

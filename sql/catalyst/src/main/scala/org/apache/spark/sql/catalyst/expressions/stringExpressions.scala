@@ -647,7 +647,8 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class Contains(left: Expression, right: Expression) extends StringPredicate {
+case class Contains(left: Expression, right: Expression)
+  extends StringPredicate with NoThrow {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     CollationSupport.Contains.exec(l, r, collationId)
   }
@@ -698,7 +699,8 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
   }
 }
 
-case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
+case class StartsWith(left: Expression, right: Expression)
+  extends StringPredicate with NoThrow {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     CollationSupport.StartsWith.exec(l, r, collationId)
   }
@@ -754,7 +756,8 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
+case class EndsWith(left: Expression, right: Expression)
+  extends StringPredicate with NoThrow {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     CollationSupport.EndsWith.exec(l, r, collationId)
   }
@@ -2668,7 +2671,7 @@ case class StringSpace(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
 
   def this(str: Expression, pos: Expression) = {
@@ -2839,7 +2842,7 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Length(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
@@ -2936,7 +2939,7 @@ case class BitLength(child: Expression)
   since = "2.3.0",
   group = "string_funcs")
 case class OctetLength(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =

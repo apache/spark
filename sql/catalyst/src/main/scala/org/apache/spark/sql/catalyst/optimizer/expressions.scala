@@ -64,7 +64,12 @@ object ConstantFolding extends Rule[LogicalPlan] {
         hasNoSideEffect(c.child)
       case _ => false
     }
-    case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
+    // Only these two of the expressions marked `NoThrow`, as before the other expressions that
+    // are always total were marked with it too, so that this rule folds what it did then.
+    // TODO(SPARK-61667): Rely on `Expression.isTotal` instead, to also fold e.g.
+    // `size(array(i > 1))`.
+    case _: CreateArray | _: CreateNamedStruct if e.deterministic =>
+      e.children.forall(hasNoSideEffect)
     case _ => false
   }
 
