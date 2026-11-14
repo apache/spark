@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.net.URL
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
@@ -241,6 +242,20 @@ private[spark] object HiveUtils extends Logging {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  val HIVE_EXTERNAL_CATALOG_LOCK_TIMEOUT =
+    buildStaticConf("spark.sql.hive.externalCatalog.lockTimeoutMs")
+      .doc("Maximum time a thread waits for the lock that serializes the metastore operations " +
+        "of the Hive external catalog. When it expires, the operation fails instead of " +
+        "queueing behind the thread that holds the lock, so a metastore call that is stuck " +
+        "does not block every other reader of the catalog. 0 or a negative value disables " +
+        "the timeout and the thread waits indefinitely. " +
+        "Long metastore operations, such as loading many dynamic partitions, legitimately " +
+        "hold the lock, so set a value above the longest one expected.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(0L)
 
   val HIVE_THRIFT_SERVER_ASYNC = buildConf("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
