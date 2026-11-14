@@ -779,9 +779,10 @@ private[sql] object CatalogManager extends Logging {
 
   /**
    * Parse a frozen path for analysis and upgrade legacy unversioned metadata in memory. Legacy
-   * paths could only contain schema entries, while two-part names were resolved through a
-   * separate mini-path containing `system` and the creation-time current catalog. Append those
-   * catalog entries in the historical order so old views and SQL functions keep their behavior.
+   * paths could contain catalog-only entries, but those entries did not participate in resolution;
+   * two-part names used a separate mini-path containing `system` and the creation-time current
+   * catalog. Preserve the schema entries and append those catalog entries in the historical order
+   * so old views and SQL functions keep their behavior.
    */
   def deserializePathEntriesForAnalysisOrFail(
       storedPathStr: String,
