@@ -259,6 +259,45 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     })
   }
 
+  test("SPARK-61622: comparator and sort key agree for sharp s") {
+    // U+00DF (sharp s), U+1E9E (capital sharp s), U+017F (long s) and U+FF53 (fullwidth s).
+    val strings = Seq("\u00DF", "\u1E9E", "ss", "sS", "Ss", "SS", "s", "S", "\u017Fs",
+      "\uFF53\uFF53", "a\u00DF", "ass", "aSS", "Stra\u00DFe", "Strasse", "STRASSE", "st", "sr",
+      "\u00DF ", "ss ")
+    val collationNames = Seq("UNICODE", "UNICODE_CI", "UNICODE_AI", "UNICODE_CI_AI",
+      "UNICODE_AI_RTRIM", "en_AI", "de", "de_CI", "de_AI", "de_CI_AI", "sv_AI", "tr_AI")
+    collationNames.foreach { name =>
+      val collation = fetchCollation(name)
+      val csAi = name.contains("_AI") && !name.contains("_CI")
+      for (s1 <- strings; s2 <- strings) {
+        val result = collation.comparator.compare(toUTF8(s1), toUTF8(s2))
+        val sortKey1 = collation.sortKeyFunction.apply(toUTF8(s1)).asInstanceOf[Array[Byte]]
+        val sortKey2 = collation.sortKeyFunction.apply(toUTF8(s2)).asInstanceOf[Array[Byte]]
+        val clue = s"collation: $name, strings: $s1, $s2"
+        assert((result == 0) == sortKey1.sameElements(sortKey2), clue)
+        assert(collation.equalsFunction(toUTF8(s1), toUTF8(s2)) == (result == 0), clue)
+        if (csAi) {
+          assert(Integer.signum(result) ==
+            Integer.signum(java.util.Arrays.compareUnsigned(sortKey1, sortKey2)), clue)
+        }
+      }
+    }
+
+    // A sharp s is "ss" with the same case, so it differs from "SS" only in the case.
+    Seq("UNICODE_AI", "de_AI", "UNICODE_AI_RTRIM").foreach { name =>
+      val comparator = fetchCollation(name).comparator
+      assert(comparator.compare(toUTF8("Stra\u00DFe"), toUTF8("Strasse")) == 0)
+      assert(comparator.compare(toUTF8("\u00DF"), toUTF8("\uFF53\uFF53")) == 0)
+      assert(comparator.compare(toUTF8("\u00DF"), toUTF8("SS")) < 0)
+      assert(comparator.compare(toUTF8("SS"), toUTF8("\u00DF")) > 0)
+      assert(comparator.compare(toUTF8("\u00DF"), toUTF8("sr")) > 0)
+      assert(comparator.compare(toUTF8("\u00DF"), toUTF8("st")) < 0)
+    }
+    val rtrimComparator = fetchCollation("UNICODE_AI_RTRIM").comparator
+    assert(rtrimComparator.compare(toUTF8("\u00DF  "), toUTF8("ss ")) == 0)
+    assert(fetchCollation("UNICODE_AI").comparator.compare(toUTF8("\u00DF "), toUTF8("ss")) > 0)
+  }
+
   test("collation aware string search") {
     val checks = Seq(
       CollationTestCase("UNICODE_CI", "abcde", "", 0),

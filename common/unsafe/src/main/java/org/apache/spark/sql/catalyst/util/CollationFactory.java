@@ -1034,16 +1034,59 @@ public final class CollationFactory {
         Function<UTF8String, byte[]> sortKeyFunction;
 
         if (spaceTrimming == SpaceTrimming.NONE) {
-          comparator = (s1, s2) ->
-            threadLocalCollator.get().compare(s1.toValidString(), s2.toValidString());
           sortKeyFunction = s ->
             threadLocalCollator.get().getCollationKey(s.toValidString()).toByteArray();
+        } else {
+          sortKeyFunction = s -> threadLocalCollator.get().getCollationKey(
+            applyTrimmingPolicy(s, spaceTrimming).toValidString()).toByteArray();
+        }
+
+        if (caseSensitivity == CaseSensitivity.CS &&
+            accentSensitivity == AccentSensitivity.AI) {
+          // The comparator and the sort key must agree, since both are used to compare the
+          // strings of one collation (for example, the comparator in filters and sorts, and
+          // the sort key in hash joins and aggregates). For the primary strength with the case
+          // level, they do not agree in ICU4J: the fast path of `Collator.compare` for Latin
+          // text (`CollationFastLatin`) reads the case weights of a character that maps to two
+          // collation elements from an `int` that can be negative, and then compares them
+          // wrongly. As a result U+00DF (sharp s) is not equal to "ss" for `Collator.compare`,
+          // while it is equal for the collation keys, and for the texts that do not take the
+          // fast path. The primary level of the fast path is not affected. Therefore, order
+          // the strings with a collator of the primary strength, and compare the strings that
+          // are equal at the primary level (they differ by case at most) by their collation
+          // keys.
+          ULocale primaryLocale = new ULocale.Builder()
+            .setLocale(ICULocaleMap.get(locale))
+            .setUnicodeLocaleKeyword("ks", "level1")
+            .build();
+          ThreadLocal<Collator> threadLocalPrimaryCollator = ThreadLocal.withInitial(
+            () -> {
+              Collator collator = Collator.getInstance(primaryLocale);
+              collator.freeze();
+              return collator;
+            });
+          comparator = (s1, s2) -> {
+            String left = applyTrimmingPolicy(s1, spaceTrimming).toValidString();
+            String right = applyTrimmingPolicy(s2, spaceTrimming).toValidString();
+            if (left.equals(right)) {
+              return 0;
+            }
+            int result = threadLocalPrimaryCollator.get().compare(left, right);
+            if (result != 0) {
+              return result;
+            }
+            Collator collator = threadLocalCollator.get();
+            return Arrays.compareUnsigned(
+              collator.getCollationKey(left).toByteArray(),
+              collator.getCollationKey(right).toByteArray());
+          };
+        } else if (spaceTrimming == SpaceTrimming.NONE) {
+          comparator = (s1, s2) ->
+            threadLocalCollator.get().compare(s1.toValidString(), s2.toValidString());
         } else {
           comparator = (s1, s2) -> threadLocalCollator.get().compare(
             applyTrimmingPolicy(s1, spaceTrimming).toValidString(),
             applyTrimmingPolicy(s2, spaceTrimming).toValidString());
-          sortKeyFunction = s -> threadLocalCollator.get().getCollationKey(
-            applyTrimmingPolicy(s, spaceTrimming).toValidString()).toByteArray();
         }
 
         return new Collation(
