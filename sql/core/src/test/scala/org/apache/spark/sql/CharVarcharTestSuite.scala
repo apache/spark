@@ -105,6 +105,19 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-61579: char/varchar struct processing preserves a nested NOT NULL field") {
+    val structType = new StructType()
+      .add("country", CharType(2))
+      .add("zip", StringType, nullable = false)
+    // A nullable struct whose fields carry the raw (string) types, like a read/write-side input.
+    val input = Literal(null, CharVarcharUtils.replaceCharVarcharWithStringForCast(structType))
+    val processed = CharVarcharUtils.stringLengthCheck(input, structType)
+    val resultStruct = processed.dataType.asInstanceOf[StructType]
+    // The country CHAR(2) field triggers a struct rebuild; the declared NOT NULL of zip must
+    // survive it (previously every rebuilt field became nullable).
+    assert(!resultStruct("zip").nullable, s"zip should stay NOT NULL, got $resultStruct")
+  }
+
   test("preserve char/varchar type info") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
       for {
