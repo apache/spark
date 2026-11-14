@@ -124,13 +124,13 @@ jobs:
             # must run when either the Kubernetes support or the credential-aws module
             # (including its integration-tests module, mapped to credential-aws) changes.
             oidc_e2e=`./dev/is-changed.py -m kubernetes,credential-aws`
-            sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
             # Also we only run the very slow transpile changes when that logic changes
             transpile=false
+            sparkr=false
             static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
@@ -146,6 +146,17 @@ jobs:
                   *transpile*) transpile=true; break ;;
                 esac
               done
+              # The scheduled builds cover SparkR. On PRs, run SparkR tests only when the files
+              # of the `sparkr` module or its Scala backend change, not when only its
+              # dependencies such as `hive` and `mllib` change.
+              for f in $changed_files; do
+                case "$f" in
+                  R/*|dev/spark-test-image/sparkr/*) sparkr=true; break ;;
+                  core/src/main/scala/org/apache/spark/api/r/*) sparkr=true; break ;;
+                  sql/core/src/main/scala/org/apache/spark/sql/api/r/*) sparkr=true; break ;;
+                  mllib/src/main/scala/org/apache/spark/ml/r/*) sparkr=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -157,7 +168,9 @@ jobs:
             buf=true
             ui=true
             docs=true
-            java25=true
+            # The scheduled Java 25 builds cover the whole build. On PRs, run this job only
+            # when the native data source tests, which are skipped before Java 22, are affected.
+            java25=`./dev/is-changed.py -m "sql,connect"`
           else
             pyspark_periodic=false
             pyspark_connect_old_client=false

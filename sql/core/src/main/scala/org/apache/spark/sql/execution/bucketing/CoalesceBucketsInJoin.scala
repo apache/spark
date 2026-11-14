@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 
 /**
  * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -137,6 +137,8 @@ object ExtractJoinWithBuckets {
       case j: BroadcastHashJoinExec =>
         findBucketedScan(streamedSide(j.buildSide, j.left, j.right))
       case j: BroadcastNestedLoopJoinExec =>
+        findBucketedScan(streamedSide(j.buildSide, j.left, j.right))
+      case j: BroadcastRangeJoinExec =>
         findBucketedScan(streamedSide(j.buildSide, j.left, j.right))
       case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty => Some(f)
       case _ => None

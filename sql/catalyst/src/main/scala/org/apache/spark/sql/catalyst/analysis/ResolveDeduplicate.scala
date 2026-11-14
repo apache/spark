@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, MetadataAttribute}
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_DEDUPLICATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -45,7 +45,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
     case d: UnresolvedDeduplicate if d.child.resolved =>
       val orderDeterministically = conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
       val spec = DeduplicateSpec(d.keySpec, d.viaSparkClassic)
-      val keys = computeKeys(d.child, spec, orderDeterministically, conf.resolver)
+      val keys = computeKeys(d.child.output, spec, orderDeterministically, conf.resolver)
       if (d.withinWatermark) {
         DeduplicateWithinWatermark(keys, d.child, Some(spec))
       } else {
@@ -54,7 +54,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
   }
 
   /**
-   * Computes the deduplication key attributes from the requested recipe against `child`'s output.
+   * Computes the deduplication key attributes from the requested recipe against `childOutput`.
    * Shared by the analyzer rule (with the session config) and by the streaming bootstrap (with the
    * value pinned in the offset log), so the ordering rules stay in one place.
    *
@@ -62,7 +62,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
    *   legacy (engine-specific) order selected by `spec.viaSparkClassic`.
    */
   def computeKeys(
-      child: LogicalPlan,
+      childOutput: Seq[Attribute],
       spec: DeduplicateSpec,
       orderDeterministically: Boolean,
       resolver: Resolver): Seq[Attribute] = {
@@ -72,9 +72,10 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
         // the child output directly (in output order, no name resolution); only legacy Spark
         // Classic reorders the names through a Set (see legacyClassicColumnNames).
         if (!orderDeterministically && spec.viaSparkClassic) {
-          resolveColumnNames(child, legacyClassicColumnNames(child.output.map(_.name)), resolver)
+          resolveColumnNames(
+            childOutput, legacyClassicColumnNames(childOutput.map(_.name)), resolver)
         } else {
-          child.output
+          childOutput
         }
       case DeduplicateKeyColumns(colNames) =>
         val orderedNames = if (orderDeterministically) {
@@ -85,7 +86,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
           // Legacy Spark Connect resolution: no dedup, caller-provided input order.
           colNames
         }
-        resolveColumnNames(child, orderedNames, resolver)
+        resolveColumnNames(childOutput, orderedNames, resolver)
     }
   }
 
@@ -105,7 +106,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
     val outputAtMetadataBoundary = child.output.filter { attribute =>
       !MetadataAttribute.isValid(attribute.metadata) || originalMetadataKeys.contains(attribute)
     }
-    computeKeys(Project(outputAtMetadataBoundary, child), spec, orderDeterministically, resolver)
+    computeKeys(outputAtMetadataBoundary, spec, orderDeterministically, resolver)
   }
 
   /**
@@ -117,14 +118,16 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
   private def legacyClassicColumnNames(names: Seq[String]): Seq[String] = names.toSet.toSeq
 
   private def resolveColumnNames(
-      child: LogicalPlan, names: Seq[String], resolver: Resolver): Seq[Attribute] = {
+      childOutput: Seq[Attribute],
+      names: Seq[String],
+      resolver: Resolver): Seq[Attribute] = {
     names.flatMap { colName =>
       // It is possible there is more than one column with the same name, so we call filter
       // instead of find.
-      val cols = child.output.filter(col => resolver(col.name, colName))
+      val cols = childOutput.filter(col => resolver(col.name, colName))
       if (cols.isEmpty) {
         throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-          colName, child.output.map(_.name).mkString(", "))
+          colName, childOutput.map(_.name).mkString(", "))
       }
       cols
     }

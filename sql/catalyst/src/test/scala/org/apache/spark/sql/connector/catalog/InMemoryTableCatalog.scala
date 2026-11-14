@@ -264,7 +264,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     table.increaseVersion()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
-      CatalogV2Util.structTypeToV2Columns(schema))
+      InMemoryTableCatalog.alteredColumns(table.columns(), schema, changes))
     val reconstructedId = Option(table.id()).getOrElse(util.UUID.randomUUID().toString)
     val newTable = table match {
       case _: InMemoryTable | _: InMemoryTableWithV2Filter =>
@@ -478,6 +478,26 @@ object InMemoryTableCatalog {
   def maybeSimulateFailedTableCreation(tableProperties: util.Map[String, String]): Unit = {
     if ("true".equalsIgnoreCase(tableProperties.get(SIMULATE_FAILED_CREATE_PROPERTY))) {
       throw new IllegalStateException("Manual create table failure.")
+    }
+  }
+
+  /**
+   * Returns the columns of `schema`, the schema that `changes` make of a table with `columns`.
+   * The columns that no change refers to are kept as they are, since converting a column to a
+   * StructField and back loses what a StructField does not hold, such as a connector expression
+   * or an identity column spec.
+   */
+  def alteredColumns(
+      columns: Array[Column],
+      schema: StructType,
+      changes: Seq[TableChange]): Array[Column] = {
+    val changedNames = changes.collect {
+      case change: TableChange.ColumnChange => change.fieldNames().head
+    }.toSet
+    val unchangedColumns = columns.filterNot(col => changedNames.contains(col.name))
+      .map(col => col.name -> col).toMap
+    CatalogV2Util.structTypeToV2Columns(schema).map { col =>
+      unchangedColumns.getOrElse(col.name, col)
     }
   }
 }

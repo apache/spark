@@ -175,6 +175,8 @@ public interface Column {
    * connector {@link org.apache.spark.sql.connector.expressions.Expression}. See
    * {@link GenerationExpression} for how Spark reads each form. It is up to the data source to
    * verify expression compatibility and reject writes as necessary.
+   * If the object returned by {@code columnGenerationExpression()} has no SQL string, Spark uses
+   * this method's SQL string as the fallback when its modeled expression cannot be converted.
    */
   @Nullable
   default String generationExpression() {

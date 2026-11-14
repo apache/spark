@@ -281,6 +281,8 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
 
   override def dataType: DataType = BinaryType
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(

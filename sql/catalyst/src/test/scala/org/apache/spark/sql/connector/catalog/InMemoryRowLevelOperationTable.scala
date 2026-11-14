@@ -42,7 +42,7 @@ trait RowLevelOperationWithOptions {
   def options: CaseInsensitiveStringMap
 }
 
-class InMemoryRowLevelOperationTable private (
+class InMemoryRowLevelOperationTable private[catalog] (
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],

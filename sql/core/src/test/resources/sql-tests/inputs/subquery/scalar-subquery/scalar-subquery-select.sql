@@ -140,6 +140,74 @@ SELECT t1a,
     (SELECT hex(count_min_sketch(t2d, 0.5d, 0.5d, 1)) FROM t2 WHERE t2a = t1a) collect_set_t2
 FROM t1;
 
+-- SPARK-61664: Sketch aggregates and schema_of_variant_agg should not return NULL
+-- in a correlated subquery when no inner row matches
+CREATE TEMPORARY VIEW t2_sketch AS SELECT t2a,
+    hll_sketch_agg(t2d) hll_sketch,
+    theta_sketch_agg(t2d) theta_sketch,
+    kll_sketch_agg_bigint(t2d) kll_sketch,
+    tuple_sketch_agg_double(t2d, t2f) tuple_sketch,
+    approx_top_k_accumulate(t2d) top_k_state
+FROM t2 GROUP BY t2a;
+
+SELECT t1a,
+    (SELECT hll_sketch_estimate(hll_sketch_agg(t2d)) FROM t2 WHERE t2a = t1a) hll_sketch_agg,
+    (SELECT hll_sketch_estimate(hll_union_agg(hll_sketch)) FROM t2_sketch WHERE t2a = t1a)
+      hll_union_agg,
+    (SELECT count(s) FROM (SELECT hll_sketch_agg(t2d) s FROM t2 WHERE t2a = t1a)) nested_count
+FROM (SELECT DISTINCT t1a FROM t1);
+
+SELECT t1a,
+    (SELECT theta_sketch_estimate(theta_sketch_agg(t2d)) FROM t2 WHERE t2a = t1a)
+      theta_sketch_agg,
+    (SELECT theta_sketch_estimate(theta_union_agg(theta_sketch)) FROM t2_sketch WHERE t2a = t1a)
+      theta_union_agg,
+    (SELECT theta_sketch_estimate(theta_intersection_agg(theta_sketch))
+      FROM t2_sketch WHERE t2a = t1a) theta_intersection_agg
+FROM (SELECT DISTINCT t1a FROM t1);
+
+SELECT t1a,
+    (SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t2d)) FROM t2 WHERE t2a = t1a)
+      kll_sketch_agg_bigint,
+    (SELECT kll_sketch_get_n_float(kll_sketch_agg_float(t2e)) FROM t2 WHERE t2a = t1a)
+      kll_sketch_agg_float,
+    (SELECT kll_sketch_get_n_double(kll_sketch_agg_double(t2f)) FROM t2 WHERE t2a = t1a)
+      kll_sketch_agg_double,
+    (SELECT kll_sketch_get_n_bigint(kll_merge_agg_bigint(kll_sketch))
+      FROM t2_sketch WHERE t2a = t1a) kll_merge_agg_bigint
+FROM (SELECT DISTINCT t1a FROM t1);
+
+SELECT t1a,
+    (SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(t2d, t2f)) FROM t2 WHERE t2a = t1a)
+      tuple_sketch_agg_double,
+    (SELECT tuple_sketch_estimate_double(tuple_union_agg_double(tuple_sketch))
+      FROM t2_sketch WHERE t2a = t1a) tuple_union_agg_double,
+    (SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(tuple_sketch))
+      FROM t2_sketch WHERE t2a = t1a) tuple_intersection_agg_double
+FROM (SELECT DISTINCT t1a FROM t1);
+
+SELECT t1a,
+    (SELECT size(approx_top_k(t2d)) FROM t2 WHERE t2a = t1a) approx_top_k,
+    (SELECT size(approx_top_k_estimate(approx_top_k_accumulate(t2d))) FROM t2 WHERE t2a = t1a)
+      approx_top_k_accumulate,
+    (SELECT size(approx_top_k_estimate(approx_top_k_combine(top_k_state)))
+      FROM t2_sketch WHERE t2a = t1a) approx_top_k_combine
+FROM (SELECT DISTINCT t1a FROM t1);
+
+SELECT t1a,
+    (SELECT schema_of_variant_agg(parse_json(CAST(t2d AS STRING))) FROM t2 WHERE t2a = t1a)
+      schema_of_variant_agg
+FROM (SELECT DISTINCT t1a FROM t1);
+
+-- RewriteDistinctAggregates over empty input
+SELECT count(DISTINCT t2a), count(DISTINCT t2b),
+    hll_sketch_estimate(hll_sketch_agg(t2d)),
+    schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))
+FROM t2 WHERE t2a = 'none';
+
+-- An invalid parameter fails while the query is optimized, regardless of the data
+SELECT t1a, (SELECT hll_sketch_agg(t2d, 30) FROM t2 WHERE t2a = t1a) FROM t1 WHERE false;
+
 -- SPARK-36028: Allow Project to host outer references in scalar subqueries
 SELECT t1c, (SELECT t1c) FROM t1;
 SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1;

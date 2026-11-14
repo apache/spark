@@ -666,7 +666,7 @@ object SQLConf {
       "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
       "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
       s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
-    .version("4.3.0")
+    .version("4.4.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -1278,6 +1278,40 @@ object SQLConf {
     .version("1.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
+
+  val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
+    .internal()
+    .doc("When true, a non-equi join whose condition is a range predicate (a value in a " +
+      "range, two ranges overlapping, or a single `<`/`<=`/`>`/`>=` comparison) may be " +
+      "planned as a broadcast range join instead of a broadcast nested loop join. Each " +
+      "range key must be deterministic, of boolean, integer, floating-point, decimal, " +
+      "string, binary, date, or timestamp type, and drawn entirely from one side. Planning " +
+      "still requires a side that is broadcastable by size or by a BROADCAST hint and that " +
+      "BroadcastRangeJoinExec can build: either side for inner joins, the right side for " +
+      "left outer, semi, and anti joins, the left side for right outer joins, and never a " +
+      "full outer join. An unsupported hinted side, a full outer join, and an unhinted join " +
+      "with no small side keep the previous plan (a cartesian product for an inner join, " +
+      "otherwise a nested loop join). The broadcast side is sorted and indexed once, which " +
+      "evaluates the range key of every broadcast row. When probing, each row of the other " +
+      "side evaluates its range key and reads only the part of the index that can match it. " +
+      "Keys are evaluated before any pair is tested, so a key expression that throws can " +
+      "fail a query that a nested loop join would have completed. The range join is much " +
+      "faster when that part is small. It can be slower under interleaved overlap, where " +
+      "the tree cannot prune whole miss runs; collated string and other boxed key families " +
+      "reach that regime sooner than long-specialized keys (including float and double), " +
+      "while fully overlapping builds stay near parity via the all-covering shortcut. Tiny " +
+      "builds (a handful of ranges) skip the tree walk and scan stored rows linearly so they " +
+      "stay near parity with the nested loop join. Building the index costs driver-side work " +
+      "that grows with the broadcast side and can outweigh the scans the range join saves - " +
+      "most visibly when a BROADCAST hint forces a large build side that only a handful of " +
+      "streamed rows ever probe, where that one-time cost has few scans to amortize against. " +
+      "BroadcastExchangeExec also charges the index's retained memory against " +
+      "maxBroadcastTableSize, so a hinted or raised-threshold build can fail where a nested " +
+      "loop join ran. This is disabled by default.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
 
   val SHUFFLE_HASH_JOIN_FACTOR =
     buildConfFromConfigFile[Int]("spark.sql.shuffledHashJoinFactor")
@@ -10208,6 +10242,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def broadcastRangeJoinEnabled: Boolean = getConf(BROADCAST_RANGE_JOIN_ENABLED)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 
