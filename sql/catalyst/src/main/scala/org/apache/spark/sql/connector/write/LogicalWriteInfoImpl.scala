@@ -24,12 +24,17 @@ import scala.jdk.OptionConverters._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+/**
+ * @param isStreaming whether a streaming query builds this write. Internal: sinks do not see it
+ *                    through [[LogicalWriteInfo]].
+ */
 private[sql] case class LogicalWriteInfoImpl(
     queryId: String,
     schema: StructType,
     options: CaseInsensitiveStringMap,
     override val rowIdSchema: Optional[StructType] = Optional.empty[StructType],
-    override val metadataSchema: Optional[StructType] = Optional.empty[StructType])
+    override val metadataSchema: Optional[StructType] = Optional.empty[StructType],
+    isStreaming: Boolean = false)
   extends LogicalWriteInfo
 
 object LogicalWriteInfoImpl {
@@ -38,12 +43,14 @@ object LogicalWriteInfoImpl {
       schema: StructType,
       options: CaseInsensitiveStringMap,
       rowIdSchema: Option[StructType],
-      metadataSchema: Option[StructType]): LogicalWriteInfoImpl = {
+      metadataSchema: Option[StructType],
+      isStreaming: Boolean): LogicalWriteInfoImpl = {
     LogicalWriteInfoImpl(
       queryId,
       schema,
       options,
       rowIdSchema.toJava,
-      metadataSchema.toJava)
+      metadataSchema.toJava,
+      isStreaming)
   }
 }

@@ -101,7 +101,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         r: DataSourceV2Relation, query, queryId, options, outputMode, Some(batchId)) =>
       val table = r.table
       val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
-      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId = queryId)
+      val writeBuilder = newWriteBuilder(
+        table, writeOptions, query.schema, queryId = queryId, isStreaming = true)
       val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
       val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
@@ -163,14 +164,16 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       writeOptions: Map[String, String],
       rowSchema: StructType,
       metadataSchema: Option[StructType] = None,
-      queryId: String = UUID.randomUUID().toString): WriteBuilder = {
+      queryId: String = UUID.randomUUID().toString,
+      isStreaming: Boolean = false): WriteBuilder = {
 
     val info = LogicalWriteInfoImpl(
       queryId,
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema = None,
-      metadataSchema)
+      metadataSchema,
+      isStreaming)
     table.asWritable.newWriteBuilder(info)
   }
 
@@ -189,7 +192,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema,
-      metadataSchema)
+      metadataSchema,
+      isStreaming = false)
 
     val writeBuilder = table.asWritable.newWriteBuilder(info)
     assert(writeBuilder.isInstanceOf[DeltaWriteBuilder], s"$writeBuilder must be DeltaWriteBuilder")
