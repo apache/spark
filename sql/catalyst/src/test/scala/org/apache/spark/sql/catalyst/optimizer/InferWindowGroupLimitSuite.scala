@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CurrentRow, DenseRank, Literal, NthValue, NTile, PercentRank, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentRow, DenseRank, Literal, NthValue, NTile, PercentRank, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, WindowGroupLimit}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Window, WindowGroupLimit, WindowHint}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.MetadataBuilder
 
 class InferWindowGroupLimitSuite extends PlanTest {
   private object Optimize extends RuleExecutor[LogicalPlan] {
@@ -349,6 +350,199 @@ class InferWindowGroupLimitSuite extends PlanTest {
         Optimize.execute(originalQuery1.analyze),
         WithoutOptimize.execute(correctAnswer1.analyze))
     }
+  }
+
+  test("Eliminate the Window/Filter once WindowGroupLimit already truncates to one row") {
+    for (cond <- Seq($"rn" === 1, $"rn" <= 1, $"rn" < 2,
+        Literal(1) === $"rn", Literal(1) >= $"rn", Literal(2) > $"rn");
+      order <- Seq(c.desc, c.asc)) {
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(RowNumber(),
+              windowSpec(a :: Nil, order :: Nil, windowFrame)).as("rn"))
+          .where(cond)
+
+      val correctAnswer =
+        testRelation
+          .windowGroupLimit(a :: Nil, order :: Nil, RowNumber(), 1)
+          .select(a, b, c, Literal(1).as("rn"))
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(correctAnswer.analyze))
+    }
+  }
+
+  test("Eliminate the Window/Filter with a multi-column partition/order spec") {
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(Seq(a, b), Seq(c.desc, b.asc), windowFrame)).as("rn"))
+        .where($"rn" === 1)
+
+    val correctAnswer =
+      testRelation
+        .windowGroupLimit(Seq(a, b), Seq(c.desc, b.asc), RowNumber(), 1)
+        .select(a, b, c, Literal(1).as("rn"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Eliminate the Window/Filter also fires with an empty partitionSpec when the " +
+      "top-k sort fallback is disabled") {
+    // With the default config, limit == 1 and an empty partitionSpec take the Limit+Sort
+    // fallback path instead (see "Insert limit node for top-k computation" above) and never
+    // reach this rule's WindowGroupLimit-based elimination. Disabling the fallback here forces
+    // the WindowGroupLimit path so the elimination branch is exercised with no PARTITION BY.
+    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "0") {
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(RowNumber(),
+              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where($"rn" === 1)
+
+      val correctAnswer =
+        testRelation
+          .windowGroupLimit(Nil, c.desc :: Nil, RowNumber(), 1)
+          .select(a, b, c, Literal(1).as("rn"))
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(correctAnswer.analyze))
+    }
+  }
+
+  test("Eliminate the Window/Filter keeps rn's exprId for downstream references") {
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1)
+        .select(a, b, c, $"rn")
+
+    val result = Optimize.execute(originalQuery.analyze)
+    assert(result.output.map(_.exprId) == originalQuery.analyze.output.map(_.exprId))
+    assert(!result.exists(_.isInstanceOf[Window]) && !result.exists(_.isInstanceOf[Filter]))
+  }
+
+  test("Eliminate the Window/Filter preserves rn's qualifier and metadata") {
+    val metadata = new MetadataBuilder().putString("tag", "pii").build()
+    val rnAlias = Alias(
+      windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)), "rn")(
+      qualifier = Seq("t"), explicitMetadata = Some(metadata))
+
+    val originalQuery =
+      testRelation
+        .select(a, b, c, rnAlias)
+        .where($"rn" === 1)
+        .analyze
+
+    val rnAttr = Optimize.execute(originalQuery).output.last
+    assert(rnAttr.qualifier == Seq("t"))
+    assert(rnAttr.metadata == metadata)
+  }
+
+  test("Not eliminated when the Window carries a hint that the Project rewrite can't preserve") {
+    case object TestWindowHint extends WindowHint
+
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1)
+        .analyze
+        .transform { case w: Window => w.copy(hint = Some(TestWindowHint)) }
+
+    val correctAnswer =
+      testRelation
+        .windowGroupLimit(a :: Nil, c.desc :: Nil, RowNumber(), 1)
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1)
+        .analyze
+        .transform { case w: Window => w.copy(hint = Some(TestWindowHint)) }
+
+    comparePlans(
+      Optimize.execute(originalQuery),
+      WithoutOptimize.execute(correctAnswer))
+  }
+
+  test("Not eliminated when the Window computes more than the top-1 RowNumber") {
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+          windowExpr(Rank(c :: Nil),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
+        .where($"rn" === 1)
+
+    val correctAnswer =
+      testRelation
+        .windowGroupLimit(a :: Nil, c.desc :: Nil, RowNumber(), 1)
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"),
+          windowExpr(Rank(c :: Nil),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rank"))
+        .where($"rn" === 1)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Not eliminated for Rank/DenseRank even when the limit is 1 (ties could leave more " +
+      "than one row per group)") {
+    for (function <- rankLikeFunctions.filterNot(_.isInstanceOf[RowNumber])) {
+      val originalQuery =
+        testRelation
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where($"rn" === 1)
+
+      val correctAnswer =
+        testRelation
+          .windowGroupLimit(a :: Nil, c.desc :: Nil, function, 1)
+          .select(a, b, c,
+            windowExpr(function,
+              windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where($"rn" === 1)
+
+      comparePlans(
+        Optimize.execute(originalQuery.analyze),
+        WithoutOptimize.execute(correctAnswer.analyze))
+    }
+  }
+
+  test("Not eliminated when the filter has an extra conjunct beyond the top-1 predicate") {
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1 && b > 0)
+
+    val correctAnswer =
+      testRelation
+        .windowGroupLimit(a :: Nil, c.desc :: Nil, RowNumber(), 1)
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1 && b > 0)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
   }
 
   test("SPARK-46941: Can't Insert window group limit node for top-k computation if contains " +
