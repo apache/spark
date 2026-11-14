@@ -50,9 +50,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
           val updatedAttrs = dataUpdates.map(_._1)
           val table = buildOperationTable(tbl, UPDATE, r.options, updatedAttrs)
           val updateCond = cond.getOrElse(TrueLiteral)
-          val narrowAttrs = resolveNarrowWriteAttrs(
+          val writeAttrs = resolveWriteAttrs(
             r, table.operation, metadataUpdates.map(_._2), updatedAttrs)
-          val writeAttrs = narrowAttrs.getOrElse(r.output)
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(r, table, assignments, updateCond, writeAttrs)
@@ -177,7 +176,6 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
-    val splitUpdates = operation.representUpdateAsDeleteAndInsert
 
     // construct a read relation and include all required metadata columns
     // as well as metadata columns referenced in the condition or assignments
@@ -187,7 +185,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
-    val rowDeltaPlan = if (splitUpdates) {
+    val rowDeltaPlan = if (operation.representUpdateAsDeleteAndInsert) {
       buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
     } else {
       buildWriteDeltaUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
@@ -266,28 +264,28 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   /**
-   * Returns the output of a narrow write relation, which is the layout of the data rows the
-   * connector receives: the connector's `requiredDataAttributes()` if the operation opts into
-   * column updates and declares at least one column. Returns `None` for a full-width write. A
-   * mixed-in operation's declaration must cover every updated column, even an empty one, and a
-   * narrow write rejects a new value for a metadata column.
+   * Returns the output of the write relation, which is the layout of the data rows the connector
+   * receives: the connector's `requiredDataAttributes()` if the operation opts into column updates
+   * and declares at least one column, and the relation's output otherwise. A mixed-in operation's
+   * declaration must cover every updated column, even an empty one, and a narrow write rejects a
+   * new value for a metadata column.
    */
-  private def resolveNarrowWriteAttrs(
+  private def resolveWriteAttrs(
       relation: DataSourceV2Relation,
       operation: RowLevelOperation,
       metadataUpdates: Seq[Assignment],
-      updatedAttrs: Seq[AttributeReference]): Option[Seq[AttributeReference]] = operation match {
+      updatedAttrs: Seq[AttributeReference]): Seq[AttributeReference] = operation match {
     case op: SupportsColumnUpdates =>
       val attrs = RewriteRowLevelCommand.resolveRequiredDataAttrs(relation, op)
       validateUpdatedColumnsSubset(op, updatedAttrs, AttributeSet(attrs))
       if (attrs.isEmpty) {
-        None
+        relation.output
       } else {
         validateNoMetadataAssignments(metadataUpdates)
-        Some(attrs)
+        attrs
       }
     case _ =>
-      None
+      relation.output
   }
 
   /**

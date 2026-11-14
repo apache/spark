@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.Update
 
 class DeltaBasedNoMetadataColumnUpdateTableSuite extends UpdateTableSuiteBase
   with ColumnUpdateTableSharedTests {
@@ -52,7 +51,7 @@ class DeltaBasedNoMetadataColumnUpdateTableSuite extends UpdateTableSuiteBase
 
     assert(!table.lastWriteInfo.metadataSchema().isPresent)
     checkLastColumnUpdateWriteLog(
-      WriteLogEntry(operation = Update, id = Some(1), data = Some(Row(1, "hr", -1))))
+      updateWriteLogEntry(id = 1, metadata = null, data = Row(1, "hr", -1)))
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, -1, "hr") :: Row(2, 200, "software") :: Nil)
@@ -67,7 +66,7 @@ class DeltaBasedNoMetadataColumnUpdateTableSuite extends UpdateTableSuiteBase
     sql(s"UPDATE $tableNameAsString SET pk = 10 WHERE pk = 1")
 
     checkLastColumnUpdateWriteLog(
-      WriteLogEntry(operation = Update, id = Some(1), data = Some(Row(10, "hr"))))
+      updateWriteLogEntry(id = 1, metadata = null, data = Row(10, "hr")))
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(2, 200, "software") :: Row(10, 100, "hr") :: Nil)

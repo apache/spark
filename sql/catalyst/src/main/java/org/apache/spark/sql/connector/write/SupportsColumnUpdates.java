@@ -91,7 +91,12 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * row carries only the columns declared here, and its metadata keeps only the values of the
    * columns returned by {@link #requiredMetadataAttributes()} that are preserved on reinsert
    * ({@link org.apache.spark.sql.connector.catalog.MetadataColumn#PRESERVE_ON_REINSERT}); the
-   * others are null. Spark does not relate a reinserted row to the deleted row.
+   * others are null. Spark does not relate a reinserted row to the deleted row. A declared column
+   * that {@link RowLevelOperationInfo#updatedColumns()} reports, such as an assigned row-ID column,
+   * carries its assigned value in the reinserted row, which can differ from the row ID passed to
+   * {@link DeltaWriter#delete}. A connector that relates the two rows through a data column can
+   * build an operation without this mix-in when {@link RowLevelOperationInfo#updatedColumns()}
+   * contains that column.
    * <p>
    * Data columns the write needs must be declared here too, even if the command does not
    * reference them, such as the source columns of partition transforms and any columns used by

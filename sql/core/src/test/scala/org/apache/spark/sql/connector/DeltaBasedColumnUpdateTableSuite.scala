@@ -122,23 +122,11 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     }
   }
 
-  test("column-update: CHAR and VARCHAR self-assignments are reported as updated") {
-    createTable("pk INT NOT NULL, id INT, c CHAR(3), v VARCHAR(10), " +
-      "a ARRAY<CHAR(3)>, m MAP<STRING, CHAR(3)>, s STRUCT<f: CHAR(3)>, dep STRING")
-    sql(s"INSERT INTO $tableNameAsString VALUES " +
-      "(1, 1, 'a', 'x', array('b'), map('k', 'c'), named_struct('f', 'd'), 'hr')")
-
-    sql(s"UPDATE $tableNameAsString SET id = id, c = c, v = v, a = a, m = m, s = s WHERE pk = 1")
-
-    checkLastUpdatedColumns("c", "v", "a", "m", "s")
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString"),
-      Row(1, 1, "a  ", "x", Seq("b  "), Map("k" -> "c  "), Row("d  "), "hr") :: Nil)
-  }
-
-  test("column-update: with preserved types, a CHAR self-assignment is reported only when its " +
-    "read is padded") {
+  test("column-update: a CHAR or VARCHAR self-assignment is reported when Spark pads or checks " +
+    "its value") {
     Seq(
+      Seq.empty[(String, String)] -> Seq("id", "c", "v", "a", "m", "s"),
+      // with preserved types, only the read-side padding of CHAR changes the assigned value
       Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") -> Seq("id", "c", "a", "m", "s"),
       Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
         SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") -> Seq("id")
@@ -492,63 +480,68 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
     sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
 
+    checkLastColumnUpdateSchema("pk", "salary", "dep")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(2, 200, "software") :: Row(11, -1, "hr") :: Nil)
   }
 
-  test("column-update split: Spark does not check whether the row ID reaches the reinserted " +
-    "row") {
-    // the fixture cannot commit a reinserted row without its row ID, so this checks the plan
+  test("column-update split: reassigning a declared row-ID column keeps the row's other columns") {
+    // the split fixtures complete a reinserted row by its `pk`, so they fall back to full width
+    Seq(splitReqAttrsTableProps("pk,salary"), java.util.Map.of("column-update-split-row-id", "pk"))
+      .foreach(props => checkRowIdReassignmentKeepsOtherColumns(props, narrow = false))
+  }
+
+  test("column-update split: assigning an undeclared row-ID column is rejected") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin,
+      splitReqAttrsTableProps("salary,dep"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET pk = 5 WHERE pk = 1")
+      },
+      condition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
+      parameters = Map("connector" -> splitOperationClass, "missingColumns" -> "[`pk`]"))
+  }
+
+  test("column-update split: Spark narrows the write when the row ID does not reach the " +
+    "reinserted row") {
+    // the row ID does not reach the reinserted row, so the fixture cannot commit it, and this
+    // checks the optimized plan
     Seq(
-      // reassigns the row ID, and the declared [pk, dep, salary] leaves out `extra`
-      ("pk INT NOT NULL, salary INT, dep STRING, extra STRING", splitTableProps,
-        "pk = pk + 10, salary = -1 WHERE dep = 'hr'", Seq("pk", "dep", "salary")),
-      // a table that accepts any schema lists the metadata columns in SET
-      ("pk INT NOT NULL, salary INT, dep STRING",
-        tablePropsWith(splitReqAttrsTableProps("pk,salary,dep"), "accept-any-schema" -> "true"),
-        "pk = 2, salary = salary, dep = dep, index = index, _partition = _partition",
-        Seq("pk", "salary", "dep")),
-      // the row ID is undeclared
-      ("pk INT NOT NULL, salary INT, dep STRING",
-        java.util.Map.of("column-update-split-row-id", "pk"), "salary = -1", Seq("salary")),
+      // the declaration leaves out the row ID `pk`
+      java.util.Map.of("column-update-split-row-id", "pk"),
       // without required metadata attributes, nothing projects `_partition` into the REINSERT row
-      ("pk INT NOT NULL, salary INT, dep STRING",
-        java.util.Map.of("column-update-split-row-id", "_partition", "no-metadata", "true"),
-        "salary = -1", Seq("salary"))
-    ).foreach { case (schema, props, assignments, writeColumns) =>
+      java.util.Map.of("column-update-split-row-id", "_partition", "no-metadata", "true")
+    ).foreach { props =>
       withTable(tableNameAsString) {
-        createAndInitTable(schema, """{ "pk": 1, "salary": 100, "dep": "hr" }""", props)
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""", props)
 
-        val analyzed = spark.sessionState.executePlan(
-          spark.sessionState.sqlParser.parsePlan(
-            s"UPDATE $tableNameAsString SET $assignments"),
-          CommandExecutionMode.SKIP).analyzed
+        val optimized = spark.sessionState.executePlan(
+          spark.sessionState.sqlParser.parsePlan(s"UPDATE $tableNameAsString SET salary = -1"),
+          CommandExecutionMode.SKIP).optimizedPlan
 
-        val write = analyzed.collectFirst { case w: WriteDelta => w }
-          .getOrElse(fail("couldn't find WriteDelta in the analyzed plan"))
-        assert(write.table.output.map(_.name) == writeColumns)
+        val write = optimized.collectFirst { case w: WriteDelta => w }
+          .getOrElse(fail("couldn't find WriteDelta in the optimized plan"))
+        assert(write.table.output.map(_.name) == Seq("salary"))
       }
     }
   }
 
   test("column-update split: an empty declaration keeps the write full width") {
-    // `_partition` is the row ID, and with no metadata attributes it does not reach the REINSERT
-    // row. The fixture cannot commit such a row, so this checks the analyzed plan.
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |""".stripMargin,
-      tablePropsWith(splitPartitionRowIdTableProps, "no-metadata" -> "true"))
+      splitReqAttrsTableProps(""))
 
-    val analyzed = spark.sessionState.executePlan(
-      spark.sessionState.sqlParser.parsePlan(
-        s"UPDATE $tableNameAsString SET salary = salary WHERE pk = 1"),
-      CommandExecutionMode.SKIP).analyzed
+    sql(s"UPDATE $tableNameAsString SET salary = salary WHERE pk = 1")
 
     checkLastUpdatedColumns()
-    val write = analyzed.collectFirst { case w: WriteDelta => w }
-      .getOrElse(fail("couldn't find WriteDelta in the analyzed plan"))
-    assert(write.table.output.map(_.name) == Seq("pk", "salary", "dep"))
+    checkLastWriteIsFullWidth()
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 100, "hr") :: Nil)
   }
 
   test("column-update split: an UPDATE with a subquery condition") {

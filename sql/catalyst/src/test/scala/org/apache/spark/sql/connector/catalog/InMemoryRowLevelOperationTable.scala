@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * Test helper trait mixed into the in-memory row-level operations so tests can verify that
@@ -166,28 +167,41 @@ class InMemoryRowLevelOperationTable private (
       if (properties.getOrDefault(updatedKey, "false") == "true") {
         Some(declaredColumns(info.updatedColumns().toSeq))
       } else {
-        Option(properties.get(fixedKey)).map(requiredColumns(_).map(FieldReference(_)).toSeq)
+        Option(properties.get(fixedKey)).map(Utils.stringToSeq(_).map(FieldReference(_)))
       }
     }
     // the copy-on-write commit finds the original row by `pk`, so an UPDATE that assigns a
-    // declared `pk` falls back to full-width rows
+    // declared `pk` falls back to full-width rows; the split commit completes a narrow reinserted
+    // row from the row with its `pk` row ID, which is the assigned value, so a split UPDATE that
+    // assigns a declared `pk` also falls back unless the declaration covers the table
     lazy val pkIdx = findFieldIndex(schema, "pk")
     def isPk(name: String): Boolean = pkIdx.exists(findFieldIndex(schema, name).contains)
+    lazy val updatesPk = info.updatedColumns().exists(c => isPk(c.describe()))
+    def coversTable(declared: Seq[NamedReference]): Boolean =
+      declared.flatMap(c => findFieldIndex(schema, c.describe())).toSet == schema.indices.toSet
     (declaredBy(COLUMN_UPDATE, COLUMN_UPDATE_REQ_ATTRS),
         declaredBy(COLUMN_UPDATE_COW, COLUMN_UPDATE_COW_REQ_ATTRS)) match {
+      case (Some(declared), _)
+          if splitUpdates && updatesPk && declared.exists(c => isPk(c.describe())) &&
+            !coversTable(declared) =>
+        () => DeltaBasedOperation(info.command, info.options)
       case (Some(declared), _) if splitUpdates =>
         () => new DeltaBasedColumnUpdateSplitOperation(info.command, declared, info.options)
       case (Some(declared), _) =>
         () => new DeltaBasedColumnUpdateOperation(info.command, declared, info.options)
-      case (_, Some(declared)) if info.updatedColumns().exists(c => isPk(c.describe())) &&
-          declared.exists(c => isPk(c.describe())) =>
+      case (_, Some(declared)) if updatesPk && declared.exists(c => isPk(c.describe())) =>
         () => PartitionBasedOperation(info.command, info.options)
       case (_, Some(declared)) =>
         () => new PartitionBasedColumnUpdateOperation(info.command, declared, info.options)
       case _ if properties.containsKey(COLUMN_UPDATE_SPLIT_ROW_ID) =>
         val rowIdCol = properties.get(COLUMN_UPDATE_SPLIT_ROW_ID)
-        () => new DeltaBasedColumnUpdateSplitOperationWithRowId(
-          info.command, rowIdCol, info.updatedColumns().toSeq, info.options)
+        val declared = info.updatedColumns().toSeq
+        if (isPk(rowIdCol) && updatesPk && !coversTable(declared)) {
+          () => DeltaBasedOperation(info.command, info.options)
+        } else {
+          () => new DeltaBasedColumnUpdateSplitOperationWithRowId(
+            info.command, rowIdCol, declared, info.options)
+        }
       case _ if properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true" =>
         () => DeltaBasedOperation(info.command, info.options)
       case _ =>
@@ -244,16 +258,6 @@ class InMemoryRowLevelOperationTable private (
     }
 
     override def description(): String = "InMemoryPartitionReplaceOperation"
-  }
-
-  // A group-based write replaces every partition its scan handed to Spark after runtime
-  // filtering. Drops those partitions and returns them.
-  private def replaceReadPartitions(scan: BatchScanBaseClass): Seq[BufferedRows] = {
-    val read = scan.readPartitions.map(_.asInstanceOf[BufferedRows])
-    val readPartitionKeys = read.flatMap(_.rows).map(r => getKey(r, schema)).distinct
-    dataMap --= readPartitionKeys
-    replacedPartitions = readPartitionKeys
-    read
   }
 
   private case class PartitionBasedReplaceData(scan: BatchScanBaseClass)
@@ -335,6 +339,16 @@ class InMemoryRowLevelOperationTable private (
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
   }
 
+  // A group-based write replaces every partition its scan handed to Spark after runtime
+  // filtering. Drops those partitions and returns them.
+  private def replaceReadPartitions(scan: BatchScanBaseClass): Seq[BufferedRows] = {
+    val read = scan.readPartitions.map(_.asInstanceOf[BufferedRows])
+    val readPartitionKeys = read.flatMap(_.rows).map(r => getKey(r, schema)).distinct
+    dataMap --= readPartitionKeys
+    replacedPartitions = readPartitionKeys
+    read
+  }
+
   // The rows of `buf` in the table's current schema, matched to columns by name like a scan does.
   private def currentRows(buf: BufferedRows): Seq[InternalRow] = {
     val reader = new BufferedRowsReader(buf, Seq.empty, schema.fields.toSeq, schema)
@@ -395,9 +409,6 @@ class InMemoryRowLevelOperationTable private (
     fullRow
   }
 
-  private def requiredColumns(prop: String): Array[String] =
-    prop.split(",").map(_.trim).filter(_.nonEmpty)
-
   // The base columns `pk` and `dep`, where the table has them, followed by the updated columns.
   private def declaredColumns(updatedCols: Seq[NamedReference]): Seq[NamedReference] = {
     val base = Seq("pk", "dep").flatMap(findFieldIndex(schema, _))
@@ -427,7 +438,7 @@ class InMemoryRowLevelOperationTable private (
     override def canEqual(other: Any): Boolean = false
 
     private def writeRequirementRefs(key: String): Option[Seq[Expression]] =
-      Option(properties.get(key)).map(requiredColumns(_).map(FieldReference(_)).toSeq)
+      Option(properties.get(key)).map(Utils.stringToSeq(_).map(FieldReference(_)))
 
     private def withNestedTransforms(refs: Seq[Expression]): Seq[Expression] = {
       if (properties.getOrDefault(COLUMN_UPDATE_CLUSTER_BY_NESTED_TRANSFORM, "false") == "true") {
@@ -547,7 +558,10 @@ class InMemoryRowLevelOperationTable private (
     // For delete+reinsert with narrow writes, the REINSERT row has only the connector-declared
     // columns (requiredDataAttributes order). The original row is located by the row ID, taking a
     // data row-ID column from the narrow row and a metadata row-ID column from the preserved
-    // metadata, and the full row is rebuilt by overlaying the narrow row onto it. A DELETE logged
+    // metadata, and the full row is rebuilt by overlaying the narrow row onto it. A data row-ID
+    // column in the narrow row carries the assigned value, so when `pk` is the row ID the
+    // dispatcher does not build this operation for an UPDATE that assigns `pk` without declaring
+    // every column. A DELETE logged
     // without a `pk` row ID is resolved the same way from its metadata, so such a row ID must
     // consist of metadata columns.
     override protected def commitColumnUpdate(
@@ -608,8 +622,8 @@ class InMemoryRowLevelOperationTable private (
     }
   }
 
-  // Test-only: a split-update fixture whose row ID is the given column, which the dispatcher does
-  // not declare: it declares only the updated columns.
+  // Test-only: a split-update fixture whose row ID is the given column; the dispatcher declares
+  // only the updated columns.
   class DeltaBasedColumnUpdateSplitOperationWithRowId(
       command: Command,
       rowIdCol: String,

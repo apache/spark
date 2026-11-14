@@ -144,8 +144,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
   // Maps the stored and the padded attribute of each padded target column to the padded value.
   // A condition can refer to either one. The read-side padding rewrites the attributes a node
-  // references, and `ReplaceData.references` is `query.outputSet`, so a group-based DELETE refers
-  // to the padded alias. A delta-based DELETE does not output the column and keeps the stored one.
+  // references. A `ReplaceData` references every column its projections read, and the row
+  // projection of a group-based DELETE reads every data column, so a group-based DELETE refers to
+  // the padded alias. A delta-based DELETE does not output the column and keeps the stored one.
   // The aliases of the padding keep the raw type, unlike the new values that an UPDATE also
   // projects directly on top of the read relation.
   private def targetColumnPaddings(query: LogicalPlan): AttributeMap[Expression] = {

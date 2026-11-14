@@ -106,6 +106,35 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     }
   }
 
+  // reassigns `pk` 1 to 2, the value of another row, on the table of `createAndInitTableWithProps`
+  protected def checkRowIdReassignmentKeepsOtherColumns(
+      props: java.util.Map[String, String],
+      narrow: Boolean): Unit = {
+    Seq(
+      "pk = 2, salary = 0 WHERE pk = 1",
+      // assigns every column in table order, so the assignments are aligned as written
+      "PK = 2, ID = ID, DEP = DEP, SALARY = 0, BONUS = BONUS, EXTRA = EXTRA WHERE PK = 1"
+    ).foreach { update =>
+      withTable(tableNameAsString) {
+        createAndInitTableWithProps(props)
+
+        sql(s"UPDATE $tableNameAsString SET $update")
+
+        checkLastUpdatedColumns("pk", "salary")
+        if (narrow) {
+          checkLastColumnUpdateSchema("pk", "salary")
+        } else {
+          checkLastWriteIsFullWidth()
+        }
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk, id"),
+          Row(2, 1, "hr", 0, 10, 1) ::
+          Row(2, 2, "hr", 200, 20, 1) ::
+          Row(3, 3, "software", 300, 30, 1) :: Nil)
+      }
+    }
+  }
+
   test("column-update: undeclared columns are not written and keep their values") {
     createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
@@ -244,29 +273,21 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
   }
 
   test("column-update: reassigning a declared row-ID column keeps the row's other columns") {
-    Seq(
-      "pk = 2, salary = 0 WHERE pk = 1",
-      // assigns every column in table order, so the assignments are aligned as written
-      "PK = 2, ID = ID, DEP = DEP, SALARY = 0, BONUS = BONUS, EXTRA = EXTRA WHERE PK = 1"
-    ).foreach { update =>
-      withTable(tableNameAsString) {
-        createAndInitTableWithProps(reqAttrsTableProps("pk,salary"))
+    // the copy-on-write fixture finds original rows by `pk`, so it falls back to full width
+    checkRowIdReassignmentKeepsOtherColumns(reqAttrsTableProps("pk,salary"), narrow = deltaUpdate)
+  }
 
-        sql(s"UPDATE $tableNameAsString SET $update")
+  test("column-update: a CHAR self-assignment writes the padded value of an unpadded CHAR") {
+    createTable("pk INT NOT NULL, id INT, c CHAR(3), dep STRING")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      sql(s"INSERT INTO $tableNameAsString VALUES (1, 1, 'a', 'hr')")
+    }
 
-        checkLastUpdatedColumns("pk", "salary")
-        // the copy-on-write fixture finds original rows by `pk`, so it falls back to full width
-        if (deltaUpdate) {
-          checkLastColumnUpdateSchema("pk", "salary")
-        } else {
-          checkLastWriteIsFullWidth()
-        }
-        checkAnswer(
-          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk, id"),
-          Row(2, 1, "hr", 0, 10, 1) ::
-          Row(2, 2, "hr", 200, 20, 1) ::
-          Row(3, 3, "software", 300, 30, 1) :: Nil)
-      }
+    sql(s"UPDATE $tableNameAsString SET id = -1, c = c WHERE pk = 1")
+
+    checkLastColumnUpdateSchema("pk", "dep", "id", "c")
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, -1, "a  ", "hr") :: Nil)
     }
   }
 

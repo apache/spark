@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -76,11 +77,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
 
   private def projection(query: LogicalPlan, names: String*): ProjectingInternalRow = {
     val ordinals = names.map(name => query.output.indexWhere(_.name == name)).toIndexedSeq
-    val fields = ordinals.map { i =>
-      val attr = query.output(i)
-      StructField(attr.name, attr.dataType, attr.nullable)
-    }
-    ProjectingInternalRow(StructType(fields), ordinals)
+    ProjectingInternalRow(DataTypeUtils.fromAttributes(ordinals.map(query.output)), ordinals)
   }
 
   // the copy-on-write UPDATE query built by RewriteUpdateTable.buildReplaceDataPlan

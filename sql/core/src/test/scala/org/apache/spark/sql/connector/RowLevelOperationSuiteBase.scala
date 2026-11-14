@@ -289,7 +289,7 @@ abstract class RowLevelOperationSuiteBase
   }
 
   // the schemas of the scans of the target table, directly or through a row-level operation, in
-  // the plan of the query
+  // the main plan of the query, not in its subqueries such as the runtime group filter
   private def executeAndCollectScanSchemas(query: String): Seq[StructType] = {
     val executedPlan = executeAndKeepPlan {
       sql(query)
@@ -303,8 +303,9 @@ abstract class RowLevelOperationSuiteBase
   }
 
   /**
-   * Executes the query and asserts the exact schema of its scans of the target table, including
-   * the spelling of field names but ignoring nullability.
+   * Executes the query and asserts the exact schema of its scans of the target table in the main
+   * plan, not the scan of the runtime group filter, including the spelling of field names but
+   * ignoring nullability.
    */
   protected def executeAndCheckScan(
       query: String,
