@@ -162,8 +162,9 @@ case class AnalysisContext(
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
-    // 2. If we are not resolving a view, this field will be updated everytime the analyzer
-    //    lookup a temporary function. And export to the view metadata.
+    // 2. If we are not resolving a view, this field is updated each time the analyzer binds a
+    //    temporary function, then exported to view or temporary SQL function metadata, or
+    //    rejected by persistent SQL function creation.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
@@ -183,13 +184,15 @@ case class AnalysisContext(
     // than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
       mutable.LinkedHashSet.empty,
-    // Whether a SQL function expanded during this analysis shares the accumulator above with the
+    // Whether a SQL function expanded during this analysis shares the accumulators above
+    // (`referredTempFunctionNames` and `referredTempVariableNamesUnderIdentifier`) with the
     // enclosing object. A view or CACHE TABLE AS SELECT body owns the dependencies of every
-    // function it expands (functions persist no IDENTIFIER-variable metadata of their own that is
+    // function it expands (functions persist no temporary-object metadata of their own that is
     // consulted on resolution), so they share. A SQL function body being created does not: a
-    // variable that an already existing function reads is that function's dependency, and
-    // attributing it to the new function would reject or record it there. See SPARK-59970.
-    shareIdentifierVariablesWithNestedSQLFunctions: Boolean = true,
+    // temporary function or variable that an already existing function uses is that function's
+    // dependency, and attributing it to the new function would reject or record it there. See
+    // SPARK-59970 and SPARK-60806.
+    shareTempReferencesWithNestedSQLFunctions: Boolean = true,
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
 
@@ -306,12 +309,19 @@ object AnalysisContext {
       // and must be recorded there. Sharing the caller's set records it; a nested view, by
       // contrast, stores its own and so is reset. The exception is a SQL function body under
       // creation, which must not inherit the dependencies of the functions it calls; see
-      // `shareIdentifierVariablesWithNestedSQLFunctions`.
+      // `shareTempReferencesWithNestedSQLFunctions`.
       referredTempVariableNamesUnderIdentifier =
-        if (originContext.shareIdentifierVariablesWithNestedSQLFunctions) {
+        if (originContext.shareTempReferencesWithNestedSQLFunctions) {
           originContext.referredTempVariableNamesUnderIdentifier
         } else {
           mutable.LinkedHashSet.empty
+        },
+      // The same holds for the temporary functions the body binds.
+      referredTempFunctionNames =
+        if (originContext.shareTempReferencesWithNestedSQLFunctions) {
+          originContext.referredTempFunctionNames
+        } else {
+          mutable.Set.empty
         },
       collation = function.collation)
     set(context)
@@ -333,15 +343,41 @@ object AnalysisContext {
   }
 
   /**
-   * Runs `f` with `shareIdentifierVariablesWithNestedSQLFunctions` set to `share`; see that field.
+   * Runs `f` with `shareTempReferencesWithNestedSQLFunctions` set to `share`; see that field.
    */
-  def withSharingIdentifierVariablesWithNestedSQLFunctions[A](share: Boolean)(f: => A): A = {
+  def withSharingTempReferencesWithNestedSQLFunctions[A](share: Boolean)(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(shareIdentifierVariablesWithNestedSQLFunctions = share)
+    val context = originContext.copy(shareTempReferencesWithNestedSQLFunctions = share)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
     try f finally { set(originContext) }
   }
+
+  /**
+   * Wraps `rule` so that a parameter default inserted by named-argument filling
+   * ([[SQLFunction.INSERTED_PARAMETER_DEFAULT]]) records the temporary functions it binds as the
+   * called function's body does: in a fresh set unless `shareTempReferencesWithNestedSQLFunctions`
+   * is set. Unlike a default that a positional call omits, which the body pads, it resolves in the
+   * caller's plan. A parameter default cannot read a session variable.
+   */
+  def withTempReferencesOfInsertedDefault(
+      rule: PartialFunction[Expression, Expression]): PartialFunction[Expression, Expression] =
+    new PartialFunction[Expression, Expression] {
+      override def isDefinedAt(e: Expression): Boolean = rule.isDefinedAt(e)
+      override def apply(e: Expression): Expression = applyOrElse(e, rule)
+      override def applyOrElse[E <: Expression, B >: Expression](e: E, default: E => B): B = {
+        lazy val originContext = value.get()
+        if (e.getTagValue(SQLFunction.INSERTED_PARAMETER_DEFAULT).isEmpty ||
+            originContext.shareTempReferencesWithNestedSQLFunctions) {
+          rule.applyOrElse(e, default)
+        } else {
+          val context = originContext.copy(referredTempFunctionNames = mutable.Set.empty)
+          context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
+          set(context)
+          try rule.applyOrElse(e, default) finally { set(originContext) }
+        }
+      }
+    }
 }
 
 object Analyzer {
@@ -453,9 +489,9 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
-  /** Whether a temporary function owns the unqualified built-in `name` under the SQL path. */
-  private[sql] def unqualifiedFunctionResolvesToTemp(name: String): Boolean =
-    functionResolution.unqualifiedFunctionResolvesToTemp(name)
+  /** The resolution candidate that owns an unqualified function call, see `FunctionResolution`. */
+  private[sql] def unqualifiedFunctionOwner(name: String): Option[Seq[String]] =
+    functionResolution.unqualifiedFunctionOwner(name)
 
   /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
@@ -603,25 +639,29 @@ class Analyzer(
   }
 
   /**
-   * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
-   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   * Like [[execute]], but also returns the temporary functions the analysis bound
+   * (`AnalysisContext.referredTempFunctionNames`) and the temporary variables recorded via
+   * IDENTIFIER clauses (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
    *
    * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
    * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
-   * the recorded variables, which [[execute]] discards with its analysis context: a persistent
+   * the recorded names, which [[execute]] discards with its analysis context: a persistent
    * function must reject them and a temporary one stores them in its metadata.
    *
-   * Only the variables read by the body itself are returned. A SQL function that the body calls
-   * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
-   * that function's dependency rather than becoming one of the function under creation.
+   * Only the names the body itself refers to are returned. A SQL function that the body calls is
+   * expanded in a context of its own, so a temporary function it binds or a variable it reads
+   * through an IDENTIFIER clause stays that function's dependency rather than becoming one of the
+   * function under creation.
    */
-  def executeWithReferredTempVariablesUnderIdentifier(
-      plan: LogicalPlan): (LogicalPlan, Seq[Seq[String]]) = {
+  def executeWithReferredTempObjects(
+      plan: LogicalPlan): (LogicalPlan, Seq[String], Seq[Seq[String]]) = {
     AnalysisContext.withNewAnalysisContext {
-      AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
+      AnalysisContext.withSharingTempReferencesWithNestedSQLFunctions(share = false) {
         val analyzed = executeSameContext(plan)
-        // Read the accumulator before the context is restored on exit.
-        (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+        // Read the accumulators before the context is restored on exit.
+        val context = AnalysisContext.get
+        (analyzed, context.referredTempFunctionNames.toSeq,
+          context.referredTempVariableNamesUnderIdentifier.toSeq)
       }
     }
   }
@@ -2346,15 +2386,13 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _) =>
-          // For builtin/temp functions, we can do a quick check without catalog lookup
-          val quickCheck = if (nameParts.size == 1 ||
-              FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
-          } else {
-            None
-          }
+          // For builtin/temp functions, we can do a quick check without catalog lookup. It does
+          // not record a temp function as referred: ResolveFunctions does once it binds one.
+          val quickCheck = (nameParts.size == 1 ||
+              FunctionResolution.sessionNamespaceKind(nameParts).isDefined) &&
+            functionResolution.builtinOrTempFunctionExists(nameParts, Some(f))
 
-          if (quickCheck.isDefined) {
+          if (quickCheck) {
             // It's a builtin or temp function - no need for catalog lookup or caching
             f
           } else {
@@ -2531,9 +2569,10 @@ class Analyzer(
         }
 
       case q: LogicalPlan =>
+        // A default inserted by named-argument filling is the called function's dependency.
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR, UNRESOLVED_JSON_CONSTRUCTOR),
-          ruleId) {
+          ruleId)(AnalysisContext.withTempReferencesOfInsertedDefault {
           case u @ UnresolvedFunction(_, arguments, _, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) =>
             resolveHigherOrderFunction(u)
@@ -2605,7 +2644,7 @@ class Analyzer(
               u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
               newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments)
           }
-        }
+        })
     }
 
     private def resolveHigherOrderFunction(u: UnresolvedFunction): Expression = withPosition(u) {

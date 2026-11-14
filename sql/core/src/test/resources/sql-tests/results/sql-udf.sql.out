@@ -4427,6 +4427,80 @@ struct<>
 
 
 -- !query
+CREATE TEMPORARY FUNCTION foo3_5k(x INT) RETURNS INT RETURN x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5k(x) + foo3_5b(x) + foo3_5a(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "FUNCTION",
+    "tempObjName" : "`foo3_5a`"
+  }
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_5k
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_5h(x INT) RETURNS INT RETURN abs(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT foo3_5h(-1)
+-- !query schema
+struct<spark_catalog.default.foo3_5h(-1):int>
+-- !query output
+1
+
+
+-- !query
+DROP FUNCTION foo3_5h
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE FUNCTION foo3_12a(x INT) RETURNS INT CONTAINS SQL RETURN x
 -- !query schema
 struct<>

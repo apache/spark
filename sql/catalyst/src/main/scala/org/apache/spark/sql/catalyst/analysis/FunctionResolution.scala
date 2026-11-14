@@ -390,6 +390,23 @@ class FunctionResolution(
     }
   }
 
+  /**
+   * Whether [[lookupBuiltinOrTempFunction]] finds the function, without recording a temp function
+   * as referred: a persistent function earlier in the resolution order may own the call.
+   */
+  def builtinOrTempFunctionExists(
+      nameParts: Seq[String],
+      unresolvedFunc: Option[UnresolvedFunction]): Boolean = {
+    val n = nameParts.length
+    if (n == 1 && unresolvedFunc.exists(_.isInternal)) {
+      return FunctionRegistry.internal.functionExists(FunctionIdentifier(nameParts.head))
+    }
+    v1SessionCatalog.identifierFromSystemNameParts(nameParts) match {
+      case Some(ident) => v1SessionCatalog.functionExistsByIdentifier(ident, tableFunction = false)
+      case None => n == 1 && v1SessionCatalog.builtinOrTempFunctionExists(nameParts.head)
+    }
+  }
+
   def lookupBuiltinOrTempTableFunction(nameParts: Seq[String]): Option[ExpressionInfo] = {
     val n = nameParts.length
     v1SessionCatalog.identifierFromSystemNameParts(nameParts) match {
@@ -418,14 +435,6 @@ class FunctionResolution(
    */
   def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean =
     unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Builtin)
-
-  /**
-   * Whether a temp function owns an unqualified name: it comes first in the effective SQL PATH,
-   * before `system.builtin` and any persistent function. Same precondition as
-   * [[unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow]].
-   */
-  def unqualifiedFunctionResolvesToTemp(functionName: String): Boolean =
-    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Temp)
 
   /**
    * The kind of the first PATH entry that owns an unqualified name: `Builtin`, `Temp`, or None for
@@ -557,6 +566,20 @@ class FunctionResolution(
   private def isSystemBuiltinCandidate(candidate: Seq[String]): Boolean =
     isSystemCatalogQualified(candidate) &&
       candidate(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+
+  /**
+   * The resolution candidate (e.g. `system.session.f` or `spark_catalog.db.f`) that owns an
+   * unqualified scalar or table function call, without recording a temp function as referred.
+   */
+  def unqualifiedFunctionOwner(name: String): Option[Seq[String]] =
+    resolutionCandidates(Seq(name)).find { candidate =>
+      v1SessionCatalog.identifierFromSystemNameParts(candidate) match {
+        case Some(ident) =>
+          v1SessionCatalog.functionExistsByIdentifier(ident, tableFunction = false) ||
+            v1SessionCatalog.functionExistsByIdentifier(ident, tableFunction = true)
+        case None => persistentFunctionExists(candidate)
+      }
+    }
 
   /** Whether `candidate` owns a function, branching as [[resolveFunctionCandidate]] does. */
   private def candidateOwnsFunction(candidate: Seq[String]): Boolean =

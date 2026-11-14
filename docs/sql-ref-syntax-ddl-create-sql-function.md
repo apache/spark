@@ -143,7 +143,8 @@ characteristic
   - Row producing functions such as `explode`
 
   A persistent SQL UDF cannot reference temporary views, temporary functions, or session
-  variables.
+  variables. A call to a built-in or persistent function that resolves ahead of a same-named
+  temporary function is not a reference to the temporary function.
 
   The SQL Path in effect at `CREATE FUNCTION` time is captured into the function's metadata; the
   body resolves against that frozen path on every invocation, not the invoker's current path.

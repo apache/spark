@@ -4173,6 +4173,66 @@ DropVariable false
 
 
 -- !query
+CREATE TEMPORARY FUNCTION foo3_5k(x INT) RETURNS INT RETURN x
+-- !query analysis
+CreateSQLFunctionCommand foo3_5k, x INT, INT, x, false, true, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5k(x) + foo3_5b(x) + foo3_5a(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "FUNCTION",
+    "tempObjName" : "`foo3_5a`"
+  }
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_5k
+-- !query analysis
+DropFunctionCommand foo3_5k, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN 42
+-- !query analysis
+CreateSQLFunctionCommand abs, x INT, INT, 42, false, true, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_5h(x INT) RETURNS INT RETURN abs(x)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_5h, x INT, INT, abs(x), false, false, false, false
+
+
+-- !query
+SELECT foo3_5h(-1)
+-- !query analysis
+Project [spark_catalog.default.foo3_5h(x#x) AS spark_catalog.default.foo3_5h(-1)#x]
++- Project [cast(-1 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+DROP FUNCTION foo3_5h
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_5h, false, false
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query analysis
+DropFunctionCommand abs, false, true
+
+
+-- !query
 CREATE FUNCTION foo3_12a(x INT) RETURNS INT CONTAINS SQL RETURN x
 -- !query analysis
 CreateSQLFunctionCommand spark_catalog.default.foo3_12a, x INT, INT, x, true, false, false, false, false
