@@ -106,9 +106,9 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with AliasHelper 
         // different rules. `doCanonicalize` only feeds plan equality, so a plain `takeWhile` that
         // drops the pruned columns is enough there.
         // A nested sort key such as `s.x` resolves to a new `Alias(GetStructField(...))` on every
-        // run of this rule. Strip the alias so repeated runs give equal plans and, when the scan
-        // reads the whole struct, the ordering can satisfy a required ordering on the same field
-        // (see SPARK-60011).
+        // run of this rule. Strip the alias so repeated runs give equal plans and the ordering can
+        // satisfy a required ordering on the same field. When nested schema pruning narrows the
+        // struct, `DataSourceV2ScanExecBase` rebinds the field to the pruned type.
         val ordering =
           V2ExpressionUtils.toCatalystOrdering(reportedOrdering, relation, relation.funCatalog)
             .map(o => o.copy(child = trimAliases(o.child)))
