@@ -513,6 +513,7 @@ def _null_narrowed(params: List[str], test_node: ast.AST) -> Tuple[frozenset, fr
             return body_nonnull, frozenset()
     return frozenset(), frozenset()
 
+
 class CatalystTranspiler(AbstractTranspiler):
     """Transpiler that attempts to convert a Python UDF into native Spark SQL expressions."""
 
@@ -1285,13 +1286,13 @@ class CatalystTranspiler(AbstractTranspiler):
         # Category inference depends on the per-variant assumptions above. Cache
         # each AST node only for this lowering so recursive conversion stays linear.
         self._category_cache = {}
-        # Reset per-transpilation null-narrowing state.
-        self._nonnull_params = frozenset()
-        self._null_guard_emitted = False
         # Charged by ``_lower_compare_pair``. Reset per variant, not per process:
         # the budget bounds one body's lowering, and each variant lowers the body
         # again from scratch.
         self._lowered_comparisons = 0
+        # Reset per-transpilation null-narrowing state.
+        self._nonnull_params = frozenset()
+        self._null_guard_emitted = False
         function_body = function_ast.body
         # Normalize `if <test>: return y\nreturn body` (2-stmt early-return)
         # into a single if/else so null narrowing can apply to the main body.
