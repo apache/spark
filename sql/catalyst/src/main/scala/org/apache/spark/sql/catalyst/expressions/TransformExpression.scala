@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, MapType, StructType, UpCastRule, UserDefinedType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, DatetimeType, DayTimeIntervalType, DecimalType, MapType, StructType, TimestampFamily, TimeType, UpCastRule, UserDefinedType, YearMonthIntervalType}
 
 /**
  * The identity of a partition transform function. It holds the two values
@@ -459,17 +459,22 @@ object TransformExpression extends Logging {
    * reads a `long` at a smaller precision than its value has as it is. An array element, or a
    * map's key or value, is read with a check that fails for a value of more digits than that
    * precision, as one stored as bytes is anywhere. So a cogroup over such keys can fail, but never
-   * pairs its groups wrongly.
+   * pairs its groups wrongly. Two datetime or interval types are compared by their storage alone,
+   * i.e. their physical type, e.g. a `TIME` key and a `TIMESTAMP` column, as the hash shuffle
+   * compares them. Nanosecond timestamps with and without a time zone have physical types of their
+   * own, so they are not taken for each other. Whether the layout's function reads such a key is
+   * asked separately, see `datetimeReadAsIs`.
    */
   private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean =
-    storedAlike(from, to, nested = true, anyPrecision = true)
+    storedAlike(from, to, nested = true, storageOnly = true)
 
   /**
    * Whether a value of type `from` is stored the way one of type `to` is, so that a function
    * declaring `to` reads it as it is:
    *  - two types with one physical type, e.g. a `VARCHAR` and a string of the same collation, a
    *    `DATE` and an `INT`, or a `TIMESTAMP` and a `BIGINT`. A user-defined type is stored as its
-   *    `sqlType`;
+   *    `sqlType`. A function reads one datetime or interval type as another only as
+   *    `datetimeReadAsIs` says;
    *  - two structs, arrays or maps whose fields, elements, keys and values are stored alike, by
    *    position. Field names and nullability do not change how a value is stored. A function
    *    declaring a non-nullable field gets the values a nullable one holds;
@@ -479,32 +484,66 @@ object TransformExpression extends Logging {
    *    `DECIMAL(10,2)`, see `KeyedShuffleSpec.createPartitioning`. Nested in an unsafe row, a
    *    decimal is read at the declared precision: it is stored as a `long` up to
    *    `Decimal.MAX_LONG_DIGITS` digits and as bytes above, so there `to` needs no less precision,
-   *    and both on one side of that. With `anyPrecision`, as `keysStoredAlike` asks, any precision
-   *    on one side of that.
+   *    and both on one side of that.
+   * With `storageOnly`, as `keysStoredAlike` asks, by storage alone: a nested decimal of any
+   * precision on one side of that, and two datetime or interval types stored alike whatever they
+   * hold, e.g. a `TIME` and a `TIMESTAMP`.
    */
   private def storedAlike(
       from: DataType,
       to: DataType,
       nested: Boolean,
-      anyPrecision: Boolean = false): Boolean =
+      storageOnly: Boolean = false): Boolean =
     (from, to) match {
       case _ if from == to => true
-      case (udt: UserDefinedType[_], _) => storedAlike(udt.sqlType, to, nested, anyPrecision)
-      case (_, udt: UserDefinedType[_]) => storedAlike(from, udt.sqlType, nested, anyPrecision)
+      case (udt: UserDefinedType[_], _) => storedAlike(udt.sqlType, to, nested, storageOnly)
+      case (_, udt: UserDefinedType[_]) => storedAlike(from, udt.sqlType, nested, storageOnly)
       case (f: StructType, t: StructType) =>
         f.length == t.length && f.fields.zip(t.fields).forall { case (ff, tf) =>
-          storedAlike(ff.dataType, tf.dataType, nested = true, anyPrecision)
+          storedAlike(ff.dataType, tf.dataType, nested = true, storageOnly)
         }
       case (f: ArrayType, t: ArrayType) =>
-        storedAlike(f.elementType, t.elementType, nested = true, anyPrecision)
+        storedAlike(f.elementType, t.elementType, nested = true, storageOnly)
       case (f: MapType, t: MapType) =>
-        storedAlike(f.keyType, t.keyType, nested = true, anyPrecision) &&
-          storedAlike(f.valueType, t.valueType, nested = true, anyPrecision)
+        storedAlike(f.keyType, t.keyType, nested = true, storageOnly) &&
+          storedAlike(f.valueType, t.valueType, nested = true, storageOnly)
       case (f: DecimalType, t: DecimalType) =>
-        f.scale == t.scale && (!nested || ((anyPrecision || f.precision <= t.precision) &&
+        f.scale == t.scale && (!nested || ((storageOnly || f.precision <= t.precision) &&
           DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)))
+      case (_: DatetimeType | _: AnsiIntervalType, _: DatetimeType | _: AnsiIntervalType)
+          if !storageOnly && !datetimeReadAsIs(from, to) => false
       case _ =>
         val physical = PhysicalDataType(from)
         physical != UninitializedPhysicalType && physical == PhysicalDataType(to)
+    }
+
+  /**
+   * Whether a function declaring the datetime or interval type `to` reads a value of the datetime
+   * or interval type `from` as it is: where Spark's cast to `to` would leave the value unchanged,
+   * so that the function gets one value however it reaches it, as it is or cast by the write path,
+   * whose implicit cast depends on `spark.sql.ansi.enabled`. That is a value of the same type, or
+   * of the same class at no finer a precision or end field, e.g. a `TIME(3)` against a `TIME(6)`,
+   * or a `DAY TO HOUR` interval against a `DAY TO SECOND` one. A timestamp goes by its family,
+   * local or not, and its fractional precision (`TimestampFamily`), e.g. a `TIMESTAMP_NTZ(7)`
+   * against a `TIMESTAMP_NTZ(9)`. Not one of a finer precision or end field, which the cast
+   * truncates. Not one of another class, though both can share a physical type: a `TIME` holds
+   * nanoseconds of the day where a `TIMESTAMP` holds microseconds since the epoch, a `YEAR TO
+   * MONTH` interval holds months where a `DATE` holds days, a `DAY TO SECOND` interval holds a
+   * duration where a `TIMESTAMP` holds an instant, and a `TIMESTAMP_NTZ` holds a local time where
+   * a `TIMESTAMP` holds an instant, which the cast converts with the session time zone. Where the
+   * write path passes such a value as it is, e.g. an interval, which it never casts, refusing it
+   * costs only the storage-partitioned plan.
+   */
+  private def datetimeReadAsIs(from: DataType, to: DataType): Boolean =
+    (TimestampFamily.fractionalPrecision(from), TimestampFamily.fractionalPrecision(to)) match {
+      case (Some(f), Some(t)) => TimestampFamily.isLtz(from) == TimestampFamily.isLtz(to) && f <= t
+      case (Some(_), None) | (None, Some(_)) => false
+      case _ => (from, to) match {
+        case (f: TimeType, t: TimeType) => f.precision <= t.precision
+        case (f: DayTimeIntervalType, t: DayTimeIntervalType) => f.endField <= t.endField
+        case (f: YearMonthIntervalType, t: YearMonthIntervalType) => f.endField <= t.endField
+        // `storedAlike` takes two equal types first, so these are of other classes.
+        case _ => false
+      }
     }
 }
