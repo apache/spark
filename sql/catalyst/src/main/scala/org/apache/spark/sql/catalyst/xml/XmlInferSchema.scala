@@ -73,7 +73,9 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
-  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
+  private lazy val timeFormatter = allCatch opt {
+    TimeFormatter(options.timeFormatInRead, isParsing = true)
+  }
 
   private val isTimeTypeEnabled = SQLConf.get.isTimeTypeEnabled
 
@@ -782,7 +784,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
   }
 
   private def isTime(value: String): Boolean = {
-    (allCatch opt timeFormatter.parse(value)).isDefined
+    timeFormatter.exists(_.parseOptional(value).isDefined)
   }
 
   /**
