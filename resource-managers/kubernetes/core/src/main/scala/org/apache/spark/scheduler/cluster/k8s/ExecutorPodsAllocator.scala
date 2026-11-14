@@ -133,6 +133,9 @@ class ExecutorPodsAllocator(
   // if they happen to come up before the deletion takes effect.
   @volatile protected var deletedExecutorIds = Set.empty[Long]
 
+  // Executors whose pod was unschedulable in the last snapshot; used to log each reason once.
+  protected var unschedulableExecutorIds = Set.empty[Long]
+
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
     warnIfRecoveryModeCannotIsolateSingleTask()
@@ -278,6 +281,15 @@ class ExecutorPodsAllocator(
 
     val notDeletedPods = lastSnapshot.executorPods
       .filter { case (k, _) => !_deletedExecutorIds.contains(k) }
+    val unschedulable = notDeletedPods.collect { case (id, p: PodUnschedulable) => id -> p }
+    unschedulable.filterNot { case (id, _) => unschedulableExecutorIds.contains(id) }
+      .foreach { case (id, state) =>
+        logWarning(log"Executor ${MDC(LogKeys.EXECUTOR_ID, id)} pod " +
+          log"${MDC(LogKeys.POD_NAME, state.pod.getMetadata.getName)} cannot be scheduled: " +
+          log"${MDC(LogKeys.REASON, state.message)}")
+      }
+    unschedulableExecutorIds = unschedulable.keySet
+
     // Map the pods into per ResourceProfile id so we can check per ResourceProfile,
     // add a fast path if not using other ResourceProfiles.
     val rpIdToExecsAndPodState =
@@ -311,7 +323,7 @@ class ExecutorPodsAllocator(
       }
 
       val (schedulerKnownPendingExecsForRpId, currentPendingExecutorsForRpId) = podsForRpId.filter {
-        case (_, PodPending(_)) => true
+        case (_, _: PendingPodState) => true
         case _ => false
       }.partition { case (k, _) =>
         schedulerKnownExecs.contains(k)

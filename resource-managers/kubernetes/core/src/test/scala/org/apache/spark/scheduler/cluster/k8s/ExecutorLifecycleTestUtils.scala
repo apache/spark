@@ -111,6 +111,22 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
+  def unschedulableExecutor(
+      executorId: Long,
+      rpId: Int = DEFAULT_RESOURCE_PROFILE_ID,
+      message: String = "0/3 nodes are available: 3 Insufficient cpu."): Pod = {
+    new PodBuilder(pendingExecutor(executorId, rpId))
+      .editOrNewStatus()
+        .addNewCondition()
+          .withType("PodScheduled")
+          .withStatus("False")
+          .withReason("Unschedulable")
+          .withMessage(message)
+          .endCondition()
+        .endStatus()
+      .build()
+  }
+
   def runningExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()

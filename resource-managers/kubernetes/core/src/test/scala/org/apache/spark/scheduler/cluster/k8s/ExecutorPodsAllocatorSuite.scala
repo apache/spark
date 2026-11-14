@@ -527,6 +527,19 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!podsAllocatorUnderTest.isDeleted("4"))
   }
 
+  test("SPARK-61268: Unschedulable pods count as pending and do not trigger extra requests") {
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1))
+    verify(podResource).create()
+
+    snapshotsStore.updatePod(unschedulableExecutor(1))
+    snapshotsStore.notifySubscribers()
+    snapshotsStore.notifySubscribers()
+
+    verify(podsWithNamespace, never()).resource(podWithAttachedContainerForId(2))
+    verify(podResource, times(1)).create()
+  }
+
   test("SPARK-34334: correctly identify timed out pending pod requests as excess") {
     when(podsWithNamespace
       .withField("status.phase", "Pending"))
