@@ -1059,7 +1059,8 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
           df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
           sparkContext.listenerBus.waitUntilEmpty()
           // The required distribution becomes an exchange and the ordering a sort.
-          assert(plans.exists(p => p.contains("Exchange hashpartitioning") && p.contains("Sort")),
+          assert(plans.exists(p => p.contains("Exchange hashpartitioning(id") &&
+            p.contains("Sort [id") && p.contains("DESC NULLS LAST")),
             s"expected a hash exchange and a sort in:\n${plans.mkString("\n")}")
         } finally {
           spark.listenerManager.unregister(listener)

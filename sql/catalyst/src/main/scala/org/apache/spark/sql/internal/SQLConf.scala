@@ -7667,7 +7667,7 @@ object SQLConf {
         "writer, at the cost of running the Python worker one additional time during planning. " +
         "Applies to batch writes only.")
       .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
