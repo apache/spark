@@ -157,7 +157,9 @@ jobs:
             buf=true
             ui=true
             docs=true
-            java25=true
+            # The scheduled Java 25 builds cover the whole build. On PRs, run this job only
+            # when the native data source tests, which are skipped before Java 22, are affected.
+            java25=`./dev/is-changed.py -m "sql,connect"`
           else
             pyspark_periodic=false
             pyspark_connect_old_client=false
