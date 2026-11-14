@@ -2782,3 +2782,89 @@ SET spark.sql.ansi.enabled=true
 struct<key:string,value:string>
 -- !query output
 spark.sql.ansi.enabled	true
+
+
+-- !query
+SELECT CAST('epoch' AS timestamp_ntz(7)), CAST(' Epoch ' AS timestamp_ntz(8)),
+       try_cast('EPOCH' AS timestamp_ntz(9))
+-- !query schema
+struct<CAST(epoch AS TIMESTAMP_NTZ(7)):timestamp_ntz(7),CAST( Epoch  AS TIMESTAMP_NTZ(8)):timestamp_ntz(8),TRY_CAST(EPOCH AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+1970-01-01 00:00:00	1970-01-01 00:00:00	1970-01-01 00:00:00
+
+
+-- !query
+SELECT typeof(CAST('now' AS timestamp_ntz(9))), CAST('now' AS timestamp_ntz(9)) IS NOT NULL
+-- !query schema
+struct<typeof(CAST(now AS TIMESTAMP_NTZ(9))):string,(CAST(now AS TIMESTAMP_NTZ(9)) IS NOT NULL):boolean>
+-- !query output
+timestamp_ntz(9)	true
+
+
+-- !query
+SELECT CAST('today' AS timestamp_ntz(9)) = CAST(current_date() AS timestamp_ntz(9)),
+       CAST('tomorrow' AS timestamp_ntz(8)) = CAST(current_date() + 1 AS timestamp_ntz(8)),
+       CAST('yesterday' AS timestamp_ntz(7)) = CAST(current_date() - 1 AS timestamp_ntz(7))
+-- !query schema
+struct<(CAST(today AS TIMESTAMP_NTZ(9)) = CAST(current_date() AS TIMESTAMP_NTZ(9))):boolean,(CAST(tomorrow AS TIMESTAMP_NTZ(8)) = CAST(date_add(current_date(), 1) AS TIMESTAMP_NTZ(8))):boolean,(CAST(yesterday AS TIMESTAMP_NTZ(7)) = CAST(date_sub(current_date(), 1) AS TIMESTAMP_NTZ(7))):boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+SELECT c FROM VALUES (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000001'),
+                     (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000000') AS t(c)
+  WHERE c > 'epoch'
+-- !query schema
+struct<c:timestamp_ntz(9)>
+-- !query output
+1970-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT CAST('epochs' AS timestamp_ntz(9))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'epochs'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP_NTZ(9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "CAST('epochs' AS timestamp_ntz(9))"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT CAST('epoch' AS timestamp_ntz(9)), CAST('epochs' AS timestamp_ntz(9))
+-- !query schema
+struct<CAST(epoch AS TIMESTAMP_NTZ(9)):timestamp_ntz(9),CAST(epochs AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+1970-01-01 00:00:00	NULL
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true

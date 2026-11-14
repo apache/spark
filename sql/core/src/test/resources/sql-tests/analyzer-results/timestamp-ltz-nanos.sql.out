@@ -2519,3 +2519,63 @@ Aggregate [typeof(median(c#x)) AS typeof(median(c))#x]
 SET spark.sql.ansi.enabled=true
 -- !query analysis
 SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+SELECT CAST('epoch' AS timestamp_ltz(7)), CAST(' Epoch ' AS timestamp_ltz(8)),
+       try_cast('EPOCH' AS timestamp_ltz(9))
+-- !query analysis
+Project [cast(epoch as timestamp_ltz(7)) AS CAST(epoch AS TIMESTAMP_LTZ(7))#x, cast( Epoch  as timestamp_ltz(8)) AS CAST( Epoch  AS TIMESTAMP_LTZ(8))#x, try_cast(EPOCH as timestamp_ltz(9)) AS TRY_CAST(EPOCH AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(CAST('now' AS timestamp_ltz(9))), CAST('now' AS timestamp_ltz(9)) IS NOT NULL
+-- !query analysis
+Project [typeof(cast(now as timestamp_ltz(9))) AS typeof(CAST(now AS TIMESTAMP_LTZ(9)))#x, isnotnull(cast(now as timestamp_ltz(9))) AS (CAST(now AS TIMESTAMP_LTZ(9)) IS NOT NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST('today' AS timestamp_ltz(9)) = CAST(current_date() AS timestamp_ltz(9)),
+       CAST('tomorrow' AS timestamp_ltz(8)) = CAST(current_date() + 1 AS timestamp_ltz(8)),
+       CAST('yesterday' AS timestamp_ltz(7)) = CAST(current_date() - 1 AS timestamp_ltz(7))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT c FROM VALUES (TIMESTAMP_LTZ '1970-01-01 00:00:00.000000001 UTC'),
+                     (TIMESTAMP_LTZ '1970-01-01 00:00:00.000000000 UTC') AS t(c)
+  WHERE c > 'epoch'
+-- !query analysis
+Project [c#x]
++- Filter (c#x > cast(epoch as timestamp_ltz(9)))
+   +- SubqueryAlias t
+      +- LocalRelation [c#x]
+
+
+-- !query
+SELECT CAST('epochs' AS timestamp_ltz(9))
+-- !query analysis
+Project [cast(epochs as timestamp_ltz(9)) AS CAST(epochs AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SELECT CAST('epoch' AS timestamp_ltz(9)), CAST('epochs' AS timestamp_ltz(9))
+-- !query analysis
+Project [cast(epoch as timestamp_ltz(9)) AS CAST(epoch AS TIMESTAMP_LTZ(9))#x, cast(epochs as timestamp_ltz(9)) AS CAST(epochs AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))

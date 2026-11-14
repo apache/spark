@@ -279,6 +279,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       ("TIMESTAMP_NTZ", "CAST(TIME '23:59:59.999999' AS TIMESTAMP_NTZ)", "localtimestamp()",
         "INTERVAL 1 DAY"),
       ("TIMESTAMP_NTZ", "CAST('now' AS TIMESTAMP_NTZ)", "localtimestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP_NTZ(9)", "CAST('now' AS TIMESTAMP_NTZ(9))", "localtimestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP_LTZ(9)", "CAST('now' AS TIMESTAMP_LTZ(9))", "current_timestamp()",
+        "INTERVAL 1 DAY"),
       ("DATE", "current_date()", "current_date()", "1"),
       ("DATE", "CAST('today' AS DATE)", "current_date()", "2")
     ).foreach { case (dataType, now, current, step) =>
@@ -354,11 +357,13 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("SPARK-60032: Check constraint added by ALTER TABLE on a fixed datetime") {
     // 'epoch' and a full datetime string do not read the current date, so the predicate is kept.
     Seq(
-      "created >= CAST('epoch' AS TIMESTAMP)",
-      "created >= 'epoch'",
-      "created >= CAST('2020-01-01 00:00:00' AS TIMESTAMP)").foreach { cond =>
+      "TIMESTAMP" -> "created >= CAST('epoch' AS TIMESTAMP)",
+      "TIMESTAMP" -> "created >= 'epoch'",
+      "TIMESTAMP" -> "created >= CAST('2020-01-01 00:00:00' AS TIMESTAMP)",
+      "TIMESTAMP_NTZ(9)" -> "created >= CAST('epoch' AS TIMESTAMP_NTZ(9))",
+      "TIMESTAMP_LTZ(9)" -> "created >= 'epoch'").foreach { case (dataType, cond) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-        sql(s"CREATE TABLE $t (id INT, created TIMESTAMP) $defaultUsing")
+        sql(s"CREATE TABLE $t (id INT, created $dataType) $defaultUsing")
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
         assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
           cond)

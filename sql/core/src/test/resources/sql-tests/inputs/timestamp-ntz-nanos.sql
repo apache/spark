@@ -733,3 +733,18 @@ SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER
 SELECT typeof(median(c))
   FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))) AS t(c);
 SET spark.sql.ansi.enabled=true;
+
+-- Special datetime strings in casts and comparisons to TIMESTAMP_NTZ(p).
+SELECT CAST('epoch' AS timestamp_ntz(7)), CAST(' Epoch ' AS timestamp_ntz(8)),
+       try_cast('EPOCH' AS timestamp_ntz(9));
+SELECT typeof(CAST('now' AS timestamp_ntz(9))), CAST('now' AS timestamp_ntz(9)) IS NOT NULL;
+SELECT CAST('today' AS timestamp_ntz(9)) = CAST(current_date() AS timestamp_ntz(9)),
+       CAST('tomorrow' AS timestamp_ntz(8)) = CAST(current_date() + 1 AS timestamp_ntz(8)),
+       CAST('yesterday' AS timestamp_ntz(7)) = CAST(current_date() - 1 AS timestamp_ntz(7));
+SELECT c FROM VALUES (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000001'),
+                     (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000000') AS t(c)
+  WHERE c > 'epoch';
+SELECT CAST('epochs' AS timestamp_ntz(9));
+SET spark.sql.ansi.enabled=false;
+SELECT CAST('epoch' AS timestamp_ntz(9)), CAST('epochs' AS timestamp_ntz(9));
+SET spark.sql.ansi.enabled=true;
