@@ -117,9 +117,10 @@ abstract class BasePythonUDFRunner(
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
-      context: TaskContext): Iterator[Array[Byte]] = {
+      context: TaskContext,
+      readerInput: Option[ReaderInputStream]): ReaderIterator = {
     new ReaderIterator(
-      stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
+      stream, writer, startTime, env, worker, handle, releasedOrClosed, context, readerInput) {
 
       protected override def read(): Array[Byte] = {
         if (writer.exception.isDefined) {
