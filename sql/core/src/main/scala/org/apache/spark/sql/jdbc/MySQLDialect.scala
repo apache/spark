@@ -57,6 +57,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
 
+    override protected def likeEscapeChar: Char = '!'
+
     override def visitExtract(extract: Extract): String = {
       val field = extract.field
       field match {
@@ -100,14 +102,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
     }
 
-    // MySQL treats backslash as an escape character inside string literals, so every backslash in
-    // a LIKE pattern (and the ESCAPE character) must be doubled to survive string-literal parsing
-    // before the LIKE engine applies its own escaping. The base STARTS_WITH/ENDS_WITH/CONTAINS
-    // pattern building is otherwise shared, so only this hook is overridden.
-    override def escapeStringLiteralForLikePattern(str: String): String = {
-      str.replace("\\", "\\\\")
-    }
-
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -129,6 +123,15 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
     }
+  }
+
+  override def compileValue(value: Any): Any = value match {
+    // '\\' is one backslash in the default sql_mode but two under NO_BACKSLASH_ESCAPES,
+    // so LEFT('\\', 1) yields exactly one backslash in either mode.
+    case stringValue: String if stringValue.contains('\\') =>
+      val escaped = escapeSql(stringValue.replace("\\", "\\\\"))
+      raw"""REPLACE('$escaped', '\\', LEFT('\\', 1))"""
+    case other => super.compileValue(other)
   }
 
   override def compileExpression(expr: Expression): Option[String] = {

@@ -26,6 +26,7 @@ import scala.util.Using
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
@@ -97,6 +98,17 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE TBL_GEOMETRY (col0 GEOMETRY)").executeUpdate()
     conn.prepareStatement("INSERT INTO TBL_GEOMETRY VALUES (ST_GeomFromText('POINT(0 0)'))")
       .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE backslash (s VARCHAR(20))").executeUpdate()
+    Using.resource(conn.prepareStatement("INSERT INTO backslash VALUES (?)")) { stmt =>
+      Seq("C:\\temp", "C:/temp").foreach { v =>
+        stmt.setString(1, v)
+        stmt.executeUpdate()
+      }
+    }
+    conn.prepareStatement("SET collation_connection = 'utf8mb3_bin'").executeUpdate()
+    conn.prepareStatement("CREATE VIEW backslash_case AS SELECT CASE WHEN s = 'C:/temp' " +
+      "THEN 'c:\\\\temp' ELSE 'C:\\\\temp' END AS s FROM backslash").executeUpdate()
   }
 
   def testConnection(): Unit = {
@@ -363,6 +375,24 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
       .format("jdbc")
       .load()
     checkAnswer(df, Row("brown     ", "fox"))
+  }
+
+  test("SPARK-57500: push down string literals containing a backslash in any sql_mode") {
+    Seq("", "NO_BACKSLASH_ESCAPES").foreach { mode =>
+      val df = spark.read
+        .option("sessionInitStatement", s"SET SESSION sql_mode = '$mode'")
+        .jdbc(jdbcUrl, "backslash", new Properties)
+      checkAnswer(df.filter(col("s") === "C:\\temp"), Row("C:\\temp"))
+      checkAnswer(df.filter(col("s").startsWith("C:\\")), Row("C:\\temp"))
+      checkAnswer(df.filter(col("s") === "x\\' OR 1=1) #"), Seq.empty)
+
+      val view = spark.read
+        .option("sessionInitStatement",
+          s"SET SESSION sql_mode = '$mode', collation_connection = 'utf8mb3_bin'")
+        .jdbc(jdbcUrl, "backslash_case", new Properties)
+      checkAnswer(view.filter(col("s") === "C:\\temp"), Row("C:\\temp"))
+      checkAnswer(view.filter(col("s").startsWith("C:\\")), Row("C:\\temp"))
+    }
   }
 }
 
