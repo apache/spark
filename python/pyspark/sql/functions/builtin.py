@@ -31291,7 +31291,9 @@ def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName")
     Notes
     -----
     A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
-    NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
 
     Examples
     --------
@@ -31336,7 +31338,9 @@ def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") 
     Notes
     -----
     A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
-    NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
 
     Examples
     --------
@@ -31381,7 +31385,9 @@ def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName")
     Notes
     -----
     A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
-    NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+    When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+    the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(0.5D, NULL)`` is accepted, but ``array(0.5, NULL)`` fails.
 
     Examples
     --------
@@ -31426,7 +31432,9 @@ def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName")
     Notes
     -----
     A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
-    NULL elements in a quantile array are treated as zero, returning the rank of zero.
+    When a quantile array already has element type BIGINT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3L, NULL)`` is accepted, but ``array(3, NULL)`` fails.
 
     Examples
     --------
@@ -31471,7 +31479,9 @@ def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") 
     Notes
     -----
     A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
-    NULL elements in a quantile array are treated as zero, returning the rank of zero.
+    When a quantile array already has element type FLOAT, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3.0F, NULL)`` is accepted, but ``array(3.0, NULL)`` fails.
 
     Examples
     --------
@@ -31516,7 +31526,9 @@ def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName")
     Notes
     -----
     A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
-    NULL elements in a quantile array are treated as zero, returning the rank of zero.
+    When a quantile array already has element type DOUBLE, NULL elements are treated as zero,
+    returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+    analysis. For example, SQL ``array(3.0D, NULL)`` is accepted, but ``array(3.0, NULL)`` fails.
 
     Examples
     --------

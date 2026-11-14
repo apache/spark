@@ -11580,7 +11580,9 @@ object functions {
    * a single value or an array.
    *
    * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
-   * NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+   * When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+   * the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+   * analysis. For example, SQL `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
    *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
@@ -11600,7 +11602,9 @@ object functions {
    * a single value or an array.
    *
    * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
-   * NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+   * When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+   * the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+   * analysis. For example, SQL `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
    *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
@@ -11620,7 +11624,9 @@ object functions {
    * a single value or an array.
    *
    * A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
-   * NULL elements in a rank array are treated as 0.0, requesting the minimum quantile.
+   * When a rank array already has element type DOUBLE, NULL elements are treated as 0.0, requesting
+   * the minimum quantile. A NULL-containing array that needs an implicit element cast fails
+   * analysis. For example, SQL `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.
@@ -11641,7 +11647,9 @@ object functions {
    * can be a single value or an array.
    *
    * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
-   * NULL elements in a quantile array are treated as zero, returning the rank of zero.
+   * When a quantile array already has element type BIGINT, NULL elements are treated as zero,
+   * returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+   * analysis. For example, SQL `array(3L, NULL)` is accepted, but `array(3, NULL)` fails.
    *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
@@ -11661,7 +11669,9 @@ object functions {
    * be a single value or an array.
    *
    * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
-   * NULL elements in a quantile array are treated as zero, returning the rank of zero.
+   * When a quantile array already has element type FLOAT, NULL elements are treated as zero,
+   * returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+   * analysis. For example, SQL `array(3.0F, NULL)` is accepted, but `array(3.0, NULL)` fails.
    *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
@@ -11681,7 +11691,9 @@ object functions {
    * can be a single value or an array.
    *
    * A NULL sketch, scalar NULL quantile, or NULL quantile array returns NULL.
-   * NULL elements in a quantile array are treated as zero, returning the rank of zero.
+   * When a quantile array already has element type DOUBLE, NULL elements are treated as zero,
+   * returning the rank of zero. A NULL-containing array that needs an implicit element cast fails
+   * analysis. For example, SQL `array(3.0D, NULL)` is accepted, but `array(3.0, NULL)` fails.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.
