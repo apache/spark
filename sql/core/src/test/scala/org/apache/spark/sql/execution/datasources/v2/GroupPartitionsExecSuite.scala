@@ -942,6 +942,64 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(diverged.withKeyPositionsFor(swapped).isEmpty,
       "there is nothing to move the positions into once the child reports another partitioning")
   }
+
+  test("SPARK-61279: the grouped coalescer prefers majority hosts and spreads ties") {
+    val parent = spark.sparkContext.makeRDD((0 until 6).map(i => (i, Seq("host-a", "host-b"))))
+    val coalescer = new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2), Seq(3, 4), Seq(5)))
+    // Groups whose partitions all prefer both hosts alternate between them, a group of one
+    // partition included.
+    assert(coalescer.coalesce(4, parent).map(_.prefLoc).toSeq ===
+      Seq(Some("host-a"), Some("host-b"), Some("host-a"), Some("host-b")))
+    // A caller sizes the coalesced RDD by the groups, so another count is a bug.
+    intercept[IllegalArgumentException](coalescer.coalesce(3, parent))
+    // A host that the largest number of a group's partitions prefer wins over balancing.
+    val majority = spark.sparkContext.makeRDD((0 until 5).map { i =>
+      (i, Seq(if (i < 4) "host-a" else "host-b"))
+    })
+    assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2, 3, 4))).coalesce(2, majority)
+      .map(_.prefLoc).toSeq === Seq(Some("host-a"), Some("host-a")))
+    // A partition counts once for each host it prefers, however often it lists that host.
+    val repeated = spark.sparkContext.makeRDD(Seq(
+      (0, Seq("host-a", "host-a", "host-a")), (1, Seq("host-b")), (2, Seq("host-b"))))
+    assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1, 2))).coalesce(1, repeated)
+      .map(_.prefLoc).toSeq === Seq(Some("host-b")))
+    // A null host is not a location, as for the scheduler.
+    val withNull =
+      spark.sparkContext.makeRDD(Seq((0, Seq(null, "host-a")), (1, Seq(null, "host-a"))))
+    assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1))).coalesce(1, withNull)
+      .map(_.prefLoc).toSeq === Seq(Some("host-a")))
+    // Only the driver reads the groups, so tasks do not carry them.
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
+    val copy = serializer.deserialize[GroupedPartitionCoalescer](serializer.serialize(coalescer))
+    assert(copy.groupedPartitions == null)
+  }
+
+  test("SPARK-61279: groups over a mapped parent prefer the hosts of its lineage") {
+    // As over a scan: `GroupPartitionsExec` coalesces the scan's mapped RDD, which reports no
+    // locations of its own, so the vote reads the hosts the scheduler finds through the lineage.
+    val source = spark.sparkContext.makeRDD(Seq(
+      (0, Seq("h2")), (1, Seq("h1")), (2, Seq("h1")), (3, Seq("h3"))))
+    val mapped = source.map(identity)
+    val coalesced = mapped.coalesce(2, shuffle = false,
+      Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1, 2), Seq(3)))))
+    assert(coalesced.partitions.map(coalesced.preferredLocations).toSeq ===
+      Seq(Seq("h1"), Seq("h3")))
+    // With no host anywhere in the lineage, a group names none, as before.
+    val unplaced = spark.sparkContext.makeRDD(0 until 4, 4).map(identity).coalesce(2,
+      shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2, 3)))))
+    assert(unplaced.partitions.map(unplaced.preferredLocations).forall(_.isEmpty))
+  }
+
+  test("SPARK-61279: a group of one partition keeps a location when zipped") {
+    // `ZippedPartitionsBaseRDD` reads each side's own locations rather than walking its lineage,
+    // so a side whose group named no location would drop out of the zipped task's locations.
+    val single = spark.sparkContext.makeRDD(Seq((0, Seq("h1", "h2"))))
+      .coalesce(1, shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0)))))
+    val pair = spark.sparkContext.makeRDD(Seq((0, Seq("h3")), (1, Seq("h3"))))
+      .coalesce(1, shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1)))))
+    val zipped = single.zipPartitions(pair)((left, right) => left ++ right)
+    assert(zipped.preferredLocations(zipped.partitions.head).toSet === Set("h1", "h3"))
+  }
 }
 
 private case class DummyLeafSparkPlan(
