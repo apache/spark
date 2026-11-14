@@ -612,8 +612,10 @@ object OrcUtils extends Logging {
    */
   def createAggInternalRowFromFooter(
       reader: Reader,
+      conf: Configuration,
       filePath: String,
       dataSchema: StructType,
+      isCaseSensitive: Boolean,
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
@@ -627,11 +629,46 @@ object OrcUtils extends Logging {
         s"ORC aggregate push down by setting 'spark.sql.orc.aggregatePushdown' to false.", e)
     }
 
-    // Get column statistics with column name.
-    def getColumnStatistics(columnName: String): ColumnStatistics = {
-      val columnIndex = dataSchema.getFieldIndex(columnName).getOrElse(-1)
-      columnsStatistics.get(columnIndex).getStatistics
+    // Find a column the way the reader does, with `requestedColumnIds`, which also fails in the
+    // same cases: by position for a file with `_colN` names, written by an old version of Hive,
+    // or with `orc.force.positional.evolution`, and otherwise by name, lower-cased with
+    // `Locale.ROOT` in case-insensitive mode. The statistics follow the top-level columns of the
+    // file schema, which may differ from the data schema. Maps each aggregated data column that
+    // the file has to its index in the file schema. The lookup is built lazily, as COUNT(*) does
+    // not use it.
+    lazy val fileColumnIndexes: Map[String, Int] = {
+      val columnNames = aggregation.aggregateExpressions.toSeq.flatMap {
+        case max: Max => V2ColumnUtils.extractV2Column(max.column)
+        case min: Min => V2ColumnUtils.extractV2Column(min.column)
+        case count: Count => V2ColumnUtils.extractV2Column(count.column)
+        case _ => None
+      }.filterNot(partitionSchema.fieldNames.contains).distinct
+      val orcSchema = reader.getSchema
+      def lookupKey(name: String): String =
+        if (isCaseSensitive) name else name.toLowerCase(Locale.ROOT)
+      requestedColumnIds(isCaseSensitive, dataSchema, StructType(columnNames.map(dataSchema(_))),
+          orcSchema, conf) match {
+        case Some((ids, canPruneCols)) =>
+          val orcFieldNames = orcSchema.getFieldNames.asScala.toIndexedSeq
+          columnNames.zip(ids).collect { case (name, id) if id != -1 =>
+            // When the columns can be pruned, they are matched by name, and `id` is the index of
+            // the column in the required schema, not in the file schema. `requestedColumnIds`
+            // already failed if the name matches more than one column.
+            name -> (if (canPruneCols) {
+              orcFieldNames.indexWhere(lookupKey(_) == lookupKey(name))
+            } else {
+              id
+            })
+          }.toMap
+        // An old empty file with an empty schema (SPARK-8501).
+        case None => Map.empty
+      }
     }
+
+    // Get the statistics of a data column, or None if the file does not have the column, which
+    // is then all null.
+    def getColumnStatistics(columnName: String): Option[ColumnStatistics] =
+      fileColumnIndexes.get(columnName).map(columnsStatistics.get(_).getStatistics)
 
     // Get Min/Max statistics and store as ORC `WritableComparable` format.
     // Return null if number of non-null values is zero.
@@ -689,14 +726,16 @@ object OrcUtils extends Logging {
       aggregation.aggregateExpressions.zipWithIndex.map {
         case (max: Max, index) if V2ColumnUtils.extractV2Column(max.column).isDefined =>
           val columnName = V2ColumnUtils.extractV2Column(max.column).get
-          val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy(index).dataType
-          getMinMaxFromColumnStatistics(statistics, dataType, isMax = true)
+          // A column the file does not have is all null, so its max is null.
+          getColumnStatistics(columnName)
+            .map(getMinMaxFromColumnStatistics(_, dataType, isMax = true)).orNull
         case (min: Min, index) if V2ColumnUtils.extractV2Column(min.column).isDefined =>
           val columnName = V2ColumnUtils.extractV2Column(min.column).get
-          val statistics = getColumnStatistics(columnName)
           val dataType = schemaWithoutGroupBy.apply(index).dataType
-          getMinMaxFromColumnStatistics(statistics, dataType, isMax = false)
+          // A column the file does not have is all null, so its min is null.
+          getColumnStatistics(columnName)
+            .map(getMinMaxFromColumnStatistics(_, dataType, isMax = false)).orNull
         case (count: Count, _) if V2ColumnUtils.extractV2Column(count.column).isDefined =>
           val columnName = V2ColumnUtils.extractV2Column(count.column).get
           val isPartitionColumn = partitionSchema.fields.map(_.name).contains(columnName)
@@ -707,7 +746,8 @@ object OrcUtils extends Logging {
           val nonNullRowsCount = if (isPartitionColumn) {
             columnsStatistics.getStatistics.getNumberOfValues
           } else {
-            getColumnStatistics(columnName).getNumberOfValues
+            // A column the file does not have is all null.
+            getColumnStatistics(columnName).map(_.getNumberOfValues).getOrElse(0L)
           }
           new LongWritable(nonNullRowsCount)
         case (_: CountStar, _) =>
