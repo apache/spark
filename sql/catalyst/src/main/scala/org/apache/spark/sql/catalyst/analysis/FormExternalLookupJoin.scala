@@ -24,9 +24,10 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.optimizer.{EliminateResolvedHint, InlineCTE}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, CTERelationRef,
-  ExternalLookupHint, ExternalLookupJoin, ExternalLookupJoinShapes, Filter, Join, JoinStrategyHint,
-  LateralJoin, LogicalPlan, NearestByJoin, Project, ResolvedHint, SetOperation, SubqueryAlias,
-  UnaryNode, Union, View, WithCTE}
+  ExternalLookupCacheOptions, ExternalLookupHint, ExternalLookupHintCacheOptions,
+  ExternalLookupJoin, ExternalLookupJoinShapes, Filter, Join, JoinStrategyHint, LateralJoin,
+  LogicalPlan, NearestByJoin, Project, ResolvedHint, SetOperation, SubqueryAlias, UnaryNode, Union,
+  View, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, CTE, EXTERNAL_LOOKUP_HINT, JOIN,
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.execution.datasources.v2.ExternalLookupRelations
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Classifies a join for external lookup. [[CheckExternalLookupJoin]] and [[FormExternalLookupJoin]]
@@ -316,6 +318,16 @@ object ExternalLookupJoinEligibility extends QueryErrorsBase {
       case marker: ExternalLookupHint => marker.child
     }
 
+  /**
+   * The cache options of an eligible join, with its CTEs inlined by [[inlineCTEs]]. As with join
+   * strategy hints, an outer hint's option wins over an inner one's, and an option that no hint
+   * sets follows its configuration.
+   */
+  def cacheOptions(join: Join): ExternalLookupCacheOptions =
+    lookupHints(join.right).map(_.cacheOptions)
+      .foldLeft(ExternalLookupHintCacheOptions())(_ orElse _)
+      .withDefaults(SQLConf.get)
+
   private def ineligible(
       subClass: String,
       relation: String,
@@ -501,6 +513,7 @@ object FormExternalLookupJoin extends Rule[LogicalPlan] {
               lookupPlan,
               join.joinType,
               join.condition,
+              cacheOptions(inlined),
               lookupPlan.output)
           // Operator optimization could push a filter's predicate into the join later, but the
           // condition must be written in the join.

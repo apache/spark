@@ -34,8 +34,47 @@ import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, 
   TimestampType, VarcharType}
 
 /**
+ * The cache settings of one external lookup join, from the
+ * `spark.sql.join.externalLookup.cache.*` configurations unless the join's `EXTERNAL_LOOKUP` hint
+ * overrides them. A cache lives within a task, per input partition, so these bound each such cache:
+ * its keys and their result rows take at most `maxBytes`, and each is kept for `ttlMillis` (0 keeps
+ * it until evicted). A key whose rows take more than a sixteenth of `maxBytes` is still joined but
+ * not cached, so that one large result cannot evict most of the cache. At present, a join that
+ * selects a range comparison (`<`, `<=`, `>`, `>=`) whose parameter reads a stream column caches
+ * nothing, whatever these settings say.
+ */
+case class ExternalLookupCacheOptions(
+    enabled: Boolean,
+    maxBytes: Long,
+    ttlMillis: Long)
+
+/**
+ * The cache options that one `EXTERNAL_LOOKUP` hint sets. An option that no hint of a join sets
+ * follows its `spark.sql.join.externalLookup.cache.*` configuration when the join is planned, not
+ * the one in effect when the hint was written.
+ */
+case class ExternalLookupHintCacheOptions(
+    enabled: Option[Boolean] = None,
+    maxBytes: Option[Long] = None,
+    ttlMillis: Option[Long] = None) {
+  /** These options, with the ones that they do not set taken from `other`. */
+  def orElse(other: ExternalLookupHintCacheOptions): ExternalLookupHintCacheOptions =
+    ExternalLookupHintCacheOptions(
+      enabled.orElse(other.enabled),
+      maxBytes.orElse(other.maxBytes),
+      ttlMillis.orElse(other.ttlMillis))
+
+  /** These options, with the configurations of `conf` for the ones that they do not set. */
+  def withDefaults(conf: SQLConf): ExternalLookupCacheOptions = ExternalLookupCacheOptions(
+    enabled = enabled.getOrElse(conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED)),
+    maxBytes = maxBytes.getOrElse(conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_MAX_BYTES)),
+    ttlMillis = ttlMillis.getOrElse(conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_TTL)))
+}
+
+/**
  * Marks the plan below it as the lookup side that the `EXTERNAL_LOOKUP` hint asks an external
- * lookup join to read. The external lookup join rules consume it when they form the join.
+ * lookup join to read, with the cache options that the hint sets. The external lookup join rules
+ * consume it when they form the join.
  *
  * Join strategy hints are [[ResolvedHint]] nodes with a [[JoinStrategyHint]]. This hint is not,
  * because that representation cannot keep two of its guarantees:
@@ -45,7 +84,9 @@ import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, CharType, 
  *  - It selects how the lookup side is read, not a physical join. `EliminateResolvedHint` moves
  *    every [[ResolvedHint]] it can attach into `Join.hint`, for physical join selection.
  */
-case class ExternalLookupHint(child: LogicalPlan) extends UnaryNode {
+case class ExternalLookupHint(
+    child: LogicalPlan,
+    cacheOptions: ExternalLookupHintCacheOptions) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTERNAL_LOOKUP_HINT)
@@ -72,6 +113,7 @@ case class ExternalLookupJoin(
     right: LogicalPlan,
     joinType: JoinType,
     condition: Option[Expression],
+    cacheOptions: ExternalLookupCacheOptions,
     requiredLookupOutput: Seq[Attribute]) extends BinaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTERNAL_LOOKUP_JOIN)
@@ -367,7 +409,8 @@ case class PreparedExternalLookupJoin(
     lookupKeys: Seq[Attribute],
     lookupKeyComparisons: Seq[LookupKeyComparison],
     joinType: JoinType,
-    residualCondition: Option[Expression]) extends UnaryNode {
+    residualCondition: Option[Expression],
+    cacheOptions: ExternalLookupCacheOptions) extends UnaryNode {
 
   override def output: Seq[Attribute] = joinType match {
     case Inner => child.output ++ lookupOutput

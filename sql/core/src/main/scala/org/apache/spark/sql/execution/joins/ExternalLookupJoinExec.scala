@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution.joins
 
+import com.google.common.base.Ticker
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSeq,
   AttributeSet, BoundReference, Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftAnti, LeftOuter, LeftSemi, QueryPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupFilter, ExternalLookupJoinShapes,
-  ExternalLookupProject, ExternalLookupTransform, LookupKeyComparison}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupCacheOptions,
+  ExternalLookupFilter, ExternalLookupJoinShapes, ExternalLookupProject, ExternalLookupTransform,
+  LookupKeyComparison}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
@@ -51,7 +54,10 @@ case class ExternalLookupJoinExec(
     @transient scan: Scan,
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
-    child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
+    cacheOptions: ExternalLookupCacheOptions,
+    child: SparkPlan,
+    cacheTicker: Ticker = ExternalLookupJoinExec.SystemCacheTicker)
+  extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
 
   // The connector's value rows follow the read schema, which `lookupInput` describes, and the
   // lookup-side stages turn them into rows of `transformedLookup`. The lookup columns keep their
@@ -172,12 +178,15 @@ case class ExternalLookupJoinExec(
       math.min(ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST, maxParameterRowsPerRequest),
       ExternalLookupJoinShapes.oneParameterRowPerRequest(lookupParameters, lookupKeyComparisons),
       conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES),
+      cacheOptions,
+      cacheTicker,
       ExternalLookupJoinMetrics(
         outputRows = longMetric("numOutputRows"),
         inputRows = longMetric("numInputRows"),
         inputBatches = longMetric("numInputBatches"),
         requests = longMetric("numLookupRequests"),
         parameterRows = longMetric("numLookupParameterRows"),
+        cacheHits = longMetric("numCacheHits"),
         lookupTime = longMetric("lookupTime")),
       new ExternalLookupReaderMetrics(customMetrics))
     if (conf.usePartitionEvaluator) {
@@ -218,6 +227,11 @@ case class ExternalLookupJoinExec(
 }
 
 object ExternalLookupJoinExec {
+  /** The clock of the cache TTL in production. It is sent to the tasks with the join. */
+  private[sql] object SystemCacheTicker extends Ticker with Serializable {
+    override def read(): Long = System.nanoTime()
+  }
+
   /**
    * Spark's cap on the stream rows of one request, whatever the connector allows, and so on its
    * parameter rows. It bounds the stream rows that a task buffers while one request is in flight,
@@ -235,6 +249,7 @@ object ExternalLookupJoinExec {
     OperatorMetric("numInputBatches", "external lookup input batches"),
     OperatorMetric("numLookupRequests", "external lookup requests"),
     OperatorMetric("numLookupParameterRows", "external lookup parameter rows"),
+    OperatorMetric("numCacheHits", "external lookup cache hits"),
     OperatorMetric("lookupTime", "external lookup time", isTiming = true))
 
   /** The key of a connector's custom metric, which no operator metric uses. */
@@ -259,4 +274,5 @@ private[joins] case class ExternalLookupJoinMetrics(
     inputBatches: SQLMetric,
     requests: SQLMetric,
     parameterRows: SQLMetric,
+    cacheHits: SQLMetric,
     lookupTime: SQLMetric)
