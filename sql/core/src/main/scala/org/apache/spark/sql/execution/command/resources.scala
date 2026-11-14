@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
-import org.apache.spark.JobArtifactSet
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -58,15 +58,37 @@ case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
 }
 
 /**
- * The jars, files and archives that the jobs of a session ship to its tasks: those added to the
- * session when its artifacts are isolated, as with Spark Connect, and else all those added to the
+ * The jars, files and archives added to resources, as a session lists them. When the artifacts of
+ * the session are isolated, as with Spark Connect and with Scala and Java sessions without Hive
+ * support, these are those added to the session and those added to the
+ * [[org.apache.spark.SparkContext]] outside of any session, such as with `--jars`, `--files` and
+ * `--archives`, but not those of the other sessions. Otherwise, these are all those added to the
  * [[org.apache.spark.SparkContext]].
  */
 private object SessionResources {
-  def apply(sparkSession: SparkSession): JobArtifactSet =
-    sparkSession.artifactManager.withResources {
-      JobArtifactSet.getActiveOrDefault(sparkSession.sparkContext)
+  // The key of what is added to the SparkContext outside of any session.
+  private val DefaultKey = "default"
+
+  private def list(
+      sparkSession: SparkSession,
+      added: SparkContext => collection.Map[String, collection.Map[String, Long]],
+      all: SparkContext => Seq[String]): Seq[String] = {
+    val sc = sparkSession.sparkContext
+    Option(sparkSession.artifactManager.state) match {
+      case Some(state) =>
+        Seq(state.uuid, DefaultKey).flatMap(added(sc).get).flatMap(_.keys).distinct
+      case None => all(sc)
     }
+  }
+
+  def files(sparkSession: SparkSession): Seq[String] =
+    list(sparkSession, _.addedFiles, _.listFiles())
+
+  def jars(sparkSession: SparkSession): Seq[String] =
+    list(sparkSession, _.addedJars, _.listJars())
+
+  def archives(sparkSession: SparkSession): Seq[String] =
+    list(sparkSession, _.addedArchives, _.listArchives())
 }
 
 /**
@@ -78,7 +100,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val fileList = SessionResources(sparkSession).files.keySet.toSeq
+    val fileList = SessionResources.files(sparkSession)
     if (files.nonEmpty) {
       files.map { f =>
         val uri = Utils.resolveURI(f)
@@ -104,7 +126,7 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRu
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val jarList = SessionResources(sparkSession).jars.keySet.toSeq
+    val jarList = SessionResources.jars(sparkSession)
     if (jars.nonEmpty) {
       for {
         jarName <- jars.map(f => Utils.resolveURI(f).toString.split("/").last)
@@ -126,7 +148,7 @@ case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String])
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val archiveList = SessionResources(sparkSession).archives.keySet.toSeq
+    val archiveList = SessionResources.archives(sparkSession)
     if (archives.nonEmpty) {
       for {
         archiveName <- archives.map(f => Utils.resolveURI(f).toString.split("/").last)
