@@ -132,14 +132,10 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
       // The first reference adopts the definition output directly.
       assert(refs.exists(_.output.map(_.exprId) == cteDef.output.map(_.exprId)))
 
-      // The second reference is re-bound through an aliasing Project that re-mints the
-      // original expression ids of that occurrence, so consumers need no rewriting.
-      val projects = mainPlan.collect {
-        case p @ Project(_, _: CTERelationRef) => p
-      }
-      assert(projects.length == 1)
-      assert(projects.head.output.map(_.name) == Seq("a", "b"))
-      assert(projects.head.output.map(_.exprId) == renewed.map(_.exprId))
+      // Every reference is bare and exposes its own occurrence's attributes. Downstream
+      // CTE rules positionally rebind those attributes when replacing the references.
+      assert(refs.exists(_.output.map(_.exprId) == renewed.map(_.exprId)))
+      assert(mainPlan.collect { case p @ Project(_, _: CTERelationRef) => p }.isEmpty)
 
       // The join condition still references the original attributes of both occurrences.
       val join = mainPlan.collect { case j: Join => j }.head
@@ -152,12 +148,9 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("moves view-body join hints above the references") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // A join hint at the top of the view body binds to the join(s) the view takes part
-      // in (SPARK-40999): after this rule replaces the View with a CTERelationRef, which
-      // is a leaf, the following EliminateResolvedHint can no longer hoist the hint
-      // through the tree. The definition is built from the hint-free body, and the
-      // extracted hints are re-attached above each reference so that hint hoisting keeps
-      // reaching the outer joins as before conversion.
+      // A top-of-body hint binds to the join the view takes part in (SPARK-40999). Left
+      // in the definition, the leaf CTERelationRef would strand it, so the rule lifts it
+      // onto each reference.
       val broadcastHint = HintInfo(Some(BROADCAST))
       val base = Seq(attr("a", 100), attr("b", 101))
       val (v1, v2, renewed) = sameViewTwice("v", base, (as: Seq[AttributeReference]) =>
@@ -172,21 +165,18 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
       assert(cteDefs.head.child.collect { case h: ResolvedHint => h }.isEmpty,
         s"definition body still carries the hint: ${cteDefs.head.child}")
 
-      // Each reference carries the body's hint above it: the first occurrence wraps the
-      // bare reference, the later occurrence wraps its rebinding Project.
+      // Each reference carries the body's hint directly above its bare reference.
       val hinted = mainPlan.collect {
         case h @ ResolvedHint(_, hints) => (h, hints)
       }
       assert(hinted.length == 2, s"expected two hinted references in: $mainPlan")
       assert(hinted.forall { case (_, hints) => hints == broadcastHint })
-      assert(hinted.count { case (h, _) => h.child.isInstanceOf[CTERelationRef] } == 1,
-        s"first reference must be hinted directly: $mainPlan")
-      assert(hinted.count { case (h, _) => h.child.isInstanceOf[Project] } == 1,
-        s"rebinding reference must be hinted above its Project: $mainPlan")
+      assert(hinted.count { case (h, _) => h.child.isInstanceOf[CTERelationRef] } == 2,
+        s"every reference must be hinted directly: $mainPlan")
 
-      // The rebinding occurrence's identity is preserved under its hint.
-      val bindingProject = hinted.collect { case (ResolvedHint(p: Project, _), _) => p }.head
-      assert(bindingProject.output.map(_.exprId) == renewed.map(_.exprId))
+      // The later occurrence's identity is preserved under its hint.
+      val hintedRefs = hinted.collect { case (ResolvedHint(r: CTERelationRef, _), _) => r }
+      assert(hintedRefs.exists(_.output.map(_.exprId) == renewed.map(_.exprId)))
 
       // The query output schema is unchanged.
       assert(optimized.output == query.output)
@@ -251,13 +241,40 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     }
   }
 
+  test("does not convert views whose body contains a recursive CTE") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // Re-analysis re-mints a recursive CTE's `UnionLoop` id, `UnionLoopRef`
+      // loopId, and `UnionLoop` outputAttrIds per occurrence, and `normalizeCteIds`
+      // rewrites only CTE relation ids, so the bodies canonicalize apart and the
+      // view is left unconverted.
+      def recursiveBody(): LogicalPlan = {
+        val defId = CTERelationDef.newId
+        val anchor = LocalRelation(Seq(
+          AttributeReference("x", IntegerType, nullable = true)(NamedExpression.newExprId)))
+        val loop = UnionLoop(
+          defId,
+          anchor,
+          UnionLoopRef(defId, anchor.output.map(_.newInstance()), accumulated = false),
+          anchor.output.map(_.newInstance().exprId))
+        val cteDef = CTERelationDef(SubqueryAlias("r", loop), id = defId)
+        WithCTE(
+          CTERelationRef(
+            defId,
+            _resolved = true,
+            output = cteDef.output.map(_.newInstance()),
+            isStreaming = false),
+          Seq(cteDef))
+      }
+      val (v1, v2) = sameViewTwice("v", () => recursiveBody())
+      val query = Join(v1, v2, Inner, None, JoinHint(None, None))
+      comparePlans(Optimize.execute(query), query)
+    }
+  }
+
   test("refuses conversion when occurrences of the same view diverge into multiple groups") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // Degenerate scenario the analyzer cannot produce today: two pairs of occurrences
-      // of the same view whose canonicalized bodies diverge. Each pair qualifies on its
-      // own, but rewriting all four occurrences against whichever definition happens to
-      // be visited first would re-bind the divergent pair positionally against the wrong
-      // schema, so the identifier must be skipped entirely.
+      // Two qualifying pairs of one name, one column on the left and two on the right.
+      // Admitting either pair would rebind the other to its definition.
       val a1 = attr("a", 100)
       val a2 = attr("a", 200)
       val a3 = attr("a", 300)
@@ -279,11 +296,9 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("does not convert a qualifying pair plus a divergent singleton") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // Three references to the same view: two resolved against one body and a third
-      // against a replaced one (reachable by capturing `spark.table("v")` before
-      // `CREATE OR REPLACE TEMP VIEW v`). The pair qualifies on its own, but admitting
-      // the identifier would rebind the singleton to the pair's definition and return
-      // the old body's rows for it, so the identifier must be refused entirely.
+      // A qualifying one-column pair plus a two-column singleton of the same name, as a
+      // captured Dataset produces when the view is replaced mid-query. Admitting the
+      // pair would rebind the singleton to it.
       val a1 = attr("a", 100)
       val a2 = attr("a", 200)
       val a3 = attr("a", 300)
@@ -301,10 +316,8 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("does not convert a deterministic pair plus a non-deterministic pair") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // Degenerate scenario the analyzer cannot produce today: two qualifying
-      // deterministic occurrences and two non-qualifying non-deterministic ones share
-      // one identifier. Rewriting all four against the deterministic definition would
-      // drop `rand` from the plan, so nothing converts.
+      // Two deterministic occurrences of the old view with two non-deterministic ones
+      // of its replacement. Admitting the name would drop the rand bodies.
       val a1 = attr("a", 100)
       val a2 = attr("a", 200)
       val a3 = attr("a", 300)
@@ -323,10 +336,7 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("does not convert views whose body has a top-level ORDER BY") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // The per-reference shuffle boundary is added above the definition, so a
-      // top-level ORDER BY in the view body would be destroyed by it, changing what
-      // an outer LIMIT sees. Skip such views, also when the ORDER BY is wrapped in
-      // order-preserving nodes (Project, Filter, LIMIT).
+      // Also when the ORDER BY is wrapped in order-preserving nodes (Project, LIMIT).
       val a1 = attr("a", 100)
       val a2 = attr("a", 200)
       def sortBody(a: AttributeReference): LogicalPlan =
@@ -347,10 +357,8 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("does not convert views whose body has a Sort under a Join") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // The definition is materialized behind one shuffle, which buries every ordering
-      // the body computes - including one under a Join. A hash join's output order
-      // follows its shuffled inputs, so the reorder is observable through consumers
-      // (e.g. an outer LIMIT), and the view must stay unconverted.
+      // A hash join's output order follows its shuffled inputs, so a sort under the
+      // join is observable through an outer LIMIT and must block conversion.
       val a1 = attr("a", 100)
       val b1 = attr("b", 101)
       val a2 = attr("a", 200)
@@ -428,9 +436,8 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("does not convert views whose body contains non-deterministic inner CTEs") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // The view body itself evaluates a multi-ref non-deterministic inner CTE, so the view
-      // yields different results per evaluation. Converting it to a compute-once CTE would
-      // change query results, hence it must stay unconverted.
+      // The body's non-deterministic inner CTE keeps the body non-deterministic even
+      // though its own references are materialized.
       val (v1, v2) = sameViewTwice(
         "v", () => nestedCteBody(987654321L, deterministic = false))
       val query = Join(v1, v2, Inner, None, JoinHint(None, None))
@@ -462,11 +469,8 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("converts occurrences whose bodies differ only in inner CTE definition ids") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // A SQL view's body is re-analyzed per occurrence, and that re-analysis
-      // re-substitutes the body's inner CTEs, minting a fresh `CTERelationDef` id each
-      // time (e.g. for a view whose body has a WITH clause over a persistent table).
-      // The rule normalizes inner CTE ids before grouping, so the structurally
-      // identical bodies collapse into one qualifying group and convert.
+      // Re-analysis re-substitutes the body's inner CTEs with fresh definition ids, as
+      // for a view with a WITH clause. Normalization must still group them.
       val query = Join(
         tempView("v", nestedCteBody(1L, deterministic = true)),
         tempView("v", nestedCteBody(2L, deterministic = true)),
@@ -485,6 +489,36 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
     }
   }
 
+  test("does not convert occurrences with differently wired inner CTEs") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // Matching outer schemas reach the body comparison. A normalization that mapped
+      // every inner CTE id to one ordinal would call the swapped EXCEPT operands equal.
+      def body(firstId: Long, secondId: Long, swapOperands: Boolean): LogicalPlan = {
+        val firstDef = CTERelationDef(
+          OneRowRelation().select(Literal(1).as("r")),
+          id = firstId,
+          forceSkipInline = true)
+        val secondDef = CTERelationDef(
+          OneRowRelation().select(Literal(2).as("r")),
+          id = secondId,
+          forceSkipInline = true)
+        def mkRef(d: CTERelationDef): CTERelationRef = CTERelationRef(
+          d.id,
+          _resolved = true,
+          output = d.output.map(_.withExprId(NamedExpression.newExprId)),
+          isStreaming = false)
+        val refs = Seq(mkRef(firstDef), mkRef(secondDef))
+        val operands = if (swapOperands) refs.reverse else refs
+        WithCTE(Except(operands.head, operands.last, isAll = true), Seq(firstDef, secondDef))
+      }
+      val query = Join(
+        tempView("v", body(1L, 2L, swapOperands = false)),
+        tempView("v", body(3L, 4L, swapOperands = true)),
+        Inner, None, JoinHint(None, None))
+      comparePlans(Optimize.execute(query), query)
+    }
+  }
+
   test("converts a view whose body references another view") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
       // v2's body is the v1 view referenced in the query twice, so both views are
@@ -498,23 +532,19 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
       val WithCTE(mainPlan, cteDefs) = optimized
       assert(cteDefs.length == 2)
-      // The outer view is referenced twice and keeps its materialization flag. The inner
-      // view's second reference dies with the dropped second occurrence's body, leaving it
-      // with a single live reference inside the outer definition: materializing it would
-      // add a shuffle that exchange reuse cannot deduplicate, so it stays inlinable.
+      // v2 is referenced twice and is materialized; v1 keeps one reference inside v2's
+      // definition and stays inlinable.
       assert(!cteDefs.head.forceSkipInline)
       assert(cteDefs.last.forceSkipInline)
-      // Bottom-up creation order puts the referenced (inner) definition before the
-      // definition that references it, so the outer body resolves its inner reference
-      // without needing the inner definition to be attached later.
+      // The referenced (inner) definition precedes the one that references it.
       val innerDef = cteDefs.head
       val outerDef = cteDefs.last
       assert(innerDef.child.collect { case _: CTERelationRef => true }.isEmpty)
       val innerRefs = outerDef.child.collect { case r: CTERelationRef => r }
       assert(innerRefs.map(_.cteId) == Seq(innerDef.id))
 
-      // Only the outer view is referenced from the main plan, once bare and once
-      // re-bound through a rebinding Project.
+      // Only the outer view is referenced from the main plan, as two bare references
+      // with occurrence-specific output attributes.
       val refs = mainPlan.collect { case r: CTERelationRef => r }
       assert(refs.length == 2)
       assert(refs.forall(_.cteId == outerDef.id))
@@ -531,9 +561,8 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
       val optimized = OptimizeWithInlineCTE.execute(query)
 
-      // v1 is referenced once after the rewrite (inside v2's definition), so its converted
-      // definition stays inlinable and InlineCTE flattens it into v2's definition. Only
-      // v2's definition (two references) survives, without a nested definition inside it.
+      // v1's definition stays inlinable, so InlineCTE flattens it into v2's. Only v2's
+      // definition survives, with no nested definition inside it.
       val defs = optimized.collect { case d: CTERelationDef => d }
       assert(defs.length == 1)
       assert(defs.head.forceSkipInline)
@@ -544,10 +573,8 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("a reference inside an unreferenced CTE does not force materialization") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // The dead CTE holds v's second occurrence when the rule runs, but it is itself
-      // unreferenced, so v has a single live reference: its converted definition must be
-      // inlined by InlineCTE (and the dead definition dropped) rather than materialized
-      // behind a shuffle nothing reuses.
+      // The dead CTE holds v's second occurrence but is itself unreferenced, so v keeps
+      // one live reference and its definition must be inlined, not materialized.
       val (v1, v2, _) = sameViewTwice(
         "v", Seq(attr("a", 100), attr("b", 101)),
         (as: Seq[AttributeReference]) => simpleBody(as(0), as(1)))
