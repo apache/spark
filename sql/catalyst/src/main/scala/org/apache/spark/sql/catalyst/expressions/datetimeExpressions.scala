@@ -649,7 +649,10 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None) extends 
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the second component of the string/timestamp.",
+  usage = """
+    _FUNC_(timestamp) - Returns the second component of the string/timestamp as an integer,
+    discarding fractional seconds.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
@@ -4822,7 +4825,9 @@ object DatePart {
        9
   """,
   note = """
-    The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`
+    The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`.
+    When extracting `SECOND`, the result is a decimal including fractional seconds,
+    unlike `second(source)`, which returns an integer and discards fractional seconds.
   """,
   group = "datetime_funcs",
   since = "3.0.0")
@@ -4899,6 +4904,8 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
   """,
   note = """
     The _FUNC_ function is equivalent to `date_part(field, source)`.
+    When extracting `SECOND`, the result is a decimal including fractional seconds,
+    unlike `second(source)`, which returns an integer and discards fractional seconds.
   """,
   group = "datetime_funcs",
   since = "3.0.0")
