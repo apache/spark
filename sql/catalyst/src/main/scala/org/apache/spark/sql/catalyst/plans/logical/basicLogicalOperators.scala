@@ -2596,9 +2596,10 @@ case class LateralJoin(
    */
   override def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] = {
-    childAttributes.resolve(nameParts, resolver)
-      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int]): Option[NamedExpression] = {
+    childAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
   }
 
   override def childrenResolved: Boolean = left.resolved && right.resolved

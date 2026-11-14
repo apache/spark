@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.OptionalReferences
 import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   Literal,
@@ -56,8 +57,13 @@ class SemiStructuredExtractResolver(expressionResolver: ExpressionResolver)
       withResolvedChildren(semiStructuredExtract, expressionResolver.resolve _)
         .asInstanceOf[SemiStructuredExtract]
 
+    val column = semiStructuredExtractWithResolvedChildren.child
     val semiStructuredExtractWithProperExtractionMethod =
-      semiStructuredExtractWithResolvedChildren.child.dataType match {
+      column.dataType match {
+        // The column is an optional reference that is not found, so the field is NULL, like a
+        // field of a missing struct column.
+        case _ if OptionalReferences.isNullReference(column) =>
+          Literal(null, VariantType)
         case _: VariantType =>
           val extractResult = VariantGet(
             child = semiStructuredExtractWithResolvedChildren.child,

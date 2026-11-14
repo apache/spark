@@ -66,6 +66,14 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean file_type_enabled = false;
 
   /**
+   * When true, optional references (`x?`) are enabled. A statement that is not valid with every
+   * `?` as a positional parameter marker is parsed again with QUESTION_WITH_OPTIONAL_REFERENCES
+   * tokens in place of its QUESTION tokens, and a `?` after a named parameter marker is not a
+   * positional parameter marker.
+   */
+  public boolean optional_references_enabled = false;
+
+  /**
    * Checks if the next token after PIPE can start an operator pipe right side.
    * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
    * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
@@ -84,6 +92,48 @@ options { tokenVocab = SqlBaseLexer; }
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
+  }
+
+  /**
+   * Checks if the IN predicate at the next token has a subquery that starts with SELECT or VALUES
+   * and a positional parameter marker, such as `c IN (SELECT ?)`, in a statement that is parsed
+   * with optional references. SELECT and VALUES are non-reserved, so the subquery would otherwise
+   * also be a list of expressions that starts with an optional reference to a column named
+   * `select` or `values`.
+   */
+  public boolean isInSubqueryWithLeadingParameterMarker() {
+    int offset = 1;
+    if (_input.LA(offset) == NOT || _input.LA(offset) == BANG) {
+      offset++;
+    }
+    if (_input.LA(offset) != IN || _input.LA(offset + 1) != LEFT_PAREN) {
+      return false;
+    }
+    int queryStart = _input.LA(offset + 2);
+    return (queryStart == SELECT || queryStart == VALUES) &&
+        _input.LA(offset + 3) == QUESTION_WITH_OPTIONAL_REFERENCES;
+  }
+
+  /**
+   * Checks if the next token is a `?` that follows a named parameter marker while optional
+   * references are enabled. Such a `?` makes the marker optional (`:name?`), so it is not a
+   * positional parameter marker that continues a string literal. Without optional references,
+   * such a string literal is an error because it mixes named and positional parameter markers.
+   */
+  public boolean isOptionalMarkerOfNamedParameterMarker() {
+    if (!optional_references_enabled) {
+      return false;
+    }
+    int next = _input.LA(1);
+    if (next != QUESTION && next != QUESTION_WITH_OPTIONAL_REFERENCES) {
+      return false;
+    }
+    // The part of the string literal before the `?` is a string, a `?`, or a named parameter
+    // marker, which ends with the name of the parameter. A double-quoted name is an identifier.
+    int previous = _input.LA(-1);
+    return previous != STRING_LITERAL &&
+        (previous != DOUBLEQUOTED_STRING || double_quoted_identifiers) &&
+        previous != QUESTION && previous != QUESTION_WITH_OPTIONAL_REFERENCES;
   }
 
   /**
@@ -1641,7 +1691,8 @@ booleanExpression
 
 predicate
     : errorCapturingNot? kind=BETWEEN lower=valueExpression AND upper=valueExpression
-    | errorCapturingNot? kind=IN (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
+    | {!isInSubqueryWithLeadingParameterMarker()}?
+      errorCapturingNot? kind=IN (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
     | errorCapturingNot? kind=IN LEFT_PAREN query RIGHT_PAREN
     | errorCapturingNot? kind=RLIKE pattern=valueExpression
     | errorCapturingNot? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
@@ -1727,16 +1778,28 @@ primaryExpression
     | identifier ARROW expression                                                              #lambda
     | LEFT_PAREN identifier (COMMA identifier)+ RIGHT_PAREN ARROW expression                   #lambda
     | value=primaryExpression LEFT_BRACKET index=valueExpression RIGHT_BRACKET                 #subscript
-    | identifier                                                                               #columnReference
-    | base=primaryExpression DOT fieldName=identifier                                          #dereference
+    | identifier optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                            #columnReference
+    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN QUESTION_WITH_OPTIONAL_REFERENCES         #optionalIdentifierClause
+    | base=primaryExpression DOT fieldName=identifier
+      optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                                        #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
     | EXTRACT LEFT_PAREN field=simpleIdentifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
       ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
     | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
-    | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
-      FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    | overlayExpression                                                                        #overlay
+    ;
+
+// Kept out of `primaryExpression` so its generated method stays under the JIT size limit: the
+// optional `?` after a column reference and a dereferenced field (`#columnReference`,
+// `#dereference`) and the `#optionalIdentifierClause` alternative, an IDENTIFIER clause with any
+// expression as the name of a column that is a `#functionCall` without the `?`, are inlined there
+// instead of being rules of their own, because a rule of their own would cost every column
+// reference a rule invocation. The marker alternatives themselves still cost a lookahead check.
+overlayExpression
+    : OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN
     ;
 
 // The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are
@@ -1878,8 +1941,8 @@ literalType
 
 constant
     : NULL                                                                                     #nullLiteral
-    | QUESTION                                                                                 #posParameterLiteral
-    | namedParameterMarker                                                                     #namedParameterLiteral
+    | (QUESTION | QUESTION_WITH_OPTIONAL_REFERENCES)                                           #posParameterLiteral
+    | namedParameterMarker optionalMarker=QUESTION_WITH_OPTIONAL_REFERENCES?                   #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
     | literalType singleStringLitWithoutMarker                                                     #typeConstructor
     | number                                                                                   #numericLiteral
@@ -2362,11 +2425,11 @@ singleStringLit
 
 parameterMarker
     : {parameter_substitution_enabled && !isJsonObjectColonSeparator()}? namedParameterMarker #namedParameterMarkerRule
-    | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterMarkerRule
+    | {parameter_substitution_enabled}? (QUESTION | QUESTION_WITH_OPTIONAL_REFERENCES)         #positionalParameterMarkerRule
     ;
 
 stringLit
-    : singleStringLit+
+    : singleStringLit ({!isOptionalMarkerOfNamedParameterMarker()}? singleStringLit)*
     ;
 
 comment

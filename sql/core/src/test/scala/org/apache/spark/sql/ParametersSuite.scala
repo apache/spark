@@ -1385,6 +1385,73 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("optional named parameter markers") {
+    val optionalFilterQuery = "SELECT id FROM range(3) WHERE :low? IS NULL OR id >= :low?"
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        // A marker with a value is bound, and a marker without a value is NULL.
+        checkAnswer(spark.sql("SELECT :x?, :y?", Map("x" -> 1)), Row(1, null))
+        checkAnswer(spark.sql("SELECT :x ?, :x? + 1", Map("x" -> 1)), Row(1, 2))
+        checkAnswer(spark.sql(optionalFilterQuery, Map("low" -> 2L)), Row(2))
+        checkAnswer(
+          spark.sql(optionalFilterQuery, Map("unused" -> 1)),
+          Row(0) :: Row(1) :: Row(2) :: Nil)
+
+        // A marker in a subquery is bound like a marker in the query around it.
+        checkAnswer(spark.sql("SELECT (SELECT :x?) AS a, (SELECT :y?) AS b", Map("x" -> 1)),
+          Row(1, null))
+        checkAnswer(
+          spark.sql("SELECT id FROM range(3) WHERE id IN (SELECT :low? AS low)", Map("low" -> 2L)),
+          Row(2))
+        checkAnswer(
+          spark.sql(
+            "SELECT id FROM range(3) t WHERE EXISTS (SELECT 1 WHERE t.id >= :low?)",
+            Map("low" -> 1L)),
+          Row(1) :: Row(2) :: Nil)
+
+        // Each occurrence is independent: the occurrence without `?` still requires a value.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT :y?, :y", Map("x" -> 1))
+          },
+          condition = "UNBOUND_SQL_PARAMETER",
+          parameters = Map("name" -> "y"),
+          context = ExpectedContext(fragment = ":y", start = 12, stop = 13))
+      }
+    }
+  }
+
+  test("positional parameter values that a statement with optional references does not use") {
+    Seq(false, true).foreach { constantsOnly =>
+      withSQLConf(
+        SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
+      ) {
+        // A statement that is valid without optional references keeps its markers.
+        checkAnswer(spark.sql("SELECT first(DISTINCT ?) AS f, ? AS g", Array(5, 6)), Row(5, 6))
+        // In a statement with optional references, a `?` after a non-reserved keyword where the
+        // syntax allows a reference is an optional reference, so the remaining markers would
+        // take the values of the following ones silently.
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT missing?, first(DISTINCT ?) AS f, ? AS g", Array(5, 6))
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT missing? FROM range(1)", Array(5))
+          },
+          condition = "UNUSED_SQL_PARAMETER_VALUES",
+          parameters = Map("numMarkers" -> "0", "numValues" -> "1"))
+        checkAnswer(spark.sql("SELECT missing?, ? AS g", Array(6)), Row(null, 6))
+      }
+    }
+  }
+
   // =============================================
   // Legacy Mode Comprehensive Tests
   // =============================================

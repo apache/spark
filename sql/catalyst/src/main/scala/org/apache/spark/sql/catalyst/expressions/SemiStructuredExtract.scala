@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.OptionalReferences
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -50,7 +51,11 @@ case object ExtractSemiStructuredFields extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
     _.containsPattern(SEMI_STRUCTURED_EXTRACT), ruleId) {
     case SemiStructuredExtract(column, field) if column.resolved =>
-      if (column.dataType.isInstanceOf[VariantType]) {
+      if (OptionalReferences.isNullReference(column)) {
+        // The column is an optional reference that is not found, so the field is NULL, like a
+        // field of a missing struct column.
+        Literal(null, VariantType)
+      } else if (column.dataType.isInstanceOf[VariantType]) {
         VariantGet(column, Literal(UTF8String.fromString(field)), VariantType, failOnError = true)
       } else {
         throw new AnalysisException(

@@ -297,6 +297,28 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(spark.table(t), Seq(Row(3L, "software"), Row(4L, "hr      ")))
   }
 
+  test("Overwrite: fail if the condition has an optional reference") {
+    spark.sql(
+      "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
+    spark.table("source").writeTo("testcat.table_name").append()
+
+    // A column that the table does not have must not turn the condition into NULL IS NULL.
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.table("source2").writeTo("testcat.table_name").overwrite(expr("deleted? IS NULL"))
+        },
+        condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+        sqlState = "0A000",
+        parameters = Map("context" -> "INSERT"),
+        context = ExpectedContext(fragment = "deleted?", start = 0, stop = 7))
+    }
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+  }
+
   test("Overwrite: write to a temp view of v2 relation") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.table("source").writeTo("testcat.table_name").append()

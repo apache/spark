@@ -313,6 +313,17 @@ object AnalysisContext {
         } else {
           mutable.LinkedHashSet.empty
         },
+      // The body of a SQL function is not a part of the query that calls it. If the call is in a
+      // subquery, the body must not resolve its names as outer references of that query. The
+      // legacy conf restores that, except while optional references are enabled, because their
+      // resolution tells the plan of a subquery from other plans by the outer plan.
+      outerPlan = if (
+        SQLConf.get.getConf(SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES) &&
+        !SQLConf.get.getConf(SQLConf.OPTIONAL_REFERENCES_ENABLED)) {
+        originContext.outerPlan
+      } else {
+        None
+      },
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }
@@ -639,6 +650,29 @@ class Analyzer(
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
   /**
+   * Runs the rules of the "Resolution" batch on `plan` until it reaches a fixed point, e.g. after
+   * [[ResolveOptionalReferences]] replaced the optional references it could not resolve.
+   */
+  private def executeResolutionBatch(plan: LogicalPlan): LogicalPlan = {
+    val resolutionRules = batches
+      .find(_.name == "Resolution")
+      .getOrElse(throw SparkException.internalError("The analyzer has no Resolution batch."))
+      .rules
+    val maxIterations = conf.analyzerMaxIterations
+    val resolutionBatchExecutor = new RuleExecutor[LogicalPlan] {
+      override protected def batches: Seq[Batch] = Seq(
+        Batch(
+          "Resolution",
+          FixedPoint(
+            maxIterations,
+            errorOnExceed = true,
+            maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key),
+          resolutionRules: _*))
+    }
+    resolutionBatchExecutor.execute(plan)
+  }
+
+  /**
    * Extensions for the single-pass analyzer.
    *
    * See [[ResolverExtension]] for more info.
@@ -722,7 +756,8 @@ class Analyzer(
         ResolveExternalLookupHint) ++
         hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
-      LookupFunctions),
+      LookupFunctions,
+      CheckOptionalReferencesInDml),
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
     Batch("Unresolve Relations", Once,
@@ -811,6 +846,8 @@ class Analyzer(
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
+    Batch("Resolve Optional References", fixedPoint,
+      new ResolveOptionalReferences(resolveAgain = executeResolutionBatch)),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
@@ -3339,7 +3376,7 @@ class Analyzer(
               // This column is neither inside aggregate functions nor a grouping column. It
               // shouldn't be resolved with `agg.child.output`. Mark it as "hasTried", so that it
               // can be re-resolved later or go back to `UnresolvedAttribute` at the end.
-              withOrigin(t.origin)(t.copy(hasTried = true))
+              withOrigin(t.origin)(markTried(t))
             } else {
               // This is a nested column, we still have a chance to match grouping expressions with
               // the top-level column. Here we wrap the underlying `Attribute` with
@@ -3349,7 +3386,7 @@ class Analyzer(
               }
               val newChild = buildAggExprList(childWithTempCol, agg, aggExprMap)
               if (newChild.containsPattern(TEMP_RESOLVED_COLUMN)) {
-                withOrigin(t.origin)(t.copy(hasTried = true))
+                withOrigin(t.origin)(markTried(t))
               } else {
                 newChild
               }
@@ -3358,6 +3395,16 @@ class Analyzer(
             other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprMap)))
         }
       }
+    }
+
+    /**
+     * Marks `t` as tried. A case class copy does not keep the tree node tags, such as the optional
+     * name parts of the column, which the re-resolution of the column needs.
+     */
+    private def markTried(t: TempResolvedColumn): TempResolvedColumn = {
+      val tried = t.copy(hasTried = true)
+      tried.copyTagsFrom(t)
+      tried
     }
 
     def resolveOperatorWithAggregate(
@@ -4380,7 +4427,9 @@ class Analyzer(
         // can resolve against this node's output.
         val resolved = cond.transformUp {
           case u: UnresolvedAttribute =>
-            other.output.resolve(u.nameParts, conf.resolver).getOrElse(u)
+            other.output
+              .resolve(u.nameParts, conf.resolver, OptionalReferences.optionalNamePartIndices(u))
+              .getOrElse(u)
         }
         (resolved, other)
     }
@@ -4680,13 +4729,19 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveExpressionsWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN)) {
-      case t: TempResolvedColumn =>
-        if (t.hasTried) {
-          UnresolvedAttribute(t.nameParts)
-        } else {
-          t.child
-        }
+    if (ResolveOptionalReferences.isUnfinishedSubqueryPlan(plan)) {
+      // HAVING and ORDER BY can still resolve these columns when the subquery plan is resolved
+      // again, after its unresolvable optional references are replaced.
+      plan
+    } else {
+      plan.resolveExpressionsWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN)) {
+        case t: TempResolvedColumn =>
+          if (t.hasTried) {
+            UnresolvedAttribute(t.nameParts)
+          } else {
+            t.child
+          }
+      }
     }
   }
 }

@@ -23,10 +23,12 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{
   ExpandStarParameters,
   LiteralFunctionResolution,
+  OptionalReferences,
   Resolver => NameComparator,
   Star,
   UnresolvedStarBase,
@@ -628,11 +630,13 @@ class NameScope(
         canReferenceAggregatedAccessOnlyAttributes =
           parameters.canReferenceAggregatedAccessOnlyAttributes,
         extractValueExtractionKey = parameters.extractValueExtractionKey
-      ).orElse(tryResolveMultipartNameAsLiteralFunction(multipartName))
+      ).orElse(tryResolveMissingOptionalFieldByOutput(multipartName, parameters))
+        .orElse(tryResolveMultipartNameAsLiteralFunction(multipartName))
         .orElse(
           tryResolveMultipartNameAsLateralColumnReference(
             multipartName,
-            parameters.canLaterallyReferenceColumn
+            parameters.canLaterallyReferenceColumn,
+            parameters.optionalNamePartIndices
           )
         )
         .orElse(
@@ -659,6 +663,22 @@ class NameScope(
           output = output
         )
     }
+  }
+
+  /**
+   * Returns the attributes that [[resolveMultipartName]] matches multipart names against with
+   * `parameters`, regardless of whether they can be referenced in the current clause: the main
+   * output, the metadata columns, and the hidden output if `parameters` allow resolving names by
+   * it. For example, used to find the first name part of an optional reference such as `t.col?`
+   * that does not resolve.
+   */
+  def attributesForNameMatching(parameters: NameResolutionParameters): Seq[Attribute] = {
+    val hiddenAttributes = if (parameters.canResolveNameByHiddenOutput) {
+      hiddenOutput
+    } else {
+      getMetadataOutputCandidates(hiddenOutput)
+    }
+    output ++ hiddenAttributes
   }
 
   /**
@@ -771,6 +791,57 @@ class NameScope(
     }
   }
 
+  /**
+   * Resolves the optional name `multipartName` that [[tryResolveMultipartNameByOutput]] could not
+   * resolve, if it matches columns of the output and none of them has the nested fields of the
+   * name. This mirrors the fixed-point analyzer, for which the error of the same name without `?`
+   * is final in that case, except in ORDER BY: the result is NULL if the field that the only
+   * matching column does not have is optional, and all the matching columns, for the ambiguity
+   * error, if there are several.
+   *
+   * {{{
+   *   -- `t.addr` has no field `zip`, so `addr.zip?` is NULL instead of the field of the alias.
+   *   SELECT named_struct('zip', '1') AS addr, addr.zip? FROM t;
+   * }}}
+   */
+  private def tryResolveMissingOptionalFieldByOutput(
+      multipartName: Seq[String],
+      parameters: NameResolutionParameters): Option[ResolvedMultipartName] = {
+    if (parameters.optionalNamePartIndices.isEmpty || parameters.resolvingSortOrder) {
+      None
+    } else {
+      val (candidates, nestedFields) =
+        attributesForResolution.getCandidatesForResolution(multipartName, nameComparator)
+      val outputCandidates = Seq(
+        getMainOutputCandidates(candidates),
+        getMetadataOutputCandidates(candidates)
+      ).find(_.nonEmpty).getOrElse(Seq.empty)
+      val resolvedCandidates = if (nestedFields.isEmpty || outputCandidates.isEmpty) {
+        Seq.empty
+      } else {
+        try {
+          attributesForResolution.resolveCandidates(
+            multipartName,
+            nameComparator,
+            outputCandidates,
+            nestedFields,
+            parameters.optionalNamePartIndices
+          )
+        } catch {
+          // The name does not resolve to a field of these columns, e.g. because a field that a
+          // column does not have is not optional. Like for a name without `?`, the other ways to
+          // resolve the name are tried next.
+          case _: AnalysisException => Seq.empty
+        }
+      }
+      if (resolvedCandidates.nonEmpty) {
+        Some(ResolvedMultipartName(candidates = resolvedCandidates, referencedAttribute = None))
+      } else {
+        None
+      }
+    }
+  }
+
   private def getCandidatesForResolution(
       multipartName: Seq[String]): (Seq[Attribute], Seq[String]) = {
     val (candidates, nestedFields) =
@@ -870,7 +941,8 @@ class NameScope(
 
   private def tryResolveMultipartNameAsLateralColumnReference(
       multipartName: Seq[String],
-      canLaterallyReferenceColumn: Boolean): Option[ResolvedMultipartName] = {
+      canLaterallyReferenceColumn: Boolean,
+      optionalNamePartIndices: Set[Int]): Option[ResolvedMultipartName] = {
     val (candidatesForLca, nestedFields, referencedAttribute) =
       if (canLaterallyReferenceColumn) {
         getLcaCandidates(multipartName)
@@ -882,7 +954,8 @@ class NameScope(
       multipartName,
       nameComparator,
       candidatesForLca,
-      nestedFields
+      nestedFields,
+      optionalNamePartIndices
     )
     if (resolvedCandidatesForLca.nonEmpty) {
       planLogger.logNameResolutionEvent(
@@ -1295,14 +1368,16 @@ class NameScopeStack(
           multipartName = multipartName,
           parameters = NameResolutionParameters(
             resolvingView = parameters.resolvingView,
-            referredTempVariableNames = parameters.referredTempVariableNames
+            referredTempVariableNames = parameters.referredTempVariableNames,
+            optionalNamePartIndices = parameters.optionalNamePartIndices
           )
         )
 
         if (nameTargetFromVariableResolution.candidates.nonEmpty) {
           nameTargetFromVariableResolution
         } else {
-          nameTargetFromCurrentScope
+          tryResolveOptionalReferenceAsNull(multipartName, parameters)
+            .getOrElse(nameTargetFromCurrentScope)
         }
       }
     }
@@ -1344,6 +1419,48 @@ class NameScopeStack(
   }
 
   /**
+   * Resolves the optional reference `multipartName` that no resolution source could resolve to a
+   * static NULL of type VOID, aliased with its last name part, if its first name part that matches
+   * no attribute of the current and outer scopes is optional. See
+   * [[OptionalReferences.firstUnmatchedNamePartIndex]].
+   *
+   * {{{
+   *   -- `t` has no column `name`:
+   *   SELECT t.name? FROM t;
+   *   -- Project [null AS name#1]
+   * }}}
+   */
+  private def tryResolveOptionalReferenceAsNull(
+      multipartName: Seq[String],
+      parameters: NameResolutionParameters): Option[NameTarget] = {
+    if (parameters.optionalNamePartIndices.isEmpty) {
+      None
+    } else {
+      val outerScopeParameters = NameResolutionParameters(
+        canResolveNameByHiddenOutput = parameters.canResolveNameByHiddenOutputInSubquery
+      )
+      val attributes = current.attributesForNameMatching(parameters) ++
+        outerScopes.flatMap(_.attributesForNameMatching(outerScopeParameters))
+      if (OptionalReferences.resolvesToNull(
+          nameParts = multipartName,
+          optionalNamePartIndices = parameters.optionalNamePartIndices,
+          attributes = attributes,
+          resolver = conf.resolver
+        )) {
+        Some(
+          NameTarget(
+            candidates = Seq(OptionalReferences.nullReference()),
+            aliasName = Some(multipartName.last),
+            output = current.output
+          )
+        )
+      } else {
+        None
+      }
+    }
+  }
+
+  /**
    * Try to resolve `multipartName` as a session (temporary or scripting) variable. See
    * [[VariableResolution.resolveMultipartName]] for more details.
    *
@@ -1359,7 +1476,8 @@ class NameScopeStack(
     variableResolution.resolveMultipartName(
       nameParts = multipartName,
       resolvingView = parameters.resolvingView,
-      referredTempVariableNames = parameters.referredTempVariableNames
+      referredTempVariableNames = parameters.referredTempVariableNames,
+      optionalNamePartIndices = parameters.optionalNamePartIndices
     ) match {
       case Some(variable) =>
         NameTarget(candidates = Seq(variable), aliasName = Some(multipartName.last))

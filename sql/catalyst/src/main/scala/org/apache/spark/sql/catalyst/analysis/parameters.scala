@@ -174,6 +174,22 @@ object MoveParameterizedQueriesDown extends Rule[LogicalPlan] {
  */
 object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
+  /**
+   * Fails if a statement with optional references has fewer positional parameter markers than
+   * values. In such a statement, a `?` after an identifier or a non-reserved keyword is an
+   * optional reference where the syntax allows a reference, and the remaining markers must not
+   * take its value silently. See `SubstituteParamsParser` for the statements that are not bound
+   * here.
+   */
+  private def checkUnusedPositionalArgs(plan: LogicalPlan, numMarkers: Int, numArgs: Int): Unit = {
+    def hasOptionalReferences: Boolean = plan.exists { operator =>
+      operator.expressions.exists(OptionalReferences.unresolvedOptionalReference(_).isDefined)
+    }
+    if (numArgs > numMarkers && hasOptionalReferences) {
+      throw QueryCompilationErrors.unusedSqlParameterValuesError(numMarkers, numArgs)
+    }
+  }
+
   private def bind(p0: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
     var stop = false
     p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
@@ -223,6 +239,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
         val positions = scala.collection.mutable.Set.empty[Int]
         bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
+        checkUnusedPositionalArgs(child, positions.size, args.size)
         val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
 
         bind(child) {
@@ -280,6 +297,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           }
         } else {
           // Positional parameter binding (same logic as PosParameterizedQuery)
+          checkUnusedPositionalArgs(child, positionalParams.size, args.size)
           val posToIndex = positionalParams.toSeq.sorted.zipWithIndex.toMap
           bind(child) {
             case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>

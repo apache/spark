@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.{ATN, ParserATNSimulator, PredictionContextCache, PredictionMode}
@@ -136,6 +137,33 @@ private[parser] class UpperCaseCharStream(wrapped: CodePointCharStream) extends 
     val la = wrapped.LA(i)
     if (la == 0 || la == IntStream.EOF) la
     else Character.toUpperCase(la)
+  }
+}
+
+/**
+ * Counts the `?` tokens that a parse uses as positional parameter markers. A parse that uses a
+ * `?` in another way, e.g. as the free text of a `SET` command, uses fewer of them than the
+ * statement has. A parse can also use every `?` as a marker and still fail, as
+ * `SELECT ? FROM t WHERE` does.
+ */
+private class PositionalParameterMarkerCounter extends SqlBaseParserBaseListener {
+  var count: Int = 0
+
+  override def enterEveryRule(ctx: ParserRuleContext): Unit = {
+    // The parser enters a rule without a parent when it starts to parse the statement, which it
+    // does once in each stage of the two-stage parsing strategy.
+    if (ctx.getParent == null) {
+      count = 0
+    }
+  }
+
+  override def exitPosParameterLiteral(ctx: SqlBaseParser.PosParameterLiteralContext): Unit = {
+    count += 1
+  }
+
+  override def exitPositionalParameterMarkerRule(
+      ctx: SqlBaseParser.PositionalParameterMarkerRuleContext): Unit = {
+    count += 1
   }
 }
 
@@ -500,11 +528,16 @@ object AbstractParser extends Logging {
     parser.legacy_identifier_clause_only = conf.legacyIdentifierClauseOnly
     parser.single_character_pipe_operator_enabled = conf.singleCharacterPipeOperatorEnabled
     parser.file_type_enabled = conf.isFileTypeEnabled
+    parser.optional_references_enabled = conf.optionalReferencesEnabled
   }
 
   /**
    * Executes a parsing operation using the standard two-stage parsing strategy. This ensures
    * consistent error handling and performance optimization across all parsers.
+   *
+   * If optional references (`x?`) are enabled, the operation is executed again with optional
+   * references if it fails without using every `?` as a positional parameter marker, or if it
+   * succeeds but stops before a `?` it did not parse, see [[restartWithOptionalReferences]].
    *
    * @param parser
    *   The configured SqlBaseParser to use
@@ -516,6 +549,73 @@ object AbstractParser extends Logging {
    *   The result of the parsing operation
    */
   def executeWithTwoStageStrategy[T](
+      parser: SqlBaseParser,
+      tokenStream: CommonTokenStream,
+      parseOperation: SqlBaseParser => T): T = {
+    if (!parser.optional_references_enabled) {
+      executeWithSllThenLl(parser, tokenStream, parseOperation)
+    } else {
+      val parameterMarkers = new PositionalParameterMarkerCounter
+      parser.addParseListener(parameterMarkers)
+      val result = Try(executeWithSllThenLl(parser, tokenStream, parseOperation))
+      parser.removeParseListener(parameterMarkers)
+      val hasOtherQuestion = result match {
+        case Success(_) =>
+          // A rule that does not end at the end of the statement stops before a `?` that it
+          // cannot parse, see `spark.sql.legacy.parseQueryWithoutEof`. A `?` that a successful
+          // operation does parse stays what it is, including in the free text of commands such
+          // as `SET key=a?b`.
+          tokenStream.LA(1) != Token.EOF &&
+          questions(tokenStream).exists(_.getTokenIndex >= tokenStream.index())
+        case Failure(_) =>
+          // The statement has a syntax error at a `?`, or before it, or a rule that accepts any
+          // tokens such as `SET .*?` parsed the `?` of a statement that is then not valid.
+          parameterMarkers.count < questions(tokenStream).length
+      }
+      if (hasOtherQuestion && restartWithOptionalReferences(parser, tokenStream)) {
+        executeWithSllThenLl(parser, tokenStream, parseOperation)
+      } else {
+        result.get
+      }
+    }
+  }
+
+  /**
+   * Prepares `parser` to parse the statement of `tokenStream` again with optional references
+   * (`x?`), where a `?` after a name part of a reference marks that name part as optional.
+   * Returns false if optional references are disabled or the statement has no `?`. The parser is
+   * then not prepared to parse the statement again.
+   *
+   * A statement is parsed without optional references first, where a `?` is a positional
+   * parameter marker. It is parsed with them only if that fails, or does not reach a `?`, so a
+   * statement that is valid without optional references keeps its meaning. For example, the `?`
+   * of `c IN (SELECT ?)` stays a parameter marker. With optional references, `select?` could also
+   * be a reference to a column named `select`.
+   */
+  private[parser] def restartWithOptionalReferences(
+      parser: SqlBaseParser,
+      tokenStream: CommonTokenStream): Boolean = {
+    val questionTokens = if (parser.optional_references_enabled) questions(tokenStream) else Nil
+    questionTokens.foreach {
+      _.asInstanceOf[WritableToken].setType(SqlBaseParser.QUESTION_WITH_OPTIONAL_REFERENCES)
+    }
+    if (questionTokens.nonEmpty) {
+      tokenStream.seek(0)
+      parser.reset()
+    }
+    questionTokens.nonEmpty
+  }
+
+  /**
+   * Returns the `?` tokens of the statement of `tokenStream` that were not prepared for optional
+   * references by [[restartWithOptionalReferences]].
+   */
+  private[parser] def questions(tokenStream: CommonTokenStream): Seq[Token] = {
+    tokenStream.fill()
+    tokenStream.getTokens.asScala.filter(_.getType == SqlBaseParser.QUESTION).toSeq
+  }
+
+  private def executeWithSllThenLl[T](
       parser: SqlBaseParser,
       tokenStream: CommonTokenStream,
       parseOperation: SqlBaseParser => T): T = {
