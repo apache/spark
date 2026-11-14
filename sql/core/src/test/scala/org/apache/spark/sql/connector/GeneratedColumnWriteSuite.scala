@@ -2021,8 +2021,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
           assert(ex.getMessage.contains(s"$command with generated columns"))
         }
-        // INSERT auto-fills the column from the legacy getter. Write last, because a write to
-        // this in-memory table rebuilds its columns with `columnGenerationExpression()`.
+        // INSERT auto-fills the column from the legacy getter.
         sql(s"INSERT INTO $legacyCat.$tblName(id, data) VALUES (1, 'a')")
         checkAnswer(spark.table(s"$legacyCat.$tblName"), Row(1, "a", 2))
       }
