@@ -23,7 +23,7 @@ import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkUns
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResourceType, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResourceType, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
@@ -1167,6 +1167,16 @@ class QueryCompilationErrorsSuite
       },
       condition = "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION",
       parameters = Map("resourceType" -> "unknown")
+    )
+  }
+
+  test("SPARK-61689: COLUMN_STATISTICS_DESERIALIZATION_NOT_SUPPORTED: unsupported data type") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        CatalogColumnStat.fromExternalString("1", "col1", NullType, version = 2)
+      },
+      condition = "COLUMN_STATISTICS_DESERIALIZATION_NOT_SUPPORTED",
+      parameters = Map("name" -> "col1", "dataType" -> "NullType")
     )
   }
 }
