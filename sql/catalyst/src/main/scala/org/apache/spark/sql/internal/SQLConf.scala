@@ -978,7 +978,8 @@ object SQLConf {
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
-        "query. This is to prevent driver OOMs with too many Bloom filters.")
+        "query. This is to prevent driver OOMs with too many Bloom filters. Per-partition " +
+        "runtime bloom filters count apart, under a limit of the same value.")
       .version("3.3.0")
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold should be >= 0")
@@ -993,11 +994,39 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.perPartition.enabled")
+      .doc("When true, a runtime bloom filter can be built per partition. This needs the join " +
+        "key of each side of a join to come from a V2 scan, and both scans to report a keyed " +
+        "partitioning by the same partition transform of that key (other than identity). Each " +
+        "partition of the application side is then checked against the bloom filter of the " +
+        "matching partition of the creation side, in a semi join. The semi join calls the " +
+        "function of the partition transform on each row of both sides, so that function must " +
+        "implement `produceResult` or `invoke`. That semi join is dropped when " +
+        "it adds a shuffle or cuts the tasks that read the application side. It is also dropped " +
+        "when it would sit in more than one place, as below a union. The same goes when another " +
+        "check or a storage filter of a scan needs the bloom filter of the whole creation side " +
+        "anyway. It goes too when there is that bloom filter and partially clustered " +
+        "distribution would make the semi join read the creation side more than once. It always " +
+        "goes when that distribution would repeat the side the semi join is on. Otherwise " +
+        "it stays and replaces that bloom filter, if there is one. The number of per-partition " +
+        "bloom filters has a limit of its own, the value of " +
+        s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
+        "limit, no per-partition one is added either. Choosing plans the query once more, and " +
+        "once more for each semi join. Adaptive query execution does that again on each " +
+        "re-planning before the semi join runs.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject a bloom filter, unless the creation side is fully " +
-        "materialized and has accurate statistics.")
+        "materialized and has accurate statistics. Under a bucket transform, a per-partition " +
+        "bloom filter needs only the estimated size of one partition of the creation side to be " +
+        "under it.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
@@ -9737,6 +9766,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
+
+  def runtimeBloomFilterPerPartitionEnabled: Boolean =
+    getConf(RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED)
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)

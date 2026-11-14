@@ -21,19 +21,22 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLValue
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.debug.codegenStringSeq
+import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{BinaryType, LongType}
 import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Query tests for the Bloom filter aggregate and filter function.
  */
 @ExtendedSQLTest
-class BloomFilterAggregateQuerySuite extends SharedSparkSession {
+class BloomFilterAggregateQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   // Registry requires 3-part identifiers (catalog.database.funcName) for session functions
@@ -273,31 +276,13 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
       context = ExpectedContext(fragment = "might_contain(NULL, 0.1)", start = 7, stop = 30))
   }
 
-  test("Test that might_contain errors out non-constant Bloom filter") {
-    val exception1 = intercept[AnalysisException] {
-      spark.sql("""
-                  |SELECT might_contain(cast(a as binary), cast(5 as long))
-                  |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)""".stripMargin)
-    }
+  test("Test that might_contain errors out a correlated Bloom filter subquery") {
     checkError(
-      exception = exception1,
-      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
-      parameters = Map(
-        "sqlExpr" -> "\"might_contain(CAST(a AS BINARY), CAST(5 AS BIGINT))\"",
-        "functionName" -> "`might_contain`",
-        "actual" -> "\"CAST(a AS BINARY)\""),
-      context = ExpectedContext(
-        fragment = "might_contain(cast(a as binary), cast(5 as long))",
-        start = 8,
-        stop = 56))
-
-    val exception2 = intercept[AnalysisException] {
-      spark.sql("""
-                  |SELECT might_contain((select cast(a as binary)), cast(5 as long))
-                  |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)""".stripMargin)
-    }
-    checkError(
-      exception = exception2,
+      exception = intercept[AnalysisException] {
+        spark.sql("""
+                    |SELECT might_contain((select cast(a as binary)), cast(5 as long))
+                    |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)""".stripMargin)
+      },
       condition = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"might_contain(scalarsubquery(a), CAST(5 AS BIGINT))\"",
@@ -323,6 +308,149 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
         |X'0000000200000005000000000000000343A2EC6EA8C117E2D3CDB767296B144FC5BFBCED9737F267',
         |cast(201 as long))""".stripMargin),
       Row(false))
+  }
+
+  // Whole-stage codegen, expression codegen alone, and no codegen at all.
+  private val codegenModes = Seq(
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"),
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"),
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString))
+
+  // One bloom per key, of the values 10 and 11 for key 1, and of 20 and 21 for key 2.
+  private val bloomsCte =
+    """
+      |WITH blooms AS (
+      |  SELECT k, bloom_filter_agg(v) AS bf
+      |  FROM VALUES (1, 10L), (1, 11L), (2, 20L), (2, 21L) AS t(k, v)
+      |  GROUP BY k)
+      |""".stripMargin
+
+  test("SPARK-60541: might_contain reads a bloom filter from a column") {
+    // The blooms joined to the values of both keys, so the expression reads more than one bloom.
+    // A null value makes it null.
+    val query = bloomsCte +
+      """
+        |SELECT k, x, might_contain(bf, x), might_contain(bf, NULL)
+        |FROM blooms
+        |JOIN VALUES (1, 10L), (2, 10L), (1, 20L), (2, 20L), (1, 21L) AS p(pk, x) ON k = pk
+        |""".stripMargin
+    codegenModes.foreach { conf =>
+      withSQLConf(conf: _*) {
+        checkAnswer(spark.sql(query), Seq(
+          Row(1, 10L, true, null), Row(2, 10L, false, null), Row(1, 20L, false, null),
+          Row(2, 20L, true, null), Row(1, 21L, false, null)))
+      }
+    }
+  }
+
+  test("SPARK-60541: might_contain takes an aggregate as its bloom filter") {
+    // `CollapseProject` inlines `bf`, so the bloom is the aggregate itself.
+    codegenModes.foreach { conf =>
+      withSQLConf(conf: _*) {
+        checkAnswer(spark.sql(bloomsCte + "SELECT k, might_contain(bf, 10L) FROM blooms"),
+          Seq(Row(1, true), Row(2, false)))
+      }
+    }
+  }
+
+  test("SPARK-60541: might_contain reads a bloom filter again only for another array") {
+    val bytes =
+      spark.sql(bloomsCte + "SELECT bf FROM blooms WHERE k = 1").head().getAs[Array[Byte]](0)
+    val check = BloomFilterMightContain(
+      BoundReference(0, BinaryType, nullable = true), BoundReference(1, LongType, nullable = true))
+    val first = check.bloomFilterOf(bytes)
+    assert(check.bloomFilterOf(bytes) eq first, "the same array must give the same bloom filter")
+    assert(!(check.bloomFilterOf(bytes.clone()) eq first), "another array must be read again")
+  }
+
+  // The rows a hash existence join checks against the blooms of `bloomsCte`, switching between
+  // build rows. The existence join is the one of the EXISTS under the OR, and its condition is
+  // `condition` and more.
+  private def existenceJoin(hint: String, condition: String = "TRUE"): DataFrame = spark.sql(
+    bloomsCte +
+      s"""
+        |SELECT pk, x
+        |FROM VALUES (1, 10L), (2, 10L), (1, 20L), (2, 20L), (1, 11L), (1, 21L) AS p(pk, x)
+        |WHERE x = 21 OR EXISTS (SELECT /*+ $hint(blooms) */ 1 FROM blooms
+        |  WHERE pk = k AND might_contain(bf, x) AND $condition)
+        |""".stripMargin)
+
+  // Whether the generated code of the existence join of `df` that `hint` asks for reads a binary
+  // build column again only when the build row changes. None when whole-stage codegen holds no
+  // such join.
+  private def readsBuildBinaryOnce(df: DataFrame, hint: String): Option[Boolean] = {
+    val join = if (hint == "BROADCAST") "BroadcastHashJoin" else "ShuffledHashJoin"
+    codegenStringSeq(df.queryExecution.executedPlan).collectFirst {
+      case (subtree, code, _) if subtree.contains(join) && subtree.contains("ExistenceJoin") =>
+        code.contains("buildBinaryBase")
+    }
+  }
+
+  test("SPARK-60541: a hash existence join checks each row against the bloom of its build row") {
+    for {
+      hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+      conf <- codegenModes
+    } {
+      withSQLConf(conf: _*) {
+        val df = existenceJoin(hint)
+        checkAnswer(df, Seq(Row(1, 10L), Row(2, 20L), Row(1, 11L), Row(1, 21L)))
+        if (conf == codegenModes.head) {
+          assert(readsBuildBinaryOnce(df, hint) === Some(true), df.queryExecution.executedPlan)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60541: a hash join condition that reads a bloom column elsewhere too gets an " +
+      "array of its own") {
+    // The function changes the array it gets. With one array per build row, the next probe of the
+    // build row would see that change. It reads a streamed column too, so it stays in the join
+    // rather than in a filter below it.
+    withUserDefinedFunction("first_then_bump" -> true) {
+      spark.udf.register("first_then_bump", (bin: Array[Byte], x: Long) => {
+        val first = bin(0)
+        bin(0) = (bin(0) + 1).toByte
+        first + x * 0
+      })
+      for {
+        hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+        conf <- codegenModes
+      } {
+        withSQLConf(conf: _*) {
+          val df = existenceJoin(hint, "first_then_bump(bf, x) = 0")
+          checkAnswer(df, Seq(Row(1, 10L), Row(2, 20L), Row(1, 11L), Row(1, 21L)))
+          if (conf == codegenModes.head) {
+            assert(readsBuildBinaryOnce(df, hint) === Some(false), df.queryExecution.executedPlan)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60541: a semi join a query wrote is not taken for a per-partition bloom filter") {
+    // It has the shape of the one `InjectRuntimeFilter` adds, an existence join with a filter on
+    // its flag, and would need a shuffle, which is when the planner drops that one. The random
+    // column keeps the filter above the projection of `pk`, so the join's key stays `pk`.
+    val query =
+      """
+        |WITH blooms AS (
+        |  SELECT k, bloom_filter_agg(xxhash64(v)) AS bf
+        |  FROM VALUES (1, 10L), (1, 11L), (2, 20L), (2, 21L) AS t(k, v)
+        |  GROUP BY k)
+        |SELECT x, r >= 0
+        |FROM (SELECT CAST(IF(id = 29, NULL, id % 3) AS INT) AS pk, id AS x, rand() AS r
+        |      FROM range(30)) p
+        |WHERE pk IS NULL OR EXISTS (SELECT /*+ SHUFFLE_HASH(blooms) */ 1 FROM blooms
+        |  WHERE pk = k AND might_contain(bf, xxhash64(x)))
+        |""".stripMargin
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED.key -> "true") {
+      val df = spark.sql(query)
+      checkAnswer(df, Seq(Row(10L, true), Row(20L, true), Row(29L, true)))
+      assert(collect(df.queryExecution.executedPlan) {
+        case join: ShuffledHashJoinExec if join.joinType.isInstanceOf[ExistenceJoin] => join
+      }.nonEmpty, df.queryExecution.executedPlan)
+    }
   }
 
   test("Test that bloom_filter_agg produces a NULL with empty input") {

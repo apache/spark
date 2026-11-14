@@ -22,13 +22,15 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class TransformExpressionSuite extends SparkFunSuite {
+class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /** The logger the log tests attach their appender to, so that other loggers stay out. */
   private val transformLogger = Seq(classOf[TransformExpression].getName)
@@ -706,4 +708,77 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(warnings.size == 2, warnings)
     assert(warnings.exists(_.contains("first")) && warnings.exists(_.contains("second")))
   }
+
+  test("SPARK-60541: the generated code computes what eval does") {
+    // `checkEvaluation` runs both the interpreted and the generated path. Each function resolves to
+    // one of the calls `V2ExpressionUtils.resolveScalarFunction` builds.
+    val input = BoundReference(0, IntegerType, nullable = true)
+    Seq(
+      InvokeBucketFunction -> classOf[Invoke],
+      new StaticInvokeBucketFunction -> classOf[StaticInvoke],
+      ProduceResultBucketFunction -> classOf[ApplyFunctionExpression]
+    ).foreach { case (fn, call) =>
+      val transform = bucket(fn, input)
+      assert(call.isInstance(transform.evaluableFunction.get), transform.evaluableFunction)
+      checkEvaluation(transform, 3, create_row(7))
+      checkEvaluation(transform, 2, create_row(6))
+    }
+  }
+
+  test("SPARK-60541: a transform whose call falls back leaves its arguments to `eval`") {
+    // Subexpression elimination and `With` treat it as they treat a `CodegenFallback`.
+    val sum = Add(BoundReference(0, IntegerType, nullable = true),
+      BoundReference(1, IntegerType, nullable = true))
+    def commonSubexpressions(fn: BoundFunction): Seq[Expression] = {
+      val equivalence = new EquivalentExpressions
+      equivalence.addExprTree(bucket(fn, sum))
+      equivalence.addExprTree(sum)
+      equivalence.getCommonSubexpressions
+    }
+    assert(commonSubexpressions(InvokeBucketFunction) == Seq(sum),
+      "the generated call shares the sum")
+    assert(commonSubexpressions(ProduceResultBucketFunction).isEmpty,
+      "the call that falls back computes the sum itself")
+
+    def refUnderCodegenFallback(fn: BoundFunction): Boolean =
+      With(sum) { refs => bucket(fn, refs.head) }.refUnderCodegenFallback
+    assert(!refUnderCodegenFallback(InvokeBucketFunction))
+    assert(refUnderCodegenFallback(ProduceResultBucketFunction))
+  }
+
+  test("SPARK-60541: a transform whose keys a join reduced generates no code") {
+    // The call no longer computes such keys, so it must not run in the generated path either.
+    val input = BoundReference(0, IntegerType, nullable = true)
+    val reduced = bucket(InvokeBucketFunction, input, 12)
+      .reducedTogetherWith(bucket(InvokeBucketFunction, input, 8))
+    checkError(
+      exception = intercept[SparkException](reduced.genCode(new CodegenContext)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> s"Cannot generate code for expression: $reduced"))
+  }
+}
+
+/** `bucket` over integers. The functions below differ only in how Spark calls them. */
+private trait IntBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+}
+
+/** Called through the magic `invoke` method, whose call generates code. */
+private object InvokeBucketFunction extends IntBucketFunction {
+  def invoke(numBuckets: Int, value: Int): Int = Math.floorMod(value, numBuckets)
+}
+
+/** Called through a static `invoke` method, as a Java function would be. */
+private class StaticInvokeBucketFunction extends IntBucketFunction
+
+private object StaticInvokeBucketFunction {
+  def invoke(numBuckets: Int, value: Int): Int = Math.floorMod(value, numBuckets)
+}
+
+/** Called through `produceResult`, whose call falls back to `eval`. */
+private object ProduceResultBucketFunction extends IntBucketFunction {
+  override def produceResult(input: InternalRow): Int =
+    Math.floorMod(input.getInt(1), input.getInt(0))
 }

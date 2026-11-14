@@ -27,7 +27,7 @@ import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{ARGS, CLASS_NAME, ERROR, FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -196,7 +196,8 @@ case class TransformExpression(
    * would send the row to a partition it does not belong to. That second arm is a local gate. No
    * caller reaches it today, because every consumer of a reduced partitioning refuses it first,
    * and the write path never sees one. The write path (`DistributionAndOrderingUtils`) casts the
-   * arguments to the function's input types itself. `eval` uses [[evaluableFunction]] instead.
+   * arguments to the function's input types itself. `eval` and `doGenCode` use
+   * [[evaluableFunction]] instead.
    */
   lazy val resolvedFunction: Option[Expression] =
     scalarFunction.map(V2ExpressionUtils.resolveScalarFunction(_, callArguments))
@@ -258,6 +259,14 @@ case class TransformExpression(
       }
   }
 
+  /**
+   * Whether the code of [[evaluableFunction]] falls back to `eval` on the input row, as the call of
+   * a function with only `produceResult` does. This transform is not a [[CodegenFallback]], so the
+   * places that keep such code apart name it (see `CodegenFallback.generate`).
+   */
+  lazy val fallsBackToEval: Boolean =
+    evaluableFunction.exists(_.exists(_.isInstanceOf[CodegenFallback]))
+
   override def eval(input: InternalRow): Any = evaluableFunctionAttempt match {
     case Success(Some(call)) => call.eval(input)
     case Failure(e) => throw e
@@ -265,7 +274,11 @@ case class TransformExpression(
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    evaluableFunctionAttempt match {
+      case Success(Some(call)) => call.genCode(ctx)
+      case Failure(e) => throw e
+      case _ => throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    }
 }
 
 object TransformExpression extends Logging {

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQL
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
-import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION, SCALAR_SUBQUERY_REFERENCE}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.BloomFilter
 
@@ -33,8 +33,10 @@ import org.apache.spark.util.sketch.BloomFilter
  * for values of `valueExpression` in the Bloom filter represented by `bloomFilterExpression`.
  * Not that since the function is "might contain", always returning true regardless is not
  * wrong.
- * Note that this expression requires that `bloomFilterExpression` is either a constant value or
- * an uncorrelated scalar subquery. This is sufficient for the Bloom filter join rewrite.
+ * Note that this expression requires that `bloomFilterExpression` is a constant value, an
+ * uncorrelated scalar subquery, or an expression without subqueries. The last is read from each
+ * input row, such as one bloom per partition key on the other side of a join. This is sufficient
+ * for the Bloom filter join rewrites.
  *
  * @param bloomFilterExpression the Binary data of Bloom filter.
  * @param valueExpression the Long value to be tested for the membership of `bloomFilterExpression`.
@@ -60,6 +62,7 @@ case class BloomFilterMightContain(
             if !subquery.containsPattern(OUTER_REFERENCE) =>
             TypeCheckResult.TypeCheckSuccess
           case _: ScalarSubqueryReference => TypeCheckResult.TypeCheckSuccess
+          case e if !hasSubquery(e) => TypeCheckResult.TypeCheckSuccess
           case _ =>
             DataTypeMismatch(
               errorSubClass = "BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
@@ -88,6 +91,30 @@ case class BloomFilterMightContain(
     copy(bloomFilterExpression = newBloomFilterExpression,
       valueExpression = newValueExpression)
 
+  private def hasSubquery(e: Expression): Boolean =
+    e.containsAnyPattern(PLAN_EXPRESSION, SCALAR_SUBQUERY_REFERENCE)
+
+  // Whether the bloom comes from the input row, so it has to be read per row. A constant or a
+  // scalar subquery is read once.
+  @transient private lazy val bloomIsPerRow =
+    !bloomFilterExpression.foldable && !hasSubquery(bloomFilterExpression)
+
+  // The last bloom read per row, with the bytes it was deserialized from, for both `eval` and the
+  // generated code. The bloom is reused while rows hand over the same array. One field, so a
+  // reader never pairs one bloom's bytes with another's filter.
+  @transient private var lastBloomFilter: (Array[Byte], BloomFilter) = _
+
+  private[sql] def bloomFilterOf(bytes: Array[Byte]): BloomFilter = {
+    val last = lastBloomFilter
+    if (last != null && (last._1 eq bytes)) {
+      last._2
+    } else {
+      val bloomFilter = deserialize(bytes)
+      lastBloomFilter = (bytes, bloomFilter)
+      bloomFilter
+    }
+  }
+
   // The bloom filter created from `bloomFilterExpression`.
   @transient private lazy val bloomFilter = {
     val bytes = bloomFilterExpression.eval().asInstanceOf[Array[Byte]]
@@ -95,7 +122,9 @@ case class BloomFilterMightContain(
   }
 
   override def eval(input: InternalRow): Any = {
-    if (bloomFilter == null) {
+    if (bloomIsPerRow) {
+      super.eval(input)
+    } else if (bloomFilter == null) {
       null
     } else {
       val value = valueExpression.eval(input)
@@ -103,8 +132,20 @@ case class BloomFilterMightContain(
     }
   }
 
+  // Only for a bloom read per row, see `eval`.
+  override protected def nullSafeEval(bytes: Any, value: Any): Any =
+    bloomFilterOf(bytes.asInstanceOf[Array[Byte]]).mightContainLong(value.asInstanceOf[Long])
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (bloomFilter == null) {
+    if (bloomIsPerRow && left.dataType != NullType && right.dataType != NullType) {
+      // Calls `bloomFilterOf`, which keeps the last bloom. `BloomFilter.readFrom` declares a
+      // checked exception, so the generated Java does not call it directly.
+      val self = ctx.addReferenceObj("bloomFilterMightContain", this)
+      nullSafeCodeGen(ctx, ev, (bytes, value) =>
+        s"${ev.value} = $self.bloomFilterOf($bytes).mightContainLong($value);")
+    } else if (bloomIsPerRow || bloomFilter == null) {
+      // Null on every row, for a null bloom read once or a bloom read per row with a null-typed
+      // side. Such a side has no Java type to call the bloom with.
       ev.copy(isNull = TrueLiteral, value = JavaCode.defaultLiteral(dataType))
     } else {
       val bf = ctx.addReferenceObj("bloomFilter", bloomFilter, classOf[BloomFilter].getName)

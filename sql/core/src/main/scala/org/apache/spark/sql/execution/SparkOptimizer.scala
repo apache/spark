@@ -99,6 +99,10 @@ class SparkOptimizer(
         RewriteDistinctAggregates),
       Batch("Pushdown Filters from PartitionPruning", fixedPoint,
         PushDownPredicates),
+      // After the pushdown, which moves the placeholder of a per-partition runtime bloom filter
+      // along its key.
+      Batch("Insert per-partition runtime filter joins", Once,
+        InsertPerPartitionRuntimeFilterJoins),
       Batch("Cleanup filters that cannot be pushed down", Once,
         CleanupDynamicPruningFilters,
         // cleanup the unnecessary TrueLiteral predicates
@@ -148,6 +152,8 @@ class SparkOptimizer(
     Seq(
       // ANALYZE needs the driver session; do not leave it to ConstantFolding.
       EvaluateParseSql.ruleName,
+      // Nothing can evaluate the placeholder of a per-partition runtime bloom filter.
+      InsertPerPartitionRuntimeFilterJoins.ruleName,
       // A plan with a Python UDF in a higher-order function lambda passes analysis only because
       // this rule lifts the UDF out of the lambda.
       ExtractPythonUDFFromLambda.ruleName,
