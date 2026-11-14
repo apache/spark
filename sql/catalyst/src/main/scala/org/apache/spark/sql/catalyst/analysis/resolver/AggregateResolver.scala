@@ -174,7 +174,7 @@ class AggregateResolver(
           operator = expandedAggregate,
           outputList = expandedAggregate.aggregateExpressions,
           groupingAttributeIds = getGroupingAttributeIds(expandedAggregate),
-          aggregateListAliases = scopes.current.getTopAggregateExpressionAliases,
+          aggregateListAliases = aggregateListAliases(expandedAggregate),
           baseAggregate = expandedAggregate
         )
       }
@@ -190,6 +190,37 @@ class AggregateResolver(
     )
 
     resolvedAggregate.operator
+  }
+
+  /**
+   * Aggregate-list aliases to register for `aggregate`: the aliases collected while resolving the
+   * aggregate expressions, replaced by the aggregate's own alias where the exprIds match. A
+   * grouping-analytics aggregate is rebuilt over an [[Expand]] with fresh grouping attributes, so
+   * the collected aliases still have the pre-Expand input as child and would never match a
+   * post-Expand reference resolved under HAVING. For
+   * `SELECT col1 AS k, count(*) AS c FROM t GROUP BY ROLLUP(col1) HAVING ...` the rebuilt plan is
+   *
+   * {{{
+   * Aggregate [col1#4, spark_grouping_id#5L], [col1#4 AS k#2, count(1) AS c#3L]
+   * +- Expand [[col1#0, col2#1, col1#4, 0], [col1#0, col2#1, null, 1]],
+   *           [col1#0, col2#1, col1#4, spark_grouping_id#5L]
+   *    +- Project [col1#0, col2#1, col1#0 AS col1#4]
+   *       +- LocalRelation [col1#0, col2#1]
+   * }}}
+   *
+   * and the collected `col1#0 AS k#2` is replaced by `col1#4 AS k#2`, so a HAVING reference to the
+   * post-Expand `col1#4` binds to `k#2`.
+   */
+  private def aggregateListAliases(aggregate: Aggregate): Seq[Alias] = {
+    val collectedAliases = scopes.current.getTopAggregateExpressionAliases
+    if (operatorResolutionContextStack.current.hasGroupingAnalytics) {
+      val rebuiltAliasesById = aggregate.aggregateExpressions.collect {
+        case alias: Alias => alias.exprId -> alias
+      }.toMap
+      collectedAliases.map(alias => rebuiltAliasesById.getOrElse(alias.exprId, alias))
+    } else {
+      collectedAliases
+    }
   }
 
   /**
