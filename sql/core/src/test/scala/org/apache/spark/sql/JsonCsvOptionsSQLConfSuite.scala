@@ -239,7 +239,8 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  for (conversion <- Seq("from_json", "to_csv", "to_json_array", "to_json_map")) {
+  for (conversion <- Seq("from_json", "to_csv", "to_json_array", "to_json_map",
+      "to_json_struct", "to_json_variant", "to_json_struct_key")) {
     test(s"saved functions share $conversion when captured defaults are ineffective") {
       val (key, body, returnType) = conversion match {
         case "from_json" =>
@@ -254,6 +255,15 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
         case "to_json_map" =>
           (SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key,
             "to_json(map('id', id, 'n', CAST(NULL AS BIGINT)))", "STRING")
+        case "to_json_struct" =>
+          (SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key,
+            "to_json(named_struct('id', id))", "STRING")
+        case "to_json_variant" =>
+          (SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key,
+            """to_json(parse_json(concat('{"id":', id, ',"n":null}')))""", "STRING")
+        case "to_json_struct_key" =>
+          (SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key,
+            "to_json(map(named_struct('key', id), id))", "STRING")
       }
       withUserDefinedFunction("captured_fn_1" -> false, "captured_fn_2" -> false) {
         val firstValue = if (conversion == "from_json") None else Some(false)
@@ -282,10 +292,47 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
               case "to_csv" => id.toString
               case "to_json_array" => s"[$id,null]"
               case "to_json_map" => s"""{"id":$id,"n":null}"""
+              case "to_json_struct" => s"""{"id":$id}"""
+              case "to_json_variant" => s"""{"id":$id,"n":null}"""
+              case "to_json_struct_key" => s"""{"[$id]":$id}"""
             }
             Row(value, value)
           }
           checkAnswer(result, expected)
+        }
+      }
+    }
+  }
+
+  for (dataType <- Seq("DATE", "TIMESTAMP")) {
+    test(s"saved $dataType parsers share with only the other datetime type's format") {
+      val format = if (dataType == "DATE") "TiMeStAmPfOrMaT" else "DaTeFoRmAt"
+      val value = if (dataType == "DATE") "1" else "2024-01-02"
+      val body = s"""from_json(concat('{"id":', id, ',"v":"$value"}'),
+                   |'id BIGINT, v $dataType', map('$format', 'yyyy/MM/dd'))""".stripMargin
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withUserDefinedFunction("captured_fn_1" -> false, "captured_fn_2" -> false) {
+          for ((name, captured) <- Seq("captured_fn_1" -> None, "captured_fn_2" -> Some(true))) {
+            withFallbackConf(captured) {
+              sql(s"CREATE FUNCTION $name(id BIGINT) " +
+                s"RETURNS STRUCT<id: BIGINT, v: $dataType> RETURN $body")
+            }
+          }
+          val result = sql("SELECT captured_fn_1(id), captured_fn_2(id) FROM range(1, 3)")
+          val conversions = result.queryExecution.optimizedPlan.flatMap { plan =>
+            plan.expressions.flatMap(_.collect { case j: JsonToStructs => j })
+          }
+          assert(conversions.size == 2)
+          val equivalents = new EquivalentExpressions
+          conversions.foreach(equivalents.addExprTree(_))
+          assert(equivalents.getCommonSubexpressions.exists(_.semanticEquals(conversions.head)))
+          val parsed = if (dataType == "DATE") Date.valueOf("1970-01-02") else {
+            Timestamp.from(Instant.parse("2024-01-02T00:00:00Z"))
+          }
+          checkAnswer(result, (1 to 2).map { id =>
+            Row(Row(id.toLong, parsed), Row(id.toLong, parsed))
+          })
         }
       }
     }

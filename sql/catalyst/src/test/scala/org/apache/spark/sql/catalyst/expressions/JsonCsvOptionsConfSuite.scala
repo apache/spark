@@ -250,8 +250,7 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
         json.copy(useCapturedOptionDefaults = false).replacement)
     }
     val withFields = Seq(ArrayType(new StructType().add("n", LongType)),
-      MapType(StringType, new StructType().add("n", LongType)),
-      ArrayType(new ExampleBaseTypeUDT))
+      MapType(StringType, new StructType().add("n", LongType)))
     withFields.foreach { dataType =>
       val json = StructsToJson(Map.empty,
         BoundReference(0, dataType, nullable = false), Some("UTC"))
@@ -265,6 +264,76 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(StructsToJson(Map.empty,
         BoundReference(0, MapType(StringType, LongType), nullable = false), Some("UTC"),
         ignoreNullFields = ignore), """{"a":null}""", create_row(create_map("a" -> null)))
+    }
+  }
+
+  test("JSON serialization shares exactly when serialized fields cannot observe null omission") {
+    val nonnullable = new StructType().add("id", LongType, nullable = false)
+    val independent = Seq(nonnullable,
+      new StructType().add("nested", ArrayType(nonnullable), nullable = false),
+      VariantType, MapType(new StructType().add("key", LongType), LongType),
+      ArrayType(new ExampleBaseTypeUDT), ArrayType(new ExampleIntRowUDT(1)))
+    independent.foreach { dataType =>
+      val json = StructsToJson(Map.empty,
+        BoundReference(0, dataType, nullable = false), Some("UTC"))
+      assertShared(json.copy(ignoreNullFields = true).replacement,
+        json.copy(ignoreNullFields = false).replacement)
+      assertShared(json.copy(useCapturedOptionDefaults = true).replacement,
+        json.copy(useCapturedOptionDefaults = false).replacement)
+    }
+    val nullable = new StructType().add("n", LongType)
+    val udt = new ExampleIntRowUDT(1) {
+      override def sqlType: DataType = nullable
+    }
+    val sensitive = Seq(nullable,
+      new StructType().add("nested", nullable, nullable = false),
+      ArrayType(nullable), MapType(StringType, nullable), ArrayType(udt))
+    sensitive.foreach { dataType =>
+      val json = StructsToJson(Map.empty,
+        BoundReference(0, dataType, nullable = false), Some("UTC"))
+      assert(!json.copy(ignoreNullFields = true).replacement.semanticEquals(
+        json.copy(ignoreNullFields = false).replacement))
+    }
+    val nested = CreateNamedStruct(Seq(Literal("nested"), struct))
+    for (ignore <- Seq(true, false)) {
+      val expected = if (ignore) """{"nested":{"id":1}}""" else {
+        """{"nested":{"id":1,"n":null}}"""
+      }
+      checkEvaluation(StructsToJson(Map.empty, nested, Some("UTC"), ignoreNullFields = ignore),
+        expected, create_row(1L))
+    }
+  }
+
+  test("JSON parser sharing ignores only formats for absent fallback-sensitive types") {
+    val input = BoundReference(0, StringType, nullable = false)
+    val types = Seq((DateType, "TiMeStAmPfOrMaT", "DaTeFoRmAt"),
+      (TimestampType, "DaTeFoRmAt", "TiMeStAmPfOrMaT"))
+    for ((dataType, unrelated, own) <- types) {
+      val udt = new ExampleIntRowUDT(1) {
+        override def sqlType: DataType = new StructType().add("v", dataType)
+      }
+      val schemas = Seq(new StructType().add("v", dataType),
+        new StructType().add("nested", ArrayType(MapType(StringType, dataType))),
+        new StructType().add("udt", udt))
+      for (schema <- schemas; value <- Seq(null, "yyyy/MM/dd")) {
+        val parser = JsonToStructs(schema, Map(unrelated -> value), input, Some("UTC"),
+          enableDateTimeParsingFallback = None)
+        assertShared(parser, parser.copy(enableDateTimeParsingFallback = Some(true)))
+        assert(!parser.semanticEquals(parser.copy(enableDateTimeParsingFallback = Some(false))))
+        assert(!parser.semanticEquals(parser.copy(useCapturedOptionDefaults = false)))
+        val relevantFormat = parser.copy(options = Map(own -> value))
+        assert(!relevantFormat.semanticEquals(
+          relevantFormat.copy(enableDateTimeParsingFallback = Some(true))))
+      }
+    }
+    for ((first, last, format) <- Seq((DateType, TimestampType, "timestampFormat"),
+        (TimestampType, DateType, "dateFormat"))) {
+      val middle = (0 until 128).map(i => StructField(s"n$i", LongType))
+      val schema = StructType(Seq(StructField("first", first)) ++ middle :+
+        StructField("last", last))
+      val parser = JsonToStructs(schema, Map(format -> "yyyy/MM/dd"), input, Some("UTC"),
+        enableDateTimeParsingFallback = None)
+      assert(!parser.semanticEquals(parser.copy(enableDateTimeParsingFallback = Some(true))))
     }
   }
 

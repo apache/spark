@@ -339,7 +339,7 @@ case class StructsToCsv(
     val explicitDefault = parameters.get(CSVOptions.TREAT_NULL_AS_EMPTY_STRING).exists { value =>
       value != null && Set("true", "false").contains(value.toLowerCase(Locale.ROOT))
     }
-    val nonNullableFields = child.resolved && (child.dataType match {
+    def nonNullableFields: Boolean = child.resolved && (child.dataType match {
       case schema: StructType => schema.forall(!_.nullable)
       case _ => false
     })
