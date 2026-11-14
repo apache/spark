@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Expression, Literal, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.columnar.CachedBatch
@@ -301,6 +301,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   def assertDidNotRewriteWithBloomFilter(query: String): Unit = {
     checkWithAndWithoutFeatureEnabled(query, shouldReplace = false)
   }
+
+  // The keys that the bloom filters of `query` check.
+  def bloomFilterKeys(query: String): Seq[Expression] =
+    sql(query).queryExecution.optimizedPlan.flatMap(_.expressions)
+      .flatMap(_.collect { case BloomFilterMightContain(_, XxHash64(Seq(key), _)) => key })
+
+  // The names of the columns that the bloom filters of `query` check.
+  def bloomFilterKeyNames(query: String): Seq[String] =
+    bloomFilterKeys(query).flatMap(_.references.map(_.name))
 
   test("SPARK-58272: safely use fully materialized selectively filtered caches") {
     val cacheName = "cached_bloom_filter_keys"
