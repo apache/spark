@@ -268,8 +268,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @throws ArithmeticException
    *   if the decimal is too big to fit in Byte type.
    */
-  private[sql] def roundToByte(): Byte =
-    roundToNumeric[Byte](ByteType, Byte.MaxValue, Byte.MinValue)(_.toByte)(_.toByte)
+  private[sql] def roundToByte(): Byte = roundToByte(exactTruncation = true)
+
+  private[sql] def roundToByte(exactTruncation: Boolean): Byte =
+    roundToNumeric[Byte](
+      ByteType, Byte.MaxValue, Byte.MinValue, exactTruncation)(_.toByte)(_.toByte)
 
   /**
    * @return
@@ -277,8 +280,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @throws ArithmeticException
    *   if the decimal is too big to fit in Short type.
    */
-  private[sql] def roundToShort(): Short =
-    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue)(_.toShort)(_.toShort)
+  private[sql] def roundToShort(): Short = roundToShort(exactTruncation = true)
+
+  private[sql] def roundToShort(exactTruncation: Boolean): Short =
+    roundToNumeric[Short](ShortType, Short.MaxValue, Short.MinValue, exactTruncation)(
+      _.toShort)(_.toShort)
 
   /**
    * @return
@@ -286,19 +292,35 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @throws ArithmeticException
    *   if the decimal too big to fit in Int type.
    */
-  private[sql] def roundToInt(): Int =
-    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue)(_.toInt)(_.toInt)
+  private[sql] def roundToInt(): Int = roundToInt(exactTruncation = true)
+
+  private[sql] def roundToInt(exactTruncation: Boolean): Int =
+    roundToNumeric[Int](IntegerType, Int.MaxValue, Int.MinValue, exactTruncation)(_.toInt)(_.toInt)
 
   private def toSqlValue: String = this.toString + "BD"
 
   private def roundToNumeric[T <: AnyVal](
       integralType: IntegralType,
       maxValue: Int,
-      minValue: Int)(f1: Long => T)(f2: Double => T): T = {
+      minValue: Int,
+      exactTruncation: Boolean)(f1: Long => T)(f2: Double => T): T = {
     if (decimalVal.eq(null)) {
       val numericVal = f1(actualLongVal)
       if (actualLongVal == numericVal) {
         numericVal
+      } else {
+        throw DataTypeErrors.castingCauseOverflowError(
+          toSqlValue,
+          DecimalType(this.precision, this.scale),
+          integralType)
+      }
+    } else if (exactTruncation) {
+      // Truncate toward zero on the exact value. Going through a Double (the legacy branch below)
+      // rounds values such as 0.999999999999999999 up to 1 before truncating.
+      val intVal = decimalVal.bigDecimal.toBigInteger
+      if (intVal.bitLength() < 32 && intVal.intValue() <= maxValue &&
+          intVal.intValue() >= minValue) {
+        f1(intVal.longValue())
       } else {
         throw DataTypeErrors.castingCauseOverflowError(
           toSqlValue,

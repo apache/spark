@@ -181,3 +181,11 @@ private[sql] object DecimalExactNumeric extends DecimalIsConflicted {
 
   override def toLong(x: Decimal): Long = x.roundToLong()
 }
+
+// DecimalExactNumeric with the legacy Double-based rounding for BigDecimal-backed values, used
+// when spark.sql.legacy.castDecimalToIntegralTypeViaDouble is true. See Decimal.roundToNumeric.
+private[sql] object LegacyDecimalExactNumeric extends DecimalIsConflicted {
+  override def toInt(x: Decimal): Int = x.roundToInt(exactTruncation = false)
+
+  override def toLong(x: Decimal): Long = x.roundToLong()
+}

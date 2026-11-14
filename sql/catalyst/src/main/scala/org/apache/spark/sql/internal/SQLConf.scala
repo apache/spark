@@ -2689,6 +2689,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  val LEGACY_CAST_DECIMAL_TO_INTEGRAL_TYPE_VIA_DOUBLE =
+    buildConf("spark.sql.legacy.castDecimalToIntegralTypeViaDouble")
+      .internal()
+      .doc("When true, an ANSI cast to TINYINT, SMALLINT or INT of a DECIMAL value stored as a " +
+        "BigDecimal (precision > 18) converts it to a Double first, so a value such as " +
+        "0.999999999999999999 becomes 1. When false, the exact value is truncated toward zero.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")

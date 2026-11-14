@@ -1212,6 +1212,17 @@ case class Cast(
     }
   }
 
+  // Selects exact (default) or legacy Double-based truncation of BigDecimal-backed DECIMALs in
+  // ANSI casts to TINYINT/SMALLINT/INT; see Decimal.roundToNumeric.
+  private lazy val decimalToIntegralExactTruncation: Boolean =
+    !SQLConf.get.getConf(SQLConf.LEGACY_CAST_DECIMAL_TO_INTEGRAL_TYPE_VIA_DOUBLE)
+
+  private def exactNumericToInt(x: NumericType): Numeric[Any] = x match {
+    case _: DecimalType if !decimalToIntegralExactTruncation =>
+      LegacyDecimalExactNumeric.asInstanceOf[Numeric[Any]]
+    case _ => PhysicalNumericType.exactNumeric(x)
+  }
+
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case _: StringType if ansiEnabled =>
@@ -1235,7 +1246,7 @@ case class Cast(
     case _: TimeType =>
       buildCast[Long](_, t => timeToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
-      val exactNumeric = PhysicalNumericType.exactNumeric(x)
+      val exactNumeric = exactNumericToInt(x)
       b => exactNumeric.toInt(b)
     case x: NumericType =>
       val numeric = PhysicalNumericType.numeric(x)
@@ -1288,7 +1299,7 @@ case class Cast(
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToShortExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
-      val exactNumeric = PhysicalNumericType.exactNumeric(x)
+      val exactNumeric = exactNumericToInt(x)
       b =>
         val intValue = try {
           exactNumeric.toInt(b)
@@ -1354,7 +1365,7 @@ case class Cast(
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToByteExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
-      val exactNumeric = PhysicalNumericType.exactNumeric(x)
+      val exactNumeric = exactNumericToInt(x)
       b =>
         val intValue = try {
           exactNumeric.toInt(b)
@@ -2441,7 +2452,9 @@ case class Cast(
 
   private[this] def castDecimalToIntegralTypeCode(integralType: String): CastFunction = {
     if (ansiEnabled) {
-      (c, evPrim, _) => code"$evPrim = $c.roundTo${integralType.capitalize}();"
+      // roundToLong is always exact; the gate only selects the byte/short/int variant.
+      val args = if (integralType == "long") "" else decimalToIntegralExactTruncation.toString
+      (c, evPrim, _) => code"$evPrim = $c.roundTo${integralType.capitalize}($args);"
     } else {
       (c, evPrim, _) => code"$evPrim = $c.to${integralType.capitalize}();"
     }
