@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -26,6 +28,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -47,6 +50,104 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
           case _ => false
         }
+      case _ => false
+    }
+  }
+
+  /**
+   * The window of `otherEventTime` that a row with `thisEventTime` can match, as offsets in
+   * microseconds from that row's event time, both inclusive, for the V4 range scan. Returns None
+   * when no exact comparison bounds the window in one of the two directions.
+   *
+   * The window comes only from comparisons whose solved bound is an exact offset from the row's
+   * event time, so each of them admits every row it can match, and so does the loosest of them:
+   * - The comparison must compare timestamps: no event time in it may be cast to a type other
+   *   than TIMESTAMP; see [[castsEventTime]]. Casting an event time to a number, as in
+   *   CAST(ts AS BIGINT), is the epoch-seconds idiom from before Spark 3.0. Eviction still
+   *   supports it, but the range scan does not optimize it.
+   * - The bound must move with the watermark the solver is given. It stays fixed for a
+   *   comparison of one event time with a constant, such as
+   *   leftTime >= CAST(1700000000 AS TIMESTAMP), which gives an absolute time.
+   * - It must add no months, and no whole days in a zone whose offset changes; see
+   *   [[hasCalendarInterval]].
+   * The solver returns whole milliseconds, truncated toward zero, so a bound that is not a whole
+   * number of milliseconds can move inward by less than 1 ms. Each end is widened by 1 ms.
+   */
+  def getRangeScanOffsets(
+      condition: Option[Expression],
+      thisEventTime: Attribute,
+      otherEventTime: Attribute): Option[(Long, Long)] = {
+    val eventTimes = AttributeSet(Seq(thisEventTime, otherEventTime))
+    val exactComparisons = condition.toSeq.flatMap(splitConjunctivePredicates)
+      .filterNot(c => castsEventTime(c, eventTimes) || hasCalendarInterval(c))
+    // The solver's bound on `bounded` for the loosest kept comparison, in milliseconds relative
+    // to `probing`: truncated toward zero, and 1 ms lower for a non-strict comparison.
+    def loosestOffsetMs(bounded: Attribute, probing: Attribute): Option[Long] =
+      exactComparisons.flatMap { comparison =>
+        def solve(watermark: Long): Option[Long] = getStateValueWatermark(
+          AttributeSet(Seq(bounded)), AttributeSet(Seq(probing)), Some(comparison), Some(watermark))
+        for {
+          atZero <- solve(0L)
+          atShift <- solve(rangeScanOffsetCheckMs)
+          // Truncation can move each result by less than 1 ms.
+          if math.abs(atShift - atZero - rangeScanOffsetCheckMs) <= 1
+        } yield atZero
+      }.minOption
+    for {
+      lower <- loosestOffsetMs(otherEventTime, thisEventTime)
+      upper <- loosestOffsetMs(thisEventTime, otherEventTime)
+    } yield ((lower - 1) * 1000L, (-upper + 1) * 1000L) // ms -> us
+  }
+
+  // A watermark well away from 0, so that an offset bound moves by it. 10^12 ms, in 2001, keeps
+  // the solver's sums of microseconds exact in a double.
+  private val rangeScanOffsetCheckMs = 1000000000000L
+
+  /**
+   * Whether the expression casts one of the event times in `eventTimes` to a type other than
+   * TIMESTAMP, such as BIGINT, DOUBLE, DECIMAL or a TIMESTAMP with nanoseconds. The solver reads
+   * a cast to a number as its input, although the cast can drop or round part of a time, and it
+   * derives no bound through any other cast, such as to TIMESTAMP_NTZ or a nanosecond TIMESTAMP.
+   */
+  def castsEventTime(expr: Expression, eventTimes: AttributeSet): Boolean = expr.exists {
+    case Cast(child, dataType, _, _) =>
+      dataType != TimestampType && child.references.exists(eventTimes.contains)
+    case _ => false
+  }
+
+  /**
+   * Whether the expression adds months to a time, whole days in a time zone whose offset changes,
+   * or an interval whose value is not known. Spark adds days and months in the session time zone,
+   * where a day can be 23 or 25 hours long, but the solver counts a day as 24 hours, so a bound
+   * it solves from that expression can be an hour or more too narrow. In a zone with a fixed
+   * offset, such as UTC, a day is always 24 hours.
+   */
+  def hasCalendarInterval(expr: Expression): Boolean = {
+    // A zone that is missing or cannot be resolved counts as one whose offset changes.
+    def hasFixedOffset(timeZoneId: Option[String]): Boolean = timeZoneId.exists { zone =>
+      try DateTimeUtils.getZoneId(zone).getRules.isFixedOffset catch { case NonFatal(_) => false }
+    }
+    def isCalendarInterval(interval: Expression, timeZoneId: Option[String]): Boolean = {
+      // An interval that cannot be evaluated here counts as one with months.
+      val value = if (interval.foldable) {
+        try Option(interval.eval()) catch { case NonFatal(_) => None }
+      } else {
+        None
+      }
+      value.forall {
+        case micros: Long =>
+          (micros <= -MICROS_PER_DAY || micros >= MICROS_PER_DAY) && !hasFixedOffset(timeZoneId)
+        case i: CalendarInterval => i.months != 0 || (i.days != 0 && !hasFixedOffset(timeZoneId))
+        case _ => true
+      }
+    }
+    expr.exists {
+      case TimestampAddInterval(_, interval, timeZoneId) =>
+        isCalendarInterval(interval, timeZoneId)
+      case _: TimestampAddYMInterval => true
+      case TimestampAdd(unit, _, _, _) =>
+        !Set("MICROSECOND", "MILLISECOND", "SECOND", "MINUTE", "HOUR")
+          .contains(unit.toUpperCase(Locale.ROOT))
       case _ => false
     }
   }
