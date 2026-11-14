@@ -337,6 +337,41 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("unchanged JSON canonicalization avoids cloning a wide nullable schema") {
+    val fields = (0 until 128).map { i =>
+      StructField(s"n$i", ArrayType(MapType(StringType, LongType)))
+    }
+    val schema = new StructType().add("payload", ArrayType(StructType(fields)))
+    val parser = JsonToStructs(schema, Map("enableDateTimeParsingFallback" -> "false"),
+      BoundReference(0, StringType, nullable = false), Some("UTC"),
+      enableDateTimeParsingFallback = None, useCapturedOptionDefaults = true)
+    assert(parser.canonicalized eq parser)
+    assert(parser.canonicalized eq parser.canonicalized)
+
+    val attribute = AttributeReference("json", StringType, nullable = false)(exprId = ExprId(42))
+    assert(attribute.canonicalized ne attribute)
+    val changedChild = parser.copy(child = attribute)
+    val canonicalChild = changedChild.canonicalized.asInstanceOf[JsonToStructs]
+    assert(canonicalChild ne changedChild)
+    assert(canonicalChild.child eq attribute.canonicalized)
+    assert(changedChild.child eq attribute)
+
+    val captured = parser.copy(enableDateTimeParsingFallback = Some(true))
+    val canonicalCapture = captured.canonicalized.asInstanceOf[JsonToStructs]
+    assert(canonicalCapture ne captured)
+    assert(canonicalCapture.enableDateTimeParsingFallback.isEmpty)
+    assert(captured.enableDateTimeParsingFallback.contains(true))
+    assert(canonicalCapture.semanticEquals(parser))
+    assert(canonicalCapture.semanticHash() == parser.semanticHash())
+
+    val legacy = parser.copy(useCapturedOptionDefaults = false)
+    val canonicalMode = legacy.canonicalized.asInstanceOf[JsonToStructs]
+    assert(canonicalMode ne legacy)
+    assert(canonicalMode.useCapturedOptionDefaults)
+    assert(!legacy.useCapturedOptionDefaults)
+    assert(canonicalMode.semanticEquals(parser))
+  }
+
   test("conversion sharing respects the binding mode only when it can affect results") {
     val parser = JsonToStructs(new StructType().add("ts", TimestampType), Map.empty,
       BoundReference(0, StringType, nullable = false), Some("UTC"))

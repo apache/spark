@@ -2269,10 +2269,17 @@ case class JsonToStructs(
     } else {
       None
     }
-    copy(
-      child = child.canonicalized,
-      enableDateTimeParsingFallback = capturedFallback,
-      useCapturedOptionDefaults = !relevant || useCapturedOptionDefaults)
+    val canonicalChild = child.canonicalized
+    val canonicalMode = !relevant || useCapturedOptionDefaults
+    if ((canonicalChild eq child) && capturedFallback == enableDateTimeParsingFallback &&
+        canonicalMode == useCapturedOptionDefaults) {
+      this
+    } else {
+      copy(
+        child = canonicalChild,
+        enableDateTimeParsingFallback = capturedFallback,
+        useCapturedOptionDefaults = canonicalMode)
+    }
   }
 
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =

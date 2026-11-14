@@ -59,7 +59,8 @@ class JacksonParser(
     // file scans build the parser with `None`, so the key check follows the executing session's
     // flag like other scan-time options (a scan under a persisted view resolves it the same way).
     charVarcharStandardSemanticsOverride: Option[Boolean] = None,
-    // from_json passes its captured default, including None. File scans use the current SQLConf.
+    // from_json supplies its captured default (including None) when capture mode is enabled.
+    // In rollback mode, and for file scans, the default comes from the current SQLConf.
     defaultEnableDateTimeParsingFallback: Option[Boolean] =
       SQLConf.get.jsonEnableDateTimeParsingFallback) extends Logging {
 
