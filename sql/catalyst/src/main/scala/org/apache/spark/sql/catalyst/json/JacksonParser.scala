@@ -908,7 +908,8 @@ class JacksonParser(
   private[sql] def parseIterator[T](
       record: T,
       createParser: (JsonFactory, T) => JsonParser,
-      recordLiteral: T => UTF8String): Iterator[InternalRow] = {
+      recordLiteral: T => UTF8String,
+      closeOnTaskCompletion: Boolean = true): Iterator[InternalRow] = {
     val streamArray = allowArrayAsStructs && schema.isInstanceOf[StructType] &&
       options.singleVariantColumn.isEmpty && options.explodeEmbeddedArray.isEmpty
     val jsonParser = try {
@@ -922,44 +923,69 @@ class JacksonParser(
           _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
         throw badRecord(e, () => recordLiteral(record))
     }
-    // An archive read builds one parser per entry inside a single task, so a closed parser left
-    // reachable from the completion listener keeps its entry's buffer alive for the rest of the
-    // task. Every close path takes the parser out of this cell first, so exactly one of them closes
-    // it and the listener stops retaining it as soon as one does.
+    // A task can read many files, one parser each, so a closed parser left reachable from the
+    // completion listener keeps it and its input alive for the rest of the task. Every close path
+    // takes the parser out of this cell first, so exactly one of them closes it and the listener
+    // stops retaining it as soon as one does.
     val openParser = new AtomicReference(jsonParser)
     def takeParser(): Option[JsonParser] = Option(openParser.getAndSet(null))
     // Cleanup must not fail a read that already emitted rows, nor a task whose iterator was
     // abandoned, so the paths that can still succeed close the way `tryWithResource` does: quietly.
     def closeParser(): Unit = takeParser().foreach(parser => Utils.closeQuietly(parser))
-    def fail(error: Throwable): Nothing = {
+    def fail(
+        error: Throwable,
+        literal: () => UTF8String = () => recordLiteral(record)): Nothing = {
       try takeParser().foreach(_.close()) catch {
         case NonFatal(closeError) => error.addSuppressed(closeError)
       }
-      throw badRecord(error, () => recordLiteral(record))
+      throw badRecord(error, literal)
     }
     // Resuming is only safe where the failed element left the parser back in the top-level array.
     // A syntax error inside a nested object ends `convertObject` at that object's END_OBJECT, not
     // the element's, so a `PartialResultException` alone does not prove the element was consumed.
-    def resumableAfter(error: Throwable, elementStart: Option[JsonToken]): Boolean = {
+    def consumedElementEnd(error: Throwable, elementStart: Option[JsonToken]): Option[Long] = {
       val context = jsonParser.getParsingContext
-      options.parseMode != FailFastMode && context.inArray && context.getParent.inRoot &&
+      val consumed = context.inArray && context.getParent.inRoot &&
         (elementStart match {
           case Some(START_OBJECT) | Some(START_ARRAY) => error.isInstanceOf[PartialResultException]
           case Some(_) => error.isInstanceOf[RuntimeException]
           case None => false
         })
+      if (consumed) {
+        try {
+          // Jackson reads a string's text lazily; until it is read, the position is inside it.
+          jsonParser.finishToken()
+          Some(jsonParser.currentLocation().getByteOffset)
+        } catch {
+          case NonFatal(_) => None
+        }
+      } else {
+        None
+      }
     }
-    def handleFailure[R](elementStart: Option[JsonToken])(operation: => R): R = {
+    // A char-based parser, used for an explicit `encoding` and for UTF-16 or UTF-32 input, reports
+    // no byte offsets, so its elements keep the whole document.
+    def elementLiteral(start: Long, end: Long): () => UTF8String = () => {
+      val document = recordLiteral(record)
+      if (start >= 0 && start < end && end <= document.numBytes) {
+        document.copyUTF8String(start.toInt, end.toInt - 1)
+      } else {
+        document
+      }
+    }
+    def handleFailure[R](elementStart: Option[JsonToken], startOffset: Long = -1L)(
+        operation: => R): R = {
       try operation catch {
         case e: SparkUpgradeException => fail(e)
         case e: CharConversionException if options.encoding.isEmpty => fail(e)
         case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException |
             _: PartialResultException | _: PartialResultArrayException |
             _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
-          if (resumableAfter(e, elementStart)) {
-            throw badRecord(e, () => recordLiteral(record)).copy(recoverable = true)
-          } else {
-            fail(e)
+          consumedElementEnd(e, elementStart) match {
+            case Some(end) if options.parseMode != FailFastMode =>
+              throw badRecord(e, elementLiteral(startOffset, end)).copy(recoverable = true)
+            case Some(end) => fail(e, elementLiteral(startOffset, end))
+            case None => fail(e)
           }
         // Anything else, such as a raw `IOException` off the underlying stream, is not a malformed
         // record and so propagates unwrapped -- but it still has to close what the eager path's
@@ -976,7 +1002,9 @@ class JacksonParser(
         Iterator.empty
       case START_ARRAY if streamArray =>
         // Abandoning the iterator before END_ARRAY (e.g. a LIMIT) reaches no eager close.
-        Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeParser()))
+        if (closeOnTaskCompletion) {
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeParser()))
+        }
         new Iterator[InternalRow] {
           private var nextRow: InternalRow = _
           private var prepared = false
@@ -1004,7 +1032,8 @@ class JacksonParser(
               case null =>
                 fail(new JsonParseException(jsonParser, "Unexpected end of top-level array"))
               case elementStart =>
-                nextRow = handleFailure(Some(elementStart)) {
+                val startOffset = jsonParser.currentTokenLocation().getByteOffset
+                nextRow = handleFailure(Some(elementStart), startOffset) {
                   val row = arrayElementConverter(jsonParser).asInstanceOf[InternalRow]
                   if (row == null) throw QueryExecutionErrors.rootConverterReturnNullError()
                   row
