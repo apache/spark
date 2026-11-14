@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkEnv
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -139,6 +141,72 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     hashed2.writeExternal(out2)
     out2.flush()
     assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
+  }
+
+  test("SPARK-61082: many UnsafeHashedRelations fit in one task when each holds little data") {
+    // UnsafeHashedRelation takes its page size from SparkEnv, not from this memory manager. With a
+    // page larger than 16 MiB, 16 relations rounded up to a full page each would need more than
+    // the 256 MiB available.
+    assert(SparkEnv.get.memoryManager.pageSizeBytes > ByteUnit.MiB.toBytes(16))
+    val smallUmm = newMemoryManager(ByteUnit.MiB.toBytes(64), ByteUnit.MiB.toBytes(256))
+    val smallMm = new TaskMemoryManager(smallUmm, 0)
+    val buildKey = Seq(BoundReference(0, StringType, false))
+    val toUnsafeRow = UnsafeProjection.create(Array[DataType](StringType, IntegerType))
+    val toUnsafeKey = UnsafeProjection.create(Array[DataType](StringType))
+    val relations = ArrayBuffer.empty[HashedRelation]
+    try {
+      (0 until 16).foreach { i =>
+        val rows = (0 until 10).map { k =>
+          toUnsafeRow(InternalRow(UTF8String.fromString(s"key$k"), k + i)).copy()
+        }
+        val relation = HashedRelation(rows.iterator, buildKey, taskMemoryManager = smallMm)
+        assert(relation.isInstanceOf[UnsafeHashedRelation])
+        relations += relation
+      }
+      relations.zipWithIndex.foreach { case (relation, i) =>
+        assert(relation.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+        (0 until 10).foreach { k =>
+          val key = toUnsafeKey(InternalRow(UTF8String.fromString(s"key$k")))
+          assert(relation.getValue(key).getInt(1) === k + i)
+        }
+      }
+    } catch {
+      // SparkOutOfMemoryError is fatal to ScalaTest and would abort the whole suite.
+      case e: SparkOutOfMemoryError =>
+        fail("Could not build 16 small UnsafeHashedRelations in one task", e)
+    } finally {
+      relations.foreach(_.close())
+    }
+    assert(smallUmm.executionMemoryUsed === 0)
+  }
+
+  test("SPARK-61082: UnsafeHashedRelation does not round its page up to the page size") {
+    // The single string column is also the key, so a row is its own key.
+    val buildKey = Seq(BoundReference(0, StringType, false))
+    val toUnsafeRow = UnsafeProjection.create(Array[DataType](StringType))
+    val row = toUnsafeRow(InternalRow(UTF8String.fromString("a"))).copy()
+    val relation = HashedRelation(Iterator(row), buildKey, taskMemoryManager = mm)
+    val serializers = Seq(
+      new JavaSerializer(new SparkConf()).newInstance(),
+      new KryoSerializer(new SparkConf().set(KRYO_REFERENCE_TRACKING, false)).newInstance())
+    // The map grows its pages up to the SparkEnv page size, not up to the initial page size.
+    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
+    try {
+      assert(relation.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+      assert(relation.asInstanceOf[UnsafeHashedRelation].mapPageSizeBytes === pageSize)
+      serializers.foreach { ser =>
+        val deserialized = ser.deserialize[UnsafeHashedRelation](ser.serialize(relation))
+        try {
+          assert(deserialized.estimatedSize < 2 * UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
+          assert(deserialized.mapPageSizeBytes === pageSize)
+          assert(deserialized.getValue(row) === row)
+        } finally {
+          deserialized.close()
+        }
+      }
+    } finally {
+      relation.close()
+    }
   }
 
   test("LongToUnsafeRowMap") {
@@ -334,26 +402,31 @@ abstract class HashedRelationSuite extends SharedSparkSession {
   }
 
   test("SPARK-60998: LongToUnsafeRowMap does not round its page up to the page size") {
-    val largeUmm = newMemoryManager(ByteUnit.MiB.toBytes(64), ByteUnit.GiB.toBytes(1))
-    val largeMm = new TaskMemoryManager(largeUmm, 0)
-    assert(largeMm.pageSizeBytes() === ByteUnit.MiB.toBytes(64))
+    // SPARK-61257: Like the default on-heap page size under G1 (SPARK-37593), a page size that
+    // leaves room for the header of a long[] makes the page leave the same room.
+    Seq(0L, Platform.LONG_ARRAY_OFFSET.toLong).foreach { header =>
+      val largeUmm = newMemoryManager(ByteUnit.MiB.toBytes(64) - header, ByteUnit.GiB.toBytes(1))
+      val largeMm = new TaskMemoryManager(largeUmm, 0)
+      assert(largeMm.pageSizeBytes() === ByteUnit.MiB.toBytes(64) - header)
 
-    // Capacity 16 gives an array of 32 longs, which does not grow for a single key.
-    val arrayBytes = 32 * 8L
-    val map = new LongToUnsafeRowMap(largeMm, 16)
-    assert(map.getMode === largeMm.getTungstenMemoryMode)
-    assert(map.getUsed === arrayBytes + LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
+      // Capacity 16 gives an array of 32 longs, which does not grow for a single key.
+      val arrayBytes = 32 * 8L
+      val map = new LongToUnsafeRowMap(largeMm, 16)
+      assert(map.getMode === largeMm.getTungstenMemoryMode)
+      assert(map.getUsed === arrayBytes + LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - header)
 
-    // A value larger than the initial page doubles the page to 2 MiB, not 64 MiB.
-    val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
-    val bigStr = UTF8String.fromString("x".repeat(3 << 19))
-    map.append(0L, unsafeProj(InternalRow(bigStr)))
-    assert(map.getUsed === arrayBytes + 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
+      // A value larger than the initial page doubles the page together with its header, to
+      // 2 MiB, not 64 MiB.
+      val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
+      val bigStr = UTF8String.fromString("x".repeat(3 << 19))
+      map.append(0L, unsafeProj(InternalRow(bigStr)))
+      assert(map.getUsed === arrayBytes + 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - header)
 
-    val resultRow = new UnsafeRow(1)
-    assert(map.getValue(0L, resultRow).getUTF8String(0) === bigStr)
-    map.free()
-    assert(largeUmm.executionMemoryUsed === 0)
+      val resultRow = new UnsafeRow(1)
+      assert(map.getValue(0L, resultRow).getUTF8String(0) === bigStr)
+      map.free()
+      assert(largeUmm.executionMemoryUsed === 0)
+    }
   }
 
   test("SPARK-60998: many LongToUnsafeRowMaps fit in one task when each holds little data") {

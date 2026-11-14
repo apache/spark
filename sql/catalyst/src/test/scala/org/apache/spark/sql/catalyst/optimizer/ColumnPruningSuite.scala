@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
@@ -38,6 +38,35 @@ class ColumnPruningSuite extends PlanTest {
       ColumnPruning,
       RemoveNoopOperators,
       CollapseProject) :: Nil
+  }
+
+  test("Column pruning for an external lookup join keeps the lookup columns its parent reads") {
+    val stream = LocalRelation($"id".int, $"label".string)
+    val lookup = LocalRelation($"key".int, $"value".string, $"extra".string)
+    val Seq(streamId, label) = stream.output
+    val Seq(lookupKey, value, _) = lookup.output
+    val condition = Some(streamId === lookupKey)
+    val join = ExternalLookupJoin(stream, lookup, Inner, condition, lookup.output)
+
+    val optimized = Optimize.execute(Project(Seq(label, value), join))
+    val correctAnswer = Project(Seq(label, value),
+      ExternalLookupJoin(stream, Project(Seq(lookupKey, value), lookup), Inner, condition,
+        Seq(value)))
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Column pruning for an external lookup semi or anti join keeps no lookup column") {
+    val stream = LocalRelation($"id".int, $"label".string)
+    val lookup = LocalRelation($"key".int, $"value".string)
+    val streamId = stream.output.head
+    val lookupKey = lookup.output.head
+    val condition = Some(streamId === lookupKey)
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val join = ExternalLookupJoin(stream, lookup, joinType, condition, lookup.output)
+      val correctAnswer = ExternalLookupJoin(
+        stream, Project(Seq(lookupKey), lookup), joinType, condition, Seq.empty)
+      comparePlans(Optimize.execute(join), correctAnswer)
+    }
   }
 
   test("Column pruning for Generate when Generate.unrequiredChildIndex = child.output") {

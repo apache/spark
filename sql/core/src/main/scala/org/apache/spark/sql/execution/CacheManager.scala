@@ -25,7 +25,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{ExternalLookupJoinEligibility,
+  RelationCacheIneligible, Resolver}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -34,7 +35,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -294,14 +295,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def isSameName(
       name: Seq[String],
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      resolver: Resolver): Boolean = {
-    isSameName(name, ident.toQualifiedNameParts(catalog), resolver)
-  }
-
-  private def isSameName(
-      name: Seq[String],
       nameInCache: Seq[String],
       resolver: Resolver): Boolean = {
     nameInCache.length == name.length && nameInCache.zip(name).forall(resolver.tupled)
@@ -474,39 +467,31 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       catalog: CatalogPlugin,
       ident: Identifier,
       tableId: Option[String],
-      stateOptions: CaseInsensitiveStringMap,
-      resolver: Resolver): Option[LogicalPlan] = {
-    val name = ident.toQualifiedNameParts(catalog)
-    val cachedRelations = findCachedRelations(name, resolver)
-    // Changelog loads have their own context and state options, so they cannot supply an
-    // ordinary table's metadata even when the catalog and identifier match.
-    val cachedRelation = cachedRelations.collectFirst {
-      case r: DataSourceV2Relation
-          if !r.table.isInstanceOf[ChangelogTable] &&
-            r.catalog.contains(catalog) && r.identifier.contains(ident) &&
-            tableId.forall(_ == r.table.id) &&
-            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
-        r
-    }
-    cachedRelation.foreach { _ =>
-      CacheManager.logCacheOperation(
-        log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+      stateOptions: CaseInsensitiveStringMap): Option[LogicalPlan] = {
+    val cachedRelation = findCachedRelation(catalog, ident, tableId, stateOptions)
+    cachedRelation.foreach { r =>
+      CacheManager.logCacheOperation(log"Relation cache hit for table ${MDC(TABLE_NAME, r.name)}")
     }
     cachedRelation
   }
 
-  private def findCachedRelations(
-      name: Seq[String],
-      resolver: Resolver): Seq[LogicalPlan] = {
-    cachedData.flatMap { cd =>
-      val plan = stripRootSubqueryAliases(cd.plan)
-      plan match {
-        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-            if isSameName(name, catalog, ident, resolver) && r.timeTravelSpec.isEmpty =>
-          Some(r)
-        case _ =>
-          None
-      }
+  // finds a relation cached directly (e.g. CACHE TABLE t) for the given table and state,
+  // ignoring time travel relations and tables marked ineligible for the relation cache
+  private def findCachedRelation(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    val cachedPlans = cachedData.map(cd => stripRootSubqueryAliases(cd.plan))
+    cachedPlans.collectFirst {
+      case r: DataSourceV2Relation
+          if !r.table.isInstanceOf[RelationCacheIneligible] &&
+            r.catalog.contains(catalog) &&
+            r.identifier.contains(ident) &&
+            r.timeTravelSpec.isEmpty &&
+            tableId.forall(_ == r.table.id) &&
+            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
+        r
     }
   }
 
@@ -528,8 +513,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def lookupCachedDataInternal(
       plan: LogicalPlan,
-      canUse: CachedData => Boolean = _ => true): Option[CachedData] = {
-    val result = cachedData.find(cd => plan.sameResult(cd.plan) && canUse(cd))
+      canUse: CachedData => Boolean = _ => true,
+      entries: IndexedSeq[CachedData] = cachedData): Option[CachedData] = {
+    val result = entries.find(cd => plan.sameResult(cd.plan) && canUse(cd))
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
         log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
@@ -566,12 +552,27 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   private[sql] def useCachedData(
       plan: LogicalPlan,
-      canUse: CachedData => Boolean = _ => true): LogicalPlan = {
-    val newPlan = plan transformDown {
+      canUse: CachedData => Boolean = _ => true): LogicalPlan =
+    useCachedEntries(plan, canUse, cachedData)
+
+  // `entries` is one read of the cache list, which another thread may replace meanwhile, so that
+  // an entry that is used is also one that the lookup sides were protected from.
+  private def useCachedEntries(
+      plan: LogicalPlan,
+      canUse: CachedData => Boolean,
+      entries: IndexedSeq[CachedData]): LogicalPlan = {
+    // An external lookup join reads its lookup side by lookups. If cached data replaced that side
+    // or a CTE definition that it reads, the join would silently read the cached data instead, or
+    // fail.
+    // TODO: protect only the lookup side's path, so that the other readers of a CTE definition
+    //   that a lookup side reads keep using cached data. Today the whole definition is skipped.
+    val lookupSidePlans =
+      if (entries.isEmpty) Nil else ExternalLookupJoinEligibility.lookupSidePlans(plan)
+    val newPlan = plan.transformDownWithPruning(node => !lookupSidePlans.exists(_ eq node)) {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment, canUse).map { cached =>
+        lookupCachedDataInternal(currentFragment, canUse, entries).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -584,14 +585,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, canUse))
+      case s: SubqueryExpression => s.withNewPlan(useCachedEntries(s.plan, canUse, entries))
     }
 
     if (result.fastEquals(plan)) {
       CacheManager.logCacheOperation(
         log"Dataframe cache miss for input plan:\n${MDC(QUERY_PLAN, plan)}")
       CacheManager.logCacheOperation(log"Last 20 Dataframe cache entry logical plans:\n" +
-        log"[${MDC(DATAFRAME_CACHE_ENTRY, cachedData.take(20).map(_.plan).mkString(",\n"))}]")
+        log"[${MDC(DATAFRAME_CACHE_ENTRY, entries.take(20).map(_.plan).mkString(",\n"))}]")
     } else {
       CacheManager.logCacheOperation(log"Dataframe cache hit plan change summary:\n" +
         log"${MDC(
@@ -705,8 +706,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
-   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS`.
+   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is disabled, return the session with disabled
+   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS` and
+   * `PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED`.
    * `AUTO_BUCKETED_SCAN_ENABLED` is always disabled.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
@@ -719,8 +721,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
-      disableConfigs =
-        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
+      disableConfigs ++= Seq(
+        SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS,
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED)
     }
     SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }

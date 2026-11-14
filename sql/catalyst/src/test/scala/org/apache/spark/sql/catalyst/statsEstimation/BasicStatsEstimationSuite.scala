@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
@@ -218,6 +218,13 @@ test("range with invalid long value") {
     checkStats(offset, plan.stats.copy(attributeStats = AttributeMap(Nil)))
   }
 
+  test("SPARK-61558: offset estimation: child's rowCount is unknown") {
+    val childStats = Statistics(sizeInBytes = 120)
+    val offset = Offset(Literal(2), DummyLogicalPlan(childStats, childStats))
+    // The number of skipped rows is unknown, so the child's size is used as an upper bound.
+    checkStats(offset, childStats)
+  }
+
   test("limit estimation: limit < child's rowCount") {
     val localLimit = LocalLimit(Literal(2), plan)
     val globalLimit = GlobalLimit(Literal(2), plan)
@@ -376,6 +383,23 @@ test("range with invalid long value") {
       join,
       expectedStatsCboOn = Statistics(4871880, Some(tableRowCnt), join.stats.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = 4059900 * 2))
+  }
+
+  test("SPARK-61534: an existence join is estimated from its left side") {
+    // It outputs each of the 10 rows of `left` once, with a boolean column added. The size of
+    // `left` is twice its row count times its row width, so a size computed from the row count
+    // and the column stats, as `JoinEstimation` computes it for a left semi join, would be half.
+    val left = plan.copy(size = Some(2 * 10 * (8 + 4)))
+    val otherKey = attr("other")
+    val other = StatsTestPlan(outputList = Seq(otherKey), rowCount = 1000,
+      attributeStats = AttributeMap(Seq(otherKey -> colStat)), size = Some(1000 * (8 + 4)))
+    val exists = AttributeReference("exists", BooleanType, nullable = false)()
+    val join = Join(left, other, ExistenceJoin(exists), Some(attribute === otherKey),
+      JoinHint.NONE)
+    checkStats(join, Statistics(
+      sizeInBytes = 2 * 10 * (8 + 4 + 1),
+      rowCount = Some(10),
+      attributeStats = AttributeMap(Seq(attribute -> colStat))))
   }
 
   test("row size and column stats estimation for sort") {
