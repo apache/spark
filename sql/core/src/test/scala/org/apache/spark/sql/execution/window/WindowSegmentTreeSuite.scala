@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow, MutableProjection, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, EvalMode, Expression, GenericInternalRow, MutableProjection, NumericEvalContext, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, Max, Min, StddevSamp, Sum}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType}
@@ -376,6 +376,56 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
           assert(queryMin(tree, lo, hi) == naiveMin(v3, lo, hi),
             s"post-recovery mismatch at [$lo, $hi)")
         }
+      } finally tree.close()
+    }
+  }
+
+  test("SPARK-61623: an overflow of a node does not fail the ranges that do not overflow") {
+    withTaskContext {
+      val longAttr = AttributeReference("v", LongType, nullable = true)()
+      // Two of them are in range, three are not.
+      val big = Long.MaxValue / 2
+      val rnd = new Random(42)
+      val choices = Seq(big, big, big, -big, 1L, -1L)
+      val values = Seq.fill(100)(choices(rnd.nextInt(choices.length)))
+      val tree = new WindowSegmentTree(
+        Array(Sum(longAttr, NumericEvalContext(EvalMode.ANSI))), Seq(longAttr),
+        newMutableProjection, fanout = 4, blockSize = 8,
+        taskMemoryManager = TaskContext.get().taskMemoryManager())
+      val rows = values.iterator.map { v =>
+        val r = new GenericInternalRow(1)
+        r.update(0, v)
+        r.asInstanceOf[InternalRow]
+      }
+      def inRange(v: BigInt): Boolean = v >= Long.MinValue && v <= Long.MaxValue
+      try {
+        // Most of the blocks and of their internal nodes overflow.
+        SegmentTreeWindowTestHelper.buildTreeFromIter(tree, rows, Seq(longAttr))
+        var succeeded = 0
+        var failed = 0
+        for (lo <- 0 until values.length; hi <- lo + 1 to values.length) {
+          val prefixSums = values.slice(lo, hi).scanLeft(BigInt(0))(_ + _).tail
+          val expected = prefixSums.last
+          def query(): Long = {
+            val out = new SpecificInternalRow(Seq[DataType](LongType))
+            tree.query(lo, hi, out)
+            out.getLong(0)
+          }
+          if (prefixSums.forall(inRange)) {
+            // Adding up the rows one by one does not overflow, so the tree must not either.
+            assert(query() == expected, s"SUM at [$lo, $hi)")
+            succeeded += 1
+          } else if (!inRange(expected)) {
+            intercept[ArithmeticException](query())
+            failed += 1
+          } else {
+            // Whether an intermediate sum overflows depends on the order of the additions.
+            try assert(query() == expected, s"SUM at [$lo, $hi)") catch {
+              case _: ArithmeticException =>
+            }
+          }
+        }
+        assert(succeeded > 100 && failed > 100)
       } finally tree.close()
     }
   }
