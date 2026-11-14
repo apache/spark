@@ -4330,6 +4330,117 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("kll uncorrelated lateral queries retain their rows") {
+    for (dataType <- Seq("bigint", "float", "double"); merge <- Seq(false, true)) {
+      val sketch = s"kll_sketch_agg_$dataType(CAST(id AS $dataType), 8)"
+      val source = "VALUES (0), (1), (2) AS i(id)"
+      val aggregate = if (merge) s"kll_merge_agg_$dataType(s, 8)" else sketch
+      val from = if (merge) s"(SELECT $sketch AS s FROM $source GROUP BY id)" else source
+      checkAnswer(sql(s"""SELECT o.id, l.n FROM VALUES (0), (1) AS o(id),
+          |LATERAL (SELECT kll_sketch_get_n_$dataType($aggregate) AS n FROM $from) l
+          |""".stripMargin), Seq(Row(0, 3L), Row(1, 3L)))
+    }
+  }
+
+  test("kll predicate subqueries retain complete predicate semantics") {
+    for (singlePass <- Seq(false, true); dataType <- Seq("bigint", "float", "double");
+        merge <- Seq(false, true)) {
+      def analyzed(queryText: String): DataFrame = withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val df = sql(queryText)
+        df.queryExecution.assertAnalyzed()
+        df
+      }
+      val values = "VALUES (0), (1), (2) AS i(id)"
+      val sketch = s"kll_sketch_agg_$dataType(CAST(id AS $dataType), 8)"
+      val aggregate = if (merge) s"kll_merge_agg_$dataType(s, 8)" else sketch
+      val source = if (merge) s"(SELECT $sketch AS s FROM $values GROUP BY id)" else values
+      val query = s"SELECT kll_sketch_get_n_$dataType($aggregate) FROM $source"
+      val exists = s"EXISTS ($query)"
+      checkAnswer(analyzed(s"SELECT count(*) FROM VALUES (0), (1) AS o(id) GROUP BY $exists"),
+        Row(2L))
+      checkAnswer(analyzed(s"SELECT sum(CAST($exists AS INT)) FROM VALUES (0), (1) AS o(id)"),
+        Row(2L))
+      checkAnswer(analyzed(s"""SELECT count(*) FILTER (WHERE $exists)
+          |FROM VALUES (0), (1) AS o(id)""".stripMargin), Row(2L))
+      checkAnswer(analyzed(s"""SELECT l.id FROM VALUES (0), (1) AS l(id)
+          |JOIN VALUES (0), (1) AS r(id) ON l.id = r.id AND $exists""".stripMargin),
+        Seq(Row(0), Row(1)))
+      val set = s"$query UNION ALL SELECT CAST(NULL AS BIGINT)"
+      checkAnswer(analyzed(s"""SELECT count(*) FROM VALUES (3), (4), (NULL) AS o(id)
+          |GROUP BY id IN ($set)""".stripMargin), Seq(Row(1L), Row(2L)))
+      checkAnswer(analyzed(s"""SELECT count(*) FILTER (WHERE id NOT IN ($set))
+          |FROM VALUES (3), (4), (NULL) AS o(id)""".stripMargin), Row(0L))
+      checkAnswer(analyzed(s"""SELECT count(*) FILTER (WHERE id IN ($query HAVING count(*) < 0))
+          |FROM VALUES (3), (4), (NULL) AS o(id)""".stripMargin), Row(0L))
+      checkAnswer(analyzed(s"""SELECT count(*) FILTER (
+          |WHERE (id, id) NOT IN (SELECT n, n FROM ($query) AS t(n)))
+          |FROM VALUES (3), (4), (NULL) AS o(id)""".stripMargin), Row(1L))
+      withSQLConf(SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key -> "false") {
+        checkAnswer(analyzed(s"""SELECT l.id, r.id FROM VALUES (0), (1) AS l(id)
+            |JOIN VALUES (2), (3) AS r(id) ON l.id + r.id IN ($query)""".stripMargin),
+          Seq(Row(0, 3), Row(1, 2)))
+      }
+    }
+  }
+
+  test("sketch predicate operands can contain scalar subqueries") {
+    val inner = """SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+        |FROM VALUES (0), (1), (2) AS i(id)""".stripMargin
+    for (singlePass <- Seq(false, true)) {
+      val result = withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val df = sql(s"""SELECT count(*) FILTER (WHERE ($inner) IN ($inner))
+            |FROM VALUES (0), (1) AS o(id)""".stripMargin)
+        df.queryExecution.assertAnalyzed()
+        df
+      }
+      checkAnswer(result, Row(2L))
+    }
+  }
+
+  test("separate correlated sketch grouping identities agree between analyzers") {
+    def query(aggregate: String): String = {
+      val scalar = s"(SELECT $aggregate FROM VALUES (0), (1) AS i(id) WHERE i.id = o.id)"
+      s"SELECT $scalar AS a, $scalar AS b FROM VALUES (0), (1) AS o(id) GROUP BY 1"
+    }
+    for (singlePass <- Seq(false, true)) {
+      val settings = Seq(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false")
+      val error = withSQLConf(settings: _*) {
+        intercept[AnalysisException] {
+          sql(query("kll_sketch_get_n_bigint(kll_sketch_agg_bigint(i.id))"))
+        }
+      }
+      assert(error.getCondition == "SCALAR_SUBQUERY_IS_IN_GROUP_BY_OR_AGGREGATE_FUNCTION")
+      val control = withSQLConf(settings: _*) {
+        val df = sql(query("sum(i.id)"))
+        df.queryExecution.assertAnalyzed()
+        df
+      }
+      checkAnswer(control, Seq(Row(0L, 0L), Row(1L, 1L)))
+    }
+  }
+
+  test("kll lateral extraction retains row randomness and correlation restrictions") {
+    val query = """SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS n
+        |FROM VALUES (0), (1), (2) AS i(id)""".stripMargin
+    Seq(s"SELECT n + rand() FROM ($query)",
+      s"SELECT n FROM ($query) WHERE n = o.id").foreach { lateral =>
+      val error = intercept[AnalysisException] {
+        sql(s"SELECT * FROM VALUES (0), (1) AS o(id), LATERAL ($lateral) l")
+      }
+      assert(error.getCondition ==
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES")
+    }
+  }
+
   test("kll scalar extraction retains direct randomness restrictions") {
     val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
                    | FROM VALUES (0), (1), (2) AS i(id))""".stripMargin

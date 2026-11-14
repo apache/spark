@@ -867,7 +867,7 @@ abstract class KllMergeAggBase[T <: KllSketch]
  * Common trait for KLL sketch aggregate functions that support an optional k parameter.
  */
 trait KllSketchAggBase {
-  // Only the optimizer copies of checkpoint-pinned legacy streaming queries use this mode.
+  // Only compatibility and validation copies use this mode; fresh execution defaults to false.
   private[sql] def legacyDeterministic: Boolean
 
   def kExpr: Option[Expression]

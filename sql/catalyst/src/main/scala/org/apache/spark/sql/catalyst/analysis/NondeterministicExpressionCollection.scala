@@ -20,15 +20,22 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.LinkedHashMap
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 object NondeterministicExpressionCollection {
+  private[sql] val EXTRACTED_SUBQUERY = TreeNodeTag[Unit]("extracted-nondeterministic-subquery")
+
   private[analysis] def getExpressionKey(expression: Expression): (Expression, Seq[ExprId]) = {
     // Canonicalization removes subquery IDs, but separate nondeterministic subqueries must
     // retain independent evaluations, including when they are children of a collected UDF.
-    val scalarIds = expression.collect {
-      case scalar: ScalarSubquery if !scalar.deterministic => scalar.exprId
-    }
-    (expression.canonicalized, scalarIds)
+    val subqueryIds = if (expression.containsAnyPattern(
+        SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+      expression.collect { case subquery: SubqueryExpression if !subquery.deterministic =>
+        subquery.exprId
+      }
+    } else Seq.empty
+    (expression.canonicalized, subqueryIds)
   }
 
   def getNondeterministicToAttributes(
@@ -41,6 +48,9 @@ object NondeterministicExpressionCollection {
         val leafNondeterministic = expr.collect {
           case nondeterministicExpr: Nondeterministic => nondeterministicExpr
           case scalar: ScalarSubquery if !scalar.deterministic => scalar
+          case exists: Exists if !exists.deterministic => exists
+          case not @ Not(in: InSubquery) if !in.deterministic => not
+          case in: InSubquery if !in.deterministic => in
           case udf: UserDefinedExpression if !udf.deterministic => udf
           case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
         }
@@ -49,6 +59,10 @@ object NondeterministicExpressionCollection {
           val namedExpression = nondeterministicExpr match {
             case namedExpression: NamedExpression => namedExpression
             case _ => Alias(nondeterministicExpr, "_nondeterministic")()
+          }
+          if (nondeterministicExpr.containsAnyPattern(
+              SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+            namedExpression.setTagValue(EXTRACTED_SUBQUERY, ())
           }
           nonDeterministicToAttributes.put(getExpressionKey(nondeterministicExpr), namedExpression)
         }

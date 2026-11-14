@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.catalyst.analysis.NondeterministicExpressionCollection
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 
 /**
  * Validates [[Aggregate]] operators in the single-pass resolver. Delegates to
- * [[ExprUtils.assertValidAggregation]] with canonicalized expression equality since
+ * [[ExprUtils.assertValidAggregation]] with canonicalized expression equality and preserved
+ * nondeterministic subquery identities since
  * non-deterministic expressions are still not extracted (done in [[PullOutNondeterministic]] post
  * hoc rule). Scalar aggregate arguments are checked as they will be after extraction.
  *
@@ -38,8 +40,9 @@ object AggregationValidator {
     ExprUtils.assertValidAggregation(
       aggregate,
       (groupingExpression, checkedExpression) =>
-        groupingExpression.canonicalized == checkedExpression.canonicalized,
-      aggregateArgumentIsDeterministic = ExprUtils.isDeterministicAfterScalarSubqueryExtraction
+        NondeterministicExpressionCollection.getExpressionKey(groupingExpression) ==
+          NondeterministicExpressionCollection.getExpressionKey(checkedExpression),
+      aggregateArgumentIsDeterministic = ExprUtils.isDeterministicAfterSubqueryExtraction
     )
   }
 }

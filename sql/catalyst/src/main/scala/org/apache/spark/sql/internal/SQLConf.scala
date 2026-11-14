@@ -4085,7 +4085,7 @@ object SQLConf {
       .internal()
       .doc("Preserve the historical KLL optimizer behavior and ordered aggregation buffers " +
         "in existing streaming checkpoints. " +
-        "New checkpoints keep separate evaluations of nondeterministic KLL aggregates. " +
+        "New checkpoints default to separate evaluations of nondeterministic KLL aggregates. " +
         "The checkpoint restores this setting; changing it requires a new checkpoint.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)

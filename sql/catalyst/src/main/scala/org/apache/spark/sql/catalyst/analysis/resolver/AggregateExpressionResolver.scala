@@ -208,7 +208,7 @@ class AggregateExpressionResolver(
         }
 
         aggregateExpression.aggregateFunction.children.foreach { child =>
-          if (!ExprUtils.isDeterministicAfterScalarSubqueryExtraction(child)) {
+          if (!ExprUtils.isDeterministicAfterSubqueryExtraction(child)) {
             throwAggregateFunctionWithNondeterministicExpression(
               aggregateExpression,
               child

@@ -516,6 +516,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           true
         }
       }
+      if (replacements.isEmpty) return (retained, results)
       val rewritten = results.map(_.transform {
         case a: Attribute if replacements.contains(a.exprId) => replacements(a.exprId)
       }.asInstanceOf[NamedExpression])

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, OneRowRelation, Project, RepartitionByExpression}
 import org.apache.spark.sql.types.{BinaryType, DoubleType}
 
 /**
@@ -141,9 +141,38 @@ class PullOutNondeterministicSuite extends AnalysisTest {
       JoinHint.NONE)
     val join = PullOutNondeterministic(plan).collectFirst { case j: Join => j }.get
     val projected = join.left.asInstanceOf[Project].projectList.collect {
-      case Alias(s: ScalarSubquery, _) => s.exprId
+      case alias @ Alias(s: ScalarSubquery, _) => s.exprId -> alias.toAttribute
     }
-    assert(projected == Seq(first.exprId, second.exprId))
+    assert(projected.map(_._1) == Seq(first.exprId, second.exprId))
+    val bindings = projected.toMap
+    val consumed = join.condition.get.collect { case a: Attribute => a.exprId }
+    assert(consumed == Seq(bindings(first.exprId).exprId, bindings(second.exprId).exprId))
+  }
+
+  test("pull out an uncorrelated KLL scalar from a repartition expression") {
+    val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(aggregate).as("n")))
+    val projected = Alias(scalar, "_nondeterministic")()
+    checkAnalysis(
+      RepartitionByExpression(Seq(scalar), r, Some(2)),
+      Project(r.output, RepartitionByExpression(Seq(projected.toAttribute),
+        r.select(a, b, projected), Some(2))))
+  }
+
+  test("keep a right-local join scalar on the right input") {
+    val scalar = ScalarSubquery(OneRowRelation().select(Rand(10).as("value")))
+    val c = $"c".int
+    val plan = Join(r, LocalRelation(c), LeftOuter,
+      Some(And(EqualTo(a, c), LessThan(Cast(c, DoubleType), scalar))), JoinHint.NONE)
+    val pulled = PullOutNondeterministic(plan)
+    val join = pulled.collectFirst { case j: Join => j }.get
+    assert(pulled.output == plan.output)
+    assert(join.left == r)
+    val alias = join.right.asInstanceOf[Project].projectList.collectFirst {
+      case a @ Alias(s: ScalarSubquery, _) if s.exprId == scalar.exprId => a
+    }.get
+    assert(join.condition.get.references.contains(alias.toAttribute))
   }
 
   private def correlatedKllScalar: ScalarSubquery = {

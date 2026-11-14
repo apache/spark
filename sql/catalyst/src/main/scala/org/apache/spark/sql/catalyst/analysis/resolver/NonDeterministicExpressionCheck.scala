@@ -28,7 +28,9 @@ object NonDeterministicExpressionCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreachUp { operator =>
       if (nonDeterministic(operator.expressions) &&
-        !operatorAllowsNonDeterministicExpressions(operator)) {
+        !operatorAllowsNonDeterministicExpressions(operator) &&
+        !(operator.isInstanceOf[Join] && operator.expressions.forall(
+          ExprUtils.isDeterministicAfterPredicateSubqueryRewrite))) {
         operator.failAnalysis(
           errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
           messageParameters = Map(
