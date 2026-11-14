@@ -298,6 +298,12 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     checkWithAndWithoutFeatureEnabled(query, shouldReplace = true, runtimeFilterNum)
   }
 
+  def bloomFilterKeyNames(query: String): Seq[String] = {
+    sql(query).queryExecution.optimizedPlan.flatMap(_.expressions).flatMap(_.collect {
+      case BloomFilterMightContain(_, value) => value.references.toSeq.map(_.name)
+    }).flatten
+  }
+
   def assertDidNotRewriteWithBloomFilter(query: String): Unit = {
     checkWithAndWithoutFeatureEnabled(query, shouldReplace = false)
   }
