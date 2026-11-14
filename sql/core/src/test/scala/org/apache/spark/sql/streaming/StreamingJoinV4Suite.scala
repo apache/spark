@@ -321,7 +321,7 @@ class StreamingInnerJoinV4Suite
       val df2 = input2.toDF().toDF("key", "time")
         .select($"key", timestamp_seconds($"time") as "ts", ($"key" * 3) as "rightValue")
       // Only left side has watermark; ts is part of the join key, so
-      // joinKeyOrdinalForWatermark is defined -> hasEventTime = true for both sides.
+      // joinKeyOrdinalForWatermark is defined -> hasTimestampForEviction = true for both sides.
 
       val joined = df1.join(df2, Seq("key", "ts"))
         .select($"key", $"ts".cast("long"), $"leftValue", $"rightValue")
@@ -373,7 +373,7 @@ class StreamingInnerJoinV4Suite
         .select($"rightKey", timestamp_seconds($"time") as "rightTime",
           ($"rightKey" * 3) as "rightValue")
       // Only left side has watermark; watermark is on a value column, not the join key.
-      // joinKeyOrdinalForWatermark is None -> only left has hasEventTime = true.
+      // joinKeyOrdinalForWatermark is None -> only left has hasTimestampForEviction = true.
       // Neither side can actually evict: the left state watermark is derived from the right
       // side's watermark via the join condition, which is absent here. The left secondary
       // index is populated but never used for eviction.
@@ -397,10 +397,11 @@ class StreamingInnerJoinV4Suite
           assert(readStateStore(checkpointLoc, "right-keyWithTsToValues") > 0,
             "right primary store should have rows")
 
-          // Left has watermark on a value column -> hasEventTime = true, secondary index populated.
+          // Left has watermark on a value column -> hasTimestampForEviction = true,
+          // secondary index populated.
           assert(readStateStore(checkpointLoc, "left-tsWithKey") > 0,
             "left secondary index should be populated (watermark on left value column)")
-          // Right has no watermark -> hasEventTime = false, secondary index empty.
+          // Right has no watermark -> hasTimestampForEviction = false, secondary index empty.
           assert(readStateStore(checkpointLoc, "right-tsWithKey") === 0,
             "right secondary index should be empty (no watermark on right side)")
         },

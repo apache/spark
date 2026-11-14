@@ -52,6 +52,37 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Whether the expression is the event time, optionally cast to TIMESTAMP or a numeric type,
+   * plus or minus constants: intervals without months, or numbers. The solver reads such a cast
+   * as the column itself and counts such an interval as a fixed duration, a day as 24 hours, in
+   * every version and every time zone, so a range condition built from it derives the same
+   * cutoff before and after the stream-stream join corrections. Months have no fixed length.
+   */
+  private[sql] def isConstantOffsetOf(expr: Expression, eventTime: Attribute): Boolean = {
+    def isConstant(e: Expression): Boolean = {
+      // A constant that fails to evaluate gives no bound; the query reports the error at run time.
+      def value: Option[Any] = try Option(e.eval()) catch { case NonFatal(_) => None }
+      e.foldable && (e.dataType match {
+        case _: DayTimeIntervalType | _: NumericType => value.isDefined
+        case CalendarIntervalType => value.exists(_.asInstanceOf[CalendarInterval].months == 0)
+        case _ => false
+      })
+    }
+    expr match {
+      case a: Attribute => a.semanticEquals(eventTime)
+      case Cast(child, TimestampType | _: NumericType, _, _) => isConstantOffsetOf(child, eventTime)
+      case TimestampAddInterval(start, interval, _) =>
+        isConstant(interval) && isConstantOffsetOf(start, eventTime)
+      case DatetimeSub(_, _, replacement) => isConstantOffsetOf(replacement, eventTime)
+      case Add(left, right, _) =>
+        isConstant(right) && isConstantOffsetOf(left, eventTime) ||
+          isConstant(left) && isConstantOffsetOf(right, eventTime)
+      case Subtract(left, right, _) => isConstant(right) && isConstantOffsetOf(left, eventTime)
+      case _ => false
+    }
+  }
+
+  /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
    * given the join condition and the event time watermark. This is how it works.
    * - The condition is split into conjunctive predicates, and we find the predicates of the
@@ -197,6 +228,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
     }.reduceLeft(Add(_, _))
+
+    // Callers can pass only the constrained column and the opposite event time, so a term on any
+    // other column passes the occurrence check above. Its value is unknown here.
+    if (exprWithWatermarkSubstituted.references.nonEmpty) {
+      logDebug(s"Failed to extract state constraint: unresolved $exprWithWatermarkSubstituted")
+      return None
+    }
 
     // Calculate the constraint value
     logInfo(log"Final expression to evaluate " +

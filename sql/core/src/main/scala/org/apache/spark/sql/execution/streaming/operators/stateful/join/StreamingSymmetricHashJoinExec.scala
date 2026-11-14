@@ -26,8 +26,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BoundReference, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -134,6 +135,9 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  *                                 [[JoinStateWatermarkPredicates]]
  * @param left      Left child plan
  * @param right     Right child plan
+ * @param outputWatermarkSides Inputs whose event time reaches the next stateful operator; the
+ *                             output watermark is held back only for their state. None when
+ *                             unknown, which holds it back for both inputs.
  */
 case class StreamingSymmetricHashJoinExec(
     leftKeys: Seq[Expression],
@@ -147,7 +151,8 @@ case class StreamingSymmetricHashJoinExec(
     stateFormatVersion: Int,
     left: SparkPlan,
     right: SparkPlan,
-    outputMode: Option[OutputMode])
+    outputMode: Option[OutputMode],
+    outputWatermarkSides: Option[Set[JoinSide]] = None)
     extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
 
   def this(
@@ -697,7 +702,12 @@ case class StreamingSymmetricHashJoinExec(
       stateFormatVersion = stateFormatVersion,
       skippedNullValueCount = skippedNullValueCount,
       joinStoreGenerator = joinStateManagerStoreGenerator,
-      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
+      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark,
+      // The predicate can constrain either the event-time column or another timestamp column.
+      stateValueWatermarkColumnOrdinal = stateWatermarkPredicate.collect {
+        case p: JoinStateValueWatermarkPredicate =>
+          inputAttributes.indexWhere(p.expr.references.contains)
+      })
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
@@ -717,21 +727,105 @@ case class StreamingSymmetricHashJoinExec(
         Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
     }
 
+    // A NULL in the column that the state watermark predicate tests makes the predicate unknown,
+    // so eviction never removes the row. The row cannot match either: that column is an equality
+    // key, or a comparison in the join condition bounds it. Handle the row like one that fails
+    // the pre-join filter.
+    // The check takes the generated key and the input row, so the key is computed only once.
+    private[this] val isEvictionColumnNull: (UnsafeRow, UnsafeRow) => Boolean =
+      stateWatermarkPredicate match {
+        case Some(JoinStateKeyWatermarkPredicate(expr, _, _)) =>
+          // Only a NULL key fails equality. A struct key with a NULL field can still be equal.
+          val ordinal = expr.collectFirst { case b: BoundReference => b.ordinal }.get
+          (key, _) => key.isNullAt(ordinal)
+        case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _)) =>
+          // Test the compared column, not the predicate: the predicate holds the cutoff, which
+          // changes every batch and would generate and compile new code each time.
+          val isNull = Predicate.create(IsNull(column), inputAttributes)
+          (_, row) => isNull.eval(row)
+        case _ =>
+          (_, _) => false
+      }
+
+    // V1 to V3 eviction tests every stored row each batch, so it also removes a row whose
+    // eviction column is NULL. This version never stores such a row, but an older version did,
+    // and the row can never match. isEvictionColumnNull reads only the key for a key predicate
+    // and only the row for a value predicate.
+    private[this] val stateKeyEvictionFunc: UnsafeRow => Boolean =
+      key => stateKeyWatermarkPredicateFunc(key) || isEvictionColumnNull(key, null)
+    private[this] val stateValueEvictionFunc: UnsafeRow => Boolean =
+      row => stateValueWatermarkPredicateFunc(row) || isEvictionColumnNull(null, row)
+
     private[this] var updatedStateRowsCount = 0
     private[this] var numRemovedFromOtherSideDuringJoinCount = 0
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
+    // For the right side of a left semi join: whether a cutoff at the late-events watermark that
+    // is exact today shows that no left row passing late filtering can match a key and row.
+    private[this] lazy val noLeftRowCanMatch: (UnsafeRow, UnsafeRow) => Boolean =
+      if (joinType == LeftSemi && joinSide == RightSide) {
+        val (keyCutoff, valueCutoff) = getLeftSemiExactRightCutoffs(left.output, right.output,
+          leftKeys, rightKeys, condition.full, eventTimeWatermarkForLateEvents,
+          useFirstEventTimeColumn = !allowMultipleStatefulOperators)
+        val keyFunc = keyCutoff.map(Predicate.create(_, Seq.empty).eval _)
+        val valueFunc = valueCutoff.map(Predicate.create(_, inputAttributes).eval _)
+        (key, row) => keyFunc.exists(_(key)) || valueFunc.exists(_(row))
+      } else {
+        (_, _) => false
+      }
+
     // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
     // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
     // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
+      // A row on this side probes the other side's state for the window
+      //   [thisEventTime + lowerOffset, thisEventTime + upperOffset]
+      // on the other side's event time. In V4, each side's timestamp index stores the column its
+      // own value-eviction predicate constrains, or its event-time column if it has no such
+      // predicate. The window can only select rows from an index on the event-time column.
+      //
+      // So a range scan requires both of the following:
+      // - isV4TimeIntervalJoin: V4 state, and this side evicts by value. An event-time equality
+      //   key makes both sides evict by key instead, so those joins never range scan.
+      // - indexesEventTimeColumns: no side indexes a column other than its event time. Each side
+      //   either has no value-eviction predicate, or its predicate constrains only its own
+      //   event-time column. This joiner probes only the other side's index; checking both
+      //   sides keeps the check identical for the two joiners.
+      //
+      // Examples, where leftTime and rightTime are the event-time columns and expiry is another
+      // timestamp column of the left input:
+      // - rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES: both sides evict on
+      //   their event-time columns, so both checks pass. A left row probes right rows with
+      //   rightTime in [leftTime, leftTime + 10 minutes], and a right row probes left rows with
+      //   leftTime in [rightTime - 10 minutes, rightTime].
+      // - rightTime <= leftTime + INTERVAL 10 MINUTES: the left side evicts on leftTime. The
+      //   right side has no value-eviction predicate, because a later left row can still match
+      //   any buffered right row, so its index falls back to rightTime. Both checks pass for
+      //   the left joiner. The condition gives only one bound, so the extraction below returns
+      //   None and the left joiner still reads all right rows for the key.
+      // - rightTime BETWEEN leftTime AND expiry: there is no cutoff on leftTime, because a later
+      //   right row can still match any buffered left row. The left side evicts on expiry
+      //   instead, so its index is ordered by expiry. A window on leftTime cannot select rows
+      //   from that index, so indexesEventTimeColumns is false and each joiner reads all rows
+      //   of the other side for the key.
       val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
         case Some(_: JoinStateValueWatermarkPredicate) => true
         case _ => false
       })
 
-      if (!isV4TimeIntervalJoin) {
+      val indexesEventTimeColumns = Seq(
+        (stateWatermarkPredicates.left, left.output),
+        (stateWatermarkPredicates.right, right.output)).forall {
+        case (Some(p: JoinStateValueWatermarkPredicate), attributes) =>
+          attributes.find(_.metadata.contains(EventTimeWatermark.delayKey)).exists { eventTime =>
+            p.expr.references.forall(_.semanticEquals(eventTime))
+          }
+        // No value-eviction predicate: the index falls back to the event-time column, as in the
+        // second example. Key-eviction joins also reach here; isV4TimeIntervalJoin excludes them.
+        case _ => true
+      }
+      if (!isV4TimeIntervalJoin || !indexesEventTimeColumns) {
         None
       } else {
         val (thisSideAttrs, otherSideAttrs) = joinSide match {
@@ -843,12 +937,12 @@ case class StreamingSymmetricHashJoinExec(
 
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
-        // If this row fails the pre join filter, that means it can never satisfy the full join
-        // condition no matter what other side row it's matched with. This allows us to avoid
-        // adding it to the state, and generate an outer join row immediately (or do nothing in
-        // the case of inner join).
-        if (preJoinFilter(thisRow)) {
-          val key = keyGenerator(thisRow)
+        // If this row fails the pre join filter, or its eviction column is NULL, that means it can
+        // never satisfy the full join condition no matter what other side row it's matched with.
+        // This allows us to avoid adding it to the state, and generate an outer join row
+        // immediately (or do nothing in the case of inner join).
+        val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
+        if (key != null && !isEvictionColumnNull(key, thisRow)) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for
           // the following input rows.
@@ -896,7 +990,14 @@ case class StreamingSymmetricHashJoinExec(
         //   is done at this point. That said, input can be skipped to be added to the state store
         //   if input is going to be evicted in this batch. Though, input should be added to the
         //   state store if it's right outer join or full outer join, as unmatched output is
-        //   handled during state eviction.
+        //   handled during state eviction. A left semi join processes the right side first, so
+        //   the left input of this batch has not probed it yet: an input this batch evicts is
+        //   added, and the eviction at the end of the batch removes it, unless a cutoff at the
+        //   late-events watermark that is exact today shows no left row passing late filtering
+        //   can match it (see getLeftSemiExactRightCutoffs). The cutoff derivation gives no exact
+        //   cutoff otherwise: it counts a day as 24 hours, which is wrong in a time zone with
+        //   daylight saving time, and it reads truncating casts as exact.
+        //   TODO(SPARK-61381): skip such inputs too once the cutoff is exact.
         val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         val shouldAddToState = if (isLeftSemiWithMatch) {
           false
@@ -910,6 +1011,8 @@ case class StreamingSymmetricHashJoinExec(
             !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
 
           isNotEvictingInThisBatch ||
+            // if a left row of this batch, which probes after this side, can still match it
+            (joinType == LeftSemi && !noLeftRowCanMatch(key, thisRow)) ||
             // if the input is producing "unmatched row" in this batch
             (
               (joinType == RightOuter && !iteratorNotEmpty) ||
@@ -942,7 +1045,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictByKeyCondition(stateKeyWatermarkPredicateFunc)
+              s.evictByKeyCondition(stateKeyEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictByTimestamp(
@@ -952,7 +1055,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictByValueCondition(stateValueWatermarkPredicateFunc)
+              s.evictByValueCondition(stateValueEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictByTimestamp(
@@ -979,7 +1082,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictAndReturnByKeyCondition(stateKeyWatermarkPredicateFunc)
+              s.evictAndReturnByKeyCondition(stateKeyEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictAndReturnByTimestamp(
@@ -989,7 +1092,7 @@ case class StreamingSymmetricHashJoinExec(
         case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
-              s.evictAndReturnByValueCondition(stateValueWatermarkPredicateFunc)
+              s.evictAndReturnByValueCondition(stateValueEvictionFunc)
 
             case s: SupportsEvictByTimestamp =>
               s.evictAndReturnByTimestamp(
@@ -1124,7 +1227,9 @@ case class StreamingSymmetricHashJoinExec(
 
   // The output watermark bounds the event-time columns emitted by the join. State watermarks
   // bound buffered rows that can still be emitted, and the input watermark bounds new rows.
-  // Joins emitting both sides take the minimum of both state watermarks and the input watermark.
+  // Joins emitting both sides take the minimum of the input watermark and the state watermarks
+  // of the inputs whose event time the next stateful operator uses: a side's state watermark
+  // bounds only that side's event time.
   override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     val (leftStateWatermark, rightStateWatermark) =
       StreamingSymmetricHashJoinHelper.getStateWatermark(
@@ -1139,7 +1244,10 @@ case class StreamingSymmetricHashJoinExec(
         (leftStateWatermark ++ Some(inputWatermarkMs)).min
       }
     } else {
-      Some((leftStateWatermark ++ rightStateWatermark ++ Some(inputWatermarkMs)).min)
+      val sides = outputWatermarkSides.getOrElse(Set(LeftSide, RightSide))
+      val stateWatermarks = leftStateWatermark.filter(_ => sides.contains(LeftSide)) ++
+        rightStateWatermark.filter(_ => sides.contains(RightSide))
+      Some((stateWatermarks ++ Some(inputWatermarkMs)).min)
     }
   }
 }
