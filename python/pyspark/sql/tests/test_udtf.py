@@ -2733,6 +2733,35 @@ class BaseUDTFTestsMixin:
             [Row(a=6), Row(a=7)],
         )
 
+    def test_udtf_with_table_argument_and_partition_by_nan(self):
+        @udtf(returnType="n: int")
+        class CountRows:
+            def __init__(self):
+                self._n = 0
+
+            def eval(self, row: Row):
+                self._n += 1
+
+            def terminate(self):
+                yield (self._n,)
+
+        self.spark.udtf.register("count_rows", CountRows)
+        nan = float("nan")
+        # NaN keys must form one partition, also when nested in an array or a struct.
+        df = self.spark.createDataFrame(
+            [(nan, 1), (nan, 2), (1.0, 3), (1.0, 4)], "k double, v int"
+        ).selectExpr(
+            "k", "v", "array(k) AS arr", "struct(k) AS st", "array(CAST(k AS FLOAT)) AS arr_f"
+        )
+        with self.temp_view("t"):
+            df.createOrReplaceTempView("t")
+            for key in ["k", "arr", "st", "arr_f"]:
+                with self.subTest(key=key):
+                    assertDataFrameEqual(
+                        self.spark.sql(f"SELECT * FROM count_rows(TABLE(t) PARTITION BY {key})"),
+                        [Row(n=2), Row(n=2)],
+                    )
+
     def test_udtf_with_table_argument_and_partition_by_and_order_by(self):
         class TestUDTF:
             def __init__(self):

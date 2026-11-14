@@ -71,6 +71,29 @@ if TYPE_CHECKING:
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
+def _partition_values_equal(left: Any, right: Any) -> bool:
+    """
+    Compare two partition key values with ``==``, except that NaN is equal to NaN (also when
+    nested inside rows, structs, arrays or maps). Python's ``!=`` is not enough, since
+    ``float("nan") != float("nan")`` is True.
+    """
+    # TODO: collated string keys (for example 'a' and 'A' under UTF8_LCASE) still compare with
+    # plain ``==``, because the worker does not know each key's collation.
+    if left == right:
+        return True
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        return len(left) == len(right) and all(
+            _partition_values_equal(lv, rv) for lv, rv in zip(left, right)
+        )
+    if isinstance(left, dict) and isinstance(right, dict):
+        return len(left) == len(right) and all(
+            k in right and _partition_values_equal(v, right[k]) for k, v in left.items()
+        )
+    # NaN is the only value not equal to itself. This also covers NumPy floating scalars such as
+    # numpy.float32, which are not ``float`` subclasses.
+    return left != left and right != right
+
+
 class PartitionedUDTF(metaclass=ABCMeta):
     """
     Base for the wrappers that implement TABLE argument PARTITION BY semantics on top of a UDTF.
@@ -177,7 +200,7 @@ class UDTFWithPartitions(PartitionedUDTF):
             for i in self._partition_child_indexes:
                 cur_partitions_args.append(cur_table_arg[i])
                 prev_partitions_args.append(prev_table_arg[i])
-            result = any(k != v for k, v in zip(cur_partitions_args, prev_partitions_args))
+            result = not _partition_values_equal(cur_partitions_args, prev_partitions_args)
         self._prev_arguments = arguments
         return result
 
@@ -351,8 +374,8 @@ class ArrowUDTFWithPartition(PartitionedUDTF):
             # TODO: This check is only necessary for the first boundary in each batch.
             # The following boundaries are always for new partitions within the same batch.
             # This could be optimized by only checking i == 0.
-            is_new_partition = (
-                self._last_partition_key is not None and partition_key != self._last_partition_key
+            is_new_partition = self._last_partition_key is not None and not _partition_values_equal(
+                partition_key, self._last_partition_key
             )
 
             if is_new_partition:
@@ -437,7 +460,9 @@ class ArrowUDTFWithPartition(PartitionedUDTF):
             # Check if any partition column changed from previous row
             partition_changed = False
             for col_array in partition_arrays:
-                if col_array[row_idx].as_py() != col_array[row_idx - 1].as_py():
+                if not _partition_values_equal(
+                    col_array[row_idx].as_py(), col_array[row_idx - 1].as_py()
+                ):
                     partition_changed = True
                     break
 

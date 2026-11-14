@@ -1332,6 +1332,41 @@ class ArrowUDTFTestsMixin:
         )
         assertDataFrameEqual(result_df, expected_df)
 
+    def test_arrow_udtf_with_partition_by_nan_values(self):
+        @arrow_udtf(returnType="n int")
+        class CountRows:
+            def __init__(self):
+                self._n = 0
+
+            def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                self._n += table_data.num_rows
+                return iter(())
+
+            def terminate(self) -> Iterator["pa.Table"]:
+                yield pa.table({"n": pa.array([self._n], type=pa.int32())})
+
+        self.spark.udtf.register("count_rows_arrow", CountRows)
+        nan = float("nan")
+        # NaN keys must form one partition, also when nested in an array or a struct.
+        df = self.spark.createDataFrame(
+            [(nan, 1), (nan, 2), (1.0, 3), (1.0, 4)], "k double, v int"
+        ).selectExpr("k", "v", "array(k) AS arr", "struct(k) AS st")
+        with self.temp_view("t_nan"):
+            df.createOrReplaceTempView("t_nan")
+            # A batch size of 1 makes each partition span Arrow batches, so the cross-batch
+            # partition key comparison is covered too.
+            for batch_size in ["10000", "1"]:
+                with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                    for key in ["k", "arr", "st"]:
+                        with self.subTest(batch_size=batch_size, key=key):
+                            assertDataFrameEqual(
+                                self.spark.sql(
+                                    "SELECT * FROM count_rows_arrow("
+                                    f"TABLE(t_nan) PARTITION BY {key})"
+                                ),
+                                [Row(n=2), Row(n=2)],
+                            )
+
     def test_arrow_udtf_with_empty_table(self):
         @arrow_udtf(returnType="result string")
         class EmptyTableUDTF:
