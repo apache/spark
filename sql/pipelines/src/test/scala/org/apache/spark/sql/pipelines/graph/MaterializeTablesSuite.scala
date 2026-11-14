@@ -1182,7 +1182,10 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val set = changes.collect {
         case s: TableChange.SetProperty => s.property() -> s.value()
       }.toMap
-      assert(set == Map("p.a" -> "2", "p.new" -> "n"))
+      assert(set == Map(
+        "p.a" -> "2",
+        "p.new" -> "n",
+        PipelinesTableProperties.declaredPropertyKeys -> """["p.a","p.new"]"""))
 
       val table = loadTableFromRecordingCatalog("t")
       assert(table.properties().get("p.a") == "2")
@@ -1610,18 +1613,97 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
-  test("re-materializing with a dropped property neither removes it nor issues an alterTable") {
+  test("SPARK-57670: re-materializing with a dropped property removes it") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)
-      // This test locks in the current buggy behavior where dropped properties do not materialize
-      // against the catalog table entity. See SPARK-57670.
       materializeStreamingTable("t", schema, Map("p.keep" -> "v", "p.stale" -> "old"))
       assert(recordingCatalog.recordedAlters.isEmpty)
-      materializeStreamingTable("t", schema, Map("p.keep" -> "v"))
-      assert(recordingCatalog.recordedAlters.isEmpty)
+      // A property the pipeline never declared, e.g. one managed by the catalog.
+      spark.sql(
+        s"ALTER TABLE $recordingCatalogName.$recordingNamespace.t " +
+        "SET TBLPROPERTIES ('p.external' = 'e')")
+      recordingCatalog.recordedAlters.clear()
 
-      assert(loadTableFromRecordingCatalog("t").properties().get("p.stale") == "old")
+      materializeStreamingTable("t", schema, Map("p.keep" -> "v"))
+      assert(recordingCatalog.recordedAlters.size == 1)
+      val changes = recordingCatalog.recordedAlters.flatten
+      assert(changes.collect { case r: TableChange.RemoveProperty => r.property() } ==
+        Seq("p.stale"))
+
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(!props.containsKey("p.stale"))
+      assert(props.get("p.keep") == "v")
+      assert(props.get("p.external") == "e")
+      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.keep"]""")
     }
+  }
+
+  test("SPARK-57670: re-materializing with all properties dropped removes them") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable("t", schema, Map("p.a" -> "1", "p.b" -> "2"))
+      materializeStreamingTable("t", schema, Map.empty)
+
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(!props.containsKey("p.a"))
+      assert(!props.containsKey("p.b"))
+      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == "[]")
+
+      // The table is now in sync with its definition, so re-materializing is a no-op.
+      recordingCatalog.recordedAlters.clear()
+      materializeStreamingTable("t", schema, Map.empty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
+    }
+  }
+
+  test("SPARK-57670: dropped properties are not removed from a table without a declared-keys " +
+    "record") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable("t", schema, Map("p.keep" -> "v", "p.stale" -> "old"))
+      // Simulate a table materialized before the declared-keys record was introduced.
+      spark.sql(
+        s"ALTER TABLE $recordingCatalogName.$recordingNamespace.t " +
+        s"UNSET TBLPROPERTIES ('${PipelinesTableProperties.declaredPropertyKeys}')")
+
+      materializeStreamingTable("t", schema, Map("p.keep" -> "v"))
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(props.get("p.stale") == "old")
+      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.keep"]""")
+    }
+  }
+
+  test("SPARK-57670: a user-declared value for the declared-keys property is ignored") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable("t", schema, Map(
+        "p.a" -> "1",
+        PipelinesTableProperties.declaredPropertyKeys -> """["p.other"]"""))
+      assert(loadTableFromRecordingCatalog("t").properties()
+        .get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""")
+    }
+  }
+
+  test("SPARK-57670: a dropped property is removed from a materialized view") {
+    materializeGraph(new TestGraphRegistrationContext(spark) {
+      registerMaterializedView(
+        "mv",
+        query = dfFlowFunc(Seq(1).toDF("id")),
+        properties = Map("p.keep" -> "v", "p.stale" -> "old"))
+    }.resolveToDataflowGraph(), storageRoot = storageRoot)
+
+    materializeGraph(new TestGraphRegistrationContext(spark) {
+      registerMaterializedView(
+        "mv",
+        query = dfFlowFunc(Seq(1).toDF("id")),
+        properties = Map("p.keep" -> "v"))
+    }.resolveToDataflowGraph(), storageRoot = storageRoot)
+
+    val props = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+      .loadTable(Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "mv"))
+      .properties()
+    assert(!props.containsKey("p.stale"))
+    assert(props.get("p.keep") == "v")
   }
 }
 

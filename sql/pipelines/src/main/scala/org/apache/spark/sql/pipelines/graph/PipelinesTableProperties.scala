@@ -22,6 +22,9 @@ import java.util.Locale
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods.{compact, parse}
+
 /**
  * Interface for validating and accessing Pipeline-specific table properties.
  */
@@ -36,6 +39,36 @@ object PipelinesTableProperties {
   /** Whether the table should be reset when a Reset is triggered. */
   val resetAllowed: PipelineTableProperty[Boolean] =
     buildProp("pipelines.reset.allowed", default = true)
+
+  /**
+   * Internal table property recording, as a JSON string array, the keys of the table properties
+   * declared in the dataset definition as of the latest materialization. On the next
+   * materialization, keys recorded here but no longer declared are removed from the table, while
+   * properties the pipeline never set (e.g. catalog-managed ones) are left untouched.
+   *
+   * This key is not registered as a user-settable property, so [[validateAndCanonicalize]] drops
+   * it if a user declares it.
+   */
+  val declaredPropertyKeys: String = s"${pipelinesPrefix}declaredPropertyKeys"
+
+  /** Serializes property keys for [[declaredPropertyKeys]]. */
+  def serializePropertyKeys(keys: Seq[String]): String = {
+    compact(JArray(keys.map(JString(_)).toList))
+  }
+
+  /**
+   * Parses a value written by [[serializePropertyKeys]]. `None` if it is not a JSON array of
+   * strings.
+   */
+  def parsePropertyKeys(raw: String): Option[Seq[String]] = {
+    val parsed = try Some(parse(raw)) catch { case NonFatal(_) => None }
+    parsed.flatMap {
+      case JArray(elems) =>
+        val keys = elems.collect { case JString(s) => s }
+        if (keys.size == elems.size) Some(keys) else None
+      case _ => None
+    }
+  }
 
   /**
    * Validates that all known pipeline properties are valid and can be parsed.
