@@ -22,14 +22,17 @@ module.exports = async ({github, context, core, env = process.env, log = console
   // the Build checks on the head commit (statusCheckRollup.commit) and the fork's
   // workflow runs for that commit (headRef.target), both as GitHub Actions check
   // suites: fork runs are Actions runs, and Build checks written with the GITHUB_TOKEN
-  // land in Actions suites too. On the PR side, only suites containing Build checks
-  // are relevant; unrelated upstream workflow runs must not fill the page.
+  // land in Actions suites too.
   //
-  // A PR rarely has more than a few such suites. A fork's default branch can collect
-  // thousands from scheduled workflows, but suites are listed oldest first and a push
-  // creates its runs' suites right away, so they are still among the first. Should a
-  // page ever not hold everything a PR needs, the PR fails loudly rather than being
-  // synced from partial data.
+  // On the PR commit, list Actions suites and take each suite's latest check run
+  // named Build. Filtering suites by checkName repeats a suite once per historical
+  // Build run of that name, which can fill the page. checkType LATEST on checkRuns
+  // returns one Build check per suite. Fork PRs usually have one such suite here;
+  // in-repo branches can collect one suite per workflow run. A fork's default branch
+  // can collect thousands from scheduled workflows, but those suites are listed
+  // oldest first and a push creates its runs' suites right away, so they are still
+  // among the first. Should a page ever not hold everything a PR needs, the PR fails
+  // loudly rather than being synced from partial data.
   //
   // GitHub aborts a GraphQL request after 10 seconds and allows 60 seconds of GraphQL
   // CPU time per minute. A page of 25 PRs takes about 3 seconds, so each page is
@@ -39,6 +42,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
   const PR_PAGE_SIZE = 25
   // Name of the mirrored PR check, not the workflow.
   const BUILD_CHECK_NAME = 'Build'
+  const BUILD_CHECK_SUITE_PAGE = 10
 
   // Quick syncs cover only open PRs updated in the last QUICK_SYNC_LOOKBACK_DAYS. A
   // push, comment, review, or label change updates a PR, but a check change does not.
@@ -72,9 +76,7 @@ module.exports = async ({github, context, core, env = process.env, log = console
             statusCheckRollup {
               commit {
                 oid
-                checkSuites(first: 10, filterBy: {
-                  appId: $appId, checkName: "${BUILD_CHECK_NAME}"
-                }) {
+                checkSuites(first: ${BUILD_CHECK_SUITE_PAGE}, filterBy: {appId: $appId}) {
                   pageInfo { hasNextPage }
                   nodes {
                     checkRuns(first: 10,
@@ -163,7 +165,6 @@ module.exports = async ({github, context, core, env = process.env, log = console
       throw new Error('The PR head commit has more check suites or Build checks '
         + 'than a page holds')
     }
-    // checkName filtering can repeat suites; process each Build check only once.
     const checks = new Map(suites.flatMap(s => s.checkRuns.nodes).map(cr => [cr.databaseId, cr]))
     const lower = (value) => value?.toLowerCase()
     const runs = target.checkSuites.nodes.filter(s => s.workflowRun).map(s => ({
