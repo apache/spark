@@ -20,7 +20,11 @@ package org.apache.spark.sql.execution.datasources
 import java.sql.{Date, Timestamp}
 import java.time.LocalTime
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import scala.reflect.ClassTag
+
+import org.apache.orc.OrcConf
+
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
@@ -716,7 +720,7 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
-  private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
+  protected def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         checkKeywordsExistsInExplain(df, expectedPlanFragment)
@@ -804,6 +808,138 @@ class OrcV1AggregatePushDownSuite extends OrcAggregatePushDownSuite {
 @SlowSQLTest
 class OrcV2AggregatePushDownSuite extends OrcAggregatePushDownSuite {
 
+  import testImplicits._
+
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  // The footer statistics must be those of the column that the reader reads, which the reader
+  // finds by name or by position (see `OrcUtils.requestedColumnIds`). Each check runs the query
+  // without aggregate push-down too, so the reader gives the same answer.
+  private def checkAggPushDown(df: => DataFrame, pushed: String, expected: Row): Unit = {
+    withSQLConf(aggPushDownEnabledKey -> "false") {
+      checkAnswer(df, expected)
+    }
+    withSQLConf(aggPushDownEnabledKey -> "true") {
+      checkPushedInfo(df, s"PushedAggregation: [$pushed]")
+      checkAnswer(df, expected)
+    }
+  }
+
+  test("SPARK-61499: aggregate push-down with a user schema that differs from the file schema") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq((1, 10L, Some(100)), (2, 20L, None)).toDF("x", "a", "b").coalesce(1).write.orc(path)
+      // The data schema lists `b` (as `B`) first, and adds `z`, which the file does not have,
+      // after the last column of the file.
+      def df: DataFrame = spark.read.schema("B INT, x INT, a LONG, z INT").orc(path)
+        .selectExpr("max(a)", "min(B)", "min(x)", "count(B)", "count(z)", "max(z)")
+      checkAggPushDown(df, "MAX(a), MIN(B), MIN(x), COUNT(B), COUNT(z), MAX(z)",
+        Row(20L, 100, 1, 1, 0, null))
+    }
+  }
+
+  test("SPARK-61499: aggregate push-down matches columns by position like the reader") {
+    // A file written by an old version of Hive has the column names `_col0`, `_col1`, ...
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq((1, 10), (2, 20)).toDF("_col0", "_col1").coalesce(1).write.orc(path)
+      def df: DataFrame = spark.read.schema("y INT, x INT, z INT").orc(path)
+        .selectExpr("max(y)", "max(x)", "count(z)", "max(z)")
+      checkAggPushDown(df, "MAX(y), MAX(x), COUNT(z), MAX(z)", Row(2, 20, 0, null))
+    }
+    // With `orc.force.positional.evolution`, the reader also matches columns by position.
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq((1, 10), (2, 20)).toDF("a", "b").coalesce(1).write.orc(path)
+      Seq("true" -> Row(2, 20), "false" -> Row(20, 2)).foreach { case (positional, expected) =>
+        def df: DataFrame = spark.read.schema("b INT, a INT")
+          .option(OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute, positional)
+          .orc(path)
+          .selectExpr("max(b)", "max(a)")
+        checkAggPushDown(df, "MAX(b), MAX(a)", expected)
+      }
+    }
+  }
+
+  test("SPARK-61499: aggregate push-down matches column names like the reader") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq((1L, 10L, 100L), (2L, 20L, 200L)).toDF("C", "b", "a").coalesce(1).write.orc(path)
+      // Case-insensitive mode: `c` is the file column `C`.
+      def df: DataFrame = spark.read.schema("a LONG, b LONG, c LONG").orc(path)
+        .selectExpr("max(a)", "max(b)", "min(c)")
+      checkAggPushDown(df, "MAX(a), MAX(b), MIN(c)", Row(200L, 20L, 1L))
+    }
+    // The reader lower-cases names with Locale.ROOT, so `id` and `${dotlessI}d` are different
+    // columns, although String.equalsIgnoreCase says they are equal.
+    val dotlessI = 0x0131.toChar.toString
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(3).selectExpr(s"id * 2 AS `${dotlessI}d`", "id").coalesce(1).write.orc(path)
+      def df: DataFrame = spark.read.schema(s"id LONG, `${dotlessI}d` LONG").orc(path)
+        .selectExpr("max(id)", s"max(`${dotlessI}d`)")
+      checkAggPushDown(df, s"MAX(id), MAX(`${dotlessI}d`)", Row(2L, 4L))
+    }
+  }
+
+  test("SPARK-61499: aggregate push-down in case-sensitive mode") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        sql("SELECT * FROM VALUES (1L, 10L, 100L), (2L, NULL, 200L) AS t(a, A, b)").coalesce(1)
+          .write.orc(path)
+        // `a` and `A` are different columns, and the file column `b` is not `B`.
+        def df: DataFrame = spark.read.schema("A LONG, a LONG, B LONG").orc(path)
+          .selectExpr("max(a)", "max(A)", "count(A)", "count(B)")
+        checkAggPushDown(df, "MAX(a), MAX(A), COUNT(A), COUNT(B)", Row(2L, 10L, 1, 0))
+      }
+    }
+  }
+
+  test("SPARK-61499: aggregate push-down fails on an ambiguous case-insensitive column match") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        spark.range(3).selectExpr("id AS A", "id * 2 AS a").coalesce(1).write.orc(path)
+      }
+      // The reader fails in the same way for this file.
+      Seq("false", "true").foreach { pushDown =>
+        withSQLConf(aggPushDownEnabledKey -> pushDown) {
+          val df = spark.read.schema("a LONG").orc(path).selectExpr("max(a)")
+          if (pushDown == "true") checkPushedInfo(df, "PushedAggregation: [MAX(a)]")
+          checkError(
+            exception = interceptCause[SparkRuntimeException](df.collect()),
+            condition = "_LEGACY_ERROR_TEMP_2093",
+            parameters = Map("requiredFieldName" -> "a", "matchedOrcFields" -> "[A, a]"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-61499: aggregate push-down is not used for a column with an existence default") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq(7L, 7L).toDF("x").coalesce(1).write.orc(path)
+      // The reader returns the existence default for `z`, which the file does not have.
+      val readSchema = new StructType(Array(
+        StructField("z", LongType).withExistenceDefaultValue("CAST(7 AS BIGINT)")))
+      withSQLConf(aggPushDownEnabledKey -> "true") {
+        val df = spark.read.schema(readSchema).orc(path).selectExpr("count(z)", "max(z)")
+        checkPushedInfo(df, "PushedAggregation: []")
+        checkAnswer(df, Row(2, 7L))
+      }
+    }
+  }
+
+  // The error comes from the partition reader, so it may be wrapped in another exception.
+  private def interceptCause[T <: Throwable](f: => Any)(implicit tag: ClassTag[T]): T = {
+    val e = intercept[Exception](f)
+    var cause: Throwable = e
+    while (cause != null && !tag.runtimeClass.isInstance(cause)) {
+      cause = cause.getCause
+    }
+    assert(cause != null, s"Expected a ${tag.runtimeClass.getSimpleName} but got: $e")
+    cause.asInstanceOf[T]
+  }
 }
