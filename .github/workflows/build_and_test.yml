@@ -933,6 +933,9 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         python3.12 ./dev/structured_logging_style.py
+    - name: Scheduled CI image check
+      if: hashFiles('dev/visualize_ci_schedule.py') != ''
+      run: python3.12 ./dev/visualize_ci_schedule.py --check
     - name: Java linter
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
