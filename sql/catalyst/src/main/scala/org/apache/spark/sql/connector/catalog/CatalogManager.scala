@@ -708,13 +708,6 @@ private[sql] object CatalogManager extends Logging {
       JArray(parts.map(JString(_)).toList)).toList))
   }
 
-  /**
-   * Version of the persisted resolution-path semantics. Version 1 payloads were written before
-   * catalog-only PATH entries participated in two-part name resolution. Version 2 payloads use
-   * the same JSON representation, but may include catalog-only entries.
-   */
-  val CURRENT_RESOLUTION_PATH_VERSION: String = "2"
-
   private def parsePathEntries(storedPathStr: String): Either[String, Seq[Seq[String]]] = {
     import org.json4s.JsonAST.{JArray, JString}
     import org.json4s.jackson.JsonMethods.parse
@@ -778,40 +771,46 @@ private[sql] object CatalogManager extends Logging {
   }
 
   /**
-   * Parse a frozen path for analysis and upgrade legacy unversioned metadata in memory. Legacy
-   * paths could contain catalog-only entries, but those entries did not participate in resolution;
-   * two-part names used a separate mini-path containing `system` and the creation-time current
-   * catalog. Preserve the schema entries and append those catalog entries in the historical order
-   * so old views and SQL functions keep their behavior.
+   * Parse a frozen path for analysis, using the object's metadata version to decide whether the
+   * stored PATH already encodes catalog entries for two-part names. Version 0 (absent) payloads
+   * could contain catalog-only entries that did not participate in resolution; two-part names used
+   * a separate mini-path containing `system` and the creation-time current catalog. Preserve the
+   * schema entries and append those catalog entries in the historical order so old views and SQL
+   * functions keep their behavior. Version `METADATA_VERSION_PATH_WITH_CATALOG_ENTRIES` and above
+   * trusts the stored PATH as-is.
    */
   def deserializePathEntriesForAnalysisOrFail(
       storedPathStr: String,
-      storedPathVersion: Option[String],
+      metadataVersion: Int,
       creationCatalog: Option[String],
       persistentCatalogFirst: Boolean,
       objectType: String,
       objectName: String): Seq[Seq[String]] = {
+    import org.apache.spark.sql.catalyst.catalog.CatalogTable.{
+      CURRENT_VIEW_METADATA_VERSION,
+      METADATA_VERSION_PATH_WITH_CATALOG_ENTRIES
+    }
     val entries = deserializePathEntriesOrFail(storedPathStr, objectType, objectName)
-    storedPathVersion match {
-      case Some(CURRENT_RESOLUTION_PATH_VERSION) => entries
-      case None | Some("1") =>
-        val persistentCatalog = creationCatalog.map(Seq(_)).toSeq
-        val catalogEntries = if (persistentCatalogFirst) {
-          persistentCatalog :+ Seq(SYSTEM_CATALOG_NAME)
-        } else {
-          Seq(Seq(SYSTEM_CATALOG_NAME)) ++ persistentCatalog
-        }
-        entries.filter(_.length > 1) ++ catalogEntries
-      case Some(version) =>
-        throw new AnalysisException(
-          message = s"Unsupported stored SQL path version '$version' for $objectType " +
-            s"'$objectName'.",
-          line = None,
-          startPosition = None,
-          cause = None,
-          errorClass = None,
-          messageParameters = Map.empty,
-          context = Array.empty)
+    if (metadataVersion > CURRENT_VIEW_METADATA_VERSION) {
+      throw new AnalysisException(
+        message = s"Unsupported stored metadata version '$metadataVersion' for $objectType " +
+          s"'$objectName'.",
+        line = None,
+        startPosition = None,
+        cause = None,
+        errorClass = None,
+        messageParameters = Map.empty,
+        context = Array.empty)
+    } else if (metadataVersion >= METADATA_VERSION_PATH_WITH_CATALOG_ENTRIES) {
+      entries
+    } else {
+      val persistentCatalog = creationCatalog.map(Seq(_)).toSeq
+      val catalogEntries = if (persistentCatalogFirst) {
+        persistentCatalog :+ Seq(SYSTEM_CATALOG_NAME)
+      } else {
+        Seq(Seq(SYSTEM_CATALOG_NAME)) ++ persistentCatalog
+      }
+      entries.filter(_.length > 1) ++ catalogEntries
     }
   }
 }

@@ -203,8 +203,8 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
           val metadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
           val storedPath = metadata.viewStoredResolutionPath.getOrElse(
             fail("Expected persisted view resolution path to be set"))
-          assert(metadata.viewStoredResolutionPathVersion.contains(
-            CatalogManager.CURRENT_RESOLUTION_PATH_VERSION))
+          assert(metadata.viewMetadataVersion ==
+            CatalogTable.CURRENT_VIEW_METADATA_VERSION)
           val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
             fail(s"Expected a valid serialized path, got: $storedPath"))
           assert(parsed.head == Seq("spark_catalog", "path_materialized_view"))
@@ -235,8 +235,8 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
           val function = analyzedSqlFunction(testFunctionName)
           val storedPath = function.functionStoredResolutionPath.getOrElse(
             fail("Expected persisted function resolution path to be set"))
-          assert(function.functionStoredResolutionPathVersion.contains(
-            CatalogManager.CURRENT_RESOLUTION_PATH_VERSION))
+          assert(function.functionMetadataVersion ==
+            SQLFunction.CURRENT_FUNCTION_METADATA_VERSION)
           val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
             fail(s"Expected a valid serialized path, got: $storedPath"))
           assert(parsed.head == Seq("spark_catalog", "path_materialized_fn"))
@@ -267,6 +267,8 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
             val metadata =
               spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
             assert(metadata.viewStoredResolutionPath.isEmpty)
+            assert(metadata.viewMetadataVersion ==
+              CatalogTable.CURRENT_VIEW_METADATA_VERSION)
             checkAnswer(sql(s"SELECT id FROM spark_catalog.default.$testViewName"), Row(1))
           } finally {
             sql("SET PATH = DEFAULT_PATH")
@@ -322,7 +324,7 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
             .updated(
               CatalogTable.VIEW_RESOLUTION_PATH,
               CatalogManager.serializePathEntries(legacyPath))
-            .removed(CatalogTable.VIEW_RESOLUTION_PATH_VERSION)))
+            .removed(CatalogTable.VIEW_METADATA_VERSION)))
 
         checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(1, 100))
       } finally {
@@ -359,7 +361,7 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
             .updated(
               SQLFunction.FUNCTION_RESOLUTION_PATH,
               CatalogManager.serializePathEntries(legacyPath))
-            .removed(SQLFunction.FUNCTION_RESOLUTION_PATH_VERSION))
+            .removed(SQLFunction.FUNCTION_METADATA_VERSION))
         spark.sessionState.catalog.alterFunction(legacyFunction.toCatalogFunction)
 
         withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "false") {

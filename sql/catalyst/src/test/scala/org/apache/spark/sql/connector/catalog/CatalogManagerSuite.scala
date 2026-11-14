@@ -24,7 +24,12 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog => V1InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{
+  CatalogDatabase,
+  CatalogTable,
+  InMemoryCatalog => V1InMemoryCatalog,
+  SessionCatalog
+}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.connector.catalog.CatalogManager.{CurrentCatalogEntry, CurrentSchemaEntry, LiteralPathEntry}
 import org.apache.spark.sql.internal.SQLConf
@@ -187,7 +192,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     def read(persistentCatalogFirst: Boolean): Seq[Seq[String]] =
       CatalogManager.deserializePathEntriesForAnalysisOrFail(
         stored,
-        storedPathVersion = None,
+        metadataVersion = 0,
         creationCatalog = Some("spark_catalog"),
         persistentCatalogFirst = persistentCatalogFirst,
         objectType = "view",
@@ -199,12 +204,12 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       schemaEntries ++ Seq(Seq("spark_catalog"), Seq("system")))
   }
 
-  test("current persisted path version preserves an intentionally schema-only path") {
+  test("current metadata version preserves an intentionally schema-only path") {
     val entries = Seq(Seq("pathcat", "ns"))
     val stored = CatalogManager.serializePathEntries(entries)
     assert(CatalogManager.deserializePathEntriesForAnalysisOrFail(
       stored,
-      storedPathVersion = Some(CatalogManager.CURRENT_RESOLUTION_PATH_VERSION),
+      metadataVersion = CatalogTable.CURRENT_VIEW_METADATA_VERSION,
       creationCatalog = Some("spark_catalog"),
       persistentCatalogFirst = false,
       objectType = "view",

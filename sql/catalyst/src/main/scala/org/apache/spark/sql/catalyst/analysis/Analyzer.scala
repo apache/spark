@@ -277,7 +277,7 @@ object AnalysisContext {
       resolutionPathEntries = viewDesc.viewStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
           _,
-          viewDesc.viewStoredResolutionPathVersion,
+          viewDesc.viewMetadataVersion,
           viewDesc.viewCatalogAndNamespace.headOption,
           resolutionConf.persistentCatalogFirst,
           "view",
@@ -307,7 +307,7 @@ object AnalysisContext {
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
           _,
-          function.functionStoredResolutionPathVersion,
+          function.functionMetadataVersion,
           function.functionCreationCatalog,
           SQLConf.get.persistentCatalogFirst,
           "SQL function",

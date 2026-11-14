@@ -502,11 +502,12 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   }
 
   /**
-   * Remove the frozen resolution path from `properties` so it can be recomputed.
+   * Remove the frozen resolution path and metadata version from `properties` so they can be
+   * recomputed (or selectively restored when `captureNewPath` is false).
    */
   private def removeResolutionPath(properties: Map[String, String]): Map[String, String] = {
     properties.filterNot { case (key, _) =>
-      key == VIEW_RESOLUTION_PATH || key == VIEW_RESOLUTION_PATH_VERSION
+      key == VIEW_RESOLUTION_PATH || key == VIEW_METADATA_VERSION
     }
   }
 
@@ -570,20 +571,19 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // Capture the effective resolution path at view creation time so the view body
     // resolves with the same path regardless of the caller's session path later.
     // When captureNewPath is false (e.g. ALTER VIEW SCHEMA BINDING), preserve the
-    // existing frozen path instead of overwriting with the current session path.
+    // existing frozen path and metadata version instead of overwriting them.
     val resolutionPathProps = if (captureNewPath) {
       val expandedPathEntries = CatalogManager.pathEntriesForPersistence(
         manager, conf, stripSession = stripSystemSessionFromStoredPath)
-      if (expandedPathEntries.nonEmpty) {
-        Map(
-          VIEW_RESOLUTION_PATH -> CatalogManager.serializePathEntries(expandedPathEntries),
-          VIEW_RESOLUTION_PATH_VERSION -> CatalogManager.CURRENT_RESOLUTION_PATH_VERSION)
+      val pathProps = if (expandedPathEntries.nonEmpty) {
+        Map(VIEW_RESOLUTION_PATH -> CatalogManager.serializePathEntries(expandedPathEntries))
       } else {
         Map.empty[String, String]
       }
+      pathProps + (VIEW_METADATA_VERSION -> CURRENT_VIEW_METADATA_VERSION.toString)
     } else {
       properties.filter { case (key, _) =>
-        key == VIEW_RESOLUTION_PATH || key == VIEW_RESOLUTION_PATH_VERSION
+        key == VIEW_RESOLUTION_PATH || key == VIEW_METADATA_VERSION
       }
     }
 

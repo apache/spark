@@ -38,10 +38,11 @@ class AlterViewSchemaBindingSuite
       try {
         sql(s"SET PATH = $catalog.alter_view_path_a, system.builtin")
         sql(s"CREATE VIEW $view AS SELECT 1 AS x")
-        val pathAfterCreate = spark.sessionState.catalog
+        val metaAfterCreate = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier(viewName, Some(namespace)))
-          .viewStoredResolutionPath
+        val pathAfterCreate = metaAfterCreate.viewStoredResolutionPath
           .getOrElse(fail("Expected the view to persist a frozen SQL path"))
+        val versionAfterCreate = metaAfterCreate.viewMetadataVersion
         val parsedCreate = CatalogManager.deserializePathEntries(pathAfterCreate)
           .getOrElse(fail(s"Expected a valid serialized path, got: $pathAfterCreate"))
         assert(parsedCreate.contains(Seq(catalog, "alter_view_path_a")),
@@ -52,13 +53,16 @@ class AlterViewSchemaBindingSuite
         sql(s"SET PATH = $catalog.default, system.builtin")
         sql(s"ALTER VIEW $view WITH SCHEMA EVOLUTION")
 
-        val pathAfterAlter = spark.sessionState.catalog
+        val metaAfterAlter = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier(viewName, Some(namespace)))
-          .viewStoredResolutionPath
+        val pathAfterAlter = metaAfterAlter.viewStoredResolutionPath
           .getOrElse(fail("Frozen SQL path was dropped by ALTER VIEW WITH SCHEMA"))
         assert(pathAfterAlter == pathAfterCreate,
           s"ALTER VIEW WITH SCHEMA must preserve the frozen path. " +
             s"Before: $pathAfterCreate; after: $pathAfterAlter")
+        assert(metaAfterAlter.viewMetadataVersion == versionAfterCreate,
+          s"ALTER VIEW WITH SCHEMA must preserve metadataVersion. " +
+            s"Before: $versionAfterCreate; after: ${metaAfterAlter.viewMetadataVersion}")
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql(s"DROP VIEW IF EXISTS $view")

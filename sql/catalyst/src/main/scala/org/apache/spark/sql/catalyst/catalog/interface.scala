@@ -626,9 +626,16 @@ case class CatalogTable(
   def viewStoredResolutionPath: Option[String] =
     properties.get(CatalogTable.VIEW_RESOLUTION_PATH)
 
-  /** Version of the frozen PATH resolution semantics. Missing means the legacy version. */
-  def viewStoredResolutionPathVersion: Option[String] =
-    properties.get(CatalogTable.VIEW_RESOLUTION_PATH_VERSION)
+  /**
+   * Persisted view metadata format version. Absent means version 0 (pre-metadataVersion
+   * payloads). Bumped when Spark makes an incompatible change to how view properties are
+   * interpreted. See [[CatalogTable.CURRENT_VIEW_METADATA_VERSION]].
+   */
+  def viewMetadataVersion: Int =
+    CatalogTable.parseMetadataVersion(
+      properties.get(CatalogTable.VIEW_METADATA_VERSION),
+      objectType = "view",
+      objectName = identifier.unquotedString)
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -819,10 +826,51 @@ object CatalogTable {
   /** Frozen expanded PATH at view creation (PATH feature); not a SQL config property. */
   val VIEW_RESOLUTION_PATH = VIEW_PREFIX + "resolutionPath"
 
-  /** Version of [[VIEW_RESOLUTION_PATH]] resolution semantics. */
-  val VIEW_RESOLUTION_PATH_VERSION = VIEW_PREFIX + "resolutionPathVersion"
+  /**
+   * Sequence counter for incompatible changes to persisted view property interpretation.
+   * Absent = 0. Version history:
+   *   0 - Pre-metadataVersion payloads. Frozen PATH schema entries only; two-part names used a
+   *       separate mini-path of `system` and the creation catalog.
+   *   1 - Frozen PATH may include catalog-only entries that participate in two-part resolution.
+   */
+  val VIEW_METADATA_VERSION = VIEW_PREFIX + "metadataVersion"
+
+  /**
+   * Current [[VIEW_METADATA_VERSION]] written by this Spark build. Bump when a change cannot
+   * read older view property payloads without a version branch.
+   */
+  val CURRENT_VIEW_METADATA_VERSION: Int = 1
+
+  /**
+   * First [[VIEW_METADATA_VERSION]] / function metadata version where frozen PATH catalog
+   * entries are authoritative for two-part name resolution.
+   */
+  val METADATA_VERSION_PATH_WITH_CATALOG_ENTRIES: Int = 1
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
+
+  /** Parse a persisted metadata-version property; absent means 0. */
+  def parseMetadataVersion(
+      raw: Option[String],
+      objectType: String,
+      objectName: String): Int = {
+    raw.map { value =>
+      try {
+        value.toInt
+      } catch {
+        case _: NumberFormatException =>
+          throw new AnalysisException(
+            message = s"Invalid stored metadata version '$value' for $objectType " +
+              s"'$objectName'.",
+            line = None,
+            startPosition = None,
+            cause = None,
+            errorClass = None,
+            messageParameters = Map.empty,
+            context = Array.empty)
+      }
+    }.getOrElse(0)
+  }
 
   val PROP_CLUSTERING_COLUMNS: String = "clusteringColumns"
 

@@ -523,7 +523,7 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
               .updated(
                 CatalogTable.VIEW_RESOLUTION_PATH,
                 CatalogManager.serializePathEntries(legacyPath))
-              .removed(CatalogTable.VIEW_RESOLUTION_PATH_VERSION))
+              .removed(CatalogTable.VIEW_METADATA_VERSION))
           AnalysisContext.withAnalysisContext(legacyView) {
             checkResolverGuard("SELECT builtin.abs(-1)")
           }

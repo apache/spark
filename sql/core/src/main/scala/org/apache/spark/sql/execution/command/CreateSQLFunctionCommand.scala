@@ -590,16 +590,18 @@ case class CreateSQLFunctionCommand(
     // body resolves with the same path regardless of the caller's session path later.
     val expandedPathEntries = CatalogManager.pathEntriesForPersistence(
       manager, conf, stripSession = !isTemp)
-    val resolutionPathProps =
+    val pathProps =
       if (expandedPathEntries.nonEmpty) {
         Map(
           SQLFunction.FUNCTION_RESOLUTION_PATH ->
-            CatalogManager.serializePathEntries(expandedPathEntries),
-          SQLFunction.FUNCTION_RESOLUTION_PATH_VERSION ->
-            CatalogManager.CURRENT_RESOLUTION_PATH_VERSION)
+            CatalogManager.serializePathEntries(expandedPathEntries))
       } else {
         Map.empty[String, String]
       }
+    val resolutionPathProps =
+      pathProps +
+        (SQLFunction.FUNCTION_METADATA_VERSION ->
+          SQLFunction.CURRENT_FUNCTION_METADATA_VERSION.toString)
 
     sqlConfigsToProps(conf, SQL_CONFIG_PREFIX) ++
       catalogAndNamespaceToProps(

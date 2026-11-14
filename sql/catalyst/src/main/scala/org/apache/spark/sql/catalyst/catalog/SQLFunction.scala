@@ -188,9 +188,15 @@ case class SQLFunction(
   def functionStoredResolutionPath: Option[String] =
     properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH)
 
-  /** Version of the frozen PATH resolution semantics. Missing means the legacy version. */
-  def functionStoredResolutionPathVersion: Option[String] =
-    properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH_VERSION)
+  /**
+   * Persisted SQL function metadata format version. Absent means version 0. See
+   * [[SQLFunction.CURRENT_FUNCTION_METADATA_VERSION]].
+   */
+  def functionMetadataVersion: Int =
+    CatalogTable.parseMetadataVersion(
+      properties.get(SQLFunction.FUNCTION_METADATA_VERSION),
+      objectType = "SQL function",
+      objectName = name.unquotedString)
 
   /** Catalog that was current when the function was created. */
   def functionCreationCatalog: Option[String] =
@@ -209,8 +215,17 @@ object SQLFunction {
    */
   val FUNCTION_RESOLUTION_PATH: String = "function.resolutionPath"
 
-  /** Version of [[FUNCTION_RESOLUTION_PATH]] resolution semantics. */
-  val FUNCTION_RESOLUTION_PATH_VERSION: String = "function.resolutionPathVersion"
+  /**
+   * Sequence counter for incompatible changes to persisted SQL function property interpretation.
+   * Absent = 0. Version history matches [[CatalogTable.VIEW_METADATA_VERSION]].
+   */
+  val FUNCTION_METADATA_VERSION: String = "function.metadataVersion"
+
+  /**
+   * Current [[FUNCTION_METADATA_VERSION]] written by this Spark build. Bump when a change cannot
+   * read older function property payloads without a version branch.
+   */
+  val CURRENT_FUNCTION_METADATA_VERSION: Int = CatalogTable.CURRENT_VIEW_METADATA_VERSION
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 
