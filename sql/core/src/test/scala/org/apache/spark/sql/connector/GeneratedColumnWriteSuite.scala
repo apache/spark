@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import java.time.LocalDate
 import java.util.Collections
 
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
@@ -26,14 +27,15 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.util.GeneratedColumn
-import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, GeneralScalarExpression, Transform}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Expressions, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
-import org.apache.spark.sql.types.{DataType, IntegerType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, IntegerType, LongType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // A V2 function that a test binds to the name of a built-in function to shadow it.
@@ -63,15 +65,30 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
   // generated columns for it.
   private val noWriteCapProp = "generate-column-values-on-write"
 
-  // A generated column of a connector that implements only the legacy SQL getter.
-  private def legacyGeneratedColumn(name: String, dataType: DataType, sql: String): Column = {
+  private def createCatalogTable(
+      name: String,
+      columns: Array[Column],
+      properties: java.util.Map[String, String] = Collections.emptyMap[String, String]): Unit = {
+    val info = new TableInfo.Builder()
+      .withColumns(columns)
+      .withProperties(properties)
+      .build()
+    catalog("testcat").asTableCatalog.createTable(Identifier.of(Array.empty, name), info)
+  }
+
+  // A connector column that exposes SQL through the legacy getter.
+  private def legacyGeneratedColumn(
+      name: String,
+      dataType: DataType,
+      sql: String,
+      expression: V2Expression = null): Column = {
     new ColumnImpl(
         name = name,
         dataType = dataType,
         nullable = true,
         comment = null,
         defaultValue = null,
-        columnGenerationExpression = null,
+        columnGenerationExpression = Option(expression).map(new GenerationExpression(_)).orNull,
         identityColumnSpec = null,
         metadataInJSON = null) {
       override def generationExpression(): String = sql
@@ -347,6 +364,415 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  gridTest("SPARK-61495: modeled generation expression auto-fill")(
+      Seq("insert", "insert overwrite", "append", "overwrite", "overwrite partitions")) { mode =>
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
+      FieldReference(Seq("a.b")), FieldReference(Seq("s", "f"))))
+    val generation = new GenerationExpression(new V2Cast(genExpr, IntegerType, LongType))
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName,
+        Array(
+          Column.create("a.b", IntegerType),
+          Column.builderFor("b", LongType).generationExpression(generation).build(),
+          Column.create("s", new StructType().add("f", IntegerType)),
+          Column.builderFor("c", IntegerType).generationExpression("s.f * 2").build()))
+      val input = "SELECT named_struct('f', 5.7) AS s, 2.9 AS `a.b`"
+      val insert = s"INSERT INTO testcat.$tblName BY NAME $input"
+      assert(!hasCheckInvariant(insert))
+      mode match {
+        case "insert" => sql(insert)
+        case "insert overwrite" => sql(s"INSERT OVERWRITE testcat.$tblName BY NAME $input")
+        case "append" => sql(input).writeTo(s"testcat.$tblName").append()
+        case "overwrite" => sql(input).writeTo(s"testcat.$tblName").overwrite(lit(true))
+        case "overwrite partitions" =>
+          sql(input).writeTo(s"testcat.$tblName").overwritePartitions()
+      }
+      // Both expressions read the stored integer values after assignment casts, including the
+      // nested field. The modeled expression preserves the parts of the dotted column name.
+      val expected = Row(2, 7L, Row(5), 10)
+      checkAnswer(spark.table(s"testcat.$tblName"), expected)
+      assertNoGenerationMetadata(spark.table(s"testcat.$tblName"), "b")
+      assert(generationExpressionOf(tblName, "b").isEmpty)
+      val table = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), tblName))
+      assert(table.columns().find(_.name == "b").get.columnGenerationExpression() == generation)
+
+      val provided = s"INSERT INTO testcat.$tblName VALUES (2, 7L, named_struct('f', 5), 10)"
+      assert(hasCheckInvariant(provided))
+      sql(provided)
+      assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+        sql(s"INSERT INTO testcat.$tblName VALUES (2, 8L, named_struct('f', 5), 10)")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq(expected, expected))
+    }
+  }
+
+  gridTest("SPARK-61495: modeled expressions support first-class CHAR/VARCHAR")(
+      for {
+        config <- Seq(
+          SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO, SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
+        dataType <- Seq("CHAR(5)", "VARCHAR(5)")
+      } yield (config.key, dataType)) { case (config, dataType) =>
+    val tblName = "my_tab"
+    withSQLConf(config -> "true") {
+      withTable(s"testcat.$tblName") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a INT, s $dataType, b INT GENERATED ALWAYS AS (a + 1)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(a, s) VALUES (1, 'x')")
+        sql(s"INSERT INTO testcat.$tblName VALUES (1, 'x', 2)")
+        checkAnswer(sql(s"SELECT a, b FROM testcat.$tblName"), Seq.fill(2)(Row(1, 2)))
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: generated CHAR/VARCHAR values survive explicit validation")(
+      for {
+        config <- Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key,
+          SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)
+        dataType <- Seq("CHAR(5)", "VARCHAR(5)")
+      } yield (config, dataType)) { case (config, dataType) =>
+    val tblName = "my_tab"
+    withSQLConf(config -> "true") {
+      withTable(s"testcat.$tblName") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  s $dataType, b $dataType GENERATED ALWAYS AS (s)
+               |) USING foo""".stripMargin)
+        sql(s"INSERT INTO testcat.$tblName(s) VALUES ('x')")
+        sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+        val expected = if (dataType.startsWith("CHAR")) "x    " else "x"
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(expected, expected)))
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: invalid modeled literal values use SQL fallback when available")(
+      Seq(true, false)) { hasSql =>
+    val tblName = "my_tab"
+    val expression = new GeneralScalarExpression("+", Array[V2Expression](
+      FieldReference("a"), LiteralValue("not an integer", IntegerType)))
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName, Array(
+        Column.create("a", IntegerType),
+        Column.builderFor("b", IntegerType)
+          .generationExpression(
+            new GenerationExpression(if (hasSql) "a + 1" else null, expression)).build()))
+      Seq("(a) VALUES (1)", " VALUES (1, 2)").foreach { suffix =>
+        if (hasSql) {
+          sql(s"INSERT INTO testcat.$tblName$suffix")
+        } else {
+          val error = intercept[AnalysisException] {
+            sql(s"INSERT INTO testcat.$tblName$suffix")
+          }
+          assert(error.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
+          assert(error.getMessage.contains("generated column `b`"))
+        }
+      }
+      val expected = if (hasSql) Seq.fill(2)(Row(1, 2)) else Seq.empty
+      checkAnswer(spark.table(s"testcat.$tblName"), expected)
+    }
+  }
+
+  gridTest("SPARK-61495: modeled FLOOR and CEIL retain ANSI overflow behavior")(
+      for {
+        function <- Seq("floor", "ceil")
+        ansi <- Seq("false", "true")
+        legacy <- Seq("false", "true")
+      } yield (function, ansi, legacy)) { case (function, ansi, legacy) =>
+    val tblName = "my_tab"
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> ansi,
+        SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> legacy) {
+      withTable(s"testcat.$tblName") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  d DOUBLE, b BIGINT GENERATED ALWAYS AS ($function(d))
+               |) USING foo""".stripMargin)
+        val expected = if (function == "floor") 2L else 3L
+        sql(s"INSERT INTO testcat.$tblName(d) VALUES (2.5)")
+        sql(s"INSERT INTO testcat.$tblName VALUES (2.5, $expected)")
+        sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(4)(Row(2.5, expected)))
+        Seq("1e19", "-1e19", "CAST('Infinity' AS DOUBLE)", "CAST('-Infinity' AS DOUBLE)")
+          .foreach { value =>
+            Seq(s"(d) VALUES ($value)", s" VALUES ($value, 0L)").foreach { suffix =>
+              assertWriteFails("ARITHMETIC_OVERFLOW") {
+                sql(s"INSERT INTO testcat.$tblName$suffix")
+              }
+            }
+          }
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: modeled expressions accept public literal values")(
+      Seq("string", "decimal", "date")) { kind =>
+    val (literal, dataType, value): (V2Expression, DataType, String) = kind match {
+      case "string" => (Expressions.literal("Y"), StringType, "'Y'")
+      case "decimal" =>
+        (Expressions.literal(new java.math.BigDecimal("1.25")), DecimalType(3, 2), "1.25")
+      case "date" =>
+        (Expressions.literal(LocalDate.of(2024, 1, 2)), DateType, "DATE'2024-01-02'")
+    }
+    val tblName = "my_tab"
+    val expression = new GeneralScalarExpression("=",
+      Array[V2Expression](FieldReference("a"), literal))
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName, Array(
+        Column.create("a", dataType),
+        Column.builderFor("b", BooleanType)
+          .generationExpression(new GenerationExpression("false", expression)).build()))
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES ($value)")
+      sql(s"INSERT INTO testcat.$tblName VALUES ($value, true)")
+      assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+        sql(s"INSERT INTO testcat.$tblName VALUES ($value, false)")
+      }
+      checkAnswer(sql(s"SELECT b FROM testcat.$tblName"), Seq.fill(2)(Row(true)))
+    }
+  }
+
+  gridTest("SPARK-61495: legacy SQL supplies fallback for a separate modeled expression")(
+      Seq(true, false)) { convertible =>
+    val tblName = "my_tab"
+    val expression = if (convertible) {
+      FieldReference("a")
+    } else {
+      new GeneralScalarExpression("UPPER", Array[V2Expression](FieldReference("a")))
+    }
+    val expected = if (convertible) "x" else "X"
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName, Array(
+        Column.create("a", StringType),
+        legacyGeneratedColumn("b", StringType, "upper(a)", expression)))
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES ('x')")
+      sql(s"INSERT INTO testcat.$tblName VALUES ('x', '$expected')")
+      assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+        sql(s"INSERT INTO testcat.$tblName VALUES ('x', 'wrong')")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row("x", expected)))
+    }
+  }
+
+  gridTest("SPARK-61495: modeled generation expression keeps ANSI semantics")(
+      Seq("false", "true")) { ansi =>
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
+      new V2Cast(FieldReference(Seq("a")), StringType, IntegerType), LiteralValue(1, IntegerType)))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+      withTable(s"testcat.$tblName") {
+        createCatalogTable(tblName,
+          Array(
+            Column.create("a", StringType),
+            Column.builderFor("b", IntegerType)
+              .generationExpression(new GenerationExpression(genExpr)).build()))
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES ('1'), (NULL)")
+        sql(s"INSERT INTO testcat.$tblName VALUES ('1', 2), (NULL, NULL)")
+        Seq("(a) VALUES ('bad')", " VALUES ('bad', 2)").foreach { suffix =>
+          assertWriteFails("CAST_INVALID_INPUT") {
+            sql(s"INSERT INTO testcat.$tblName$suffix")
+          }
+        }
+        Seq("(a) VALUES ('2147483647')", " VALUES ('2147483647', 2)").foreach { suffix =>
+          assertWriteFails("ARITHMETIC_OVERFLOW") {
+            sql(s"INSERT INTO testcat.$tblName$suffix")
+          }
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"),
+          Seq(Row("1", 2), Row(null, null), Row("1", 2), Row(null, null)))
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: modeled generation expression takes precedence with SQL fallback")(
+      Seq("+", "NOT_A_FUNCTION")) { function =>
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression(function, Array[V2Expression](
+      FieldReference(Seq("a")), LiteralValue(100, IntegerType)))
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName,
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", IntegerType)
+            .generationExpression(new GenerationExpression("a + 1", genExpr)).build()))
+      val expected = if (function == "+") 101 else 2
+      val rejected = if (function == "+") 2 else 101
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+      sql(s"INSERT INTO testcat.$tblName VALUES (1, $expected)")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO testcat.$tblName VALUES (1, $rejected)")
+        },
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        parameters = Map(
+          "constraintName" -> "Generated Column",
+          "expression" -> (if (function == "+") "b <=> (a + 100)" else "b <=> a + 1"),
+          "values" -> s" - b : $rejected"))
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row(1, expected), Row(1, expected)))
+    }
+  }
+
+  gridTest("SPARK-61495: convertible modeled generation expression does not parse SQL")(
+      Seq("", "NOT VALID SQL")) { text =>
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
+      FieldReference(Seq("a")), LiteralValue(1, IntegerType)))
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName,
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", IntegerType)
+            .generationExpression(new GenerationExpression(text, genExpr)).build()))
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+      sql(s"INSERT INTO testcat.$tblName VALUES (1, 2)")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO testcat.$tblName VALUES (1, 3)")
+        },
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        parameters = Map(
+          "constraintName" -> "Generated Column",
+          "expression" -> "b <=> (a + 1)",
+          "values" -> " - b : 3"))
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row(1, 2), Row(1, 2)))
+    }
+  }
+
+  test("SPARK-61495: modeled generation expression analysis failure does not fall back to SQL") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName,
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", IntegerType).generationExpression(
+            new GenerationExpression("a + 1", FieldReference(Seq("missing")))).build()))
+      Seq("(a) VALUES (1)", " VALUES (1, 2)").foreach { suffix =>
+        val error = intercept[AnalysisException] {
+          sql(s"INSERT INTO testcat.$tblName$suffix")
+        }
+        assert(error.getCondition == "INVALID_GENERATED_COLUMN_EXPRESSION")
+        assert(error.messageParameters("tableName") == s"`testcat`.`$tblName`")
+        assert(error.messageParameters("columnName") == "`b`")
+        assert(error.messageParameters("expression") == "missing")
+        assert(error.getCause.asInstanceOf[AnalysisException].getCondition ==
+          "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: malformed modeled generation expression falls back to SQL")(
+      Seq("WIDTH_BUCKET", "IN", "BOOLEAN_EXPRESSION")) { function =>
+    val tblName = "my_tab"
+    val children = if (function == "WIDTH_BUCKET") {
+      Array[V2Expression](FieldReference(Seq("a")), LiteralValue(0, IntegerType))
+    } else {
+      Array.empty[V2Expression]
+    }
+    val text = if (function == "WIDTH_BUCKET") "width_bucket(a, 0, 10, 5)" else "a + 1"
+    val genExpr = new GeneralScalarExpression(function, children)
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName,
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", LongType)
+            .generationExpression(new GenerationExpression(text, genExpr)).build()))
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+      val expected = if (function == "WIDTH_BUCKET") 1L else 2L
+      sql(s"INSERT INTO testcat.$tblName VALUES (1, $expected)")
+      assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+        sql(s"INSERT INTO testcat.$tblName VALUES (1, 100)")
+      }
+      checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(1, expected)))
+    }
+  }
+
+  gridTest("SPARK-61495: modeled generation expression does not use session type coercion")(
+      for {
+        ansi <- Seq("false", "true")
+        legacy <- Seq("false", "true")
+      } yield (ansi, legacy)) { case (ansi, legacy) =>
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("=", Array[V2Expression](
+      FieldReference(Seq("flag")), LiteralValue(1, IntegerType)))
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> ansi,
+        SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> legacy) {
+      withTable(s"testcat.$tblName") {
+        createCatalogTable(tblName,
+          Array(
+            Column.create("flag", BooleanType),
+            Column.builderFor("b", BooleanType)
+              .generationExpression(new GenerationExpression("true", genExpr)).build()))
+        Seq("(flag) VALUES (true)", " VALUES (true, true)").foreach { suffix =>
+          val error = intercept[AnalysisException] {
+            sql(s"INSERT INTO testcat.$tblName$suffix")
+          }
+          assert(error.getCondition == "INVALID_GENERATED_COLUMN_EXPRESSION")
+          assert(error.messageParameters("tableName") == s"`testcat`.`$tblName`")
+          assert(error.messageParameters("columnName") == "`b`")
+          assert(error.getCause.asInstanceOf[AnalysisException].getCondition ==
+            "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES")
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"), Nil)
+      }
+    }
+  }
+
+  test("SPARK-61495: modeled generation expression evaluation failure does not fall back to SQL") {
+    val tblName = "my_tab"
+    val genExpr = new V2Cast(FieldReference(Seq("a")), StringType, IntegerType)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withTable(s"testcat.$tblName") {
+        createCatalogTable(tblName,
+          Array(
+            Column.create("a", StringType),
+            Column.builderFor("b", IntegerType)
+              .generationExpression(new GenerationExpression("1", genExpr)).build()))
+        Seq("(a) VALUES ('bad')", " VALUES ('bad', 1)").foreach { suffix =>
+          assertWriteFails("CAST_INVALID_INPUT") {
+            sql(s"INSERT INTO testcat.$tblName$suffix")
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: modeled generation expression respects the write capability")(
+      Seq(true, false)) {
+      supportsWrite =>
+    val tblName = "my_tab"
+    val genExpr = new GeneralScalarExpression("+", Array[V2Expression](
+      FieldReference(Seq("a")), LiteralValue(1, IntegerType)))
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName,
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", IntegerType)
+            .generationExpression(new GenerationExpression(genExpr)).build(),
+          Column.create("optional", StringType)),
+        Collections.singletonMap(noWriteCapProp, supportsWrite.toString))
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+      checkAnswer(spark.table(s"testcat.$tblName"),
+        Row(1, if (supportsWrite) 2 else null, null))
+      withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> "false") {
+        if (supportsWrite) {
+          assertWriteFails("INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA") {
+            sql(s"INSERT INTO testcat.$tblName(a) VALUES (2)")
+          }
+        } else {
+          sql(s"INSERT INTO testcat.$tblName(a) VALUES (2)")
+        }
+      }
+      assertWriteFails("INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS") {
+        sql(s"INSERT INTO testcat.$tblName VALUES (3)")
+      }
+      val mismatched = s"INSERT INTO testcat.$tblName VALUES (3, 100, 'provided')"
+      if (supportsWrite) {
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION")(sql(mismatched))
+      } else {
+        sql(mismatched)
+      }
+    }
+  }
+
   test("INSERT by name computes generated column from the stored (post-cast) value") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -467,13 +893,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
   test("SPARK-61550: INSERT validates a provided value of a legacy SQL-only generated column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
-      catalog("testcat").asTableCatalog.createTable(
-        Identifier.of(Array(), tblName),
+      createCatalogTable(tblName,
         Array(
           Column.create("id", IntegerType),
-          legacyGeneratedColumn("doubled", IntegerType, "id * 2")),
-        Array.empty[Transform],
-        Collections.emptyMap[String, String])
+          legacyGeneratedColumn("doubled", IntegerType, "id * 2")))
       val ex = intercept[SparkRuntimeException] {
         sql(s"INSERT INTO testcat.$tblName(id, doubled) VALUES (1, 3)")
       }
@@ -643,6 +1066,33 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
 
       sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE testcat.$tblName(id) SELECT 5")
       checkAnswer(spark.table(s"testcat.$tblName"), Row(5, 10))
+    }
+  }
+
+  gridTest("SPARK-61495: generation expression presence checks do not convert expressions")(
+      Seq("sql", "modeled")) { form =>
+    val tblName = "my_tab"
+    val generation = if (form == "sql") {
+      new GenerationExpression("a +")
+    } else {
+      new GenerationExpression(new GeneralScalarExpression("NOT_A_FUNCTION", Array.empty))
+    }
+    withTable(s"testcat.$tblName") {
+      createCatalogTable(tblName,
+        Array(
+          Column.create("a", IntegerType),
+          Column.builderFor("b", IntegerType).generationExpression(generation).build(),
+          Column.create("c", StringType)))
+      withSQLConf(SQLConf.INSERT_INTO_NESTED_TYPE_COERCION_ENABLED.key -> "true") {
+        assertWriteFails("INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS") {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE testcat.$tblName SELECT 5")
+        }
+      }
+      withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> "false") {
+        assertWriteFails("INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA") {
+          sql(s"INSERT INTO testcat.$tblName(c) VALUES ('provided')")
+        }
+      }
     }
   }
 
@@ -1359,15 +1809,26 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("streaming write with generated columns is blocked") {
+  gridTest("SPARK-61495: streaming write with generated columns is blocked")(
+      Seq("sql", "modeled")) { form =>
     import testImplicits._
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       withTempDir { checkpointDir =>
-        sql(s"""CREATE TABLE testcat.$tblName(
-               |  id INT,
-               |  doubled INT GENERATED ALWAYS AS (id * 2)
-               |) USING foo""".stripMargin)
+        if (form == "sql") {
+          sql(s"""CREATE TABLE testcat.$tblName(
+                 |  id INT,
+                 |  doubled INT GENERATED ALWAYS AS (id * 2)
+                 |) USING foo""".stripMargin)
+        } else {
+          val genExpr = new GeneralScalarExpression("*", Array[V2Expression](
+            FieldReference(Seq("id")), LiteralValue(2, IntegerType)))
+          createCatalogTable(tblName,
+            Array(
+              Column.create("id", IntegerType),
+              Column.builderFor("doubled", IntegerType)
+                .generationExpression(new GenerationExpression(genExpr)).build()))
+        }
         val inputData = MemoryStream[Int]
         val df = inputData.toDF().toDF("id")
         val ex = intercept[AnalysisException] {
@@ -1387,13 +1848,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       withTempDir { checkpointDir =>
-        catalog("testcat").asTableCatalog.createTable(
-          Identifier.of(Array(), tblName),
+        createCatalogTable(tblName,
           Array(
             Column.create("id", IntegerType),
-            legacyGeneratedColumn("doubled", IntegerType, "id * 2")),
-          Array.empty[Transform],
-          Collections.emptyMap[String, String])
+            legacyGeneratedColumn("doubled", IntegerType, "id * 2")))
         val df = MemoryStream[Int].toDF().toDF("id")
         val ex = intercept[AnalysisException] {
           df.writeStream
@@ -1744,10 +2202,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     "of the writer") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
-      sql(s"""CREATE TABLE testcat.$tblName(
-             |  `current_date` DATE,
-             |  b DATE GENERATED ALWAYS AS (current_date)
-             |) USING foo""".stripMargin)
+      createCatalogTable(tblName,
+        Array(
+          Column.create("current_date", DateType),
+          Column.builderFor("b", DateType).generationExpression("current_date").build()))
       withSQLConf(
           SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
@@ -1891,13 +2349,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       // A catalog can store a text that CREATE TABLE rejects.
-      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
-        Identifier.of(Array(), tblName),
+      createCatalogTable(tblName,
         Array(
           Column.create("i", IntegerType),
-          Column.create("b", IntegerType, true, null, "sum(i)", null)),
-        Array.empty[Transform],
-        Collections.emptyMap[String, String])
+          Column.create("b", IntegerType, true, null, "sum(i)", null)))
       assertWriteFails("MISSING_GROUP_BY") {
         sql(s"INSERT INTO testcat.$tblName(i) VALUES (1)")
       }
@@ -1919,7 +2374,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-60757: the validation of a provided value reads the text of a table with a V2 form") {
+  test("SPARK-61495: modeled generation expression keeps the implicit casts of CREATE TABLE") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -1931,9 +2386,68 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
         val table = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), tblName))
         val genExpr = table.columns().find(_.name == "b").get.columnGenerationExpression()
         assert(genExpr.getExpression != null)
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          sql(s"INSERT INTO testcat.$tblName VALUES ('007', '007')")
+          sql(s"INSERT INTO testcat.$tblName(s) VALUES ('008')")
+          assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+            sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
+          }
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row("007", "007"), Row("008", "008")))
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: modeled generation expressions retain creation-time folded constants")(
+      for {
+        kind <- Seq("cast", "overflow")
+        legacy <- Seq("false", "true")
+      } yield (kind, legacy)) { case (kind, legacy) =>
+    val tblName = "my_tab"
+    val (expression, expected) = if (kind == "cast") {
+      ("coalesce(a, CAST('x' AS INT))", null)
+    } else {
+      ("coalesce(a, 2147483647 + 1)", Int.MinValue)
+    }
+    withTable(s"testcat.$tblName") {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "false",
+          "spark.sql.optimizer.datasourceV2ExprFolding" -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  a INT, b INT GENERATED ALWAYS AS ($expression)
+               |) USING foo""".stripMargin)
+      }
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> legacy) {
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES (NULL)")
+        sql(s"INSERT INTO testcat.$tblName SELECT * FROM testcat.$tblName")
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+          sql(s"INSERT INTO testcat.$tblName VALUES (NULL, 0)")
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row(null, expected)))
+      }
+    }
+  }
+
+  gridTest("SPARK-61495: a legacy config does not change the modeled expression's stored casts")(
+      Seq("false", "true")) { legacy =>
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        sql(s"""CREATE TABLE testcat.$tblName(
+               |  s STRING, b STRING GENERATED ALWAYS AS (coalesce(s, 1))
+               |) USING foo""".stripMargin)
+      }
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "false",
+          SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_GENERATED_COLUMN.key -> legacy) {
+        sql(s"INSERT INTO testcat.$tblName(s) VALUES ('007')")
         sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
-        sql(s"INSERT INTO testcat.$tblName(s) VALUES ('008')")
-        checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row("007", "7"), Row("008", "8")))
+        assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
+          sql(s"INSERT INTO testcat.$tblName VALUES ('007', '007')")
+        }
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq.fill(2)(Row("007", "7")))
       }
     }
   }
@@ -1992,13 +2506,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       // A table created before the DDL rejected this text.
-      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
-        Identifier.of(Array(), tblName),
+      createCatalogTable(tblName,
         Array(
           Column.create("s", new StructType().add("f", IntegerType)),
-          Column.create("b", IntegerType, true, null, "s.\"f\"", null)),
-        Array.empty[Transform],
-        Collections.emptyMap[String, String])
+          Column.create("b", IntegerType, true, null, "s.\"f\"", null)))
       val autoFilled = s"INSERT INTO testcat.$tblName(s) VALUES (named_struct('f', 1))"
       val provided = s"INSERT INTO testcat.$tblName VALUES (named_struct('f', 1), 1)"
       withSQLConf(
@@ -2043,12 +2554,16 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       withSQLConf(
           SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.DOUBLE_QUOTED_IDENTIFIERS.key -> "true") {
-        sql(s"""CREATE TABLE testcat.$tblName(
-               |  a INT,
-               |  b INT GENERATED ALWAYS AS (IDENTIFIER('"a"') + 1)
-               |) USING foo""".stripMargin)
+        createCatalogTable(tblName,
+          Array(
+            Column.create("a", IntegerType),
+            Column.builderFor("b", IntegerType)
+              .generationExpression("IDENTIFIER('\"a\"') + 1").build()))
         assert(!hasCheckInvariant(s"INSERT INTO testcat.$tblName(a) VALUES (1)"))
         assert(hasCheckInvariant(s"INSERT INTO testcat.$tblName VALUES (5, 6)"))
+        sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+        sql(s"INSERT INTO testcat.$tblName VALUES (5, 6)")
+        checkAnswer(spark.table(s"testcat.$tblName"), Seq(Row(1, 2), Row(5, 6)))
       }
     }
   }
@@ -2057,23 +2572,22 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     val tblName = "my_tab"
     val genExpr = new GeneralScalarExpression("NOT_A_FUNCTION", Array.empty[V2Expression])
     withTable(s"testcat.$tblName") {
-      catalog("testcat").asInstanceOf[InMemoryCatalog].createTable(
-        Identifier.of(Array(), tblName),
+      createCatalogTable(tblName,
         Array(
           Column.create("a", IntegerType),
           Column.builderFor("b", IntegerType)
-            .generationExpression(new GenerationExpression(genExpr)).build()),
-        Array.empty[Transform],
-        Collections.emptyMap[String, String])
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO testcat.$tblName VALUES (1, 2)")
-        },
-        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        parameters = Map(
-          "tableName" -> "`testcat`.`my_tab`",
-          "operation" -> ("a value for the generated column `b`, because Spark cannot convert " +
-            s"its expression $genExpr")))
+            .generationExpression(new GenerationExpression(genExpr)).build()))
+      Seq(" VALUES (1, 2)", "(a) VALUES (1)").foreach { suffix =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"INSERT INTO testcat.$tblName$suffix")
+          },
+          condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+          parameters = Map(
+            "tableName" -> "`testcat`.`my_tab`",
+            "operation" -> ("a value for the generated column `b`, because Spark cannot convert " +
+              s"its expression $genExpr")))
+      }
     }
   }
 
@@ -2086,11 +2600,12 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
                  |  s STRING,
                  |  b STRING GENERATED ALWAYS AS (coalesce(s, 1))
                  |) USING foo""".stripMargin)
-          sql(s"INSERT INTO testcat.$tblName VALUES ('007', '7')")
+          val expected = if (ansi == "true") "7" else "007"
+          sql(s"INSERT INTO testcat.$tblName VALUES ('007', '$expected')")
           assertWriteFails("CHECK_CONSTRAINT_VIOLATION") {
             sql(s"INSERT INTO testcat.$tblName VALUES ('007', '07')")
           }
-          checkAnswer(spark.table(s"testcat.$tblName"), Row("007", "7"))
+          checkAnswer(spark.table(s"testcat.$tblName"), Row("007", expected))
         }
       }
     }
