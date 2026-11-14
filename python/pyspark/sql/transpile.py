@@ -433,6 +433,11 @@ class CatalystTranspiler(AbstractTranspiler):
         # (e.g. a bare ``None``) are treated as compatible and don't force this.
         body_cat = self._safe_category(params, body_node)
         else_cat = self._safe_category(params, else_node)
+        if body_cat in ("map", "array") or else_cat in ("map", "array"):
+            raise UnsupportedOperationException(
+                "if/else branches have a `map`/`array` operand; complex branches "
+                "fall back to interpreted Python"
+            )
         if body_cat is not None and else_cat is not None and body_cat != else_cat:
             # Numeric sub-categories (integer/float) are compatible: Spark widens
             # to double in the CASE WHEN expression. Truly mismatched families
@@ -494,8 +499,8 @@ class CatalystTranspiler(AbstractTranspiler):
         if lc in ("map", "array") or rc in ("map", "array"):
             # A map is not orderable, so `=` fails analysis -- even vs None, which
             # coerces to MapType first. "array" says nothing about the element type
-            # (map elements fail the same way) and Python's `[None] == [None]` is
-            # True, so arrays are refused too (SPARK-55219).
+            # (map elements fail the same way), nor the elements' collation,
+            # so arrays are refused too (SPARK-55219).
             raise UnsupportedOperationException(
                 "`==`/`!=` has a `map`/`array` operand; Spark's `=` fails analysis "
                 "or diverges from Python there, so the transpiler falls back to "
@@ -594,11 +599,12 @@ class CatalystTranspiler(AbstractTranspiler):
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
     def _category(self, params: List[str], node: ast.AST) -> str:
-        """Infer the scalar category of ``node`` under the current
+        """Infer the category of ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
 
         Returns one of ``"integer"``, ``"float"``, ``"numeric"`` (unknown
-        numeric sub-type), ``"string"``, ``"bool"``, or ``"binary"``.
+        numeric sub-type), ``"string"``, ``"bool"``, ``"binary"``, ``"map"``,
+        or ``"array"``.
 
         Drives operator selection (``+`` -> add vs concat, ``*`` -> multiply vs
         repeat) and raises ``UnsupportedOperationException`` when an operator's
@@ -1141,16 +1147,32 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
 
 
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
-    """Map a parameter's type annotation to a category
-    (``"integer"``/``"float"``/``"string"``/``"bool"``/``"binary"``/``"map"``/``"array"``),
-    or ``None`` when it's absent or unrecognised (the caller then tries integer, float and string)."""
-    name = _annotation_base_name(annotation)
-    # str -> "string", int -> "integer", float -> "float", bool -> "bool"
-    # (matching the constant handling in ``_category``). dict/Dict/Mapping ->
-    # "map", list/List/Sequence -> "array": pinning them stops the untyped
-    # numeric/string blow-up and lets the JVM keep the option only against a
-    # matching MapType/ArrayType column (SPARK-55219). Anything unrecognised
-    # returns None so the caller tries both numeric and string.
+    """Map a parameter's type annotation to a category, or ``None`` when absent
+    or unrecognised (the caller then tries all numeric and string variants).
+
+    Returns one of ``"integer"``, ``"float"``, ``"string"``, ``"bool"``,
+    ``"binary"``, ``"map"``, or ``"array"``. Numeric annotations select the
+    variant whose NaN semantics match the bound column type."""
+    if isinstance(annotation, ast.Subscript):
+        annotation = annotation.value  # dict[str, str] -> dict
+    name: Optional[str] = None
+    if isinstance(annotation, ast.Name):
+        name = annotation.id
+    elif (
+        isinstance(annotation, ast.Attribute)
+        and isinstance(annotation.value, ast.Name)
+        and annotation.value.id == "typing"
+    ):
+        name = annotation.attr  # typing.Dict -> Dict, but not torch.float
+    elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        # Parse quoted subscripted and typing-qualified forms like their
+        # unquoted spellings. Anything unparseable falls out as untyped.
+        try:
+            with _syntax_warnings_suppressed():
+                parsed = ast.parse(annotation.value, mode="eval").body
+            return _annotation_category(parsed)
+        except (SyntaxError, ValueError):
+            return None
     if name == "str":
         return "string"
     if name == "int":
@@ -1171,9 +1193,15 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
 def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
     """Per-variant maps ``{public_param_index -> category}``.
 
-    A typed param is pinned to its category; an untyped param is tried as
-    integer, float and string. With more than three untyped params, collapse
-    them to one uniform variant per category while keeping typed params pinned.
+    A typed param (``def f(a: str, b: int)``) is pinned to its category
+    (``"integer"``/``"float"``/``"string"``/``"bool"``/``"binary"``/
+    ``"map"``/``"array"``); an
+    untyped param is tried as ``"integer"``, ``"float"``, and ``"string"``
+    separately so the JVM can select the variant that matches the bound column
+    type and apply the right NaN semantics. To cap plan growth, when more than
+    three params are untyped we collapse the untyped ones to one variant per
+    base category (encourage typing inputs to keep the matrix small) while
+    keeping every typed param pinned.
     """
     n = len(public_params)
     all_args = _positional_args(function_ast)
@@ -1427,7 +1455,7 @@ def _transpile_func(
     method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
-    list of per-option input-type categories (one of ``"numeric"`` /
+    list of per-option input-type categories (one of ``"integer"`` / ``"float"`` /
     ``"string"`` / ``"bool"`` / ``"binary"`` / ``"map"`` / ``"array"`` per
     public param) -- the JVM picks the option whose categories match the bound
     column types, or falls back to the Python UDF when none match.
