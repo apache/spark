@@ -447,8 +447,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if name:
                 data = data.rename(name)
 
-            if index:
-                data = data.reindex(index)
+            if index is not None:
+                # Reindex joins on labels. That multiplies rows when the source index repeats a
+                # label, and it drops values at null labels when the target is this Series' own
+                # index. Apply pandas' constructor rules before that join.
+                data = _align_series_index(data, index)
 
             if dtype:
                 data = data.astype(dtype)
@@ -7630,6 +7633,139 @@ def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union[Series, pd.Series]
         return df._psser_for(df._internal.column_labels[0])
     else:
         return df[df.columns[0]]
+
+
+# Pandas refuses to reindex a non-unique axis onto any other labels, and it returns the
+# Series unchanged when the target labels are the same axis. Series.reindex does neither:
+# it right-joins on values, so repeated labels multiply rows and null labels never match.
+_DUPLICATE_AXIS_MESSAGE = "cannot reindex on an axis with duplicate labels"
+
+
+def _index_argument_follows_axis_rules(index: Any) -> bool:
+    """Index arguments that used to fail ``if index:`` and must follow pandas' axis rules.
+
+    Lists, tuples, and NumPy arrays of at most one element already went through reindex
+    and keep that path, including its duplicate-label results.
+    """
+    from pyspark.pandas.indexes.base import Index as PSIndex
+
+    if isinstance(index, (PSIndex, pd.Index, pd.Series)):
+        return True
+    return isinstance(index, np.ndarray) and index.ndim == 1 and index.size > 1
+
+
+def _index_repeats_a_label(index: "Index") -> bool:
+    """Return whether any label, including null, occurs more than once.
+
+    ``Index.is_unique`` uses Spark ``count`` and ``countDistinct``, which ignore
+    nulls. Pandas counts a repeated null as a duplicate label.
+    """
+    if index.nlevels != 1:
+        return not index.is_unique
+
+    sdf = index._internal.spark_frame.select(index.spark.column.alias("__label__"))
+    scol = scol_for(sdf, "__label__")
+    missing = scol.isNull()
+    if isinstance(index.spark.data_type, (FloatType, DoubleType)):
+        # Pandas treats NaN as a missing label, and Spark does not store it as null.
+        missing = missing | F.isnan(scol)
+    repeated_value = F.count(scol) != F.countDistinct(scol)
+    repeated_missing = F.sum(F.when(missing, 1).otherwise(0)) > 1
+    duplicated = F.coalesce(repeated_value | repeated_missing, F.lit(False))
+    return bool(sdf.select(duplicated).first()[0])
+
+
+def _labels_equal_series_index(data: "Series", index: Any) -> bool:
+    """True when ``index`` has ``data``'s labels in the same order, including nulls."""
+    from pyspark.pandas.indexes.base import Index as PSIndex
+
+    target = index.to_pandas() if isinstance(index, PSIndex) else index
+    if isinstance(target, (pd.Series, np.ndarray)):
+        target = pd.Index(target)
+    return bool(data.index.to_pandas().equals(target))
+
+
+def _with_index_names(data: "Series", index_names: List[Optional[Label]]) -> "Series":
+    names = list(index_names)
+    if list(data._internal.index_names) == names:
+        return data
+    updated = data._internal.copy(index_names=names)
+    return first_series(DataFrame(updated))
+
+
+def _with_index_name_and_dtype(data: "Series", name: Any, dtype: Any) -> "Series":
+    """Set a single-level index name and dtype without joining on labels."""
+    from pyspark.pandas.typedef import pandas_on_spark_type
+
+    internal = data._internal
+    if internal.index_level != 1:
+        return data
+    index_names: List[Optional[Label]] = [
+        name if name is None or isinstance(name, tuple) else (name,)
+    ]
+    fields = internal.index_fields
+    columns = internal.index_spark_columns
+    if fields[0].dtype != dtype:
+        pd_dtype, spark_type = pandas_on_spark_type(dtype)
+        col_name = internal.index_spark_column_names[0]
+        columns = [columns[0].cast(spark_type).alias(col_name)]
+        # Leave StructField empty so InternalFrame fills it from the cast expression.
+        fields = [InternalField(dtype=pd_dtype)]
+    if list(internal.index_names) == index_names and columns is internal.index_spark_columns:
+        return data
+    updated = internal.copy(
+        index_spark_columns=columns,
+        index_fields=fields,
+        index_names=index_names,
+    )
+    return first_series(DataFrame(updated))
+
+
+def _adopt_index_metadata(data: "Series", index: Any) -> "Series":
+    """Keep ``data``'s rows and take the name and dtype of an equal index argument."""
+    from pyspark.pandas.indexes.base import Index as PSIndex
+
+    if isinstance(index, PSIndex):
+        if index.nlevels != 1:
+            return _with_index_names(data, index._internal.index_names)
+        return _with_index_name_and_dtype(data, index.name, index.dtype)
+
+    as_index = pd.Index(index) if isinstance(index, (pd.Series, np.ndarray)) else index
+    if isinstance(as_index, pd.Index) and as_index.nlevels == 1:
+        return _with_index_name_and_dtype(data, as_index.name, as_index.dtype)
+    return data
+
+
+def _align_series_index(data: "Series", index: Any) -> "Series":
+    """Conform ``data`` to ``index`` the way the pandas Series constructor does.
+
+    The Series' own index, including one whose name was overridden, shares the anchor
+    frame. Reindexing it would join the Series to itself and lose values at null labels,
+    so only the index name is applied. Any other Index, pandas Index or Series, or
+    multi-element NumPy array is refused when the source index repeats a label, unless
+    the target is that same sequence of labels. Unique indexes still use reindex, and a
+    pandas Index or Series keeps its name and dtype.
+    """
+    from pyspark.pandas.indexes.base import Index as PSIndex
+
+    if isinstance(index, PSIndex) and same_anchor(data, index):
+        return _with_index_names(data, index._internal.index_names)
+
+    if _index_argument_follows_axis_rules(index):
+        if _index_repeats_a_label(data.index):
+            # Same labels are the original axis, so pandas keeps every row. A different
+            # target cannot be aligned by a value join once a label, including null,
+            # repeats.
+            if _labels_equal_series_index(data, index):
+                return _adopt_index_metadata(data, index)
+            raise ValueError(_DUPLICATE_AXIS_MESSAGE)
+        if isinstance(index, (pd.Index, pd.Series)):
+            # Reindex rebuilds a non-pandas-on-Spark target as ps.Index(list(index)),
+            # which drops that argument's name and dtype. Carry them onto the result.
+            aligned = data.reindex(index)
+            return _adopt_index_metadata(aligned, index)
+
+    return data.reindex(index)
 
 
 def _test() -> None:
