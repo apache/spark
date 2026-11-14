@@ -498,6 +498,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         throw SparkException.internalError(
           s"V2Reference should be resolved during analysis: ${r.name}")
 
+      // ResolveGapFill runs only in the Resolution batch. With the gate on, an input that
+      // resolves in a later batch leaves the node here.
+      case _: UnresolvedGapFill =>
+        throw QueryCompilationErrors.gapFillNotSupportedError()
+
       case u: UnresolvedInlineTable
           if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
             unresolvedInlineTableContainsScalarSubquery(u) =>

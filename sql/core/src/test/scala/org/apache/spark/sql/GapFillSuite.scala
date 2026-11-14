@@ -40,4 +40,19 @@ class GapFillSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("GAP FILL is rejected when its input resolves after the Resolution batch") {
+    // HAVING over a GROUP BY with a generator and a window function resolves only in the last
+    // analyzer batch, after ResolveGapFill has run.
+    val input = "SELECT explode(array(a)) AS col, count(*) OVER () AS cnt, a " +
+      "FROM VALUES (1), (2), (3), (NULL) AS t(a) GROUP BY a HAVING a IS NOT NULL"
+    withSQLConf(SQLConf.GAP_FILL_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(s"SELECT * FROM ($input) GAP FILL (ORDER BY a BIN WIDTH 1)")
+        },
+        condition = "UNSUPPORTED_FEATURE.GAP_FILL",
+        parameters = Map.empty[String, String])
+    }
+  }
 }
