@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.window
 
+import java.io.Closeable
 import java.util
 
 import org.apache.spark.SparkUnsupportedOperationException
@@ -702,26 +703,33 @@ final class UnboundedFollowingWindowFunctionFrame(
     // the output row lower bound.
     val iterator = input.generateIterator(startIndex = inputIndex)
 
-    var nextRow = WindowFunctionFrame.getNextOrNull(iterator)
-    while (nextRow != null && lbound.compare(nextRow, inputIndex, current, index) < 0) {
-      inputIndex += 1
-      bufferUpdated = true
-      nextRow = WindowFunctionFrame.getNextOrNull(iterator)
-    }
+    try {
+      var nextRow = WindowFunctionFrame.getNextOrNull(iterator)
+      while (nextRow != null && lbound.compare(nextRow, inputIndex, current, index) < 0) {
+        inputIndex += 1
+        bufferUpdated = true
+        nextRow = WindowFunctionFrame.getNextOrNull(iterator)
+      }
 
-    // Only recalculate and update when the buffer changes.
-    if (processor != null && bufferUpdated) {
-      // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
-      // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
-      // backstop that fails loudly rather than silently truncating if that guard is bypassed.
-      processor.initialize(Math.toIntExact(input.length))
-      if (nextRow != null) {
-        processor.update(nextRow)
+      // Only recalculate and update when the buffer changes.
+      if (processor != null && bufferUpdated) {
+        // The window driver rejects partitions larger than Int.MaxValue rows before any frame runs
+        // (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit); toIntExact is a defensive
+        // backstop that fails loudly rather than silently truncating if that guard is bypassed.
+        processor.initialize(Math.toIntExact(input.length))
+        if (nextRow != null) {
+          processor.update(nextRow)
+        }
+        while (iterator.hasNext) {
+          processor.update(iterator.next())
+        }
+        processor.evaluate(target)
       }
-      while (iterator.hasNext) {
-        processor.update(iterator.next())
+    } finally {
+      iterator match {
+        case closeable: Closeable => closeable.close()
+        case _ =>
       }
-      processor.evaluate(target)
     }
   }
 
