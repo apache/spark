@@ -36,8 +36,8 @@ jobs:
     if: github.repository == 'apache/spark' || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
     with:
-      # Sampled upstream pushes run the full job matrix.
-      # Fork pushes keep the reusable workflow's change-based selection.
+      # Sampled upstream pushes run the full job matrix except SparkR, which the scheduled
+      # builds cover. Fork pushes keep the reusable workflow's change-based selection.
       jobs: >-
         ${{ github.repository == 'apache/spark' && '{
           "build": "true",
@@ -46,7 +46,7 @@ jobs:
           "pyspark-pandas": "true",
           "pyspark-periodic": "true",
           "pyspark-connect-old-client": "true",
-          "sparkr": "true",
+          "sparkr": "false",
           "tpcds-1g": "true",
           "docker-integration-tests": "true",
           "lint": "true",
