@@ -608,16 +608,26 @@ class SetPathSuite extends SharedSparkSession {
   }
 
   test("PATH enabled: DEFAULT_PATH respects persistentCatalogFirst") {
-    Seq(
-      false -> Seq("system", "spark_catalog"),
-      true -> Seq("spark_catalog", "system")
-    ).foreach { case (persistentCatalogFirst, expectedCatalogs) =>
-      withSQLConf(
+    val catalogManager = spark.sessionState.catalogManager
+    val previousPath = catalogManager.storedSessionPathEntries
+    withSQLConf(
         SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.PERSISTENT_CATALOG_FIRST.key -> persistentCatalogFirst.toString) {
-        sql("SET PATH = DEFAULT_PATH")
-        val catalogEntries = pathEntries(currentPath()).filter(expectedCatalogs.contains)
-        assert(catalogEntries === expectedCatalogs)
+        SQLConf.DEFAULT_PATH.key -> "DEFAULT_PATH") {
+      catalogManager.clearSessionPath()
+      try {
+        Seq(
+          false -> Seq("system", "spark_catalog"),
+          true -> Seq("spark_catalog", "system")
+        ).foreach { case (persistentCatalogFirst, expectedCatalogs) =>
+          withSQLConf(
+              SQLConf.PERSISTENT_CATALOG_FIRST.key -> persistentCatalogFirst.toString) {
+            val catalogEntries = pathEntries(currentPath()).filter(expectedCatalogs.contains)
+            assert(catalogEntries === expectedCatalogs)
+          }
+        }
+      } finally {
+        catalogManager.clearSessionPath()
+        previousPath.foreach(catalogManager.setSessionPath)
       }
     }
   }

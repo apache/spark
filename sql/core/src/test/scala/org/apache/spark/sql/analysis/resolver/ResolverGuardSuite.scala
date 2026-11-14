@@ -18,6 +18,8 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
@@ -493,6 +495,28 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       } finally {
         catalogManager.clearSessionPath()
         previousPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("two-part builtin function follows the frozen view PATH") {
+    val catalogManager = spark.sessionState.catalogManager
+    val previousPath = catalogManager.storedSessionPathEntries
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withView("v") {
+        try {
+          sql("SET PATH = system, current_catalog")
+          sql("CREATE VIEW v AS SELECT builtin.abs(-1) AS result")
+
+          sql("SET PATH = current_catalog, system")
+          val view = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+          AnalysisContext.withAnalysisContext(view) {
+            checkResolverGuard("SELECT builtin.abs(-1)")
+          }
+        } finally {
+          catalogManager.clearSessionPath()
+          previousPath.foreach(catalogManager.setSessionPath)
+        }
       }
     }
   }

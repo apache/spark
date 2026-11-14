@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{
   SQLConfHelper
 }
 import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
   FunctionRegistry,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
@@ -698,9 +699,9 @@ class ResolverGuard(
   }
 
   private def twoPartBuiltinUsesSystemCatalog(nameParts: Seq[String]): Boolean = {
-    val currentCatalog = catalogManager.currentCatalog.name()
-    val pathEntries = catalogManager.sqlResolutionPathEntries(
-      currentCatalog, catalogManager.currentNamespace.toSeq)
+    val context = AnalysisContext.get
+    val pathEntries = catalogManager.resolutionPathEntriesForAnalysis(
+      context.resolutionPathEntries, context.catalogAndNamespace)
     CatalogManager.identifierPathCandidates(
       pathEntries, nameParts, catalogManager.isCatalogRegistered).headOption.exists { candidate =>
       candidate.length == 3 &&

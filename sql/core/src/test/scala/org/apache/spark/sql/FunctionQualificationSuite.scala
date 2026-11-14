@@ -1330,6 +1330,24 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
+  test("SECTION 16k: DESCRIBE FUNCTION follows catalog entries in PATH") {
+    withDatabase("builtin") {
+      sql("CREATE DATABASE builtin")
+      sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+      try {
+        withCatalogPath("current_catalog, system") {
+          assert(sql("DESCRIBE FUNCTION builtin.abs").head().getString(0) ===
+            "Function: spark_catalog.builtin.abs")
+        }
+        withCatalogPath("system, current_catalog") {
+          assert(sql("DESCRIBE FUNCTION builtin.abs").head().getString(0) === "Function: abs")
+        }
+      } finally {
+        sql("DROP FUNCTION IF EXISTS builtin.abs")
+      }
+    }
+  }
+
   test("SECTION 17a: SPARK-57758 built-in fast-path respects dynamic session order") {
     withTempView("t") {
       sql("CREATE TEMPORARY VIEW t AS SELECT 1 AS id")

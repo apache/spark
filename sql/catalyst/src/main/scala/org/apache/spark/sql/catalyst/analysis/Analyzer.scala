@@ -59,7 +59,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -2417,18 +2416,8 @@ class Analyzer(
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES, UNRESOLVED_JSON_CONSTRUCTOR),
       ruleId) {
       // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
-      case u @ UnresolvedFunctionName(nameParts, _, _) =>
-        functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
-          .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
-          ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
-        }.getOrElse {
-          val CatalogAndIdentifier(catalog, ident) =
-            relationResolution.expandIdentifier(nameParts)
-          val fullName = catalog.name +: ident.namespace :+ ident.name
-          CatalogV2Util.loadFunction(catalog, ident).map { func =>
-            ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
-          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName.toImmutableArraySeq)))
-        }
+      case u: UnresolvedFunctionName =>
+        functionResolution.resolveFunctionName(u)
 
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>

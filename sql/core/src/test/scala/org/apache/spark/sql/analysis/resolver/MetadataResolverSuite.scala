@@ -170,7 +170,8 @@ class MetadataResolverSuite extends SharedSparkSession {
         sqlText = s"select id from json.`${f.getCanonicalPath}`",
         expectedTableData = Seq(
           RelationId(
-            multipartIdentifier = Seq(catalogName, "json", s"${f.getCanonicalPath}")
+            multipartIdentifier = Seq(catalogName, "json", s"${f.getCanonicalPath}"),
+            pathIdentifier = Some(Seq("json", s"${f.getCanonicalPath}"))
           ) -> TestTableData(
             name = s"file:${f.getCanonicalPath}",
             schema = fileTableSchema
@@ -316,8 +317,7 @@ class MetadataResolverSuite extends SharedSparkSession {
         new BridgedRelationMetadataProvider(
           spark.sessionState.catalogManager,
           Resolver.createRelationResolution(spark.sessionState.catalogManager),
-          analyzerBridgeState,
-          new ViewResolver(resolver = resolver, catalogManager = spark.sessionState.catalogManager)
+          analyzerBridgeState
         )
       case None =>
         val relationResolution =
@@ -377,7 +377,8 @@ class MetadataResolverSuite extends SharedSparkSession {
 
   private def createTableData(name: String, schema: Option[StructType] = None) =
     RelationId(
-      multipartIdentifier = Seq(catalogName, "default", name)
+      multipartIdentifier = Seq(catalogName, "default", name),
+      pathIdentifier = Some(Seq(name))
     ) -> TestTableData(
       name = s"$catalogName.default.$name",
       schema = schema.getOrElse(keyValueTableSchema)

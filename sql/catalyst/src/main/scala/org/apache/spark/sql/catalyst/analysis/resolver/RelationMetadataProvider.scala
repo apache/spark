@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, RelationResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.LookupCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -76,11 +76,17 @@ trait RelationMetadataProvider extends LookupCatalog {
    * This method is public, because it's used in [[MetadataResolverSuite]].
    */
   def relationIdFromUnresolvedRelation(unresolvedRelation: UnresolvedRelation): RelationId = {
-    relationResolution.expandIdentifier(unresolvedRelation.multipartIdentifier) match {
+    val nameParts = unresolvedRelation.multipartIdentifier
+    val usesPath = CatalogManager.identifierUsesPath(
+      nameParts, catalogManager.isCatalogRegistered)
+    relationResolution.expandIdentifier(nameParts) match {
       case CatalogAndIdentifier(catalog, ident) =>
         RelationId(
           multipartIdentifier =
             Seq(catalog.name()) ++ ident.namespace().toImmutableArraySeq ++ Seq(ident.name()),
+          pathIdentifier = Option.when(usesPath)(nameParts),
+          resolutionPathEntries = Option.when(usesPath)(AnalysisContext.get.resolutionPathEntries)
+            .flatten,
           options = unresolvedRelation.options,
           isStreaming = unresolvedRelation.isStreaming,
           timeTravelSpec = None

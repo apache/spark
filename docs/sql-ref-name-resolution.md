@@ -302,7 +302,7 @@ SQL Path.
 
 If the relation cannot be resolved, Spark raises `TABLE_OR_VIEW_NOT_FOUND`. The error includes
 the effective search path, for example
-`searchPath = [system.builtin, system.session, spark_catalog.default, system, spark_catalog]`.
+`searchPath = [system.builtin, system.session, spark_catalog.default]`.
 
 ### Examples
 
@@ -392,7 +392,7 @@ A function reference is recognized by the trailing parentheses, and follows
 
 If the function cannot be resolved, Spark raises `UNRESOLVED_ROUTINE`. The error includes the
 effective search path, for example
-`searchPath = [system.builtin, system.session, spark_catalog.default, system, spark_catalog]`.
+`searchPath = [system.builtin, system.session, spark_catalog.default]`.
 
 ### Examples
 

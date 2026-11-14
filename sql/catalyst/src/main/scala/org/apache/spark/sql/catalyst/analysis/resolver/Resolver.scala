@@ -216,8 +216,7 @@ class Resolver(
           new BridgedRelationMetadataProvider(
             catalogManager,
             relationResolution,
-            analyzerBridgeState,
-            viewResolver
+            analyzerBridgeState
           )
         case None =>
           relationMetadataProvider

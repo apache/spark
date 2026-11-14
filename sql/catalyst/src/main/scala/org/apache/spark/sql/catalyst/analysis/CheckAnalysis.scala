@@ -78,16 +78,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * Formats the entries from [[CatalogManager.sqlResolutionPathEntries]] that participate in
-   * resolving `multipartIdentifier` with [[toSQLId]] for TABLE_OR_VIEW_NOT_FOUND messages.
+   * Formats the analysis-time path entries that participate in resolving `multipartIdentifier`
+   * with [[toSQLId]] for TABLE_OR_VIEW_NOT_FOUND messages.
    */
   private def fullSearchPathForError(
       catalogPath: Seq[String],
       multipartIdentifier: Seq[String]): Seq[String] = {
-    val catalog = catalogPath.head
-    val ns = catalogPath.tail.toSeq
     CatalogManager.identifierPathEntries(
-      catalogManager.sqlResolutionPathEntries(catalog, ns),
+      catalogManager.resolutionPathEntriesForAnalysis(
+        AnalysisContext.get.resolutionPathEntries, catalogPath),
       multipartIdentifier,
       catalogManager.isCatalogRegistered).map(toSQLId)
   }

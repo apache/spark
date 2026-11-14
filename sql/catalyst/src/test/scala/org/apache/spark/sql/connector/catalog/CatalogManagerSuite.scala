@@ -221,6 +221,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       Seq("system"),
       Seq("spark_catalog"))
     val noCatalogs = (_: String) => false
+    val sparkCatalogRegistered = Set("spark_catalog").contains _
     val catRegistered = Set("cat").contains _
 
     assert(CatalogManager.identifierPathEntries(path, Seq("f"), noCatalogs) === path.take(2))
@@ -231,12 +232,18 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(CatalogManager.identifierPathEntries(
       path, Seq("cat", "ns", "f"), noCatalogs) === path.take(2))
     assert(CatalogManager.identifierPathCandidates(path, Seq("f"), noCatalogs) === Seq(
+      Seq("system", "builtin", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      path, Seq("f"), sparkCatalogRegistered) === Seq(
       Seq("system", "builtin", "f"),
       Seq("spark_catalog", "default", "f")))
     assert(CatalogManager.identifierPathCandidates(
-      path, Seq("session", "f"), noCatalogs) === Seq(
+      path, Seq("session", "f"), sparkCatalogRegistered) === Seq(
       Seq("system", "session", "f"),
       Seq("spark_catalog", "session", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      path, Seq("session", "f"), noCatalogs) === Seq(
+      Seq("system", "session", "f")))
     assert(CatalogManager.identifierPathCandidates(
       path, Seq("cat", "f"), catRegistered) === Seq(Seq("cat", "f")))
     assert(CatalogManager.identifierPathCandidates(

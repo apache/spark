@@ -234,13 +234,14 @@ private[sql] class DefaultCatalogManager(
   /**
    * Cache for [[confDefaultPathEntries]]: stores the expanded [[SessionPathEntry]] list keyed
    * on the trimmed [[SQLConf#DEFAULT_PATH]] string and
-   * [[SQLConf#SESSION_FUNCTION_RESOLUTION_ORDER]] value (the only conf that affects the
-   * expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
+   * [[SQLConf#SESSION_FUNCTION_RESOLUTION_ORDER]] and
+   * [[SQLConf#PERSISTENT_CATALOG_FIRST]] values (the confs that affect the expansion of
+   * `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
    * `CurrentSchemaEntry` markers are preserved unresolved so the cache stays valid across
    * `USE SCHEMA`.
    */
   private val confDefaultPathCache =
-    new AtomicReference[Option[(String, String, Seq[SessionPathEntry])]](None)
+    new AtomicReference[Option[(String, String, Boolean, Seq[SessionPathEntry])]](None)
 
   /**
    * Returns the effective session path entries: the explicit `SET PATH` value if stored,
@@ -277,12 +278,16 @@ private[sql] class DefaultCatalogManager(
     } else {
       val trimmed = confValue.trim
       val sessionOrder = conf.sessionFunctionResolutionOrder
+      val persistentCatalogFirst = conf.persistentCatalogFirst
       val expanded = confDefaultPathCache.get() match {
-        case Some((k, ord, cached)) if k == trimmed && ord == sessionOrder => cached
+        case Some((k, ord, persistentFirst, cached))
+            if k == trimmed && ord == sessionOrder &&
+              persistentFirst == persistentCatalogFirst => cached
         case _ =>
           val elements = CatalystSqlParser.parsePathElements(trimmed)
           val computed = PathElement.expand(elements, conf, this, isConfDefaultExpansion = true)
-          confDefaultPathCache.set(Some((trimmed, sessionOrder, computed)))
+          confDefaultPathCache.set(
+            Some((trimmed, sessionOrder, persistentCatalogFirst, computed)))
           computed
       }
       if (expanded.isEmpty) None else Some(expanded)
@@ -610,7 +615,12 @@ private[sql] object CatalogManager extends Logging {
       nameParts: Seq[String],
       isCatalogRegistered: String => Boolean): Seq[Seq[String]] = {
     if (identifierUsesPath(nameParts, isCatalogRegistered)) {
-      identifierPathEntries(pathEntries, nameParts, isCatalogRegistered).map(_ ++ nameParts)
+      val entries = identifierPathEntries(pathEntries, nameParts, isCatalogRegistered).to(LazyList)
+      val applicableEntries = entries.filter { entry =>
+        entry.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) ||
+          isCatalogRegistered(entry.head)
+      }
+      applicableEntries.map(_ ++ nameParts)
     } else {
       Seq(nameParts)
     }

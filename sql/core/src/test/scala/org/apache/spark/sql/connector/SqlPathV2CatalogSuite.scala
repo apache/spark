@@ -48,6 +48,7 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
     super.beforeAll()
     spark.conf.set("spark.sql.catalog.pathcat", classOf[InMemoryCatalog].getName)
     spark.conf.set("spark.sql.catalog.pathcat2", classOf[InMemoryCatalog].getName)
+    spark.conf.set("spark.sql.catalog.session", classOf[InMemoryCatalog].getName)
   }
 
   override def afterAll(): Unit = {
@@ -55,6 +56,7 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
       spark.sessionState.catalogManager.reset()
       spark.sessionState.conf.unsetConf("spark.sql.catalog.pathcat")
       spark.sessionState.conf.unsetConf("spark.sql.catalog.pathcat2")
+      spark.sessionState.conf.unsetConf("spark.sql.catalog.session")
     } finally {
       super.afterAll()
     }
@@ -154,6 +156,19 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
         v2Catalog("pathcat").clearFunctions()
         v2Catalog("pathcat2").clearFunctions()
       }
+    }
+  }
+
+  test("catalog named session is not treated as the temp-function namespace") {
+    v2Catalog("session").createFunction(
+      Identifier.of(Array.empty[String], "strlen"),
+      StrLen(StrLenDefault))
+    sql("CREATE TEMPORARY FUNCTION strlen() RETURNS TABLE(value INT) RETURN SELECT 1")
+    try {
+      checkAnswer(sql("SELECT session.strlen('abc')"), Row(3))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION strlen")
+      v2Catalog("session").clearFunctions()
     }
   }
 }

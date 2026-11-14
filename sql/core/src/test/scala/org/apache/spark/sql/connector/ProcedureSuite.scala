@@ -283,6 +283,36 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("PATH enabled: partially qualified CALL skips a missing candidate") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        catalog("cat2").createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
+        sql("SET PATH = cat, cat2")
+        checkAnswer(sql("CALL ns.sum(1, 2)"), Row(3L) :: Nil)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("PATH enabled: partially qualified CALL does not mask catalog failures") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        "spark.sql.catalog.failing" -> classOf[FailingProcedureCatalog].getName) {
+      try {
+        catalog("cat2").createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
+        sql("SET PATH = failing, cat2")
+        checkError(
+          exception = intercept[AnalysisException](sql("CALL ns.sum(1, 2)")),
+          sqlState = Some("38000"),
+          condition = "FAILED_TO_LOAD_ROUTINE",
+          parameters = Map("routineName" -> "`failing`.`ns`.`sum`"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
   test("SPARK-61553: a null from loadProcedure means the procedure is not found") {
     withSQLConf("spark.sql.catalog.nullcat" -> classOf[NullReturningProcedureCatalog].getName) {
       checkError(
@@ -1065,4 +1095,15 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
 /** A procedure catalog that returns null for an unknown procedure instead of throwing. */
 class NullReturningProcedureCatalog extends InMemoryCatalog {
   override def loadProcedure(ident: Identifier): UnboundProcedure = procedures.get(ident)
+}
+
+/** A procedure catalog that fails while loading procedures. */
+class FailingProcedureCatalog extends InMemoryCatalog {
+  override def listProcedures(namespace: Array[String]): Array[Identifier] = {
+    Array(Identifier.of(namespace, "sum"))
+  }
+
+  override def loadProcedure(ident: Identifier): UnboundProcedure = {
+    throw new IllegalStateException("Procedure catalog unavailable")
+  }
 }

@@ -283,7 +283,51 @@ class RelationQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 15: Three-part system.session.missing - search path lists temp scope only") {
+  test("SECTION 15: Analyzer++ keeps PATH-resolved and explicit relations distinct") {
+    withDatabase("session") {
+      sql("CREATE DATABASE session")
+      sql("CREATE TABLE session.collision_probe (persistent_id INT) USING parquet")
+      sql("CREATE TEMPORARY VIEW collision_probe AS SELECT 1 AS temp_id")
+      try {
+        withCatalogPath("system, current_catalog") {
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            val analyzed = sql(
+              "SELECT partial.*, qualified.* " +
+                "FROM session.collision_probe partial " +
+                "CROSS JOIN spark_catalog.session.collision_probe qualified")
+              .queryExecution.analyzed
+            assert(analyzed.schema.fieldNames === Array("temp_id", "persistent_id"))
+          }
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS collision_probe")
+      }
+    }
+  }
+
+  test("SECTION 16: Analyzer++ keeps unqualified and explicit relations distinct") {
+    withTable("collision_probe") {
+      val currentDatabase = spark.catalog.currentDatabase
+      sql("CREATE TABLE collision_probe (persistent_id INT) USING parquet")
+      sql("CREATE TEMPORARY VIEW collision_probe AS SELECT 1 AS temp_id")
+      try {
+        withCatalogPath("DEFAULT_PATH") {
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            val analyzed = sql(
+              "SELECT partial.*, qualified.* " +
+                "FROM collision_probe partial " +
+                s"CROSS JOIN spark_catalog.$currentDatabase.collision_probe qualified")
+              .queryExecution.analyzed
+            assert(analyzed.schema.fieldNames === Array("temp_id", "persistent_id"))
+          }
+        }
+      } finally {
+        sql("DROP VIEW IF EXISTS collision_probe")
+      }
+    }
+  }
+
+  test("SECTION 17: Three-part system.session.missing - search path lists temp scope only") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT * FROM system.session.no_such_view_xyz")
