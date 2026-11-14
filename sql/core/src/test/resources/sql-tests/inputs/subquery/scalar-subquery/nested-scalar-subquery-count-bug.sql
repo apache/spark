@@ -248,7 +248,7 @@ from t1 order by a1;
 -- with an expression that fails on the value of a lower aggregate over no rows, which is
 -- evaluated only for an outer row without matching rows: every outer row matches in the first
 -- two queries and the CAST query below, and the query over every row of t1 fails when the value
--- for a1 = 1 is computed. Until SPARK-61482, these five queries, up to the CAST query, all fail
+-- for a1 = 1 is computed. Until SPARK-61444, these five queries, up to the CAST query, all fail
 -- while the query is optimized; after it, the first two and the CAST query return results, and
 -- the other two fail at runtime.
 select a1, ( select count(*) from (select 10 / coalesce(max(b2), 0) d from t2
