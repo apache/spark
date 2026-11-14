@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{RowIterator, ScalarSubquery => ExecScalarSubquery, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.{BitSet, OpenHashSet}
@@ -97,28 +97,24 @@ case class ShuffledHashJoinExec private (
     case _ => false
   }
 
-  /**
-   * Creates the builder of the build-side [[HashedRelation]]. It holds only what building the
-   * relation needs, so the generated code can reference it instead of this plan node, which would
-   * serialize the child subtrees into every task.
-   */
-  private def createRelationBuilder(): ShuffledHashJoinRelationBuilder = {
+  private def createRelationBuilder(keys: Seq[Expression]): ShuffledHashJoinRelationBuilder = {
     new ShuffledHashJoinRelationBuilder(
-      buildBoundKeys,
+      keys,
       // build-side or full outer join needs support for NULL key in HashedRelation.
       allowsNullKey = joinType == FullOuter ||
         (joinType == LeftOuter && buildSide == BuildLeft) ||
         (joinType == RightOuter && buildSide == BuildRight),
-      ignoresDuplicatedKey = ignoreDuplicatedKey)
+      ignoresDuplicatedKey = ignoreDuplicatedKey,
+      buildTime = longMetric("buildTime"),
+      buildDataSize = longMetric("buildDataSize"))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val buildTime = longMetric("buildTime")
-    val buildDataSize = longMetric("buildDataSize")
-    val relationBuilder = createRelationBuilder()
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
-      val hashed = relationBuilder.build(buildIter, buildTime, buildDataSize)
+      // The closure captures this plan node anyway, so the builder is created in the task, as
+      // `buildBoundKeys` and `ignoreDuplicatedKey` are transient.
+      val hashed = createRelationBuilder(buildBoundKeys).build(buildIter)
       joinType match {
         case FullOuter => buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows,
           isFullOuterJoin = true)
@@ -365,17 +361,16 @@ case class ShuffledHashJoinExec private (
   override def needCopyResult: Boolean = true
 
   protected override def prepareRelation(ctx: CodegenContext): HashedRelationInfo = {
-    // The generated code calls into a relation builder rather than into this plan node: a
-    // reference to the node would serialize its child subtrees into every task binary.
-    val relationBuilder = ctx.addReferenceObj("relationBuilder", createRelationBuilder())
-    val buildTime = metricTerm(ctx, "buildTime")
-    val buildDataSize = metricTerm(ctx, "buildDataSize")
+    // A scalar subquery in the keys would carry its plan along, so use its result instead, as the
+    // generated code of the scalar subquery does. Its result is ready, as `produce` waits for the
+    // subqueries of this plan.
+    val keys = buildBoundKeys.map(ExecScalarSubquery.replaceWithLiterals)
+    val relationBuilder = ctx.addReferenceObj("relationBuilder", createRelationBuilder(keys))
     val clsName = classOf[HashedRelation].getName
 
     // Inline mutable state since not many join operations in a task
     val relationTerm = ctx.addMutableState(clsName, "relation",
-      v => s"$v = $relationBuilder.build(inputs[1], $buildTime, $buildDataSize);",
-      forceInline = true)
+      v => s"$v = $relationBuilder.build(inputs[1]);", forceInline = true)
     HashedRelationInfo(relationTerm, keyIsUnique = false, isEmpty = false)
   }
 
@@ -691,20 +686,22 @@ object ShuffledHashJoinExec {
  * @param allowsNullKey whether the relation must support null keys (build-side outer and full
  *                      outer joins).
  * @param ignoresDuplicatedKey whether the relation keeps only the first row of each key.
+ * @param buildTime the metric of the time to build the relation.
+ * @param buildDataSize the metric of the size of the relation.
  */
 private[joins] class ShuffledHashJoinRelationBuilder(
     buildBoundKeys: Seq[Expression],
     allowsNullKey: Boolean,
-    ignoresDuplicatedKey: Boolean) extends Serializable {
+    ignoresDuplicatedKey: Boolean,
+    buildTime: SQLMetric,
+    buildDataSize: SQLMetric) extends Serializable {
 
   /**
    * Builds the relation from the build-side rows of the current task, and closes it when the task
-   * completes. Called by the generated code, so it must be public.
+   * completes. Called by the generated code and by `ShuffledHashJoinExec.doExecute`, so it must be
+   * public.
    */
-  def build(
-      iter: Iterator[InternalRow],
-      buildTime: SQLMetric,
-      buildDataSize: SQLMetric): HashedRelation = {
+  def build(iter: Iterator[InternalRow]): HashedRelation = {
     val start = System.nanoTime()
     val context = TaskContext.get()
     val relation = HashedRelation(
