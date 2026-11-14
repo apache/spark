@@ -47,6 +47,8 @@ case class UnionLoop(
     maxDepth: Option[Int] = None) extends UnionBase {
   override def children: Seq[LogicalPlan] = Seq(anchor, recursion)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNION_LOOP)
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): UnionLoop =
     copy(anchor = newChildren(0), recursion = newChildren(1))
 

@@ -47,10 +47,12 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 abstract class TypeCoercionBase extends TypeCoercionHelper {
@@ -239,13 +241,20 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           // type to match the anchor type.
           // On the other hand, we cannot cast the anchor type into a wider recursion type, as at
           // this point the UnionLoopRefs inside the recursion are already resolved with the
-          // narrower anchor type.
+          // narrower anchor type. Nullability and the case of struct field names may differ, as
+          // UnionLoop's output merges them, unless the legacy setting keeps the exact types.
+          val sameType: (DataType, DataType) => Boolean =
+            if (conf.getConf(SQLConf.LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY)) {
+              _ == _
+            } else {
+              DataTypeUtils.sameType
+            }
           val projectList = s.recursion.output.zip(s.anchor.output.map(_.dataType)).map {
             case (attr, dt) =>
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
-              if (widerType.isDefined && widerType.get == dt) {
-                if (attr.dataType != dt) {
-                  Alias(Cast(attr, dt), attr.name)()
+              if (widerType.isDefined && sameType(widerType.get, dt)) {
+                if (!sameType(attr.dataType, dt)) {
+                  Alias(Cast(attr, widerType.get), attr.name)()
                 } else {
                   attr
                 }

@@ -3906,52 +3906,6 @@ class Analyzer(
   }
 
   /**
-   * Correctly handle null primitive inputs for UDF by adding extra [[If]] expression to do the
-   * null check.  When user defines a UDF with primitive parameters, there is no way to tell if the
-   * primitive parameter is null or not, so here we assume the primitive input is null-propagatable
-   * and we should return null if the input is null.
-   */
-  object HandleNullInputsForUDF extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(SCALA_UDF)) {
-      case p if !p.resolved => p // Skip unresolved nodes.
-
-      case p => p.transformExpressionsUpWithPruning(_.containsPattern(SCALA_UDF)) {
-
-        case udf: ScalaUDF if udf.inputPrimitives.contains(true) =>
-          // Otherwise, add special handling of null for fields that can't accept null.
-          // The result of operations like this, when passed null, is generally to return null.
-          assert(udf.inputPrimitives.length == udf.children.length)
-
-          val inputPrimitivesPair = udf.inputPrimitives.zip(udf.children)
-          val inputNullCheck = inputPrimitivesPair.collect {
-            case (isPrimitive, input) if isPrimitive && input.nullable =>
-              IsNull(input)
-          }.reduceLeftOption[Expression](Or)
-
-          if (inputNullCheck.isDefined) {
-            // Once we add an `If` check above the udf, it is safe to mark those checked inputs
-            // as null-safe (i.e., wrap with `KnownNotNull`), because the null-returning
-            // branch of `If` will be called if any of these checked inputs is null. Thus we can
-            // prevent this rule from being applied repeatedly.
-            val newInputs = inputPrimitivesPair.map {
-              case (isPrimitive, input) =>
-                if (isPrimitive && input.nullable) {
-                  KnownNotNull(input)
-                } else {
-                  input
-                }
-            }
-            val newUDF = udf.copy(children = newInputs)
-            If(inputNullCheck.get, Literal.create(null, udf.dataType), newUDF)
-          } else {
-            udf
-          }
-      }
-    }
-  }
-
-  /**
    * Resolve the encoders for the UDF by explicitly given the attributes. We give the
    * attributes explicitly in order to handle the case where the data type of the input
    * value is not the same with the internal schema of the encoder, which could cause

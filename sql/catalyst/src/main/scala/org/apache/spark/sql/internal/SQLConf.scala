@@ -8218,6 +8218,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_RECURSIVE_CTE_USE_ANCHOR_NESTED_NULLABILITY =
+    buildConf("spark.sql.legacy.recursiveCTE.useAnchorNestedNullability")
+      .internal()
+      .doc("When true, the recursive reference of a recursive CTE takes the anchor's data types, " +
+        "including their nested nullability, with every column nullable, which is the behavior " +
+        "in Spark 4.3 and earlier. A NULL that the recursive term writes into an array element, " +
+        "map value or struct field that the anchor types as non-nullable can then be read back " +
+        "as a non-NULL value. The UnionLoop type coercion then also compares exact types, so a " +
+        "recursive term that is more nullable than the anchor in a nested position, or whose " +
+        "struct field names differ from the anchor's only in case, fails with " +
+        "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE when a column needs a cast. When false, the " +
+        "nullability of the recursive reference, top-level and nested, is widened to cover " +
+        "what the anchor and the recursive term can write.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT =
     buildConf("spark.sql.legacy.createHiveTableByDefault")
       .internal()

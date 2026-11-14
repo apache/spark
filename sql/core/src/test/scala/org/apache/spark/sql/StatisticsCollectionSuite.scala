@@ -27,7 +27,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, EqualTo, IsNotNull, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
@@ -1104,6 +1104,23 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         attributeStats = buildExpectedColumnStats(newLogicalRDD.output))
       assert(newStats === newExpectedStats)
     }
+  }
+
+  test("LogicalRDD stats rewrite to a new output with more nullable nested types") {
+    val a = AttributeReference("a", ArrayType(IntegerType, containsNull = false))()
+    val b = AttributeReference("b", ArrayType(IntegerType, containsNull = true))()
+    assert(LogicalRDD.buildOutputAssocForRewriteWithNewOutput(Seq(a), Seq(b)) ===
+      Some(Map(a -> b)))
+    assert(LogicalRDD.buildOutputAssocForRewriteWithNewOutput(Seq(b), Seq(a)).isEmpty)
+    val otherType = AttributeReference("b", ArrayType(LongType))()
+    assert(LogicalRDD.buildOutputAssocForRewriteWithNewOutput(Seq(a), Seq(otherType)).isEmpty)
+
+    // The cast to non-nullable elements is invalid for `b`, so that constraint is dropped.
+    val longArray = ArrayType(LongType, containsNull = false)
+    val condition = EqualTo(Cast(a, longArray), Literal.create(Seq(1L), longArray))
+    val (_, constraints) = LogicalRDD.rewriteStatsAndConstraints(
+      LocalRelation(b), Filter(condition, LocalRelation(a)), sameOutput = false)
+    assert(constraints.get.toSeq === Seq(IsNotNull(b)))
   }
 }
 
