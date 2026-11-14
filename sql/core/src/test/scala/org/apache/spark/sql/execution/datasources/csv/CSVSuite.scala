@@ -4154,9 +4154,11 @@ abstract class CSVSuite
         """{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00","_c2":null,"_c3":null}""")
 
       // A small partition size ensures each value is parsed independently and would otherwise get
-      // its type inferred.
+      // its type inferred. The time parser policy is pinned because the inferred timestamp is
+      // rendered differently under LEGACY (see CSVLegacyTimeParserSuite).
       withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED") {
         // The option keeps every non-null value as a string regardless of inferSchema. Null and
         // nullValue tokens remain variant nulls.
         for (inferSchema <- Seq(None, Some("true"), Some("false"))) {
