@@ -223,7 +223,9 @@ object SQLFunction {
 
   /**
    * Current [[FUNCTION_METADATA_VERSION]] written by this Spark build. Bump when a change cannot
-   * read older function property payloads without a version branch.
+   * read older function property payloads without a version branch. This may diverge from
+   * [[CatalogTable.CURRENT_VIEW_METADATA_VERSION]]; callers must pass the matching ceiling to
+   * `CatalogManager.deserializePathEntriesForAnalysisOrFail`.
    */
   val CURRENT_FUNCTION_METADATA_VERSION: Int = CatalogTable.CURRENT_VIEW_METADATA_VERSION
 

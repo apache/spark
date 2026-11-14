@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -75,15 +75,20 @@ class AlterViewSchemaBindingSuite
     }
   }
 
-  test("ALTER VIEW ... WITH SCHEMA preserves creation catalog and namespace") {
+  test("ALTER VIEW ... WITH SCHEMA preserves creation catalog under a different current catalog") {
     // Legacy (metadataVersion 0) PATH reconstruction appends the creation catalog for
     // two-part names. SCHEMA BINDING must not rewrite catalog/namespace from the
-    // ALTER-time session, or resolution would silently change.
-    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+    // ALTER-time session catalog, or resolution would silently change. Changing only
+    // the namespace under the same catalog would not catch that bug.
+    val otherCatalog = "alter_view_other_catalog"
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        s"spark.sql.catalog.$otherCatalog" -> classOf[InMemoryTableCatalog].getName) {
       val viewName = "v_catalog_preserved_on_alter"
       val view = s"$catalog.$namespace.$viewName"
       val createNs = "alter_view_catalog_ns"
       sql(s"CREATE SCHEMA IF NOT EXISTS $catalog.$createNs")
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $otherCatalog.ns")
       try {
         sql(s"USE $catalog.$createNs")
         sql(s"CREATE VIEW $view AS SELECT 1 AS x")
@@ -93,8 +98,9 @@ class AlterViewSchemaBindingSuite
         assert(catalogAfterCreate === Seq(catalog, createNs),
           s"Expected creation catalog/namespace [$catalog, $createNs]; got: $catalogAfterCreate")
 
-        // ALTER under a different current namespace must keep the create-time values.
-        sql(s"USE $catalog.$namespace")
+        // ALTER while the session current catalog is a different registered catalog.
+        sql(s"USE $otherCatalog.ns")
+        assert(spark.sessionState.catalogManager.currentCatalog.name === otherCatalog)
         sql(s"ALTER VIEW $view WITH SCHEMA EVOLUTION")
 
         val metaAfterAlter = spark.sessionState.catalog
@@ -106,6 +112,7 @@ class AlterViewSchemaBindingSuite
         sql(s"USE $catalog.$namespace")
         sql(s"DROP VIEW IF EXISTS $view")
         sql(s"DROP SCHEMA IF EXISTS $catalog.$createNs")
+        sql(s"DROP NAMESPACE IF EXISTS $otherCatalog.ns")
       }
     }
   }

@@ -196,7 +196,8 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
         creationCatalog = Some("spark_catalog"),
         persistentCatalogFirst = persistentCatalogFirst,
         objectType = "view",
-        objectName = "v")
+        objectName = "v",
+        currentMetadataVersion = CatalogTable.CURRENT_VIEW_METADATA_VERSION)
 
     assert(read(persistentCatalogFirst = false) ===
       schemaEntries ++ Seq(Seq("system"), Seq("spark_catalog")))
@@ -213,7 +214,8 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       creationCatalog = Some("spark_catalog"),
       persistentCatalogFirst = false,
       objectType = "view",
-      objectName = "v") === entries)
+      objectName = "v",
+      currentMetadataVersion = CatalogTable.CURRENT_VIEW_METADATA_VERSION) === entries)
   }
 
   test("unsupported metadata version fails before PATH parse") {
@@ -224,7 +226,8 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
         creationCatalog = Some("spark_catalog"),
         persistentCatalogFirst = false,
         objectType = "view",
-        objectName = "default.v_future")
+        objectName = "default.v_future",
+        currentMetadataVersion = CatalogTable.CURRENT_VIEW_METADATA_VERSION)
     }
     assert(e.getMessage.contains("Unsupported stored metadata version"))
     assert(e.getMessage.contains("default.v_future"))
@@ -239,7 +242,8 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
         creationCatalog = Some("spark_catalog"),
         persistentCatalogFirst = false,
         objectType = "view",
-        objectName = "v")
+        objectName = "v",
+        currentMetadataVersion = CatalogTable.CURRENT_VIEW_METADATA_VERSION)
     }
     assert(e.getMessage.contains("Unsupported stored metadata version '-1'"))
   }

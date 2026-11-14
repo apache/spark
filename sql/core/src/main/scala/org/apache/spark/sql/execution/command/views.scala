@@ -511,7 +511,11 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     }
   }
 
-  /** True if `key` is a persisted view catalog/namespace (or pre-3.0 default database) property. */
+  /**
+   * True if `key` is a persisted view catalog/namespace property, including the pre-Spark-3.0
+   * [[VIEW_DEFAULT_DATABASE]] key. Stripping that legacy key on rewrite is intentional: create /
+   * replace always writes [[VIEW_CATALOG_AND_NAMESPACE]], which supersedes it.
+   */
   private def isCatalogAndNamespaceProperty(key: String): Boolean = {
     key == VIEW_CATALOG_AND_NAMESPACE ||
       key.startsWith(VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX) ||

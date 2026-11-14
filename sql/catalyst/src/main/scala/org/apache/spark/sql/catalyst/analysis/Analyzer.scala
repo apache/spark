@@ -287,7 +287,8 @@ object AnalysisContext {
           viewDesc.viewCatalogAndNamespace.headOption,
           resolutionConf.persistentCatalogFirst,
           "view",
-          viewDesc.identifier.unquotedString)),
+          viewDesc.identifier.unquotedString,
+          CatalogTable.CURRENT_VIEW_METADATA_VERSION)),
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
@@ -323,7 +324,8 @@ object AnalysisContext {
           function.functionCreationCatalog,
           SQLConf.get.persistentCatalogFirst,
           "SQL function",
-          function.name.unquotedString)),
+          function.name.unquotedString,
+          SQLFunction.CURRENT_FUNCTION_METADATA_VERSION)),
       // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator by default. A SQL
       // function has no IDENTIFIER-variable metadata of its own that is consulted on resolution, so
       // a variable its body reads through an IDENTIFIER clause is part of the enclosing object's

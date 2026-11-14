@@ -785,16 +785,16 @@ private[sql] object CatalogManager extends Logging {
       creationCatalog: Option[String],
       persistentCatalogFirst: Boolean,
       objectType: String,
-      objectName: String): Seq[Seq[String]] = {
+      objectName: String,
+      currentMetadataVersion: Int): Seq[Seq[String]] = {
     import org.apache.spark.sql.catalyst.catalog.CatalogTable.{
-      CURRENT_VIEW_METADATA_VERSION,
       METADATA_VERSION_PATH_WITH_CATALOG_ENTRIES,
       requireSupportedMetadataVersion
     }
     // Check the version before parsing PATH so a future-format payload reports an
     // unsupported-version error instead of a misleading invalid-path error.
     requireSupportedMetadataVersion(
-      metadataVersion, CURRENT_VIEW_METADATA_VERSION, objectType, objectName)
+      metadataVersion, currentMetadataVersion, objectType, objectName)
     val entries = deserializePathEntriesOrFail(storedPathStr, objectType, objectName)
     if (metadataVersion >= METADATA_VERSION_PATH_WITH_CATALOG_ENTRIES) {
       entries

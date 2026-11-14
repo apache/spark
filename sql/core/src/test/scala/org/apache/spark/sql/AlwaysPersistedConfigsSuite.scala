@@ -320,6 +320,34 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
     }
   }
 
+  test("unsupported function metadata version fails analysis even without a stored PATH") {
+    // metadataVersion is validated for every SQL function analysis, including PATH-off
+    // functions that store no resolution path.
+    withUserDefinedFunction(testFunctionName -> false) {
+      sql(
+        s"""
+           |CREATE OR REPLACE FUNCTION $testFunctionName()
+           |RETURN SELECT 1
+           |""".stripMargin)
+      val function = SQLFunction.fromCatalogFunction(
+        spark.sessionState.catalog.getFunctionMetadata(FunctionIdentifier(testFunctionName)),
+        spark.sessionState.sqlParser)
+      val future = function.copy(properties =
+        function.properties
+          .removed(SQLFunction.FUNCTION_RESOLUTION_PATH)
+          .updated(
+            SQLFunction.FUNCTION_METADATA_VERSION,
+            (SQLFunction.CURRENT_FUNCTION_METADATA_VERSION + 1).toString))
+      val e = intercept[AnalysisException] {
+        AnalysisContext.withAnalysisContext(future) {
+          ()
+        }
+      }
+      assert(e.getMessage.contains("Unsupported stored metadata version"))
+      assert(e.getMessage.contains("SQL function"))
+    }
+  }
+
   test("legacy persisted view path resolves two-part relations through creation catalog") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       sql("CREATE DATABASE session")
