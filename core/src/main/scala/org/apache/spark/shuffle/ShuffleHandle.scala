@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import java.util.Optional
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -25,4 +27,21 @@ import org.apache.spark.annotation.DeveloperApi
  * @param shuffleId ID of the shuffle
  */
 @DeveloperApi
-abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {}
+abstract class ShuffleHandle(val shuffleId: Int) extends Serializable {
+  /**
+   * Whether this shuffle's output survives losing the executor or host that wrote it (e.g. on a
+   * remote shuffle service). If so, executor or worker loss keeps its map output registered.
+   *
+   * Overrides `ShuffleDriverComponents.supportsReliableStorage()` for this shuffle. Empty (the
+   * default) falls back to that flag. With the flag on, an empty value marks the shuffle reliable,
+   * so worker removal keeps its map output (dropping only push-merge results), and a map-output
+   * FetchFailed clears only the failed shuffle. A pipelined shuffle must leave it empty.
+   *
+   * The driver reads it once, when it registers the shuffle and before any map output is
+   * written. Later loss handling and task-set checks use that recorded value.
+   *
+   * TODO(SPARK-59806, SPARK-59807): executor retirement (`SparkContext.executorHoldSupported`,
+   * `ExecutorAllocationManager`) still reads only the global flag.
+   */
+  def reliablyStored: Optional[java.lang.Boolean] = Optional.empty()
+}

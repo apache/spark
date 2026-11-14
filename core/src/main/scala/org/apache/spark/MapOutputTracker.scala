@@ -47,6 +47,21 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
+ * Result of an executor/host cleanup. `metadataChanged`: some status was removed.
+ * `preservedReliable`: reliable map output on the target was kept.
+ */
+private[spark] case class CleanupOutcome(metadataChanged: Boolean, preservedReliable: Boolean) {
+  // A no-op that only kept reliable output skips the bump (DAGScheduler still bumps after a
+  // FetchFailed cleanup); any other no-op bumps for fencing.
+  def shouldBumpEpoch: Boolean = metadataChanged || !preservedReliable
+}
+
+/** Per-shuffle cleanup result; fields as in [[CleanupOutcome]]. */
+private[spark] case class ShuffleRemovalResult(
+    metadataChanged: Boolean,
+    mapPreservedReliable: Boolean)
+
+/**
  * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
  * ShuffleMapStage.
  *
@@ -63,7 +78,8 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 private class ShuffleStatus(
     numPartitions: Int,
     numReducers: Int = -1,
-    bufferRacingMigrations: Boolean = false) extends Logging {
+    bufferRacingMigrations: Boolean = false,
+    val isReliablyStored: Boolean = false) extends Logging {
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -369,30 +385,54 @@ private class ShuffleStatus(
   }
 
   /**
-   * Removes all shuffle outputs associated with this host. Note that this will also remove
-   * outputs which are served by an external shuffle server (if one exists).
+   * Removes this shuffle's outputs on `host`, keeping map output if `respectReliablyStored` is set
+   * and the shuffle is reliably stored. Merge results on the host are always removed. Note that
+   * this will also remove outputs which are served by an external shuffle server (if one exists).
    */
-  def removeOutputsOnHost(host: String): Unit = withWriteLock {
-    logDebug(s"Removing outputs for host ${host}")
-    removeOutputsByFilter(x => x.host == host)
-    removeMergeResultsByFilter(x => x.host == host)
+  def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): ShuffleRemovalResult =
+    withWriteLock {
+      logDebug(s"Removing outputs for host ${host}")
+      val filter = (x: BlockManagerId) => x.host == host
+      val mergeChanged = removeMergeResultsByFilter(filter)
+      removeMapOutputsSelectively(filter, respectReliablyStored, mergeChanged)
+    }
+
+  /**
+   * Removes this shuffle's map outputs on the executor, keeping them if `respectReliablyStored` is
+   * set and the shuffle is reliably stored. Note that this will also remove outputs which are
+   * served by an external shuffle server (if one exists), as they are still registered with that
+   * execId.
+   */
+  def removeOutputsOnExecutor(
+      execId: String,
+      respectReliablyStored: Boolean): ShuffleRemovalResult = withWriteLock {
+      logDebug(s"Removing outputs for execId ${execId}")
+      removeMapOutputsSelectively(x => x.executorId == execId, respectReliablyStored,
+        alreadyChanged = false)
+    }
+
+  /** Shared by the executor and host paths. `alreadyChanged`: the caller removed merge results. */
+  private def removeMapOutputsSelectively(
+      f: BlockManagerId => Boolean,
+      respectReliablyStored: Boolean,
+      alreadyChanged: Boolean): ShuffleRemovalResult = withWriteLock {
+    if (respectReliablyStored && isReliablyStored) {
+      val preserved = mapStatuses.exists(s => s != null && f(s.location))
+      ShuffleRemovalResult(metadataChanged = alreadyChanged, mapPreservedReliable = preserved)
+    } else {
+      val mapChanged = removeOutputsByFilter(f)
+      ShuffleRemovalResult(metadataChanged = mapChanged || alreadyChanged,
+        mapPreservedReliable = false)
+    }
   }
 
   /**
-   * Removes all map outputs associated with the specified executor. Note that this will also
-   * remove outputs which are served by an external shuffle server (if one exists), as they are
-   * still registered with that execId.
+   * Removes all shuffle outputs which satisfies the filter, returning whether any was removed.
+   * Note that this will also remove outputs which are served by an external
+   * shuffle server (if one exists).
    */
-  def removeOutputsOnExecutor(execId: String): Unit = withWriteLock {
-    logDebug(s"Removing outputs for execId ${execId}")
-    removeOutputsByFilter(x => x.executorId == execId)
-  }
-
-  /**
-   * Removes all shuffle outputs which satisfies the filter. Note that this will also
-   * remove outputs which are served by an external shuffle server (if one exists).
-   */
-  def removeOutputsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
+  def removeOutputsByFilter(f: BlockManagerId => Boolean): Boolean = withWriteLock {
+    var changed = false
     for (mapIndex <- mapStatuses.indices) {
       val currentMapStatus = mapStatuses(mapIndex)
       if (currentMapStatus != null && f(currentMapStatus.location)) {
@@ -401,21 +441,26 @@ private class ShuffleStatus(
         mapStatusesDeleted(mapIndex) = currentMapStatus
         mapStatuses(mapIndex) = null
         invalidateSerializedMapOutputStatusCache()
+        changed = true
       }
     }
+    changed
   }
 
   /**
-   * Removes all shuffle merge result which satisfies the filter.
+   * Removes all shuffle merge result which satisfies the filter, returning whether any was removed.
    */
-  def removeMergeResultsByFilter(f: BlockManagerId => Boolean): Unit = withWriteLock {
+  def removeMergeResultsByFilter(f: BlockManagerId => Boolean): Boolean = withWriteLock {
+    var changed = false
     for (reduceId <- mergeStatuses.indices) {
       if (mergeStatuses(reduceId) != null && f(mergeStatuses(reduceId).location)) {
         _numAvailableMergeResults -= 1
         mergeStatuses(reduceId) = null
         invalidateSerializedMergeOutputStatusCache()
+        changed = true
       }
     }
+    changed
   }
 
   /**
@@ -955,23 +1000,37 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcast)
   }
 
-  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
+  def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit =
+    registerShuffle(shuffleId, numMaps, numReduces, isReliablyStored = false)
+
+  def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      isReliablyStored: Boolean): Unit = {
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId,
-        new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations)).isDefined) {
+        new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations,
+          isReliablyStored)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     } else {
       if (shuffleStatuses.put(shuffleId,
-        new ShuffleStatus(numMaps, bufferRacingMigrations = bufferRacingMigrations)).isDefined) {
+        new ShuffleStatus(numMaps, bufferRacingMigrations = bufferRacingMigrations,
+          isReliablyStored = isReliablyStored)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     }
   }
 
   // ShuffleOutputTrackerMaster: a regular shuffle has no per-job registration, so jobId is ignored.
-  override def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit =
-    registerShuffle(shuffleId, numMaps, numReduces)
+  override def registerShuffle(
+      shuffleId: Int,
+      numMaps: Int,
+      numReduces: Int,
+      jobId: Int,
+      isReliablyStored: Boolean): Unit =
+    registerShuffle(shuffleId, numMaps, numReduces, isReliablyStored)
 
   def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
     shuffleStatuses.get(shuffleId) match {
@@ -1071,19 +1130,76 @@ private[spark] class MapOutputTrackerMaster(
    * Removes all shuffle outputs associated with this host. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists).
    */
-  def removeOutputsOnHost(host: String): Unit = {
-    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnHost(host) }
-    incrementEpoch()
-  }
+  def removeOutputsOnHost(host: String): Unit =
+    removeOutputsOnHost(host, respectReliablyStored = false)
 
   /**
    * Removes all shuffle outputs associated with this executor. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists), as they are still
    * registered with this execId.
    */
-  def removeOutputsOnExecutor(execId: String): Unit = {
-    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnExecutor(execId) }
-    incrementEpoch()
+  def removeOutputsOnExecutor(execId: String): Unit =
+    removeOutputsOnExecutor(execId, respectReliablyStored = false)
+
+  /** Like `removeOutputsOnHost(host)`, but keeps reliably-stored map output if asked. */
+  def removeOutputsOnHost(host: String, respectReliablyStored: Boolean): CleanupOutcome =
+    removeOutputsOnHost(host, respectReliablyStored, None)
+
+  /** See `removeSelectively` for `failedShuffleId` and `restrictToFailedShuffle`. */
+  def removeOutputsOnHost(
+      host: String,
+      respectReliablyStored: Boolean,
+      failedShuffleId: Option[Int],
+      restrictToFailedShuffle: Boolean = false): CleanupOutcome = {
+    val outcome = removeSelectively(
+      respectReliablyStored, failedShuffleId, restrictToFailedShuffle)(
+      (status, respect) => status.removeOutputsOnHost(host, respect))
+    if (outcome.shouldBumpEpoch) incrementEpoch()
+    outcome
+  }
+
+  /** Like `removeOutputsOnExecutor(execId)`, but keeps reliably-stored map output if asked. */
+  def removeOutputsOnExecutor(execId: String, respectReliablyStored: Boolean): CleanupOutcome =
+    removeOutputsOnExecutor(execId, respectReliablyStored, None)
+
+  /** See `removeSelectively` for `failedShuffleId` and `restrictToFailedShuffle`. */
+  def removeOutputsOnExecutor(
+      execId: String,
+      respectReliablyStored: Boolean,
+      failedShuffleId: Option[Int],
+      restrictToFailedShuffle: Boolean = false): CleanupOutcome = {
+    val outcome = removeSelectively(
+      respectReliablyStored, failedShuffleId, restrictToFailedShuffle)(
+      (status, respect) => status.removeOutputsOnExecutor(execId, respect))
+    if (outcome.shouldBumpEpoch) incrementEpoch()
+    outcome
+  }
+
+  /**
+   * Applies `remove` to each shuffle and aggregates the results; the caller bumps the epoch.
+   * `failedShuffleId` is cleaned even if reliable; `restrictToFailedShuffle` touches only it.
+   */
+  private def removeSelectively(
+      respectReliablyStored: Boolean,
+      failedShuffleId: Option[Int],
+      restrictToFailedShuffle: Boolean = false)(
+      remove: (ShuffleStatus, Boolean) => ShuffleRemovalResult): CleanupOutcome = {
+    require(!restrictToFailedShuffle || failedShuffleId.isDefined,
+      "restrictToFailedShuffle requires a failedShuffleId to restrict to")
+    var metadataChanged = false
+    var preservedReliable = false
+    val targets = if (restrictToFailedShuffle) {
+      failedShuffleId.flatMap(id => shuffleStatuses.get(id).map(id -> _)).iterator
+    } else {
+      shuffleStatuses.iterator
+    }
+    targets.foreach { case (shuffleId, status) =>
+      val respect = respectReliablyStored && !failedShuffleId.contains(shuffleId)
+      val result = remove(status, respect)
+      if (result.metadataChanged) metadataChanged = true
+      if (result.mapPreservedReliable) preservedReliable = true
+    }
+    CleanupOutcome(metadataChanged, preservedReliable)
   }
 
   /**
@@ -1108,6 +1224,16 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Check if the given shuffle is being tracked */
   override def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
+
+  /** Whether this shuffle's output survives executor or host loss. False for unknown shuffles. */
+  def isReliablyStored(shuffleId: Int): Boolean = {
+    shuffleStatuses.get(shuffleId).exists(_.isReliablyStored)
+  }
+
+  /** Whether any registered shuffle is not reliably stored. */
+  def hasUnreliablyStoredShuffle: Boolean = {
+    shuffleStatuses.valuesIterator.exists(!_.isReliablyStored)
+  }
 
   def getNumAvailableOutputs(shuffleId: Int): Int = {
     shuffleStatuses.get(shuffleId).map(_.numAvailableMapOutputs).getOrElse(0)
