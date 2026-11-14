@@ -2154,7 +2154,9 @@ case class JsonToStructs(
     // parser still reads that one live from `SQLConf.get`.)
     charVarcharStandardSemantics: Boolean = SQLConf.get.charVarcharStandardSemantics,
     // Capture the optional default while the view or SQL function's saved SQLConf is active.
-    enableDateTimeParsingFallback: Option[Boolean] = SQLConf.get.jsonEnableDateTimeParsingFallback)
+    enableDateTimeParsingFallback: Option[Boolean] = SQLConf.get.jsonEnableDateTimeParsingFallback,
+    useCapturedOptionDefaults: Boolean =
+      SQLConf.get.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS))
   extends UnaryExpression
   with TimeZoneAwareExpression
   with CodegenFallback
@@ -2217,7 +2219,7 @@ case class JsonToStructs(
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys,
-    charVarcharStandardSemantics, enableDateTimeParsingFallback)
+    charVarcharStandardSemantics, enableDateTimeParsingFallback, useCapturedOptionDefaults)
   override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = {
@@ -2236,6 +2238,18 @@ case class JsonToStructs(
 
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(6)
 
+  override lazy val canonicalized: Expression = {
+    val explicitFallback = CaseInsensitiveMap(options)
+      .get(JSONOptions.ENABLE_DATETIME_PARSING_FALLBACK)
+      .exists(value => value != null && value.toBooleanOption.isDefined)
+    val relevant = !explicitFallback && JsonToStructs.usesDateTimeParsingFallback(schema)
+    copy(
+      child = child.canonicalized,
+      enableDateTimeParsingFallback =
+        if (relevant && useCapturedOptionDefaults) enableDateTimeParsingFallback else None,
+      useCapturedOptionDefaults = !relevant || useCapturedOptionDefaults)
+  }
+
   override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
     copy(child = newChild)
 }
@@ -2244,6 +2258,15 @@ object JsonToStructs {
   def unapply(
       j: JsonToStructs): Option[(DataType, Map[String, String], Expression, Option[String])] =
     Some((j.schema, j.options, j.child, j.timeZoneId))
+
+  private def usesDateTimeParsingFallback(schema: DataType): Boolean = schema match {
+    case DateType | TimestampType => true
+    case struct: StructType => struct.exists(field => usesDateTimeParsingFallback(field.dataType))
+    case ArrayType(elementType, _) => usesDateTimeParsingFallback(elementType)
+    case MapType(_, valueType, _) => usesDateTimeParsingFallback(valueType)
+    case udt: UserDefinedType[_] => usesDateTimeParsingFallback(udt.sqlType)
+    case _ => false
+  }
 }
 
 /**
@@ -2285,7 +2308,9 @@ case class StructsToJson(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None,
-    ignoreNullFields: Boolean = SQLConf.get.jsonGeneratorIgnoreNullFields)
+    ignoreNullFields: Boolean = SQLConf.get.jsonGeneratorIgnoreNullFields,
+    useCapturedOptionDefaults: Boolean =
+      SQLConf.get.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS))
   extends UnaryExpression
   with RuntimeReplaceable
   with ExpectsInputTypes
@@ -2332,9 +2357,16 @@ case class StructsToJson(
     copy(child = newChild)
 
   @transient
-  private lazy val evaluator = StructsToJsonEvaluator(
-    CaseInsensitiveMap(Map(JSONOptions.IGNORE_NULL_FIELDS -> ignoreNullFields.toString)) ++ options,
-    inputSchema, timeZoneId)
+  private lazy val evaluator = {
+    val parameters = CaseInsensitiveMap(options)
+    val effectiveOptions = if (useCapturedOptionDefaults &&
+        !parameters.contains(JSONOptions.IGNORE_NULL_FIELDS)) {
+      parameters.updated(JSONOptions.IGNORE_NULL_FIELDS, ignoreNullFields.toString)
+    } else {
+      parameters
+    }
+    StructsToJsonEvaluator(effectiveOptions, inputSchema, timeZoneId)
+  }
 
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[StructsToJsonEvaluator])),

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.csv.{CsvToStructsEvaluator, SchemaOfCsvEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
@@ -255,7 +257,9 @@ case class StructsToCsv(
      child: Expression,
      timeZoneId: Option[String] = None,
      nullValueWrittenAsQuotedEmptyString: Boolean =
-       SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV))
+       SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV),
+     useCapturedOptionDefaults: Boolean =
+       SQLConf.get.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS))
   extends UnaryExpression
   with TimeZoneAwareExpression
   with DefaultStringProducingExpression
@@ -306,7 +310,11 @@ case class StructsToCsv(
   @transient
   lazy val gen = new UnivocityGenerator(
     inputSchema, writer, new CSVOptions(options, columnPruning = true, timeZoneId.get),
-    defaultNullAsEmptyString = nullValueWrittenAsQuotedEmptyString)
+    defaultNullAsEmptyString = if (useCapturedOptionDefaults) {
+      nullValueWrittenAsQuotedEmptyString
+    } else {
+      SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)
+    })
 
   // This converts rows to the CSV output according to the given schema.
   @transient
@@ -325,6 +333,21 @@ case class StructsToCsv(
   override def prettyName: String = "to_csv"
 
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
+
+  override lazy val canonicalized: Expression = {
+    val parameters = CaseInsensitiveMap(options)
+    val explicitDefault = parameters.get(CSVOptions.TREAT_NULL_AS_EMPTY_STRING).exists { value =>
+      value != null && Set("true", "false").contains(value.toLowerCase(Locale.ROOT))
+    }
+    val nonEmptyNullValue = parameters.get(CSVOptions.NULL_VALUE)
+      .exists(value => value != null && value.nonEmpty)
+    val relevant = !explicitDefault && !nonEmptyNullValue
+    copy(
+      child = child.canonicalized,
+      nullValueWrittenAsQuotedEmptyString = relevant && useCapturedOptionDefaults &&
+        nullValueWrittenAsQuotedEmptyString,
+      useCapturedOptionDefaults = !relevant || useCapturedOptionDefaults)
+  }
 
   override protected def withNewChildInternal(newChild: Expression): StructsToCsv =
     copy(child = newChild)
