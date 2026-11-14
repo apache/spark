@@ -26,9 +26,11 @@ import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.{foreachNanosPrecision, localDateTimeToNanosVal, nanoOfSecTruncator, nanosVal}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
@@ -1268,6 +1270,82 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       keysValues(Array("a", "b"), Array(1), IntegerType),
       "_LEGACY_ERROR_TEMP_2128", Map.empty[String, String])
+  }
+
+  test("nanosecond timestamps cannot be written to a variant") {
+    val obj = Literal(parseJson("{}"))
+    // variant_insert / variant_set / variant_array_append and their try_ forms.
+    def valueWrites(dt: DataType): Seq[Expression] = {
+      val value = Literal.create(null, dt)
+      Seq(true, false).flatMap { failOnError =>
+        Seq(
+          VariantInsert(obj, Literal("$.a"), value, failOnError),
+          VariantSet(obj, Literal("$.a"), value, Literal(true), failOnError),
+          VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), value, failOnError))
+      }
+    }
+    // Object builders over values of type `dt`, paired with the srcType each one reports.
+    def objectWrites(dt: DataType): Seq[(Expression, DataType)] = {
+      val keys = Literal.create(null, ArrayType(StringType))
+      val entries = ArrayType(StructType(Seq(StructField("k", StringType), StructField("v", dt))))
+      Seq(
+        ToVariantObject(Literal.create(null, ArrayType(dt))) -> ArrayType(dt),
+        VariantFromArrays(keys, Literal.create(null, ArrayType(dt))) -> dt,
+        VariantFromEntries(Literal.create(null, entries)) -> dt)
+    }
+    def mismatch(dt: DataType): DataTypeMismatch = DataTypeMismatch(
+      "CAST_WITHOUT_SUGGESTION",
+      Map("srcType" -> ("\"" + dt.sql + "\""), "targetType" -> "\"VARIANT\""))
+
+    val unsupported = (7 to 9).flatMap { p =>
+      Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))
+    }
+    unsupported.foreach { t =>
+      Seq(t, ArrayType(t)).foreach { dt =>
+        valueWrites(dt).foreach(e => assert(e.checkInputDataTypes() == mismatch(dt), e))
+      }
+      // Top-level and nested values.
+      Seq(
+        t,
+        StructType(Seq(StructField("t", t))),
+        MapType(StringType, ArrayType(StructType(Seq(StructField("t", t)))))).foreach { dt =>
+        objectWrites(dt).foreach { case (e, srcType) =>
+          assert(e.checkInputDataTypes() == mismatch(srcType), e)
+        }
+      }
+    }
+
+    // DATE and microsecond timestamps can be written.
+    Seq(DateType, TimestampType, TimestampNTZType).foreach { t =>
+      (valueWrites(t) ++ objectWrites(t).map(_._1)).foreach { e =>
+        assert(e.checkInputDataTypes().isSuccess, e)
+      }
+    }
+  }
+
+  test("variant_get and cast read nanosecond timestamps at the target precision") {
+    val str = "\"2020-01-01 00:00:00.123456789\""
+    val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+    // A microsecond primitive, 2020-01-01 00:00:00.123456 UTC.
+    val micros = 1577836800123456L
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val expected = localDateTimeToNanosVal(ldt.withNano(nanoOfSecTruncator(p)(ldt.getNano)))
+        Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)).foreach { t =>
+          testVariantGet(str, "$", t, expected)
+          testVariantGet(s"""{"a": [$str]}""", "$.a", ArrayType(t), Array(expected))
+          EvalMode.values.foreach { mode =>
+            checkEvaluation(Cast(Literal(parseJson(str)), t, evalMode = mode), expected)
+          }
+        }
+        Seq(TimestampType -> TimestampLTZNanosType(p),
+            TimestampNTZType -> TimestampNTZNanosType(p)).foreach { case (micro, nanos) =>
+          val v = Cast(Literal.create(micros, micro), VariantType)
+          checkEvaluation(VariantGet(v, Literal("$"), nanos, failOnError = true),
+            nanosVal(micros, 0))
+        }
+      }
+    }
   }
 
   test("schema_of_variant - unknown type") {

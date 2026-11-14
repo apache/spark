@@ -131,7 +131,8 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * expr - A nested value of array, map, or struct type. Maps must have string keys. Nested
-          values of any type are allowed.
+          values can be arrays, structs or maps, or of any type that can be cast to a variant
+          except VOID.
   """,
   examples = """
     Examples:
@@ -153,11 +154,11 @@ case class ToVariantObject(child: Expression)
   override def nullIntolerant: Boolean = true
   override val dataType: DataType = VariantType
 
-  // Only accept nested types at the root but any types can be nested inside.
+  // Only accept nested types at the root; nested values follow `VariantGet.canCastToVariant`.
   override def checkInputDataTypes(): TypeCheckResult = {
     val checkResult: Boolean = child.dataType match {
       case _: StructType | _: ArrayType | _: MapType =>
-        VariantGet.checkDataType(child.dataType, allowStructsAndMaps = true)
+        VariantGet.canCastToVariant(child.dataType, allowStructsAndMaps = true)
       case _ => false
     }
     if (!checkResult) {
@@ -228,7 +229,7 @@ case class VariantFromArrays(left: Expression, right: Expression)
       defaultCheck
     } else {
       left.dataType.asInstanceOf[ArrayType].elementType match {
-        case _: StringType if VariantGet.checkDataType(valueType, allowStructsAndMaps = true) =>
+        case _: StringType if VariantGet.canCastToVariant(valueType, allowStructsAndMaps = true) =>
           TypeCheckResult.TypeCheckSuccess
         case _: StringType =>
           DataTypeMismatch(
@@ -304,7 +305,7 @@ case class VariantFromEntries(child: Expression)
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(
         StructType(Array(StructField(_, _: StringType, _, _), StructField(_, vt, _, _))), _) =>
-      if (VariantGet.checkDataType(vt, allowStructsAndMaps = true)) {
+      if (VariantGet.canCastToVariant(vt, allowStructsAndMaps = true)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
         DataTypeMismatch(
@@ -530,7 +531,8 @@ object VariantManipulationExpressionUtils extends QueryErrorsBase {
       path, functionName, legacyPathBackslashAsLiteral, allowRoot)
 
   def checkValueType(dataType: DataType): TypeCheckResult = {
-    if (dataType == NullType || VariantGet.checkDataType(dataType, allowStructsAndMaps = false)) {
+    if (dataType == NullType ||
+        VariantGet.canCastToVariant(dataType, allowStructsAndMaps = false)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -578,7 +580,7 @@ case class VariantGet(
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!VariantGet.checkDataType(targetType)) {
+    } else if (!VariantGet.canCastFromVariant(targetType)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
         messageParameters =
@@ -681,21 +683,35 @@ case class VariantCastArgs(
 
 case object VariantGet {
   /**
-   * Returns whether a data type can be cast into/from variant. For scalar types, we allow a subset
-   * of them. For nested types, we reject map types with a non-string key type.
+   * Returns whether a value of `dataType` can be cast to a variant. Nanosecond timestamps can only
+   * be read, because Spark's variant encoding has no primitive for them.
+   * `allowStructsAndMaps = false` rejects structs and maps at any level.
    */
-  def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
+  def canCastToVariant(dataType: DataType, allowStructsAndMaps: Boolean): Boolean =
+    checkDataType(dataType, toVariant = true, allowStructsAndMaps)
+
+  /** Returns whether a variant can be cast to `dataType`. */
+  def canCastFromVariant(dataType: DataType): Boolean =
+    checkDataType(dataType, toVariant = false, allowStructsAndMaps = true)
+
+  // For scalar types, we allow a subset of them. For nested types, we reject map types with a
+  // non-string key type.
+  private def checkDataType(
+      dataType: DataType,
+      toVariant: Boolean,
+      allowStructsAndMaps: Boolean): Boolean =
     dataType match {
     case _: CharType | _: VarcharType => false
+    case _: AnyTimestampNanoType => !toVariant
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
         VariantType =>
       true
-    case ArrayType(elementType, _) => checkDataType(elementType, allowStructsAndMaps)
+    case ArrayType(elementType, _) => checkDataType(elementType, toVariant, allowStructsAndMaps)
     case MapType(_: CharType | _: VarcharType, _, _) => false
     case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>
-        checkDataType(valueType, allowStructsAndMaps)
+        checkDataType(valueType, toVariant, allowStructsAndMaps)
     case StructType(fields) if allowStructsAndMaps =>
-        fields.forall(f => checkDataType(f.dataType, allowStructsAndMaps))
+        fields.forall(f => checkDataType(f.dataType, toVariant, allowStructsAndMaps))
     case _ => false
   }
 
