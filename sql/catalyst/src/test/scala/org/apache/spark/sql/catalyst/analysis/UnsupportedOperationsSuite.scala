@@ -702,7 +702,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   }
 
   // With allowMultiple=false, late rows are filtered by an input's first watermarked column, so
-  // a time window key bounds the opposite state only when the window is that column.
+  // a time window key after it bounds the opposite state only when the input builds the window
+  // from that column, which a relation that outputs both does not show.
   {
     val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
     val windowMetadata = new MetadataBuilder()
@@ -739,9 +740,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         }
         sides.foreach { side =>
           assert(error.getMessage.contains(s"the $side input filters late rows by its first " +
-            s"watermarked column, ${side}Time, so its window key ${side}Window is not a time " +
-            s"constraint. Put ${side}Window before ${side}Time in that input's columns, or " +
-            s"drop ${side}Time"))
+            s"watermarked column, ${side}Time, so its window key ${side}Window is a time " +
+            "constraint only if that input computes it as a tumbling or sliding window over " +
+            s"${side}Time itself, through projections, filters and unions only. Otherwise, put " +
+            s"${side}Window before ${side}Time in that input's columns, or drop ${side}Time"))
         }
         Seq("left", "right").diff(sides).foreach { side =>
           assert(!error.getMessage.contains(s"the $side input filters late rows"))
@@ -800,8 +802,17 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), OutputMode.Append())
         }
       }
-      assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage
-        .contains("requires a watermark on the right input")))
+      val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("requires a watermark on the right input"))
+      assert(warnings.nonEmpty)
+      // The query starts with the check disabled, so the aggregation that the error says fails at
+      // start never emits instead.
+      if (joinType == LeftOuter) {
+        assert(warnings.forall { message =>
+          message.contains("an append-mode aggregation over that event time never emits results") &&
+            !message.contains("fails at start")
+        })
+      }
     }
   }
 
