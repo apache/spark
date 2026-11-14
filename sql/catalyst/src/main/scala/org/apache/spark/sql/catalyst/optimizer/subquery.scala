@@ -567,7 +567,154 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
      nonEquivalentGroupbyCols(query, aggNode.get).isEmpty
    }
 
-  private def rewriteSubQueries(plan: LogicalPlan): LogicalPlan = {
+  // Whether some aggregate function of `a` has a default result on empty input, such as COUNT.
+  private def hasDefaultResult(a: Aggregate): Boolean =
+    a.aggregateExpressions.exists(_.exists {
+      case ae: AggregateExpression => ae.aggregateFunction.defaultResult.isDefined
+      case _ => false
+    })
+
+  /**
+   * Returns true if the Aggregate without grouping expressions `agg` returns the same result
+   * over the one row that the Aggregate without grouping expressions below it returns on empty
+   * input as over no rows, so that constructLeftJoins handles its count bug correctly even
+   * though decorrelation loses that row, with fewer joins than DecorrelateInnerQuery. E.g.
+   * SUM(s) and COLLECT_LIST(s) over s = MAX(b.v) return NULL and [] over both. The check is
+   * conservative: it accepts only a short list of functions of `agg` directly over outputs of
+   * lower aggregate functions, with only Projects between, and leaves other shapes that have
+   * this property, such as STDDEV_SAMP(s), to DecorrelateInnerQuery. It never accepts a lower
+   * Aggregate with a function with a `defaultResult`, such as COUNT, which DecorrelateInnerQuery
+   * handled before SPARK-60501. Like the rest of the count bug handling, this relies on
+   * `defaultResult` matching the result on empty input.
+   */
+  private def sameResultOverEmptyLowerAggregate(agg: Aggregate): Boolean = {
+    // The attributes of `plan` that the count bug handling takes as NULL when the lower Aggregate
+    // gets empty input.
+    def nullOnEmptyInput(plan: LogicalPlan): Option[AttributeSet] = plan match {
+      case Project(projectList, child) =>
+        nullOnEmptyInput(child).map { attrs =>
+          AttributeSet(projectList.collect {
+            case a: Attribute if attrs.contains(a) => a
+            case a @ Alias(c: Attribute, _) if attrs.contains(c) => a.toAttribute
+          })
+        }
+      case lower: Aggregate if lower.groupingExpressions.isEmpty &&
+          !lower.child.exists(_.isInstanceOf[Aggregate]) && !hasDefaultResult(lower) =>
+        Some(AttributeSet(lower.aggregateExpressions.collect {
+          case a @ Alias(_: AggregateExpression, _) => a.toAttribute
+        }))
+      case _ => None
+    }
+    val aggregates = agg.aggregateExpressions.flatMap(_.collect {
+      case ae: AggregateExpression => ae
+    })
+    agg.groupingExpressions.isEmpty &&
+      nullOnEmptyInput(agg.child).exists { attrs =>
+        aggregates.forall { ae =>
+          val sameResultOverNulls = ae.aggregateFunction match {
+            case _: Max | _: Min | _: Sum | _: Average | _: Count | _: First | _: Last => true
+            // With RESPECT NULLS, they collect the NULLs.
+            case c: CollectList => c.ignoreNulls
+            case c: CollectSet => c.ignoreNulls
+            case _ => false
+          }
+          // A FILTER condition can fail on the row of NULLs, which constructLeftJoins does not
+          // evaluate it on, so it is left to DecorrelateInnerQuery.
+          ae.filter.isEmpty && sameResultOverNulls && ae.aggregateFunction.children.forall {
+            case a: Attribute => attrs.contains(a)
+            case _ => false
+          }
+        }
+      }
+  }
+
+  /**
+   * Whether `input`, the outer input of an operator with a correlated subquery, gives the same
+   * rows when the domain joins of [[DecorrelateInnerQuery]] compute it again. The check is
+   * conservative: it accepts only operators known to keep the same rows, deterministic
+   * expressions, aggregate functions whose result does not depend on the order of the rows, and
+   * leaves other than a CTE that is not inlined (which may be a non-deterministic one; a
+   * CTERelationRef does not tell) and a streaming source, for which the domain joins fail. It
+   * also checks the plans of the subqueries in `input`. A relation is taken to give the same
+   * rows again, as elsewhere in Spark, e.g. in a self-join; a LogicalRDD over an RDD that does
+   * not is not detected. Anything else, e.g. a LIMIT (other than
+   * over rows of constants), a window function, a sample or a FIRST, keeps the previous
+   * handling.
+   */
+  private def repeatableInput(input: LogicalPlan, inSubquery: Boolean = false): Boolean =
+    !input.exists { p =>
+      val known = p match {
+        case _: Project | _: Filter | _: Join | _: Union | _: Distinct | _: Intersect | _: Except |
+             _: Sort | _: SubqueryAlias | _: RepartitionOperation | _: LateralJoin => true
+        // The domain join of a subquery of an operator in `input` takes its domain from the input
+        // of that operator, which this check accepts too. Directly in `input`, its domain comes
+        // from outside the plan this rule sees.
+        case _: DomainJoin => inSubquery
+        // E.g. the LIMIT 1 that RewriteNonCorrelatedExists adds for an uncorrelated EXISTS.
+        case l @ (_: LocalLimit | _: GlobalLimit) => constantOutput(l.children.head)
+        case a: Aggregate => !a.aggregateExpressions.exists(_.exists {
+          case ae: AggregateExpression => !orderIrrelevant(ae.aggregateFunction)
+          case _ => false
+        })
+        case _: CTERelationRef => false
+        case l: LeafNode => !l.isStreaming
+        case _ => false
+      }
+      !known || !p.expressions.forall(_.deterministic) ||
+        !p.subqueries.forall(repeatableInput(_, inSubquery = true))
+    }
+
+  // Whether every row of `plan` is the same row of constants, so that a LIMIT over it gives the
+  // same rows whichever rows it keeps.
+  private def constantOutput(plan: LogicalPlan): Boolean = plan match {
+    case Project(projectList, _) => projectList.forall(trimAliases(_).foldable)
+    case l @ (_: LocalLimit | _: GlobalLimit) => constantOutput(l.children.head)
+    case _ => false
+  }
+
+  // Whether `f` gives the same value when computed again over the same rows in another order.
+  // This is stricter than EliminateSorts.isOrderIrrelevantAggFunction, which only needs the
+  // result not to depend on a Sort below the aggregate: floating-point addition is not
+  // associative, so neither a SUM of floating-point values nor an AVG of anything but decimals
+  // and ANSI intervals, which AVG adds up as DOUBLE, nor a CentralMomentAgg qualifies; and a SUM
+  // or AVG of decimals becomes NULL on an overflow that depends on the order unless in ANSI
+  // mode, where the overflow fails the query.
+  private def orderIrrelevant(f: AggregateFunction): Boolean = f match {
+    case _: Min | _: Max | _: Count | _: BitAndAgg | _: BitOrAgg | _: BitXorAgg => true
+    case s: Sum => s.child.dataType match {
+      case FloatType | DoubleType => false
+      case _: DecimalType => s.evalContext.evalMode == EvalMode.ANSI
+      case _ => true
+    }
+    case a: Average => a.child.dataType match {
+      case _: DecimalType => a.evalMode == EvalMode.ANSI
+      case _: AnsiIntervalType => true
+      case _ => false
+    }
+    case _ => false
+  }
+
+  /**
+   * Whether the operators above the operator with the correlated subquery `exprId` in `root`,
+   * the plan this rule runs on (the whole query, or the plan of a subquery when
+   * OptimizeSubqueries optimizes it), may put something into its outer input that gives other
+   * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
+   * builds the domain joins: PushDownPredicates can push a filter or join condition there. The
+   * check is conservative and looks at all of `root`. LimitPushDown keeps a LIMIT above an
+   * operator with a correlated scalar subquery, so it does not push one there.
+   */
+  private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
+    root.exists {
+      case p @ (_: Filter | _: Join) =>
+        !p.expressions.forall(_.deterministic) || p.expressions.exists(_.exists {
+          case s: SubqueryExpression =>
+            s.exprId != exprId && !repeatableInput(s.plan, inSubquery = true)
+          case _ => false
+        })
+      case _ => false
+    }
+
+  private def rewriteSubQueries(plan: LogicalPlan, root: LogicalPlan): LogicalPlan = {
     /**
      * This function is used as a aid to enforce idempotency of pullUpCorrelatedPredicate rule.
      * In the first call to rewriteSubqueries, all the outer references from the subplan are
@@ -584,44 +731,73 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         sub: LogicalPlan,
         outer: LogicalPlan,
         handleCountBug: Boolean = false): (LogicalPlan, Seq[Expression]) = {
-      if (SQLConf.get.decorrelateInnerQueryEnabled) {
+      if (conf.decorrelateInnerQueryEnabled) {
         DecorrelateInnerQuery(sub, outer, handleCountBug)
       } else {
         pullOutCorrelatedPredicates(sub, outer)
       }
     }
 
-    plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case ScalarSubquery(sub, children, exprId, conditions, hint,
-      mayHaveCountBugOld, needSingleJoinOld)
-        if children.nonEmpty =>
+    // Whether the outer input of `plan` gives the same rows when computed again (see below).
+    lazy val inputRepeatable = plan.children.forall(repeatableInput(_))
 
+    plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+      case ScalarSubquery(sub, outerAttrs, exprId, conditions, hint,
+      mayHaveCountBugOld, needSingleJoinOld)
+        if outerAttrs.nonEmpty =>
+
+        // An Aggregate without grouping expressions returns one row even on empty input,
+        // whatever its aggregate functions are, and an Aggregate above it sees that row. If the
+        // Aggregate is correlated, decorrelation can lose that row (see below). An uncorrelated
+        // one keeps its row: [[DecorrelateInnerQuery]] leaves a subtree without outer references
+        // unchanged or inner joins it with the domain, and mayHaveCountBugAgg uses the same check
+        // (SubExprUtils.hasOuterReferences).
+        // An Aggregate with an aggregate function with a default result, such as COUNT, also
+        // qualifies, correlated or not, as before SPARK-60501. Only such an Aggregate does with
+        // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR, and where the domain joins
+        // of DecorrelateInnerQuery are known not to work, so as not to make such queries worse
+        // than before: where the outer input may give other rows when computed again (see
+        // repeatableInput and mayMoveIntoOuterInput), and for outer references that are not
+        // orderable, for which the domain joins fail.
+        // A filter above can also inline another subquery of `plan` through its alias, so those
+        // are checked as well.
+        lazy val domainJoinsWork = inputRepeatable &&
+          plan.expressions.forall(_.collect {
+            case s: SubqueryExpression if s.exprId != exprId => s
+          }.forall(s => repeatableInput(s.plan, inSubquery = true))) &&
+          !mayMoveIntoOuterInput(root, exprId) &&
+          outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
+        lazy val onlyDefaultResultSelectsDecorrelation =
+          conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
+            !domainJoinsWork
         def mayHaveCountBugAgg(a: Aggregate): Boolean = {
-          a.groupingExpressions.isEmpty && a.aggregateExpressions.exists(_.exists {
-            case a: AggregateExpression => a.aggregateFunction.defaultResult.isDefined
-            case _ => false
-          })
+          a.groupingExpressions.isEmpty && (hasDefaultResult(a) ||
+            (SubExprUtils.hasOuterReferences(a) && !onlyDefaultResultSelectsDecorrelation))
         }
 
         // The below logic controls handling count bug for scalar subqueries in
         // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
         // [[RewriteCorrelatedScalarSubquery#constructLeftJoins]]. Note that handling it in
-        // [[DecorrelateInnerQuery]] is always correct, and turning it off to handle it in
-        // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
-        // not introduced.
-        val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
+        // [[DecorrelateInnerQuery]] is correct where its domain joins work (see domainJoinsWork
+        // above), and turning it off to handle it in constructLeftJoins is otherwise an
+        // optimization, so that additional, redundant left outer joins are not introduced.
+        val handleCountBugInDecorrelate = conf.decorrelateInnerQueryEnabled &&
           !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
-          // Handle count bug only if there exists lower level Aggs with count bugs. It does not
-          // matter if the top level agg is count bug vulnerable or not, because:
-          // 1. If the top level agg is count bug vulnerable, it can be handled in
-          // constructLeftJoins, unless there are lower aggs that are count bug vulnerable.
-          // E.g. COUNT(COUNT + COUNT)
-          // 2. If the top level agg is not count bug vulnerable, it can be count bug vulnerable if
-          // there are lower aggs that are count bug vulnerable. E.g. SUM(COUNT)
+          // If the top level node is an Agg, handle count bug in DecorrelateInnerQuery only if
+          // there exists a lower level Agg for which mayHaveCountBugAgg holds. Decorrelation
+          // groups a correlated lower level Agg by the outer (domain) columns, so it returns no
+          // row for an outer row without matching rows, instead of the one row it returns on
+          // empty input. constructLeftJoins only handles the count bug of the top level Agg and
+          // cannot bring back that row. Whether it is needed does not follow from whether the
+          // aggregate functions have a default result, e.g. COUNT(COUNT + COUNT), SUM(COUNT),
+          // COUNT(*) over MAX and SUM(COALESCE(SUM, 0)) all need it. Some shapes do not, because
+          // the top level Agg returns the same result over that row as over no rows, e.g. SUM(s)
+          // and COLLECT_LIST(s) over s = MAX; they are handled in constructLeftJoins, with fewer
+          // joins (see sameResultOverEmptyLowerAggregate).
           case agg: Aggregate => !agg.child.exists {
             case lowerAgg: Aggregate => mayHaveCountBugAgg(lowerAgg)
             case _ => false
-          }
+          } || sameResultOverEmptyLowerAggregate(agg)
           case _ => false
         })
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
@@ -644,7 +820,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           conf.getConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN) && !guaranteedToReturnOneRow(sub)
         }
-        ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
+        ScalarSubquery(newPlan, outerAttrs, exprId, getJoinCondition(newCond, conditions),
           hint, Some(mayHaveCountBug), Some(needSingleJoin))
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = if (SQLConf.get.decorrelateInnerQueryEnabledForExistsIn) {
@@ -673,7 +849,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(PLAN_EXPRESSION)) {
     case j: LateralJoin =>
-      val newPlan = rewriteSubQueries(j)
+      val newPlan = rewriteSubQueries(j, plan)
       // Since a lateral join's output depends on its left child output and its lateral subquery's
       // plan output, we need to trim the domain attributes added to the subquery's plan output
       // to preserve the original output of the join.
@@ -683,12 +859,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         newPlan
       }
     case j: Join if conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
-      rewriteSubQueries(j)
+      rewriteSubQueries(j, plan)
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
-      rewriteSubQueries(q)
+      rewriteSubQueries(q, plan)
     case s: SupportsSubquery =>
-      rewriteSubQueries(s)
+      rewriteSubQueries(s, plan)
   }
 }
 

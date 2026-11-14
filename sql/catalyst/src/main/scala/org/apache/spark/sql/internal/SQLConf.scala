@@ -8805,6 +8805,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR =
+    buildConf("spark.sql.legacy.scalarSubqueryNestedAggregateCountBugBehavior")
+      .internal()
+      .doc("When true, restores the behavior before SPARK-60501, where a correlated scalar " +
+        "subquery whose top Aggregate is over a correlated Aggregate without GROUP BY can " +
+        "return a wrong result for an outer row without matching rows, e.g. COUNT(*) over a " +
+        "MAX returns 0 instead of 1. Has no effect when " +
+        s"${DECORRELATE_INNER_QUERY_ENABLED.key} is false or " +
+        s"${LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING.key} is true.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE =
     buildConf("spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate")
       .internal()
