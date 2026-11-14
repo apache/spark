@@ -21,7 +21,7 @@ import java.io.File
 import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDateTime, LocalTime, Period, ZoneOffset}
+import java.time.{Duration, Instant, LocalDateTime, LocalTime, Period, ZoneId, ZoneOffset}
 
 import scala.jdk.CollectionConverters._
 
@@ -36,6 +36,8 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
@@ -313,23 +315,33 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             val timestamps = input.map(Literal(_))
             checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
 
-            checkFilterPredicate($"_1" === timestamps(0), PredicateLeaf.Operator.BETWEEN)
-            checkFilterPredicate($"_1" <=> timestamps(0), PredicateLeaf.Operator.BETWEEN)
+            // A predicate with a value before 1582-10-15 is not pushed down, see SPARK-60152. Only
+            // the IsNotNull inferred for it is.
+            Seq(timestamps(0), timestamps(1)).foreach { ts =>
+              Seq($"_1" === ts, $"_1" < ts, $"_1" <= ts, $"_1" > ts, $"_1" >= ts).foreach { p =>
+                checkFilterPredicate(df, p, (sarg: SearchArgument) => assert(
+                  sarg.getLeaves.asScala.forall(_.getOperator == PredicateLeaf.Operator.IS_NULL),
+                  s"$p: $sarg"))
+              }
+            }
 
-            checkFilterPredicate($"_1" < timestamps(1), PredicateLeaf.Operator.LESS_THAN)
+            checkFilterPredicate($"_1" === timestamps(2), PredicateLeaf.Operator.BETWEEN)
+            checkFilterPredicate($"_1" <=> timestamps(2), PredicateLeaf.Operator.BETWEEN)
+
+            checkFilterPredicate($"_1" < timestamps(3), PredicateLeaf.Operator.LESS_THAN)
             checkFilterPredicate($"_1" > timestamps(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
-            checkFilterPredicate($"_1" <= timestamps(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+            checkFilterPredicate($"_1" <= timestamps(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
             checkFilterPredicate($"_1" >= timestamps(3), PredicateLeaf.Operator.LESS_THAN)
 
-            checkFilterPredicate(Literal(timestamps(0)) === $"_1", PredicateLeaf.Operator.BETWEEN)
+            checkFilterPredicate(Literal(timestamps(2)) === $"_1", PredicateLeaf.Operator.BETWEEN)
             checkFilterPredicate(
-              Literal(timestamps(0)) <=> $"_1", PredicateLeaf.Operator.BETWEEN)
-            checkFilterPredicate(Literal(timestamps(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
+              Literal(timestamps(2)) <=> $"_1", PredicateLeaf.Operator.BETWEEN)
+            checkFilterPredicate(Literal(timestamps(3)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
             checkFilterPredicate(
               Literal(timestamps(2)) < $"_1",
               PredicateLeaf.Operator.LESS_THAN_EQUALS)
             checkFilterPredicate(
-              Literal(timestamps(0)) >= $"_1",
+              Literal(timestamps(2)) >= $"_1",
               PredicateLeaf.Operator.LESS_THAN_EQUALS)
             checkFilterPredicate(Literal(timestamps(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
           }
@@ -407,6 +419,125 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  // The time zones the SPARK-60152 tests run in: UTC, one behind it and one ahead of it.
+  private val timeZonesForCalendarSwitch = Seq("UTC", "America/Los_Angeles", "Asia/Kolkata")
+
+  test("SPARK-60152: filter pushdown - timestamp before 1582-10-15") {
+    // Spark writes TIMESTAMP values in the hybrid Julian/Gregorian calendar, while ORC compares a
+    // pushed down value with the statistics converted to the proleptic Gregorian calendar, which
+    // moves the ones whose wall clock is before 1582-10-15. So the pushed down predicates must not
+    // skip their files.
+    val values = Seq(
+      "0001-01-02 00:00:00",
+      "1500-01-01 00:00:00",
+      // Its wall clock is before 1582-10-15, but in a time zone behind UTC its UTC time is not.
+      "1582-10-04 20:00:00",
+      "1582-10-15 00:00:00",
+      "1582-10-15 18:00:00",
+      "1582-10-16 00:00:00",
+      "2020-05-25 10:11:12")
+    // The dates from 1582-10-05 to 1582-10-14 don't exist in the hybrid calendar, and their values
+    // are moved to 1582-10-15 at the same time of day when they are converted to it. As data, they
+    // read back as the moved values, so they are only used in the conditions. In
+    // America/Asuncion, the wall clock of the moved 1582-10-05 23:30:00 can be 1582-10-16 00:30:00,
+    // see `OrcFilters.buildLeafSearchArgument`.
+    val conditionValues = values ++ Seq("1582-10-05 23:30:00", "1582-10-10 18:00:00")
+    val later = "TIMESTAMP'2020-05-25 10:11:12'"
+    val conditions = conditionValues.flatMap { v =>
+      val ts = s"TIMESTAMP'$v'"
+      Seq("=", "<=>", "<", "<=", ">", ">=", "!=").map(op => s"t $op $ts") ++ Seq(
+        s"NOT (t <=> $ts)",
+        s"t IN ($ts, $later)",
+        s"t IN ($ts, NULL)",
+        s"t = $ts OR t > $later")
+    }
+    (timeZonesForCalendarSwitch :+ "America/Asuncion").foreach { zone =>
+      withDefaultTimeZone(ZoneId.of(zone)) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          val inMemory = sql(values.map(v => s"SELECT TIMESTAMP'$v' AS t").mkString(" UNION ALL "))
+          val expected = conditions.map(c => c -> inMemory.where(c).count())
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            // One file per value, so the statistics of a file hold only its value.
+            values.foreach { v =>
+              sql(s"SELECT TIMESTAMP'$v' AS t").write.mode("append").orc(path)
+            }
+            Seq(false, true).foreach { java8Api =>
+              withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+                withAllNativeOrcReaders {
+                  val df = spark.read.orc(path)
+                  expected.foreach { case (condition, count) =>
+                    assert(df.where(condition).count() === count,
+                      s"$condition, time zone $zone, java8 API $java8Api")
+                  }
+                  // Predicates with a later value are still pushed down and skip the other files.
+                  assert(stripSparkFilter(df.where(s"t = $later")).count() === 1)
+                  assert(
+                    stripSparkFilter(df.where("t > TIMESTAMP'1582-10-17 00:00:00'")).count() === 1)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60152: timestamp predicates with a value before 1582-10-15 are not pushed down") {
+    import org.apache.spark.sql.sources._
+    val schema = new StructType().add("t", TimestampType)
+    def createFilter(filter: Filter): Option[SearchArgument] =
+      OrcFilters.createFilter(schema, Seq(filter))
+    val later = Instant.parse("2020-05-25T10:11:12Z")
+    timeZonesForCalendarSwitch.foreach { zone =>
+      withDefaultTimeZone(ZoneId.of(zone)) {
+        // What counts is the wall clock of the value in the JVM default time zone.
+        Seq(
+          "0001-01-02T00:00:00" -> false,
+          "1500-01-01T00:00:00" -> false,
+          "1582-10-04T20:00:00" -> false,
+          "1582-10-04T23:59:59.999999" -> false,
+          // The hybrid calendar has no 1582-10-05 to 1582-10-14, and this value is moved to
+          // 1582-10-15 18:00:00 in it.
+          "1582-10-10T18:00:00" -> false,
+          "1582-10-15T01:00:00" -> false,
+          "1582-10-15T23:59:59.999999" -> false,
+          "1582-10-16T23:59:59.999999" -> false,
+          "1582-10-17T00:00:00" -> true,
+          "1900-01-01T00:00:00" -> true
+        ).foreach { case (wallClock, pushed) =>
+          val instant = LocalDateTime.parse(wallClock).atZone(ZoneId.of(zone)).toInstant
+          // The values that a filter holds with spark.sql.datetime.java8API.enabled on and off: an
+          // Instant, or a java.sql.Timestamp in the hybrid Julian/Gregorian calendar.
+          Seq[Any](
+            instant,
+            DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(instant))
+          ).foreach { value =>
+            Seq(
+              EqualTo("t", value),
+              EqualNullSafe("t", value),
+              Not(EqualTo("t", value)),
+              LessThan("t", value),
+              LessThanOrEqual("t", value),
+              GreaterThan("t", value),
+              GreaterThanOrEqual("t", value),
+              In("t", Array[Any](value)),
+              In("t", Array[Any](later, value)),
+              In("t", Array[Any](value, null)),
+              Or(EqualTo("t", value), GreaterThan("t", later))
+            ).foreach { filter =>
+              assert(createFilter(filter).isDefined === pushed, s"$filter, time zone $zone")
+            }
+            // The other parts of a conjunction are still pushed down.
+            assert(createFilter(And(EqualTo("t", value), EqualTo("t", later))).isDefined)
+          }
+        }
+      }
+    }
+    assert(createFilter(IsNull("t")).isDefined)
+    assert(createFilter(IsNotNull("t")).isDefined)
   }
 
   test("SPARK-36357: filter pushdown - timestamp_ntz") {
