@@ -21,7 +21,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.InSubquery
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
 
   import testImplicits._

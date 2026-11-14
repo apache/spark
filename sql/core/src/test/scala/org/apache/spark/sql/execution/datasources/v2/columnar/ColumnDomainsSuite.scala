@@ -36,9 +36,11 @@ import org.apache.spark.sql.functions.{col, expr, not}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /** Tests how [[ColumnDomains]] derives the domains of columns from the predicates of a query. */
+@DataSourceV2Test
 class ColumnDomainsSuite extends QueryTest with SharedSparkSession with PredicateHelper
   with TimeLimits {
 

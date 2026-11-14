@@ -23,7 +23,9 @@ import org.apache.spark.sql.execution.{InSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   import testImplicits._

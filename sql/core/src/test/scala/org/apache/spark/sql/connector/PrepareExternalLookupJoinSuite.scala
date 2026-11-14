@@ -44,9 +44,11 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DecimalType, IntegerType,
   LongType, MapType, StringType, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class PrepareExternalLookupJoinSuite extends PlanTest {
   private val stream =
     LocalRelation(Seq($"streamId".int, $"streamLabel".string), isStreaming = true)

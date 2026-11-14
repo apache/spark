@@ -24,7 +24,9 @@ import org.apache.spark.sql.execution.datasources.v2.PushablePredicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, TimestampType}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class PushablePredicateSuite extends SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED, true)

@@ -37,6 +37,7 @@ import org.apache.spark.sql.functions.udaf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory}
 import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 // A V2 function that a test binds to the name of a built-in function to shadow it.
@@ -59,6 +60,7 @@ private object CountingString extends ScalarFunction[UTF8String] {
   }
 }
 
+@DataSourceV2Test
 class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
   override protected def command: String = "Check CONSTRAINT"
 
