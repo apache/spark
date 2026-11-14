@@ -1841,10 +1841,10 @@ object SQLConf {
     buildConf("spark.sql.subexpressionElimination.filterExec.enabled")
       .internal()
       .doc("When true (and subexpression elimination is enabled), FilterExec whole-stage " +
-        "codegen eliminates common subexpressions shared across its predicates. When false, " +
-        "FilterExec falls back to the predicate codegen that loads input columns lazily and " +
-        "short-circuits, avoiding eager materialization of all predicate-referenced columns on " +
-        "every row. Only affects FilterExec; subexpression elimination elsewhere is unaffected.")
+        "codegen eliminates the common subexpressions shared across its predicates when one " +
+        "of them is not cheap. When false, FilterExec falls back to the predicate codegen " +
+        "without subexpression elimination. Only affects FilterExec; subexpression elimination " +
+        "elsewhere is unaffected.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
