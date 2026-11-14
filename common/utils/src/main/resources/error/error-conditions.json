@@ -4079,7 +4079,7 @@
   },
   "INVALID_BUCKET_COLUMN_DATA_TYPE" : {
     "message" : [
-      "Cannot use <type> for bucket column. Collated data types are not supported for bucketing."
+      "Cannot use <type> for bucket column. Bucketing does not support collated data types or non-NULL GEOMETRY and GEOGRAPHY values."
     ],
     "sqlState" : "42601"
   },

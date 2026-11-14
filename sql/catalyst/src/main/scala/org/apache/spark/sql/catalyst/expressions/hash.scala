@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -480,6 +480,13 @@ abstract class HashExpression[E] extends Expression {
     s"$result = $hasherClassName.hashUnsafeBytes($b, $offset, $b.length, $result);"
   }
 
+  protected def genHashBinaryView(input: String, result: String): String = {
+    val baseObject = s"$input.getBaseObject()"
+    val baseOffset = s"$input.getBaseOffset()"
+    val numBytes = s"$input.numBytes()"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+  }
+
   protected def genHashBoolean(input: String, result: String): String =
     genHashInt(s"$input ? 1 : 0", result)
 
@@ -660,6 +667,7 @@ abstract class HashExpression[E] extends Expression {
     case _: DayTimeIntervalType => genHashLong(input, result)
     case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
+    case _: GeometryType | _: GeographyType => genHashBinaryView(input, result)
     case st: StringType => genHashString(ctx, st, input, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>
@@ -743,6 +751,7 @@ abstract class InterpretedHashFunction {
       case t: TimestampNanosVal => hashInt(t.nanosWithinMicro, hashLong(t.epochMicros, seed))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
+      case b: BinaryView => hashUnsafeBytes(b.getBaseObject, b.getBaseOffset, b.numBytes, seed)
       case s: UTF8String =>
         val st = dataType.asInstanceOf[StringType]
         if (st.supportsBinaryEquality) {
@@ -1069,6 +1078,13 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashBytes(b: String, result: String): String =
     s"$result = $hasherClassName.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length);"
+
+  override protected def genHashBinaryView(input: String, result: String): String = {
+    val baseObject = s"$input.getBaseObject()"
+    val baseOffset = s"$input.getBaseOffset()"
+    val numBytes = s"$input.numBytes()"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes);"
+  }
 
   override protected def genHashDecimal(
       ctx: CodegenContext,

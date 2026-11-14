@@ -525,6 +525,9 @@ object ArrowBatchingDataWriter {
    * by buffer as a column of the field of a write: it has a value for each row, it is physically
    * congruent with the field, though it may differ in the names, nullability and metadata of its
    * fields, and in the time zones of timestamps, which the copy keeps, and Arrow can slice it.
+   * Unlike other metadata, a tag that marks the WKB of a GEOMETRY or GEOGRAPHY vector as kept as
+   * created must also be on the field (see `ArrowUtils.isCompatibleWithDeclaredField`), so values
+   * from the Arrow cache are converted to little-endian WKB instead of copied.
    * Arrow computes some byte positions of a slice in int, so it cannot slice a fixed-width vector
    * of 2 GiB or more, for example (see `BaseSliceArrowOutputProcessor.canSlice`), whose values are
    * then converted.

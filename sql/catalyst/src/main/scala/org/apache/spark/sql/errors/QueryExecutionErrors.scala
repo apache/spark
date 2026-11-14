@@ -914,6 +914,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("format" -> format))
   }
 
+  def invalidBucketColumnDataTypeError(dataType: DataType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+      messageParameters = Map("type" -> toSQLType(dataType)))
+  }
+
   def taskFailedWhileWritingRowsError(path: String, cause: Throwable): Throwable = {
     new SparkException(
       errorClass = "TASK_WRITE_FAILED",
