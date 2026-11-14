@@ -4048,6 +4048,19 @@ public class CollationSupportSuite {
   }
 
   @Test
+  public void testStringInstrWithOccurrenceZeroStart() throws SparkException {
+    for (String collationName : testSupportedCollations) {
+      for (String string : new String[]{"", "abc", "\u4F60\u597D"}) {
+        for (String substring : new String[]{"", "a"}) {
+          for (int occurrence : new int[]{1, 2}) {
+            assertStringInstrWithOccurrence(string, substring, 0, occurrence, collationName, 0);
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   public void testStringInstrWithOccurrence() throws SparkException {
     // Test start = 1 and occurrence = 1 (equivalent to StringInstr)
     // Empty strings.
