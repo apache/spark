@@ -34,6 +34,7 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
 )
 from pyspark.pandas.typedef import pandas_on_spark_type
+from pyspark.pandas.typedef.typehints import extension_arrow_dtypes_available
 from pyspark.sql import Column
 from pyspark.sql import functions as F
 from pyspark.sql.internal import InternalFunction as SF
@@ -46,6 +47,10 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.utils import pyspark_column_op
+
+if extension_arrow_dtypes_available:
+    import pyarrow as pa
+    from pandas import ArrowDtype
 
 
 class DatetimeOps(DataTypeOps):
@@ -130,10 +135,34 @@ class DatetimeOps(DataTypeOps):
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
+        if (
+            extension_arrow_dtypes_available
+            and isinstance(self.dtype, ArrowDtype)
+            and isinstance(self.spark_type, TimestampType)
+        ):
+            pyarrow_type = self.dtype.pyarrow_dtype
+            if pa.types.is_timestamp(pyarrow_type) and pyarrow_type.tz is None:
+                from pyspark.pandas.utils import default_session
+
+                session_tz = default_session().conf.get("spark.sql.session.timeZone", "UTC")
+                return col.dt.tz_localize(session_tz).dt.tz_convert("UTC").dt.tz_localize(None)
         return col
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
+        if extension_arrow_dtypes_available and isinstance(self.dtype, ArrowDtype):
+            pyarrow_type = self.dtype.pyarrow_dtype
+            if pa.types.is_timestamp(pyarrow_type):
+                if pyarrow_type.tz is not None:
+                    from pyspark.pandas.utils import default_session
+
+                    session_tz = default_session().conf.get("spark.sql.session.timeZone", "UTC")
+                    col = (
+                        pd.to_datetime(col)
+                        .dt.tz_localize(session_tz)
+                        .dt.tz_convert(pyarrow_type.tz)
+                    )
+                return col.astype(self.dtype)
         if LooseVersion(pd.__version__) < "3.0.0":
             return col
         else:

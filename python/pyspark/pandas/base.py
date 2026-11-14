@@ -40,7 +40,11 @@ from pyspark.pandas.internal import (
     InternalFrame,
 )
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
+from pyspark.pandas.typedef.typehints import (
+    handle_dtype_as_extension_dtype,
+    is_arrow_dtype,
+    is_string_pyarrow_dtype,
+)
 from pyspark.pandas.utils import (
     ERROR_MESSAGE_CANNOT_COMBINE,
     ansi_mode_context,
@@ -242,10 +246,17 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
                 *[arg.spark.column if isinstance(arg, IndexOpsMixin) else arg for arg in args],
             )
 
+            dtypes = [col.dtype for col in [self] + cols]
+            is_comparison = f in [
+                getattr(Column, f"__{comp_op}__")
+                for comp_op in ["eq", "ne", "lt", "le", "ge", "gt"]
+            ]
             field = InternalField.from_struct_field(
                 self._internal.spark_frame.select(scol).schema[0],
-                use_extension_dtypes=any(
-                    handle_dtype_as_extension_dtype(col.dtype) for col in [self] + cols
+                use_extension_dtypes=any(handle_dtype_as_extension_dtype(d) for d in dtypes),
+                use_arrow_dtypes=any(
+                    is_arrow_dtype(d) or (is_comparison and is_string_pyarrow_dtype(d))
+                    for d in dtypes
                 ),
             )
 
