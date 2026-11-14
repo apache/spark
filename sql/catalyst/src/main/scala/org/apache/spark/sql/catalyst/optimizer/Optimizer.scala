@@ -2272,8 +2272,8 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
 object InferFiltersFromConstraints extends Rule[LogicalPlan]
   with PredicateHelper with ConstraintHelper {
 
-  // Marks the Filters the AsOfJoin case adds, so the Filter case adds no failable or subquery
-  // filter to them.
+  // Marks the Filters the AsOfJoin case adds, so the Filter case adds no failable, IN or
+  // correlated EXISTS filter to them.
   private val asOfInputFilterTag = TreeNodeTag[Unit]("asOfInputFilter")
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -2325,7 +2325,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     // A right row that fails the ON condition is never the match of any left row, so a filter
     // that follows from the left constraints and the ON condition can drop it before the join.
     // An inner join also drops the left rows without a match, so its left side gets one too.
-    case j: AsOfJoin =>
+    case j: AsOfJoin if conf.inferFiltersAcrossAsOfJoinEnabled =>
       val allConstraints = getAllConstraints(j.left, j.right, j.condition)
       val newLeft = j.joinType match {
         case Inner => inferAsOfInputFilter(j.left, allConstraints)
@@ -2333,10 +2333,20 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         case other =>
           throw SparkException.internalError(s"Unexpected as-of join type: $other")
       }
+      // The join reads the right input lazily and reads one row past each key group. A right
+      // filter changes which rows it reads, so a right ON key or a right input expression that
+      // can fail could fail on a row the join did not read before.
+      val rightKeys =
+        j.condition.toSeq.flatMap(AsOfJoin.extractEquiJoinKeys(_, j.left, j.right)._2)
+      val newRight = if (rightKeys.forall(cannotFail) && cannotFailAnywhere(j.right)) {
+        inferAsOfInputFilter(j.right, allConstraints)
+      } else {
+        j.right
+      }
       // With LeftOuter only the right input gets a filter, so a self join loses its shared
-      // exchange. Skipping the filter when both inputs match would keep it, but the filter drops
-      // right rows before the shuffle.
-      j.copy(left = newLeft, right = inferAsOfInputFilter(j.right, allConstraints))
+      // exchange. Leaving the right input unfiltered when both inputs are the same plan would
+      // keep it, but the filter drops right rows before the shuffle.
+      j.copy(left = newLeft, right = newRight)
   }
 
   private def getAllConstraints(
@@ -2363,6 +2373,15 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       plan
     } else {
       Filter(newPredicates.reduce(And), plan)
+    }
+  }
+
+  /** Whether no expression of `plan` can fail. Aliases and sort orders count as their child. */
+  private def cannotFailAnywhere(plan: LogicalPlan): Boolean = !plan.exists {
+    _.expressions.exists {
+      case a: Alias => !cannotFail(a.child)
+      case s: SortOrder => !cannotFail(s.child)
+      case e => !cannotFail(e)
     }
   }
 

@@ -1866,6 +1866,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED =
+    buildConf("spark.sql.optimizer.inferFiltersAcrossAsOfJoin.enabled")
+      .internal()
+      .doc("When true, the query optimizer infers filters for the inputs of an AS-OF join from " +
+        "its ON condition and its other input, such as `q.k = 7` from `ON t.k = q.k` and " +
+        "`t.k = 7`. When false, it infers no filter for the inputs of an AS-OF join, while " +
+        "other joins keep their inferred filters.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()
@@ -9914,6 +9926,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyInferFailableFiltersFromConstraints: Boolean =
     getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
+
+  def inferFiltersAcrossAsOfJoinEnabled: Boolean = getConf(INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 

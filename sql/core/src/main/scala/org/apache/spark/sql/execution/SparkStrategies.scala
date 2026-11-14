@@ -383,11 +383,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /** Plans AS-OF joins whose analyzed node selects the sort-merge operator. */
-  object AsOfJoinSelection extends Strategy with PredicateHelper {
+  object AsOfJoinSelection extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case j: AsOfJoin if j.requiresSortMergeAsOfJoin =>
         val (leftKeys, rightKeys, residual) = j.condition match {
-          case Some(cond) => extractEquiJoinKeys(cond, j.left, j.right)
+          case Some(cond) => AsOfJoin.extractEquiJoinKeys(cond, j.left, j.right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
         }
 
@@ -405,42 +405,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           codegenEnabled = conf.getConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN)
         ) :: Nil
       case _ => Nil
-    }
-
-    /**
-     * Extract equi-join key pairs and residual (non-equi) condition
-     * from a conjunction. Only EqualTo is treated as equi-key;
-     * EqualNullSafe is excluded because the scanner implements EqualTo
-     * null semantics (left rows with any null equi-key never match and
-     * are skipped or null-padded), whereas EqualNullSafe requires null
-     * keys to match. Such predicates fall through to the residual
-     * condition, which evaluates them per candidate pair.
-     */
-    private def extractEquiJoinKeys(
-        condition: Expression,
-        left: LogicalPlan,
-        right: LogicalPlan): (Seq[Expression], Seq[Expression], Option[Expression]) = {
-      val leftKeys =
-        new scala.collection.mutable.ArrayBuffer[Expression]()
-      val rightKeys =
-        new scala.collection.mutable.ArrayBuffer[Expression]()
-      val residuals =
-        new scala.collection.mutable.ArrayBuffer[Expression]()
-
-      splitConjunctivePredicates(condition).foreach {
-        case EqualTo(l, r)
-            if l.references.subsetOf(left.outputSet) &&
-              r.references.subsetOf(right.outputSet) =>
-          leftKeys += l; rightKeys += r
-        case EqualTo(l, r)
-            if r.references.subsetOf(left.outputSet) &&
-              l.references.subsetOf(right.outputSet) =>
-          leftKeys += r; rightKeys += l
-        case other =>
-          residuals += other
-      }
-      val residual = residuals.reduceOption(And)
-      (leftKeys.toSeq, rightKeys.toSeq, residual)
     }
   }
 

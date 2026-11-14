@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, CodegenObject
   EqualTo, Expression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
-import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.execution.{FileSourceScanExec, InputAdapter, SparkPlan,
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -216,12 +216,27 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       case _ => false
     }
 
+  /** Asserts that every input row of the as-of join of `df` reaches the join. */
+  private def assertEveryInputRowReachesAsOfJoin(df: DataFrame): Unit = {
+    val qe = df.queryExecution
+    def inputs(plan: LogicalPlan): Seq[LogicalPlan] =
+      plan.collectFirst { case j: AsOfJoin => j.children }.get
+    def numRows(plan: LogicalPlan): Long = classic.Dataset.ofRows(spark, plan).count()
+    inputs(qe.analyzed).zip(inputs(qe.optimizedPlan)).foreach { case (input, joinInput) =>
+      assert(numRows(joinInput) == numRows(input),
+        s"Expected every input row to reach the as-of join in:\n${qe.optimizedPlan}")
+    }
+  }
+
   /**
-   * Runs `f` without InferFiltersFromConstraints. It would drop the right rows with a NULL ON
-   * key before the join, so a test of how the join itself treats NULL keys would not see them.
+   * Checks `query` with checkCursorScan, without InferFiltersFromConstraints. It would drop the
+   * rows with a NULL ON key before the join, so also asserts that every input row reaches it.
    */
-  private def withNullOnKeysKept(f: => Unit): Unit =
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName)(f)
+  private def checkCursorScanWithNullOnKeys(query: => DataFrame, expected: Seq[Row]): Unit =
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+      assertEveryInputRowReachesAsOfJoin(query)
+      checkCursorScan(query, expected)
+    }
 
   /** Runs `f` with temp view `r` over `rows`, kept in input order so ties keep that order. */
   private def withOrderedRightView(rows: String, columns: String)(f: => Unit): Unit = {
@@ -1355,17 +1370,26 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   test("WHERE on the left ON key also filters the right scan") {
     withTradeQuoteTables {
       Seq("LEFT ASOF JOIN", "ASOF JOIN").foreach { join =>
-        val query = sql(
+        val text =
           s"""
              |SELECT t.trade_time, q.bid_price
              |FROM trades_t t $join quotes_t q
              |  MATCH_CONDITION (t.trade_time >= q.quote_time)
              |  ON t.symbol = q.symbol
              |WHERE t.symbol = 'MSFT'
-             |""".stripMargin)
+             |""".stripMargin
+        val expected = Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50) :: Nil
         withClue(s"$join: ") {
-          checkSortMergeAsOf(query, Row(Timestamp.valueOf("2026-06-29 10:00:12"), 420.50) :: Nil)
+          val query = sql(text)
+          checkSortMergeAsOf(query, expected)
           assert(scanFiltersOnEquality(query, "quotes_t", "symbol", "MSFT"))
+        }
+        withClue(s"$join, inference across as-of joins off: ") {
+          withSQLConf(SQLConf.INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED.key -> "false") {
+            val query = sql(text)
+            checkSortMergeAsOf(query, expected)
+            assert(scanFilterColumns(query, "quotes_t").isEmpty)
+          }
         }
       }
     }
@@ -1420,6 +1444,86 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
             |  ON t.k = r.k
             |""".stripMargin),
         Seq(Row(1, "a1"), Row(2, null)))
+    }
+  }
+
+  test("an inferred right filter does not make a right input expression fail") {
+    // The join reads the right input lazily and one row past each key group. A right filter
+    // would skip 'B', so (ask - bid) / bid would run on 'C', which divides by zero.
+    withTable("asof_tr", "asof_qu", "asof_tr2", "asof_qu2", "asof_bids") {
+      sql("CREATE TABLE asof_tr USING parquet AS SELECT * FROM VALUES ('A', 5) AS t(sym, ts)")
+      sql(
+        """
+          |CREATE TABLE asof_qu USING parquet AS
+          |SELECT * FROM VALUES ('A', 1, 10, 9), ('B', 1, 10, 9), ('C', 1, 10, 0)
+          |  AS q(sym, ts, ask, bid)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_tr2 USING parquet AS
+          |SELECT * FROM VALUES ('A', 1, 5) AS t(sym, x, ts)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_qu2 USING parquet AS
+          |SELECT * FROM VALUES ('A', 1, 1, 10, 9), ('B', NULL, 1, 10, 9), ('B', 1, 1, 10, 0)
+          |  AS q(sym, x, ts, ask, bid)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_bids USING parquet AS
+          |SELECT * FROM VALUES ('A', 0, 9), ('B', 0, 9), ('C', 0, 0) AS b(sym, ts, bid)
+          |""".stripMargin)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // The window keeps the order the join needs, so the join reads its output directly.
+        checkCursorScan(
+          sql(
+            """
+              |SELECT t.sym, q.spread, q.prev
+              |FROM asof_tr t ASOF JOIN (
+              |  SELECT sym, ts, (ask - bid) / bid AS spread, prev
+              |  FROM (SELECT *, lag(bid) OVER (PARTITION BY sym ORDER BY ts) AS prev
+              |    FROM asof_qu)) q
+              |  MATCH_CONDITION (t.ts >= q.ts)
+              |  ON t.sym = q.sym
+              |WHERE t.sym <> 'B'
+              |""".stripMargin),
+          Row("A", 1.0 / 9, null) :: Nil)
+        // IS NOT NULL on the second ON key would skip ('B', NULL).
+        checkCursorScan(
+          sql(
+            """
+              |SELECT t.sym, q.spread, q.prev
+              |FROM asof_tr2 t ASOF JOIN (
+              |  SELECT sym, x, ts, (ask - bid) / bid AS spread, prev
+              |  FROM (SELECT *, lag(bid) OVER (PARTITION BY sym, x ORDER BY ts) AS prev
+              |    FROM asof_qu2)) q
+              |  MATCH_CONDITION (t.ts >= q.ts)
+              |  ON t.sym = q.sym AND t.x = q.x
+              |""".stripMargin),
+          Row("A", 1.0 / 9, null) :: Nil)
+        // The right input is an as-of join, which keeps the order of its left input.
+        for (cursorScan <- Seq("false", "true")) {
+          withSQLConf(
+              SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+              SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan) {
+            checkSortMergeAsOf(
+              sql(
+                """
+                  |SELECT t.sym, q.spread
+                  |FROM asof_tr t ASOF JOIN (
+                  |  SELECT a.sym, a.ts, (a.ask - a.bid) / b.bid AS spread
+                  |  FROM asof_qu a ASOF JOIN asof_bids b
+                  |    MATCH_CONDITION (a.ts >= b.ts)
+                  |    ON a.sym = b.sym) q
+                  |  MATCH_CONDITION (t.ts >= q.ts)
+                  |  ON t.sym = q.sym
+                  |WHERE t.sym <> 'B'
+                  |""".stripMargin),
+              Row("A", 1.0 / 9) :: Nil)
+          }
+        }
+      }
     }
   }
 
@@ -1856,59 +1960,58 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   test("cursor scan: backward match moves forward across trades and keys") {
     // B has no quotes, C has quotes but no trades, and NULL keys never match. A best row kept
     // from key A would give B a match.
-    withNullOnKeysKept {
-      checkCursorScan(
-        sql(
-          """
-            |SELECT t.sym, t.ts, q.tag
-            |FROM VALUES ('A', 2), ('A', 6), ('A', 7), ('B', 4), ('D', 5), (NULL, 3) AS t(sym, ts)
-            |LEFT ASOF JOIN VALUES ('A', 1, 'a1'), ('A', 3, 'a3'), ('A', 5, 'a5'), ('A', 8, 'a8'),
-            |  ('C', 1, 'c1'), ('D', 2, 'd2'), ('D', 6, 'd6'), (NULL, 1, 'n1') AS q(sym, ts, tag)
-            |  MATCH_CONDITION (t.ts >= q.ts)
-            |  ON t.sym = q.sym
-            |""".stripMargin),
-        Row("A", 2, "a1") :: Row("A", 6, "a5") :: Row("A", 7, "a5") :: Row("B", 4, null) ::
-          Row("D", 5, "d2") :: Row(null, 3, null) :: Nil)
-    }
+    checkCursorScanWithNullOnKeys(
+      sql(
+        """
+          |SELECT t.sym, t.ts, q.tag
+          |FROM VALUES ('A', 2), ('A', 6), ('A', 7), ('B', 4), ('D', 5), (NULL, 3) AS t(sym, ts)
+          |LEFT ASOF JOIN VALUES ('A', 1, 'a1'), ('A', 3, 'a3'), ('A', 5, 'a5'), ('A', 8, 'a8'),
+          |  ('C', 1, 'c1'), ('D', 2, 'd2'), ('D', 6, 'd6'), (NULL, 1, 'n1') AS q(sym, ts, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.sym = q.sym
+          |""".stripMargin),
+      Row("A", 2, "a1") :: Row("A", 6, "a5") :: Row("A", 7, "a5") :: Row("B", 4, null) ::
+        Row("D", 5, "d2") :: Row(null, 3, null) :: Nil)
   }
 
   test("cursor scan: two ON keys, with NULL parts, start a new group on either key") {
     // (1, 1) and (1, 2) differ only in the second key. A cursor that compared only the first
     // key would give trade 5 the quote q1n, and trade 1 the later quote q12.
-    withNullOnKeysKept {
-      checkCursorScan(
-        sql(
-          """
-            |SELECT t.id, q.tag
-            |FROM VALUES (1, 1, 1, 10), (2, 1, 2, 10), (3, 1, NULL, 10), (4, 2, 1, 10),
-            |  (5, 1, 1, 3) AS t(id, a, b, ts)
-            |LEFT ASOF JOIN VALUES (1, 1, 5, 'q11'), (1, 2, 6, 'q12'), (1, NULL, 1, 'q1n'),
-            |  (2, 2, 1, 'q22') AS q(a, b, ts, tag)
-            |  MATCH_CONDITION (t.ts >= q.ts)
-            |  ON t.a = q.a AND t.b = q.b
-            |""".stripMargin),
-        Row(1, "q11") :: Row(2, "q12") :: Row(3, null) :: Row(4, null) :: Row(5, null) :: Nil)
-    }
+    checkCursorScanWithNullOnKeys(
+      sql(
+        """
+          |SELECT t.id, q.tag
+          |FROM VALUES (1, 1, 1, 10), (2, 1, 2, 10), (3, 1, NULL, 10), (4, 2, 1, 10),
+          |  (5, 1, 1, 3) AS t(id, a, b, ts)
+          |LEFT ASOF JOIN VALUES (1, 1, 5, 'q11'), (1, 2, 6, 'q12'), (1, NULL, 1, 'q1n'),
+          |  (2, 2, 1, 'q22') AS q(a, b, ts, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.a = q.a AND t.b = q.b
+          |""".stripMargin),
+      Row(1, "q11") :: Row(2, "q12") :: Row(3, null) :: Row(4, null) :: Row(5, null) :: Nil)
   }
 
   test("cursor scan: a NULL right ON key ends the group like any later key") {
     // Row 'null key' has k1 = 2, so it ends the group of k1 = 1, and the scan stops there. It
-    // must not read on to row 'bad', whose ON key r.a / r.b divides by zero under ANSI.
-    withNullOnKeysKept {
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-        withOrderedRightView(
-            "(1, 10, 2, 1, 'match'), (2, NULL, 1, 1, 'null key'), (3, 1, 0, 1, 'bad')",
-            "k1, a, b, ts, tag") {
-          checkCursorScan(
-            sql(
-              """
-                |SELECT t.k1, r.tag
-                |FROM VALUES (1, 5.0D, 10) AS t(k1, k2, ts)
-                |ASOF JOIN r
-                |  MATCH_CONDITION (t.ts >= r.ts)
-                |  ON t.k1 = r.k1 AND t.k2 = r.a / r.b
-                |""".stripMargin),
-            Row(1, "match") :: Nil)
+    // must not read on to row 'bad', whose ON key r.a / r.b divides by zero under ANSI. Filter
+    // inference must keep 'null key' too, as r.a / r.b can fail.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withOrderedRightView(
+          "(1, 10, 2, 1, 'match'), (2, NULL, 1, 1, 'null key'), (3, 1, 0, 1, 'bad')",
+          "k1, a, b, ts, tag") {
+        val query =
+          """
+            |SELECT t.k1, r.tag
+            |FROM VALUES (1, 5.0D, 10) AS t(k1, k2, ts)
+            |ASOF JOIN r
+            |  MATCH_CONDITION (t.ts >= r.ts)
+            |  ON t.k1 = r.k1 AND t.k2 = r.a / r.b
+            |""".stripMargin
+        withClue("InferFiltersFromConstraints excluded: ") {
+          checkCursorScanWithNullOnKeys(sql(query), Row(1, "match") :: Nil)
+        }
+        withClue("InferFiltersFromConstraints on: ") {
+          checkCursorScan(sql(query), Row(1, "match") :: Nil)
         }
       }
     }
@@ -1982,9 +2085,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   gridTest("cursor scan: a NOT NULL left ON key never matches a NULL right ON key")(
     notNullLeftKeyQueries.keys.toSeq.sorted) { keyShape =>
     val (query, expected) = notNullLeftKeyQueries(keyShape)
-    withNullOnKeysKept {
-      checkCursorScan(sql(query), expected)
-    }
+    checkCursorScanWithNullOnKeys(sql(query), expected)
   }
 
   test("a LIMIT in the join's codegen stage stops the join early") {
@@ -2314,12 +2415,14 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                   SQLConf.SHUFFLE_PARTITIONS.key -> "1",
                   SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
                   SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
-                checkWithAsOfJoinCodegenOffAndOn(sql(
+                val query =
                   s"""
                      |SELECT t.id, q.ts, q.tag
                      |FROM t $joinType ASOF JOIN q
                      |  MATCH_CONDITION (t.ts $op q.ts) ON t.k = q.k
-                     |""".stripMargin)) { df =>
+                     |""".stripMargin
+                assertEveryInputRowReachesAsOfJoin(sql(query))
+                checkWithAsOfJoinCodegenOffAndOn(sql(query)) { df =>
                   checkAnswer(df, expected)
                   assert((asOfJoinMetric(df, "numAsOfCursorTasks") > 0) == cursorScan)
                 }
