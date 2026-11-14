@@ -150,7 +150,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
           numSpillThreshold,
           Long.MaxValue,
           -1, // bounded merge not applicable — benchmark does not sort
-          false)
+          false,
+          false) // canUseRadixSort / keyNullable: unused, benchmark does not sort
 
         rows.foreach(x =>
           array.insertRecord(

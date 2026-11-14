@@ -59,7 +59,9 @@ final class UnsafeSorterBoundedSpillMerger {
       SparkLoggerFactory.getLogger(UnsafeSorterBoundedSpillMerger.class);
 
   private final int mergeFactor;
-  private final RecordComparator recordComparator;
+  // Null when the key prefix is a total order and the per-round mergers can skip the
+  // record-comparator tie-break on equal prefixes (see UnsafeSorterSpillMerger).
+  @Nullable private final RecordComparator recordComparator;
   private final PrefixComparator prefixComparator;
   private final BlockManager blockManager;
   private final SerializerManager serializerManager;
@@ -71,7 +73,7 @@ final class UnsafeSorterBoundedSpillMerger {
 
   UnsafeSorterBoundedSpillMerger(
       int mergeFactor,
-      RecordComparator recordComparator,
+      @Nullable RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       BlockManager blockManager,
       SerializerManager serializerManager,
