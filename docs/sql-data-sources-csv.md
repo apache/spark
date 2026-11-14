@@ -111,7 +111,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>inferSchema</code></td>
     <td>false</td>
-    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option, except as noted under <code>variantRespectInferSchema</code>.</td>
+    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -231,13 +231,13 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>singleVariantColumn</code></td>
     <td>(none)</td>
-    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields. By default, scalar values are type-inferred inside the variant on a best-effort basis (for example, <code>"0001"</code> may be inferred as the integer <code>1</code>). To preserve scalar values as strings, set <code>variantRespectInferSchema</code> to <code>true</code> and <code>inferSchema</code> to <code>false</code>.</td>
+    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields. By default, scalar values are type-inferred inside the variant on a best-effort basis (for example, <code>"0001"</code> may be inferred as the integer <code>1</code>). To preserve scalar values as strings, set <code>variantPrimitivesAsString</code> to <code>true</code>.</td>
     <td>read</td>
   </tr>
   <tr>
-    <td><code>variantRespectInferSchema</code></td>
+    <td><code>variantPrimitivesAsString</code></td>
     <td>false</td>
-    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code> or a <code>VariantType</code> column in the schema), controls whether the <code>inferSchema</code> option is honored. When <code>true</code> and <code>inferSchema</code> is <code>false</code>, scalar values are preserved as strings inside the variant instead of being inferred as boolean, long, decimal, date, or timestamp. When <code>false</code> (the default), scalar types are inferred on a best-effort basis regardless of <code>inferSchema</code>. Enabling this option forces <code>from_csv</code> to observe <code>inferSchema</code> when reading into a <code>VARIANT</code>.</td>
+    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code>, or a <code>VariantType</code> column in the schema), stores every non-null value as a string holding its text from the input, instead of a type inferred from that text (boolean, long, decimal, date or timestamp). For example, <code>0001</code> is kept as the string <code>"0001"</code> instead of the integer <code>1</code>. Null values, including those matching <code>nullValue</code>, remain variant nulls. Unlike most options here, CSV built-in functions such as <code>from_csv</code> also observe this option.</td>
     <td>read</td>
   </tr>
   <tr>

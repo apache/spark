@@ -24534,7 +24534,6 @@ def from_xml(
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
-    * ``spark.sql.xml.variant.respectInferSchema``
     * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
       arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
       types are first-class (this flag or

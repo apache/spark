@@ -1021,6 +1021,35 @@ class CsvFunctionsSuite extends SharedSparkSession {
       Seq(Row("BIGINT")))
   }
 
+  test("from_csv with variant: variantPrimitivesAsString keeps primitives as strings") {
+    val df = Seq("0001,true,").toDF("value")
+    val schema = StructType.fromDDL("v variant")
+
+    // The option keeps every non-null value as a string regardless of inferSchema, and takes
+    // precedence over the deprecated variantRespectInferSchema option.
+    for (extra <- Seq(
+        Map.empty[String, String],
+        Map("inferSchema" -> "true"),
+        Map("variantRespectInferSchema" -> "false"))) {
+      val options = Map("singleVariantColumn" -> "v", "variantPrimitivesAsString" -> "true") ++
+        extra
+      checkAnswer(
+        df.select(from_csv($"value", schema, options).cast("string")),
+        Seq(Row("""{{"_c0":"0001","_c1":"true","_c2":null}}""")))
+    }
+    checkAnswer(
+      df.select(from_csv($"value", schema, Map("singleVariantColumn" -> "v",
+        "variantPrimitivesAsString" -> "false", "variantRespectInferSchema" -> "true",
+        "inferSchema" -> "false")).cast("string")),
+      Seq(Row("""{{"_c0":1,"_c1":true,"_c2":null}}""")))
+
+    // Explicit VariantType columns behave the same.
+    checkAnswer(
+      df.selectExpr("schema_of_variant(from_csv(value, 'a variant, b variant', " +
+        "map('variantPrimitivesAsString', 'true')).a)"),
+      Seq(Row("STRING")))
+  }
+
   test("from_csv with variant: extreme negative scale decimal does not hang") {
     // A value like "1E99999" parses to a BigDecimal with scale=-99999.
     // Calling setScale(0) on it would hang, so it should fall through to string.

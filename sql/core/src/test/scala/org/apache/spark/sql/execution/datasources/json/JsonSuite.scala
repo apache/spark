@@ -4466,7 +4466,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 35)
+    assert(JSONOptions.getAllOptions.size == 36)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -4498,6 +4498,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("timeZone"))
     assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
     assert(JSONOptions.isValidOption("singleVariantColumn"))
+    assert(JSONOptions.isValidOption("variantPrimitivesAsString"))
     assert(JSONOptions.isValidOption("explodeEmbeddedArray"))
     assert(JSONOptions.isValidOption("useUnsafeRow"))
     assert(JSONOptions.isValidOption("enableStreamingTopLevelArray"))
@@ -4804,6 +4805,90 @@ abstract class JsonSuite
       Seq(Row("{true, null}"), Row("""{{"a":[],"b":null}, null}"""), Row("""{{"a":1}, null}"""),
         Row("{null, bad json}"), Row("{[1,2,3], null}"))
     )
+  }
+
+  test("json variant keeps primitives as strings with variantPrimitivesAsString") {
+    // A 50-digit integer does not fit a variant decimal (38 digits) and an exponent number is
+    // not a plain decimal, so both are normally stored as lossy doubles.
+    val bigInt = "1234567890" * 5
+    val content = Seq(
+      s"""{"i": 1, "big": $bigInt, "e": 1e2, "d": 1.50, "b": true, "f": false, "n": null,
+         |"s": "x", "arr": [1, false, null], "obj": {"x": -0.0}}""".stripMargin.replace("\n", " "),
+      "7",
+      "bad json"
+    ).mkString("\n").getBytes(StandardCharsets.UTF_8)
+    val asStrings = s"""{"arr":["1","false",null],"b":"true","big":"$bigInt","d":"1.50",""" +
+      """"e":"1e2","f":"false","i":"1","n":null,"obj":{"x":"-0.0"},"s":"x"}"""
+
+    withTempDir { dir =>
+      val path = new File(dir, "file.json").getAbsolutePath
+      Files.write(new File(path).toPath, content)
+
+      def readSingleVariant(options: Map[String, String]): DataFrame =
+        spark.read.format("json").options(options ++ Map("singleVariantColumn" -> "var"))
+          .load(path)
+
+      // Number and boolean tokens keep their text exactly as written. Nulls remain variant
+      // nulls, and objects and arrays keep their structure. Malformed records are unaffected.
+      checkAnswer(
+        readSingleVariant(Map("variantPrimitivesAsString" -> "true")).selectExpr("to_json(var)"),
+        Seq(Row(asStrings), Row("\"7\""), Row(null)))
+      checkAnswer(
+        readSingleVariant(Map("variantPrimitivesAsString" -> "true"))
+          .where("var:i is not null")
+          .selectExpr("schema_of_variant(var:big)", "schema_of_variant(var:e)",
+            "schema_of_variant(var:b)", "schema_of_variant(var:n)"),
+        Row("STRING", "STRING", "STRING", "VOID"))
+
+      // Without the option, or with it disabled, numbers and booleans keep their types. The
+      // existing `primitivesAsString` option does not affect variant values. Note that the decimal
+      // 1.50 is normalized to 1.5, dropping the trailing zero that the option preserves.
+      for (options <- Seq(Map.empty[String, String],
+          Map("variantPrimitivesAsString" -> "false"),
+          Map("primitivesAsString" -> "true"))) {
+        checkAnswer(
+          readSingleVariant(options)
+            .where("var:i is not null")
+            .selectExpr("schema_of_variant(var:i)", "schema_of_variant(var:big)",
+              "schema_of_variant(var:e)", "schema_of_variant(var:d)", "schema_of_variant(var:b)"),
+          Row("BIGINT", "DOUBLE", "DOUBLE", "DECIMAL(2,1)", "BOOLEAN"))
+      }
+
+      // Explicit VariantType columns behave the same.
+      checkAnswer(
+        spark.read.format("json").schema("big variant, b variant, n variant")
+          .option("variantPrimitivesAsString", "true")
+          .load(path)
+          .where("big is not null")
+          .selectExpr("to_json(big)", "to_json(b)", "to_json(n)"),
+        Row(s""""$bigInt"""", "\"true\"", "null"))
+    }
+  }
+
+  test("json variantPrimitivesAsString records whether the user set it") {
+    val unset = new JSONOptions(Map.empty[String, String], "UTC")
+    assert(unset.variantPrimitivesAsStringOpt.isEmpty)
+    assert(!unset.variantPrimitivesAsString)
+    for (value <- Seq(true, false)) {
+      val opts = new JSONOptions(Map("variantPrimitivesAsString" -> value.toString), "UTC")
+      assert(opts.variantPrimitivesAsStringOpt.contains(value))
+      assert(opts.variantPrimitivesAsString == value)
+    }
+  }
+
+  test("from_json with variant: variantPrimitivesAsString keeps primitives as strings") {
+    val df = Seq("""{"a": 1e2, "b": [true, 2], "c": NaN}""").toDF("value")
+    checkAnswer(
+      df.selectExpr("to_json(from_json(value, 'var variant', map('singleVariantColumn', 'var', " +
+        "'variantPrimitivesAsString', 'true')).var)"),
+      Row("""{"a":"1e2","b":["true","2"],"c":"NaN"}"""))
+    checkAnswer(
+      df.selectExpr("schema_of_variant(from_json(value, 'a variant', " +
+        "map('variantPrimitivesAsString', 'true')).a)"),
+      Row("STRING"))
+    checkAnswer(
+      df.selectExpr("schema_of_variant(from_json(value, 'a variant').a)"),
+      Row("DOUBLE"))
   }
 
   private def createTestFiles(dir: File, fileFormatWriter: Boolean,

@@ -9379,13 +9379,15 @@ object SQLConf {
 
   val XML_VARIANT_RESPECT_INFER_SCHEMA =
     buildConf("spark.sql.xml.variant.respectInferSchema")
+      .internal()
       .doc(
         "Kill switch for the SPARK-56554 fix. When true (default), the XML to Variant parser " +
         "honors the 'inferSchema' option: if 'inferSchema' is false, primitive leaf values " +
         "(text and attributes) are preserved as strings inside the Variant instead of being " +
         "inferred as boolean, long, or decimal. Set this conf to false to restore the " +
         "pre-SPARK-56554 behavior of always inferring types regardless of the 'inferSchema' " +
-        "option."
+        "option. Deprecated: use the 'variantPrimitivesAsString' XML option instead, which " +
+        "takes precedence over this conf when set."
       )
       .version("4.1.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -9545,7 +9547,9 @@ object SQLConf {
       DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
         "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\"."),
       DeprecatedConfig(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "4.1",
-        s"Use '${CONNECT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key}' instead.")
+        s"Use '${CONNECT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key}' instead."),
+      DeprecatedConfig(XML_VARIANT_RESPECT_INFER_SCHEMA.key, "4.4",
+        "Use the 'variantPrimitivesAsString' XML option instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)

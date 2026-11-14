@@ -46,8 +46,21 @@ public class VariantBuilder {
   }
 
   public VariantBuilder(boolean allowDuplicateKeys, boolean validateUnicodeInJsonParsing) {
+    this(allowDuplicateKeys, validateUnicodeInJsonParsing, false);
+  }
+
+  /**
+   * @param primitivesAsString when true, JSON number and boolean tokens are stored as variant
+   *     strings holding their text exactly as written in the input, instead of numeric or boolean
+   *     values. JSON nulls remain variant nulls.
+   */
+  public VariantBuilder(
+      boolean allowDuplicateKeys,
+      boolean validateUnicodeInJsonParsing,
+      boolean primitivesAsString) {
     this.allowDuplicateKeys = allowDuplicateKeys;
     this.validateUnicodeInJsonParsing = validateUnicodeInJsonParsing;
+    this.primitivesAsString = primitivesAsString;
   }
 
   /**
@@ -91,7 +104,18 @@ public class VariantBuilder {
    */
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
       boolean validateUnicodeInJsonParsing) throws IOException {
-    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys, validateUnicodeInJsonParsing);
+    return parseJson(parser, allowDuplicateKeys, validateUnicodeInJsonParsing, false);
+  }
+
+  /**
+   * Similar to {@link #parseJson(JsonParser, boolean, boolean)}, but additionally controls
+   * whether JSON number and boolean tokens are stored as strings holding their input text. See
+   * {@link #VariantBuilder(boolean, boolean, boolean)}.
+   */
+  public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
+      boolean validateUnicodeInJsonParsing, boolean primitivesAsString) throws IOException {
+    VariantBuilder builder = new VariantBuilder(
+      allowDuplicateKeys, validateUnicodeInJsonParsing, primitivesAsString);
     builder.buildJson(parser);
     return builder.result();
   }
@@ -1207,6 +1231,10 @@ public class VariantBuilder {
         break;
       }
       case VALUE_NUMBER_INT:
+        if (primitivesAsString) {
+          appendString(parser.getText());
+          break;
+        }
         try {
           appendLong(parser.getLongValue());
         } catch (InputCoercionException ignored) {
@@ -1215,13 +1243,19 @@ public class VariantBuilder {
         }
         break;
       case VALUE_NUMBER_FLOAT:
+        if (primitivesAsString) {
+          appendString(parser.getText());
+          break;
+        }
         parseFloatingPoint(parser);
         break;
       case VALUE_TRUE:
-        appendBoolean(true);
-        break;
       case VALUE_FALSE:
-        appendBoolean(false);
+        if (primitivesAsString) {
+          appendString(parser.getText());
+        } else {
+          appendBoolean(token == JsonToken.VALUE_TRUE);
+        }
         break;
       case VALUE_NULL:
         appendNull();
@@ -1301,4 +1335,7 @@ public class VariantBuilder {
   // Unpaired UTF-16 surrogate code units cause a `JsonParseException` to be thrown during
   // `buildJson`, which surfaces as a `MALFORMED_RECORD_IN_PARSING` error to SQL callers.
   private final boolean validateUnicodeInJsonParsing;
+  // When true, `buildJson` stores JSON number and boolean tokens as strings holding their input
+  // text. See `VariantBuilder(boolean, boolean, boolean)`.
+  private final boolean primitivesAsString;
 }

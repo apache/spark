@@ -220,6 +220,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>variantPrimitivesAsString</code></td>
+    <td><code>false</code></td>
+    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code>, or a <code>VariantType</code> column in the schema), stores JSON numbers and booleans as strings holding their text exactly as written, instead of numeric or boolean values. For example, <code>1e2</code> is kept as the string <code>"1e2"</code> instead of the double <code>100.0</code>, and a number with more digits than a decimal can hold is kept as written instead of being rounded to a double. JSON nulls remain variant nulls. This option does not affect non-variant columns; see <code>primitivesAsString</code> for those. JSON built-in functions such as <code>from_json</code> also observe this option.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>explodeEmbeddedArray</code></td>
     <td>(none)</td>
     <td>If specified, each input file is treated as a single JSON object document with a top-level array-valued field of the given name (e.g. <code>{"Records": [record1, record2, ...]}</code>). Each element of that array becomes one row, stored as a single column of <code>VariantType</code>, and anything outside the array is ignored. This is useful for ingesting formats such as AWS CloudTrail. Mutually exclusive with <code>singleVariantColumn</code>. Because each file is consumed as a whole document, line-based options such as <code>multiLine</code> and <code>lineSep</code> are ignored.</td>
