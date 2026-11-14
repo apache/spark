@@ -33,7 +33,11 @@ object ViewResolution {
     // operator.
 
     // Resolve all the UnresolvedRelations and Views in the child.
-    val newChild = AnalysisContext.withAnalysisContext(view.desc) {
+    val effectiveConf = View.effectiveSQLConf(
+      configs = view.desc.viewSQLConfigs,
+      isTempView = view.isTempView,
+      createSparkVersion = view.desc.createVersion)
+    val newChild = AnalysisContext.withAnalysisContext(view.desc, effectiveConf) {
       val nestedViewDepth = AnalysisContext.get.nestedViewDepth
       val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
       if (nestedViewDepth > maxNestedViewDepth) {
@@ -43,13 +47,7 @@ object ViewResolution {
           view
         )
       }
-      SQLConf.withExistingConf(
-        View.effectiveSQLConf(
-          configs = view.desc.viewSQLConfigs,
-          isTempView = view.isTempView,
-          createSparkVersion = view.desc.createVersion
-        )
-      ) {
+      SQLConf.withExistingConf(effectiveConf) {
         resolveChild(view.child)
       }
     }

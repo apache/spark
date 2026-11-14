@@ -708,6 +708,13 @@ private[sql] object CatalogManager extends Logging {
       JArray(parts.map(JString(_)).toList)).toList))
   }
 
+  /**
+   * Version of the persisted resolution-path semantics. Version 1 payloads were written before
+   * catalog-only PATH entries participated in two-part name resolution. Version 2 payloads use
+   * the same JSON representation, but may include catalog-only entries.
+   */
+  val CURRENT_RESOLUTION_PATH_VERSION: String = "2"
+
   private def parsePathEntries(storedPathStr: String): Either[String, Seq[Seq[String]]] = {
     import org.json4s.JsonAST.{JArray, JString}
     import org.json4s.jackson.JsonMethods.parse
@@ -761,6 +768,43 @@ private[sql] object CatalogManager extends Logging {
         throw new AnalysisException(
           message = s"Invalid stored SQL path metadata for $objectType '$objectName': " +
             s"$reason. Raw payload: $storedPathStr",
+          line = None,
+          startPosition = None,
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          context = Array.empty)
+    }
+  }
+
+  /**
+   * Parse a frozen path for analysis and upgrade legacy unversioned metadata in memory. Legacy
+   * paths could only contain schema entries, while two-part names were resolved through a
+   * separate mini-path containing `system` and the creation-time current catalog. Append those
+   * catalog entries in the historical order so old views and SQL functions keep their behavior.
+   */
+  def deserializePathEntriesForAnalysisOrFail(
+      storedPathStr: String,
+      storedPathVersion: Option[String],
+      creationCatalog: Option[String],
+      persistentCatalogFirst: Boolean,
+      objectType: String,
+      objectName: String): Seq[Seq[String]] = {
+    val entries = deserializePathEntriesOrFail(storedPathStr, objectType, objectName)
+    storedPathVersion match {
+      case Some(CURRENT_RESOLUTION_PATH_VERSION) => entries
+      case None | Some("1") =>
+        val persistentCatalog = creationCatalog.map(Seq(_)).toSeq
+        val catalogEntries = if (persistentCatalogFirst) {
+          persistentCatalog :+ Seq(SYSTEM_CATALOG_NAME)
+        } else {
+          Seq(Seq(SYSTEM_CATALOG_NAME)) ++ persistentCatalog
+        }
+        entries.filter(_.length > 1) ++ catalogEntries
+      case Some(version) =>
+        throw new AnalysisException(
+          message = s"Unsupported stored SQL path version '$version' for $objectType " +
+            s"'$objectName'.",
           line = None,
           startPosition = None,
           cause = None,

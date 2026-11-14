@@ -29,9 +29,27 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 case class RelationId(
     multipartIdentifier: Seq[String],
-    pathIdentifier: Option[Seq[String]] = None,
-    resolutionPathEntries: Option[Seq[Seq[String]]] = None,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty,
     isStreaming: Boolean = false,
-    timeTravelSpec: Option[TimeTravelSpec] = None
-)
+    timeTravelSpec: Option[TimeTravelSpec] = None,
+    pathIdentifier: Option[Seq[String]] = None,
+    resolutionPathEntries: Option[Seq[Seq[String]]] = None
+) {
+  def this(
+      multipartIdentifier: Seq[String],
+      options: CaseInsensitiveStringMap,
+      isStreaming: Boolean,
+      timeTravelSpec: Option[TimeTravelSpec]) = {
+    this(multipartIdentifier, options, isStreaming, timeTravelSpec, None, None)
+  }
+}
+
+object RelationId {
+  def apply(
+      multipartIdentifier: Seq[String],
+      options: CaseInsensitiveStringMap,
+      isStreaming: Boolean,
+      timeTravelSpec: Option[TimeTravelSpec]): RelationId = {
+    new RelationId(multipartIdentifier, options, isStreaming, timeTravelSpec, None, None)
+  }
+}

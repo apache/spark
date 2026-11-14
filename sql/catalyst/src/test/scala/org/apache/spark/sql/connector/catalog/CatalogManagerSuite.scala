@@ -177,6 +177,40 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     assert(parsed === entries)
   }
 
+  test("legacy persisted path is enriched with catalog entries in configured order") {
+    val schemaEntries = Seq(
+      Seq("system", "builtin"),
+      Seq("spark_catalog", "default"))
+    val stored = CatalogManager.serializePathEntries(
+      schemaEntries ++ Seq(Seq("other_catalog"), Seq("system")))
+
+    def read(persistentCatalogFirst: Boolean): Seq[Seq[String]] =
+      CatalogManager.deserializePathEntriesForAnalysisOrFail(
+        stored,
+        storedPathVersion = None,
+        creationCatalog = Some("spark_catalog"),
+        persistentCatalogFirst = persistentCatalogFirst,
+        objectType = "view",
+        objectName = "v")
+
+    assert(read(persistentCatalogFirst = false) ===
+      schemaEntries ++ Seq(Seq("system"), Seq("spark_catalog")))
+    assert(read(persistentCatalogFirst = true) ===
+      schemaEntries ++ Seq(Seq("spark_catalog"), Seq("system")))
+  }
+
+  test("current persisted path version preserves an intentionally schema-only path") {
+    val entries = Seq(Seq("pathcat", "ns"))
+    val stored = CatalogManager.serializePathEntries(entries)
+    assert(CatalogManager.deserializePathEntriesForAnalysisOrFail(
+      stored,
+      storedPathVersion = Some(CatalogManager.CURRENT_RESOLUTION_PATH_VERSION),
+      creationCatalog = Some("spark_catalog"),
+      persistentCatalogFirst = false,
+      objectType = "view",
+      objectName = "v") === entries)
+  }
+
   test("deserializePathEntriesOrFail raises a clear AnalysisException for bad payloads") {
     val e = intercept[AnalysisException] {
       CatalogManager.deserializePathEntriesOrFail(

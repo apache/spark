@@ -155,6 +155,10 @@ class RelationResolution(
    * Resolution search path formatted for TABLE_OR_VIEW_NOT_FOUND error messages.
    * Same order as [[relationResolutionSteps]]; each entry is quoted (e.g. "`system`.`session`").
    */
+  def resolutionSearchPathForError: Seq[String] = {
+    relationResolutionEntries.map(toSQLId)
+  }
+
   def resolutionSearchPathForError(nameParts: Seq[String]): Seq[String] = {
     CatalogManager.identifierPathEntries(
       relationResolutionEntries,

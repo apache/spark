@@ -187,6 +187,14 @@ case class SQLFunction(
   /** Frozen PATH string persisted when the function was created with SQL PATH enabled. */
   def functionStoredResolutionPath: Option[String] =
     properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH)
+
+  /** Version of the frozen PATH resolution semantics. Missing means the legacy version. */
+  def functionStoredResolutionPathVersion: Option[String] =
+    properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH_VERSION)
+
+  /** Catalog that was current when the function was created. */
+  def functionCreationCatalog: Option[String] =
+    properties.get(FUNCTION_CATALOG_AND_NAMESPACE_PART_PREFIX + "0")
 }
 
 object SQLFunction {
@@ -200,6 +208,9 @@ object SQLFunction {
    * [[CatalogTable.VIEW_RESOLUTION_PATH]]).
    */
   val FUNCTION_RESOLUTION_PATH: String = "function.resolutionPath"
+
+  /** Version of [[FUNCTION_RESOLUTION_PATH]] resolution semantics. */
+  val FUNCTION_RESOLUTION_PATH_VERSION: String = "function.resolutionPathVersion"
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 

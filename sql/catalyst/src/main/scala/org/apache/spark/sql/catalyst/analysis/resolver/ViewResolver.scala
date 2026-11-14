@@ -90,24 +90,24 @@ class ViewResolver(
    *     [[UnresolvedRelation.options]].
    */
   override def resolve(unresolvedView: View): View = {
-    val (resolvedChild, usedViewResolutionContext) = withViewResolutionContext(unresolvedView) {
-      SQLConf.withExistingConf(
-        View.effectiveSQLConf(
-          configs = unresolvedView.desc.viewSQLConfigs,
-          isTempView = unresolvedView.isTempView,
-          createSparkVersion = unresolvedView.desc.createVersion)
-      ) {
-        checkResolverGuard(unresolvedView)
+    val effectiveConf = View.effectiveSQLConf(
+      configs = unresolvedView.desc.viewSQLConfigs,
+      isTempView = unresolvedView.isTempView,
+      createSparkVersion = unresolvedView.desc.createVersion)
+    val (resolvedChild, usedViewResolutionContext) =
+      withViewResolutionContext(unresolvedView, effectiveConf) {
+        SQLConf.withExistingConf(effectiveConf) {
+          checkResolverGuard(unresolvedView)
 
-        cteRegistry.pushScope(isRoot = true, isOpaque = true)
+          cteRegistry.pushScope(isRoot = true, isOpaque = true)
 
-        try {
-          resolver.lookupMetadataAndResolve(unresolvedView.child)
-        } finally {
-          cteRegistry.popScope()
+          try {
+            resolver.lookupMetadataAndResolve(unresolvedView.child)
+          } finally {
+            cteRegistry.popScope()
+          }
         }
       }
-    }
 
     resolvedChild.setAnalyzed()
 
@@ -125,9 +125,9 @@ class ViewResolver(
    * `unresolvedView` resolution. The context is popped back to the previous one after the
    * `body` is executed, because views may be nested.
    */
-  private def withViewResolutionContext(unresolvedView: View)(
+  private def withViewResolutionContext(unresolvedView: View, resolutionConf: SQLConf)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
-    AnalysisContext.withAnalysisContext(unresolvedView.desc) {
+    AnalysisContext.withAnalysisContext(unresolvedView.desc, resolutionConf) {
       val prevContext = if (viewResolutionContextStack.isEmpty()) {
         ViewResolutionContext(
           nestedViewDepth = 0,

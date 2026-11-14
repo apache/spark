@@ -23,7 +23,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.analysis.SQLScalarFunction
 import org.apache.spark.sql.catalyst.catalog.{
@@ -203,6 +203,8 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
           val metadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
           val storedPath = metadata.viewStoredResolutionPath.getOrElse(
             fail("Expected persisted view resolution path to be set"))
+          assert(metadata.viewStoredResolutionPathVersion.contains(
+            CatalogManager.CURRENT_RESOLUTION_PATH_VERSION))
           val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
             fail(s"Expected a valid serialized path, got: $storedPath"))
           assert(parsed.head == Seq("spark_catalog", "path_materialized_view"))
@@ -233,6 +235,8 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
           val function = analyzedSqlFunction(testFunctionName)
           val storedPath = function.functionStoredResolutionPath.getOrElse(
             fail("Expected persisted function resolution path to be set"))
+          assert(function.functionStoredResolutionPathVersion.contains(
+            CatalogManager.CURRENT_RESOLUTION_PATH_VERSION))
           val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
             fail(s"Expected a valid serialized path, got: $storedPath"))
           assert(parsed.head == Seq("spark_catalog", "path_materialized_fn"))
@@ -258,11 +262,12 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
             // Persisted objects strip system.session; a session-only path should not be persisted.
             sql("SET PATH = system.session")
             sql(
-              s"CREATE VIEW $testViewName AS SELECT id FROM spark_catalog.default.path_empty_src")
+              s"CREATE VIEW default.$testViewName " +
+                "AS SELECT id FROM spark_catalog.default.path_empty_src")
             val metadata =
               spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
             assert(metadata.viewStoredResolutionPath.isEmpty)
-            checkAnswer(sql(s"SELECT id FROM default.$testViewName"), Row(1))
+            checkAnswer(sql(s"SELECT id FROM spark_catalog.default.$testViewName"), Row(1))
           } finally {
             sql("SET PATH = DEFAULT_PATH")
           }
@@ -279,7 +284,9 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
              |CREATE OR REPLACE FUNCTION $testFunctionName()
              |RETURN SELECT 1
              |""".stripMargin)
-        val function = analyzedSqlFunction(testFunctionName)
+        val function = SQLFunction.fromCatalogFunction(
+          spark.sessionState.catalog.getFunctionMetadata(FunctionIdentifier(testFunctionName)),
+          spark.sessionState.sqlParser)
         val broken = function.copy(
           properties = function.properties + (SQLFunction.FUNCTION_RESOLUTION_PATH -> "{bad-json"))
         val e = intercept[AnalysisException] {
@@ -288,6 +295,83 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
           }
         }
         assert(e.getMessage.contains("Invalid stored SQL path metadata for SQL function"))
+      }
+    }
+  }
+
+  test("legacy persisted view path resolves two-part relations through creation catalog") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      sql("CREATE DATABASE session")
+      sql("CREATE DATABASE builtin")
+      try {
+        sql("CREATE TABLE session.legacy_path_src (id INT) USING parquet")
+        sql("INSERT INTO session.legacy_path_src VALUES (1)")
+        sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          sql(
+            s"CREATE VIEW $testViewName AS " +
+              "SELECT id, builtin.abs(id) AS result FROM session.legacy_path_src")
+        }
+
+        val catalog = spark.sessionState.catalog
+        val metadata = catalog.getTableMetadata(TableIdentifier(testViewName))
+        val legacyPath = CatalogManager.deserializePathEntries(
+          metadata.viewStoredResolutionPath.get).get.filter(_.length > 1)
+        catalog.alterTable(metadata.copy(properties =
+          metadata.properties
+            .updated(
+              CatalogTable.VIEW_RESOLUTION_PATH,
+              CatalogManager.serializePathEntries(legacyPath))
+            .removed(CatalogTable.VIEW_RESOLUTION_PATH_VERSION)))
+
+        checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(1, 100))
+      } finally {
+        sql(s"DROP VIEW IF EXISTS $testViewName")
+        sql("DROP FUNCTION IF EXISTS builtin.abs")
+        sql("DROP TABLE IF EXISTS session.legacy_path_src")
+        sql("DROP DATABASE IF EXISTS session")
+        sql("DROP DATABASE IF EXISTS builtin")
+      }
+    }
+  }
+
+  test("legacy persisted function path preserves two-part routine resolution order") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      sql("CREATE DATABASE builtin")
+      try {
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+          sql(
+            s"""
+               |CREATE FUNCTION $testFunctionName(x INT)
+               |RETURNS INT
+               |RETURN builtin.abs(x)
+               |""".stripMargin)
+        }
+
+        val function = SQLFunction.fromCatalogFunction(
+          spark.sessionState.catalog.getFunctionMetadata(FunctionIdentifier(testFunctionName)),
+          spark.sessionState.sqlParser)
+        val legacyPath = CatalogManager.deserializePathEntries(
+          function.functionStoredResolutionPath.get).get.filter(_.length > 1)
+        val legacyFunction = function.copy(properties =
+          function.properties
+            .updated(
+              SQLFunction.FUNCTION_RESOLUTION_PATH,
+              CatalogManager.serializePathEntries(legacyPath))
+            .removed(SQLFunction.FUNCTION_RESOLUTION_PATH_VERSION))
+        spark.sessionState.catalog.alterFunction(legacyFunction.toCatalogFunction)
+
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "false") {
+          checkAnswer(sql(s"SELECT $testFunctionName(-5)"), Row(5))
+        }
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          checkAnswer(sql(s"SELECT $testFunctionName(-5)"), Row(-500))
+        }
+      } finally {
+        sql(s"DROP FUNCTION IF EXISTS $testFunctionName")
+        sql("DROP FUNCTION IF EXISTS builtin.abs")
+        sql("DROP DATABASE IF EXISTS builtin")
       }
     }
   }

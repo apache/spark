@@ -261,6 +261,10 @@ object AnalysisContext {
   private def set(context: AnalysisContext): Unit = value.set(context)
 
   def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
+    withAnalysisContext(viewDesc, SQLConf.get)(f)
+  }
+
+  def withAnalysisContext[A](viewDesc: CatalogTable, resolutionConf: SQLConf)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
       SQLConf.get.maxNestedViewDepth
@@ -271,8 +275,13 @@ object AnalysisContext {
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
       resolutionPathEntries = viewDesc.viewStoredResolutionPath
-        .map(CatalogManager.deserializePathEntriesOrFail(
-          _, "view", viewDesc.identifier.unquotedString)),
+        .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
+          _,
+          viewDesc.viewStoredResolutionPathVersion,
+          viewDesc.viewCatalogAndNamespace.headOption,
+          resolutionConf.persistentCatalogFirst,
+          "view",
+          viewDesc.identifier.unquotedString)),
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
@@ -296,8 +305,13 @@ object AnalysisContext {
     // Function body analysis should not inherit any caller-pinned path; use only function metadata.
     val context = originContext.copy(
       resolutionPathEntries = function.functionStoredResolutionPath
-        .map(CatalogManager.deserializePathEntriesOrFail(
-          _, "SQL function", function.name.unquotedString)),
+        .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
+          _,
+          function.functionStoredResolutionPathVersion,
+          function.functionCreationCatalog,
+          SQLConf.get.persistentCatalogFirst,
+          "SQL function",
+          function.name.unquotedString)),
       // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator by default. A SQL
       // function has no IDENTIFIER-variable metadata of its own that is consulted on resolution, so
       // a variable its body reads through an IDENTIFIER clause is part of the enclosing object's

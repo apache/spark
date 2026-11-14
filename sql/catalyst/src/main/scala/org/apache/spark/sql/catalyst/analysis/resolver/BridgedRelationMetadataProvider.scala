@@ -34,6 +34,14 @@ class BridgedRelationMetadataProvider(
     override val relationResolution: RelationResolution,
     analyzerBridgeState: AnalyzerBridgeState
 ) extends RelationMetadataProvider {
+  def this(
+      catalogManager: CatalogManager,
+      relationResolution: RelationResolution,
+      analyzerBridgeState: AnalyzerBridgeState,
+      viewResolver: ViewResolver) = {
+    this(catalogManager, relationResolution, analyzerBridgeState)
+  }
+
   override val relationsWithResolvedMetadata = new RelationsWithResolvedMetadata
 
   /**

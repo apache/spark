@@ -26,8 +26,10 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
   ResolverGuard
 }
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{JsonArray, JsonObjectExpr, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -511,6 +513,18 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
           sql("SET PATH = current_catalog, system")
           val view = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
           AnalysisContext.withAnalysisContext(view) {
+            checkResolverGuard("SELECT builtin.abs(-1)")
+          }
+
+          val legacyPath = CatalogManager.deserializePathEntries(
+            view.viewStoredResolutionPath.get).get.filter(_.length > 1)
+          val legacyView = view.copy(properties =
+            view.properties
+              .updated(
+                CatalogTable.VIEW_RESOLUTION_PATH,
+                CatalogManager.serializePathEntries(legacyPath))
+              .removed(CatalogTable.VIEW_RESOLUTION_PATH_VERSION))
+          AnalysisContext.withAnalysisContext(legacyView) {
             checkResolverGuard("SELECT builtin.abs(-1)")
           }
         } finally {

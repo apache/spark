@@ -626,6 +626,10 @@ case class CatalogTable(
   def viewStoredResolutionPath: Option[String] =
     properties.get(CatalogTable.VIEW_RESOLUTION_PATH)
 
+  /** Version of the frozen PATH resolution semantics. Missing means the legacy version. */
+  def viewStoredResolutionPathVersion: Option[String] =
+    properties.get(CatalogTable.VIEW_RESOLUTION_PATH_VERSION)
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[URI] = storage.locationUri,
@@ -814,6 +818,9 @@ object CatalogTable {
 
   /** Frozen expanded PATH at view creation (PATH feature); not a SQL config property. */
   val VIEW_RESOLUTION_PATH = VIEW_PREFIX + "resolutionPath"
+
+  /** Version of [[VIEW_RESOLUTION_PATH]] resolution semantics. */
+  val VIEW_RESOLUTION_PATH_VERSION = VIEW_PREFIX + "resolutionPathVersion"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 

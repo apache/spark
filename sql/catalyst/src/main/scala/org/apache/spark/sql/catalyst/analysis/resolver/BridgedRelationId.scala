@@ -30,4 +30,18 @@ case class BridgedRelationId(
     unresolvedRelation: UnresolvedRelation,
     catalogAndNamespace: Seq[String],
     resolutionPathEntries: Option[Seq[Seq[String]]] = None
-)
+) {
+  def this(
+      unresolvedRelation: UnresolvedRelation,
+      catalogAndNamespace: Seq[String]) = {
+    this(unresolvedRelation, catalogAndNamespace, None)
+  }
+}
+
+object BridgedRelationId {
+  def apply(
+      unresolvedRelation: UnresolvedRelation,
+      catalogAndNamespace: Seq[String]): BridgedRelationId = {
+    new BridgedRelationId(unresolvedRelation, catalogAndNamespace, None)
+  }
+}

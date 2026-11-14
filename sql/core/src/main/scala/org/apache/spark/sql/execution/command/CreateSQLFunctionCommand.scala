@@ -592,8 +592,11 @@ case class CreateSQLFunctionCommand(
       manager, conf, stripSession = !isTemp)
     val resolutionPathProps =
       if (expandedPathEntries.nonEmpty) {
-        Map(SQLFunction.FUNCTION_RESOLUTION_PATH ->
-          CatalogManager.serializePathEntries(expandedPathEntries))
+        Map(
+          SQLFunction.FUNCTION_RESOLUTION_PATH ->
+            CatalogManager.serializePathEntries(expandedPathEntries),
+          SQLFunction.FUNCTION_RESOLUTION_PATH_VERSION ->
+            CatalogManager.CURRENT_RESOLUTION_PATH_VERSION)
       } else {
         Map.empty[String, String]
       }

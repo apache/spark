@@ -10934,6 +10934,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def persistentCatalogFirst: Boolean = getConf(SQLConf.PERSISTENT_CATALOG_FIRST)
 
+  def prioritizeSystemCatalog: Boolean = !persistentCatalogFirst
+
   def pathEnabled: Boolean = getConf(SQLConf.PATH_ENABLED)
 
   def defaultPath: String = getConf(SQLConf.DEFAULT_PATH)
@@ -10961,9 +10963,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * @param schemaEntries persistent schema path entries (may be empty).
    * @param catalogEntries persistent catalog path entries (may be empty).
    */
+  def defaultPathOrder(schemaEntries: Seq[Seq[String]]): Seq[Seq[String]] = {
+    defaultPathOrder(schemaEntries, Seq.empty)
+  }
+
   def defaultPathOrder(
       schemaEntries: Seq[Seq[String]],
-      catalogEntries: Seq[Seq[String]] = Seq.empty): Seq[Seq[String]] = {
+      catalogEntries: Seq[Seq[String]]): Seq[Seq[String]] = {
     val order = sessionFunctionResolutionOrder
     val session = Seq("system", "session")
     val builtin = Seq("system", "builtin")
