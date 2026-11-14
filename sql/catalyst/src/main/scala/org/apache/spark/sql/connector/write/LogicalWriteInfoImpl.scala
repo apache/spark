@@ -43,14 +43,12 @@ object LogicalWriteInfoImpl {
       schema: StructType,
       options: CaseInsensitiveStringMap,
       rowIdSchema: Option[StructType],
-      metadataSchema: Option[StructType],
-      isStreaming: Boolean): LogicalWriteInfoImpl = {
+      metadataSchema: Option[StructType]): LogicalWriteInfoImpl = {
     LogicalWriteInfoImpl(
       queryId,
       schema,
       options,
       rowIdSchema.toJava,
-      metadataSchema.toJava,
-      isStreaming)
+      metadataSchema.toJava)
   }
 }

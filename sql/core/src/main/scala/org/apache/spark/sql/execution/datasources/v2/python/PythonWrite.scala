@@ -48,10 +48,9 @@ class PythonWrite(
   /**
    * The distribution and ordering the Python writer asks for, fetched from Python once per write.
    *
-   * `V2Writes` calls each `RequiresDistributionAndOrdering` method separately, so the result is
-   * cached to keep this to a single Python worker invocation. When the feature is disabled, or
-   * for a streaming write, we skip the worker and report the API defaults, leaving planning
-   * unchanged.
+   * The planner calls each `RequiresDistributionAndOrdering` method separately, so the result is
+   * cached to keep this to one Python worker run. When the feature is disabled, or for a streaming
+   * write, no worker runs and the API defaults leave planning unchanged.
    */
   private lazy val requirements: PythonWriteRequirements = {
     if (SQLConf.get.pythonWriteDistributionAndOrdering && !isStreamingWrite) {

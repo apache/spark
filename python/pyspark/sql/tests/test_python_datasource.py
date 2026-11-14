@@ -1511,6 +1511,7 @@ class BasePythonDataSourceTestsMixin:
 
     def _write_conf(self, enabled=True):
         return {
+            "spark.sql.adaptive.enabled": True,
             self.WRITE_DIST_CONF: enabled,
             self.NO_COALESCE_CONF: False,
             self.SHUFFLE_PARTITIONS_CONF: 4,
@@ -1597,7 +1598,7 @@ class BasePythonDataSourceTestsMixin:
             [(k, v) for v in range(3) for k in ["a", "b"]], "key string, value int"
         ).repartition(4)
 
-    def test_write_no_requirements_by_default(self):
+    def test_write_no_requirements_keeps_input_layout(self):
         with tempfile.TemporaryDirectory(prefix="write_req_default") as d:
             self._register_write_requirements_source("write_req_default", d)
             df = self._write_df()
@@ -1778,13 +1779,14 @@ class BasePythonDataSourceTestsMixin:
                 distribution=ClusteredDistribution((("key",),)),
                 ordering=[SortOrder(("value",), SortDirection.DESCENDING)],
             )
+            df = self._write_df()
             with self.sql_conf(self._write_conf(enabled=False)):
-                self._write_df().write.format("write_req_disabled").mode("append").save()
-            tasks = self._read_tasks(d)
-            # With the config off the requirements are ignored: rows are neither clustered
-            # by key nor sorted, so more than one task sees both keys.
-            self.assertTrue(any(len({key for key, _ in rows}) > 1 for rows in tasks))
-            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+                df.write.format("write_req_disabled").mode("append").save()
+                expected = [
+                    [[r.key, r.value] for r in rows] for rows in df.rdd.glom().collect() if rows
+                ]
+            # With the config off the requirements are ignored: the input layout is untouched.
+            self.assertEqual(self._read_tasks(d), expected)
 
     def test_write_requirements_skipped_for_streaming(self):
         # The requirements come from the batch writer, which this streaming-only sink lacks,

@@ -49,15 +49,12 @@ _JVM_LONG_MAX = 2**63 - 1
 
 def serialize_column_path(writer: DataSourceWriter, column: Any) -> list:
     """Validates a `ColumnPath` and converts it to a JSON-serializable list."""
-    if isinstance(column, str) or not isinstance(column, (tuple, list)):
-        raise PySparkValueError(
-            errorClass="DATA_SOURCE_INVALID_COLUMN_PATH",
-            messageParameters={
-                "type": type(writer).__name__,
-                "column": repr(column),
-            },
-        )
-    if len(column) == 0 or not all(isinstance(part, str) for part in column):
+    if (
+        isinstance(column, str)
+        or not isinstance(column, (tuple, list))
+        or len(column) == 0
+        or not all(isinstance(part, str) for part in column)
+    ):
         raise PySparkValueError(
             errorClass="DATA_SOURCE_INVALID_COLUMN_PATH",
             messageParameters={

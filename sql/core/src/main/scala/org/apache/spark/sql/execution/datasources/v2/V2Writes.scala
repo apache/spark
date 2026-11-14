@@ -172,8 +172,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema = None,
-      metadataSchema,
-      isStreaming)
+      metadataSchema).copy(isStreaming = isStreaming)
     table.asWritable.newWriteBuilder(info)
   }
 
@@ -192,8 +191,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema,
-      metadataSchema,
-      isStreaming = false)
+      metadataSchema)
 
     val writeBuilder = table.asWritable.newWriteBuilder(info)
     assert(writeBuilder.isInstanceOf[DeltaWriteBuilder], s"$writeBuilder must be DeltaWriteBuilder")
