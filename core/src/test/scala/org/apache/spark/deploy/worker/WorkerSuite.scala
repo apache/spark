@@ -444,6 +444,20 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
 
+  test("failed app leaf creation removes the executor directory") {
+    val supplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val sparkConf = new SparkConf()
+    val worker = makeWorker(sparkConf, supplier)
+    val roots = Utils.getOrCreateLocalRootDirs(sparkConf).map(new File(_))
+    val before = roots.flatMap(_.listFiles()).map(_.getAbsolutePath).toSet
+    intercept[IOException] {
+      worker.createExecutorLocalDirs("x" * 300)
+    }
+    assert(roots.flatMap(_.listFiles()).map(_.getAbsolutePath).toSet === before)
+  }
+
   test("app cleanup uses the LaunchExecutor local dir layout") {
     val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
       override def get: ExternalShuffleService = shuffleService
@@ -478,6 +492,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
       eventually(timeout(1.second), interval(10.milliseconds)) {
         assert(!secondExecutorDir.exists())
       }
+      assert(sibling.exists())
     } finally {
       Utils.deleteRecursively(executorDir)
       Utils.deleteRecursively(secondExecutorDir)

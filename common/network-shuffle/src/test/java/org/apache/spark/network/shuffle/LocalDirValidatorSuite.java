@@ -79,6 +79,20 @@ public class LocalDirValidatorSuite {
   }
 
   @Test
+  public void rejectsAppIdNestedUnderAnotherYarnApplication() throws Exception {
+    File root = Files.createTempDirectory("ess-nm-local").toFile();
+    try {
+      File nested = new File(root, "usercache/u/appcache/app1/blockmgr-x/app0");
+      assertTrue(nested.mkdirs(), "precondition: directory created");
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
+      assertThrows(IllegalArgumentException.class,
+        () -> validator.validate(new String[] { nested.getPath() }, "app0"));
+    } finally {
+      JavaUtils.deleteRecursively(root);
+    }
+  }
+
+  @Test
   public void acceptsYarnAppScopedDir() throws Exception {
     File root = Files.createTempDirectory("ess-nm-local").toFile();
     try {
@@ -102,6 +116,22 @@ public class LocalDirValidatorSuite {
       // Both the app dir and the blockmgr dir below it must be accepted.
       validator.validate(new String[] { ownDir.getPath() }, "app0");
       validator.validate(new String[] { blockMgrDir.getPath() }, "app0");
+    } finally {
+      JavaUtils.deleteRecursively(root);
+    }
+  }
+
+  @Test
+  public void acceptsAppScopedDirWithUnrelatedRoots() throws Exception {
+    File root = Files.createTempDirectory("ess-local-root").toFile();
+    try {
+      File ownDir = new File(root, "spark-random/executor-random/app0");
+      assertTrue(ownDir.mkdirs(), "precondition: app directory created");
+      String[] roots = java.util.stream.Stream.concat(
+        java.util.Arrays.stream(File.listRoots()).map(File::getPath),
+        java.util.stream.Stream.of(root.getPath())).toArray(String[]::new);
+      LocalDirValidator validator = new LocalDirValidator(roots, true);
+      validator.validate(new String[] { ownDir.getPath() }, "app0");
     } finally {
       JavaUtils.deleteRecursively(root);
     }

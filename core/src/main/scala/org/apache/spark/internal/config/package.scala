@@ -913,7 +913,8 @@ package object config {
       .doc("Whether the external shuffle service requires every local directory an executor " +
         "reports at registration to use the registering application's own directory: the " +
         "path must be spark-*/executor-*/<url-encoded-appId>, optionally followed by " +
-        "blockmgr-*, under one of the service's configured local directory roots. This " +
+        "blockmgr-*, or below appcache/<appId> (the YARN layout), under one of the " +
+        "service's configured local directory roots. Both layouts are accepted. This " +
         "guards against mis-registration (e.g. a bug " +
         "or race mixing up application directories); it is not an isolation boundary against " +
         "malicious applications, because the application id is supplied by the client and " +

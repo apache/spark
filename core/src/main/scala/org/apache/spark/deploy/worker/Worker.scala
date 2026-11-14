@@ -758,12 +758,18 @@ private[deploy] class Worker(
         // Keep the random root and executor directories (and their shutdown-hook cleanup),
         // adding a URL-encoded app id leaf for the shuffle service's app-scope check.
         val executorDir = Utils.createDirectory(dir, namePrefix = "executor")
-        val appDir = new File(executorDir, URLEncoder.encode(appId, StandardCharsets.UTF_8))
-        if (!Utils.createDirectory(appDir)) {
-          throw new IOException(s"Failed to create directory $appDir")
+        try {
+          val appDir = new File(executorDir, URLEncoder.encode(appId, StandardCharsets.UTF_8))
+          if (!Utils.createDirectory(appDir)) {
+            throw new IOException(s"Failed to create directory $appDir")
+          }
+          Utils.chmod700(appDir)
+          Some(appDir.getAbsolutePath())
+        } catch {
+          case e: IOException =>
+            Utils.deleteRecursively(executorDir)
+            throw e
         }
-        Utils.chmod700(appDir)
-        Some(appDir.getAbsolutePath())
       } catch {
         case e: IOException =>
           logWarning(log"${MDC(ERROR, e.getMessage)}. Ignoring this directory.")
