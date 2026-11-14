@@ -275,28 +275,6 @@ if TYPE_CHECKING:
     from pyspark.sql import SparkSession
     from pyspark.sql._typing import DataTypeOrString
 
-# Categories that represent numeric (non-string) scalar types.
-_NUMERIC_CATS = frozenset(("numeric", "integer", "float"))
-
-
-def _is_numeric_cat(cat: str) -> bool:
-    """True for any numeric sub-category (``"numeric"``, ``"integer"``, ``"float"``)."""
-    return cat in _NUMERIC_CATS
-
-
-def _wider_numeric(lc: str, rc: str) -> str:
-    """Return the wider of two numeric categories (numeric > float > integer)."""
-    if not (_is_numeric_cat(lc) and _is_numeric_cat(rc)):
-        raise UnsupportedOperationException(
-            f"_wider_numeric called with non-numeric categories: {lc!r}, {rc!r}"
-        )
-    if "numeric" in (lc, rc):
-        return "numeric"
-    if "float" in (lc, rc):
-        return "float"
-    return "integer"
-
-
 # Input-type categories. "numeric" spans every numeric column type that has a
 # faithful Python counterpart -- Byte/Short/Integer/Long/DoubleType, so neither
 # DecimalType nor FloatType (see the module docstring); "integral" and
@@ -561,14 +539,14 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
             return _is_definitely_basic_type(operand)
         case ast.Name():
             return True
-        case ast.Call(func=ast.Name(id="len"), args=[_], keywords=[]):
-            # len() always returns an int: CPython raises if __len__ returns anything else.
-            return True
         case ast.Call(func=ast.Name(id=name), args=args) if name in _SUPPORTED_BUILTINS:
             # abs/min/max/round of basic types are basic types. A name that no
             # longer refers to the builtin is caught when the call is lowered
             # (``_lower_builtin_call``), which raises there rather than here.
             return all(_is_definitely_basic_type(a) for a in args)
+        case ast.Call(func=ast.Name(id="len"), args=[_], keywords=[]):
+            # len() always returns an int: CPython raises if __len__ returns anything else.
+            return True
         case _:
             return False
 
@@ -702,24 +680,6 @@ class CatalystTranspiler(AbstractTranspiler):
         if len(statements) == 0:
             return lit(None)
         return self._convert_chunk(params, statements[0])
-
-    def _is_nonnull_node(self, params: List[str], node: ast.AST) -> bool:
-        """Return True when ``node`` is statically known to produce a non-null value.
-
-        A non-None literal constant is always non-null. A parameter name is
-        non-null when proven so by an enclosing ``is not None`` guard recorded
-        in ``self._nonnull_params``. ``len(x)`` is non-null when ``x`` is non-null
-        because ``length`` of a non-null string always returns a non-null integer.
-        """
-        match node:
-            case ast.Constant(value=v):
-                return v is not None
-            case ast.Name(id=name) if name in params:
-                return name in self._nonnull_params
-            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
-                return self._is_nonnull_node(params, arg)
-            case _:
-                return False
 
     def _builtin_call_category(self, params: List[str], name: str, args: List[ast.expr]) -> str:
         """Category of a supported builtin call, following Python's own typing."""
@@ -1158,6 +1118,24 @@ class CatalystTranspiler(AbstractTranspiler):
         round_col = self._convert_chunk(params, args[0])
         return _raise_on_null_operand("round()", bround(round_col, scale), round_col)
 
+    def _is_nonnull_node(self, params: List[str], node: ast.AST) -> bool:
+        """Return True when ``node`` is statically known to produce a non-null value.
+
+        A non-None literal constant is always non-null. A parameter name is
+        non-null when proven so by an enclosing ``is not None`` guard recorded
+        in ``self._nonnull_params``. ``len(x)`` is non-null when ``x`` is non-null
+        because ``length`` of a non-null string always returns a non-null integer.
+        """
+        match node:
+            case ast.Constant(value=v):
+                return v is not None
+            case ast.Name(id=name) if name in params:
+                return name in self._nonnull_params
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                return self._is_nonnull_node(params, arg)
+            case _:
+                return False
+
     def _safe_category(self, params: List[str], node: Optional[ast.AST]) -> Optional[str]:
         """Best-effort input-type category for an if/else branch, or ``None`` when
         it can't be pinned down statically.
@@ -1306,9 +1284,6 @@ class CatalystTranspiler(AbstractTranspiler):
         where Python's ``==`` is simply False. Refuse those so the UDF falls
         back to interpreted Python. A ``None`` literal operand stays allowed
         (the four-branch NULL handling above reproduces Python exactly).
-        Numeric sub-categories (``"integer"`` vs ``"float"``) are treated as
-        compatible; Spark widens to double in the comparison.
-
         Spark treats ``NaN = NaN`` as true, while Python's ``nan == nan`` is
         False, so a numeric variant that could hold a double tests for NaN
         before evaluating the Spark comparison -- see ``_nan_guard``. NULL is
@@ -1331,24 +1306,6 @@ class CatalystTranspiler(AbstractTranspiler):
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
         right_null = right_col.isNull()
-        # NaN guard: Python's `NaN == NaN` is False (IEEE 754 reflexivity fails),
-        # but Spark's EqualTo returns True. Emit only for numeric operands, and
-        # skip only when both are provably integral ("integer"); "numeric" is an
-        # unknown sub-type that may resolve to a float column, so it keeps the guard.
-        if (
-            lc is not None
-            and rc is not None
-            and _is_numeric_cat(lc)
-            and _is_numeric_cat(rc)
-            and not (lc == "integer" and rc == "integer")
-        ):
-            nan_result = lit(not equal)
-            nan_cmp = isnan(left_col) | isnan(right_col)
-            value_cmp: Column = when(nan_cmp, nan_result).otherwise(
-                left_col == right_col if equal else left_col != right_col
-            )
-        else:
-            value_cmp = left_col == right_col if equal else left_col != right_col
         if equal:
             both_null_val: Column = lit(True)
             one_null_val: Column = lit(False)
@@ -1426,8 +1383,11 @@ class CatalystTranspiler(AbstractTranspiler):
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
+        nan_guard = self._nan_guard(lc, rc, left_col, right_col)
         if self._is_nonnull_node(params, left_node) and self._is_nonnull_node(params, right_node):
-            return op(left_col, right_col)
+            if nan_guard is None:
+                return op(left_col, right_col)
+            return when(nan_guard, lit(False)).otherwise(op(left_col, right_col))
         null_guard = left_col.isNull() | right_col.isNull()
         err = lit(
             "Python UDF transpiler: cannot compare NULL with operator "
@@ -1435,7 +1395,6 @@ class CatalystTranspiler(AbstractTranspiler):
             "`is not None` guard or filter NULLs upstream."
         )
         self._null_guard_emitted = True
-        nan_guard = self._nan_guard(lc, rc, left_col, right_col)
         guarded = when(null_guard, raise_error(err))
         if nan_guard is not None:
             guarded = guarded.when(nan_guard, lit(False))
@@ -1445,8 +1404,8 @@ class CatalystTranspiler(AbstractTranspiler):
         """Infer a category for ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
 
-        Returns one of ``"integer"``, ``"float"``, ``"numeric"`` (unknown
-        numeric sub-type), ``"string"``, ``"bool"``, or ``"binary"``.
+        Returns one of ``"integral"``, ``"integral32"``, ``"fractional"``,
+        ``"numeric"``, ``"string"``, ``"bool"``, or ``"binary"``.
 
         Drives operator selection (``+`` -> add vs concat, ``*`` -> multiply vs
         repeat) and raises ``UnsupportedOperationException`` when an operator's
@@ -2053,11 +2012,14 @@ class CatalystTranspiler(AbstractTranspiler):
                         "types fall back to interpreted Python"
                     )
                 arg_col = self._convert_chunk(params, arg)
+                if self._is_nonnull_node(params, arg):
+                    return length(arg_col)
                 err = lit(
                     "Python UDF transpiler: cannot call len() on NULL; "
                     "Python would raise TypeError here. Add an "
                     "`is not None` guard or filter NULLs upstream."
                 )
+                self._null_guard_emitted = True
                 return when(arg_col.isNull(), raise_error(err)).otherwise(length(arg_col))
             # Only a call through a plain name can be one of the builtins we lower.
             # Anything else -- `(lambda y: y + 1)(x)`, a method call, a call through a
@@ -2288,7 +2250,8 @@ def _body_needs_numeric_refinement(function_ast: ast.FunctionDef) -> bool:
 
     Every other body keeps the single ``"numeric"`` variant it always emitted,
     which is what makes the split free for existing UDFs -- no extra plan options
-    and no change in which columns match.
+    and no change in which columns match. Comparisons are refined too, so an
+    integral comparison can omit the NaN guard.
     """
     refined_ops = (
         ast.Div,
@@ -2301,10 +2264,13 @@ def _body_needs_numeric_refinement(function_ast: ast.FunctionDef) -> bool:
         ast.RShift,
         ast.Invert,
     )
+    comparison_ops = (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE)
     for node in ast.walk(function_ast):
         if isinstance(node, (ast.BinOp, ast.AugAssign)) and isinstance(node.op, refined_ops):
             return True
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, refined_ops):
+            return True
+        if isinstance(node, ast.Compare) and any(isinstance(op, comparison_ops) for op in node.ops):
             return True
         # `min`/`max`/`round` are integral-only; `abs` works on either kind and so
         # needs no split.
