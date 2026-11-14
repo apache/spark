@@ -76,19 +76,20 @@ object ValueInterval {
   }
 
   /**
-   * Intersected results of two intervals. This is only for two overlapped intervals.
-   * The outputs are the intersected min/max values.
+   * Intersected results of two intervals. This is only for two overlapped intervals, which
+   * `isIntersected` checks. The outputs are the intersected min/max values.
    */
   def intersect(r1: ValueInterval, r2: ValueInterval, dt: DataType): (Option[Any], Option[Any]) = {
     (r1, r2) match {
-      case (_: DefaultValueInterval, _: DefaultValueInterval) =>
-        // Neither range is known, e.g. for binary/string types.
-        (None, None)
-      case (_: DefaultValueInterval, _: NumericValueInterval) =>
-        intersect(r2, r1, dt)
       case (n: NumericValueInterval, _: DefaultValueInterval) =>
         // An unknown range does not narrow the other one.
         (Some(EstimationUtils.fromDouble(n.min, dt)), Some(EstimationUtils.fromDouble(n.max, dt)))
+      case (_: DefaultValueInterval, _: NumericValueInterval) =>
+        intersect(r2, r1, dt)
+      case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
+        // No range is known: both are unknown, e.g. for binary/string types, or the other one
+        // holds only nulls.
+        (None, None)
       case (n1: NumericValueInterval, n2: NumericValueInterval) =>
         // Choose the maximum of two min values, and the minimum of two max values.
         val newMin = if (n1.min <= n2.min) n2.min else n1.min

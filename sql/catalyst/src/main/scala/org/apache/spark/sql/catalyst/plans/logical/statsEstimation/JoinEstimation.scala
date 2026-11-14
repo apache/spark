@@ -198,32 +198,27 @@ case class JoinEstimation(join: Join) extends Logging {
       val rightKeyStat = rightStats.attributeStats(rightKey)
       val lInterval = keyInterval(leftKey, leftKeyStat)
       val rInterval = keyInterval(rightKey, rightKeyStat)
-      // A distinct count of 0 on both sides means neither has a non-null key value.
-      val noValues = leftKeyStat.distinctCount.contains(BigInt(0)) &&
-        rightKeyStat.distinctCount.contains(BigInt(0))
-      if (!noValues && ValueInterval.isIntersected(lInterval, rInterval)) {
+      if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
-        // If only one key has a known range, the joined keys take it. The histogram of the other
-        // key may not cover that range, so it is neither used nor propagated.
-        def keepsHistogram(interval: ValueInterval): Boolean =
-          newMin.isEmpty || interval.isInstanceOf[NumericValueInterval]
+        val lRangeKnown = lInterval.isInstanceOf[NumericValueInterval]
+        val rRangeKnown = rInterval.isInstanceOf[NumericValueInterval]
         val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
           // Histograms are trimmed to the intersected range, so both keys need a known range.
           case (Some(l: Histogram), Some(r: Histogram))
-              if canEstimateWithHistogram(leftKey.dataType) && newMin.isDefined &&
-                newMax.isDefined && keepsHistogram(lInterval) && keepsHistogram(rInterval) =>
+              if canEstimateWithHistogram(leftKey.dataType) && lRangeKnown && rRangeKnown =>
             computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
         keyStatsAfterJoin +=
-          // Histograms are propagated as unchanged. During future estimation, they should be
-          // truncated by the updated max/min. In this way, only pointers of the histograms are
-          // propagated and thus reduce memory consumption.
+          // A histogram is propagated as unchanged, so that only a pointer to it is kept. Later
+          // estimates bound it by the min/max of the joined keys, and do not use it without them.
+          // If only one key has a known range, the joined keys take it, and the histogram of the
+          // other key, which may not cover that range, is neither used above nor propagated.
           (leftKey -> joinStat.copy(
-            histogram = leftKeyStat.histogram.filter(_ => keepsHistogram(lInterval)))) +=
+            histogram = leftKeyStat.histogram.filter(_ => lRangeKnown || !rRangeKnown))) +=
             (rightKey -> joinStat.copy(
-              histogram = rightKeyStat.histogram.filter(_ => keepsHistogram(rInterval))))
+              histogram = rightKeyStat.histogram.filter(_ => rRangeKnown || !lRangeKnown)))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
@@ -237,12 +232,15 @@ case class JoinEstimation(join: Join) extends Logging {
   }
 
   /**
-   * Returns the value range of a join key. A key with distinct values but no min/max (a data
-   * source may not report them, and a union drops them for some types) has an unknown range, not
-   * only nulls, so it overlaps the other key unless that key holds only nulls.
+   * Returns the value range of a join key. A key with a distinct count of 0 holds only nulls and
+   * overlaps no key, whatever its type. A key with distinct values but no min/max (a data source
+   * may not report them, and a union drops them for some types) has an unknown range, as a string
+   * or binary key does, and overlaps any key that has values.
    */
   private def keyInterval(key: AttributeReference, keyStat: ColumnStat): ValueInterval = {
-    if (keyStat.distinctCount.get > 0 && !keyStat.hasMinMaxStats) {
+    if (keyStat.distinctCount.contains(BigInt(0))) {
+      new NullValueInterval()
+    } else if (!keyStat.hasMinMaxStats) {
       new DefaultValueInterval()
     } else {
       ValueInterval(keyStat.min, keyStat.max, key.dataType)
