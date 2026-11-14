@@ -8928,6 +8928,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_ORDERING_AWARE_LIMIT_OFFSET_IGNORE_GENERATE =
+    buildConf("spark.sql.legacy.orderingAwareLimitOffset.ignoreGenerate")
+      .internal()
+      .doc("When true, the local sort for a non-root LIMIT/OFFSET is not inserted when a " +
+        "generator sits between the sort and the limit, so the limit may keep arbitrary rows.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val LAZY_SET_OPERATOR_OUTPUT = buildConf("spark.sql.lazySetOperatorOutput.enabled")
     .internal()
     .doc(

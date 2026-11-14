@@ -114,6 +114,32 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
           }
         case _ => None
       }
+    case g: GenerateExec =>
+      extractOrderingAndPropagateOrderingColumns(g.child) match {
+        case Some((ordering, newChild)) =>
+          if (conf.getConf(SQLConf.LEGACY_ORDERING_AWARE_LIMIT_OFFSET_IGNORE_GENERATE)) {
+            None
+          } else if (g.requiredChildOutput.isEmpty && g.generator.mayProduceRowsOnTerminate) {
+            // A GenerateExec that passes no input column through runs the branch that emits
+            // generator rows without pairing them with an input row. Widening requiredChildOutput
+            // would move it onto the joined branch, which pairs each output row with the last input
+            // row; on an empty partition that row is null, so a generator whose terminate() emits
+            // rows (a Hive UDTF) would throw a NullPointerException. Keep the base plan for it.
+            // TODO: preserve ordering for these too, which needs nullable pass-through columns on
+            // GenerateExec's joined branch so terminate() rows survive an empty partition.
+            None
+          } else {
+            // GenerateExec streams its input rows in order. Like ProjectExec, it must keep the
+            // ordering columns in its output so that the sort after the shuffle can use them.
+            val missingCols = ordering.flatMap(_.references).distinct
+              .filterNot(g.outputSet.contains)
+            val newGen = g.copy(
+              requiredChildOutput = g.requiredChildOutput ++ missingCols, child = newChild)
+            newGen.copyTagsFrom(g)
+            Some((ordering, newGen))
+          }
+        case _ => None
+      }
     case _ => None
   }
 }
