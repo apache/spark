@@ -37,6 +37,7 @@ object ExternalLookupJoinStrategy extends SparkStrategy {
         lookup.scan,
         lookup.readerFactory,
         lookup.maxParameterRowsPerRequest,
+        lookup.cacheOptions,
         planLater(lookup.child)) :: Nil
     case _ => Nil
   }
