@@ -2689,6 +2689,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  val LEGACY_PUSH_DOWN_DATETIME_IGNORING_TIME_ZONE =
+    buildConf("spark.sql.legacy.dataSource.pushDownDatetimeIgnoringTimeZone")
+      .internal()
+      .doc("When true (legacy behavior), the Data Source V2 push-down framework pushes " +
+        "zone-dependent casts and datetime field extractions without their time zone, so a " +
+        "source evaluates them in its own zone. When false, they are pushed only when the " +
+        "expression's time zone has the rules of the JVM default time zone. A command whose " +
+        "condition has to reach the source, a DELETE on a Data Source V2 table without " +
+        "row-level operations or an overwrite by condition (DataFrameWriterV2.overwrite, " +
+        "INSERT INTO ... REPLACE WHERE), fails to plan with the cannot-translate-expression " +
+        "error when the session time zone keeps such an expression from being pushed.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")

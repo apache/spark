@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import java.util.TimeZone
+
 import test.org.apache.spark.sql.connector.catalog.functions.JavaAverage
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
@@ -648,6 +650,56 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
         assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() == null,
           cond)
+      }
+    }
+  }
+
+  test("SPARK-61560: Check constraint with a time-zone-dependent cast in another session time " +
+      "zone") {
+    // `CAST(ts AS DATE)` depends on the session time zone, which the V2 cast does not carry. The
+    // predicate is stored anyway: it describes the condition, and a write enforces it with the
+    // constants of this session. Stored without it, a write would re-parse `predicateSql` and read
+    // the TIMESTAMP bound in its own time zone.
+    assert(TimeZone.getDefault.getID == "America/Los_Angeles")
+    val cond = "ts <= TIMESTAMP '2024-01-01 00:00:00' AND CAST(ts AS DATE) >= DATE '2023-01-01'"
+    def checkEnforced(ddlTimeZone: String)(addConstraint: String => Unit): Unit = {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> ddlTimeZone) {
+          addConstraint(t)
+        }
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null)
+        // The write runs in America/Los_Angeles, where the bound reads as 2024-01-01 08:00:00 UTC.
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          // 2023-12-31 12:00:00 UTC meets the bound in both zones.
+          sql(s"INSERT INTO $t VALUES (1, timestamp_seconds(1704024000))")
+          // 2024-01-01 00:30:00 UTC is beyond the bound read in UTC, but before the bound read in
+          // America/Los_Angeles. Its date in the writer's zone, 2023-12-31, meets the date
+          // conjunct.
+          val insertBeyondUtcBound = s"INSERT INTO $t VALUES (2, timestamp_seconds(1704069000))"
+          if (ddlTimeZone == "UTC") {
+            val error = intercept[SparkRuntimeException](sql(insertBeyondUtcBound))
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+            checkAnswer(spark.table(t).select("id"), Row(1))
+          } else {
+            sql(insertBeyondUtcBound)
+            checkAnswer(spark.table(t).select("id"), Seq(Row(1), Row(2)))
+          }
+        }
+      }
+    }
+    Seq("UTC", "America/Los_Angeles").foreach { ddlTimeZone =>
+      checkEnforced(ddlTimeZone) { t =>
+        sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP, CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+      }
+      checkEnforced(ddlTimeZone) { t =>
+        sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+        sql(s"REPLACE TABLE $t (id INT, ts TIMESTAMP, CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+      }
+      checkEnforced(ddlTimeZone) { t =>
+        sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
       }
     }
   }

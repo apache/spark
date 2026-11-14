@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.{HexFormat, Properties}
+import java.util.{HexFormat, Properties, TimeZone}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -1665,6 +1665,41 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       "PushedTopN: ORDER BY [EXTRACT(DAY_OF_YEAR FROM DATE1) ASC NULLS FIRST] LIMIT 1,"
     checkPushedInfo(df9, expectedPlanFragment9)
     checkAnswer(df9, Seq(Row("alex")))
+  }
+
+  // time1 is midnight in the JVM default zone (America/Los_Angeles in tests), which is 21:00 of the
+  // previous day in Pacific/Honolulu. A zone-dependent field of a TIMESTAMP must be evaluated in
+  // the session time zone, not pushed to the source (which evaluates it in its own zone).
+  // ANSI is pinned because `dayofmonth(time1)` casts `time1` to DATE and only an ANSI cast is
+  // translated to a V2 cast: without it the cast is never pushed, whatever the time zone.
+  private def checkDatetimeFieldsInSessionTimeZone(fixed: Boolean): Unit = {
+    assert(TimeZone.getDefault.getID == "America/Los_Angeles")
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Pacific/Honolulu",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      // hour(time1) is 21 for both rows in Honolulu (midnight LA -> 21:00 of the previous day).
+      val hour = sql("SELECT name FROM h2.test.datetime WHERE hour(time1) = 21")
+      checkFiltersRemoved(hour, removed = !fixed)
+      checkAnswer(hour, if (fixed) Seq(Row("amy"), Row("alex")) else Seq.empty)
+      // dayofmonth(time1) reads CAST(time1 AS DATE); in Honolulu amy -> 18, alex -> 17.
+      val day = sql("SELECT name FROM h2.test.datetime WHERE dayofmonth(time1) = 18")
+      checkFiltersRemoved(day, removed = !fixed)
+      checkAnswer(day, if (fixed) Seq(Row("amy")) else Seq(Row("alex")))
+      // date1 fields do not depend on the time zone: still pushed either way, same correct rows.
+      val date = sql("SELECT name FROM h2.test.datetime WHERE dayofmonth(date1) = 18")
+      checkFiltersRemoved(date, removed = true)
+      checkAnswer(date, Seq(Row("alex")))
+    }
+  }
+
+  test("SPARK-61560: datetime fields of a timestamp are evaluated in the session time zone") {
+    checkDatetimeFieldsInSessionTimeZone(fixed = true)
+  }
+
+  test("SPARK-61560: datetime fields of a timestamp are evaluated in the session time zone " +
+      "(gate off reproduces the bug)") {
+    withSQLConf(SQLConf.LEGACY_PUSH_DOWN_DATETIME_IGNORING_TIME_ZONE.key -> "true") {
+      checkDatetimeFieldsInSessionTimeZone(fixed = false)
+    }
   }
 
   test("scan with filter push-down with misc functions") {

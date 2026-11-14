@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.TimeZone
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,15 +32,52 @@ import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg,
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AnyTimestampNanoType, BooleanType, DataType, IntegerType,
-  StringType}
+  StringType, TimestampNTZNanosType, TimestampNTZType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
+ *
+ * @param e the catalyst expression to translate.
+ * @param isPredicate whether `e` is used as a predicate.
+ * @param checkTimeZone whether to refuse a time-zone-dependent cast or datetime field extraction
+ *                      whose time zone has other rules than the JVM default time zone. Push-down
+ *                      keeps the default, so that a source does not evaluate such an expression in
+ *                      its own zone (see [[pushdownLosesTimeZone]]). DDL metadata conversions
+ *                      (CHECK constraint predicates, column defaults, generation expressions) pass
+ *                      `false`: their V2 forms describe the condition or value rather than a
+ *                      source evaluation, and Spark itself consumes them on write.
  */
-class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends Logging  {
+class V2ExpressionBuilder(
+    e: Expression,
+    isPredicate: Boolean = false,
+    checkTimeZone: Boolean = true) extends Logging  {
+
+  // The legacy conf restores the zone-ignoring translation for every caller.
+  private val guardTimeZone: Boolean =
+    checkTimeZone && !SQLConf.get.getConf(SQLConf.LEGACY_PUSH_DOWN_DATETIME_IGNORING_TIME_ZONE)
 
   def build(): Option[V2Expression] = generateExpression(e, isPredicate)
+
+  // A V2 Cast and Extract carry no time zone, and JDBC exchanges timestamps in the JVM default
+  // zone, so a zone-dependent expression whose zone has other rules yields other results remotely.
+  private def pushdownLosesTimeZone(expr: Expression): Boolean = {
+    def zoneOf(e: TimeZoneAwareExpression, input: DataType): Option[String] = input match {
+      case _: TimestampNTZType | _: TimestampNTZNanosType => None
+      case _ => e.timeZoneId
+    }
+    val timeZoneId = expr match {
+      case c: Cast if c.needsTimeZone => c.timeZoneId
+      case f: GetTimeField => zoneOf(f, f.child.dataType)
+      case _ => None
+    }
+    // TimeZone.getDefault is the zone of the JVM that plans the query (the driver). This assumes
+    // the source evaluates the pushed expression in that same zone; a deployment whose executors
+    // run in a different JVM zone can still lose a valid push-down or keep a wrong one.
+    timeZoneId.exists { tz =>
+      DateTimeUtils.getZoneId(tz).getRules != TimeZone.getDefault.toZoneId.getRules
+    }
+  }
 
   def buildPredicate(): Option[V2Predicate] = {
     if (isPredicate) {
@@ -119,6 +158,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         generateExpression(constantExpr, isPredicate)
       }
+    case _ if guardTimeZone && pushdownLosesTimeZone(expr) => None
     case col @ ColumnOrField(nameParts) =>
       val ref = FieldReference(nameParts)
       if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {

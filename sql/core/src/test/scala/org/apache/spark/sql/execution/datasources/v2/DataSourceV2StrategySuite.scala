@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.time.LocalTime
-import java.util.{EnumSet, OptionalLong}
+import java.util.{EnumSet, OptionalLong, TimeZone}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Row, SQLContext}
@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete, Count, Percentile, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete, Count, Max, Percentile, PercentileDisc}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, JoinHint, Limit, LogicalPlan, Offset, OneRowRelation, Project, Sort}
 import org.apache.spark.sql.catalyst.util.{CharVarcharCodegenUtils, CharVarcharUtils, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, SortOrder => V2SortOrder, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
@@ -44,7 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DateType, DoubleType, FloatType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -1020,6 +1020,59 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     // A source would interpolate with its own rounding; percentile_disc returns an input value.
     assert(translate(new Percentile(ts, Literal(0.5))).isEmpty)
     assert(translate(PercentileDisc(ts, Literal(0.5))).isDefined)
+  }
+
+  test("SPARK-61560: time-zone-dependent expressions are pushed only with the rules of the JVM " +
+      "default time zone") {
+    assert(TimeZone.getDefault.getID == "America/Los_Angeles")
+    // Another ID for the rules of America/Los_Angeles, and a zone with other rules.
+    val sameRules = "US/Pacific"
+    val otherRules = "Pacific/Honolulu"
+    val ts = AttributeReference("ts", TimestampType)()
+    def hourOf(attr: Attribute, zone: String): Option[V2Expression] =
+      new V2ExpressionBuilder(Hour(attr, Some(zone))).build()
+    def castToDate(zone: String): Option[V2Expression] =
+      new V2ExpressionBuilder(Cast(ts, DateType, Some(zone), EvalMode.ANSI)).build()
+    def maxHourOf(zone: String): Option[V2Expression] = new V2ExpressionBuilder(
+      AggregateExpression(Max(Hour(ts, Some(zone))), Complete, isDistinct = false)).build()
+    def checkHour(actual: Option[V2Expression], column: String): Unit = actual match {
+      case Some(e: V2Extract) =>
+        assert(e.field() == "HOUR" && e.source() == FieldReference(column))
+      case other => fail(s"expected EXTRACT(HOUR FROM $column), got $other")
+    }
+    val castTs = new V2Cast(FieldReference("ts"), TimestampType, DateType)
+
+    // A source would evaluate the expression in its own zone: Spark keeps it.
+    assert(hourOf(ts, otherRules).isEmpty)
+    assert(castToDate(otherRules).isEmpty)
+    assert(maxHourOf(otherRules).isEmpty)
+    // The zone has the rules of the JVM default: the source gets the same result.
+    checkHour(hourOf(ts, sameRules), "ts")
+    assert(castToDate(sameRules).contains(castTs))
+    // A timestamp without time zone does not depend on the zone.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(TimestampNTZType, TimestampNTZNanosType(9)).foreach { ntzType =>
+        checkHour(hourOf(AttributeReference("ntz", ntzType)(), otherRules), "ntz")
+      }
+    }
+    // DDL metadata describes a condition or value rather than a source evaluation.
+    checkHour(new V2ExpressionBuilder(Hour(ts, Some(otherRules)), checkTimeZone = false).build(),
+      "ts")
+    // The legacy conf restores the zone-ignoring translation.
+    withSQLConf(SQLConf.LEGACY_PUSH_DOWN_DATETIME_IGNORING_TIME_ZONE.key -> "true") {
+      checkHour(hourOf(ts, otherRules), "ts")
+      assert(castToDate(otherRules).contains(castTs))
+      assert(maxHourOf(otherRules).isDefined)
+    }
+    // An expression the guard never reads translates the same under both settings.
+    val gt = GreaterThan(attrInts.head._1, Literal(1))
+    val v2Gt = new Predicate(">",
+      Array[V2Expression](FieldReference("cint"), LiteralValue(1, IntegerType)))
+    Seq("false", "true").foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_PUSH_DOWN_DATETIME_IGNORING_TIME_ZONE.key -> legacy) {
+        assert(new V2ExpressionBuilder(gt, isPredicate = true).build().contains(v2Gt))
+      }
+    }
   }
 
   test("VariantGet with non-column child returns None") {
