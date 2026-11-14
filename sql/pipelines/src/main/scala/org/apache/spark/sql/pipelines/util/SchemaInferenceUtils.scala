@@ -28,7 +28,11 @@ import org.apache.spark.sql.catalyst.analysis.{
   Resolver
 }
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{
+  CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+  EXISTS_DEFAULT_COLUMN_METADATA_KEY
+}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, DefaultValue, TableChange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType
 import org.apache.spark.sql.pipelines.graph.{
@@ -214,7 +218,8 @@ object SchemaInferenceUtils extends Logging {
 
   /**
    * Produces the [[TableChange]] sequence needed to transform `currentSchema` into
-   * `targetSchema`: additions, type updates, deletions, nullability, and comment changes.
+   * `targetSchema`: additions, type updates, deletions, nullability, comment, and default value
+   * changes.
    * Recurses into structs, arrays, and maps so changes are emitted at the leaf level.
    * Similar to [[org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution]], but
    * produces a full bidirectional sync (deletes, nullability, and comment changes) rather
@@ -229,7 +234,10 @@ object SchemaInferenceUtils extends Logging {
    * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
    * differ only in case (`value` and `Value`) into an arbitrary one of the two.
    *
-   * TODO (SPARK-59269): Support changes to field default value in the target schema.
+   * Column default values are diffed on their current default only. An added column carries both
+   * its current default and, if present in `targetSchema`, its existence default (used to back-fill
+   * rows written before the column existed). For an existing column, only the current default is
+   * updated: its existence default reflects data that has already been written and is left as-is.
    *
    * @param currentSchema The current schema of the table
    * @param targetSchema The target schema that we want the table to have
@@ -270,7 +278,9 @@ object SchemaInferenceUtils extends Logging {
           (pathToStruct :+ fieldInTarget.name).toArray,
           fieldInTarget.dataType,
           fieldInTarget.nullable,
-          fieldInTarget.getComment().orNull
+          fieldInTarget.getComment().orNull,
+          null,
+          columnDefaultValueOf(fieldInTarget)
         )
       }
 
@@ -305,10 +315,22 @@ object SchemaInferenceUtils extends Logging {
   }
 
   /**
-   * Diffs the type, nullability, and comment of one field present in both schemas. Other
-   * StructField.metadata entries (generated-column expressions, connector-specific metadata) are
-   * not diffed: pipeline schema synchronization does not support propagating them, and Spark's
-   * own ResolveSchemaEvolution likewise ignores them.
+   * Returns the [[org.apache.spark.sql.connector.catalog.ColumnDefaultValue]] (current and
+   * existence default) of `field`, or null if it has no current default. Uses the same conversion
+   * as table creation, so an added column gets the same default it would have on a new table.
+   */
+  private def columnDefaultValueOf(field: StructField) =
+    if (field.getCurrentDefaultValue().isDefined) {
+      CatalogV2Util.structTypeToV2Columns(new StructType(Array(field))).head.defaultValue()
+    } else {
+      null
+    }
+
+  /**
+   * Diffs the type, nullability, comment, and current default value of one field present in both
+   * schemas. Other StructField.metadata entries (generated-column expressions, connector-specific
+   * metadata) are not diffed: pipeline schema synchronization does not support propagating them,
+   * and Spark's own ResolveSchemaEvolution likewise ignores them.
    */
   private def diffField(
       currentField: StructField,
@@ -317,15 +339,19 @@ object SchemaInferenceUtils extends Logging {
     warnOnFieldMetadataDrift(currentField, targetField, pathToField)
     diffDataTypes(currentField.dataType, targetField.dataType, pathToField) ++
       diffNullability(currentField.nullable, targetField.nullable, pathToField) ++
-      diffComment(currentField.getComment(), targetField.getComment(), pathToField)
+      diffComment(currentField.getComment(), targetField.getComment(), pathToField) ++
+      diffCurrentDefault(
+        currentField.getCurrentDefaultValue(),
+        targetField.getCurrentDefaultValue(),
+        pathToField)
   }
 
   /**
    * Logs a warning when two fields' metadata bags differ beyond the keys that are either already
-   * handled (comment) or known-safe to ignore (catalog-assigned field IDs). Pipeline schema
-   * synchronization does not support propagating other metadata entries (defaults,
-   * generated-column expressions, connector-specific metadata), so these differences are left
-   * for the user to reconcile.
+   * handled (comment, current default) or known-safe to ignore (catalog-assigned field IDs, and the
+   * existence default, which is fixed once a column exists). Pipeline schema synchronization does
+   * not support propagating other metadata entries (generated-column expressions,
+   * connector-specific metadata), so these differences are left for the user to reconcile.
    */
   private def warnOnFieldMetadataDrift(
       currentField: StructField,
@@ -345,6 +371,8 @@ object SchemaInferenceUtils extends Logging {
     new MetadataBuilder().withMetadata(m)
       .remove("comment")
       .remove(FIELD_ID_METADATA_KEY) // Catalog-assigned; not present in target schemas
+      .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+      .remove(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
       .build()
 
   private def diffNullability(
@@ -364,6 +392,21 @@ object SchemaInferenceUtils extends Logging {
   ): Option[TableChange] = {
     Option.when(currentComment != targetComment)(
       TableChange.updateColumnComment(pathToField.toArray, targetComment.orNull)
+    )
+  }
+
+  /**
+   * Emits a current default value update when it differs. A null `DefaultValue` drops the default.
+   */
+  private def diffCurrentDefault(
+      currentDefault: Option[String],
+      targetDefault: Option[String],
+      pathToField: Seq[String]
+  ): Option[TableChange] = {
+    Option.when(currentDefault != targetDefault)(
+      TableChange.updateColumnDefaultValue(
+        pathToField.toArray,
+        targetDefault.map(new DefaultValue(_)).orNull)
     )
   }
 
