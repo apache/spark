@@ -26,9 +26,8 @@ module.exports = async ({github, context, core, env = process.env, log = console
   //
   // On the PR commit, list Actions suites and take each suite's latest check run
   // named Build. Filtering suites by checkName repeats a suite once per historical
-  // Build run of that name, which can fill the page. checkType LATEST on checkRuns
-  // returns one Build check per suite. Fork PRs usually have one such suite here;
-  // in-repo branches can collect one suite per workflow run. A fork's default branch
+  // Build check run in it, which can fill the page. checkType LATEST on checkRuns
+  // returns one Build check per suite. A fork's default branch
   // can collect thousands from scheduled workflows, but those suites are listed
   // oldest first and a push creates its runs' suites right away, so they are still
   // among the first. Should a page ever not hold everything a PR needs, the PR fails
@@ -42,7 +41,9 @@ module.exports = async ({github, context, core, env = process.env, log = console
   const PR_PAGE_SIZE = 25
   // Name of the mirrored PR check, not the workflow.
   const BUILD_CHECK_NAME = 'Build'
-  const BUILD_CHECK_SUITE_PAGE = 10
+  // GitHub's GraphQL max, so a busy commit's extra workflow suites still fit.
+  // Simpler than also querying by checkName, which is what overflowed.
+  const BUILD_CHECK_SUITE_PAGE = 100
 
   // Quick syncs cover only open PRs updated in the last QUICK_SYNC_LOOKBACK_DAYS. A
   // push, comment, review, or label change updates a PR, but a check change does not.
