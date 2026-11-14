@@ -237,15 +237,23 @@ class RelationQualificationSuite extends SharedSparkSession {
     // Persistent object is spark_catalog.session.order_probe_tbl; temp view is order_probe_tbl.
     withDatabase("session") {
       sql("CREATE DATABASE session")
-      sql("CREATE TABLE session.order_probe_tbl (id INT) USING parquet")
+      sql("CREATE TABLE session.order_probe_tbl (persistent_id INT) USING parquet")
       sql("INSERT INTO session.order_probe_tbl VALUES (100)")
-      sql("CREATE TEMPORARY VIEW order_probe_tbl AS SELECT 200 AS id")
+      sql("CREATE TEMPORARY VIEW order_probe_tbl AS SELECT 200 AS temp_id")
       try {
         withCatalogPath("system, current_catalog") {
           checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            assert(sql("SELECT * FROM session.order_probe_tbl")
+              .queryExecution.analyzed.schema.fieldNames === Array("temp_id"))
+          }
         }
         withCatalogPath("current_catalog, system") {
           checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(100))
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            assert(sql("SELECT * FROM session.order_probe_tbl")
+              .queryExecution.analyzed.schema.fieldNames === Array("persistent_id"))
+          }
         }
       } finally {
         sql("DROP VIEW IF EXISTS order_probe_tbl")
