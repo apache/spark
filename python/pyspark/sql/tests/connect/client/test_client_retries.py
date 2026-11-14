@@ -17,6 +17,7 @@
 
 import unittest
 import warnings
+from unittest.mock import patch
 
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 
@@ -121,6 +122,40 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         client.set_retry_policies([policyA, policyB])
 
         self.assertEqual(client.get_retry_policies(), [policyA, policyB])
+
+    def test_jitter_threshold(self):
+        for backoff, expected in [(99, 99), (100, 107)]:
+            with self.subTest(backoff=backoff):
+                state = DefaultPolicy(
+                    initial_backoff=backoff, jitter=10, min_jitter_threshold=100
+                ).to_state()
+                with patch(
+                    "pyspark.sql.connect.client.retries.random.uniform", return_value=7
+                ) as jitter:
+                    self.assertEqual(state.next_attempt(), expected)
+                    if backoff == 99:
+                        jitter.assert_not_called()
+                    else:
+                        jitter.assert_called_once_with(0, 10)
+
+    def test_default_policy_error_classification(self):
+        policy = DefaultPolicy()
+        self.assertFalse(policy.can_retry(ValueError("local error")))
+        self.assertTrue(policy.can_retry(TestException("INVALID_CURSOR.DISCONNECTED")))
+        self.assertFalse(policy.can_retry(TestException("unrelated internal error")))
+
+    def test_server_retry_delay_options(self):
+        error = create_test_exception_with_details("retry later", retry_delay=1000)
+        for recognize, expected in [(True, 1000), (False, 50)]:
+            with self.subTest(recognize=recognize):
+                state = DefaultPolicy(
+                    initial_backoff=50,
+                    max_backoff=100,
+                    jitter=0,
+                    recognize_server_retry_delay=recognize,
+                    max_server_retry_delay=None,
+                ).to_state()
+                self.assertEqual(state.next_attempt(error), expected)
 
     def test_warning_works(self):
         client = SparkConnectClient("sc://foo/;token=bar")
