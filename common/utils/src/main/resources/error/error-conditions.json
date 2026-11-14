@@ -5644,12 +5644,6 @@
     ],
     "sqlState" : "XXKD0"
   },
-  "INVALID_SQL_PATH_SCHEMA_REFERENCE" : {
-    "message" : [
-      "Invalid schema reference in SET PATH: <qualifiedName>. Use at least two name parts (catalog.schema); multi-level namespaces are allowed."
-    ],
-    "sqlState" : "42601"
-  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax:"

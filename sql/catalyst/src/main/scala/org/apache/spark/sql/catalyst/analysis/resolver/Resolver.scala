@@ -593,8 +593,10 @@ class Resolver(
           }
           val searchPath = catalogManager
             .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
-            .map(toSQLId)
-          unresolvedRelation.tableNotFound(multipartId, searchPath)
+          val relevantSearchPath =
+            CatalogManager.identifierPathEntries(
+              searchPath, multipartId, catalogManager.isCatalogRegistered).map(toSQLId)
+          unresolvedRelation.tableNotFound(multipartId, relevantSearchPath)
       }
 
       resolve(resolvedRelation)

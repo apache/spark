@@ -38,6 +38,18 @@ class FunctionQualificationSuite extends SharedSparkSession {
     super.sparkConf.set("spark.sql.extensions", classOf[TestExtensions].getName)
   }
 
+  private def withCatalogPath(path: String)(f: => Unit): Unit = {
+    val catalogManager = spark.sessionState.catalogManager
+    val previousPath = catalogManager.storedSessionPathEntries
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      sql(s"SET PATH = $path")
+      try f finally {
+        catalogManager.clearSessionPath()
+        previousPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
   test("SECTION 1: Basic Qualification Tests") {
     // Test builtin function with explicit qualification
     checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
@@ -1177,12 +1189,12 @@ class FunctionQualificationSuite extends SharedSparkSession {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
       // builtin.abs does NOT exist in the persistent 'builtin' database.
-      // With default persistentCatalogFirst=false, builtin.abs resolves to system builtin.
+      // The default path searches the system catalog before the current catalog.
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
     }
   }
 
-  test("SECTION 16: Default persistentCatalogFirst is false - system wins without config") {
+  test("SECTION 16: Default catalog path resolves system first") {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
       sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
@@ -1192,8 +1204,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16a: persistentCatalogFirst=false (explicit) - system catalog wins") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+  test("SECTION 16a: system catalog first in PATH") {
+    withCatalogPath("system, current_catalog") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
@@ -1204,8 +1216,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16b: persistentCatalogFirst=true (legacy) - persistent catalog wins") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+  test("SECTION 16b: current catalog first in PATH") {
+    withCatalogPath("current_catalog, system") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
@@ -1216,8 +1228,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16c: persistentCatalogFirst=false - session namespace prioritization") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+  test("SECTION 16c: system catalog first for session functions") {
+    withCatalogPath("system, current_catalog") {
       withDatabase("session") {
         sql("CREATE DATABASE session")
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
@@ -1233,8 +1245,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16d: persistentCatalogFirst=true - persistent catalog wins") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+  test("SECTION 16d: current catalog first for session functions") {
+    withCatalogPath("current_catalog, system") {
       withDatabase("session") {
         sql("CREATE DATABASE session")
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
@@ -1244,8 +1256,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16e: persistentCatalogFirst=false - fallback when persistent doesn't exist") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+  test("SECTION 16e: system-first path falls back when persistent doesn't exist") {
+    withCatalogPath("system, current_catalog") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
@@ -1254,8 +1266,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16f: persistentCatalogFirst=true - fallback when persistent doesn't exist") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+  test("SECTION 16f: current-first path falls back when persistent doesn't exist") {
+    withCatalogPath("current_catalog, system") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
@@ -1264,8 +1276,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16g: persistentCatalogFirst=true - persistent wins over temp") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+  test("SECTION 16g: current catalog wins over temp when first in PATH") {
+    withCatalogPath("current_catalog, system") {
       withDatabase("session") {
         sql("CREATE DATABASE session")
         sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
@@ -1280,8 +1292,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16h: persistentCatalogFirst=false - table function resolves to system builtin") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+  test("SECTION 16h: table function resolves through system catalog path entry") {
+    withCatalogPath("system, current_catalog") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         // No persistent table function named range; builtin.range(3) resolves to system
@@ -1291,8 +1303,8 @@ class FunctionQualificationSuite extends SharedSparkSession {
     }
   }
 
-  test("SECTION 16i: persistentCatalogFirst=true - persistent table function wins") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+  test("SECTION 16i: persistent table function wins with current catalog first") {
+    withCatalogPath("current_catalog, system") {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.my_tvf() RETURNS TABLE(id INT) RETURN SELECT 1 AS id")
@@ -1309,11 +1321,12 @@ class FunctionQualificationSuite extends SharedSparkSession {
   test("SECTION 16j: Non-default catalog - builtin still resolves to system when prioritized") {
     withSQLConf(
       "spark.sql.catalog.othercat" -> classOf[InMemoryTableCatalog].getName,
-      SQLConf.DEFAULT_CATALOG.key -> "othercat",
-      "spark.sql.legacy.persistentCatalogFirst" -> "false") {
-      // Current catalog is othercat (no builtin namespace); builtin.abs resolves to system
-      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
-      checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      SQLConf.DEFAULT_CATALOG.key -> "othercat") {
+      withCatalogPath("system, current_catalog") {
+        // Current catalog is othercat (no builtin namespace); builtin.abs resolves to system
+        checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+        checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      }
     }
   }
 
@@ -1448,11 +1461,11 @@ class FunctionQualificationSuite extends SharedSparkSession {
         try {
           // Create the function body while `system.builtin` leads -> the body's unqualified `abs`
           // is pinned to the built-in.
-          sql("SET PATH = system.builtin, spark_catalog.path_body")
+          sql("SET PATH = system.builtin, spark_catalog.path_body, current_catalog")
           sql("CREATE FUNCTION path_body.use_abs(x INT) RETURNS INT RETURN abs(x)")
           // Caller path puts the catalog first -> a top-level unqualified `abs` resolves to the
           // persistent `abs` (x * 10), while the body keeps resolving its `abs` to the built-in.
-          sql("SET PATH = spark_catalog.path_body, system.builtin")
+          sql("SET PATH = spark_catalog.path_body, system.builtin, current_catalog")
           checkAnswer(
             sql("SELECT abs(-5) AS top, path_body.use_abs(-5) AS body"),
             Row(-50, 5))

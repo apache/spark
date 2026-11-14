@@ -478,12 +478,22 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     }
   }
 
-  test("persistentCatalogFirst is unsupported") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
-      checkResolverGuard(
-        "SELECT 1",
-        unsupportedReason = Some("configuration: persistentCatalogFirst")
-      )
+  test("two-part builtin function follows catalog entries in PATH") {
+    val catalogManager = spark.sessionState.catalogManager
+    val previousPath = catalogManager.storedSessionPathEntries
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        sql("SET PATH = system, current_catalog")
+        checkResolverGuard("SELECT builtin.abs(-1)")
+
+        sql("SET PATH = current_catalog, system")
+        checkResolverGuard(
+          "SELECT builtin.abs(-1)",
+          unsupportedReason = Some("multi-part function name"))
+      } finally {
+        catalogManager.clearSessionPath()
+        previousPath.foreach(catalogManager.setSessionPath)
+      }
     }
   }
 

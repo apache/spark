@@ -113,12 +113,11 @@ class RelationResolution(
   }
 
   /**
-   * Scope in the relation resolution search path. Used to interpret
-   * [[CatalogManager.sqlResolutionPathEntries]] when resolving unqualified table/view names.
+   * Scope in the relation resolution search path.
    */
   private sealed trait RelationResolutionStep
   private case object SessionScopeStep extends RelationResolutionStep
-  private case class PersistentCatalogStep(catalogAndNamespace: Seq[String])
+  private case class PersistentIdentifierStep(identifier: Seq[String])
       extends RelationResolutionStep
 
   /**
@@ -135,15 +134,20 @@ class RelationResolution(
   }
 
   /**
-   * Ordered resolution steps for unqualified relation names. Each persistent path entry is kept
-   * with its catalog/namespace so lookup qualifies the object name under that entry (not only
-   * under the session's current namespace).
+   * Ordered resolution steps for one- or two-part relation names.
    */
-  private def relationResolutionSteps: Seq[RelationResolutionStep] = {
-    relationResolutionEntries.flatMap {
-      case p if CatalogManager.isSystemSessionPathEntry(p) => Some(SessionScopeStep)
-      case Seq("system", "builtin") => None
-      case entry => Some(PersistentCatalogStep(entry))
+  private def relationResolutionSteps(
+      identifier: Seq[String]): Seq[RelationResolutionStep] = {
+    CatalogManager.identifierPathCandidates(
+      relationResolutionEntries,
+      identifier,
+      catalogManager.isCatalogRegistered).flatMap {
+      case p if CatalogManager.isFullyQualifiedSystemSessionViewName(p) =>
+        Some(SessionScopeStep)
+      case p if p.length == 3 &&
+          p.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) =>
+        None
+      case candidate => Some(PersistentIdentifierStep(candidate))
     }
   }
 
@@ -151,8 +155,11 @@ class RelationResolution(
    * Resolution search path formatted for TABLE_OR_VIEW_NOT_FOUND error messages.
    * Same order as [[relationResolutionSteps]]; each entry is quoted (e.g. "`system`.`session`").
    */
-  def resolutionSearchPathForError: Seq[String] = {
-    relationResolutionEntries.map(toSQLId)
+  def resolutionSearchPathForError(nameParts: Seq[String]): Seq[String] = {
+    CatalogManager.identifierPathEntries(
+      relationResolutionEntries,
+      nameParts,
+      catalogManager.isCatalogRegistered).map(toSQLId)
   }
 
   /**
@@ -194,25 +201,15 @@ class RelationResolution(
       )
     }
 
-    // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
-    // Order follows [[SQLConf.prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
+    // A two-part global-temp view name is already fully qualified in the temp-view namespace.
     if (identifier.length == 2 &&
-        identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-      val viewNameOnly = Seq(identifier.last)
-      val tempSession = () =>
-        resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel)
-      val persistentSessionDb = () =>
-        tryResolvePersistent(u, identifier, finalTimeTravelSpec)
-      return if (conf.prioritizeSystemCatalog) {
-        tempSession().orElse(persistentSessionDb())
-      } else {
-        persistentSessionDb().orElse(tempSession())
-      }
+        !identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+      val tempView = resolveTempView(identifier, u.isStreaming, isTimeTravel)
+      if (tempView.isDefined) return tempView
     }
 
-    // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
-    // persistent.
-    if (identifier.length > 1) {
+    // Names with three or more parts are already fully qualified.
+    if (identifier.length > 2) {
       return resolveTempView(
         identifier,
         u.isStreaming,
@@ -220,15 +217,14 @@ class RelationResolution(
       ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
     }
 
-    // 1-part name: try each step in [[relationResolutionSteps]] order (from
-    // [[CatalogManager.sqlResolutionPathEntries]]).
-    val steps = relationResolutionSteps
+    // One- and two-part names use schema and catalog entries from the SQL path respectively.
+    val steps = relationResolutionSteps(identifier)
     for (step <- steps) {
       val result = step match {
         case SessionScopeStep =>
-          resolveTempView(identifier, u.isStreaming, isTimeTravel)
-        case PersistentCatalogStep(prefix) =>
-          tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
+          resolveTempView(Seq(identifier.last), u.isStreaming, isTimeTravel)
+        case PersistentIdentifierStep(candidate) =>
+          tryResolvePersistent(u, candidate, finalTimeTravelSpec)
       }
       if (result.isDefined) return result
     }

@@ -2105,8 +2105,8 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * Mirrors function resolution precedence, including SQL PATH shadowing for unqualified names
-     * and `spark.sql.legacy.persistentCatalogFirst` for two-part `builtin.name` references.
+     * Mirrors function resolution precedence, including SQL PATH shadowing for one- and two-part
+     * names.
      */
     private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean =
       functionResolution.functionNameResolvesToBuiltin(nameParts, expectedName)
@@ -2347,7 +2347,7 @@ class Analyzer(
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _) =>
           // For builtin/temp functions, we can do a quick check without catalog lookup
-          val quickCheck = if (nameParts.size == 1 ||
+          val quickCheck = if (nameParts.size == 1 || nameParts.size == 3 &&
               FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
             functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
           } else {
@@ -2375,10 +2375,7 @@ class Analyzer(
 
               functionType match {
                 case FunctionType.Local =>
-                  throw SparkException.internalError(
-                    s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
-                    s"classified as $functionType by full lookup but not found by quick check. " +
-                    s"Check sessionNamespaceKind logic.")
+                  f
 
                 case FunctionType.Persistent =>
                   externalFunctionNameSet.add(fullName)
@@ -2388,11 +2385,9 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val searchPath =
-                    functionResolution.sqlResolutionPathEntriesForAnalysis.map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
-                    searchPath,
+                    functionResolution.resolutionSearchPathForError(nameParts),
                     f.origin)
               }
             }

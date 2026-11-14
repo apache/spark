@@ -63,13 +63,12 @@ catalog or schema names.
 | `builtin` | schema | A persistent schema named `builtin` is allowed but discouraged because it collides with `system.builtin`. |
 | `session` | schema | A persistent schema named `session` is allowed but discouraged because it collides with `system.session`. |
 
-A partially qualified 2-part reference like `builtin.x` or `session.x` walks a small **mini-path** to
-choose the implicit catalog: by default it resolves to `system.builtin.x` / `system.session.x`
-if such an object exists, and otherwise falls back to the same name in the current catalog. So
-an object in a persistent `builtin` or `session` schema is shadowed only when an object of the
-same name exists in the corresponding system namespace. The shadowed object stays reachable via its fully qualified 3-part name (for example
-`spark_catalog.session.x`). Set `spark.sql.legacy.persistentCatalogFirst` to `true` to reverse
-the preference: the current catalog is tried first and the system namespace becomes the fallback.
+A partially qualified 2-part reference like `builtin.x` or `session.x` uses catalog entries in
+the SQL Path to choose the implicit catalog. The built-in default path tries `system` before the
+current catalog. Set `spark.sql.legacy.persistentCatalogFirst` to `true` to reverse those entries
+in the built-in default, or use `SET PATH` with `CURRENT_CATALOG` before `system` to control the
+active path directly. A shadowed object stays reachable via its fully qualified 3-part name (for
+example, `spark_catalog.session.x`).
 
 The `system.builtin` and `system.session` namespaces are described in
 [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html). Temporary objects in `system.session` are

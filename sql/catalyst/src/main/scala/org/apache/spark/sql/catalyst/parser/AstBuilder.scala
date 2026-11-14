@@ -727,10 +727,12 @@ class AstBuilder extends DataTypeAstBuilder
       PathElement.CurrentSchema
     } else {
       val parts = visitMultipartIdentifier(ctx.multipartIdentifier())
-      if (parts.length < 2) {
-        throw QueryCompilationErrors.invalidSqlPathSchemaReferenceError(parts.mkString("."))
+      if (parts.length == 1 &&
+          ctx.multipartIdentifier().getText.equalsIgnoreCase("CURRENT_CATALOG")) {
+        PathElement.CurrentCatalog
+      } else {
+        PathElement.IdentifierInPath(parts)
       }
-      PathElement.SchemaInPath(parts)
     }
   }
 

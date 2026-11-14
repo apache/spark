@@ -78,13 +78,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * Formats [[CatalogManager.sqlResolutionPathEntries]] with [[toSQLId]]
-   * for TABLE_OR_VIEW_NOT_FOUND error messages.
+   * Formats the entries from [[CatalogManager.sqlResolutionPathEntries]] that participate in
+   * resolving `multipartIdentifier` with [[toSQLId]] for TABLE_OR_VIEW_NOT_FOUND messages.
    */
-  private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
+  private def fullSearchPathForError(
+      catalogPath: Seq[String],
+      multipartIdentifier: Seq[String]): Seq[String] = {
     val catalog = catalogPath.head
     val ns = catalogPath.tail.toSeq
-    catalogManager.sqlResolutionPathEntries(catalog, ns).map(toSQLId)
+    CatalogManager.identifierPathEntries(
+      catalogManager.sqlResolutionPathEntries(catalog, ns),
+      multipartIdentifier,
+      catalogManager.isCatalogRegistered).map(toSQLId)
   }
 
   /**
@@ -111,13 +116,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   /**
    * Search path for TABLE_OR_VIEW_NOT_FOUND on unresolved relations in SELECT/DML/INSERT/time
    * travel. Three-part `system.session.name` resolves only to session temp views, so only that
-   * scope is listed. Other names use [[fullSearchPathForError]] (sqlResolutionPathEntries order).
+   * scope is listed. Other names use the arity-relevant entries from
+   * [[CatalogManager.sqlResolutionPathEntries]].
    */
   private def searchPathForUnresolvedRelation(multipartIdentifier: Seq[String]): Seq[String] = {
     if (CatalogManager.isFullyQualifiedSystemSessionViewName(multipartIdentifier)) {
       tempViewOnlySearchPathForError()
     } else {
-      fullSearchPathForError(catalogPathForError)
+      fullSearchPathForError(catalogPathForError, multipartIdentifier)
     }
   }
 
@@ -491,7 +497,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             if (CatalogManager.isFullyQualifiedSystemSessionViewName(u.multipartIdentifier)) {
               tempViewOnlySearchPathForError()
             } else {
-              fullSearchPathForError(catalogPath)
+              fullSearchPathForError(catalogPath, u.multipartIdentifier)
             }
           case UnresolvedTableOrViewSearchPathMode.Ddl =>
             ddlSearchPathForError(catalogPath)
@@ -504,7 +510,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           searchPathForUnresolvedRelation(u.multipartIdentifier))
 
       case u: UnresolvedFunctionName =>
-        val searchPath = fullSearchPathForError(catalogPathForError)
+        val searchPath = fullSearchPathForError(catalogPathForError, u.multipartIdentifier)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
           searchPath,

@@ -272,21 +272,17 @@ variable.
 
 ### Partially qualified (2 parts) &mdash; `schema.object`
 
-The identifier is qualified with `current_catalog` &mdash; producing
-`current_catalog.schema.object` &mdash; unless the leading part is `session` (or `builtin`, for
-functions). In that case Spark uses the
-[mini-path](sql-ref-identifier.html#reserved-system-names) to choose the implicit catalog,
-returning the first match:
-
-| `spark.sql.legacy.persistentCatalogFirst` | Mini-path tried in order |
-| :-------------------------------------- | :----------------------- |
-| `false` (default) | the system namespace (`system.session.x` / `system.builtin.x`), then the current catalog's `session.x` / `builtin.x` |
-| `true` (legacy)   | the current catalog's `session.x` / `builtin.x`, then the system namespace (`system.session.x` / `system.builtin.x`) |
+Spark walks the catalog entries in the [SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html),
+prepends each catalog to the identifier, and returns the first match. For example,
+`SET PATH = system, current_catalog` makes `session.x` try `system.session.x` before
+`current_catalog.session.x`; reversing the two entries reverses the preference. In the built-in
+default path, `spark.sql.legacy.persistentCatalogFirst` controls the order of these two entries.
 
 ### Unqualified (1 part) &mdash; `object`
 
-In queries and DML, Spark walks the [SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html) and
-returns the first match. In DDL, the identifier is qualified with `current_catalog.current_schema`.
+In queries and DML, Spark walks the schema entries in the
+[SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html) and returns the first match. In DDL, the
+identifier is qualified with `current_catalog.current_schema`.
 
 > Note: persistent views and SQL UDFs capture the SQL Path at `CREATE` time. When the view or
 > function is invoked, its body resolves names &mdash; tables, views, and functions &mdash;
@@ -306,7 +302,7 @@ SQL Path.
 
 If the relation cannot be resolved, Spark raises `TABLE_OR_VIEW_NOT_FOUND`. The error includes
 the effective search path, for example
-`searchPath = [system.builtin, system.session, spark_catalog.default]`.
+`searchPath = [system.builtin, system.session, spark_catalog.default, system, spark_catalog]`.
 
 ### Examples
 
@@ -396,7 +392,7 @@ A function reference is recognized by the trailing parentheses, and follows
 
 If the function cannot be resolved, Spark raises `UNRESOLVED_ROUTINE`. The error includes the
 effective search path, for example
-`searchPath = [system.builtin, system.session, spark_catalog.default]`.
+`searchPath = [system.builtin, system.session, spark_catalog.default, system, spark_catalog]`.
 
 ### Examples
 

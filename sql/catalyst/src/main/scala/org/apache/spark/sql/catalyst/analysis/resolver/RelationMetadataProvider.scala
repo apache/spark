@@ -86,7 +86,8 @@ trait RelationMetadataProvider extends LookupCatalog {
           timeTravelSpec = None
         )
       case _ =>
-        val searchPath = relationResolution.resolutionSearchPathForError
+        val searchPath = relationResolution.resolutionSearchPathForError(
+          unresolvedRelation.multipartIdentifier)
         unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier, searchPath)
     }
   }

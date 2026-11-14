@@ -41,7 +41,7 @@ class SetPathSuite extends SharedSparkSession {
   }
 
   private def currentPath(): String =
-    sql("SELECT current_path()").collect().head.getString(0)
+    sql("SELECT system.builtin.current_path()").collect().head.getString(0)
 
   private def pathEntries(pathStr: String): Seq[String] =
     pathStr.split(",").map(_.trim).toSeq
@@ -106,8 +106,8 @@ class SetPathSuite extends SharedSparkSession {
         s"After SET PATH = DEFAULT_PATH expected system.builtin, got: $entries")
       assert(entries.contains("system.session"),
         s"After SET PATH = DEFAULT_PATH expected system.session, got: $entries")
-      assert(entries.length === 3,
-        s"DEFAULT_PATH should expand to 3 entries, got: $entries")
+      assert(entries.length === 5,
+        s"DEFAULT_PATH should expand to 5 entries, got: $entries")
     }
   }
 
@@ -123,8 +123,8 @@ class SetPathSuite extends SharedSparkSession {
           s"DEFAULT_PATH should include system.session; got: $entries")
         assert(entries.last === "spark_catalog.path_extra_test",
           s"Extra schema should be appended after DEFAULT_PATH; got: $entries")
-        assert(entries.length === 4,
-          s"DEFAULT_PATH + 1 extra should be 4 entries, got: $entries")
+        assert(entries.length === 6,
+          s"DEFAULT_PATH + 1 extra should be 6 entries, got: $entries")
       } finally {
         sql("DROP SCHEMA IF EXISTS path_extra_test")
       }
@@ -297,9 +297,13 @@ class SetPathSuite extends SharedSparkSession {
       sql("USE spark_catalog.default")
       sql("SET PATH = DEFAULT_PATH")
       val entries = pathEntries(currentPath())
-      assert(entries === Seq("system.builtin", "system.session", "spark_catalog.default"),
-        s"DEFAULT_PATH should expand to system.builtin, system.session, and the current " +
-          s"schema; got: $entries")
+      assert(entries === Seq(
+        "system.builtin",
+        "system.session",
+        "spark_catalog.default",
+        "system",
+        "spark_catalog"),
+        s"DEFAULT_PATH should include system/current schema and catalog entries; got: $entries")
     }
   }
 
@@ -358,15 +362,39 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("PATH enabled: unqualified (1-part) schema reference is rejected") {
+  test("PATH enabled: one-part catalog reference is accepted") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog, system")
+      assert(pathEntries(currentPath()) === Seq("spark_catalog", "system"))
+    }
+  }
+
+  test("PATH enabled: CURRENT_CATALOG follows USE CATALOG") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      "spark.sql.catalog.path_other" -> classOf[InMemoryCatalog].getName) {
+      try {
+        sql("SET CATALOG spark_catalog")
+        sql("SET PATH = CURRENT_CATALOG, system")
+        assert(pathEntries(currentPath()) === Seq("spark_catalog", "system"))
+        sql("SET CATALOG path_other")
+        assert(pathEntries(currentPath()) === Seq("path_other", "system"))
+      } finally {
+        sql("SET CATALOG spark_catalog")
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("PATH enabled: duplicate CURRENT_CATALOG raises error") {
     withPathEnabled {
       checkError(
         exception = intercept[AnalysisException] {
-          sql("SET PATH = myschema")
+          sql("SET PATH = CURRENT_CATALOG, CURRENT_CATALOG")
         },
-        condition = "INVALID_SQL_PATH_SCHEMA_REFERENCE",
-        parameters = Map(
-          "qualifiedName" -> "myschema"))
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "current_catalog"))
     }
   }
 
@@ -452,6 +480,32 @@ class SetPathSuite extends SharedSparkSession {
         sql("DROP TEMPORARY VARIABLE path_var_gate")
       } finally {
         sql("DROP TEMPORARY VARIABLE IF EXISTS system.session.path_var_gate")
+      }
+    }
+  }
+
+  test("PATH enabled: two-part session variable follows catalog entries") {
+    withPathEnabled {
+      sql("DECLARE OR REPLACE VARIABLE system.session.path_qualified_var = 7")
+      try {
+        sql("SET PATH = current_catalog")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SET VAR session.path_qualified_var = 8")
+          },
+          condition = "UNRESOLVED_VARIABLE",
+          sqlState = "42883",
+          parameters = Map(
+            "variableName" -> "`session`.`path_qualified_var`",
+            "searchPath" -> "[`spark_catalog`]"),
+          context = ExpectedContext("session.path_qualified_var", 8, 33))
+
+        sql("SET PATH = system, current_catalog")
+        sql("SET VAR session.path_qualified_var = 9")
+        checkAnswer(sql("SELECT session.path_qualified_var"), Row(9))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY VARIABLE IF EXISTS system.session.path_qualified_var")
       }
     }
   }
@@ -548,8 +602,23 @@ class SetPathSuite extends SharedSparkSession {
       SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "last") {
       sql("SET PATH = DEFAULT_PATH")
       val entries = pathEntries(currentPath())
-      assert(entries.last.contains("session"),
-        s"With 'last' order, session should come last; got: $entries")
+      assert(entries.indexWhere(_.contains("session")) > entries.indexWhere(_.contains("default")),
+        s"With 'last' order, session should follow the current schema; got: $entries")
+    }
+  }
+
+  test("PATH enabled: DEFAULT_PATH respects persistentCatalogFirst") {
+    Seq(
+      false -> Seq("system", "spark_catalog"),
+      true -> Seq("spark_catalog", "system")
+    ).foreach { case (persistentCatalogFirst, expectedCatalogs) =>
+      withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.PERSISTENT_CATALOG_FIRST.key -> persistentCatalogFirst.toString) {
+        sql("SET PATH = DEFAULT_PATH")
+        val catalogEntries = pathEntries(currentPath()).filter(expectedCatalogs.contains)
+        assert(catalogEntries === expectedCatalogs)
+      }
     }
   }
 
@@ -674,8 +743,8 @@ class SetPathSuite extends SharedSparkSession {
         sql("SET PATH = spark_catalog.path_res_b, spark_catalog.path_res_a, system.builtin")
         checkAnswer(sql("SELECT x FROM tbl"), Row(2))
       } finally {
-        sql("DROP TABLE IF EXISTS path_res_a.tbl")
-        sql("DROP TABLE IF EXISTS path_res_b.tbl")
+        sql("DROP TABLE IF EXISTS spark_catalog.path_res_a.tbl")
+        sql("DROP TABLE IF EXISTS spark_catalog.path_res_b.tbl")
         sql("DROP SCHEMA IF EXISTS path_res_a")
         sql("DROP SCHEMA IF EXISTS path_res_b")
       }
@@ -1007,15 +1076,17 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("path-driven COUNT(*) rewrite gate: builtin.count respects persistentCatalogFirst") {
-    withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+  test("path-driven COUNT(*) rewrite gate: builtin.count follows catalog PATH") {
+    withPathEnabled {
       withDatabase("builtin") {
         sql("CREATE DATABASE builtin")
         sql("CREATE FUNCTION builtin.count(x INT) RETURNS INT RETURN x + 100")
         try {
+          sql("SET PATH = current_catalog, system")
           checkAnswer(sql("SELECT builtin.count(*) FROM VALUES (1) AS t(a)"), Row(101))
           checkAnswer(sql("SELECT system.builtin.count(*) FROM VALUES (1) AS t(a)"), Row(1))
         } finally {
+          sql("SET PATH = DEFAULT_PATH")
           sql("DROP FUNCTION IF EXISTS builtin.count")
         }
       }
@@ -1050,7 +1121,8 @@ class SetPathSuite extends SharedSparkSession {
             s"Expected BIGINT (builtin count rewrite); got: $tpe")
         }
 
-        sql("SET PATH = system.session, system.builtin")
+        // The catalog-only system entry resolves the two-part builtin.count reference below.
+        sql("SET PATH = system.session, system.builtin, system")
 
         // PATH session-first: the gate reports a shadow, so the star expands against `a` and
         // resolves through the temp SQL `count`. The single-pass analyzer does not support SQL

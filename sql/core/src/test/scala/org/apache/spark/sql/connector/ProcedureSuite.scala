@@ -266,6 +266,23 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("PATH enabled: partially qualified CALL follows catalog entries") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+        catalog("cat2").createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
+
+        sql("SET PATH = cat2, cat")
+        checkAnswer(sql("CALL ns.sum(1, 2)"), Row(3L) :: Nil)
+
+        sql("SET PATH = cat, cat2")
+        checkAnswer(sql("CALL ns.sum(1, 2)"), Row(3) :: Nil)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
   test("SPARK-61553: a null from loadProcedure means the procedure is not found") {
     withSQLConf("spark.sql.catalog.nullcat" -> classOf[NullReturningProcedureCatalog].getName) {
       checkError(

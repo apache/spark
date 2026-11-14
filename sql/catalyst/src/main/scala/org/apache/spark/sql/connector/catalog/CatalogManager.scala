@@ -96,7 +96,6 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   def sqlResolutionPathEntries(
       currentCatalog: String,
       currentNamespace: Seq[String]): Seq[Seq[String]]
-  def isSystemSessionOnPath: Boolean
   def resolutionPathEntriesForAnalysis(
       pinnedEntries: Option[Seq[Seq[String]]],
       viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]]
@@ -348,7 +347,7 @@ private[sql] class DefaultCatalogManager(
       case Some(entries) =>
         CatalogManager.resolvePathEntries(entries, expandCatalog, expandNamespace)
       case None =>
-        conf.defaultPathOrder(Seq(defaultEntry))
+        conf.resolutionSearchPath(defaultEntry)
     }
   }
 
@@ -399,28 +398,6 @@ private[sql] class DefaultCatalogManager(
       sqlResolutionPathEntries(catName, effectiveNs)
     }
     CatalogManager.systemFunctionKindsFromPath(pathEntries)
-  }
-
-  /**
-   * True if `system.session` is on the SQL path. Only literal path entries can match: the
-   * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]] marker expands to
-   * `currentCatalog.name() +: currentNamespace`, and
-   * `system` is not a registered catalog (it is a synthetic namespace served via
-   * [[org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog]] / `lookupBuiltinOrTempFunction`,
-   * not loadable via [[catalog]]), so `currentCatalog.name()` cannot be `"system"`. If that
-   * invariant ever changes, this short-circuit must be revisited.
-   * Inspecting effective entries directly avoids loading the configured default catalog.
-   */
-  override def isSystemSessionOnPath: Boolean = synchronized {
-    if (!conf.pathEnabled) return true
-    sessionPathEntries match {
-      case None => true
-      case Some(entries) => entries.exists {
-        case CatalogManager.LiteralPathEntry(parts) =>
-          CatalogManager.isSystemSessionPathEntry(parts)
-        case _ => false
-      }
-    }
   }
 
   /**
@@ -567,8 +544,7 @@ private[sql] object CatalogManager extends Logging {
 
   /**
    * True if the multipart name uses the session temp view namespace: two-part `session.view`
-   * or three-part `system.session.view`. The two-part form can also denote a persistent relation
-   * in schema `session`; resolution order is controlled by [[SQLConf#prioritizeSystemCatalog]].
+   * or three-part `system.session.view`.
    */
   def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
     (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(SESSION_NAMESPACE)) ||
@@ -588,13 +564,57 @@ private[sql] object CatalogManager extends Logging {
       parts(1).equalsIgnoreCase(BUILTIN_NAMESPACE)
 
   /**
-   * True when `system.builtin` is the first entry of `pathEntries`. This is the path-shape
-   * condition under which a built-in function found by an unqualified single-part name cannot be
-   * shadowed by any earlier path entry -- the precise property the function-resolution built-in
-   * fast-path relies on. Pure predicate over the path shape; callers decide how to use it.
+   * True when `system.builtin` is the first schema entry of `pathEntries`. Catalog-only entries do
+   * not participate in one-part resolution. This is the path-shape condition under which a
+   * built-in function found by an unqualified single-part name cannot be shadowed by any earlier
+   * relevant entry -- the precise property the function-resolution built-in fast-path relies on.
+   * Pure predicate over the path shape; callers decide how to use it.
    */
   def isBuiltinFirstOnPath(pathEntries: Seq[Seq[String]]): Boolean =
-    pathEntries.headOption.exists(isSystemBuiltinPathEntry)
+    pathEntries.find(_.length > 1).exists(isSystemBuiltinPathEntry)
+
+  /**
+   * True if an identifier is resolved through SQL PATH. A two-part name whose first part is a
+   * registered catalog is already fully catalog-qualified and bypasses PATH.
+   */
+  def identifierUsesPath(
+      nameParts: Seq[String],
+      isCatalogRegistered: String => Boolean): Boolean = {
+    nameParts.length == 1 ||
+      (nameParts.length == 2 && !isCatalogRegistered(nameParts.head))
+  }
+
+  /**
+   * Select the SQL path entries that participate in resolving an identifier. Schema path entries
+   * (catalog + namespace) apply to one-part names, while catalog path entries apply to two-part
+   * partially qualified names. Fully catalog-qualified names do not use the path, but retain the
+   * historical schema path for diagnostics.
+   */
+  def identifierPathEntries(
+      pathEntries: Seq[Seq[String]],
+      nameParts: Seq[String],
+      isCatalogRegistered: String => Boolean): Seq[Seq[String]] = nameParts.length match {
+    case 1 => pathEntries.filter(_.length > 1)
+    case 2 if identifierUsesPath(nameParts, isCatalogRegistered) =>
+      pathEntries.filter(_.length == 1)
+    case _ => pathEntries.filter(_.length > 1)
+  }
+
+  /**
+   * Build resolution candidates for an identifier from the SQL path. Schema path entries
+   * (catalog + namespace) qualify one-part names, while catalog path entries qualify two-part
+   * names. Names with three or more parts are already fully qualified.
+   */
+  def identifierPathCandidates(
+      pathEntries: Seq[Seq[String]],
+      nameParts: Seq[String],
+      isCatalogRegistered: String => Boolean): Seq[Seq[String]] = {
+    if (identifierUsesPath(nameParts, isCatalogRegistered)) {
+      identifierPathEntries(pathEntries, nameParts, isCatalogRegistered).map(_ ++ nameParts)
+    } else {
+      Seq(nameParts)
+    }
+  }
 
   /**
    * Extract `system.builtin` / `system.session` entries from a resolved PATH, mapped to
@@ -610,8 +630,7 @@ private[sql] object CatalogManager extends Logging {
     }
 
   /**
-   * A single entry in the session SQL path: either a literal schema
-   * or the current-schema marker.
+   * A single entry in the session SQL path: a literal catalog/schema or a dynamic marker.
    */
   sealed trait SessionPathEntry {
     /** Resolve to concrete catalog + namespace parts. */
@@ -621,6 +640,8 @@ private[sql] object CatalogManager extends Logging {
       case CurrentSchemaEntry =>
         if (currentNamespace.isEmpty) Seq(currentCatalog)
         else currentCatalog +: currentNamespace
+      case CurrentCatalogEntry =>
+        Seq(currentCatalog)
       case LiteralPathEntry(parts) => parts
     }
   }
@@ -628,7 +649,10 @@ private[sql] object CatalogManager extends Logging {
   /** Marker for CURRENT_SCHEMA / CURRENT_DATABASE: expands dynamically with USE SCHEMA. */
   case object CurrentSchemaEntry extends SessionPathEntry
 
-  /** A fully qualified schema reference (catalog.namespace...). */
+  /** Marker for CURRENT_CATALOG: expands dynamically with USE CATALOG. */
+  case object CurrentCatalogEntry extends SessionPathEntry
+
+  /** A catalog or fully qualified schema reference (catalog.namespace...). */
   case class LiteralPathEntry(parts: Seq[String]) extends SessionPathEntry
 
   /** Resolve all entries in a session path to concrete catalog + namespace parts. */

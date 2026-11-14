@@ -441,25 +441,25 @@ class JsonValueSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("two-part builtin SQL/JSON path function respects persistentCatalogFirst before " +
-      "rejecting star") {
+  test("two-part builtin SQL/JSON path function follows catalog PATH before rejecting star") {
     pathFunctionShadows.foreach { case (func, retType, body, expected) =>
-      withDatabase("builtin") {
-        sql("CREATE DATABASE builtin")
-        sql(s"CREATE FUNCTION builtin.$func(a STRING, b STRING) RETURNS $retType RETURN $body")
-        try {
-          val query = s"""SELECT builtin.$func(*, '$$.a') FROM VALUES ('{"a":1}') AS t(j)"""
-          withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "false") {
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        withDatabase("builtin") {
+          sql("CREATE DATABASE builtin")
+          sql(s"CREATE FUNCTION builtin.$func(a STRING, b STRING) RETURNS $retType RETURN $body")
+          try {
+            val query = s"""SELECT builtin.$func(*, '$$.a') FROM VALUES ('{"a":1}') AS t(j)"""
+            sql("SET PATH = system, current_catalog")
             val e = intercept[AnalysisException] {
               sql(query).collect()
             }
             assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"for $func")
-          }
-          withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+            sql("SET PATH = current_catalog, system")
             checkAnswer(sql(query), expected)
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+            sql(s"DROP FUNCTION IF EXISTS builtin.$func")
           }
-        } finally {
-          sql(s"DROP FUNCTION IF EXISTS builtin.$func")
         }
       }
     }
