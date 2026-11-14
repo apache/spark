@@ -220,6 +220,10 @@ class JobCancellationTestsMixin:
         )
         self.spark.clearTags()
 
+    def test_interrupt_operation_not_running(self):
+        # Interrupting an operation id that is not running is a no-op.
+        self.assertEqual(self.spark.interruptOperation("123456789"), [])
+
 
 class JobCancellationTests(JobCancellationTestsMixin, ReusedSQLTestCase):
     pass
