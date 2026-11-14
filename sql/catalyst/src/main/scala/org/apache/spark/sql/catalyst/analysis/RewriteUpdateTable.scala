@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_TABLE
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
-import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, SupportsColumnUpdates, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.types.IntegerType
 
@@ -43,15 +44,21 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, UPDATE)
-          val table = buildOperationTable(tbl, UPDATE, r.options)
+          val (metadataUpdates, dataUpdates) = nonIdentityAssignments(r, assignments).partition {
+            case (attr, _) => MetadataAttribute.isValid(attr.metadata)
+          }
+          val updatedAttrs = dataUpdates.map(_._1)
+          val table = buildOperationTable(tbl, UPDATE, r.options, updatedAttrs)
           val updateCond = cond.getOrElse(TrueLiteral)
+          val writeAttrs = resolveWriteAttrs(
+            r, table.operation, metadataUpdates.map(_._2), updatedAttrs)
           table.operation match {
             case _: SupportsDelta =>
-              buildWriteDeltaPlan(r, table, assignments, updateCond)
+              buildWriteDeltaPlan(r, table, assignments, updateCond, writeAttrs)
             case _ if SubqueryExpression.hasSubquery(updateCond) =>
-              buildReplaceDataWithUnionPlan(r, table, assignments, updateCond)
+              buildReplaceDataWithUnionPlan(r, table, assignments, updateCond, writeAttrs)
             case _ =>
-              buildReplaceDataPlan(r, table, assignments, updateCond)
+              buildReplaceDataPlan(r, table, assignments, updateCond, writeAttrs)
           }
 
         case _ =>
@@ -65,7 +72,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       relation: DataSourceV2Relation,
       operationTable: RowLevelOperationTable,
       assignments: Seq[Assignment],
-      cond: Expression): ReplaceData = {
+      cond: Expression,
+      writeAttrs: Seq[AttributeReference]): ReplaceData = {
 
     // resolve all required metadata attrs that may be used for grouping data on write
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
@@ -80,8 +88,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val query = buildReplaceDataUpdateProjection(readRelation, assignments, cond)
 
     // build a plan to replace read groups in the table
-    val writeRelation = relation.copy(table = operationTable)
-    val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
+    val writeRelation = relation.copy(table = operationTable, output = writeAttrs)
+    val projections = buildReplaceDataProjections(query, writeAttrs, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
@@ -92,7 +100,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       relation: DataSourceV2Relation,
       operationTable: RowLevelOperationTable,
       assignments: Seq[Assignment],
-      cond: Expression): ReplaceData = {
+      cond: Expression,
+      writeAttrs: Seq[AttributeReference]): ReplaceData = {
 
     // resolve all required metadata attrs that may be used for grouping data on write
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
@@ -118,8 +127,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val query = Union(updatedRowsPlan, remainingRowsPlan)
 
     // build a plan to replace read groups in the table
-    val writeRelation = relation.copy(table = operationTable)
-    val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
+    val writeRelation = relation.copy(table = operationTable, output = writeAttrs)
+    val projections = buildReplaceDataProjections(query, writeAttrs, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
@@ -159,12 +168,12 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       relation: DataSourceV2Relation,
       operationTable: RowLevelOperationTable,
       assignments: Seq[Assignment],
-      cond: Expression): WriteDelta = {
+      cond: Expression,
+      writeAttrs: Seq[AttributeReference]): WriteDelta = {
 
     val operation = operationTable.operation.asInstanceOf[SupportsDelta]
 
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
-    val rowAttrs = relation.output
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
 
@@ -183,8 +192,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     }
 
     // build a plan to write the row delta to the table
-    val writeRelation = relation.copy(table = operationTable)
-    val projections = buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
+    val writeRelation = relation.copy(table = operationTable, output = writeAttrs)
+    val projections = buildWriteDeltaProjections(
+      rowDeltaPlan, writeAttrs, rowIdAttrs, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections, groupFilterCond)
   }
@@ -236,5 +246,74 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val attrs = operationTypeAttr +: matchedRowsPlan.output
     val expandOutput = generateExpandOutput(attrs, outputs)
     Expand(outputs, expandOutput, matchedRowsPlan)
+  }
+
+  /**
+   * Pairs each column of the relation with its assignment and keeps the pairs whose assignment
+   * sets a new value. The assignments must be aligned with the relation output, one per column in
+   * order. A column is the relation's attribute, so it keeps the table's spelling when the SET
+   * clause spells it differently.
+   */
+  private def nonIdentityAssignments(
+      relation: DataSourceV2Relation,
+      assignments: Seq[Assignment]): Seq[(AttributeReference, Assignment)] = {
+    relation.output.zip(assignments).collect {
+      case (attr, a @ Assignment(key: Attribute, value)) if !isIdentityAssignment(key, value) =>
+        attr -> a
+    }
+  }
+
+  /**
+   * Returns the output of the write relation, which is the layout of the data rows the connector
+   * receives: the connector's `requiredDataAttributes()` if the operation opts into column updates
+   * and declares at least one column, and the relation's output otherwise. A mixed-in operation's
+   * declaration must cover every updated column, even an empty one, and a narrow write rejects a
+   * new value for a metadata column.
+   */
+  private def resolveWriteAttrs(
+      relation: DataSourceV2Relation,
+      operation: RowLevelOperation,
+      metadataUpdates: Seq[Assignment],
+      updatedAttrs: Seq[AttributeReference]): Seq[AttributeReference] = operation match {
+    case op: SupportsColumnUpdates =>
+      val attrs = RewriteRowLevelCommand.resolveRequiredDataAttrs(relation, op)
+      validateUpdatedColumnsSubset(op, updatedAttrs, AttributeSet(attrs))
+      if (attrs.isEmpty) {
+        relation.output
+      } else {
+        validateNoMetadataAssignments(metadataUpdates)
+        attrs
+      }
+    case _ =>
+      relation.output
+  }
+
+  /**
+   * A connector can locate the original rows of a narrow write through metadata columns, so a new
+   * value assigned to one would point the connector at another row. Only a table that accepts any
+   * schema lets an UPDATE assign them; on other tables `ResolveRowLevelCommandAssignments` rejects
+   * such an assignment, or drops it under the legacy config.
+   */
+  private def validateNoMetadataAssignments(metadataUpdates: Seq[Assignment]): Unit = {
+    if (metadataUpdates.nonEmpty) {
+      throw QueryCompilationErrors.invalidRowLevelOperationAssignments(
+        metadataUpdates,
+        RowLevelAssignmentResolution.metadataColumnAssignmentErrors(metadataUpdates))
+    }
+  }
+
+  /**
+   * Enforces that every updated column is present in the connector-declared
+   * `requiredDataAttributes()`. Comparison is at root-column granularity.
+   */
+  private def validateUpdatedColumnsSubset(
+      operation: RowLevelOperation,
+      updatedAttrs: Seq[AttributeReference],
+      declared: AttributeSet): Unit = {
+    val missing = updatedAttrs.filterNot(declared.contains).map(a => Seq(a.name))
+    if (missing.nonEmpty) {
+      throw QueryCompilationErrors.requiredDataAttributesMissingUpdatedColumnsError(
+        operation.getClass.getName, missing)
+    }
   }
 }

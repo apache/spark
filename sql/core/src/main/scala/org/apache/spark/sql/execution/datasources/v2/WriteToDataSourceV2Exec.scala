@@ -393,6 +393,12 @@ case class OverwritePartitionsDynamicExec(
 
 /**
  * Physical plan node to replace data in existing tables.
+ *
+ * @param useWriteColumnUpdate whether UPDATE and COPY rows follow
+ *                             `LogicalWriteInfo.columnUpdateSchema()` and go to
+ *                             `DataWriter.writeColumnUpdate`. A node that replaces this one must
+ *                             send those rows to `writeColumnUpdate` when it is set, or not
+ *                             replace this node.
  */
 case class ReplaceDataExec(
     query: SparkPlan,
@@ -401,14 +407,17 @@ case class ReplaceDataExec(
     write: Write,
     rowLevelCommand: RowLevelOperation.Command,
     tableName: String,
+    useWriteColumnUpdate: Boolean,
     transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
     projections.metadataProjection match {
       case Some(metadataProj) =>
-        DataAndMetadataWritingSparkTask(projections.rowProjection, metadataProj, sparkMetrics)
+        DataAndMetadataWritingSparkTask(
+          projections.rowProjection, metadataProj, useWriteColumnUpdate, sparkMetrics)
       case None =>
-        DataWithProjectionWritingSparkTask(projections.rowProjection, sparkMetrics)
+        DataWithProjectionWritingSparkTask(
+          projections.rowProjection, useWriteColumnUpdate, sparkMetrics)
     }
   }
 
@@ -859,6 +868,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 case class DataAndMetadataWritingSparkTask(
     dataProj: ProjectingInternalRow,
     metadataProj: ProjectingInternalRow,
+    useWriteColumnUpdate: Boolean,
     sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
@@ -866,6 +876,8 @@ case class DataAndMetadataWritingSparkTask(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numCopiedRows = 0L
+    val writeCopiedOrUpdatedRow: (InternalRow, InternalRow) => Unit =
+      if (useWriteColumnUpdate) writer.writeColumnUpdate(_, _) else writer.write(_, _)
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -876,13 +888,13 @@ case class DataAndMetadataWritingSparkTask(
           numUpdatedRows += 1L
           dataProj.project(row)
           metadataProj.project(row)
-          writer.write(metadataProj, dataProj)
+          writeCopiedOrUpdatedRow(metadataProj, dataProj)
 
         case COPY_OPERATION =>
           numCopiedRows += 1L
           dataProj.project(row)
           metadataProj.project(row)
-          writer.write(metadataProj, dataProj)
+          writeCopiedOrUpdatedRow(metadataProj, dataProj)
 
         case INSERT_OPERATION =>
           dataProj.project(row)
@@ -900,6 +912,7 @@ case class DataAndMetadataWritingSparkTask(
 
 case class DataWithProjectionWritingSparkTask(
     dataProj: ProjectingInternalRow,
+    useWriteColumnUpdate: Boolean,
     sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
@@ -907,6 +920,8 @@ case class DataWithProjectionWritingSparkTask(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numCopiedRows = 0L
+    val writeCopiedOrUpdatedRow: InternalRow => Unit =
+      if (useWriteColumnUpdate) writer.writeColumnUpdate(_) else writer.write(_)
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -916,12 +931,12 @@ case class DataWithProjectionWritingSparkTask(
         case UPDATE_OPERATION =>
           numUpdatedRows += 1L
           dataProj.project(row)
-          writer.write(dataProj)
+          writeCopiedOrUpdatedRow(dataProj)
 
         case COPY_OPERATION =>
           numCopiedRows += 1L
           dataProj.project(row)
-          writer.write(dataProj)
+          writeCopiedOrUpdatedRow(dataProj)
 
         case INSERT_OPERATION =>
           dataProj.project(row)

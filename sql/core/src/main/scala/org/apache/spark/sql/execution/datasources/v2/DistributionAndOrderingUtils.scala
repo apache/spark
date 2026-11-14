@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartit
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.distributions._
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
@@ -38,15 +39,8 @@ object DistributionAndOrderingUtils {
       val numPartitions = write.requiredNumPartitions()
       val partitionSize = write.advisoryPartitionSizeInBytes()
 
-      val distribution = write.requiredDistribution match {
-        case d: OrderedDistribution =>
-          toCatalystOrdering(d.ordering(), query, funCatalogOpt)
-            .map(e => resolveTransformExpression(e).asInstanceOf[SortOrder])
-        case d: ClusteredDistribution =>
-          d.clustering.map(e => toCatalyst(e, query, funCatalogOpt))
-            .map(e => resolveTransformExpression(e)).toImmutableArraySeq
-        case _: UnspecifiedDistribution => Seq.empty[Expression]
-      }
+      val distribution = distributionExpressions(write.requiredDistribution)
+        .map(e => resolveTransformExpression(toCatalyst(e, query, funCatalogOpt)))
 
       val queryWithDistribution = if (distribution.nonEmpty) {
         val optNumPartitions = if (numPartitions > 0) Some(numPartitions) else None
@@ -87,6 +81,13 @@ object DistributionAndOrderingUtils {
     case _ =>
       query
   }
+
+  private[v2] def distributionExpressions(distribution: Distribution): Seq[V2Expression] =
+    distribution match {
+      case d: OrderedDistribution => d.ordering.toImmutableArraySeq
+      case d: ClusteredDistribution => d.clustering.toImmutableArraySeq
+      case _: UnspecifiedDistribution => Seq.empty
+    }
 
   private object TypeCoercionExecutor extends RuleExecutor[LogicalPlan] {
     override val batches =
