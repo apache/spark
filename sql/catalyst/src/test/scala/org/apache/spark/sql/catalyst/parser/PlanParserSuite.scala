@@ -3675,6 +3675,24 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
+  test("GAP FILL: clause words in names or expressions are not repeated clauses") {
+    // The duplicate check counts only the clause keywords of the GAP FILL rule itself.
+    val names = singleGapFill(parsePlan(
+      "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
+        "BIN_START AS bin_start IS_GENERATED AS is_generated ALIGN TO align MAX GAP max)"))
+    assert(names.binStart.contains(GapFillOutputColumn(Some("bin_start"))))
+    assert(names.isGenerated.contains(GapFillOutputColumn(Some("is_generated"))))
+    assert(names.originExpr.contains(parseExpression("align")))
+    assert(names.maxGapExpr.contains(parseExpression("max")))
+
+    val expressions = singleGapFill(parsePlan(
+      "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
+        "FROM ts TO ts + INTERVAL '1' DAY ALIGN TO EXTRACT(YEAR FROM ts) MAX GAP max(ts))"))
+    assert(expressions.rangeStartExpr.contains(parseExpression("ts")))
+    assert(expressions.originExpr.contains(parseExpression("EXTRACT(YEAR FROM ts)")))
+    assert(expressions.maxGapExpr.contains(parseExpression("max(ts)")))
+  }
+
   test("GAP FILL: several repeated clauses report the first one in a fixed order") {
     // The order is ALIGN TO, FROM, FILL, MAX GAP, BIN_START, IS_GENERATED, wherever the repeats
     // are in the query.
