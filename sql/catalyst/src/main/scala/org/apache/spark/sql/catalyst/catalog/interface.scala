@@ -872,6 +872,28 @@ object CatalogTable {
     }.getOrElse(0)
   }
 
+  /**
+   * Reject negative or future metadata versions. Call before interpreting other properties
+   * so unsupported future payloads fail with a version error even when PATH is absent.
+   */
+  def requireSupportedMetadataVersion(
+      metadataVersion: Int,
+      currentVersion: Int,
+      objectType: String,
+      objectName: String): Unit = {
+    if (metadataVersion < 0 || metadataVersion > currentVersion) {
+      throw new AnalysisException(
+        message = s"Unsupported stored metadata version '$metadataVersion' for $objectType " +
+          s"'$objectName'.",
+        line = None,
+        startPosition = None,
+        cause = None,
+        errorClass = None,
+        messageParameters = Map.empty,
+        context = Array.empty)
+    }
+  }
+
   val PROP_CLUSTERING_COLUMNS: String = "clusteringColumns"
 
   /**

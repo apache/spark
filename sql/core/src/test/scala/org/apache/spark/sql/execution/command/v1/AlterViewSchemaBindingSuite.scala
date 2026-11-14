@@ -43,6 +43,7 @@ class AlterViewSchemaBindingSuite
         val pathAfterCreate = metaAfterCreate.viewStoredResolutionPath
           .getOrElse(fail("Expected the view to persist a frozen SQL path"))
         val versionAfterCreate = metaAfterCreate.viewMetadataVersion
+        val catalogAfterCreate = metaAfterCreate.viewCatalogAndNamespace
         val parsedCreate = CatalogManager.deserializePathEntries(pathAfterCreate)
           .getOrElse(fail(s"Expected a valid serialized path, got: $pathAfterCreate"))
         assert(parsedCreate.contains(Seq(catalog, "alter_view_path_a")),
@@ -63,10 +64,48 @@ class AlterViewSchemaBindingSuite
         assert(metaAfterAlter.viewMetadataVersion == versionAfterCreate,
           s"ALTER VIEW WITH SCHEMA must preserve metadataVersion. " +
             s"Before: $versionAfterCreate; after: ${metaAfterAlter.viewMetadataVersion}")
+        assert(metaAfterAlter.viewCatalogAndNamespace == catalogAfterCreate,
+          s"ALTER VIEW WITH SCHEMA must preserve creation catalog/namespace. " +
+            s"Before: $catalogAfterCreate; after: ${metaAfterAlter.viewCatalogAndNamespace}")
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql(s"DROP VIEW IF EXISTS $view")
         sql(s"DROP SCHEMA IF EXISTS $catalog.alter_view_path_a")
+      }
+    }
+  }
+
+  test("ALTER VIEW ... WITH SCHEMA preserves creation catalog and namespace") {
+    // Legacy (metadataVersion 0) PATH reconstruction appends the creation catalog for
+    // two-part names. SCHEMA BINDING must not rewrite catalog/namespace from the
+    // ALTER-time session, or resolution would silently change.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      val viewName = "v_catalog_preserved_on_alter"
+      val view = s"$catalog.$namespace.$viewName"
+      val createNs = "alter_view_catalog_ns"
+      sql(s"CREATE SCHEMA IF NOT EXISTS $catalog.$createNs")
+      try {
+        sql(s"USE $catalog.$createNs")
+        sql(s"CREATE VIEW $view AS SELECT 1 AS x")
+        val metaAfterCreate = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier(viewName, Some(namespace)))
+        val catalogAfterCreate = metaAfterCreate.viewCatalogAndNamespace
+        assert(catalogAfterCreate === Seq(catalog, createNs),
+          s"Expected creation catalog/namespace [$catalog, $createNs]; got: $catalogAfterCreate")
+
+        // ALTER under a different current namespace must keep the create-time values.
+        sql(s"USE $catalog.$namespace")
+        sql(s"ALTER VIEW $view WITH SCHEMA EVOLUTION")
+
+        val metaAfterAlter = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier(viewName, Some(namespace)))
+        assert(metaAfterAlter.viewCatalogAndNamespace == catalogAfterCreate,
+          s"ALTER VIEW WITH SCHEMA must preserve creation catalog/namespace. " +
+            s"Before: $catalogAfterCreate; after: ${metaAfterAlter.viewCatalogAndNamespace}")
+      } finally {
+        sql(s"USE $catalog.$namespace")
+        sql(s"DROP VIEW IF EXISTS $view")
+        sql(s"DROP SCHEMA IF EXISTS $catalog.$createNs")
       }
     }
   }

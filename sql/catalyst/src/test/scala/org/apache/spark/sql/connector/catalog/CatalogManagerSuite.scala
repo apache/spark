@@ -216,6 +216,34 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       objectName = "v") === entries)
   }
 
+  test("unsupported metadata version fails before PATH parse") {
+    val e = intercept[AnalysisException] {
+      CatalogManager.deserializePathEntriesForAnalysisOrFail(
+        storedPathStr = "{bad-json",
+        metadataVersion = CatalogTable.CURRENT_VIEW_METADATA_VERSION + 1,
+        creationCatalog = Some("spark_catalog"),
+        persistentCatalogFirst = false,
+        objectType = "view",
+        objectName = "default.v_future")
+    }
+    assert(e.getMessage.contains("Unsupported stored metadata version"))
+    assert(e.getMessage.contains("default.v_future"))
+    assert(!e.getMessage.contains("Invalid stored SQL path metadata"))
+  }
+
+  test("negative metadata version is rejected") {
+    val e = intercept[AnalysisException] {
+      CatalogManager.deserializePathEntriesForAnalysisOrFail(
+        storedPathStr = CatalogManager.serializePathEntries(Seq(Seq("spark_catalog", "default"))),
+        metadataVersion = -1,
+        creationCatalog = Some("spark_catalog"),
+        persistentCatalogFirst = false,
+        objectType = "view",
+        objectName = "v")
+    }
+    assert(e.getMessage.contains("Unsupported stored metadata version '-1'"))
+  }
+
   test("deserializePathEntriesOrFail raises a clear AnalysisException for bad payloads") {
     val e = intercept[AnalysisException] {
       CatalogManager.deserializePathEntriesOrFail(

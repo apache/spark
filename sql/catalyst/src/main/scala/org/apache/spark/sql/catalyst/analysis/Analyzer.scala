@@ -271,6 +271,12 @@ object AnalysisContext {
     } else {
       originContext.maxNestedViewDepth
     }
+    // Validate even when PATH is absent so future metadata versions still fail closed.
+    CatalogTable.requireSupportedMetadataVersion(
+      viewDesc.viewMetadataVersion,
+      CatalogTable.CURRENT_VIEW_METADATA_VERSION,
+      "view",
+      viewDesc.identifier.unquotedString)
     val context = AnalysisContext(
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
@@ -302,6 +308,12 @@ object AnalysisContext {
 
   def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
     val originContext = value.get()
+    // Validate even when PATH is absent so future metadata versions still fail closed.
+    CatalogTable.requireSupportedMetadataVersion(
+      function.functionMetadataVersion,
+      SQLFunction.CURRENT_FUNCTION_METADATA_VERSION,
+      "SQL function",
+      function.name.unquotedString)
     // Function body analysis should not inherit any caller-pinned path; use only function metadata.
     val context = originContext.copy(
       resolutionPathEntries = function.functionStoredResolutionPath

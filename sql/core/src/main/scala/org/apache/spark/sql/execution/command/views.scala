@@ -511,6 +511,28 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     }
   }
 
+  /** True if `key` is a persisted view catalog/namespace (or pre-3.0 default database) property. */
+  private def isCatalogAndNamespaceProperty(key: String): Boolean = {
+    key == VIEW_CATALOG_AND_NAMESPACE ||
+      key.startsWith(VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX) ||
+      key == VIEW_DEFAULT_DATABASE
+  }
+
+  /**
+   * Remove creation catalog/namespace properties so they can be recomputed, or selectively
+   * restored when `captureNewPath` is false.
+   */
+  private def removeCatalogAndNamespace(
+      properties: Map[String, String]): Map[String, String] = {
+    properties.filterNot { case (key, _) => isCatalogAndNamespaceProperty(key) }
+  }
+
+  /** Existing creation catalog/namespace properties to preserve across SCHEMA BINDING alters. */
+  private def catalogAndNamespaceFromProperties(
+      properties: Map[String, String]): Map[String, String] = {
+    properties.filter { case (key, _) => isCatalogAndNamespaceProperty(key) }
+  }
+
   /**
    * Remove the temporary object names in `properties`.
    */
@@ -571,7 +593,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // Capture the effective resolution path at view creation time so the view body
     // resolves with the same path regardless of the caller's session path later.
     // When captureNewPath is false (e.g. ALTER VIEW SCHEMA BINDING), preserve the
-    // existing frozen path and metadata version instead of overwriting them.
+    // existing frozen path, metadata version, and creation catalog/namespace. Legacy
+    // (metadataVersion 0) PATH reconstruction uses the creation catalog for two-part
+    // names, so rewriting it from the ALTER-time session would change resolution.
     val resolutionPathProps = if (captureNewPath) {
       val expandedPathEntries = CatalogManager.pathEntriesForPersistence(
         manager, conf, stripSession = stripSystemSessionFromStoredPath)
@@ -586,11 +610,17 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
         key == VIEW_RESOLUTION_PATH || key == VIEW_METADATA_VERSION
       }
     }
+    val catalogNamespaceProps = if (captureNewPath) {
+      catalogAndNamespaceToProps(
+        manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq)
+    } else {
+      catalogAndNamespaceFromProperties(properties)
+    }
 
     removeResolutionPath(
-      removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties)))) ++
-      catalogAndNamespaceToProps(
-        manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
+      removeCatalogAndNamespace(
+        removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))))) ++
+      catalogNamespaceProps ++
       sqlConfigsToProps(conf, VIEW_SQL_CONFIG_PREFIX) ++
       queryColumnNameProps ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++

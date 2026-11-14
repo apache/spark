@@ -301,6 +301,25 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
     }
   }
 
+  test("unsupported metadata version fails analysis even without a stored PATH") {
+    withView(testViewName) {
+      sql(s"CREATE VIEW $testViewName AS SELECT 1 AS id")
+      val metadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
+      val future = metadata.copy(properties =
+        metadata.properties
+          .removed(CatalogTable.VIEW_RESOLUTION_PATH)
+          .updated(
+            CatalogTable.VIEW_METADATA_VERSION,
+            (CatalogTable.CURRENT_VIEW_METADATA_VERSION + 1).toString))
+      val e = intercept[AnalysisException] {
+        AnalysisContext.withAnalysisContext(future) {
+          ()
+        }
+      }
+      assert(e.getMessage.contains("Unsupported stored metadata version"))
+    }
+  }
+
   test("legacy persisted view path resolves two-part relations through creation catalog") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       sql("CREATE DATABASE session")
