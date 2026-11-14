@@ -3592,7 +3592,7 @@ class PlanParserSuite extends AnalysisTest {
     assert(partitioned.timeColumn == UnresolvedAttribute(Seq("t1", "ts")))
   }
 
-  test("GAP FILL: every clause and fill method parses, in any clause order") {
+  test("GAP FILL: every clause and fill method parses, with optional clauses in any order") {
     val maximal = singleGapFill(parsePlan(
       """SELECT * FROM metrics GAP FILL (
         |  PARTITION BY device_id
