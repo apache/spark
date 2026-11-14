@@ -36,8 +36,8 @@ case class NumericValueInterval(min: Double, max: Double) extends ValueInterval 
 }
 
 /**
- * This version of Spark does not have min/max for binary/string types, we define their default
- * behaviors by this class.
+ * A value range that is unknown: binary/string types have no max/min stats, and a join key may
+ * have distinct values but no max/min stats.
  */
 class DefaultValueInterval extends ValueInterval {
   override def contains(l: Literal): Boolean = true
@@ -62,12 +62,13 @@ object ValueInterval {
   }
 
   def isIntersected(r1: ValueInterval, r2: ValueInterval): Boolean = (r1, r2) match {
-    case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
-      // The DefaultValueInterval represents string/binary types which do not have max/min stats,
-      // we assume they are intersected to be conservative on estimation
-      true
     case (_, _: NullValueInterval) | (_: NullValueInterval, _) =>
+      // Null values intersect no interval, even one whose range is unknown
       false
+    case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
+      // The DefaultValueInterval has an unknown range, e.g. for string/binary types which do not
+      // have max/min stats, we assume they are intersected to be conservative on estimation
+      true
     case (n1: NumericValueInterval, n2: NumericValueInterval) =>
       n1.min.compareTo(n2.max) <= 0 && n1.max.compareTo(n2.min) >= 0
     case _ =>
@@ -75,13 +76,19 @@ object ValueInterval {
   }
 
   /**
-   * Intersected results of two intervals. This is only for two overlapped intervals.
-   * The outputs are the intersected min/max values.
+   * Intersected results of two intervals. This is only for two overlapped intervals, which
+   * `isIntersected` checks. The outputs are the intersected min/max values.
    */
   def intersect(r1: ValueInterval, r2: ValueInterval, dt: DataType): (Option[Any], Option[Any]) = {
     (r1, r2) match {
+      case (n: NumericValueInterval, _: DefaultValueInterval) =>
+        // An unknown range does not narrow the other one.
+        (Some(EstimationUtils.fromDouble(n.min, dt)), Some(EstimationUtils.fromDouble(n.max, dt)))
+      case (_: DefaultValueInterval, _: NumericValueInterval) =>
+        intersect(r2, r1, dt)
       case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
-        // binary/string types don't support intersecting.
+        // No range is known: both are unknown, e.g. for binary/string types, or the other one
+        // holds only nulls.
         (None, None)
       case (n1: NumericValueInterval, n2: NumericValueInterval) =>
         // Choose the maximum of two min values, and the minimum of two max values.

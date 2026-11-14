@@ -21,9 +21,10 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, EqualTo, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{DefaultValueInterval, NullValueInterval, ValueInterval}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
@@ -626,6 +627,187 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       assert(Join(left, right, FullOuter, condition, JoinHint.NONE).stats.rowCount
         .contains(BigInt(20)))
     }
+  }
+
+  test("SPARK-61002: a join key without min/max is not taken as holding only nulls") {
+    // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
+    // A data source can report the distinct and null counts of a column but not its min/max.
+    val (noMinMax, noMinMaxStat) = (attr("key-no-min-max"),
+      ColumnStat(distinctCount = Some(3), min = None, max = None,
+        nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))
+    val noMinMaxTable = StatsTestPlan(
+      outputList = Seq(noMinMax),
+      rowCount = 3,
+      attributeStats = AttributeMap(Seq(noMinMax -> noMinMaxStat)))
+    val join = Join(table1, noMinMaxTable, Inner,
+      Some(EqualTo(nameToAttr("key-1-5"), noMinMax)), JoinHint.NONE)
+    // Estimated by ndv: 5 * 3 / max(5, 3) = 3. The joined keys keep the range of key-1-5.
+    val joinedColStat = ColumnStat(distinctCount = Some(3), min = Some(1), max = Some(5),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val expectedStats = Statistics(
+      sizeInBytes = 3 * (8 + 4 * 3),
+      rowCount = Some(3),
+      attributeStats = AttributeMap(Seq(
+        nameToAttr("key-1-5") -> joinedColStat, noMinMax -> joinedColStat,
+        nameToAttr("key-5-9") -> nameToColInfo("key-5-9")._2.copy(distinctCount = Some(3)))))
+    assert(join.stats == expectedStats)
+  }
+
+  test("SPARK-61002: an outer join on a key without min/max") {
+    // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
+    val (noMinMax, noMinMaxStat) = (attr("key-no-min-max"),
+      ColumnStat(distinctCount = Some(3), min = None, max = None,
+        nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))
+    val noMinMaxTable = StatsTestPlan(
+      outputList = Seq(noMinMax),
+      rowCount = 3,
+      attributeStats = AttributeMap(Seq(noMinMax -> noMinMaxStat)))
+    // 3 rows match, and the joined keys take the range of key-1-5.
+    val joinedColStat = ColumnStat(distinctCount = Some(3), min = Some(1), max = Some(5),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val (key15, key59) = (nameToColInfo("key-1-5"), nameToColInfo("key-5-9"))
+    Seq(
+      // The outer side keeps its stats. On the inner side, the join key takes the joined stats.
+      (LeftOuter, 5, Seq(key15, key59, noMinMax -> joinedColStat)),
+      (RightOuter, 3, Seq(key15._1 -> joinedColStat,
+        key59._1 -> key59._2.copy(distinctCount = Some(3)), noMinMax -> noMinMaxStat)),
+      // 5 + 3 - 3 rows, and both sides keep their stats.
+      (FullOuter, 5, Seq(key15, key59, noMinMax -> noMinMaxStat))
+    ).foreach { case (joinType, rows, colStats) =>
+      val join = Join(table1, noMinMaxTable, joinType,
+        Some(EqualTo(nameToAttr("key-1-5"), noMinMax)), JoinHint.NONE)
+      assert(join.stats.rowCount == Some(rows), joinType)
+      assert(join.stats.attributeStats == AttributeMap(colStats), joinType)
+    }
+  }
+
+  test("SPARK-61002: join keys with histograms but without min/max are estimated by ndv") {
+    val histogram = Histogram(height = 10, Array(
+      HistogramBin(lo = 1, hi = 5, ndv = 5), HistogramBin(lo = 5, hi = 9, ndv = 4)))
+    val (col1, col2) = (attr("key1"), attr("key2"))
+    val withMinMax = generateJoinChild(col1, histogram, 1, 9)
+    val noMinMax = StatsTestPlan(
+      outputList = Seq(col2),
+      rowCount = 20,
+      attributeStats = AttributeMap(Seq(
+        col2 -> inferColumnStat(histogram, 1, 9).copy(min = None, max = None))))
+    val join = Join(withMinMax, noMinMax, Inner, Some(EqualTo(col1, col2)), JoinHint.NONE)
+    // 20 * 20 / max(9, 9), rounded up.
+    assert(join.stats.rowCount == Some(45))
+  }
+
+  test("SPARK-61002: join keys that both lack min/max are estimated by ndv") {
+    // Two data sources that report distinct and null counts but no min/max.
+    val histogram = Histogram(height = 5, Array(
+      HistogramBin(lo = 1, hi = 3, ndv = 3), HistogramBin(lo = 3, hi = 5, ndv = 3)))
+    Seq(None, Some(histogram)).foreach { hist =>
+      def table(name: String, ndv: Int): StatsTestPlan = {
+        val key = attr(name)
+        StatsTestPlan(Seq(key), rowCount = 10, attributeStats = AttributeMap(Seq(
+          key -> ColumnStat(distinctCount = Some(ndv), min = None, max = None,
+            nullCount = Some(0), avgLen = Some(4), maxLen = Some(4), histogram = hist))))
+      }
+      val (left, right) = (table("l", 5), table("r", 4))
+      val join = Join(left, right, Inner, Some(EqualTo(left.output.head, right.output.head)),
+        JoinHint.NONE)
+      // 10 * 10 / max(5, 4). The range of the joined keys is unknown, so a histogram, which
+      // later estimates use only with a range, is passed on as it is.
+      val joinedColStat = ColumnStat(distinctCount = Some(4), min = None, max = None,
+        nullCount = Some(0), avgLen = Some(4), maxLen = Some(4), histogram = hist)
+      assert(join.stats.rowCount == Some(20), hist)
+      assert(join.stats.attributeStats(left.output.head) == joinedColStat, hist)
+      assert(join.stats.attributeStats(right.output.head) == joinedColStat, hist)
+    }
+  }
+
+  test("SPARK-61002: a join key without min/max drops its histogram for the range of the other") {
+    // The joined keys take the range [1, 5] of `known`. The histogram of `unknown` covers only
+    // [2, 4], so it is dropped, while the histogram of `known` is kept.
+    val knownHistogram = Histogram(height = 5, Array(
+      HistogramBin(lo = 1, hi = 3, ndv = 3), HistogramBin(lo = 3, hi = 5, ndv = 3)))
+    val unknownHistogram = Histogram(height = 5, Array(
+      HistogramBin(lo = 2, hi = 3, ndv = 2), HistogramBin(lo = 3, hi = 4, ndv = 2)))
+    val (known, unknown) = (attr("known"), attr("unknown"))
+    def table(key: AttributeReference, stat: ColumnStat): StatsTestPlan =
+      StatsTestPlan(Seq(key), rowCount = 10, attributeStats = AttributeMap(Seq(key -> stat)))
+    val knownTable = table(known, ColumnStat(distinctCount = Some(5), min = Some(1),
+      max = Some(5), nullCount = Some(0), avgLen = Some(4), maxLen = Some(4),
+      histogram = Some(knownHistogram)))
+    val unknownTable = table(unknown, ColumnStat(distinctCount = Some(3), min = None,
+      max = None, nullCount = Some(0), avgLen = Some(4), maxLen = Some(4),
+      histogram = Some(unknownHistogram)))
+    // 10 * 10 / max(5, 3), rounded up.
+    val joinedColStat = ColumnStat(distinctCount = Some(3), min = Some(1), max = Some(5),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    Seq(
+      Join(knownTable, unknownTable, Inner, Some(EqualTo(known, unknown)), JoinHint.NONE),
+      Join(unknownTable, knownTable, Inner, Some(EqualTo(unknown, known)), JoinHint.NONE)
+    ).foreach { join =>
+      assert(join.stats.rowCount == Some(20))
+      assert(join.stats.attributeStats(known) ==
+        joinedColStat.copy(histogram = Some(knownHistogram)))
+      assert(join.stats.attributeStats(unknown) == joinedColStat)
+      // Without the histogram of `unknown`, a filter on it uses the joined min/max and distinct
+      // count: 20 / 3 and 20 * (5 - 3) / (5 - 1), rounded up.
+      assert(Filter(EqualTo(unknown, Literal(3)), join).stats.rowCount == Some(7))
+      assert(Filter(GreaterThan(unknown, Literal(3)), join).stats.rowCount == Some(10))
+    }
+  }
+
+  test("SPARK-61002: a boolean join key from a union is not taken as holding only nulls") {
+    def booleanTable(name: String, rowCount: Int): StatsTestPlan = {
+      val col = AttributeReference(name, BooleanType)()
+      StatsTestPlan(
+        outputList = Seq(col),
+        rowCount = rowCount,
+        attributeStats = AttributeMap(Seq(col -> ColumnStat(distinctCount = Some(2),
+          min = Some(false), max = Some(true),
+          nullCount = Some(0), avgLen = Some(1), maxLen = Some(1)))))
+    }
+    val union = Union(booleanTable("b1", 10), booleanTable("b2", 10))
+    val unionKey = union.output.head
+    // The union keeps the distinct and null counts of a boolean column but not its min/max.
+    assert(union.stats.attributeStats(unionKey).hasCountStats)
+    assert(!union.stats.attributeStats(unionKey).hasMinMaxStats)
+    val other = booleanTable("b3", 4)
+    val join = Join(union, other, Inner, Some(EqualTo(unionKey, other.output.head)), JoinHint.NONE)
+    // 20 * 4 / max(2, 2)
+    assert(join.stats.rowCount == Some(40))
+  }
+
+  test("SPARK-61002: a join key holding only nulls matches no key without min/max") {
+    // Neither key has min/max: the type has none, as for STRING, or the source reports none.
+    Seq(IntegerType, StringType).foreach { dataType =>
+      def noMinMaxTable(name: String, distinctCount: Int): StatsTestPlan = {
+        val col = AttributeReference(name, dataType)()
+        StatsTestPlan(
+          outputList = Seq(col),
+          rowCount = 3,
+          attributeStats = AttributeMap(Seq(col -> ColumnStat(
+            distinctCount = Some(distinctCount), min = None, max = None,
+            nullCount = Some(if (distinctCount == 0) 3 else 0), avgLen = Some(4),
+            maxLen = Some(4)))))
+      }
+      val nullKeys = noMinMaxTable("null-keys", 0)
+      Seq(noMinMaxTable("some-keys", 3), noMinMaxTable("other-null-keys", 0)).foreach { other =>
+        Seq(Join(nullKeys, other, Inner, Some(EqualTo(nullKeys.output.head, other.output.head)),
+            JoinHint.NONE),
+          Join(other, nullKeys, Inner, Some(EqualTo(other.output.head, nullKeys.output.head)),
+            JoinHint.NONE)).foreach { join =>
+          assert(join.stats.rowCount == Some(0), dataType)
+        }
+      }
+    }
+    // A distinct count of 0 makes a key null-only also when a data source reports its min/max.
+    val reported = attr("reported")
+    val reportedTable = StatsTestPlan(Seq(reported), rowCount = 3, attributeStats = AttributeMap(
+      Seq(reported -> ColumnStat(distinctCount = Some(0), min = Some(1), max = Some(3),
+        nullCount = Some(3), avgLen = Some(4), maxLen = Some(4)))))
+    assert(Join(table1, reportedTable, Inner, Some(EqualTo(nameToAttr("key-1-5"), reported)),
+      JoinHint.NONE).stats.rowCount == Some(0))
+    // `intersect` follows `isIntersected`, which rejects such a pair, but does not fail on it.
+    assert(ValueInterval.intersect(new NullValueInterval(), new DefaultValueInterval(),
+      IntegerType) == ((None, None)))
   }
 
   test("SPARK-33018 Fix estimate statistics issue if child has 0 bytes") {
