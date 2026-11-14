@@ -1854,19 +1854,28 @@ class CatalystTranspiler(AbstractTranspiler):
                         # TypeError, not a truncation. A float literal shows up as
                         # "fractional" here; for a parameter only the JVM knows, so
                         # narrow the count and let a double column drop the option.
-                        # "integral32" not "integral": `repeat` casts the count to
-                        # int, which raises under ANSI for a bigint above Int.MaxValue
-                        # where Python returns "" (negative) or a huge string. A
-                        # bigint column therefore drops the option and falls back.
+                        # Clamp negative counts before narrowing to int, preserving NULL.
                         if lc == "string" and _is_numeric_cat(rc) and rc != "fractional":
-                            self._narrow(params, "integral32", right)
+                            self._narrow(params, "integral", right)
+                            count = when(right_col < lit(0), lit(0)).otherwise(right_col)
                             return _raise_on_null_operand(
-                                "*", repeat(left_col, right_col.cast("int")), left_col, right_col
+                                "*",
+                                when(left_col == lit(""), lit("")).otherwise(
+                                    repeat(left_col, count.cast("int"))
+                                ),
+                                left_col,
+                                right_col,
                             )
                         if _is_numeric_cat(lc) and lc != "fractional" and rc == "string":
-                            self._narrow(params, "integral32", left)
+                            self._narrow(params, "integral", left)
+                            count = when(left_col < lit(0), lit(0)).otherwise(left_col)
                             return _raise_on_null_operand(
-                                "*", repeat(right_col, left_col.cast("int")), left_col, right_col
+                                "*",
+                                when(right_col == lit(""), lit("")).otherwise(
+                                    repeat(right_col, count.cast("int"))
+                                ),
+                                left_col,
+                                right_col,
                             )
                     case ast.Mod():
                         if both_numeric:
@@ -2293,12 +2302,11 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     keeping every typed param pinned.
 
     Bodies needing the integral/fractional split try three categories per untyped
-    param instead of two, so the collapse kicks in one param sooner to keep 3**n
-    in check.
+    parameter, preserving the existing full product for up to three untyped inputs.
     """
     refined = _body_needs_numeric_refinement(function_ast)
     kinds = ["integral", "fractional", "string"] if refined else ["numeric", "string"]
-    max_untyped = 2 if refined else 3
+    max_untyped = 3
     n = len(public_params)
     all_args = _positional_args(function_ast)
     public_args = all_args[len(all_args) - n :]
