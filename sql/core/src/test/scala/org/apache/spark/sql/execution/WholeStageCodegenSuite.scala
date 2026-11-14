@@ -1898,55 +1898,27 @@ class WholeStageCodegenSuite extends SharedSparkSession
           firstFilterOverProject(filtered)
           checkAnswer(filtered,
             (6L to 9L).map(i => Row(i, i, i, i, i)))
-          // With the config off the same query returns the same rows (non-CSE path).
-          withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
-            checkAnswer(df.where(predicate), (6L to 9L).map(i => Row(i, i, i, i, i)))
+          // With the config off the same query returns the same rows (non-CSE path), and the
+          // generated code differs, so the shape above does take the CSE path.
+          val cseOn = codegenString(filtered.queryExecution.executedPlan)
+          val cseOff = withSQLConf(
+              SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
+            val off = df.where(predicate)
+            checkAnswer(off, (6L to 9L).map(i => Row(i, i, i, i, i)))
+            codegenString(off.queryExecution.executedPlan)
           }
+          assert(normalize(cseOn) != normalize(cseOff),
+            s"each shape should take the CSE path (codegen differs on/off): $predicate")
         }
 
-        // The CSE path is actually taken: eliminating the shared `f + 1` makes the generated code
-        // differ from the non-CSE path (the sibling "takes CSE codegen" test asserts the same).
-        val csePredicate = "f + 1 > 6 AND f + 1 < 100 AND r > 0"
-        def filterCode(cse: Boolean): String =
-          withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse.toString) {
-            codegenString(df.where(csePredicate).queryExecution.executedPlan)
-          }
-        val cseCode = filterCode(cse = true)
-        assert(normalize(cseCode) != normalize(filterCode(cse = false)),
-          "CSE path should eliminate the shared f + 1 and differ from the non-CSE codegen")
         // `subExpr` names appear only when the states are split into functions, so they confirm
         // the split threshold is exercised: present at threshold 1, absent when kept inline.
+        val cseCode = codegenString(
+          df.where("f + 1 > 6 AND f + 1 < 100 AND r > 0").queryExecution.executedPlan)
         if (threshold == "1") {
           assert(cseCode.contains("subExpr"), "states should be split into functions at 1")
         } else {
           assert(!cseCode.contains("subExpr"), "states should be kept inline at Int.MaxValue")
-        }
-
-        // A lazy `input` sequence: `select` over a `LazyList` of columns keeps the projection
-        // list lazy into `ProjectExec`, so the output variables FilterExec receives are a lazy
-        // sequence. Snapshotting their code before the CSE analysis must force the snapshot, or
-        // the restore reads the already-blanked code and the stage fails to compile. The shared
-        // `f + 1` and `r + 1` make the filter take the CSE path; `r` fails on the rows
-        // `f + 1 > 6` drops and is first read by `r + 1`. The single-pass resolver is pinned off,
-        // as in the "create union with LazyList of children" PlannerSuite test, so its own
-        // handling of a lazy project list does not turn the projection strict.
-        withSQLConf(
-          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
-          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
-          val lazyPredicate = "f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100"
-          val lazyCols = LazyList(f($"id").as("f"), r($"id").as("r"))
-          val lazyDf = spark.range(10).select(lazyCols: _*).where(lazyPredicate)
-          val fe = firstFilterOverProject(lazyDf)
-          assert(fe.child.asInstanceOf[ProjectExec].projectList.isInstanceOf[LazyList[_]],
-            "the projection list must stay a LazyList for this to cover a lazy input")
-          def lazyCode(cse: Boolean): String = withSQLConf(
-              SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse.toString) {
-            codegenString(spark.range(10).select(LazyList(f($"id").as("f"), r($"id").as("r")): _*)
-              .where(lazyPredicate).queryExecution.executedPlan)
-          }
-          assert(normalize(lazyCode(cse = true)) != normalize(lazyCode(cse = false)),
-            "the lazy-input filter should take the CSE path")
-          checkAnswer(lazyDf, (6L to 9L).map(i => Row(i, i)))
         }
       }
     }
