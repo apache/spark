@@ -497,6 +497,29 @@ class StorageFilterPushDownSuite
     }
   }
 
+  test("SPARK-61173: a scan with a pushed variant extraction and a row-selecting pushdown is " +
+    "neither row-wise nor repeatable") {
+    // The variant build site gives the scan new output attributes.
+    def variantScan(push: String, apply: DataFrame => DataFrame): DataSourceV2ScanRelation = {
+      val df = apply(v2Probe("variant" -> "true", "push" -> push)
+        .selectExpr("k", "v", "variant_get(j, '$.a', 'long') AS a"))
+      df.queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation if r.output.intersect(r.relation.output).isEmpty => r
+      }.getOrElse(fail(s"no variant scan in:\n${df.queryExecution.optimizedPlan}"))
+    }
+    val unrestricted = variantScan("", identity)
+    assert(unrestricted.onlyRowWisePushdowns && unrestricted.repeatableRead)
+    Seq[(String, DataFrame => DataFrame)](
+      "limit" -> (_.limit(100)),
+      "offset" -> (_.offset(10)),
+      "topN" -> (_.orderBy("v").limit(100)),
+      "sample" -> (_.sample(0.5))
+    ).foreach { case (op, apply) =>
+      val scan = variantScan(op, apply)
+      assert(!scan.onlyRowWisePushdowns && !scan.repeatableRead, s"$op: $scan")
+    }
+  }
+
   test("the scan's pushdowns decide on storage filters, not whether it can be merged") {
     // A pushed variant extraction, for one, keeps the scan's rows but cannot be merged.
     withBloomJoin() {

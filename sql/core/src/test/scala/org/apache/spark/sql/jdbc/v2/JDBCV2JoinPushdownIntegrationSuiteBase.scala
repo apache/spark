@@ -358,6 +358,18 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     }
   }
 
+  test("SPARK-61173: a scan with a pushed join reads the same rows again") {
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(s"""
+        |SELECT * FROM $catalogAndNamespace.$casedJoinTableName1 a
+        |JOIN $catalogAndNamespace.$casedJoinTableName1 b
+        |ON a.id = b.id + 1""".stripMargin)
+      val scans = df.queryExecution.optimizedPlan.collect { case r: DataSourceV2ScanRelation => r }
+      assert(scans.size == 1 && scans.head.repeatableRead && !scans.head.onlyRowWisePushdowns,
+        s"expected one repeatable, not row-wise scan: $scans")
+    }
+  }
+
   test("Test self join with column pruning") {
     val sqlQuery = s"""
       |SELECT a.id + 2, b.id, b.amount FROM

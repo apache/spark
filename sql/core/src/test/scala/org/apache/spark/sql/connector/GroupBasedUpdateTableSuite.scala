@@ -18,15 +18,30 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, InSubquery}
 import org.apache.spark.sql.execution.{InSubqueryExec, ReusedSubqueryExec}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   import testImplicits._
+
+  test("SPARK-61173: the target read of a copy-on-write update reads the same rows again") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    val qes = withQueryExecutionsCaptured(spark) {
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE dep = 'hr'")
+    }
+    val scans = qes.flatMap(_.optimizedPlan.collect { case r: DataSourceV2ScanRelation => r })
+    assert(scans.nonEmpty && scans.forall(r => r.repeatableRead && !r.onlyRowWisePushdowns),
+      s"expected repeatable, not row-wise target reads: $scans")
+  }
 
   test("update handles metadata columns correctly") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",

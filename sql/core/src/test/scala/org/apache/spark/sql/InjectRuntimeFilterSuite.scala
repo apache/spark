@@ -19,16 +19,18 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, Literal, ScalarSubquery, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, GreaterThan, Literal, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalLimit, LogicalPlan}
 import org.apache.spark.sql.columnar.CachedBatch
-import org.apache.spark.sql.connector.StorageFilterTestSource
+import org.apache.spark.sql.connector.{CatalystFilterLimitDataSourceV2, CatalystFilterScanBuilder, StorageFilterTestSource}
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.{FileSourceScanExec, InSubqueryExec, ProjectedBroadcastValueSubqueryExec, ReusedSubqueryExec, SubqueryBroadcastExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1618,7 +1620,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   test("SPARK-60702: do not add bloom filter whose creation side reads a scan with a pushed " +
     "top-n") {
     // The source picks the rows of a pushed top-N, so a second read can pick other rows. So `p.f5`
-    // gets no bloom filter. `x.k` gets one, from `bf5part`, which the inferred `f5 > 1` filters.
+    // gets no bloom filter, with or without DPP. `x.k` gets one, from `bf5part`, which the inferred
+    // `f5 > 1` filters.
     withTempView("tn") {
       spark.read.format(classOf[StorageFilterTestSource].getName).option("push", "topN").load()
         .createOrReplaceTempView("tn")
@@ -1626,7 +1629,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "limit 100) where k > 1) x on p.f5 = x.k"
       withDppTestConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
-          assert(bloomFilterKeyNames(query) == Seq("f5"))
+          assert(bloomFilterKeyNames(query) == Seq("k"))
         }
         assert(bloomFilterKeyNames(query) == Seq("k"))
       }
@@ -2156,6 +2159,154 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
                 checkAnswer(creationSideResult, creationSideExpected.toSeq)
               }
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61173: a DSv2 scan that took a selective filter in fully can be the creation " +
+    "side, as in V1") {
+    // `FileScanBuilder` takes a partition filter in fully and leaves no `Filter` for it above the
+    // V2 scan, while V1 keeps the `Filter`. The rule counts a selective pushed filter as it counts
+    // that `Filter`. V1 is the reference.
+    withTempDir { dir =>
+      val factPath = new File(dir, "fact").getCanonicalPath
+      val dimPath = new File(dir, "dim").getCanonicalPath
+      spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")
+        .write.partitionBy("part").parquet(factPath)
+      spark.range(10).selectExpr("CAST(id AS INT) AS k", "CAST(id AS INT) AS v",
+        "parse_json(CONCAT('{\"a\": ', id, '}')) AS j", "CAST(id % 2 AS INT) AS dp",
+        "IF(id < 5, 'a1', 'b1') AS ds").write.partitionBy("dp", "ds").parquet(dimPath)
+      def createViews(): Unit = {
+        // A temp view keeps the relation it was created with, so create both under the conf.
+        spark.read.parquet(factPath).createOrReplaceTempView("rf_fact")
+        spark.read.parquet(dimPath).createOrReplaceTempView("rf_dim")
+      }
+      def keyNames(plan: LogicalPlan): Seq[String] = plan.flatMap(_.expressions)
+        .flatMap(_.collect { case BloomFilterMightContain(_, XxHash64(Seq(key), _)) => key })
+        .flatMap(_.references.map(_.name))
+      // Runs `query` with DPP off and on, under V1 and V2. Checks that DPP adds its filter only
+      // when on, that the bloom filters check `withoutDpp`, or `withDroppedDpp` when the shuffle
+      // join drops the DPP filter, and that the query returns `expected`.
+      def check(
+          query: String,
+          withoutDpp: Seq[String],
+          withDroppedDpp: Seq[String],
+          expected: Seq[Row],
+          checkPlan: LogicalPlan => Unit = _ => ()): Unit = {
+        for (dpp <- Seq(false, true); v1Sources <- Seq("parquet", "")) {
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> v1Sources,
+              SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dpp.toString) {
+            createViews()
+            val df = sql(query)
+            val optimized = df.queryExecution.optimizedPlan
+            val clue = s"`$query` with dpp = $dpp, v1 sources '$v1Sources':\n$optimized"
+            assert(optimized.exists(_.isInstanceOf[DataSourceV2ScanRelation]) ===
+              v1Sources.isEmpty, clue)
+            assert(optimized.exists(_.expressions.exists(
+              _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, clue)
+            assert(keyNames(optimized) == (if (dpp) withDroppedDpp else withoutDpp), clue)
+            if (v1Sources.isEmpty) checkPlan(optimized)
+            checkAnswer(df, expected)
+          }
+        }
+      }
+      def factRows(keeps: Int => Boolean): Seq[Row] =
+        (0 until 100).filter(i => keeps(i % 10)).map(i => Row(i.toLong))
+      withTempView("rf_fact", "rf_dim") {
+        withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
+          // A bloom filter's subquery takes only simple filters, which `LIKE` is not, pushed into
+          // the scan or not. For a key with a dropped DPP filter, the filters must pass
+          // `cannotFail`, which does not take `RLIKE`, pushed into the scan or not.
+          Seq(
+            ("d.dp = 1", (p: Int) => p % 2 == 1, Seq("part"), Seq("part")),
+            ("d.ds RLIKE '^a'", (p: Int) => p < 5, Seq("part"), Nil),
+            ("d.ds RLIKE '^a' AND d.v > 2", (p: Int) => p == 3 || p == 4, Seq("part"), Nil),
+            ("d.ds LIKE 'a_'", (p: Int) => p < 5, Nil, Nil),
+            ("d.ds LIKE 'a_' AND d.v > 2", (p: Int) => p == 3 || p == 4, Nil, Nil),
+            ("d.dp = 1 AND d.ds LIKE 'a_'", (p: Int) => p == 1 || p == 3, Nil, Nil)
+          ).foreach { case (condition, keeps, withoutDpp, withDroppedDpp) =>
+            check(s"SELECT f.id FROM rf_fact f JOIN rf_dim d ON f.part = d.k WHERE $condition",
+              withoutDpp, withDroppedDpp, factRows(keeps))
+          }
+
+          // A variant extraction pushed into the V2 scan builds it at another site, with new
+          // output attributes. That scan records its pushed filters too, so they count, and must
+          // pass `cannotFail`.
+          Seq(
+            ("d.dp = 1", (p: Int) => p % 2 == 1, Seq("part"), Seq("part")),
+            ("d.ds RLIKE '^a' AND d.v > 2", (p: Int) => p == 3 || p == 4, Seq("part"), Nil)
+          ).foreach { case (condition, keeps, withoutDpp, withDroppedDpp) =>
+            check("SELECT f.id, variant_get(d.j, '$.a', 'int') FROM rf_fact f " +
+              s"JOIN rf_dim d ON f.part = d.k WHERE $condition", withoutDpp, withDroppedDpp,
+              (0 until 100).filter(i => keeps(i % 10)).map(i => Row(i.toLong, i % 10)),
+              plan => assert(plan.exists {
+                case r: DataSourceV2ScanRelation =>
+                  r.output.exists(_.name == "j") && r.output.intersect(r.relation.output).isEmpty
+                case _ => false
+              }, s"expected a scan with a pushed variant extraction:\n$plan"))
+          }
+        }
+      }
+
+      // The bloom filter's subquery reads the scan again, so a scan with a row-selecting pushdown,
+      // such as a limit, is not a creation side, whether its selective filter is pushed into it or
+      // stays above it. Then `f.part` gets no bloom filter, and the fact, which the inferred
+      // `part > 3` filters, gives one on `d.i`.
+      withTempView("rf_fact", "rf_lim") {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+            SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+          spark.read.parquet(factPath).createOrReplaceTempView("rf_fact")
+          // It takes Catalyst filters in fully, and a limit. Its size comes from the row count.
+          spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
+            .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10").load()
+            .createOrReplaceTempView("rf_lim")
+          // (dimension, whether its scan is row-wise and repeatable, whether it took `i > 3` in,
+          // the columns the bloom filters check, the fact partitions the join keeps)
+          Seq(
+            ("SELECT i FROM rf_lim WHERE i > 3", true, true, Seq("part"), 4 to 9),
+            ("SELECT i FROM rf_lim WHERE i > 3 LIMIT 3", false, true, Seq("i"), 4 to 6),
+            ("SELECT i FROM (SELECT i FROM rf_lim LIMIT 5) WHERE i > 3", false, false, Seq("i"),
+              Seq(4))
+          ).foreach { case (dim, rowWiseAndRepeatable, pushed, bloomFilterColumns, parts) =>
+            val df = sql(s"SELECT f.id FROM rf_fact f JOIN ($dim) d ON f.part = d.i")
+            val optimized = df.queryExecution.optimizedPlan
+            val clue = s"`$dim`:\n$optimized"
+            // The source takes the limit in fully, so no `Limit` stays above its scan.
+            assert(!optimized.exists(_.isInstanceOf[LocalLimit]), clue)
+            val scan = optimized.collectFirst {
+              case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") => r
+            }.getOrElse(fail(s"no dimension scan in $clue"))
+            assert(scan.onlyRowWisePushdowns == rowWiseAndRepeatable, clue)
+            assert(scan.repeatableRead == rowWiseAndRepeatable, clue)
+            assert(scan.pushedFilters.exists(_.isInstanceOf[GreaterThan]) == pushed, clue)
+            assert(keyNames(optimized) == bloomFilterColumns, clue)
+            checkAnswer(df, factRows(p => parts.contains(p)))
+          }
+
+          // A scan that reads the same rows again but is not row-wise, as with a pushed aggregate
+          // or join or as the target read of a copy-on-write UPDATE, still counts under a selective
+          // `Filter`. The source keeps `i > 3` in a `Filter` above its scan here.
+          spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
+            .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
+            .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, "true").load()
+            .createOrReplaceTempView("rf_lim")
+          val plan = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+            sql("SELECT f.id FROM rf_fact f JOIN rf_lim d ON f.part = d.i WHERE d.i > 3")
+              .queryExecution.optimizedPlan
+          }
+          Seq(true, false).foreach { repeatable =>
+            val rewritten = plan.transform {
+              case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
+                r.copy(onlyRowWisePushdowns = false, repeatableRead = repeatable)
+            }
+            val expected = if (repeatable) Seq("part") else Seq("i")
+            assert(keyNames(InjectRuntimeFilter(rewritten)) == expected,
+              s"repeatableRead = $repeatable:\n$rewritten")
           }
         }
       }
