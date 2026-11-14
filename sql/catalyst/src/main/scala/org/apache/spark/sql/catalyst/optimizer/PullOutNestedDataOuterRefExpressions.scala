@@ -19,26 +19,49 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, DynamicPruningSubquery, Expression, GetMapValue, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, DynamicPruningSubquery, Expression, GetMapValue, GetStructField, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.stripOuterReference
+import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This rule replaces outer references of type Map with the Map's members for subqueries that have
- * correlated conditions on Map's members.
+ * This rule replaces outer references of nested data (map, struct, variant) with the extracted
+ * member for subqueries that have correlated conditions on that member.
  *
  * Without this rule, when a subquery is correlated on a condition like
  * `outer_map[1] = inner_map[1]`, DecorrelateInnerQuery generates a join on the map itself,
  * which is unsupported for some types like map and inefficient for other types like structs.
  *
- * This rule rewrites the query to project `outer_map[1]` as a new attribute in the outer plan,
- * and use that attribute in the correlation condition instead. This allows
- * DecorrelateInnerQuery to write the join on the extracted value instead of the entire map or
- * other object.
+ * The analyzer resolves a nested access of an outer column inside-out, so `c.home.zip` becomes
+ * `GetStructField(OuterReference(home), zip)` rather than `OuterReference(home.zip)` (an
+ * OuterReference can only wrap a NamedExpression). Everything downstream matches on a bare
+ * OuterReference, so the whole `home` struct is treated as the correlated key: a correlated
+ * equality on the member is not recognized as an equality and goes through a domain join on the
+ * whole struct, and a correlated join condition on the member fails decorrelation with an internal
+ * error. This rule instead projects the extracted member (`home.zip`) onto the outer plan and
+ * rewrites the correlation to a bare OuterReference on that projection, so the correlation keys on
+ * the member and DecorrelateInnerQuery sees a plain outer reference:
+ *
+ * Filter (scalar-subquery#50 [home#11])
+ * :  +- Aggregate [max(amount#14)]
+ * :     +- Filter (ship#13.zip = outer(home#11).zip)
+ * :        +- Relation o[ship#13, amount#14]
+ * +- Relation c[id#10, home#11]
+ *
+ * becomes
+ *
+ * Project [id#10, home#11]
+ * +- Filter (scalar-subquery#50 [home.zip#55])
+ *    :  +- Aggregate [max(amount#14)]
+ *    :     +- Filter (ship#13.zip = outer(home.zip#55))
+ *    :        +- Relation o[ship#13, amount#14]
+ *    +- Project [id#10, home#11, home#11.zip AS home.zip#55]
+ *       +- Relation c[id#10, home#11]
  *
  * Example: Here, we have outer table x and inner table y in a scalar subquery, correlated
  * on xm[1] = ym[1] where xm and ym are map columns.
@@ -69,6 +92,9 @@ import org.apache.spark.sql.internal.SQLConf
  *   expressions. In principle we could change this but it would add substantial complexity.
  * - DecorrelateInnerQuery only manipulates the inner query, not the outer plan, whereas
  *   this rewrite needs to add projections to the outer plan
+ *
+ * The rule runs under [[SQLConf.PULL_OUT_NESTED_DATA_OUTER_REF_EXPRESSIONS_ENABLED]] and is
+ * non-excludable: a correlation it does not normalize is mis-keyed on the whole outer column.
  */
 object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -79,32 +105,50 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * A (possibly nested) extract-value / variant-get chain that bottoms out at an OuterReference and
+   * references no inner attribute, i.e. a nested-data member of an outer column. `e.references` is
+   * empty iff there is no inner reference, since outer references are not included in it.
+   */
+  private def isPullableOuterExtract(e: Expression): Boolean = {
+    def rootsAtOuterRef(x: Expression): Boolean = x match {
+      case _: OuterReference => true
+      case g: GetStructField => rootsAtOuterRef(g.child)
+      case v: VariantGet => rootsAtOuterRef(v.child)
+      case m: GetMapValue => rootsAtOuterRef(m.child)
+      case _ => false
+    }
+    e match {
+      case _: GetMapValue | _: GetStructField | _: VariantGet =>
+        e.references.isEmpty && rootsAtOuterRef(e)
+      case _ => false
+    }
+  }
+
+  private def hasOuterNestedDataAccess(tree: TreePatternBits): Boolean = {
+    tree.containsAllPatterns(PLAN_EXPRESSION, OUTER_REFERENCE) &&
+      tree.containsAnyPattern(EXTRACT_VALUE, VARIANT_GET)
+  }
+
   def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(PLAN_EXPRESSION, OUTER_REFERENCE, EXTRACT_VALUE)) {
+    hasOuterNestedDataAccess) {
     case plan: UnaryNode =>
-      // Map of canonicalized original expression to new outer projection
+      // Canonicalized original extract expression -> new outer projection alias.
       val newExprMap = mutable.HashMap.empty[Expression, NamedExpression]
-      val newPlan = plan.transformExpressionsWithPruning(
-        _.containsAllPatterns(PLAN_EXPRESSION, OUTER_REFERENCE, EXTRACT_VALUE)) {
+      // Projections land on plan.child, so only members of a column available there are pullable.
+      val outerPlanOutput = plan.child.outputSet
+      val newPlan = plan.transformExpressionsWithPruning(hasOuterNestedDataAccess) {
         case e: DynamicPruningSubquery => e // Skip this case
         case subqueryExpression: SubqueryExpression =>
           val innerPlan = subqueryExpression.plan
           val newInnerPlan = innerPlan.transformAllExpressionsWithPruning(
-            _.containsAllPatterns(OUTER_REFERENCE, EXTRACT_VALUE)) {
-            // We plan to extend to other ExtractValue and similar exprs in future PRs
-            case e @ GetMapValue(outerRef: OuterReference, key) if e.references.isEmpty =>
-              // e.references.isEmpty checks whether there are any inner references (since it
-              // doesn't include outer references). The expression must reference the outer plan
-              // only, not the inner plan.
-              val key = e.canonicalized
-              if (!newExprMap.contains(key)) {
+            _.containsPattern(OUTER_REFERENCE)) {
+            case e if isPullableOuterExtract(e) &&
+                stripOuterReference(e).references.subsetOf(outerPlanOutput) =>
+              val outerProj = newExprMap.getOrElseUpdate(e.canonicalized, {
                 val projExpr = stripOuterReference(e)
-                val name = toPrettySQL(projExpr)
-                // Create a new project expression for the outer plan
-                val outerProj = Alias(projExpr, name)()
-                newExprMap(key) = outerProj
-              }
-              val outerProj = newExprMap(key)
+                Alias(projExpr, toPrettySQL(projExpr))()
+              })
               // Replace with the reference to the new outer projection
               OuterReference(outerProj.toAttribute)
           }
@@ -113,7 +157,7 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
           // them from the project.
           subqueryExpression
             .withNewPlan(newInnerPlan)
-            .withNewOuterAttrs(SubExprUtils.getOuterReferences(newInnerPlan))
+            .withNewOuterAttrs(SubExprUtils.getOuterReferences(newInnerPlan).distinct)
       }
       if (newExprMap.isEmpty) {
         // Nothing to change
