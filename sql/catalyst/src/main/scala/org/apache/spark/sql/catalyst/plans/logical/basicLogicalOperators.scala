@@ -1998,7 +1998,7 @@ case class UnresolvedGapFill(
     isGenerated: Option[GapFillOutputColumn],
     child: LogicalPlan) extends UnresolvedUnaryNode {
   require(rangeStartExpr.isDefined == rangeEndExpr.isDefined,
-    "The GAP FILL range has both FROM and TO, or neither.")
+    "The GAP FILL range has both bounds, or neither.")
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_GAP_FILL)
 

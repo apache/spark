@@ -3599,7 +3599,7 @@ class PlanParserSuite extends AnalysisTest {
         |  ORDER BY ts
         |  BIN WIDTH INTERVAL '5' MINUTE
         |  ALIGN TO TIMESTAMP '2024-01-01 00:02:00'
-        |  FROM TIMESTAMP '2024-01-01 00:00:00' TO TIMESTAMP '2024-01-02 00:00:00'
+        |  RANGE BETWEEN TIMESTAMP '2024-01-01 00:00:00' AND TIMESTAMP '2024-01-02 00:00:00'
         |  FILL (a LINEAR, b FFILL, c FORWARD FILL, d BFILL, e BACKWARD FILL,
         |    f CONSTANT 'unknown', g NULL)
         |  MAX GAP INTERVAL '40' MINUTE
@@ -3632,7 +3632,7 @@ class PlanParserSuite extends AnalysisTest {
         |  BIN WIDTH INTERVAL '5' MINUTE
         |  IS_GENERATED AS gen
         |  MAX GAP INTERVAL '40' MINUTE
-        |  FROM TIMESTAMP '2024-01-01 00:00:00' TO TIMESTAMP '2024-01-02 00:00:00'
+        |  RANGE BETWEEN TIMESTAMP '2024-01-01 00:00:00' AND TIMESTAMP '2024-01-02 00:00:00'
         |  BIN_START AS bin_begin
         |  FILL (a LINEAR, b FFILL, c FORWARD FILL, d BFILL, e BACKWARD FILL,
         |    f CONSTANT 'unknown', g NULL)
@@ -3653,7 +3653,7 @@ class PlanParserSuite extends AnalysisTest {
   test("GAP FILL: a repeated clause raises DUPLICATE_CLAUSES") {
     Seq(
       "ALIGN TO TIMESTAMP '2024-01-01 00:02:00'" -> "ALIGN TO",
-      "FROM TIMESTAMP '2024-01-01 00:00:00' TO TIMESTAMP '2024-01-02 00:00:00'" -> "FROM",
+      "RANGE BETWEEN TIMESTAMP '2024-01-01' AND TIMESTAMP '2024-01-02'" -> "RANGE BETWEEN",
       "FILL (a FFILL)" -> "FILL",
       "MAX GAP INTERVAL '40' MINUTE" -> "MAX GAP",
       "BIN_START" -> "BIN_START",
@@ -3687,15 +3687,15 @@ class PlanParserSuite extends AnalysisTest {
 
     val expressions = singleGapFill(parsePlan(
       "SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
-        "FROM ts TO ts + INTERVAL '1' DAY ALIGN TO EXTRACT(YEAR FROM ts) MAX GAP max(ts))"))
-    assert(expressions.rangeStartExpr.contains(parseExpression("ts")))
-    assert(expressions.originExpr.contains(parseExpression("EXTRACT(YEAR FROM ts)")))
+        "RANGE BETWEEN range AND range + INTERVAL '1' DAY MAX GAP max(ts))"))
+    assert(expressions.rangeStartExpr.contains(parseExpression("range")))
+    assert(expressions.rangeEndExpr.contains(parseExpression("range + INTERVAL '1' DAY")))
     assert(expressions.maxGapExpr.contains(parseExpression("max(ts)")))
   }
 
   test("GAP FILL: several repeated clauses report the first one in a fixed order") {
-    // The order is ALIGN TO, FROM, FILL, MAX GAP, BIN_START, IS_GENERATED, wherever the repeats
-    // are in the query.
+    // The order is ALIGN TO, RANGE BETWEEN, FILL, MAX GAP, BIN_START, IS_GENERATED, wherever the
+    // repeats are in the query.
     val e = parseException("SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
       "IS_GENERATED IS_GENERATED ALIGN TO x ALIGN TO y)")
     assert(e.getCondition == "DUPLICATE_CLAUSES")
@@ -3796,10 +3796,10 @@ class PlanParserSuite extends AnalysisTest {
       withSQLConf(
           SQLConf.ANSI_ENABLED.key -> "true",
           SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
-        Seq("s - INTERVAL '1' YEAR", "s - INTERVAL '1' DAY '2' HOUR").foreach { start =>
+        Seq("s - INTERVAL '1' YEAR", "s - INTERVAL '1-2' YEAR TO MONTH").foreach { start =>
           val gapFill = singleGapFill(parsePlan(
             s"SELECT * FROM t GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE " +
-              s"FROM $start TO month)"))
+              s"RANGE BETWEEN $start AND month)"))
           assert(gapFill.rangeStartExpr.contains(parseExpression(start)))
           assert(gapFill.rangeEndExpr.contains(UnresolvedAttribute(Seq("month"))))
         }
@@ -3829,8 +3829,7 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("GAP FILL: interval literals parse in SLL mode without the LL fallback") {
-    // The GAP FILL range lets TO follow an expression. Statements without GAP FILL must still
-    // parse in the first (SLL) stage, in both keyword modes.
+    // Statements without GAP FILL must parse in the first (SLL) stage, in both keyword modes.
     Seq(true, false).foreach { enforceReserved =>
       Seq(
         "SELECT * FROM T WHERE D IN (SELECT INTERVAL '1 2' DAY TO HOUR)",
@@ -3850,6 +3849,25 @@ class PlanParserSuite extends AnalysisTest {
         parser.singleStatement()
       }
     }
+  }
+
+  test("GAP FILL: first-stage lookahead does not grow with the number of interval literals") {
+    // If TO could follow any expression in the GAP FILL clause, the first (SLL) stage would read
+    // to the end of the statement at each unit-to-unit interval literal, and parsing would be
+    // quadratic.
+    def maxLookahead(columns: Int): Long = {
+      val query = (0 until columns)
+        .map(i => s"count_if(ts > now() - INTERVAL '0 01:00:00' DAY TO SECOND) AS c_$i")
+        .mkString("SELECT ", ", ", " FROM t")
+      val parser = new SqlBaseParser(
+        new CommonTokenStream(new SqlBaseLexer(CharStreams.fromString(query))))
+      parser.setErrorHandler(new SparkParserBailErrorStrategy())
+      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+      parser.setProfile(true)
+      parser.singleStatement()
+      parser.getParseInfo.getDecisionInfo.map(_.SLL_MaxLook).max
+    }
+    assert(maxLookahead(50) == maxLookahead(5))
   }
 
   test("GAP FILL: malformed clauses raise PARSE_SYNTAX_ERROR") {

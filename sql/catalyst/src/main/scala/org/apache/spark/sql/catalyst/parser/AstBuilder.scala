@@ -2530,7 +2530,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: GapFillClauseContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     checkDuplicateClauses(ctx.ALIGN, "ALIGN TO", ctx)
-    checkDuplicateClauses(ctx.FROM, "FROM", ctx)
+    checkDuplicateClauses(ctx.RANGE, "RANGE BETWEEN", ctx)
     checkDuplicateClauses(ctx.gapFillFillClause, "FILL", ctx)
     checkDuplicateClauses(ctx.MAX, "MAX GAP", ctx)
     checkDuplicateClauses(ctx.BIN_START, "BIN_START", ctx)

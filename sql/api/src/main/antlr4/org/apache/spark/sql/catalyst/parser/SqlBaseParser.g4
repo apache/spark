@@ -1318,7 +1318,7 @@ gapFillClause
         ORDER BY timeCol=multipartIdentifier
         BIN WIDTH binWidth=expression
         (ALIGN TO origin=expression
-          | FROM rangeStart=expression TO rangeEnd=expression
+          | RANGE BETWEEN rangeStart=valueExpression AND rangeEnd=valueExpression
           | gapFillFillClause
           | MAX GAP maxGap=expression
           | BIN_START (AS binStartAlias=errorCapturingIdentifier)?
@@ -1943,25 +1943,12 @@ booleanValue
     : TRUE | FALSE
     ;
 
-// The GAP FILL range `FROM start TO end` lets TO follow an expression. So the first (SLL)
-// parsing stage can see two readings of an interval literal: one that ends before TO, and one
-// that goes on through TO. ANTLR then picks the first viable alternative, so in `interval`,
-// `errorCapturingMultiUnitsInterval` and `errorCapturingUnitToUnitInterval` the alternative that
-// goes on through TO comes first.
 interval
-    : INTERVAL (errorCapturingUnitToUnitInterval | errorCapturingMultiUnitsInterval)
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
-// The first alternative captures units followed by a from-to part, such as
-// `INTERVAL '1' DAY '2' HOUR TO MINUTE`, which AstBuilder rejects.
 errorCapturingMultiUnitsInterval
-    : multiUnitsBeforeUnitToUnit unitToUnitInterval
-    | body=multiUnitsInterval unitToUnitInterval?
-    ;
-
-// The non-greedy loop stops before the from-to part that follows it.
-multiUnitsBeforeUnitToUnit
-    : (intervalValue unitInMultiUnits)+?
+    : body=multiUnitsInterval unitToUnitInterval?
     ;
 
 multiUnitsInterval
@@ -1969,7 +1956,7 @@ multiUnitsInterval
     ;
 
 errorCapturingUnitToUnitInterval
-    : body=unitToUnitInterval (error2=unitToUnitInterval | error1=multiUnitsInterval)?
+    : body=unitToUnitInterval (error1=multiUnitsInterval | error2=unitToUnitInterval)?
     ;
 
 unitToUnitInterval
