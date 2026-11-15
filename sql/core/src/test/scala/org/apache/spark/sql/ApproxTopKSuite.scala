@@ -101,6 +101,42 @@ class ApproxTopKSuite extends SharedSparkSession {
   // approx_top_k tests
   /////////////////////////////////
 
+  for {
+    dataType <- Seq("FLOAT", "DOUBLE")
+    numPartitions <- Seq(1, 3)
+    (mode, query) <- Seq(
+      "aggregate" ->
+        "SELECT approx_top_k(value, 10, 10) AS items FROM signed_zero_top_k",
+      "accumulate" ->
+        """SELECT approx_top_k_estimate(
+          |  approx_top_k_accumulate(value, 10), 10) AS items
+          |FROM signed_zero_top_k""".stripMargin,
+      "combine" ->
+        """SELECT approx_top_k_estimate(approx_top_k_combine(state, 10), 10) AS items
+          |FROM (
+          |  SELECT approx_top_k_accumulate(value, 10) AS state
+          |  FROM signed_zero_top_k GROUP BY id)""".stripMargin)
+  } {
+    test(s"SPARK-61527: signed zero $dataType, partitions=$numPartitions, mode=$mode") {
+      withTempView("signed_zero_top_k") {
+        sql(
+          s"""SELECT id, CAST(raw AS $dataType) AS value
+             |FROM VALUES (0, '0.0'), (1, '-0.0'), (2, '-1.0'),
+             |  (3, 'NaN'), (4, 'Infinity'), (5, NULL) AS t(id, raw)""".stripMargin)
+          .repartition(numPartitions)
+          .createOrReplaceTempView("signed_zero_top_k")
+        val result = sql(query).selectExpr("inline(items)")
+          .selectExpr("CAST(item AS DOUBLE) AS item", "count")
+        checkAnswer(result, Seq(
+          Row(0.0d, 2L),
+          Row(-1.0d, 1L),
+          Row(Double.NaN, 1L),
+          Row(Double.PositiveInfinity, 1L),
+          Row(null, 1L)))
+      }
+    }
+  }
+
   test("SPARK-52515: test of 1 parameter") {
     val res = sql(
       "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"

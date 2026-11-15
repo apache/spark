@@ -18,16 +18,46 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckFailure}
 import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxTopKEstimate, BoundReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast.ordinalNumber
-import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 
 class ApproxTopKSuite extends SparkFunSuite {
 
   /////////////////////////////
   // ApproxTopK tests
   /////////////////////////////
+
+  for {
+    (dataType, values) <- Seq[(DataType, Seq[Any])](
+      FloatType -> Seq[Any](0.0f, -0.0f),
+      DoubleType -> Seq[Any](0.0d, -0.0d))
+    mergePartials <- Seq(false, true)
+  } {
+    test(s"SPARK-61527: approx_top_k signed zero $dataType, merge=$mergePartials") {
+      val agg = ApproxTopK(
+        BoundReference(0, dataType, nullable = false), Literal(2), Literal(10))
+      for (ordered <- Seq(values, values.reverse)) {
+        val buffer = agg.createAggregationBuffer()
+        ordered.foreach { value =>
+          if (mergePartials) {
+            val partial = agg.createAggregationBuffer()
+            agg.update(partial, InternalRow(value))
+            agg.merge(buffer, agg.deserialize(agg.serialize(partial)))
+          } else {
+            agg.update(buffer, InternalRow(value))
+          }
+        }
+        val result = agg.eval(buffer)
+        assert(result.numElements() == 1)
+        val item = result.getStruct(0, 2)
+        assert(item.get(0, dataType) == values.head)
+        assert(item.getLong(1) == 2L)
+      }
+    }
+  }
 
   test("SPARK-52515: Accepts literal and foldable inputs") {
     val agg = new ApproxTopK(
