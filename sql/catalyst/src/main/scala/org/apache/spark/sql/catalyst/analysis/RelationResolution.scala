@@ -223,12 +223,21 @@ class RelationResolution(
 
     // One- and two-part names use schema and catalog entries from the SQL path respectively.
     val steps = relationResolutionSteps(identifier)
+    val usesPath = CatalogManager.identifierUsesPath(
+      identifier, catalogManager.isCatalogRegistered)
     for (step <- steps) {
       val result = step match {
         case SessionScopeStep =>
           resolveTempView(Seq(identifier.last), u.isStreaming, isTimeTravel)
         case PersistentIdentifierStep(candidate) =>
-          tryResolvePersistent(u, candidate, finalTimeTravelSpec)
+          try {
+            tryResolvePersistent(u, candidate, finalTimeTravelSpec)
+          } catch {
+            // PATH-derived `session_catalog.<name>` is not a valid table reference; keep searching.
+            case e: AnalysisException
+                if usesPath && e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
+              None
+          }
       }
       if (result.isDefined) return result
     }

@@ -697,8 +697,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
             condition = "UNRESOLVED_ROUTINE",
             parameters = Map(
               "routineName" -> "`dAtABaSe1`.`unknownFunc`",
-              "searchPath" ->
-                "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+              // Two-part non-catalog-qualified names search catalog PATH entries.
+              "searchPath" -> "[`system`, `spark_catalog`]"),
             context = ExpectedContext(
               fragment = "dAtABaSe1.unknownFunc(1)",
               start = 7,

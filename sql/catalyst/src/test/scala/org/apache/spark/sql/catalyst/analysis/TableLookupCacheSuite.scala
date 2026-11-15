@@ -72,6 +72,11 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
         case name => throw QueryExecutionErrors.catalogNotFoundError(name)
       }
     })
+    // identifierPathCandidates filters through isCatalogRegistered; without this stub Mockito
+    // returns false and drops spark_catalog path entries, so table lookup never reaches getTable.
+    when(catalogManager.isCatalogRegistered(any())).thenAnswer((invocation: InvocationOnMock) => {
+      invocation.getArgument[String](0) == CatalogManager.SESSION_CATALOG_NAME
+    })
     when(catalogManager.v1SessionCatalog).thenReturn(v1Catalog)
     when(catalogManager.currentCatalog).thenReturn(v2Catalog)
     when(catalogManager.currentNamespace).thenReturn(Array("default"))

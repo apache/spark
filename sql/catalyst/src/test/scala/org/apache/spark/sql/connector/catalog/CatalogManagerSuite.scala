@@ -291,13 +291,26 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       Seq("spark_catalog", "default"),
       Seq("system"),
       Seq("spark_catalog"))
+    // Schema-only PATH: no explicit catalog-only entries (e.g. SET PATH = cat.db, system.builtin).
+    val schemaOnlyPath = Seq(
+      Seq("spark_catalog", "path_db_a"),
+      Seq("system", "builtin"))
     val noCatalogs = (_: String) => false
     val sparkCatalogRegistered = Set("spark_catalog").contains _
     val catRegistered = Set("cat").contains _
 
+    // One-part: schema entries, plus catalog-only entries not already covered by a schema prefix.
     assert(CatalogManager.identifierPathEntries(path, Seq("f"), noCatalogs) === path.take(2))
+    // Empty-namespace catalog (no schema entry) still participates for one-part names.
+    val emptyNsPath = Seq(Seq("system", "builtin"), Seq("testcat"), Seq("system"))
+    assert(CatalogManager.identifierPathEntries(emptyNsPath, Seq("t"), noCatalogs) ===
+      Seq(Seq("system", "builtin"), Seq("testcat")))
+    // Two-part partially qualified names use distinct catalog prefixes of the path.
     assert(CatalogManager.identifierPathEntries(
-      path, Seq("session", "f"), noCatalogs) === path.drop(2))
+      path, Seq("session", "f"), noCatalogs) === Seq(Seq("system"), Seq("spark_catalog")))
+    assert(CatalogManager.identifierPathEntries(
+      schemaOnlyPath, Seq("default", "t"), sparkCatalogRegistered) ===
+      Seq(Seq("spark_catalog"), Seq("system")))
     assert(CatalogManager.identifierPathEntries(
       path, Seq("cat", "f"), catRegistered) === path.take(2))
     assert(CatalogManager.identifierPathEntries(
@@ -309,12 +322,20 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       Seq("system", "builtin", "f"),
       Seq("spark_catalog", "default", "f")))
     assert(CatalogManager.identifierPathCandidates(
+      emptyNsPath, Seq("t"), Set("testcat").contains _) === Seq(
+      Seq("system", "builtin", "t"),
+      Seq("testcat", "t")))
+    assert(CatalogManager.identifierPathCandidates(
       path, Seq("session", "f"), sparkCatalogRegistered) === Seq(
       Seq("system", "session", "f"),
       Seq("spark_catalog", "session", "f")))
     assert(CatalogManager.identifierPathCandidates(
       path, Seq("session", "f"), noCatalogs) === Seq(
       Seq("system", "session", "f")))
+    assert(CatalogManager.identifierPathCandidates(
+      schemaOnlyPath, Seq("default", "t"), sparkCatalogRegistered) === Seq(
+      Seq("spark_catalog", "default", "t"),
+      Seq("system", "default", "t")))
     assert(CatalogManager.identifierPathCandidates(
       path, Seq("cat", "f"), catRegistered) === Seq(Seq("cat", "f")))
     assert(CatalogManager.identifierPathCandidates(

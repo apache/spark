@@ -409,10 +409,10 @@ private[sql] class DefaultCatalogManager(
    * Single source of truth for analysis-time resolution path entries used by relation, routine,
    * and procedure resolution. When `pinnedEntries` are set (a view or SQL function body's
    * persisted frozen path) and PATH is enabled, returns them as-is so unqualified lookups follow
-   * the creation-time path. Otherwise falls back to [[sqlResolutionPathEntries]] using the view's
-   * catalog/namespace as the path default (so unqualified names inside a view body see the view's
-   * home schema first), while always expanding markers like CURRENT_SCHEMA against the live
-   * session catalog/namespace.
+   * the creation-time path. A pathless view body (no `pinnedEntries`, non-empty
+   * `viewCatalogAndNamespace`) never uses the invoker's SET PATH: it uses [[SQLConf#DEFAULT_PATH]]
+   * when PATH is enabled and it is set, else the view's home catalog/namespace with the legacy
+   * ordering. Other callers fall back to [[sqlResolutionPathEntries]] against the live session.
    *
    * @param pinnedEntries persisted frozen path entries from view / SQL function metadata
    *                      (typically `AnalysisContext.resolutionPathEntries`).
@@ -425,6 +425,21 @@ private[sql] class DefaultCatalogManager(
       viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]] = {
     pinnedEntries match {
       case Some(entries) if conf.pathEnabled => entries
+      case None if viewCatalogAndNamespace.nonEmpty =>
+        // A pathless view body must not inherit the invoker's SET PATH. Use the DEFAULT_PATH
+        // conf when PATH is enabled and it is set; otherwise the view's home catalog/namespace
+        // with the legacy ordering. Markers expand against the view's home, not the session.
+        val homeCatalog = viewCatalogAndNamespace.head
+        val homeNamespace = viewCatalogAndNamespace.tail.toSeq
+        val defaultConfEntries = if (conf.pathEnabled) confDefaultPathEntries else None
+        defaultConfEntries match {
+          case Some(entries) =>
+            CatalogManager.resolvePathEntries(entries, homeCatalog, homeNamespace)
+          case None =>
+            val homeEntry =
+              if (homeNamespace.isEmpty) Seq(homeCatalog) else homeCatalog +: homeNamespace
+            conf.resolutionSearchPath(homeEntry)
+        }
       case _ =>
         val expandCatalog = currentCatalog.name()
         val expandNamespace = currentNamespace.toSeq
@@ -590,18 +605,37 @@ private[sql] object CatalogManager extends Logging {
   }
 
   /**
-   * Select the SQL path entries that participate in resolving an identifier. Schema path entries
-   * (catalog + namespace) apply to one-part names, while catalog path entries apply to two-part
-   * partially qualified names. Fully catalog-qualified names do not use the path, but retain the
-   * historical schema path for diagnostics.
+   * Select the SQL path entries that participate in resolving an identifier.
+   *
+   * - One-part names use schema entries (catalog + namespace). Catalog-only entries are included
+   *   only when that catalog is not already present as the prefix of a schema entry -- the case
+   *   where CURRENT_SCHEMA collapses to the catalog name because the default namespace is empty
+   *   (common for V2 catalogs). Catalog-only entries that duplicate a schema prefix are omitted
+   *   so session-catalog probes like `spark_catalog.<name>` (invalid empty namespace) are not
+   *   introduced when `spark_catalog.<schema>` is already on the path.
+   * - Two-part partially qualified names use the distinct catalog prefixes of the path. Explicit
+   *   catalog-only entries and catalogs implied by schema entries both participate, so a PATH that
+   *   lists only schemas (e.g. `spark_catalog.db_a, system.builtin`) still resolves `db.table`.
+   * - Fully catalog-qualified names do not use the path for resolution, but retain the historical
+   *   schema-shaped path for diagnostics.
    */
   def identifierPathEntries(
       pathEntries: Seq[Seq[String]],
       nameParts: Seq[String],
       isCatalogRegistered: String => Boolean): Seq[Seq[String]] = nameParts.length match {
-    case 1 => pathEntries.filter(_.length > 1)
+    case 1 =>
+      val schemaEntries = pathEntries.filter(_.length > 1)
+      val catalogsWithSchema = schemaEntries.map(_.head.toLowerCase(java.util.Locale.ROOT)).toSet
+      val uncoveredCatalogEntries = pathEntries.filter { e =>
+        e.length == 1 && !catalogsWithSchema.contains(e.head.toLowerCase(java.util.Locale.ROOT))
+      }
+      schemaEntries ++ uncoveredCatalogEntries
     case 2 if identifierUsesPath(nameParts, isCatalogRegistered) =>
-      pathEntries.filter(_.length == 1)
+      // Catalog-only entries keep their configured order (e.g. persistentCatalogFirst). Catalogs
+      // that appear only as the prefix of a schema entry are appended after them.
+      val catalogOnly = pathEntries.filter(_.length == 1)
+      val schemaCatalogs = pathEntries.filter(_.length > 1).map(_.take(1))
+      (catalogOnly ++ schemaCatalogs).distinct
     case _ => pathEntries.filter(_.length > 1)
   }
 

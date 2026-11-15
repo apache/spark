@@ -2663,12 +2663,25 @@ class SessionCatalog(
   /**
    * Looks up function metadata by identifier in the system catalog.
    * Applies view context for temporary functions.
+   *
+   * Virtual built-in operators (`!=`, `<>`, `||`, `case`, ...) live only in
+   * [[FunctionRegistry.builtinOperators]], not in the mutable function registry. When PATH
+   * expands a one-part name to `system.builtin.<op>`, this method is the sole lookup, so it must
+   * consult `builtinOperators` the same way [[lookupFunctionWithShadowing]] does for unqualified
+   * names.
    */
   def lookupFunctionInfoByIdentifier(
       ident: FunctionIdentifier,
       tableFunction: Boolean): Option[ExpressionInfo] = {
     val registry = if (tableFunction) tableFunctionRegistry else functionRegistry
-    val result = registry.lookupFunction(ident)
+    val result = registry.lookupFunction(ident).orElse {
+      if (!tableFunction &&
+          ident.database.exists(_.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE))) {
+        FunctionRegistry.builtinOperators.get(ident.funcName.toLowerCase(Locale.ROOT))
+      } else {
+        None
+      }
+    }
     if (isTempFunctionIdentifier(ident)) {
       synchronized { handleViewContext(ident.funcName, result) }
     } else {

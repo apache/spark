@@ -138,6 +138,8 @@ class FunctionResolution(
   /** Resolve function metadata commands, such as DESCRIBE FUNCTION, through SQL PATH. */
   def resolveFunctionName(unresolved: UnresolvedFunctionName): LogicalPlan = {
     var possibleQualifiedName: Option[Seq[String]] = None
+    val usesPath = CatalogManager.identifierUsesPath(
+      unresolved.multipartIdentifier, catalogManager.isCatalogRegistered)
     for (candidate <- resolutionCandidates(unresolved.multipartIdentifier)) {
       if (isSystemCatalogQualified(candidate)) {
         lookupBuiltinOrTempFunction(candidate, None)
@@ -146,13 +148,20 @@ class FunctionResolution(
             return ResolvedNonPersistentFunc(candidate.last, V1Function.metadataOnly(info))
           }
       } else {
-        val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(candidate)
-        val fullName = catalog.name +: ident.asMultipartIdentifier
-        if (possibleQualifiedName.isEmpty) {
-          possibleQualifiedName = Some(fullName)
-        }
-        CatalogV2Util.loadFunction(catalog, ident).foreach { func =>
-          return ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
+        try {
+          val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(candidate)
+          val fullName = catalog.name +: ident.asMultipartIdentifier
+          if (possibleQualifiedName.isEmpty) {
+            possibleQualifiedName = Some(fullName)
+          }
+          CatalogV2Util.loadFunction(catalog, ident).foreach { func =>
+            return ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
+          }
+        } catch {
+          // PATH-derived `session_catalog.<name>` (empty namespace) is an invalid candidate; keep
+          // searching. The same shape written explicitly by the user still fails below.
+          case e: AnalysisException
+              if usesPath && e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
         }
       }
     }
@@ -198,6 +207,12 @@ class FunctionResolution(
              _: CatalogNotFoundException =>
           None
         case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+          None
+        case e: AnalysisException
+            if e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" &&
+              CatalogManager.identifierUsesPath(
+                unresolvedFunc.nameParts, catalogManager.isCatalogRegistered) =>
+          // PATH expanded a one-part name under a session-catalog-only entry.
           None
         case e: AnalysisException =>
           throw e
@@ -851,10 +866,18 @@ class FunctionResolution(
    * [[QueryCompilationErrors.missingCatalogProceduresAbilityError]].
    */
   def resolveProcedure(unresolved: UnresolvedProcedure): LogicalPlan = {
-    val candidates = resolutionCandidates(unresolved.nameParts)
     val usesPath = CatalogManager.identifierUsesPath(
       unresolved.nameParts, catalogManager.isCatalogRegistered)
     val safelyProbeCandidateExistence = usesPath && unresolved.nameParts.length == 2
+    // Two-part PATH candidates include a `system` catalog entry under the built-in default. The
+    // virtual system catalog is not a ProcedureCatalog, and CatalogAndIdentifier remaps
+    // `system.ns.p` onto the current catalog with namespace `[system, ns]`. Skip those candidates
+    // so listProcedures is not called on a namespace the base branch never probed. Relation and
+    // function resolution already divert system candidates; procedures have no system procedures.
+    val candidates = resolutionCandidates(unresolved.nameParts).filterNot { multipart =>
+      safelyProbeCandidateExistence &&
+        multipart.headOption.exists(_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))
+    }
     // Preserve the legacy fallback for unqualified procedures. For newly PATH-resolved two-part
     // names, listProcedures provides a safe miss check because ProcedureCatalog does not define a
     // standard not-found exception. Propagate other failures instead of masking authorization or

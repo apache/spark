@@ -295,6 +295,22 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("PATH enabled: two-part CALL does not probe system-qualified namespaces") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        "spark.sql.catalog.sysprobe" -> classOf[SystemNamespaceRejectingProcedureCatalog].getName) {
+      try {
+        catalog("sysprobe").createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+        sql("USE sysprobe")
+        // Under the built-in default path the first two-part candidate is system.ns.sum. Skipping
+        // it avoids listProcedures([system, ns]) on the current ProcedureCatalog.
+        checkAnswer(sql("CALL ns.sum(1, 2)"), Row(3) :: Nil)
+      } finally {
+        sql("USE spark_catalog")
+      }
+    }
+  }
+
   test("PATH enabled: partially qualified CALL does not mask catalog failures") {
     withSQLConf(
         SQLConf.PATH_ENABLED.key -> "true",
@@ -1105,5 +1121,19 @@ class FailingProcedureCatalog extends InMemoryCatalog {
 
   override def loadProcedure(ident: Identifier): UnboundProcedure = {
     throw new IllegalStateException("Procedure catalog unavailable")
+  }
+}
+
+/**
+ * A procedure catalog that rejects namespaces whose first part is `system`. Used to verify that
+ * two-part CALL resolution does not probe a remapped `system.ns` namespace on the current catalog.
+ */
+class SystemNamespaceRejectingProcedureCatalog extends InMemoryCatalog {
+  override def listProcedures(namespace: Array[String]): Array[Identifier] = {
+    if (namespace.headOption.exists(_.equalsIgnoreCase("system"))) {
+      throw new IllegalStateException(
+        s"Unexpected listProcedures on system-qualified namespace: ${namespace.mkString(".")}")
+    }
+    super.listProcedures(namespace)
   }
 }

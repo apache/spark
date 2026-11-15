@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.Locale
+import java.util.{Collections, Locale}
 
 import org.scalactic.source.Position
 import org.scalatest.Tag
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog.{
 }
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, View}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -421,6 +421,56 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
         sql(s"DROP FUNCTION IF EXISTS $testFunctionName")
         sql("DROP FUNCTION IF EXISTS builtin.abs")
         sql("DROP DATABASE IF EXISTS builtin")
+      }
+    }
+  }
+
+  test("legacy persisted function path qualifies two-part names with the invoker catalog") {
+    spark.conf.set("spark.sql.catalog.fn_invoker_cat", classOf[InMemoryCatalog].getName)
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      sql("CREATE SCHEMA IF NOT EXISTS fn_invoker_ns")
+      sql("CREATE TABLE fn_invoker_ns.tbl (x INT) USING parquet")
+      sql("INSERT INTO fn_invoker_ns.tbl VALUES (1)")
+      spark.sessionState.catalogManager.catalog("fn_invoker_cat")
+        .asInstanceOf[SupportsNamespaces]
+        .createNamespace(Array("fn_invoker_ns"), Collections.emptyMap())
+      sql("CREATE TABLE fn_invoker_cat.fn_invoker_ns.tbl (x INT) USING foo")
+      sql("INSERT INTO fn_invoker_cat.fn_invoker_ns.tbl VALUES (2)")
+      try {
+        sql(
+          s"""
+             |CREATE FUNCTION $testFunctionName() RETURNS INT
+             |RETURN (SELECT x FROM fn_invoker_ns.tbl)
+             |""".stripMargin)
+        val function = SQLFunction.fromCatalogFunction(
+          spark.sessionState.catalog.getFunctionMetadata(FunctionIdentifier(testFunctionName)),
+          spark.sessionState.sqlParser)
+        val legacyPath = CatalogManager.deserializePathEntries(
+          function.functionStoredResolutionPath.get).get.filter(_.length > 1)
+        // Keep the creation catalog property pointing at spark_catalog while stripping the
+        // version so reconstruction is version 0. The invoker then switches catalogs.
+        val legacyFunction = function.copy(properties =
+          function.properties
+            .updated(
+              SQLFunction.FUNCTION_RESOLUTION_PATH,
+              CatalogManager.serializePathEntries(legacyPath))
+            .removed(SQLFunction.FUNCTION_METADATA_VERSION))
+        spark.sessionState.catalog.alterFunction(legacyFunction.toCatalogFunction)
+
+        checkAnswer(sql(s"SELECT $testFunctionName()"), Row(1))
+        sql("USE fn_invoker_cat")
+        try {
+          checkAnswer(sql(s"SELECT spark_catalog.default.$testFunctionName()"), Row(2))
+        } finally {
+          sql("USE spark_catalog")
+        }
+      } finally {
+        sql(s"DROP FUNCTION IF EXISTS $testFunctionName")
+        sql("DROP TABLE IF EXISTS fn_invoker_ns.tbl")
+        sql("DROP TABLE IF EXISTS fn_invoker_cat.fn_invoker_ns.tbl")
+        sql("DROP SCHEMA IF EXISTS fn_invoker_ns")
+        spark.sessionState.catalogManager.reset()
+        spark.conf.unset("spark.sql.catalog.fn_invoker_cat")
       }
     }
   }

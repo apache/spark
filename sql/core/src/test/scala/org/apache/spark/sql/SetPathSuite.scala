@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.util.Collections
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
-import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.connector.catalog.{InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
@@ -778,6 +780,101 @@ class SetPathSuite extends SharedSparkSession {
         sql("DROP SCHEMA IF EXISTS path_fn_a")
         sql("DROP SCHEMA IF EXISTS path_fn_b")
       }
+    }
+  }
+
+  test("PATH enabled: schema-only SET PATH still resolves partially qualified table names") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_schema_only_a")
+      sql("CREATE SCHEMA IF NOT EXISTS path_schema_only_b")
+      sql("CREATE TABLE path_schema_only_b.tbl (x INT) USING parquet")
+      sql("INSERT INTO path_schema_only_b.tbl VALUES (7)")
+      try {
+        // The path lists only schemas, so the two-part name must resolve through the catalog
+        // prefix of the path rather than requiring an explicit catalog-only entry.
+        sql("SET PATH = spark_catalog.path_schema_only_a, system.builtin")
+        checkAnswer(sql("SELECT x FROM path_schema_only_b.tbl"), Row(7))
+      } finally {
+        sql("DROP TABLE IF EXISTS path_schema_only_b.tbl")
+        sql("DROP SCHEMA IF EXISTS path_schema_only_a")
+        sql("DROP SCHEMA IF EXISTS path_schema_only_b")
+      }
+    }
+  }
+
+  test("pathless SQL function body ignores the invoker's SET PATH for two-part names") {
+    spark.conf.set("spark.sql.catalog.path_fn_cat", classOf[InMemoryCatalog].getName)
+    sql("CREATE SCHEMA IF NOT EXISTS path_fn_ns")
+    sql("CREATE TABLE path_fn_ns.tbl (x INT) USING parquet")
+    sql("INSERT INTO path_fn_ns.tbl VALUES (1)")
+    spark.sessionState.catalogManager.catalog("path_fn_cat")
+      .asInstanceOf[SupportsNamespaces]
+      .createNamespace(Array("path_fn_ns"), Collections.emptyMap())
+    sql("CREATE TABLE path_fn_cat.path_fn_ns.tbl (x INT) USING foo")
+    sql("INSERT INTO path_fn_cat.path_fn_ns.tbl VALUES (2)")
+    // Created with PATH off, so the function stores no frozen path.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "false") {
+      sql(
+        """
+          |CREATE FUNCTION pathless_fn() RETURNS INT
+          |RETURN (SELECT x FROM path_fn_ns.tbl)
+          |""".stripMargin)
+    }
+    val catalogManager = spark.sessionState.catalogManager
+    try {
+      withPathEnabled {
+        // SET PATH prefers the other catalog; the pathless body must still qualify the
+        // two-part name with the invoker's current catalog (spark_catalog). Call the function
+        // by its fully qualified name so lookup of the function itself is not under test.
+        sql("SET PATH = path_fn_cat, spark_catalog, system.builtin")
+        checkAnswer(sql("SELECT spark_catalog.default.pathless_fn()"), Row(1))
+      }
+    } finally {
+      catalogManager.clearSessionPath()
+      sql("DROP FUNCTION IF EXISTS pathless_fn")
+      sql("DROP TABLE IF EXISTS path_fn_ns.tbl")
+      sql("DROP TABLE IF EXISTS path_fn_cat.path_fn_ns.tbl")
+      sql("DROP SCHEMA IF EXISTS path_fn_ns")
+      spark.sessionState.catalogManager.reset()
+      spark.conf.unset("spark.sql.catalog.path_fn_cat")
+    }
+  }
+
+  test("pathless view body ignores the invoker's SET PATH and uses DEFAULT_PATH") {
+    sql("CREATE SCHEMA IF NOT EXISTS path_view_home")
+    sql("CREATE SCHEMA IF NOT EXISTS path_view_other")
+    sql("CREATE TABLE path_view_home.tbl (x INT) USING parquet")
+    sql("CREATE TABLE path_view_other.tbl (x INT) USING parquet")
+    sql("INSERT INTO path_view_home.tbl VALUES (1)")
+    sql("INSERT INTO path_view_other.tbl VALUES (2)")
+    // Created with PATH off, so the view stores no frozen path.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "false") {
+      sql("USE path_view_home")
+      try {
+        sql("CREATE VIEW pathless_v AS SELECT x FROM tbl")
+      } finally {
+        sql("USE default")
+      }
+    }
+    val catalogManager = spark.sessionState.catalogManager
+    try {
+      withPathEnabled {
+        // The invoker's SET PATH must not leak into the pathless view body.
+        sql("SET PATH = spark_catalog.path_view_other, system.builtin")
+        checkAnswer(sql("SELECT x FROM spark_catalog.path_view_home.pathless_v"), Row(1))
+        catalogManager.clearSessionPath()
+        // With no SET PATH, the view body falls back to spark.sql.defaultPath.
+        withSQLConf(SQLConf.DEFAULT_PATH.key -> "spark_catalog.path_view_other, system.builtin") {
+          checkAnswer(sql("SELECT x FROM spark_catalog.path_view_home.pathless_v"), Row(2))
+        }
+      }
+    } finally {
+      catalogManager.clearSessionPath()
+      sql("DROP VIEW IF EXISTS path_view_home.pathless_v")
+      sql("DROP TABLE IF EXISTS path_view_home.tbl")
+      sql("DROP TABLE IF EXISTS path_view_other.tbl")
+      sql("DROP SCHEMA IF EXISTS path_view_home")
+      sql("DROP SCHEMA IF EXISTS path_view_other")
     }
   }
 

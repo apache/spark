@@ -307,7 +307,22 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
+  /** Test helper: analyze a SQL function body with an empty invoker catalog/namespace. */
+  def withAnalysisContext[A](function: SQLFunction)(f: => A): A =
+    withAnalysisContext(function, Nil)(f)
+
+  /**
+   * Analyze a SQL function body.
+   *
+   * @param invokerCatalogAndNamespace the caller's current catalog and namespace. Version-0
+   *                                   frozen PATH reconstruction appends this catalog (not the
+   *                                   creation catalog) for two-part names, matching the base
+   *                                   branch. Pathless bodies also use it as their home so they
+   *                                   never inherit the caller's SET PATH.
+   */
+  def withAnalysisContext[A](
+      function: SQLFunction,
+      invokerCatalogAndNamespace: Seq[String])(f: => A): A = {
     val originContext = value.get()
     // Validate even when PATH is absent so future metadata versions still fail closed.
     CatalogTable.requireSupportedMetadataVersion(
@@ -315,13 +330,19 @@ object AnalysisContext {
       SQLFunction.CURRENT_FUNCTION_METADATA_VERSION,
       "SQL function",
       function.name.unquotedString)
-    // Function body analysis should not inherit any caller-pinned path; use only function metadata.
+    val hasFrozenPath = function.functionStoredResolutionPath.isDefined
+    // Function body analysis should not inherit any caller-pinned path. A frozen PATH is used
+    // as stored (with version-0 enrichment against the invoker catalog). A pathless body pins
+    // the invoker's home catalog/namespace so DEFAULT_PATH / the built-in default apply, and
+    // the invoker's SET PATH does not.
     val context = originContext.copy(
+      catalogAndNamespace =
+        if (hasFrozenPath) Nil else invokerCatalogAndNamespace,
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
           _,
           function.functionMetadataVersion,
-          function.functionCreationCatalog,
+          invokerCatalogAndNamespace.headOption,
           SQLConf.get.persistentCatalogFirst,
           "SQL function",
           function.name.unquotedString,
@@ -2879,7 +2900,10 @@ class Analyzer(
           applySessionOverrides = true,
           alwaysSetAnsiValue = false)
         SQLConf.withExistingConf(newConf) {
-          AnalysisContext.withAnalysisContext(f.function) {
+          AnalysisContext.withAnalysisContext(
+            f.function,
+            catalogManager.currentCatalog.name +:
+              catalogManager.currentNamespace.toImmutableArraySeq) {
             executeSameContext(plan)
           }
         }
@@ -3190,7 +3214,10 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
-            AnalysisContext.withAnalysisContext(function) {
+            AnalysisContext.withAnalysisContext(
+              function,
+              catalogManager.currentCatalog.name +:
+                catalogManager.currentNamespace.toImmutableArraySeq) {
               executeSameContext(plan)
             }
           }

@@ -109,6 +109,21 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
     }
   }
 
+  test("V2 catalogs on SET PATH: catalog-only entry resolves one-part names in empty namespace") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      // V2 catalogs often have an empty default namespace, so the path entry is catalog-only.
+      sql("CREATE TABLE pathcat.path_empty_ns_t (id INT) USING foo")
+      sql("INSERT INTO pathcat.path_empty_ns_t VALUES (30)")
+      try {
+        sql("SET PATH = pathcat, system.builtin")
+        checkAnswer(sql("SELECT id FROM path_empty_ns_t"), Row(30))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TABLE IF EXISTS pathcat.path_empty_ns_t")
+      }
+    }
+  }
+
   test("V2 catalogs on SET PATH: unqualified table only in a non-path catalog is not found") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       createV2Namespace("pathcat", "ns_only_here")
