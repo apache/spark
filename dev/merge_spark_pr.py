@@ -1029,6 +1029,10 @@ class DryRunGit(Git):
 git = Git()
 
 
+class _PreserveLocalState(SystemExit):
+    """Exit without retrying cleanup over local edits after a refused checkout."""
+
+
 class SkipCherryPick(Exception):
     """Signals that the committer skipped this branch: declined a conflict or a pre-push check.
 
@@ -1101,7 +1105,6 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
     ...     patch("builtins.input", side_effect=["", "a"]),
     ...     patch.object(git, "run", side_effect=[refused, refused]),
     ...     patch.dict(continue_maybe.__globals__, original_head="master"),
-    ...     patch.object(sys.modules[__name__], "clean_up"),
     ...     redirect_stdout(StringIO()),
     ... ):
     ...     try:
@@ -1167,7 +1170,8 @@ def _restore_original_head():
             # git already printed why it refused.
             prompt = "Stash or discard those changes elsewhere, then Enter to retry, or [a]bort: "
             if get_input(prompt, ["", "a"]) == "a":
-                fail("Okay, exiting")
+                print_error("Okay, exiting; local edits and temporary branches are preserved.")
+                raise _PreserveLocalState(-1)
 
 
 def clean_up():
@@ -4112,6 +4116,35 @@ def main():
 
 
 __test__ = {
+    "abort_entrypoint": """
+    Aborting a refused checkout bypasses the CLI cleanup; ordinary exits still clean up.
+
+    >>> import ast, doctest
+    >>> from pathlib import Path
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> entrypoint = ast.parse(Path(__file__).read_text()).body[-1]
+    >>> code = compile(ast.Module(body=[entrypoint], type_ignores=[]), __file__, "exec")
+    >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> def ordinary_exit():
+    ...     raise SystemExit(-1)
+    >>> for entry, expected in ((_restore_original_head, 0), (ordinary_exit, 1)):
+    ...     clean = Mock()
+    ...     namespace = dict(globals(), __name__="__main__", main=entry, clean_up=clean)
+    ...     with (
+    ...         patch.object(doctest, "testmod", return_value=(0, 0)),
+    ...         patch.dict(_restore_original_head.__globals__, original_head="master"),
+    ...         patch.object(git, "run", side_effect=refused) as run,
+    ...         patch("builtins.input", side_effect=["a"]), redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             exec(code, namespace)
+    ...         except SystemExit as e:
+    ...             assert e.code == -1
+    ...     assert clean.call_count == expected
+    ...     assert run.call_count == (1 if entry is _restore_original_head else 0)
+    """,
     "revert_jira_issue": """
     A revert removes the versions for its branches while preserving released, archived,
     and unrelated versions. JIRA receives individual removals so concurrent additions survive.
@@ -5028,6 +5061,8 @@ if __name__ == "__main__":
         sys.exit(-1)
     try:
         main()
+    except _PreserveLocalState:
+        raise
     except BaseException:
         clean_up()
         raise
