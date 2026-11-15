@@ -6,17 +6,17 @@ OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 analyze group-based UPDATE:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-100 columns                                           4              5           2          0.0     3507342.0       1.0X
-1000 columns                                         52             59           7          0.0    52425614.0       0.1X
-10000 columns                                      3975           4100         177          0.0  3975463753.0       0.0X
+100 columns                                           4              5           2          0.0     3539400.0       1.0X
+1000 columns                                         52             55           4          0.0    52062932.0       0.1X
+10000 columns                                      3808           3868          85          0.0  3808454497.0       0.0X
 
 OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 analyze delta-based UPDATE:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-100 columns                                           2              3           1          0.0     2449483.0       1.0X
-1000 columns                                         49             50           2          0.0    49142081.0       0.0X
-10000 columns                                      4022           4035          19          0.0  4021932834.0       0.0X
+100 columns                                           3              3           1          0.0     2528778.0       1.0X
+1000 columns                                         54             55           1          0.0    53721960.0       0.0X
+10000 columns                                      4447           4570         175          0.0  4446755174.0       0.0X
 
 
 ================================================================================================
@@ -27,9 +27,9 @@ OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 analyze group-based DELETE:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-100 columns                                           2              2           0          0.0     1568331.0       1.0X
-1000 columns                                         19             20           1          0.0    18807540.0       0.1X
-10000 columns                                      1470           1516          66          0.0  1469775553.0       0.0X
+100 columns                                           2              2           0          0.0     1609136.0       1.0X
+1000 columns                                         19             20           1          0.0    18686782.0       0.1X
+10000 columns                                      1427           1449          31          0.0  1426557409.0       0.0X
 
 
 ================================================================================================
@@ -40,16 +40,16 @@ OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 analyze group-based MERGE:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-100 columns                                           4              4           1          0.0     3918609.0       1.0X
-1000 columns                                         30             31           1          0.0    29710609.0       0.1X
-10000 columns                                       954            965          11          0.0   953530798.0       0.0X
+100 columns                                           4              5           1          0.0     4019374.0       1.0X
+1000 columns                                         30             31           2          0.0    29564416.0       0.1X
+10000 columns                                      1039           1054          22          0.0  1038652899.0       0.0X
 
 OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 analyze delta-based MERGE:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-100 columns                                           4              4           0          0.0     3548669.0       1.0X
-1000 columns                                         27             28           1          0.0    27038836.0       0.1X
-10000 columns                                       905            950          43          0.0   904540811.0       0.0X
+100 columns                                           4              4           1          0.0     3554259.0       1.0X
+1000 columns                                         27             28           1          0.0    26817679.0       0.1X
+10000 columns                                       858            912          51          0.0   857630739.0       0.0X
 
 
