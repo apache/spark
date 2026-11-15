@@ -1841,6 +1841,7 @@ def amend_commit_message(message):
             "git",
             "commit",
             "--amend",
+            "--only",
             "--allow-empty",
             "--cleanup=verbatim",
             "-m",
@@ -2025,6 +2026,18 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
     return merge_hash
+
+
+def _set_skip_trailer(skip):
+    """Amend HEAD so it carries the skip trailer exactly when `skip`; leave it be otherwise,
+    so a retried push sends the same commit. Reads HEAD afresh, keeping any amend made since.
+    """
+    current = git.run(["git", "log", "-1", "--format=%B"])
+    wanted = remove_inherited_post_merge_ci_skip(current)
+    if skip:
+        wanted = append_post_merge_ci_skip(wanted)
+    if wanted != current:
+        amend_commit_message(wanted)
 
 
 def _pick_message(commit_body):
@@ -2469,19 +2482,25 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     >>> compile_check.call_args_list == [call(pushes[0].args[1])] * 4
     True
 
-    A sampled pick carries the skip trailer only while it is pushed to apache: [p] sends the
-    fork a head without it, and a failed [d] takes it off again.
+    A sampled pick carries the skip trailer only when pushed to apache, so [p] always sends
+    the fork a head without it. Both keep an amend the committer made during the checks.
 
+    >>> amends = []
     >>> def sampled(answers, push_error=None):
+    ...     amends.clear()
     ...     head = {"message": "Fix\\n\\nCloses #1 from a/b.\\n"}
+    ...     def committer_amends(*args):  # e.g. after the dirty-tree warning
+    ...         head["message"] = "Fixed\\n\\nCloses #1 from a/b.\\n"
     ...     def run(cmd):
     ...         if cmd[:3] == ["git", "commit", "--amend"]:
+    ...             amends.append(cmd)
     ...             head["message"] = cmd[-1]
     ...         return head["message"] if "--format=%B" in cmd else "head\\n"
     ...     pushed = []
     ...     def push(remote, *args, force=False):
     ...         where = "apache" if remote == PUSH_REMOTE_NAME and not force else remote
-    ...         pushed.append((where, head["message"].count(POST_MERGE_CI_SKIP_TRAILER)))
+    ...         message = head["message"]
+    ...         pushed.append((where, message.count(POST_MERGE_CI_SKIP_TRAILER), message[:5]))
     ...         if push_error and len(pushed) == 1:
     ...             raise push_error
     ...     def fork(*args):
@@ -2492,21 +2511,24 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     ...         patch.object(git, "run", side_effect=run),
     ...         patch.object(git, "push", side_effect=push),
     ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
-    ...                        maybe_compile_check=Mock(), clean_up=Mock(),
+    ...                        maybe_compile_check=committer_amends, clean_up=Mock(),
     ...                        should_skip_post_merge_ci=Mock(return_value=True),
     ...                        _land_via_fork=fork),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         _do_cherry_pick(1, "feed", "branch-4.x")
     ...     return pushed
-    >>> sampled(["p"])
-    [('fork', 0)]
-    >>> sampled(["d"])
-    [('apache', 1)]
-    >>> sampled(["d", "d"], push_error=OSError("rejected"))
-    [('apache', 1), ('apache', 1)]
+    >>> sampled(["p"]), len(amends)
+    ([('fork', 0, 'Fixed')], 0)
+    >>> sampled(["d"]), len(amends)
+    ([('apache', 1, 'Fixed')], 1)
+
+    A retried [d] pushes the same commit, in case the failed push did land:
+
+    >>> sampled(["d", "d"], push_error=OSError("rejected")), len(amends)
+    ([('apache', 1, 'Fixed'), ('apache', 1, 'Fixed')], 1)
     >>> sampled(["d", "p"], push_error=OSError("rejected"))
-    [('apache', 1), ('fork', 0)]
+    [('apache', 1, 'Fixed'), ('fork', 0, 'Fixed')]
     """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
@@ -2555,10 +2577,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
         else:
             print("Cherry-pick already completed manually; continuing with the backport.")
 
-    raw_message = git.run(["git", "log", "-1", "--format=%B"])
-    message = remove_inherited_post_merge_ci_skip(raw_message)
-    if message != raw_message:
-        amend_commit_message(message)
+    _set_skip_trailer(False)
 
     maybe_binding_policy_warning(pick_ref, pick_head)
     maybe_compile_check(pick_branch_name)
@@ -2570,9 +2589,11 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
             # continue_maybe decline path does; otherwise a later pick of the same ref fails
             # when `git fetch` tries to update the checked-out branch.
             print("Skipping this branch; the merge continues.")
+            _restore_original_head()
             clean_up()
             raise SkipCherryPick()
         if choice == "p":
+            _set_skip_trailer(False)
             marker = _land_via_fork(pr_num, pick_ref, pick_branch_name, title)
             if marker:
                 clean_up()
@@ -2588,14 +2609,11 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
             if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
                 continue
         # Only a direct push gets the skip trailer: on a fork head it would skip the PR's CI.
-        if skip_post_merge_ci:
-            amend_commit_message(append_post_merge_ci_skip(message))
+        _set_skip_trailer(skip_post_merge_ci)
         try:
             git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
             break
         except Exception as e:
-            if skip_post_merge_ci:
-                amend_commit_message(message)
             # Likely a race with another push during the compile. The pick is stale then, so
             # only [p] (which keeps it, on the fork) or [s] (which discards it) can get out.
             print_error(
