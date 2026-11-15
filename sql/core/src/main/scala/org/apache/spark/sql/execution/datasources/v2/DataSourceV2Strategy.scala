@@ -218,8 +218,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         dynamicFilters ++ scalarSubqueryFilters
       }
 
+      // Decide storage-partitioned join here, once, so a rebuild of the planned node (for instance
+      // the copy PlanAdaptiveDynamicPruningFilters makes at stage creation) does not read the
+      // config again and drop the keyed layout the join was planned with (SPARK-60260).
+      val keyGroupedPartitioning = relation.keyGroupedPartitioning
+        .filter(_ => session.sessionState.conf.v2BucketingEnabled)
+
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
-        relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
+        relation.ordering, relation.relation.table, keyGroupedPartitioning)
       DataSourceV2Strategy.withProjectAndFilter(
         project, postScanFilters.diff(fullyPushedRuntimeFilters),
         batchExec, !batchExec.supportsColumnar) :: Nil
