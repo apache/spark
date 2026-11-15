@@ -2006,6 +2006,35 @@ abstract class DynamicPartitionPruningSuiteBase
       assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
     }
   }
+
+  test("SPARK-61740: DPP pushed into a non-partitioned Union branch") {
+    val query =
+      """
+        |SELECT f.store_id,
+        |       f.date_id,
+        |       s.state_province
+        |FROM (SELECT store_id, date_id FROM fact_sk WHERE date_id >= 1300
+        |      UNION ALL
+        |      SELECT store_id, date_id FROM fact_np WHERE date_id <= 1000) f
+        |JOIN dim_store s
+        |ON f.store_id = s.store_id
+        |WHERE s.country IN ('US', 'NL')
+        |""".stripMargin
+    val expected = withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+      sql(query).collect().toSeq
+    }
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val df = sql(query)
+        // Without whole-stage codegen a DPP filter left on the fact_np branch used to be
+        // evaluated per row in tasks and fail with "... IN dynamicpruning#N has not finished".
+        checkAnswer(df, expected)
+        // fact_np is not partitioned on store_id, so only the fact_sk branch keeps DPP.
+        assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size <= 1)
+      }
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
