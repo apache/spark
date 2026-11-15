@@ -1160,7 +1160,7 @@ git = Git()
 
 
 class SkipCherryPick(Exception):
-    """Signals that the committer declined to resolve a conflicting cherry-pick.
+    """Signals that the committer skipped this branch: declined a conflict or a pre-push check.
 
     A backport conflict is routine, and by the time one is hit the merge into the target
     branch (and any earlier cherry-picks) has already been pushed. Declining it must skip
@@ -1201,6 +1201,29 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
     call('git cherry-pick --abort')
     >>> run.call_count
     2
+
+    After the pick is committed there is nothing to abort. A checkout git refuses over
+    uncommitted edits waits for the committer to stash them, then the branch is skipped:
+
+    >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> with (
+    ...     patch("builtins.input", side_effect=["", ""]) as inp,
+    ...     patch.object(git, "run", side_effect=[refused, refused, ""]) as run,
+    ...     patch.dict(continue_maybe.__globals__, original_head="master"),
+    ...     patch.object(sys.modules[__name__], "clean_up") as clean,
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Push anyway?", cherry=True)
+    ...         skipped = False
+    ...     except SkipCherryPick:
+    ...         skipped = True
+    >>> skipped
+    True
+    >>> [c.args[0] for c in run.call_args_list[1:]]
+    [['git', 'checkout', 'master'], ['git', 'checkout', 'master']]
+    >>> inp.call_count, clean.call_count
+    (2, 1)
     """
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
@@ -1209,6 +1232,8 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
                     git.run("git cherry-pick --abort")
                 except Exception:
                     print_error("Unable to abort and get back to the state before cherry-pick")
+            else:
+                _restore_original_head()
             print("Skipping this cherry-pick; the merge continues.")
             clean_up()
             raise SkipCherryPick()
@@ -1218,7 +1243,17 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
 def _cherry_pick_in_progress() -> bool:
     """True if the repo is mid-cherry-pick. With --quiet, exit 1 is git's "no such ref" answer,
     i.e. no pick in progress. Any other trouble answers "yes", so the caller still attempts
-    the abort and keeps the pre-change behaviour."""
+    the abort, as if a pick were in progress.
+
+    >>> from unittest.mock import patch
+    >>> answers = []
+    >>> for failure in (None, subprocess.CalledProcessError(1, "g"),
+    ...                 subprocess.CalledProcessError(128, "g"), OSError("no git")):
+    ...     with patch.object(git, "run", side_effect=failure):
+    ...         answers.append(_cherry_pick_in_progress())
+    >>> answers
+    [True, False, True, True]
+    """
     try:
         git.run(["git", "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD"])
         return True
@@ -1226,6 +1261,24 @@ def _cherry_pick_in_progress() -> bool:
         return e.returncode != 1
     except Exception:
         return True
+
+
+def _restore_original_head():
+    """Check out original_head, waiting for the committer while git refuses over local edits.
+
+    The committed pick is discarded by clean_up() afterwards; the edits are theirs to keep."""
+    if "original_head" not in globals():
+        return
+    while True:
+        try:
+            git.run(["git", "checkout", original_head])
+            return
+        except subprocess.CalledProcessError:
+            # git already printed which files block it.
+            get_input(
+                "Stash or discard those changes in another terminal, then press Enter to retry: ",
+                [""],
+            )
 
 
 def clean_up():
@@ -1281,7 +1334,7 @@ def maybe_compile_check(ref_name: str) -> None:
     too -- transposing them or dropping --porcelain would otherwise stay green:
 
     >>> with (
-    ...     patch("builtins.input", return_value="y"),
+    ...     patch("builtins.input", side_effect=["y"]),
     ...     patch.object(git, "run", side_effect=["/repo\\n", ""]) as grun,
     ...     patch("subprocess.call", return_value=0) as run,
     ...     redirect_stdout(StringIO()),
@@ -1290,7 +1343,7 @@ def maybe_compile_check(ref_name: str) -> None:
     >>> grun.call_args_list[0]
     call(['git', 'rev-parse', '--show-toplevel'])
     >>> grun.call_args_list[1]
-    call(['git', 'status', '--porcelain'])
+    call(['git', 'status', '--porcelain', '--untracked-files=normal'])
     >>> run.call_count
     1
     >>> run.call_args[0][0][0], run.call_args[0][0][-1]
@@ -1304,7 +1357,7 @@ def maybe_compile_check(ref_name: str) -> None:
     (`git add` + `git commit --amend`) alongside the porcelain output:
 
     >>> with (
-    ...     patch("builtins.input", return_value="y"),
+    ...     patch("builtins.input", side_effect=["y"]),
     ...     patch.object(git, "run", side_effect=["/repo\\n", " M foo.scala\\n"]),
     ...     patch("subprocess.call", return_value=0),
     ...     redirect_stdout(StringIO()) as out,
@@ -1333,12 +1386,15 @@ def maybe_compile_check(ref_name: str) -> None:
 
     >>> for boom in (KeyboardInterrupt(), OSError("no build/sbt")):
     ...     with (
-    ...         patch("builtins.input", side_effect=["y", "y"]),
+    ...         patch("builtins.input", side_effect=["y", "y"]) as inp,
     ...         patch.object(git, "run", side_effect=["/repo\\n", ""]),
     ...         patch("subprocess.call", side_effect=boom),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    ...     print(inp.call_count)
+    2
+    2
 
     Declining the override skips just this branch instead of exiting:
 
@@ -1369,7 +1425,7 @@ def maybe_compile_check(ref_name: str) -> None:
     # build/sbt is repo-relative and SPARK_HOME defaults to the cwd, which is dev/ when the
     # script is run as ./merge_spark_pr.py per its own usage line. Ask git for the root instead.
     root = git.run(["git", "rev-parse", "--show-toplevel"]).strip()
-    dirty = git.run(["git", "status", "--porcelain"]).strip()
+    dirty = git.run(["git", "status", "--porcelain", "--untracked-files=normal"]).strip()
     if dirty:
         print_error(
             "Working tree is not clean, so what compiles below is not exactly the commit that "
@@ -1478,7 +1534,8 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
 
     The diff is forced plain: without --no-color a committer with ``color.ui = always`` gets
     added lines behind an ANSI escape, no line starts with "+", and the check reports nothing
-    while looking like it ran. Like branches_with_merge_footer, a git failure only warns: this
+    while looking like it ran. --no-relative does the same for ``diff.relative = true``, which
+    would cut the diff down to dev/. Like branches_with_merge_footer, a git failure only warns: this
     runs after the merge has already been pushed.
 
     `never` below is how these tests assert "does not prompt": a bare input mock would return a
@@ -1511,9 +1568,9 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
     ...     redirect_stdout(StringIO()),
     ... ):
     ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
-    >>> run.call_args[0][0][:6]
-    ['git', 'diff', '--no-color', '--no-ext-diff', 'deadbeef', 'HEAD']
-    >>> run.call_args[0][0][6:]
+    >>> run.call_args[0][0][:7]
+    ['git', 'diff', '--no-relative', '--no-color', '--no-ext-diff', 'deadbeef', 'HEAD']
+    >>> run.call_args[0][0][7:]
     ['--', ':(top)*.scala', ':(top)*.java']
 
     Warns and prompts when the change adds a token on a pre-4.2 branch; accepting continues
@@ -1566,7 +1623,7 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
         return
     try:
         diff = git.run(
-            ["git", "diff", "--no-color", "--no-ext-diff", base_head, "HEAD", "--"]
+            ["git", "diff", "--no-relative", "--no-color", "--no-ext-diff", base_head, "HEAD", "--"]
             + list(BINDING_POLICY_PATHSPECS)
         )
     except Exception as e:
@@ -2264,19 +2321,29 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     a commit hash for a direct push (landed), a PR URL for a draft backport PR, or
     `fork:<owner>:<branch>` when the fork push worked but the PR did not open (both pending).
     `pending_sibling` is the (branch-M.x, marker) whose backport is only pending; a direct push
-    then needs an explicit maintenance-only confirmation. Raises `SkipCherryPick`, after
-    restoring the working tree, when the committer declines to resolve a conflict, declines
-    the binding-policy or compile-check prompt, or answers [s]kip at the landing prompt.
-    A failed fork landing or direct push returns to the landing prompt with the pick kept.
+    then needs an explicit maintenance-only confirmation. Raises `SkipCherryPick` when the
+    committer declines to resolve a conflict (after aborting the pick), declines the
+    binding-policy or compile-check prompt, or answers [s]kip at the landing prompt. Past the
+    conflict nothing is aborted: the committed pick and its temporary branch are discarded,
+    and uncommitted edits must be stashed first (see continue_maybe). A failed fork landing
+    or direct push returns to the landing prompt with the pick kept.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
     >>> from unittest.mock import Mock, call, patch
     >>> policy, compile_check = Mock(), Mock()
     >>> def land(answers, via_fork=(), push_error=None):
+    ...     tip = ["pre\\n"]
+    ...     def run(cmd):
+    ...         if "cherry-pick" in cmd:
+    ...             tip[0] = "head\\n"
+    ...         return tip[0]
     ...     with (
     ...         patch("builtins.input", side_effect=answers),
-    ...         patch.object(git, "run", return_value="head\\n"),
+    ...         patch.object(git, "run", side_effect=run),
+    ...         patch.object(
+    ...             sys.modules[__name__], "should_skip_post_merge_ci", return_value=False
+    ...         ),
     ...         patch.object(git, "push", side_effect=push_error) as push,
     ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=policy,
     ...                        maybe_compile_check=compile_check, clean_up=Mock(),
@@ -2299,7 +2366,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
 
     Each pre-push check ran once per pick, the binding-policy one against the pre-pick head:
 
-    >>> policy.call_args_list == [call("branch-4.2", "head")] * 4
+    >>> policy.call_args_list == [call("branch-4.2", "pre")] * 4
     True
     >>> compile_check.call_args_list == [call(pushes[0].args[1])] * 4
     True
