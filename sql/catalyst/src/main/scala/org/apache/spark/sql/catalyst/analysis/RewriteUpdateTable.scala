@@ -133,9 +133,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // the plan output may include metadata columns at the end
     // that's why the number of assignments may not match the number of plan output columns
-    val assignedValues = assignments.map(_.value)
+    val assignedValues = assignments.map(_.value).toIndexedSeq
     val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
-      if (index < assignments.size) {
+      if (index < assignedValues.size) {
         val assignedExpr = assignedValues(index)
         val updatedValue = If(cond, assignedExpr, attr)
         Alias(updatedValue, attr.name)()
@@ -198,9 +198,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // the plan output may include immutable metadata columns at the end
     // that's why the number of assignments may not match the number of plan output columns
-    val assignedValues = assignments.map(_.value)
+    val assignedValues = assignments.map(_.value).toIndexedSeq
     val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
-      if (index < assignments.size) {
+      if (index < assignedValues.size) {
         val assignedExpr = assignedValues(index)
         Alias(assignedExpr, attr.name)()
       } else {
