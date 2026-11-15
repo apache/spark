@@ -1029,8 +1029,9 @@ class DryRunGit(Git):
 git = Git()
 
 
-class _PreserveLocalState(SystemExit):
-    """Exit without retrying cleanup over local edits after a refused checkout."""
+# Set by [a]bort at the checkout-retry prompt: from then on clean_up() leaves git alone, so
+# the pick and the committer's edits survive whatever main()'s finally blocks do on the way out.
+preserve_local_state = False
 
 
 class SkipCherryPick(Exception):
@@ -1048,7 +1049,7 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
 
     `cherry` is the decline semantics, not a statement that a cherry-pick is mid-flight: the
     pre-push checks run after the pick is committed, and declining there must still skip only
-    that branch. So the abort is attempted only when git says one is actually in progress.
+    that branch. So the abort is skipped only when git says no pick is in progress.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
@@ -1082,7 +1083,7 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
     >>> refused = subprocess.CalledProcessError(1, "git checkout")
     >>> with (
     ...     patch("builtins.input", side_effect=["", ""]) as inp,
-    ...     patch.object(git, "run", side_effect=[refused, refused, ""]) as run,
+    ...     patch.object(git, "run", side_effect=[refused, refused, "", ""]) as run,
     ...     patch.dict(continue_maybe.__globals__, original_head="master"),
     ...     patch.object(sys.modules[__name__], "clean_up") as clean,
     ...     redirect_stdout(StringIO()),
@@ -1094,8 +1095,8 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
     ...         skipped = True
     >>> skipped
     True
-    >>> [c.args[0] for c in run.call_args_list[1:]]
-    [['git', 'checkout', 'master'], ['git', 'checkout', 'master']]
+    >>> [c.args[0] for c in run.call_args_list[1:3]]
+    [['git', 'checkout', '--quiet', 'master'], ['git', 'checkout', '--quiet', 'master']]
     >>> inp.call_count, clean.call_count
     (2, 1)
 
@@ -1162,7 +1163,8 @@ def _restore_original_head():
         return
     while True:
         try:
-            carried = git.run(["git", "checkout", original_head]).strip()
+            git.run(["git", "checkout", "--quiet", original_head])
+            carried = git.run(["git", "status", "--porcelain", "--untracked-files=no"]).strip()
             if carried:
                 print("Uncommitted changes carried over to %s:\n%s" % (original_head, carried))
             return
@@ -1170,11 +1172,15 @@ def _restore_original_head():
             # git already printed why it refused.
             prompt = "Stash or discard those changes elsewhere, then Enter to retry, or [a]bort: "
             if get_input(prompt, ["", "a"]) == "a":
+                global preserve_local_state
+                preserve_local_state = True
                 print_error("Okay, exiting; local edits and temporary branches are preserved.")
-                raise _PreserveLocalState(-1)
+                sys.exit(-1)
 
 
 def clean_up():
+    if preserve_local_state:
+        return
     if "original_head" in globals():
         print("Restoring head pointer to %s" % original_head)
         git.run("git checkout %s" % original_head)
@@ -1903,7 +1909,9 @@ def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
     return None
 
 
-def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
+def cherry_pick(
+    pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=(), record=None
+):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
     Enforces the Upstream-First policy (see header comment) via
@@ -1916,6 +1924,27 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     and record each backport commit for the merge comment. The list is empty (or, for the
     Upstream-First two-branch path, holds only what landed) when the committer declines to
     resolve a conflict, so the caller simply offers the next branch and still resolves JIRA.
+    `record` gets each pair as it lands, so one survives a later pick that ends the run:
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> recorded = []
+    >>> def do(pr_num, merge_hash, ref):
+    ...     if ref == "branch-4.2":
+    ...         sys.exit(-1)  # e.g. [a]bort at the checkout-retry prompt
+    ...     return ref, "abc"
+    >>> with (
+    ...     patch.multiple(sys.modules[__name__], _do_cherry_pick=do, get_input=lambda *a: "b"),
+    ...     patch("builtins.input", return_value="branch-4.2"), redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         cherry_pick(1, "abc", "branch-4.2", ["branch-4.x", "branch-4.2"], "master",
+    ...                     already_picked=("master",), record=recorded.append)
+    ...     except SystemExit:
+    ...         pass
+    >>> recorded
+    [('branch-4.x', 'abc')]
     """
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
@@ -1928,6 +1957,12 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             f"'{pick_ref}' is not a known release branch. "
             f"Valid branches: {valid_branches}. Please try again."
         )
+
+    def pick(ref):
+        pair = _do_cherry_pick(pr_num, merge_hash, ref)
+        if record:
+            record(pair)
+        return pair
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x is not None:
@@ -1949,17 +1984,17 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
         if choice == "b":
             # Preserve any pick that was already pushed: if the branch-M.N pick is skipped after
             # branch-M.x landed, still return branch-M.x so it's recorded and JIRA/comment
-            # reflect it.
+            # reflect it. `record` keeps it even when the branch-M.N pick ends the run.
             picked = []
             try:
-                picked.append(_do_cherry_pick(pr_num, merge_hash, sibling_x))
-                picked.append(_do_cherry_pick(pr_num, merge_hash, pick_ref))
+                picked.append(pick(sibling_x))
+                picked.append(pick(pick_ref))
             except SkipCherryPick:
                 pass
             return picked
         elif choice == "o":
             try:
-                return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+                return [pick(pick_ref)]
             except SkipCherryPick:
                 return []
         elif choice == "a":
@@ -1968,7 +2003,7 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             fail("Unrecognized choice %r; aborting." % choice)
 
     try:
-        return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+        return [pick(pick_ref)]
     except SkipCherryPick:
         return []
 
@@ -3993,6 +4028,11 @@ def main():
             print("Already backported to: %s" % ", ".join(picked_refs[1:]))
         # Loop so one invocation can reach several maintenance branches, as the merge path does.
         picked_commits = []
+
+        def record(pair):
+            picked_refs.append(pair[0])
+            picked_commits.append(pair)
+
         try:
             while True:
                 default = default_pick_branch(branch_names, tuple(picked_refs))
@@ -4001,16 +4041,15 @@ def main():
                         "Every known release branch already contains #%s; nothing to pick." % pr_num
                     )
                     break
-                picked = cherry_pick(
+                cherry_pick(
                     pr_num,
                     merge_hash,
                     default,
                     branch_names,
                     target_ref,
                     already_picked=tuple(picked_refs),
+                    record=record,
                 )
-                picked_refs = picked_refs + [ref for ref, _ in picked]
-                picked_commits = picked_commits + picked
                 prompt = "Would you like to pick %s into another branch?" % merge_hash
                 if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
                     break
@@ -4078,6 +4117,10 @@ def main():
     # cherry_pick, so each grows with every cherry-pick -- including branches consumed by the
     # Upstream-First two-branch path inside cherry_pick (e.g. picking branch-M.x + branch-M.N
     # in a single prompt). It starts with target_ref, the merge sink, never to be re-picked.
+    def record(pair):
+        merged_refs.append(pair[0])
+        merged_commits.append(pair)
+
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     # Always record the merge summary for what actually landed, even if a later
     # cherry-pick is aborted or cancelled: the merge into the target branch has
@@ -4088,16 +4131,15 @@ def main():
             if default is None:
                 print("Every known release branch already contains #%s; nothing to pick." % pr_num)
                 break
-            picked = cherry_pick(
+            cherry_pick(
                 pr_num,
                 merge_hash,
                 default,
                 branch_names,
                 target_ref,
                 already_picked=tuple(merged_refs),
+                record=record,
             )
-            merged_refs = merged_refs + [ref for ref, _ in picked]
-            merged_commits = merged_commits + picked
     finally:
         if merged_commits:
             # The "Closes #N" keyword in the commit message only auto-closes the PR when the
@@ -4117,33 +4159,45 @@ def main():
 
 __test__ = {
     "abort_entrypoint": """
-    Aborting a refused checkout bypasses the CLI cleanup; ordinary exits still clean up.
+    After [a]bort at the checkout-retry prompt no git runs again, by any route out: the CLI
+    handler, or a fail() in main()'s finally blocks such as declining the JIRA prompt. An
+    ordinary exit still cleans up.
 
     >>> import ast, doctest
     >>> from pathlib import Path
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
-    >>> from unittest.mock import Mock, patch
+    >>> from unittest.mock import patch
     >>> entrypoint = ast.parse(Path(__file__).read_text()).body[-1]
     >>> code = compile(ast.Module(body=[entrypoint], type_ignores=[]), __file__, "exec")
     >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> def abort_then_fail():
+    ...     try:
+    ...         _restore_original_head()
+    ...     finally:
+    ...         fail("Okay, exiting")
     >>> def ordinary_exit():
     ...     raise SystemExit(-1)
-    >>> for entry, expected in ((_restore_original_head, 0), (ordinary_exit, 1)):
-    ...     clean = Mock()
-    ...     namespace = dict(globals(), __name__="__main__", main=entry, clean_up=clean)
+    >>> for entry in (_restore_original_head, abort_then_fail, ordinary_exit):
     ...     with (
     ...         patch.object(doctest, "testmod", return_value=(0, 0)),
-    ...         patch.dict(_restore_original_head.__globals__, original_head="master"),
+    ...         patch.dict(clean_up.__globals__, original_head="master",
+    ...                    preserve_local_state=False),
     ...         patch.object(git, "run", side_effect=refused) as run,
     ...         patch("builtins.input", side_effect=["a"]), redirect_stdout(StringIO()),
     ...     ):
     ...         try:
-    ...             exec(code, namespace)
-    ...         except SystemExit as e:
-    ...             assert e.code == -1
-    ...     assert clean.call_count == expected
-    ...     assert run.call_count == (1 if entry is _restore_original_head else 0)
+    ...             exec(code, dict(globals(), __name__="__main__", main=entry))
+    ...         except BaseException as e:
+    ...             ended = getattr(e, "code", type(e).__name__)
+    ...     cmds = [c.args[0] if isinstance(c.args[0], str) else " ".join(c.args[0])
+    ...             for c in run.call_args_list]
+    ...     print(entry.__name__, [cmd.split()[1] for cmd in cmds], ended)
+    _restore_original_head ['checkout'] -1
+    abort_then_fail ['checkout'] -1
+    ordinary_exit ['checkout'] CalledProcessError
+    >>> preserve_local_state
+    False
     """,
     "revert_jira_issue": """
     A revert removes the versions for its branches while preserving released, archived,
@@ -5061,8 +5115,6 @@ if __name__ == "__main__":
         sys.exit(-1)
     try:
         main()
-    except _PreserveLocalState:
-        raise
     except BaseException:
         clean_up()
         raise
