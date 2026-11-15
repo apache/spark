@@ -410,7 +410,7 @@ mod tests {
 
     use arrow_array::builder::{
         BooleanBuilder, Decimal128Builder, Int32Builder, ListBuilder, MapBuilder,
-        OffsetBufferBuilder, StringBuilder, StructBuilder,
+        NullBufferBuilder, OffsetBufferBuilder, StringBuilder, StructBuilder,
     };
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
     use arrow_array::{
@@ -917,6 +917,32 @@ mod tests {
         let error = batch_error(batch.clone(), &required);
         assert!(error.unwrap().contains("The column map.value has a null"));
         assert_eq!(batch_error(batch, &actual), None);
+
+        // [{"a": 1}, null], where the null map still spans an entry with a null key and a null
+        // value: neither counts, even though the schema to read declares both not nullable.
+        let fields = Fields::from(vec![
+            Field::new("key", DataType::Utf8, true),
+            Field::new("value", DataType::Int32, true),
+        ]);
+        let keys: ArrayRef = Arc::new(StringArray::from(vec![Some("a"), None]));
+        let values: ArrayRef = Arc::new(Int32Array::from(vec![Some(1), None]));
+        let entries = StructArray::try_new(fields.clone(), vec![keys, values], None).unwrap();
+        let entries_field = Arc::new(Field::new("entries", DataType::Struct(fields), false));
+        let mut offsets = OffsetBufferBuilder::<i32>::new(2);
+        offsets.push_length(1);
+        offsets.push_length(1);
+        let mut slots = NullBufferBuilder::new(2);
+        slots.append_non_null();
+        slots.append_null();
+        let (offsets, slots) = (offsets.finish(), slots.finish());
+        let map = MapArray::try_new(entries_field, offsets, entries, slots, false).unwrap();
+        let actual = Arc::new(Schema::new(vec![Field::new(
+            "map",
+            map.data_type().clone(),
+            true,
+        )]));
+        let batch = RecordBatch::try_new(actual, vec![Arc::new(map)]).unwrap();
+        assert_eq!(batch_error(batch, &required), None);
     }
 
     #[test]
