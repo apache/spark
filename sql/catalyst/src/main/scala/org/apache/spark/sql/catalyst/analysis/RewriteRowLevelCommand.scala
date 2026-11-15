@@ -355,15 +355,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       attrs: Seq[Attribute],
       outputs: Seq[Seq[Expression]]): Seq[Attribute] = {
 
-    // build a correct nullability map for output attributes
     // an attribute is nullable if at least one output may produce null
     val indexedOutputs = outputs.map(_.toIndexedSeq)
-    val nullabilityMap = attrs.indices.map { index =>
-      index -> indexedOutputs.exists(output => output(index).nullable)
-    }.toMap
-
     attrs.zipWithIndex.map { case (attr, index) =>
-      AttributeReference(attr.name, attr.dataType, nullabilityMap(index), attr.metadata)()
+      val nullable = indexedOutputs.exists(output => output(index).nullable)
+      AttributeReference(attr.name, attr.dataType, nullable, attr.metadata)()
     }
   }
 }
