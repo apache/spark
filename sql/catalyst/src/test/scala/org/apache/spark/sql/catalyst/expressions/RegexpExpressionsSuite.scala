@@ -812,4 +812,18 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(RLike(udf, Literal("^1")).expensive)
     assert(Like(udf, Literal("1_"), '\\').expensive)
   }
+
+  test("SPARK-61552: LIKE and RLIKE with a foldable pattern that fails to evaluate") {
+    // `ConstantFolding` leaves such a pattern in a conditional branch. Only a row that evaluates
+    // the pattern should fail, also in generated code.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val str = $"s".string.at(0)
+      val pattern = Cast(Divide(Literal(1.0), Literal(0.0)), StringType)
+      Seq(Like(str, pattern, '\\'), RLike(str, pattern)).foreach { e =>
+        val expr = If(IsNull(str), Literal(true), e)
+        checkEvaluation(expr, true, create_row(null))
+        checkExceptionInExpression[ArithmeticException](expr, create_row("x"), "DIVIDE_BY_ZERO")
+      }
+    }
+  }
 }

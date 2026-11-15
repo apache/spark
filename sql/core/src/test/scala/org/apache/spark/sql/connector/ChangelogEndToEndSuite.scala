@@ -23,19 +23,21 @@ import java.util
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
-import org.apache.spark.sql.catalyst.streaming.UserProvided
+import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, UserProvided}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.Changelog.{
   CHANGE_TYPE_DELETE, CHANGE_TYPE_INSERT, CHANGE_TYPE_UPDATE_POSTIMAGE, CHANGE_TYPE_UPDATE_PREIMAGE}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * End-to-end tests for Change Data Capture (CDC) queries using
  * [[InMemoryChangelogCatalog]].
  */
+@DataSourceV2Test
 class ChangelogEndToEndSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_e2e"
@@ -648,6 +650,37 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
         checkAnswer(spark.sql("SELECT * FROM cdc_stream_named"), expected)
       } finally {
         q.stop()
+      }
+    }
+  }
+
+  test("SPARK-60525: streaming SQL CHANGES supports IDENTIFIED BY with alias and watermark") {
+    catalog.addChangeRows(ident, Seq(
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
+
+    val expected = Seq(
+      Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)))
+
+    val wm = "WATERMARK _commit_timestamp DELAY OF INTERVAL 1 MINUTE"
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      Seq("AS c", wm, s"$wm AS c").zipWithIndex.foreach { case (clauses, i) =>
+        val stream = sql(
+          s"SELECT * FROM STREAM $fullTableName CHANGES FROM VERSION 1 " +
+            s"IDENTIFIED BY my_cdc_source $clauses")
+
+        val sourceNames = stream.queryExecution.analyzed.collect {
+          case r: StreamingRelationV2 => r.sourceIdentifyingName
+        }
+        assert(sourceNames === Seq(UserProvided("my_cdc_source")), clauses)
+
+        val queryName = s"cdc_stream_identified_by_$i"
+        val q = stream.writeStream.format("memory").queryName(queryName).start()
+        try {
+          q.processAllAvailable()
+          checkAnswer(spark.sql(s"SELECT * FROM $queryName"), expected)
+        } finally {
+          q.stop()
+        }
       }
     }
   }

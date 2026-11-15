@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -41,7 +42,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1575,6 +1576,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     TransformExpression(DaysFunction, Seq(expr))
   }
 
+  /** A `years` that declares the `INT` it is applied to here, so that Spark can evaluate it. */
+  private object IntYearsFunction extends ScalarFunction[Int] {
+    override def inputTypes(): Array[DataType] = Array(IntegerType)
+    override def resultType(): DataType = IntegerType
+    override def name(): String = "years"
+    override def canonicalName(): String = name()
+    override def produceResult(input: InternalRow): Int = input.getInt(0)
+  }
+
   test("SPARK-59080: the re-shuffled side lands on the member the keyed side was matched on") {
     val id = AttributeReference("id", IntegerType)()
     val t1 = AttributeReference("t1", IntegerType)()
@@ -1719,6 +1729,243 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       assert(EnsureRequirements.apply(sameSpace).collect {
         case s: ShuffleExchangeExec => s
       }.isEmpty, "two sides holding one key space must still be read as they stand")
+    }
+  }
+
+  test("SPARK-60522: a cogroup over a transform Spark cannot evaluate still pairs as it stands") {
+    // `pickCoPartitionTarget` decides both which layout the other children are shuffled onto and
+    // which a child is read against as it stands. Only the first evaluates the transform, so a
+    // transform Spark cannot evaluate is refused only for that. A cogroup has only this path,
+    // since `checkKeyGroupCompatible` declines for anything that is not a `ShuffledJoin`. So two
+    // sides on the same such transform and keys, which nothing has to evaluate, keep their
+    // layout, while a plain side is not shuffled onto it.
+    val nonScalar = NonScalarBucketFunction
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    val keys = Seq(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(3))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), keys))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(nonScalar, Seq(idR), Some(4))), keys))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(idL), Seq(idR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(EnsureRequirements.apply(cogroup).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "the two sides are read as they stand")
+      val plain = cogroup.copy(right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0)))
+      assert(!EnsureRequirements.apply(plain).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }.exists(_.isInstanceOf[KeyedPartitioning]), "a plain side is not shuffled onto it")
+      // A sort-merge join over the same children is paired by `checkKeyGroupCompatible` first.
+      val join = SortMergeJoinExec(Seq(idL), Seq(idR), Inner, None, left, right)
+      assert(EnsureRequirements.apply(join).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "a join still pairs them as they stand")
+    }
+  }
+
+  test("SPARK-60522: a layout Spark cannot evaluate does not lower the shuffle parallelism") {
+    // Only a member that can serve as the layout keeps its child from being re-shuffled, so the
+    // parallelism guard treats a keyed side whose transform Spark cannot evaluate, and which the
+    // other side does not pair with, as one to re-shuffle. With both sides re-shuffled, an existing
+    // shuffle with fewer partitions than `spark.sql.shuffle.partitions` is not the layout.
+    val nonScalar = NonScalarBucketFunction
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = ShuffleExchangeExec(HashPartitioning(Seq(idR), 5), DummySparkPlan())
+    val join = SortMergeJoinExec(Seq(idL), Seq(idR), Inner, None, left, right)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+      val partitionings = EnsureRequirements.apply(join).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }
+      assert(partitionings.size == 2 && partitionings.forall {
+        case h: HashPartitioning => h.numPartitions == 200
+        case _ => false
+      }, s"both sides at spark.sql.shuffle.partitions, got $partitionings")
+    }
+  }
+
+  test("SPARK-60027: a cogroup shuffled onto a decimal bucket places a key of more precision") {
+    // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup, can shuffle a side
+    // keyed on a `DECIMAL(12,2)` onto a bucket over a `DECIMAL(10,2)` column. The function gets
+    // the `Decimal` itself and reads its unscaled digits, as Iceberg's does, so each row lands
+    // where the keyed side put its value.
+    val decimalBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, DecimalType(10, 2))
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      def invoke(numBuckets: Int, value: Decimal): Int =
+        Math.floorMod(value.toJavaBigDecimal.unscaledValue.hashCode, numBuckets)
+    }
+    val cL = AttributeReference("cL", DecimalType(10, 2))()
+    val cR = AttributeReference("cR", DecimalType(12, 2))()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(decimalBucket, Seq(cL), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val keyed = EnsureRequirements.apply(cogroup).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }.collect { case k: KeyedPartitioning => k }
+      assert(keyed.size == 1, "the right side is shuffled onto the bucket layout")
+      val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
+      Seq("123.45", "0.07", "-9.99").foreach { v =>
+        val stored = TransformExpression(decimalBucket,
+          Seq(Literal(Decimal(BigDecimal(v), 10, 2), DecimalType(10, 2))), Some(4))
+        assert(placed.eval(InternalRow(Decimal(BigDecimal(v), 12, 2))) ==
+          stored.eval(InternalRow.empty), v)
+      }
+    }
+  }
+
+  test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
+    // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup (SPARK-60782), can
+    // have another key of a type the layout's function does not take: a `BIGINT` against a
+    // function declaring `INT`,
+    // or a string of another collation, which master paired wrongly. Or one the function takes but
+    // that is stored otherwise than the layout's column, so the cogroup, which compares the key
+    // rows, would not pair its groups: an `INT` widened to a `BIGINT` column's declared type, which
+    // master failed on in a task, or a `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)`
+    // column, stored as a `long`. Falling back to a hash shuffle would pair the groups wrongly
+    // too, so it fails, while planning, with an error that names the key's type. The storage check
+    // needs no call, so nothing is logged about the transform not being evaluated first.
+    def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    Seq(
+      (IntegerType, LongType, "\"INT\"", "\"BIGINT\""),
+      (StringType, StringType("UTF8_LCASE"), "\"STRING\"", "\"STRING COLLATE UTF8_LCASE\""),
+      (LongType, IntegerType, "\"BIGINT\"", "\"INT\""),
+      (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\"")
+    ).foreach { case (columnType, keyType, declared, key) =>
+      val cL = AttributeReference("cL", columnType)()
+      val cR = AttributeReference("cR", keyType)()
+      val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(bucket(columnType), Seq(cL), Some(4))),
+        (0 until 4).map(InternalRow(_))))
+      val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+      val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
+        AttributeReference("value", IntegerType)() :: Nil, left, right)
+      val appender = new LogAppender("a cogroup key the layout cannot place")
+      withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+          level = Some(Level.INFO)) {
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          checkError(
+            exception = intercept[SparkException](EnsureRequirements.apply(cogroup)),
+            condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+            parameters = Map(
+              "transform" -> "bucket(4)",
+              "columnType" -> declared,
+              "inputTypes" -> ("(\"INT\", " + declared + ")"),
+              "key" -> "\"cR\"",
+              "keyType" -> key))
+        }
+      }
+      assert(appender.loggingEvents.isEmpty,
+        appender.loggingEvents.map(_.getMessage.getFormattedMessage))
+    }
+  }
+
+  test("SPARK-60027: the key type error names the cogroup key that does not match") {
+    // A column at two cluster positions: the layout's transform is rebuilt over the key at the
+    // first, `x`, which matches, and the error names the one that does not, `y`.
+    val intBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val c = AttributeReference("c", IntegerType)()
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", LongType)()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(intBucket, Seq(c), Some(4))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(c, c), Seq(x, y), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkException](EnsureRequirements.apply(cogroup)),
+        condition = "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH",
+        parameters = Map(
+          "transform" -> "bucket(4)",
+          "columnType" -> "\"INT\"",
+          "inputTypes" -> "(\"INT\", \"INT\")",
+          "key" -> "\"y\"",
+          "keyType" -> "\"BIGINT\""))
+    }
+  }
+
+  test("SPARK-60522: a cogroup picks among a child's layouts by what Spark can evaluate") {
+    // The left child offers two layouts: a `bucket` Spark cannot evaluate, listed first so that
+    // ranking alone would pick it, and its own column. A child that pairs with the first as it
+    // stands evaluates nothing, so it keeps it. A child that pairs with neither is shuffled, and
+    // only onto the one Spark can evaluate.
+    val nonScalar = NonScalarBucketFunction
+    // Over `INT` columns, so that both layouts hold `INT` keys, as a collection's members must.
+    val idL = AttributeReference("idL", IntegerType)()
+    val idR = AttributeReference("idR", IntegerType)()
+    val keys = (0 until 4).map(InternalRow(_))
+    val left = DummySparkPlan(outputPartitioning = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(TransformExpression(nonScalar, Seq(idL), Some(4))), keys),
+      KeyedPartitioning(Seq(idL), keys))))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    def cogroup(right: SparkPlan): FlatMapCoGroupsInPandasExec =
+      FlatMapCoGroupsInPandasExec(Seq(idL), Seq(idR), pythonUdf,
+        AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val sameBucket = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(nonScalar, Seq(idR), Some(4))), keys))
+      assert(EnsureRequirements.apply(cogroup(sameBucket)).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "paired with the layout Spark cannot evaluate as it stands")
+
+      val plain = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+      val shuffled = EnsureRequirements.apply(cogroup(plain)).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }
+      assert(shuffled.size == 1 && (shuffled.head match {
+        case k: KeyedPartitioning => k.expressions == Seq(idR)
+        case _ => false
+      }), s"shuffled onto the column, the layout Spark can evaluate, got $shuffled")
     }
   }
 
@@ -2973,10 +3220,13 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         "312" -> Seq(InternalRow(3), InternalRow(1), InternalRow(2)),
         // Duplicate keys separated by another key force regrouping on either side of the join.
         "121-interleaved" -> Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
+      // `years` over an `INT` attribute through a function that declares `INT`, so that Spark can
+      // evaluate it and a child can be shuffled onto it. The test catalog's `years` declares a
+      // `TIMESTAMP`, which an `INT` attribute is not stored as.
       val exprSets = Seq(
         "id" -> Seq[Expression](a),
         "bucket4" -> Seq[Expression](bucket(4, a)),
-        "years" -> Seq[Expression](years(a)))
+        "years" -> Seq[Expression](TransformExpression(IntYearsFunction, Seq(a))))
       for {
         (keyName, keys) <- keySets
         (exprName, exprs) <- exprSets

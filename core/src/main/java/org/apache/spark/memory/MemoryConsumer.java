@@ -128,8 +128,17 @@ public abstract class MemoryConsumer {
    * @throws SparkOutOfMemoryError
    */
   protected MemoryBlock allocatePage(long required) {
-    MemoryBlock page =
-      taskMemoryManager.allocatePageWithMinimum(Math.max(pageSize, required), required, this);
+    return allocatePage(Math.max(pageSize, required), required);
+  }
+
+  /**
+   * Allocate a memory block of `size` bytes. A smaller block may be returned, but it has at least
+   * `required` bytes, which must not exceed `size`.
+   *
+   * @throws SparkOutOfMemoryError
+   */
+  protected MemoryBlock allocatePage(long size, long required) {
+    MemoryBlock page = taskMemoryManager.allocatePageWithMinimum(size, required, this);
     if (page == null || page.size() < required) {
       throwOom(page, required);
     }

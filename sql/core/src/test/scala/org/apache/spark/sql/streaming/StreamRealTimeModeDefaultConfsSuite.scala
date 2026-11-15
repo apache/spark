@@ -62,6 +62,27 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
     observed
   }
 
+  test("Real-Time Mode defaults incremental cleanup to 2 only in the query session") {
+    val key = SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key
+    val original = spark.conf.getOption(key)
+    val explicitlySet = spark.conf.contains(key)
+    val observed = runRealTimeQueryAndReadConfs(Seq(key))
+
+    assert(observed(key).contains("2"))
+    assert(spark.conf.getOption(key) === original)
+    assert(spark.conf.contains(key) === explicitlySet)
+  }
+
+  gridTest("Real-Time Mode honors an explicit incremental cleanup factor")(Seq(0L, 1L, 5L)) {
+    factor =>
+      val key = SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key
+      withSQLConf(key -> factor.toString) {
+        val observed = runRealTimeQueryAndReadConfs(Seq(key))
+        assert(observed(key).contains(factor.toString))
+        assert(spark.conf.get(key) === factor.toString)
+      }
+  }
+
   test("a Real-Time Mode query defaults to checkpoint format v2 with the RocksDB state store") {
     val keys = Seq(
       SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key,

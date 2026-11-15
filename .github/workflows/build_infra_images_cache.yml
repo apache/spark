@@ -54,6 +54,7 @@ jobs:
   main:
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     permissions:
       packages: write
     steps:

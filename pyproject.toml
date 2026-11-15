@@ -60,9 +60,6 @@ ignore = [
     "python/pyspark/errors/error_classes.py" = ["E501"]
     # Examples contain some unused variables.
     "examples/src/main/python/sql/datasource.py" = ["F841"]
-    # DataFrame golden test scripts are executed by the framework with ``spark``
-    # injected into their namespace, so it is undefined at lint time.
-    "python/pyspark/sql/tests/df_golden/scripts/**/*.py" = ["F821"]
 
 [dependency-groups]
 internal_py4j = ["py4j>=0.10.9.9"]
@@ -260,6 +257,15 @@ ci_classic_minimum = [
     "unittest-xml-reporting",
     # Debug tools
     "psutil",
+]
+
+# pandas 2 does not have Python 3.15 wheels, so install only compatible dependencies.
+ci_python_315 = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_pyarrow"},
+    "psutil",
+    "six",
+    "unittest-xml-reporting",
 ]
 
 ci_classic_pandas_3 = [

@@ -245,6 +245,128 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100) % Decimal(0) === null)
   }
 
+  Seq(
+    ("10000000000000000000000000000000000000", "0.0007", "0.0005"),
+    ("99999999999999999999999999999999999999", "0.0007", "0.0004"),
+    ("99999999999999999999999999999999999999", "7E-38", "2E-38"),
+    ("99999999999999999999999999999999999999", "1E-38", "0")
+  ).foreach { case (dividend, divisor, expected) =>
+    test(s"decimal remainder with a large integral quotient: $dividend % $divisor") {
+      val left = Decimal(dividend)
+      val right = Decimal(divisor)
+      val remainder = Decimal(expected)
+      assert(left % right == remainder)
+      assert(left % -right == remainder)
+      assert(-left % right == -remainder)
+      assert(-left % -right == -remainder)
+      assert((left % right).scale == remainder.scale)
+      assert(left % Decimal(0) == null)
+    }
+  }
+
+  Seq(
+    (38, "99999999999999999999999999999999999999", "7", "1", 38),
+    (39, "99999999999999999999999999999999999999", "0.7", "0.3", 39),
+    (40, "99999999999999999999999999999999999999", "0.07", "0.02", 40),
+    (40, "10000000000000000000000000000000000000", "0.07", "0.06", 39)
+  ).foreach { case (bound, dividend, divisor, expected, quotientDigits) =>
+    test(s"decimal remainder with quotient bound $bound and $quotientDigits actual digits") {
+      val left = Decimal(dividend)
+      val right = Decimal(divisor)
+      val quotient = left.toJavaBigDecimal.divideToIntegralValue(right.toJavaBigDecimal)
+      assert(quotient.toBigInteger.toString.length == quotientDigits)
+      for (leftSign <- Seq(1, -1); rightSign <- Seq(1, -1)) {
+        val signedLeft = if (leftSign < 0) -left else left
+        val signedRight = if (rightSign < 0) -right else right
+        val remainder = if (leftSign < 0) -Decimal(expected) else Decimal(expected)
+        assert((signedLeft % signedRight).toJavaBigDecimal == remainder.toJavaBigDecimal)
+      }
+    }
+  }
+
+  test("decimal remainder preserves zero quotients, trailing zeros and compact operands") {
+    Seq(
+      (Decimal("0.00"), Decimal("0.7"), Decimal("0.00")),
+      (Decimal("1.00"), Decimal("7.0"), Decimal("1.00")),
+      (Decimal(120000L, 6, 2), Decimal(70L, 2, 1), Decimal("3.00")),
+      // The 39-digit context represents this 40-digit quotient because it has trailing zeros.
+      (Decimal("10000000000000000000000000000000000000"), Decimal("0.01"), Decimal("0"))
+    ).foreach { case (left, right, expected) =>
+      assert((left % right).toJavaBigDecimal == expected.toJavaBigDecimal)
+      assert((-left % right).toJavaBigDecimal == (-expected).toJavaBigDecimal)
+      assert((left % -right).toJavaBigDecimal == expected.toJavaBigDecimal)
+      assert(left % Decimal(0) == null)
+    }
+  }
+
+  test("decimal remainder preserves negative and extreme scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq(
+        (Decimal("123E+4"), Decimal("7E+2"), Decimal("1E+2")),
+        (Decimal("9E+39"), Decimal("7"), Decimal("5")),
+        (Decimal(3L, 1, Int.MinValue), Decimal(2L, 1, Int.MinValue),
+          Decimal(1L, 1, Int.MinValue)),
+        (Decimal(3L, 1, Int.MaxValue), Decimal(2L, 1, Int.MaxValue),
+          Decimal(1L, 1, Int.MaxValue)),
+        (Decimal(3L, 1, Int.MinValue), Decimal(2L, 1, Int.MinValue + 1),
+          Decimal(0L, 1, Int.MinValue + 1)),
+        (Decimal(3L, 1, Int.MaxValue), Decimal(2L, 1, Int.MaxValue - 1),
+          Decimal(3L, 1, Int.MaxValue)),
+        // These scale differences exceed Int's range, but their remainders are representable.
+        (Decimal(0L, 1, Int.MinValue), Decimal(2L, 1, Int.MaxValue), Decimal(0L, 1, -1)),
+        (Decimal(0L, 1, Int.MaxValue), Decimal(2L, 1, Int.MinValue),
+          Decimal(0L, 1, Int.MaxValue)),
+        (Decimal(1L, 1, Int.MaxValue), Decimal(2L, 1, Int.MinValue),
+          Decimal(1L, 1, Int.MaxValue))
+      ).foreach { case (left, right, expected) =>
+        assert((left % right).toJavaBigDecimal == expected.toJavaBigDecimal)
+        assert((-left % right).toJavaBigDecimal == (-expected).toJavaBigDecimal)
+        assert((left % -right).toJavaBigDecimal == expected.toJavaBigDecimal)
+      }
+    }
+  }
+
+  test("decimal remainder preserves huge trailing-zero quotients at extreme negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      for {
+        scale <- Seq(Int.MinValue, Int.MinValue + 1, Int.MinValue + 2)
+        leftSign <- Seq(1L, -1L)
+        rightSign <- Seq(1L, -1L)
+      } {
+        val left = Decimal(leftSign, 1, scale)
+        val right = Decimal(rightSign)
+        val result = left % right
+        assert(result.isZero)
+        assert(result.scale == scale)
+      }
+    }
+  }
+
+  test("decimal remainder retries beyond SQL precision bounds") {
+    val left = Decimal(1L)
+    val right = Decimal("3E-100")
+    val expected = Decimal("1E-100")
+    // Direct Decimal values can have scale gaps beyond SQL's maximum decimal precision.
+    for (leftSign <- Seq(1, -1); rightSign <- Seq(1, -1)) {
+      val signedLeft = if (leftSign < 0) -left else left
+      val signedRight = if (rightSign < 0) -right else right
+      val remainder = if (leftSign < 0) -expected else expected
+      assert((signedLeft % signedRight).toJavaBigDecimal == remainder.toJavaBigDecimal)
+    }
+  }
+
+  test("decimal remainder retries legacy negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      for (scale <- Seq(-75, -76, -100)) {
+        val dividend = Decimal(1L, 1, scale)
+        assert(dividend % Decimal(3L) == Decimal(1L))
+        assert(-dividend % Decimal(3L) == Decimal(-1L))
+        assert(dividend % Decimal(-3L) == Decimal(1L))
+        assert(-dividend % Decimal(-3L) == Decimal(-1L))
+      }
+    }
+  }
+
   test("longVal arithmetic") {
     assert(Decimal(10, 2, 0) + Decimal(10, 2, 0) === Decimal(20, 3, 0))
     assert(Decimal(10, 2, 0) + Decimal(90, 2, 0) === Decimal(100, 3, 0))
@@ -257,6 +379,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100).quot(Decimal(33)) === Decimal(BigDecimal("3")))
     assert(Decimal(100).quot(Decimal(-100)) === Decimal(BigDecimal("-1")))
     assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
+  }
+
+  test("SPARK-61050: % and quot with negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      // `MATH_CONTEXT` holds this exact quotient, so no context of 10^9 digits is used.
+      val big = Decimal(BigDecimal("1E+999999999"))
+      assert(big % Decimal(1) === Decimal(0))
+      assert(big.quot(Decimal(1)) === big)
+      // The integral part of the quotient would need more digits than an Int can count.
+      intercept[ArithmeticException] {
+        Decimal(BigDecimal("1E+2147483636")) % Decimal(BigDecimal("3E-38"))
+      }
+    }
   }
 
   test("SPARK-57937: div with target scale") {
@@ -291,6 +426,25 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(-Decimal(-100) === Decimal(BigDecimal("100")))
     assert(Decimal(100).abs === Decimal(BigDecimal("100")))
     assert(Decimal(-100).abs === Decimal(BigDecimal("100")))
+  }
+
+  test("SPARK-45438: negate and abs keep every digit of a 38-digit value") {
+    Seq(
+      "12345678901234567890123456789012345.67",
+      "-12345678901234567890123456789012345.67",
+      "99999999999999999999999999999999999999",
+      "-99999999999999999999999999999999999999",
+      "-89999999999999999999999999999999999999",
+      "1234567890123456789012345678901234567.8").foreach { s =>
+      // A java.math.BigDecimal, not Decimal(String): the latter carries a 38-digit context,
+      // which would hide the rounding of the default 34-digit one.
+      val value = new java.math.BigDecimal(s)
+      val d = Decimal(value, 38, value.scale)
+      val negated = -d
+      assert(negated.toJavaBigDecimal === value.negate(), s)
+      assert(d.abs.toJavaBigDecimal === value.abs(), s)
+      assert(negated.precision === 38 && negated.scale === value.scale, s)
+    }
   }
 
   test("floor & ceil") {

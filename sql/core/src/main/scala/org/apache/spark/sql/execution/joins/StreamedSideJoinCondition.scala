@@ -43,7 +43,7 @@ private[joins] object StreamedSideJoinCondition extends PredicateHelper {
    * row, including rows that have no buffered match and would never evaluate the conjunct
    * otherwise, so hoisting a conjunct that can throw could turn a valid outer/anti result
    * into an exception, and hoisting a non-deterministic conjunct would change how many
-   * times it is evaluated per streamed row. A whitelist of total expression families is
+   * times it is evaluated per streamed row. An allowlist of total expression families is
    * used instead of [[Expression.throwable]], which is opt-in metadata that UDFs such as
    * ScalaUDF do not override, so a throwing UDF would report non-throwable.
    */
