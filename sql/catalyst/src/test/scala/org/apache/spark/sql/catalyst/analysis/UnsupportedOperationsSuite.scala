@@ -27,14 +27,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, MultiplyDTInterval, MultiplyYMInterval, NamedExpression, TimestampAdd, TimestampAddInterval, TimestampAddYMInterval, TimeWindow}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, MultiplyDTInterval, MultiplyYMInterval, NamedExpression, TimestampAdd, TimestampAddInterval, TimestampAddYMInterval, TimeWindow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, StructType, TimestampType, YearMonthIntervalType}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -708,9 +708,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       OutputMode.Append(), Seq("requires a watermark on the right input"))
   }
 
-  // With allowMultiple=false, late rows are filtered by an input's first watermarked column, so
-  // a time window key after it bounds the opposite state only when the input builds the window
-  // from that column, which a relation that outputs both does not show.
+  // With allowMultiple=false, late rows are filtered by an input's first watermarked column. A
+  // later watermarked key bounds the opposite state as in Spark 4.3, as a relation that outputs
+  // both shows nothing against it, unless the input shows that some rows hold it below.
   {
     val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
     val windowMetadata = new MetadataBuilder()
@@ -732,29 +732,50 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       left.join(right, joinType = joinType,
         condition = Some(leftKey === rightKey && leftWindow === rightWindow))
     }
+    // Each input copies its event time less 20 seconds into a column with the same watermark.
+    def shiftedJoin(joinType: JoinType): LogicalPlan = {
+      def input(side: String): (LogicalPlan, Attribute, Attribute) = {
+        val key = AttributeReference(s"${side}Key", IntegerType)()
+        val time = AttributeReference(s"${side}Time", TimestampType)()
+          .withMetadata(watermarkMetadata)
+        val shifted = Alias(TimestampAddInterval(time,
+          Literal(-20000000L, DayTimeIntervalType()), Some("UTC")), s"${side}Shifted")(
+          explicitMetadata = Some(watermarkMetadata))
+        (Project(Seq(key, time, shifted), TestStreamingRelation(Seq(key, time))), key,
+          shifted.toAttribute)
+      }
+      val (left, leftKey, leftShifted) = input("left")
+      val (right, rightKey, rightShifted) = input("right")
+      left.join(right, joinType = joinType,
+        condition = Some(leftKey === rightKey && leftShifted === rightShifted))
+    }
     val legacyMode = SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false"
     Seq(
       LeftOuter -> Seq("right"),
       LeftSemi -> Seq("right"),
       RightOuter -> Seq("left"),
       FullOuter -> Seq("left", "right")).foreach { case (joinType, sides) =>
-      test(s"$joinType on a window after its event time in legacy mode names the column order") {
+      assertSupportedInStreamingPlan(s"$joinType on a window after its event time in legacy mode",
+        windowJoin(joinType, windowFirst = false), OutputMode.Append(), legacyMode)
+
+      test(s"$joinType on a key shifted back from its event time in legacy mode names the key") {
         val error = intercept[AnalysisException] {
           withSQLConf(legacyMode) {
             UnsupportedOperationChecker.checkForStreaming(
-              wrapInStreaming(windowJoin(joinType, windowFirst = false)), OutputMode.Append())
+              wrapInStreaming(shiftedJoin(joinType)), OutputMode.Append())
           }
         }
         sides.foreach { side =>
           assert(error.getMessage.contains(s"the $side input filters late rows by its first " +
-            s"watermarked column, ${side}Time, so its window key ${side}Window is a time " +
-            "constraint only if that input computes it as a tumbling or sliding window over " +
-            s"${side}Time itself, through projections, filters and unions only. Otherwise, put " +
-            s"${side}Window before ${side}Time in that input's columns, or drop ${side}Time"))
+            s"watermarked column, ${side}Time, and some of its rows can hold the key " +
+            s"${side}Shifted below a watermarked column before it, so ${side}Shifted does not " +
+            "bound state"))
         }
         Seq("left", "right").diff(sides).foreach { side =>
           assert(!error.getMessage.contains(s"the $side input filters late rows"))
         }
+        // Legacy mode has one global watermark, so nothing after the join waits for this one.
+        assert(!error.getMessage.contains("stateful operator after the join"))
       }
 
       test(s"$joinType on a window after its event time in the default mode has no window hint") {
@@ -768,6 +789,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
       assertSupportedInStreamingPlan(s"$joinType on a window before its event time in legacy mode",
         windowJoin(joinType, windowFirst = true), OutputMode.Append(), legacyMode)
+    }
+
+    test("LeftOuter on a key shifted back in legacy mode warns without a downstream note") {
+      val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
+      val appender = new LogAppender("finalization check")
+      withLogAppender(appender, level = Some(Level.WARN)) {
+        withSQLConf(legacyMode, checkConf -> "false") {
+          UnsupportedOperationChecker.checkForStreaming(
+            wrapInStreaming(shiftedJoin(LeftOuter)), OutputMode.Append())
+        }
+      }
+      val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("rightShifted does not bound state"))
+      assert(warnings.nonEmpty)
+      assert(!warnings.exists(_.contains("stateful operator after the join")))
     }
   }
 
@@ -887,7 +923,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   }
 
   // The range-bound arm of the check that earlier versions applied keeps a join runnable with the
-  // conf false only when the range bounds the state of every input the join must finalize.
+  // conf false when the range bounds the state of any input the join must finalize.
   {
     val leftTime = AttributeReference("leftTime", TimestampType)().withMetadata(watermarkMetadata)
     val rightTime = AttributeReference("rightTime", TimestampType)()
