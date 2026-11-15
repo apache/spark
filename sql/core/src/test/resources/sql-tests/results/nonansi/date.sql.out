@@ -1262,6 +1262,21 @@ org.apache.spark.SparkArithmeticException
 
 
 -- !query
+select datediff(date_from_unix_date(-2147483648), date_from_unix_date(1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "subtract DATE '1970-01-02' from DATE '-5877641-06-23'"
+  }
+}
+
+
+-- !query
 select date_from_unix_date(2147483647) - date_from_unix_date(-1)
 -- !query schema
 struct<>
@@ -1272,6 +1287,21 @@ org.apache.spark.SparkArithmeticException
   "sqlState" : "22008",
   "messageParameters" : {
     "operation" : "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"
+  }
+}
+
+
+-- !query
+select date_from_unix_date(-2147483648) - date_from_unix_date(0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "subtract DATE '1970-01-01' from DATE '-5877641-06-23'"
   }
 }
 

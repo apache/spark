@@ -176,5 +176,7 @@ select datediff('YEAR', date'2022-02-25', date'2023-02-25');
 select datediff(date_from_unix_date(2147483647), date_from_unix_date(0));
 select datediff(date_from_unix_date(2147483647), date_from_unix_date(-1));
 select date_diff(date_from_unix_date(-2), date_from_unix_date(2147483647));
+select datediff(date_from_unix_date(-2147483648), date_from_unix_date(1));
 select date_from_unix_date(2147483647) - date_from_unix_date(-1);
+select date_from_unix_date(-2147483648) - date_from_unix_date(0);
 select try_subtract(date_from_unix_date(2147483647), date_from_unix_date(-1));

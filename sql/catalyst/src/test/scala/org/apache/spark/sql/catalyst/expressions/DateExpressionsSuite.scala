@@ -1454,6 +1454,41 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "operation" -> "subtract DATE '+5881580-07-11' from DATE '-5877641-06-23'"))
   }
 
+  test("SPARK-60910: DATETIME_OVERFLOW formats its dates the same way under every parser policy") {
+    // The legacy formatter rebases a date to the Julian calendar, which overflows for the dates
+    // within about 44,500 days of the minimum DATE. The dates come from the input row: the legacy
+    // formatter would also fail on the `toString` of a DATE literal of them.
+    val end = BoundReference(0, DateType, nullable = false)
+    val start = BoundReference(1, DateType, nullable = false)
+    Seq("legacy", "corrected", "exception").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+        checkErrorInExpression[SparkArithmeticException](
+          DateDiff(end, start),
+          InternalRow(Int.MinValue, 1),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map(
+            "operation" -> "subtract DATE '1970-01-02' from DATE '-5877641-06-23'"))
+        checkErrorInExpression[SparkArithmeticException](
+          DateDiff(end, start),
+          InternalRow(Int.MaxValue, -1),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map(
+            "operation" -> "subtract DATE '1969-12-31' from DATE '+5881580-07-11'"))
+        checkErrorInExpression[SparkArithmeticException](
+          SubtractDates(end, start, legacyInterval = false),
+          InternalRow(Int.MinValue, 0),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map(
+            "operation" -> "subtract DATE '1970-01-01' from DATE '-5877641-06-23'"))
+        checkErrorInExpression[SparkArithmeticException](
+          TruncDate(end, Literal("QUARTER")),
+          InternalRow(Int.MinValue),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "truncate DATE '-5877641-06-23' to QUARTER"))
+      }
+    }
+  }
+
   test("to_utc_timestamp") {
     def test(t: String, tz: String, expected: String): Unit = {
       checkEvaluation(
