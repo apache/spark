@@ -1061,12 +1061,14 @@
     "subClass" : {
       "MISSING_FILES" : {
         "message" : [
-          "One or more trailing part files may have been lost. Use `spark.checkpoint.verifyPartitionCount.enabled=false` to bypass this check and load the truncated directory as-is."
+          "One or more trailing part files may have been lost. Use `spark.checkpoint.verifyPartitionCount.enabled=false` to bypass this check and load the truncated directory as-is.",
+          "Avoid this for the state of a keyed DStream operation (`mapWithState`, `updateStateByKey`, or `reduceByKeyAndWindow` with an inverse function). The loaded state still records its original partitioner, so the next batch can fail, or the updates for the keys in the missing partitions can be silently dropped."
         ]
       },
       "UNEXPECTED_FILES" : {
         "message" : [
-          "The directory contains part files that were not written by the checkpoint that recorded the count. Use `spark.checkpoint.verifyPartitionCount.enabled=false` to bypass this check and load all part files as-is."
+          "The directory contains part files that were not written by the checkpoint that recorded the count. Use `spark.checkpoint.verifyPartitionCount.enabled=false` to bypass this check and load all part files as-is.",
+          "Avoid this for the state of a keyed DStream operation (`mapWithState`, `updateStateByKey`, or `reduceByKeyAndWindow` with an inverse function). The loaded state still records its original partitioner, which no longer matches the loaded partitions, so the next batch can fail or part of the state can be silently ignored."
         ]
       }
     },

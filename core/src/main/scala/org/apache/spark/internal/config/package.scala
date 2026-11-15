@@ -3175,9 +3175,14 @@ package object config {
         "file on a best-effort basis, regardless of this setting. When true, reading a " +
         "directory that has this file throws CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH if " +
         "the recorded count disagrees with the part files found. Set to false to skip only " +
-        "that comparison and load the part files present as-is. Has no effect when the file " +
-        "is absent, whether because the directory was written by an older Spark version or " +
-        "because the best-effort write failed.")
+        "that comparison and load the part files present as-is. Do not set it to false for the " +
+        "state of a keyed DStream operation (mapWithState, updateStateByKey, or " +
+        "reduceByKeyAndWindow with an inverse function): the loaded state still records its " +
+        "original partitioner, so the next batch can fail, or part of the state can be " +
+        "silently dropped. On DStream recovery the value is read from the launch " +
+        "configuration only and is not restored from the checkpoint. Has no effect when the " +
+        "file is absent, whether because the directory was written by an older Spark version " +
+        "or because the best-effort write failed.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
