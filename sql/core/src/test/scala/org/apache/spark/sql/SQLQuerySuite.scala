@@ -3383,20 +3383,32 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   test("SPARK-60178: subexpression elimination does not re-associate floating-point arithmetic") {
     // Floating-point + and * are not associative: with a = 1.0E16, b = -1.0E16, c = 1.0,
     // (a + b) + c = 1.0 but a + (b + c) = 0.0; with x = y = 1.0E200, z = 1.0E-200, (x * y) * z
-    // overflows to Infinity but x * (y * z) does not.
+    // overflows to Infinity but x * (y * z) does not. Sums and products of DECIMAL(38, 7) and
+    // DECIMAL(38, 10) values have the maximum precision and round to 6 digits after the point:
+    // (d1 + d2) + d3 = 3.000000 but d1 + (d2 + d3) = 2.999999, and (e1 * e2) * e3 = 0.000000 but
+    // e1 * (e2 * e3) = 0.000001.
     val query =
       """
-        |SELECT (a + b) + c, a + (b + c), (x * y) * z, x * (y * z)
+        |SELECT (a + b) + c, a + (b + c), (x * y) * z, x * (y * z),
+        |       (d1 + d2) + d3, d1 + (d2 + d3), (e1 * e2) * e3, e1 * (e2 * e3)
         |FROM (
         |  SELECT CAST(id AS DOUBLE) + 1.0E16 AS a,
         |         CAST(id AS DOUBLE) - 1.0E16 AS b,
         |         CAST(id AS DOUBLE) + 1.0 AS c,
         |         CAST(id AS DOUBLE) + 1.0E200 AS x,
         |         CAST(id AS DOUBLE) + 1.0E200 AS y,
-        |         CAST(id AS DOUBLE) + 1.0E-200 AS z
+        |         CAST(id AS DOUBLE) + 1.0E-200 AS z,
+        |         CAST(id + 1.9999994 AS DECIMAL(38, 7)) AS d1,
+        |         CAST(id + 0.0000001 AS DECIMAL(38, 7)) AS d2,
+        |         CAST(id + 1.0000000 AS DECIMAL(38, 7)) AS d3,
+        |         CAST(id + 0.0000005 AS DECIMAL(38, 10)) AS e1,
+        |         CAST(id + 0.5 AS DECIMAL(38, 10)) AS e2,
+        |         CAST(id + 2 AS DECIMAL(38, 10)) AS e3
         |  FROM range(0, 1, 1, 1))
       """.stripMargin
-    val expected = Row(1.0, 0.0, (1.0E200 * 1.0E200) * 1.0E-200, 1.0E200 * (1.0E200 * 1.0E-200))
+    val expected = Row(1.0, 0.0, (1.0E200 * 1.0E200) * 1.0E-200, 1.0E200 * (1.0E200 * 1.0E-200),
+      BigDecimal("3.000000"), BigDecimal("2.999999"),
+      BigDecimal("0.000000"), BigDecimal("0.000001"))
     Seq("true", "false").foreach { cse =>
       Seq("true", "false").foreach { wholeStage =>
         withSQLConf(
@@ -3411,17 +3423,26 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   test("SPARK-60178: GROUP BY does not match re-associated floating-point arithmetic") {
     withTempView("t") {
       sql("SELECT CAST(id AS DOUBLE) AS a, CAST(id AS DOUBLE) AS b, CAST(id AS DOUBLE) AS c, " +
-        "id AS i, id AS j, id AS k FROM range(0, 2)").createOrReplaceTempView("t")
+        "id AS i, id AS j, id AS k, CAST(id AS DECIMAL(38, 18)) AS d, " +
+        "CAST(id AS DECIMAL(38, 18)) AS e, CAST(id AS DECIMAL(38, 18)) AS f, " +
+        "CAST(id AS DECIMAL(10, 2)) AS s, CAST(id AS DECIMAL(10, 2)) AS u, " +
+        "CAST(id AS DECIMAL(10, 2)) AS v FROM range(0, 2)").createOrReplaceTempView("t")
 
-      val ex = intercept[AnalysisException] {
-        sql("SELECT a + b + c FROM t GROUP BY c + b + a").collect()
+      Seq(
+        "SELECT a + b + c FROM t GROUP BY c + b + a",
+        "SELECT d + e + f FROM t GROUP BY d + (e + f)").foreach { query =>
+        val ex = intercept[AnalysisException] {
+          sql(query).collect()
+        }
+        assert(ex.getCondition === "MISSING_AGGREGATION")
       }
-      assert(ex.getCondition === "MISSING_AGGREGATION")
 
       // Commuting the operands of a single operator is still semantically equal.
       checkAnswer(sql("SELECT a + b FROM t GROUP BY b + a"), Seq(Row(0.0), Row(2.0)))
-      // Integral arithmetic keeps re-associating.
+      // Integral arithmetic and decimal arithmetic below the maximum precision keep re-associating.
       checkAnswer(sql("SELECT i + j + k FROM t GROUP BY k + j + i"), Seq(Row(0L), Row(3L)))
+      checkAnswer(sql("SELECT s + u + v FROM t GROUP BY s + (u + v)"),
+        Seq(Row(BigDecimal("0.00")), Row(BigDecimal("3.00"))))
     }
   }
 

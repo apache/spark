@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetArrayItem, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetArrayItem, LeafExpression, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ApproximatePercentile}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, DecimalType, DoubleType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class CombineApproximatePercentilesSuite extends PlanTest {
 
@@ -78,11 +80,6 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     val expressions = percentileAggregates(aggregate)
     assert(expressions.map(_.resultId).distinct.size == expressions.size)
     assert(!aggregate.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  private def decimalLiteral(value: String, scale: Int): Literal = {
-    Literal(Decimal(BigDecimal(value), DecimalType.MAX_PRECISION, scale),
-      DecimalType(DecimalType.MAX_PRECISION, scale))
   }
 
   test("do not combine approximate percentiles when disabled") {
@@ -302,15 +299,9 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(ordinals(arrayResult) == Seq(None, Some(0), Some(1)))
   }
 
-  // Decimal Add is still re-associated by canonicalization, but rounds intermediate results when
-  // precision loss is allowed, so differently associated sums can be canonically equal while
-  // evaluating differently.
-  test("do not fuse canonically equal decimal-derived accuracies that evaluate differently") {
-    val a = decimalLiteral("1.9999994", 7)
-    val b = decimalLiteral("0.0000001", 7)
-    val c = decimalLiteral("1.0000000", 7)
-    val firstAccuracy = ((a + b) + c).cast(IntegerType)
-    val secondAccuracy = (a + (b + c)).cast(IntegerType)
+  test("do not fuse canonically equal accuracies that evaluate differently") {
+    val firstAccuracy = CanonicallyEqualValue(Literal(3))
+    val secondAccuracy = CanonicallyEqualValue(Literal(2))
 
     def percentileWithAccuracy(
         percentage: Double,
@@ -330,12 +321,9 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assertNotCombined(result)
   }
 
-  test("do not fuse canonically equal decimal-derived percentages that evaluate differently") {
-    val a = decimalLiteral("0.0000000004", 10)
-    val b = decimalLiteral("0.0000000001", 10)
-    val c = decimalLiteral("0.0000000040", 10)
-    val firstPercentage = ((a + b) + c).cast(DoubleType)
-    val secondPercentage = (a + (b + c)).cast(DoubleType)
+  test("do not fuse canonically equal percentages that evaluate differently") {
+    val firstPercentage = CanonicallyEqualValue(Literal(1.0e-8))
+    val secondPercentage = CanonicallyEqualValue(Literal(0.0d))
     def percentileWithPercentage(percentage: Expression): AggregateExpression = {
       new ApproximatePercentile(value, percentage, Literal(10000)).toAggregateExpression()
     }
@@ -364,4 +352,18 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
     assert(result.aggregateExpressions.drop(1).forall(_.exists(_.isInstanceOf[GetArrayItem])))
   }
+}
+
+/**
+ * A foldable value whose canonical form ignores the value, so that two instances are canonically
+ * equal while they evaluate differently. Covers the guards for such expressions now that no
+ * built-in arithmetic is canonicalized that way.
+ */
+private case class CanonicallyEqualValue(value: Literal) extends LeafExpression
+  with CodegenFallback {
+  override def dataType: DataType = value.dataType
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def eval(input: InternalRow): Any = value.value
+  override lazy val canonicalized: Expression = Literal.default(dataType)
 }

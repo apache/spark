@@ -3030,6 +3030,26 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60178: a re-associated maximum-precision decimal query does not reuse the cache") {
+    withTempView("t") {
+      // The sums have the maximum precision and round to 6 digits after the point.
+      spark.range(0, 1, 1, 1).selectExpr(
+        "CAST(id + 1.9999994 AS DECIMAL(38, 7)) AS a",
+        "CAST(id + 0.0000001 AS DECIMAL(38, 7)) AS b",
+        "CAST(id + 1.0000000 AS DECIMAL(38, 7)) AS c").createOrReplaceTempView("t")
+      val cached = sql("SELECT (a + b) + c AS v FROM t")
+      cached.cache()
+      try {
+        checkAnswer(cached, Row(BigDecimal("3.000000")))
+        val reassociated = sql("SELECT a + (b + c) AS v FROM t")
+        assert(cacheManager.lookupCachedData(reassociated).isEmpty)
+        checkAnswer(reassociated, Row(BigDecimal("2.999999")))
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(
