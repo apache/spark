@@ -338,6 +338,8 @@ abstract class Expression extends TreeNode[Expression] {
    *   2. Reorder the canonicalized child expressions by their hashcode.
    * This means that the lazy `cannonicalized` is called and computed only on the root of the
    * adjacent expressions.
+   * Resolved `Add` and `Multiply` with a FLOAT or DOUBLE result are the exception: as they are not
+   * associative, each node only reorders its two direct children (see `orderBinaryCommutative`).
    */
   lazy val canonicalized: Expression = withCanonicalizedChildren
 
@@ -1532,6 +1534,8 @@ trait CommutativeExpression extends Expression {
  * The MultiCommutativeOp memory optimization is applied to the following commutative
  * expressions:
  *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
+ * Resolved Add and Multiply with a FLOAT or DOUBLE result never build it, as they are canonicalized
+ * per operator (see `CommutativeExpression.orderBinaryCommutative`).
  * @param operands A sequence of operands that produces a commutative expression tree.
  * @param opCls The class of the root operator of the expression tree.
  * @param evalContext The optional expression evaluation context.
