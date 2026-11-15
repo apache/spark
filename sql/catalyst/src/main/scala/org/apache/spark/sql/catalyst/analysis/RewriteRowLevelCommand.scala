@@ -257,13 +257,14 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       rowAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
+    val findColOrdinal = colOrdinalFinder(plan)
 
     val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-    val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
+    val rowProjection = newLazyProjection(findColOrdinal, outputsWithRow, rowAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(findColOrdinal, outputsWithMetadata, metadataAttrs))
     } else {
       None
     }
@@ -277,20 +278,21 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       rowIdAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute]): WriteDeltaProjections = {
     val outputs = extractOutputs(plan)
+    val findColOrdinal = colOrdinalFinder(plan)
 
     val rowProjection = if (rowAttrs.nonEmpty) {
       val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-      Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
+      Some(newLazyProjection(findColOrdinal, outputsWithRow, rowAttrs))
     } else {
       None
     }
 
     val outputsWithRowId = filterOutputs(outputs, OPERATIONS_WITH_ROW_ID)
-    val rowIdProjection = newLazyRowIdProjection(plan, outputsWithRowId, rowIdAttrs)
+    val rowIdProjection = newLazyRowIdProjection(findColOrdinal, outputsWithRowId, rowIdAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(findColOrdinal, outputsWithMetadata, metadataAttrs))
     } else {
       None
     }
@@ -321,22 +323,22 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   }
 
   private def newLazyProjection(
-      plan: LogicalPlan,
+      findColOrdinal: String => Int,
       outputs: Seq[Seq[Expression]],
       attrs: Seq[Attribute]): ProjectingInternalRow = {
-    val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
+    val colOrdinals = attrs.map(attr => findColOrdinal(attr.name))
     createProjectingInternalRow(outputs, colOrdinals, attrs)
   }
 
   // if there are assignment to row ID attributes, original values are projected as special columns
   // this method honors such special columns if present
   private def newLazyRowIdProjection(
-      plan: LogicalPlan,
+      findColOrdinal: String => Int,
       outputs: Seq[Seq[Expression]],
       rowIdAttrs: Seq[Attribute]): ProjectingInternalRow = {
     val colOrdinals = rowIdAttrs.map { attr =>
-      val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
-      if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
+      val originalValueIndex = findColOrdinal(ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
+      if (originalValueIndex != -1) originalValueIndex else findColOrdinal(attr.name)
     }
     createProjectingInternalRow(outputs, colOrdinals, rowIdAttrs)
   }
@@ -345,8 +347,9 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       outputs: Seq[Seq[Expression]],
       colOrdinals: Seq[Int],
       attrs: Seq[Attribute]): ProjectingInternalRow = {
-    val schema = StructType(attrs.zipWithIndex.map { case (attr, index) =>
-      val nullable = outputs.exists(output => output(colOrdinals(index)).nullable)
+    val indexedOutputs = outputs.map(_.toIndexedSeq)
+    val schema = StructType(attrs.zip(colOrdinals).map { case (attr, colOrdinal) =>
+      val nullable = indexedOutputs.exists(output => output(colOrdinal).nullable)
       StructField(attr.name, attr.dataType, nullable, attr.metadata)
     })
     ProjectingInternalRow(schema, colOrdinals)
@@ -354,9 +357,15 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
   // prefer the exact name as the plan may have columns whose names differ only by case
   // fall back to the resolver as connectors may refer to columns using a different case
-  private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
-    val ordinal = plan.output.indexWhere(_.name == name)
-    if (ordinal != -1) ordinal else plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+  // the output is computed once as plans like Project create new attributes on every call
+  private def colOrdinalFinder(plan: LogicalPlan): String => Int = {
+    val output = plan.output.toIndexedSeq
+    val exactOrdinals = mutable.HashMap.empty[String, Int]
+    output.zipWithIndex.foreach { case (attr, ordinal) =>
+      // keep the first ordinal of each name like indexWhere
+      exactOrdinals.getOrElseUpdate(attr.name, ordinal)
+    }
+    name => exactOrdinals.getOrElse(name, output.indexWhere(a => conf.resolver(a.name, name)))
   }
 
   protected def buildOriginalRowIdValues(
@@ -380,14 +389,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       attrs: Seq[Attribute],
       outputs: Seq[Seq[Expression]]): Seq[Attribute] = {
 
-    // build a correct nullability map for output attributes
     // an attribute is nullable if at least one output may produce null
-    val nullabilityMap = attrs.indices.map { index =>
-      index -> outputs.exists(output => output(index).nullable)
-    }.toMap
-
+    val indexedOutputs = outputs.map(_.toIndexedSeq)
     attrs.zipWithIndex.map { case (attr, index) =>
-      AttributeReference(attr.name, attr.dataType, nullabilityMap(index), attr.metadata)()
+      val nullable = indexedOutputs.exists(output => output(index).nullable)
+      AttributeReference(attr.name, attr.dataType, nullable, attr.metadata)()
     }
   }
 }
