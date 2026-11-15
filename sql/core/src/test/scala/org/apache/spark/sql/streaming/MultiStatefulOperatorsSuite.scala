@@ -523,12 +523,12 @@ class MultiStatefulOperatorsSuite
         AddData(input1, 1, 2, 3, 4),
         ExpectFailure[AnalysisException](assertFailure = error => {
           checkError(error.asInstanceOf[AnalysisException],
-            condition = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME",
+            condition = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME." +
+              "WATERMARK_AND_TIME_CONSTRAINT",
             parameters = Map(
               "eventTime" -> "eventTime1",
               "side" -> "left",
-              "requirement" -> ("a watermark on the right input and a time constraint that " +
-                "limits how late a matching right row can arrive"),
+              "otherSide" -> "right",
               "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
         }))
     } else {
