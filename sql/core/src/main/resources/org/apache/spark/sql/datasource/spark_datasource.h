@@ -838,7 +838,7 @@ typedef struct SparkDsLibrary {
                            SparkDsSink add_partition, SparkDsSink set_state, void* sink);
 
   /*
-   * Tells the library that Spark has processed the data represented by an offset's progress
+   * Tells the library that Spark has processed all the data before an offset's progress
    * boundary, and will not ask for that data again.
    *
    * info: the offset

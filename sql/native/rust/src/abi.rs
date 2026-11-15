@@ -955,6 +955,12 @@ mod tests {
         assert_ne!(unsafe { initialize(&host, &mut output, library, init) }, 0);
         assert_eq!(error(), "init received Spark 4.4.0");
 
+        // A newer host is accepted too: spark_ds_init gets the newest version that Spark
+        // supports.
+        host.abi_version = ABI_VERSION + 1;
+        assert_ne!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert_eq!(error(), "init received Spark 4.4.0");
+
         // A host whose size ends after abi_version passes no Spark version, even though a
         // valid pointer follows in memory.
         host.size = (offset_of!(SparkDsHost, abi_version) + size_of::<i32>()) as i64;

@@ -252,8 +252,9 @@ pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result
 }
 
 /// Imports a batch to write. Arrow does not validate the C data that it imports, which the safe
-/// accessors of the connector rely on, so this validates it fully: a Spark string may hold bytes
-/// that are not UTF-8, such as those of a cast from binary, which a Rust `&str` must not.
+/// accessors of the connector rely on, so this validates its layout and values, but not its
+/// nullability: a Spark string may hold bytes that are not UTF-8, such as those of a cast from
+/// binary, which a Rust `&str` must not.
 ///
 /// # Safety
 /// As for write_batch: the array must be Arrow C data of `data_type`.
@@ -313,7 +314,7 @@ pub unsafe fn close_task(handle: *mut c_void) -> Result<()> {
 mod tests {
     use std::sync::Arc;
 
-    use arrow_array::builder::{Int64Builder, ListBuilder, StringBuilder};
+    use arrow_array::builder::{Int64Builder, ListBuilder, MapBuilder, StringBuilder};
     use arrow_array::cast::AsArray;
     use arrow_array::ffi::FFI_ArrowArray;
     use arrow_array::types::Int64Type;
@@ -345,13 +346,13 @@ mod tests {
             Field::new("label", labels.data_type().clone(), true),
         ]);
         let columns: Vec<ArrayRef> = vec![Arc::new(ids), make_array(labels)];
-        let batch = StructArray::try_new(fields.clone(), columns, None)?;
-        unsafe {
-            import(
-                FFI_ArrowArray::new(&batch.to_data()),
-                &DataType::Struct(fields),
-            )
-        }
+        let batch = StructArray::try_new(fields, columns, None)?;
+        import_data(&batch.to_data())
+    }
+
+    /// Exports a batch and imports it to write, without checking it as an array would.
+    fn import_data(batch: &ArrayData) -> crate::Result<StructArray> {
+        unsafe { import(FFI_ArrowArray::new(batch), batch.data_type()) }
     }
 
     #[test]
@@ -410,5 +411,89 @@ mod tests {
         let labels = batch.column(1).as_list::<i32>();
         assert!(labels.is_null(1));
         assert_eq!(labels.value(0).as_primitive::<Int64Type>().value(0), 1);
+    }
+
+    #[test]
+    fn import_accepts_nulls_under_null_slots_of_non_nullable_map_values() {
+        // [{1: 10}, null] of map<bigint, bigint not null>, where the null map still spans an
+        // entry with a null value.
+        let mut labels = MapBuilder::new(None, Int64Builder::new(), Int64Builder::new());
+        labels.keys().append_value(1);
+        labels.values().append_value(10);
+        labels.append(true).unwrap();
+        labels.keys().append_value(2);
+        labels.values().append_null();
+        labels.append(false).unwrap();
+        let labels = labels.finish().to_data();
+        let DataType::Map(entries, sorted) = labels.data_type().clone() else {
+            unreachable!()
+        };
+        let DataType::Struct(fields) = entries.data_type() else {
+            unreachable!()
+        };
+        let fields = Fields::from(vec![
+            fields[0].as_ref().clone(),
+            fields[1].as_ref().clone().with_nullable(false),
+        ]);
+        let entries_data = labels.child_data()[0]
+            .clone()
+            .into_builder()
+            .data_type(DataType::Struct(fields.clone()));
+        let entries = entries
+            .as_ref()
+            .clone()
+            .with_data_type(DataType::Struct(fields));
+        let labels = labels
+            .into_builder()
+            .data_type(DataType::Map(Arc::new(entries), sorted))
+            .child_data(vec![unsafe { entries_data.build_unchecked() }]);
+        let batch = import_batch(unsafe { labels.build_unchecked() }).unwrap();
+        let labels = batch.column(1).as_map();
+        assert!(labels.is_null(1));
+        assert_eq!(
+            labels
+                .value(0)
+                .column(1)
+                .as_primitive::<Int64Type>()
+                .value(0),
+            10
+        );
+    }
+
+    #[test]
+    fn import_rejects_a_struct_whose_child_is_shorter_than_it() {
+        let ids = Int64Array::from_iter_values(0..1).to_data();
+        let fields = Fields::from(vec![Field::new("id", DataType::Int64, false)]);
+        let batch = unsafe {
+            ArrayData::builder(DataType::Struct(fields))
+                .len(2)
+                .child_data(vec![ids])
+                .build_unchecked()
+        };
+        let error = import_data(&batch).unwrap_err().to_string();
+        assert!(error.contains("not valid Arrow data"), "{error}");
+        assert!(
+            error.contains("has length smaller than expected"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn import_rejects_a_null_count_that_disagrees_with_the_validity_buffer() {
+        let labels = Int64Array::from(vec![Some(1), None, Some(3)]);
+        let validity = labels.nulls().unwrap().buffer().clone();
+        let labels = labels
+            .to_data()
+            .into_builder()
+            .nulls(None)
+            .null_bit_buffer(Some(validity))
+            .null_count(2);
+        let error = import_batch(unsafe { labels.build_unchecked() })
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("null count 2 does not match the 1 nulls of the validity buffer"),
+            "{error}"
+        );
     }
 }

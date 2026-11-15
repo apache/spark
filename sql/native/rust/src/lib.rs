@@ -517,7 +517,7 @@ pub trait MicroBatchStream: Send + 'static {
     /// [`MicroBatchInfo::end`], using the connector's mapping from offsets to records.
     fn plan(&mut self, info: MicroBatchInfo<Self::Offset>) -> Result<ScanPlan<Self::Factory>>;
 
-    /// Tells the stream that Spark has processed the data represented by the progress boundary
+    /// Tells the stream that Spark has processed all the data before the progress boundary
     /// [`CommitOffsetInfo::end`] and will not read that data again, so the stream can release it.
     fn commit(&mut self, _info: CommitOffsetInfo<Self::Offset>) -> Result<()> {
         Ok(())
@@ -797,8 +797,10 @@ pub trait DataWriter: Send {
     /// [`WriterContext::schema`], and at most `spark.sql.execution.arrow.maxRecordsPerBatch`
     /// rows. When Spark writes the batches of a native scan without converting them to rows,
     /// it copies their values as the scan returned them, without the checks of a conversion,
-    /// such as the precision of a decimal. The SDK validates each batch before this call, and
-    /// fails the write of one that Arrow rejects, such as a Spark string that is not UTF-8.
+    /// such as the precision of a decimal. The SDK validates the layout and values of each batch
+    /// before this call, and fails the write of one that Arrow rejects, such as a Spark string
+    /// that is not UTF-8. It does not check nullability, which Spark checks masked by the
+    /// parent, so a field that is not nullable can still hold nulls under a null parent.
     /// Process batches incrementally and check task cancellation.
     fn write(&mut self, batch: RecordBatch) -> Result<()>;
 

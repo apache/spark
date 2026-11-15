@@ -77,7 +77,8 @@ Read support uses three pieces:
   in `plan()` to return a typed `ScanPlan<Factory>`.
 * `PartitionReaderFactory`: serialize executor configuration and open one lazy reader,
   an iterator of Arrow batches, from a typed partition and a `ReaderContext`, which
-  carries the schema to read and a borrowed `TaskContext`.
+  carries the schema to read, the index of the partition in its plan, and a borrowed
+  `TaskContext`.
 
 Streaming reads reuse the executor side: `DataSource::new_micro_batch_stream` creates a
 `MicroBatchStream` from a `MicroBatchStreamInfo`, which carries the columns to read and the
@@ -97,7 +98,8 @@ The inputs of these methods are `#[non_exhaustive]` structs: `*Info` structs on 
 `StreamingCommitInfo`, and `StreamingAbortInfo`), `*Context` structs, which carry the live
 `TaskContext`, on the executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which
 `DataSource::init` receives in every JVM that loads the library, executors included. Fields
-may be added to them: construct them with `new`, as in tests, and destructure them with `..`.
+may be added to them: construct them with `new`, as in tests, or `HostInfo` with
+`HostInfo::default()` and then set its fields, and destructure them with `..`.
 `ScanPlan` has a constructor for the same reason. The methods whose function of the header
 passes nothing but the size of its info struct yet take no struct: `ScanBuilder::plan`,
 `MicroBatchStream::initial_offset`, and the `commit` and `abort` of `DataWriter`. A field
@@ -376,7 +378,7 @@ Offsets are progress boundaries defined by the connector, which decides how they
 records. The Range example stores the next row to read: `{"next":10}` to `{"next":13}`
 reads rows 10, 11, and 12, the range `[10, 13)`. Equal boundaries describe no data, and
 adjacent ranges must neither repeat nor skip records. Committing an offset acknowledges
-the data represented by that progress boundary.
+all the data before that progress boundary.
 
 `MicroBatchStream::default_read_limit` limits the data of each micro-batch, for example
 to `ReadLimit::MaxRows` from an option of the source; the default reads all the available
