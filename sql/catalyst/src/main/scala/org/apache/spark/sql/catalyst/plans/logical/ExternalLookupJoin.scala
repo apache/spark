@@ -157,8 +157,9 @@ object ExternalLookupJoinShapes {
       comparison: LookupKeyComparison)
 
   /**
-   * `conjunct` of the condition of a lookup join as a lookup candidate: `=`, `<=>`, `<`, `<=`, `>`
-   * or `>=` between a bare lookup column and a value, in either operand order. When the lookup
+   * `conjunct` as a lookup candidate: `=`, `<=>`, `<`, `<=`, `>` or `>=` between a bare lookup
+   * column and a value, in either operand order. Lookup planning asks it of each conjunct of a
+   * lookup join's condition, and of each conjunct of a lookup-side filter. When the lookup
    * column is written on the right, the comparison is rebuilt with it on the left, so
    * `s.ts < t.event_time` is offered as `event_time > ?`.
    *
@@ -169,8 +170,10 @@ object ExternalLookupJoinShapes {
    * The lookup column must be one on which [[ExternalLookupKeyTypes]] lets Spark offer the
    * comparison. A comparison on another column is an ordinary conjunct.
    *
-   * @param streamOutput The output of the join's left side, the stream side.
-   * @param lookupOutput The output of the join's right side, the lookup side.
+   * @param streamOutput The attributes that the value may read: the output of the join's stream
+   *   side, or none for a conjunct of a lookup-side filter, whose value must then be a constant.
+   * @param lookupOutput The lookup-side attributes that the lookup column may be: the output of the
+   *   join's lookup side, or the relation's and the stages' attributes for a lookup-side filter.
    */
   def lookupComparison(
       conjunct: Expression,
@@ -469,8 +472,10 @@ case class PreparedExternalLookupJoin(
 /**
  * The types of lookup columns on which Spark offers a comparison to the connector as a lookup
  * candidate. The connector evaluates a selected candidate in its store, so Spark offers only types
- * whose values a store compares as Spark does. A comparison on any other type stays in Spark's
- * residual condition.
+ * whose values a store compares as Spark does. Spark evaluates a comparison on any other type
+ * itself: in the residual condition, or, when it reads only lookup columns, in a lookup-side stage,
+ * where predicate pushdown moves it. There the connector may also receive it as a pushed filter,
+ * which Spark evaluates again on the returned rows.
  */
 object ExternalLookupKeyTypes {
   /**

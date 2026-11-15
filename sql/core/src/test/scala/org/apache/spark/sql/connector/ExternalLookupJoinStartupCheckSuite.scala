@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
 import org.apache.spark.sql.execution.streaming.runtime.{ExternalLookupJoinStartupCheck,
   MemoryStream, MicroBatchExecution, StreamingQueryCheckpointMetadata, StreamingQueryWrapper,
   StreamingV2ScanPushDown}
-import org.apache.spark.sql.functions.{col, current_timestamp, lit, max}
+import org.apache.spark.sql.functions.{col, current_timestamp, lit, localtimestamp, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException,
   StreamingQueryListener}
@@ -75,14 +75,6 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
   private def start(df: DataFrame): StreamingQuery =
     df.writeStream.format("memory").queryName(s"startup_check_${queryCount.incrementAndGet()}")
       .start()
-
-  /** The error that `start()` throws for `df`, which analysis reports. */
-  private def startFailure(df: DataFrame): AnalysisException = {
-    val e = intercept[AnalysisException](start(df).stop())
-    // The connector served no lookup at the start.
-    assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
-    e
-  }
 
   /**
    * The error that stops the query of `df` when its execution starts: `start()` returns, and the
@@ -145,25 +137,35 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     assert(e.getCause.getMessage.contains("The scan builder fails"))
   }
 
-  test("MISSING_JOIN_CONDITION fails start()") {
+  test("MISSING_JOIN_CONDITION stops the query when it starts") {
     val stream = MemoryStream[Int].toDF().toDF("id")
     val lookup = lookupOnly
-    Seq(
-      stream.join(lookup).where(stream("id") === lookup("id")),
-      stream.join(lookup, Seq.empty[String], "left_outer")).foreach { joined =>
-      checkError(
-        exception = startFailure(joined),
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
+    // The planning at the start reports a join that has no key after predicate pushdown.
+    Seq(stream.join(lookup), stream.join(lookup, Seq.empty[String], "left_outer")).foreach {
+      joined =>
+        checkError(
+          exception = queryFailure[AnalysisException](joined),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
+          parameters = Map.empty)
     }
-    // A USING join gets its condition after its first analysis, so it starts.
-    start(stream.join(lookup, Seq("id"))).stop()
+    // A USING join gets its condition after its first analysis, and predicate pushdown moves a key
+    // from a later filter into a join without a condition, as for an ordinary join, so both run.
+    Seq(stream.join(lookup, Seq("id")), stream.join(lookup).where(stream("id") === lookup("id")))
+      .foreach { joined =>
+        val query = start(joined)
+        try {
+          awaitInitialization(query)
+          assert(query.isActive && query.exception.isEmpty)
+        } finally {
+          query.stop()
+        }
+      }
   }
 
-  test("MISSING_JOIN_CONDITION fails start() for a hinted join") {
+  test("MISSING_JOIN_CONDITION stops the query when it starts, for a hinted join") {
     val stream = MemoryStream[Int].toDF().toDF("id")
     checkError(
-      exception = startFailure(stream.join(lookupOnly.hint("external_lookup"))),
+      exception = queryFailure[AnalysisException](stream.join(lookupOnly.hint("external_lookup"))),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
       parameters = Map.empty)
   }
@@ -340,6 +342,22 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     assert(rewritten.expressions.forall(_.collect {
       case _: CurrentTimestamp | _: CurrentDate | _: LocalTimestamp => true
     }.isEmpty))
+  }
+
+  test("a lookup predicate that predicate pushdown moves into the join does not stop the query") {
+    val input = MemoryStream[Int]
+    val stream = input.toDF().toDF("id")
+    val lookup = lookupOnly
+    val joined = stream.join(lookup, lookup("department") =!= "x")
+      .where(stream("id") === lookup("id"))
+    val query = start(joined.select("department"))
+    try {
+      input.addData(1, 3)
+      query.processAllAvailable()
+      checkAnswer(spark.table(query.name), Seq(Row("engineering"), Row("research")))
+    } finally {
+      query.stop()
+    }
   }
 
   test("the start plans only the lookup sides") {
@@ -572,6 +590,80 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     val e = firstBatchFailure(query, input, 1)
     assert(e.getCause.asInstanceOf[AnalysisException].getCondition ===
       "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
+  }
+
+  test("the start plans a lookup key that compares with the current time as micro-batches do") {
+    // A micro-batch reads the current time as its batch timestamp, which stays unknown until its
+    // optimization ends: predicate pushdown keeps a comparison with it above the join, and lookup
+    // planning offers no range on it. The start reads it the same way, so it reaches the decision
+    // of the first micro-batch.
+    def rates(requireValidFrom: Boolean): DataFrame =
+      spark.read.format(classOf[ValidityExternalLookupDataSource].getName)
+        .option("requireValidFrom", requireValidFrom.toString).load()
+    def failing(input: MemoryStream[Int]): Seq[(DataFrame, String)] = {
+      val events = input.toDF().toDF("id")
+      val any = rates(requireValidFrom = false)
+      val needed = rates(requireValidFrom = true)
+      Seq(
+        // The only key compares with the current time, in WHERE.
+        events.join(any).where(any("validFrom") <= localtimestamp()) -> "MISSING_JOIN_CONDITION",
+        // The source needs a predicate on validFrom next to the key.
+        events.join(needed, events("id") === needed("id"))
+          .where(needed("validFrom") <= localtimestamp()) -> "NO_LOOKUP_PREDICATE")
+    }
+    def parameters(subClass: String): Map[String, String] =
+      if (subClass == "MISSING_JOIN_CONDITION") Map.empty
+      else Map("table" -> "`ValidityExternalLookupTable`")
+    failing(MemoryStream[Int]).foreach { case (joined, subClass) =>
+      checkError(
+        exception = queryFailure[AnalysisException](joined),
+        condition = s"EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.$subClass",
+        parameters = parameters(subClass))
+    }
+    // With the startup check off, the first micro-batch fails with the same error.
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED.key -> "false") {
+      failing(MemoryStream[Int]).indices.foreach { index =>
+        val input = MemoryStream[Int]
+        val (joined, subClass) = failing(input)(index)
+        val e = firstBatchFailure(start(joined), input, 1)
+        checkError(
+          exception = e.getCause.asInstanceOf[AnalysisException],
+          condition = s"EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.$subClass",
+          parameters = parameters(subClass))
+      }
+    }
+    // The current time in a join condition fails the analysis of each micro-batch, as it does
+    // for an ordinary stream-static join, so the start leaves it to the first micro-batch.
+    val static = Seq((1, java.time.LocalDateTime.of(1970, 1, 1, 0, 0))).toDF("id", "validFrom")
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED.key -> enabled) {
+        Seq(rates(requireValidFrom = true), static).foreach { lookupSide =>
+          val input = MemoryStream[Int]
+          val events = input.toDF().toDF("id")
+          val joined = events.join(lookupSide,
+            events("id") === lookupSide("id") && lookupSide("validFrom") <= localtimestamp())
+          val e = firstBatchFailure(start(joined), input, 1)
+          assert(e.getCause.asInstanceOf[AnalysisException].getCondition ===
+            "INVALID_NON_DETERMINISTIC_EXPRESSIONS", enabled)
+        }
+      }
+    }
+    // A comparison with the current time on the lookup side itself is a lookup-side stage, whose
+    // value is the batch timestamp, so it is offered at the start too.
+    val input = MemoryStream[Int]
+    val events = input.toDF().toDF("id")
+    val needed = rates(requireValidFrom = true)
+    val current = needed.where(needed("validFrom") <= localtimestamp())
+    val query = start(events.join(current, events("id") === current("id")).select(current("id")))
+    try {
+      awaitInitialization(query)
+      assert(query.isActive && query.exception.isEmpty)
+      input.addData(1, 2)
+      query.processAllAvailable()
+      checkAnswer(spark.table(query.name), Seq(Row(1)))
+    } finally {
+      query.stop()
+    }
   }
 
   test("with the startup check disabled, the first micro-batch reports the error") {
