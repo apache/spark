@@ -70,6 +70,13 @@ trait AnalysisOnlyCommand extends Command {
 }
 
 /**
+ * A command that defines a view: it stores the text of a query, which is analyzed again whenever
+ * the view is read. CREATE VIEW, ALTER VIEW ... AS, and CACHE TABLE ... AS SELECT define views.
+ * See `AnalysisContext.isViewDefinition`.
+ */
+trait DefinesView extends Command
+
+/**
  * A logical node that does not expose its sub-nodes as children, but rather supervises them
  * in an implementation-defined manner.
  */

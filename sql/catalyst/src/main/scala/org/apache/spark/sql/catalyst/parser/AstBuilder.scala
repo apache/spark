@@ -4840,12 +4840,25 @@ class AstBuilder extends DataTypeAstBuilder
     identifierClause
   }
 
-  /** Returns the first `?` optional-reference marker of the multipart name `ctx`, if any. */
+  /**
+   * Returns the first `?` optional-reference marker of the multipart name `ctx`, if any. The name
+   * can be written in parentheses, e.g. `(t?).c`, which `expression` looks through as well.
+   */
   private def firstOptionalMarker(ctx: PrimaryExpressionContext): Option[Token] = ctx match {
     case columnReference: ColumnReferenceContext =>
       Option(columnReference.optionalMarker)
     case dereference: DereferenceContext =>
       firstOptionalMarker(dereference.base).orElse(Option(dereference.optionalMarker))
+    case parenthesized: ParenthesizedExpressionContext =>
+      parenthesized.expression.booleanExpression match {
+        case predicated: PredicatedContext if predicated.predicate == null =>
+          predicated.valueExpression match {
+            case valueExpression: ValueExpressionDefaultContext =>
+              firstOptionalMarker(valueExpression.primaryExpression)
+            case _ => None
+          }
+        case _ => None
+      }
     case _ =>
       None
   }

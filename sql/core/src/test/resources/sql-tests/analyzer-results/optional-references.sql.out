@@ -1336,6 +1336,75 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT known_struct.b?, b + 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 25,
+    "fragment" : "b"
+  } ]
+}
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE void_var DEFAULT NULL
+-- !query analysis
+CreateVariable default(null, sql='NULL'), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.void_var
+
+
+-- !query
+SELECT void_var.a
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"variablereference(system.session.void_var=NULL)\"",
+    "other" : "\"VOID\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "void_var.a"
+  } ]
+}
+
+
+-- !query
+SELECT void_var.a?
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"variablereference(system.session.void_var=NULL)\"",
+    "other" : "\"VOID\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "void_var.a?"
+  } ]
+}
+
+
+-- !query
 SET VAR known = unknown?
 -- !query analysis
 SetVariable [variablereference(system.session.known=7)]
@@ -1493,8 +1562,25 @@ LocalRelation [f#x, y#x, city#x, code#x]
 BEGIN
   lbl: BEGIN
     DECLARE y INT DEFAULT 1;
-    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y, missing? AS m;
     SELECT * FROM lbl_v;
+  END;
+END
+-- !query analysis
+LocalRelation [y#x, m#x]
+
+
+-- !query
+DROP VIEW lbl_v
+-- !query analysis
+DropTempViewCommand lbl_v, false
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
   END;
 END
 -- !query analysis
@@ -1506,17 +1592,22 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectName" : "`lbl`.`missing`"
   },
   "queryContext" : [ {
-    "objectType" : "VIEW",
-    "objectName" : "lbl_v",
-    "startIndex" : 8,
-    "stopIndex" : 19,
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 91,
+    "stopIndex" : 102,
     "fragment" : "lbl.missing?"
   } ]
 }
 
 
 -- !query
-SELECT * FROM lbl_v
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT (SELECT lbl.missing?) AS m;
+  END;
+END
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
@@ -1526,10 +1617,85 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectName" : "`lbl`.`missing`"
   },
   "queryContext" : [ {
-    "objectType" : "VIEW",
-    "objectName" : "lbl_v",
-    "startIndex" : 8,
-    "stopIndex" : 19,
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 99,
+    "stopIndex" : 110,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE VIEW lbl_pv AS SELECT lbl.missing? AS m;
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 93,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  FOR r AS SELECT id FROM people DO
+    CREATE TEMPORARY VIEW r_v AS SELECT r.missing? AS m;
+  END FOR;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`r`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 92,
+    "fragment" : "r.missing?"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y;
+    ALTER VIEW lbl_v AS SELECT lbl.missing? AS m;
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 134,
+    "stopIndex" : 145,
     "fragment" : "lbl.missing?"
   } ]
 }
@@ -2686,6 +2852,33 @@ Project [id#x]
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = :x AND deleted? IS NULL' USING 1 AS x
+-- !query analysis
+Project [id#x]
++- Filter ((id#x = 1) AND isnull(null))
+   +- SubqueryAlias people
+      +- View (`people`, [id#x, addr#x])
+         +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+            +- Project [id#x, addr#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing?, ? AS g FROM people' USING 5 AS a, 6 AS b
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
+  }
+}
+
+
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW people_v AS SELECT id, addr, deleted_at? FROM people
 -- !query analysis
 CreateViewCommand `people_v`, SELECT id, addr, deleted_at? FROM people, false, true, LocalTempView, UNSUPPORTED, true
@@ -3306,7 +3499,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "context" : "INSERT"
+    "context" : "INSERT ... REPLACE"
   },
   "queryContext" : [ {
     "objectType" : "",

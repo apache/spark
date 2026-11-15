@@ -1081,6 +1081,82 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT known_struct.b?, b + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`b`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 25,
+    "fragment" : "b"
+  } ]
+}
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE void_var DEFAULT NULL
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT void_var.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"variablereference(system.session.void_var=NULL)\"",
+    "other" : "\"VOID\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "void_var.a"
+  } ]
+}
+
+
+-- !query
+SELECT void_var.a?
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"variablereference(system.session.void_var=NULL)\"",
+    "other" : "\"VOID\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "void_var.a?"
+  } ]
+}
+
+
+-- !query
 SET VAR known = unknown?
 -- !query schema
 struct<>
@@ -1244,8 +1320,29 @@ NULL	NULL	NULL	NULL
 BEGIN
   lbl: BEGIN
     DECLARE y INT DEFAULT 1;
-    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y, missing? AS m;
     SELECT * FROM lbl_v;
+  END;
+END
+-- !query schema
+struct<y:int,m:void>
+-- !query output
+1	NULL
+
+
+-- !query
+DROP VIEW lbl_v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
   END;
 END
 -- !query schema
@@ -1259,17 +1356,22 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectName" : "`lbl`.`missing`"
   },
   "queryContext" : [ {
-    "objectType" : "VIEW",
-    "objectName" : "lbl_v",
-    "startIndex" : 8,
-    "stopIndex" : 19,
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 91,
+    "stopIndex" : 102,
     "fragment" : "lbl.missing?"
   } ]
 }
 
 
 -- !query
-SELECT * FROM lbl_v
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT (SELECT lbl.missing?) AS m;
+  END;
+END
 -- !query schema
 struct<>
 -- !query output
@@ -1281,10 +1383,91 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectName" : "`lbl`.`missing`"
   },
   "queryContext" : [ {
-    "objectType" : "VIEW",
-    "objectName" : "lbl_v",
-    "startIndex" : 8,
-    "stopIndex" : 19,
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 99,
+    "stopIndex" : 110,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE VIEW lbl_pv AS SELECT lbl.missing? AS m;
+  END;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 82,
+    "stopIndex" : 93,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  FOR r AS SELECT id FROM people DO
+    CREATE TEMPORARY VIEW r_v AS SELECT r.missing? AS m;
+  END FOR;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`r`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 92,
+    "fragment" : "r.missing?"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y;
+    ALTER VIEW lbl_v AS SELECT lbl.missing? AS m;
+  END;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 134,
+    "stopIndex" : 145,
     "fragment" : "lbl.missing?"
   } ]
 }
@@ -2173,6 +2356,30 @@ struct<id:int>
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = :x AND deleted? IS NULL' USING 1 AS x
+-- !query schema
+struct<id:int>
+-- !query output
+1
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT missing?, ? AS g FROM people' USING 5 AS a, 6 AS b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNUSED_SQL_PARAMETER_VALUES",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "numMarkers" : "1",
+    "numValues" : "2"
+  }
+}
+
+
+-- !query
 CREATE OR REPLACE TEMPORARY VIEW people_v AS SELECT id, addr, deleted_at? FROM people
 -- !query schema
 struct<>
@@ -2783,7 +2990,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "context" : "INSERT"
+    "context" : "INSERT ... REPLACE"
   },
   "queryContext" : [ {
     "objectType" : "",

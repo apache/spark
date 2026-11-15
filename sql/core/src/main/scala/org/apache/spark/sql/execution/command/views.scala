@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, 
 import org.apache.spark.sql.catalyst.analysis.V2Reference
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, DefinesView, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, ViewCatalog}
@@ -89,7 +89,8 @@ case class CreateViewCommand(
   extends RunnableCommand
   with AnalysisOnlyCommand
   with CTEInChildren
-  with CreateTempView {
+  with CreateTempView
+  with DefinesView {
 
   import ViewHelper._
 
@@ -255,7 +256,7 @@ case class AlterViewAsCommand(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty,
     referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
-  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
+  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   import ViewHelper._
 

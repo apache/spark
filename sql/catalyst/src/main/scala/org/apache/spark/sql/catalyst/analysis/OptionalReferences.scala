@@ -134,23 +134,36 @@ object OptionalReferences {
       expression
         .collect { case subquery: SubqueryExpression => subquery.plan }
         .iterator
-        .flatMap(_.flatMap(_.expressions).iterator.flatMap(unresolvedOptionalReference))
+        .flatMap(firstUnresolvedOptionalReference)
         .nextOption()
     }
   }
 
   /**
    * Returns true if the parsed `plan` has an optional reference, including in the plans of its
-   * subquery expressions and in its common table expressions, which are not children of the
-   * operator that defines them. Before the analysis, every optional reference of the statement is
-   * unresolved, so the answer does not depend on the data that the statement is analyzed against.
+   * subquery expressions and in its common table expressions. Before the analysis, every optional
+   * reference of the statement is unresolved, so the answer does not depend on the data that the
+   * statement is analyzed against.
    */
-  def hasOptionalReferences(plan: LogicalPlan): Boolean = plan.exists { operator =>
-    operator.expressions.exists(unresolvedOptionalReference(_).isDefined) ||
-    operator.innerChildren.exists {
-      case innerPlan: LogicalPlan => hasOptionalReferences(innerPlan)
-      case _ => false
-    }
+  def hasOptionalReferences(plan: LogicalPlan): Boolean =
+    firstUnresolvedOptionalReference(plan).isDefined
+
+  /**
+   * Returns the first unresolved optional reference of the operators of `plan`, including in the
+   * plans of their subquery expressions and in the plans that an operator keeps outside of its
+   * children, such as the common table expressions of `UnresolvedWith`.
+   */
+  private def firstUnresolvedOptionalReference(plan: LogicalPlan): Option[Expression] = {
+    plan.expressions.iterator
+      .flatMap(unresolvedOptionalReference)
+      .nextOption()
+      .orElse {
+        plan.innerChildren.iterator
+          .collect { case innerPlan: LogicalPlan => innerPlan }
+          .flatMap(firstUnresolvedOptionalReference)
+          .nextOption()
+      }
+      .orElse(plan.children.iterator.flatMap(firstUnresolvedOptionalReference).nextOption())
   }
 
   /** The static NULL of type VOID that an unresolvable optional reference resolves to. */
@@ -238,9 +251,9 @@ object OptionalReferences {
       optionalNamePartIndices: Set[Int],
       attributes: Seq[Attribute],
       resolver: Resolver,
-      resolvingView: Boolean): Boolean = {
+      isViewQuery: Boolean): Boolean = {
     optionalNamePartIndices.nonEmpty &&
-    firstUnmatchedNamePartIndex(nameParts, attributes, resolver, resolvingView).exists(
+    firstUnmatchedNamePartIndex(nameParts, attributes, resolver, isViewQuery).exists(
       optionalNamePartIndices.contains
     )
   }
@@ -250,9 +263,11 @@ object OptionalReferences {
    * path to `attributes`, where a path is a suffix of the attribute qualifier, the attribute name,
    * and then the names of nested fields. The qualifiers of session variables and of the variables
    * of an active SQL scripting scope, i.e. the label of a compound statement or the variable of a
-   * FOR statement, are valid paths too, the latter except while the body of a view is resolved
-   * (`resolvingView`), where variable lookup hides the variables of the script. A qualifier is not
-   * a reference by itself, so the last name part never matches a qualifier.
+   * FOR statement, are valid paths too, the latter except in the query of a view (`isViewQuery`),
+   * when the view is read or defined: a view cannot see the variables of the script, so a
+   * definition that resolves a label is rejected when the view is created rather than when it is
+   * read. A qualifier is not a reference by itself, so the last name part never matches a
+   * qualifier.
    * Returns None if the whole name matches a path, which means that the name was found but was not
    * usable, e.g. because it references a column that is not grouped.
    *
@@ -268,11 +283,11 @@ object OptionalReferences {
       nameParts: Seq[String],
       attributes: Seq[Attribute],
       resolver: Resolver,
-      resolvingView: Boolean): Option[Int] = {
+      isViewQuery: Boolean): Option[Int] = {
     val matchedNamePartCounts =
       attributes.iterator.map(matchedNamePartCount(nameParts, _, resolver)) ++
       SESSION_VARIABLE_QUALIFIERS.iterator.map(matchedQualifierPartCount(nameParts, _, resolver)) ++
-      Iterator(if (resolvingView) 0 else matchedScriptingScopeLabelCount(nameParts))
+      Iterator(if (isViewQuery) 0 else matchedScriptingScopeLabelCount(nameParts))
     val longestMatch = matchedNamePartCounts.max
     if (longestMatch < nameParts.length) Some(longestMatch) else None
   }

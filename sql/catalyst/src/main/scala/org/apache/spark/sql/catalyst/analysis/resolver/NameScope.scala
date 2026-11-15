@@ -1446,7 +1446,7 @@ class NameScopeStack(
           optionalNamePartIndices = parameters.optionalNamePartIndices,
           attributes = attributes,
           resolver = conf.resolver,
-          resolvingView = parameters.resolvingView
+          isViewQuery = parameters.resolvingView
         )) {
         Some(
           NameTarget(

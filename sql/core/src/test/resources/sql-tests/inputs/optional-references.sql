@@ -152,6 +152,12 @@ SELECT known_struct.a?, known_struct.b?;
 SELECT session.known?, session.unknown?, system.session.unknown?;
 SELECT session?, system.session?;
 SELECT known_struct.b;
+-- The name of a missing field of a variable is not a lateral column alias either.
+SELECT known_struct.b?, b + 1;
+-- The fields of a variable of type VOID are an error, like without `?`, unlike those of a column.
+DECLARE OR REPLACE VARIABLE void_var DEFAULT NULL;
+SELECT void_var.a;
+SELECT void_var.a?;
 -- A SET VAR statement outside of a SQL script.
 SET VAR known = unknown?;
 SELECT known;
@@ -202,19 +208,61 @@ BEGIN
   END;
 END;
 --QUERY-DELIMITER-END
--- The body of a view sees only the variables of a script that it referenced when it was created,
--- so a label does not qualify a reference in it: a view created with `lbl.missing?` fails inside
--- the block and after it alike.
+-- A view resolves the label-qualified variables of the script that it referenced when it was
+-- created, and no others, so a label does not qualify an optional reference in the query of a
+-- view. A definition that depends on the label fails when the view is created, instead of when it
+-- is read: also in a subquery, in a persistent view, for the variable of a FOR statement, and in
+-- ALTER VIEW ... AS.
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y, missing? AS m;
+    SELECT * FROM lbl_v;
+  END;
+END;
+--QUERY-DELIMITER-END
+DROP VIEW lbl_v;
 --QUERY-DELIMITER-START
 BEGIN
   lbl: BEGIN
     DECLARE y INT DEFAULT 1;
     CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
-    SELECT * FROM lbl_v;
   END;
 END;
 --QUERY-DELIMITER-END
-SELECT * FROM lbl_v;
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT (SELECT lbl.missing?) AS m;
+  END;
+END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE VIEW lbl_pv AS SELECT lbl.missing? AS m;
+  END;
+END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+BEGIN
+  FOR r AS SELECT id FROM people DO
+    CREATE TEMPORARY VIEW r_v AS SELECT r.missing? AS m;
+  END FOR;
+END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y;
+    ALTER VIEW lbl_v AS SELECT lbl.missing? AS m;
+  END;
+END;
+--QUERY-DELIMITER-END
 DROP VIEW lbl_v;
 
 -- Correlated subqueries resolve against the same scopes as without `?`.
@@ -364,6 +412,10 @@ EXECUTE IMMEDIATE 'SELECT p.missing?, ? AS g FROM people p' USING 1, 2;
 EXECUTE IMMEDIATE "SELECT IDENTIFIER('miss' || 'ing')?, ? AS g FROM people" USING 1, 2;
 -- A marker before an optional reference.
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = ? AND deleted? IS NULL' USING 1;
+-- Named values bind by name, so they are not unused positional values. Values that are named but
+-- have no named marker to bind to are.
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id = :x AND deleted? IS NULL' USING 1 AS x;
+EXECUTE IMMEDIATE 'SELECT missing?, ? AS g FROM people' USING 5 AS a, 6 AS b;
 
 -- Views are the primary use case: a view stays valid while its source table evolves.
 CREATE OR REPLACE TEMPORARY VIEW people_v AS SELECT id, addr, deleted_at? FROM people;

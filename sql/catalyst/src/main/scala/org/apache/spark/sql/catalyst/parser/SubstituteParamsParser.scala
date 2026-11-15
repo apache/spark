@@ -95,9 +95,12 @@ class SubstituteParamsParser extends Logging {
     }
     // In a statement with optional references, a `?` after an identifier or a non-reserved keyword
     // is an optional reference where the syntax allows a reference. The remaining markers must
-    // not take the values of such a `?` silently, so a value without a marker is an error.
+    // not take the values of such a `?` silently, so a value without a marker is an error. With
+    // named markers, every value binds by name instead: EXECUTE IMMEDIATE passes its named USING
+    // values as positional values too, and a value or a marker that cannot bind is an error below.
     val numPositionalMarkers = parameterLocations.positionalParameterLocations.length
     if (parameterLocations.hasOptionalReferences &&
+        parameterLocations.namedParameterLocations.isEmpty &&
         positionalParams.length > numPositionalMarkers) {
       throw QueryCompilationErrors.unusedSqlParameterValuesError(
         numPositionalMarkers, positionalParams.length)

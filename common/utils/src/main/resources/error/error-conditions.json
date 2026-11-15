@@ -7046,12 +7046,12 @@
     "subClass" : {
       "IN_DDL" : {
         "message" : [
-          "Definitions of tables and functions must not contain optional references."
+          "Column and parameter defaults, generation expressions, CHECK constraints, and table options must not contain optional references."
         ]
       },
       "IN_DML" : {
         "message" : [
-          "Statements that modify table data must not contain optional references."
+          "Statements that modify existing rows, and conditions that select the rows to replace, must not contain optional references."
         ]
       },
       "IN_PARTITION_SPEC" : {

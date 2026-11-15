@@ -64,8 +64,8 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
     case _: DeleteFromTable => Some("DELETE")
     case _: UpdateTable => Some("UPDATE")
     case _: MergeIntoTable => Some("MERGE")
-    // The plan of INSERT ... REPLACE WHERE.
-    case _: OverwriteByExpression => Some("INSERT")
+    // The plan of INSERT ... REPLACE WHERE and of `DataFrameWriterV2.overwrite(condition)`.
+    case _: OverwriteByExpression => Some("INSERT ... REPLACE")
     case _ => None
   }
 

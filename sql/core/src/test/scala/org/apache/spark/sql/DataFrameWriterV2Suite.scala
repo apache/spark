@@ -305,7 +305,7 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
         },
         condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
         sqlState = "0A000",
-        parameters = Map("context" -> "INSERT"),
+        parameters = Map("context" -> "INSERT ... REPLACE"),
         context = ExpectedContext(fragment = "deleted?", start = 0, stop = 7))
     }
 

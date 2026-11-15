@@ -1475,6 +1475,25 @@ class ParametersSuite extends SharedSparkSession {
           parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
         checkAnswer(spark.sql(query, Array(6)), Row(1, 2, 6))
         checkAnswer(spark.sql(s"EXECUTE IMMEDIATE '$query' USING 6"), Row(1, 2, 6))
+        // The common table expressions of the statement and of its subqueries, which are not
+        // children of the operator that defines them, are searched too.
+        val cte = "WITH c AS (SELECT first(DISTINCT ?) AS f, missing? AS m FROM v)"
+        Seq(
+          s"$cte SELECT f, ? AS g FROM c",
+          s"SELECT ($cte SELECT f FROM c) AS f, ? AS g"
+        ).foreach { cteQuery =>
+          checkError(
+            exception = intercept[AnalysisException](spark.sql(cteQuery, Array(5, 6))),
+            condition = "UNUSED_SQL_PARAMETER_VALUES",
+            parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.sql(s"EXECUTE IMMEDIATE '$cteQuery' USING 5, 6")
+            },
+            condition = "UNUSED_SQL_PARAMETER_VALUES",
+            parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+          checkAnswer(spark.sql(cteQuery, Array(6)), Row(2, 6))
+        }
         // A statement without optional references ignores the extra values, as before.
         checkAnswer(spark.sql("SELECT ? AS a FROM v", Array(1, 2)), Row(1))
         checkAnswer(spark.sql("EXECUTE IMMEDIATE 'SELECT ? AS a FROM v' USING 1, 2"), Row(1))

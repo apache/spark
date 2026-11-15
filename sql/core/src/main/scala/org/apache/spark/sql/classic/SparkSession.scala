@@ -555,7 +555,8 @@ class SparkSession private(
             PosParameterizedQuery(
               parsed,
               paramContext.params,
-              hasOptionalReferences = OptionalReferences.hasOptionalReferences(parsed))
+              hasOptionalReferences = sessionState.conf.optionalReferencesEnabled &&
+                OptionalReferences.hasOptionalReferences(parsed))
           } else {
             parsed
           }
@@ -702,7 +703,8 @@ class SparkSession private(
           parsed,
           args.map(lit(_).expr).toImmutableArraySeq,
           paramNames.toImmutableArraySeq,
-          hasOptionalReferences = OptionalReferences.hasOptionalReferences(parsed)
+          hasOptionalReferences = sessionState.conf.optionalReferencesEnabled &&
+            OptionalReferences.hasOptionalReferences(parsed)
         )
       } else {
         parsed

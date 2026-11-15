@@ -61,6 +61,22 @@ class OptionalReferencesSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-61494: a HAVING column that is not grouped keeps its optional name parts") {
+    // `s.y` first resolves to the column `y` of `s`, which is not grouped, so HAVING resolves the
+    // name again against the SELECT list, where `s` is a struct without a field `y`. The optional
+    // marker must survive that step. The single-pass resolver does not resolve such a qualified
+    // name against the SELECT list, with or without `?`, so this runs the fixed-point analyzer.
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      val query = "SELECT named_struct('x', 1) AS s FROM VALUES (1, 2) AS s(k, y) GROUP BY k " +
+        "HAVING s.y%s IS NULL"
+      checkAnswer(sql(query.format("?")), Row(Row(1)))
+      assert(intercept[AnalysisException](sql(query.format(""))).getCondition == "FIELD_NOT_FOUND")
+    }
+  }
+
   test("SPARK-61494: optional references are not supported in the parameters of a SQL function") {
     withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
       // The DEFAULT of a parameter is stored with the function, like the DEFAULT of a column. The

@@ -192,6 +192,12 @@ case class AnalysisContext(
     shareIdentifierVariablesWithNestedSQLFunctions: Boolean = true,
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
+    // Whether the plan under analysis defines a view, i.e. stores the text of a query that is
+    // analyzed again when the view is read: CREATE VIEW, ALTER VIEW ... AS, and CACHE TABLE ... AS
+    // SELECT, see `DefinesView`. Optional references (`x?`) resolve the query the way the stored
+    // text will resolve, so that a definition that cannot be read fails when the view is created.
+    // Only set while optional references are enabled, as nothing else reads it.
+    isViewDefinition: Boolean = false,
 
     /**
      * This is a bridge state between this fixed-point [[Analyzer]] and a single-pass [[Resolver]].
@@ -340,6 +346,16 @@ object AnalysisContext {
     val originContext = value.get()
     val context = originContext.copy(isDefault = false, outerPlan = Some(outerPlan))
     set(context)
+    try f finally { set(originContext) }
+  }
+
+  /** Returns true if `plan` defines a view, see `AnalysisContext.isViewDefinition`. */
+  def definesView(plan: LogicalPlan): Boolean = plan.exists(_.isInstanceOf[DefinesView])
+
+  /** Runs `f`, the analysis of a plan that defines a view, with `isViewDefinition` set. */
+  def withViewDefinition[A](f: => A): A = {
+    val originContext = value.get()
+    set(originContext.copy(isViewDefinition = true))
     try f finally { set(originContext) }
   }
 
@@ -559,7 +575,11 @@ class Analyzer(
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.withNewAnalysisContext {
-      executeSameContext(plan)
+      if (conf.optionalReferencesEnabled && AnalysisContext.definesView(plan)) {
+        AnalysisContext.withViewDefinition(executeSameContext(plan))
+      } else {
+        executeSameContext(plan)
+      }
     }
   }
 

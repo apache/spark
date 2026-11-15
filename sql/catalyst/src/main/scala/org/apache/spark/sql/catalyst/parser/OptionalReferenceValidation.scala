@@ -30,18 +30,20 @@ object OptionalReferenceValidation {
   /**
    * Throws an error for the optional reference `ctx`, i.e. the parse tree of a reference with a
    * `?` after one of its name parts, if `ctx` is part of an UPDATE, DELETE, MERGE, or AUTO CDC
-   * statement, of the condition of INSERT ... REPLACE, of a partition specification, or of an
-   * expression that is stored in the definition of a table or a function.
+   * statement, of the REPLACE condition of INSERT, of a partition specification, or of a DEFAULT,
+   * GENERATED ALWAYS AS, CHECK, or OPTIONS clause of a table or function definition.
    *
    * The boundary is the kind of statement. UPDATE, DELETE, MERGE, and AUTO CDC exist to modify
    * existing rows, so they reject optional references everywhere, including in the source query of
-   * MERGE and in common table expressions. INSERT and CREATE OR REPLACE TABLE AS SELECT reject them
-   * only in the REPLACE condition, a predicate on the target table: their queries produce the rows
-   * to write, and a missing column in such a query makes the written rows differ in the same way as
-   * in any other query. This holds where the written rows also decide which existing rows are
-   * replaced: an INSERT OVERWRITE with dynamic partition overwrite replaces the partitions of the
-   * written rows, and INSERT ... REPLACE ON or REPLACE USING deletes the target rows that match
-   * them.
+   * MERGE and in common table expressions. INSERT rejects them only in the REPLACE condition, a
+   * predicate on the target table: the query of an INSERT, like that of a CREATE OR REPLACE TABLE
+   * AS SELECT, produces the rows to write, and a missing column in such a query makes the written
+   * rows differ in the same way as in any other query. This holds where the written rows also
+   * decide which existing rows are replaced: an INSERT OVERWRITE with dynamic partition overwrite
+   * replaces the partitions of the written rows, and INSERT ... REPLACE ON or REPLACE USING deletes
+   * the target rows that match them. The arguments of CALL are values, like the arguments of a
+   * function in a query, so they accept optional references; the procedure decides what a NULL
+   * argument means.
    *
    * {{{
    *   UPDATE t SET a = b?;                                  -- IN_DML
@@ -50,6 +52,7 @@ object OptionalReferenceValidation {
    *   TRUNCATE TABLE t PARTITION (p = :p?);                 -- IN_PARTITION_SPEC
    *   CREATE TABLE t (a INT, b INT DEFAULT a?);             -- IN_DDL
    *   INSERT OVERWRITE t SELECT a? FROM s;                  -- allowed
+   *   CALL p(a?, :b?);                                      -- allowed
    * }}}
    */
   def validate(ctx: ParserRuleContext): Unit = {
@@ -91,7 +94,7 @@ object OptionalReferenceValidation {
     case _: MergeIntoTableContext =>
       Some(QueryParsingErrors.optionalReferenceInDmlNotSupportedError("MERGE", ctx))
     case _: InsertIntoReplaceBooleanCondContext =>
-      Some(QueryParsingErrors.optionalReferenceInDmlNotSupportedError("INSERT", ctx))
+      Some(QueryParsingErrors.optionalReferenceInDmlNotSupportedError("INSERT ... REPLACE", ctx))
     case dmlStatement: DmlStatementContext =>
       // The common table expressions of a statement are siblings of its DELETE, UPDATE, or MERGE.
       unsupportedContextError(dmlStatement.dmlStatementNoWith, ctx)

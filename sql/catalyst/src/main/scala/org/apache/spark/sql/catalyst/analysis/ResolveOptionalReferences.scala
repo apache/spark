@@ -165,7 +165,8 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
           optionalNamePartIndices = OptionalReferences.optionalNamePartIndices(unresolvedAttribute),
           attributes = attributes,
           resolver = conf.resolver,
-          resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+          isViewQuery = AnalysisContext.get.catalogAndNamespace.nonEmpty ||
+            AnalysisContext.get.isViewDefinition
         ) =>
       val nullReference = OptionalReferences.nullReference()
       if (isTopLevel) {

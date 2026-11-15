@@ -326,6 +326,12 @@ class OptionalReferencesParserSuite extends PlanTest {
       checkUnexpectedMarker("SELECT `(a)+`? FROM t", position = 13)(CatalystSqlParser.parsePlan)
       checkUnexpectedMarker("SELECT t.`(a)+`? FROM t", position = 15)(CatalystSqlParser.parsePlan)
       checkUnexpectedMarker("SELECT t?.`(a)+` FROM t", position = 8)(CatalystSqlParser.parsePlan)
+      // Also when the qualifier is written in parentheses, which a regular expression allows.
+      checkUnexpectedMarker("SELECT (t?).`(a)+` FROM t", position = 9)(CatalystSqlParser.parsePlan)
+      checkUnexpectedMarker("SELECT ((t?)).`(a)+` FROM t", position = 10)(
+        CatalystSqlParser.parsePlan)
+      assert(CatalystSqlParser.parsePlan("SELECT (t).`(a)+` FROM t") ==
+        CatalystSqlParser.parsePlan("SELECT t.`(a)+` FROM t"))
     }
   }
 
@@ -491,8 +497,8 @@ class OptionalReferencesParserSuite extends PlanTest {
           "MERGE",
           "a?"
         ),
-        ("INSERT INTO t REPLACE WHERE c? = 1 SELECT * FROM s", "INSERT", "c?"),
-        ("INSERT INTO t AS t REPLACE ON t.c? = s.c SELECT * FROM s", "INSERT", "t.c?"),
+        ("INSERT INTO t REPLACE WHERE c? = 1 SELECT * FROM s", "INSERT ... REPLACE", "c?"),
+        ("INSERT INTO t AS t REPLACE ON t.c? = s.c SELECT * FROM s", "INSERT ... REPLACE", "t.c?"),
         // The common table expressions of the statement.
         ("WITH s AS (SELECT c? FROM u) DELETE FROM t WHERE c IN (SELECT c FROM s)", "DELETE", "c?"),
         ("WITH s AS (SELECT c? FROM u) UPDATE t SET a = (SELECT max(c) FROM s)", "UPDATE", "c?"),

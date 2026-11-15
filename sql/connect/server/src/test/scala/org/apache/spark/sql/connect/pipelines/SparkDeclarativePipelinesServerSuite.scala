@@ -184,6 +184,13 @@ class SparkDeclarativePipelinesServerSuite
           _.setApplyAsDeletes(expressionString("deleted? = true")),
           _.setSequenceBy(expressionString("ts?")),
           _.setApplyAsDeletes(expressionString("(SELECT max(deleted?) FROM src) = true")),
+          // In the common table expression of a subquery, which is not a child of the subquery
+          // plan, also when nested in another subquery.
+          _.setApplyAsDeletes(
+            expressionString(
+              "(WITH c AS (SELECT max(deleted?) AS d FROM src) SELECT d FROM c) = true")),
+          _.setApplyAsDeletes(expressionString(
+            "(SELECT (WITH c AS (SELECT max(deleted?) AS d FROM src) SELECT d FROM c)) = true")),
           _.addKeys(expressionString("other_key?")),
           _.addColumnList(expressionString("other_column?"))).foreach { addArgument =>
           val flow = autoCdcDefineFlow(graphId, DefineFlow.SCDType.SCD_TYPE_1).toBuilder
@@ -196,12 +203,17 @@ class SparkDeclarativePipelinesServerSuite
           assert(ex.getMessage.contains("OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML"), ex.getMessage)
           assert(ex.getMessage.contains("AUTO CDC"), ex.getMessage)
         }
-        // The same kind of argument without `?` is accepted.
-        val flow = autoCdcDefineFlow(graphId, DefineFlow.SCDType.SCD_TYPE_1).toBuilder
-        flow.getAutoCdcFlowDetailsBuilder.setApplyAsDeletes(expressionString("deleted = true"))
-        sendPlan(
-          buildPlanFromPipelineCommand(
-            PipelineCommand.newBuilder().setDefineFlow(flow.build()).build()))
+        // The same kinds of argument without `?` are accepted.
+        Seq(
+          "deleted = true",
+          "(WITH c AS (SELECT max(deleted) AS d FROM src) SELECT d FROM c) = true").foreach {
+          condition =>
+            val flow = autoCdcDefineFlow(graphId, DefineFlow.SCDType.SCD_TYPE_1).toBuilder
+            flow.getAutoCdcFlowDetailsBuilder.setApplyAsDeletes(expressionString(condition))
+            sendPlan(
+              buildPlanFromPipelineCommand(
+                PipelineCommand.newBuilder().setDefineFlow(flow.build()).build()))
+        }
       } finally {
         session.conf.unset(SQLConf.OPTIONAL_REFERENCES_ENABLED.key)
       }
