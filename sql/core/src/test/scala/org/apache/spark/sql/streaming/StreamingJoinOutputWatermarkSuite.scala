@@ -304,14 +304,17 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
 
   // An append-mode aggregation over the event time of an input that the join cannot bound would
   // never emit, so the query fails at start.
-  private def unboundedEventTimeError(eventTime: String, side: String, requirement: String) = {
+  // The sub-condition asks for a watermark on the other input when that input has none.
+  private def unboundedEventTimeError(
+      eventTime: String, side: String, otherSide: String, otherHasWatermark: Boolean) = {
+    val subClass = if (otherHasWatermark) "TIME_CONSTRAINT" else "WATERMARK_AND_TIME_CONSTRAINT"
     ExpectFailure[AnalysisException](assertFailure = error => {
       checkError(error.asInstanceOf[AnalysisException],
-        condition = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME",
+        condition = s"STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME.$subClass",
         parameters = Map(
           "eventTime" -> eventTime,
           "side" -> side,
-          "requirement" -> requirement,
+          "otherSide" -> otherSide,
           "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
     })
   }
@@ -355,8 +358,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       val (impressionInput, clickInput, joined) = oneDirectionalJoin()
       testStream(aggregation(joined), OutputMode.Append())(
         MultiAddData(impressionInput, (1, 5L))(clickInput, (1, 8L)),
-        unboundedEventTimeError("clickTime", "right",
-          "a time constraint that limits how late a matching left row can arrive"))
+        unboundedEventTimeError("clickTime", "right", "left", otherHasWatermark = true))
     }
   }
 
@@ -364,8 +366,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     val (leftInput, rightInput, joined) = oneWatermarkEqualityJoin("inner", watermarkOnLeft = true)
     testStream(windowCounts(joined, "lt"), OutputMode.Append())(
       MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
-      unboundedEventTimeError("lt", "left", "a watermark on the right input and a time " +
-        "constraint that limits how late a matching right row can arrive"))
+      unboundedEventTimeError("lt", "left", "right", otherHasWatermark = false))
   }
 
   test("reject an append-mode aggregation over the unbounded input of an admitted outer join") {
@@ -373,8 +374,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       oneWatermarkEqualityJoin("left_outer", watermarkOnLeft = false)
     testStream(windowCounts(joined, "rt"), OutputMode.Append())(
       MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
-      unboundedEventTimeError("rt", "right", "a watermark on the left input and a time " +
-        "constraint that limits how late a matching left row can arrive"))
+      unboundedEventTimeError("rt", "right", "left", otherHasWatermark = false))
   }
 
   test("run an update-mode aggregation over an event time the join cannot bound") {

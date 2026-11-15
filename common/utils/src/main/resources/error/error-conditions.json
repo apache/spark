@@ -8172,18 +8172,22 @@
     ],
     "sqlState" : "0A000"
   },
-  "STREAMING_JOIN_EVENT_TIME_KEY_NOT_PLANNED" : {
-    "message" : [
-      "The stream-stream <joinType> join cannot finalize the state of its <side> input. The analysis accepted the <otherSide> input's equality key <key> as a copy of, or a time window over, the column that input filters late rows by, but the planned <otherSide> input filters late rows by <lateFilteredColumn>.",
-      "Put <key> before the other watermarked columns of the <otherSide> input. To run the query anyway, set <config> to false; the query then keeps that state without bound, and an outer join never outputs those unmatched rows."
-    ],
-    "sqlState" : "0A000"
-  },
   "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME" : {
     "message" : [
-      "The append-mode aggregation after a stream-stream join uses the event time <eventTime> of the join's <side> input, but the join has no bound on that event time for the state of that input, so it holds back its output watermark and the aggregation would never emit results.",
-      "Add <requirement>, aggregate the event time of an input whose state the join can bound, or use the update output mode. A bound on the event time comes from an equality key that shifts the other input's event time by an exact interval (under one day, or timestampadd in hours, minutes or seconds), or from a range condition used in place of a shifted equality. To run the query anyway, set <config> to false."
+      "The append-mode aggregation after a stream-stream join uses the event time <eventTime> of the join's <side> input, but the join has no bound on that event time for the state of that input, so it holds back its output watermark and the aggregation would never emit results."
     ],
+    "subClass" : {
+      "TIME_CONSTRAINT" : {
+        "message" : [
+          "Add a time constraint that limits how late a matching <otherSide> row can arrive, aggregate the event time of an input whose state the join can bound, or use the update output mode. A bound on the event time comes from an equality key that shifts the other input's event time by an exact interval (under one day, or timestampadd in hours, minutes or seconds), or from a range condition used in place of a shifted equality. To run the query anyway, set <config> to false."
+        ]
+      },
+      "WATERMARK_AND_TIME_CONSTRAINT" : {
+        "message" : [
+          "Add a watermark on the <otherSide> input and a time constraint that limits how late a matching <otherSide> row can arrive, aggregate the event time of an input whose state the join can bound, or use the update output mode. A bound on the event time comes from an equality key that shifts the other input's event time by an exact interval (under one day, or timestampadd in hours, minutes or seconds), or from a range condition used in place of a shifted equality. To run the query anyway, set <config> to false."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "STREAMING_OUTPUT_MODE" : {
