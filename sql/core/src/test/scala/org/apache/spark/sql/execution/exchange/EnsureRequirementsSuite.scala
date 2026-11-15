@@ -42,7 +42,8 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1836,53 +1837,81 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60813: a cogroup shuffles a datetime key onto a function that reads it as stored") {
-    // The key check compares storage alone, as the hash shuffle does, so a `TIME` key goes onto a
-    // bucket over a `TIMESTAMP` column whose function declares the `BIGINT` both are held as, as
-    // the test catalog's `bucket` does. Each row lands where the keyed side put its `long`.
-    val longBucket = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  test("SPARK-60813: a cogroup places a key stored as the layout's column by its bytes") {
+    // A cogroup pairs its groups by comparing key rows, so a key stored as the layout's column is
+    // goes to the function by storage (`TransformExpression.storedKey`), even where a datetime
+    // value of its type would be read differently, and lands where the keyed side put the same
+    // bytes, as the hash shuffle pairs them.
+    def readAs(declared: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
       override def resultType(): DataType = IntegerType
       override def name(): String = "bucket"
       override def canonicalName(): String = "bucket"
       override def produceResult(input: InternalRow): Int =
-        Math.floorMod(input.getLong(1), input.getInt(0).toLong).toInt
+        Math.floorMod(input.get(1, declared).hashCode, input.getInt(0))
     }
-    val cL = AttributeReference("cL", TimestampType)()
-    val cR = AttributeReference("cR", TimeType())()
-    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
-      Seq(TransformExpression(longBucket, Seq(cL), Some(4))), (0 until 4).map(InternalRow(_))))
-    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    def values(dataType: DataType): Seq[Any] = dataType match {
+      case TimestampType | TimestampNTZType => Seq(0L, 7L, -3L, 1000L)
+      case _: TimeType => Seq(7L, 3600000000001L, 86399999999999L)
+      case _: DayTimeIntervalType => Seq(7L, -1L, 90061123456L)
+      case _: YearMonthIntervalType => Seq(14, 7, -25)
+      case _: TimestampNTZNanosType =>
+        Seq(TimestampNanosVal.fromParts(3600123456L, 789.toShort),
+          TimestampNanosVal.fromParts(-1L, 5.toShort))
+    }
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("value", IntegerType))),
       Seq.empty,
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
-    val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
-      AttributeReference("value", IntegerType)() :: Nil, left, right)
-    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-      val keyed = EnsureRequirements.apply(cogroup).collect {
-        case s: ShuffleExchangeExec => s.outputPartitioning
-      }.collect { case k: KeyedPartitioning => k }
-      assert(keyed.size == 1, "the right side is shuffled onto the bucket layout")
-      val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
-      Seq(3600000000000L, 7L, 86399999999999L).foreach { v =>
-        assert(placed.eval(InternalRow(v)) == Math.floorMod(v, 4L).toInt, v)
+    // (the column's type, the layout's function, the key's type)
+    Seq[(DataType, ScalarFunction[Int], DataType)](
+      // The test catalog's `bucket`, which declares the `BIGINT` both are held as.
+      (TimestampType, BucketFunction, TimeType(9)),
+      // A function declaring the column's own type, as Iceberg's `bucket` does.
+      (TimestampType, readAs(TimestampType), TimestampNTZType),
+      (TimestampNTZType, readAs(TimestampNTZType), TimestampType),
+      (TimestampType, readAs(TimestampType), TimeType(9)),
+      (TimestampType, readAs(TimestampType), DayTimeIntervalType()),
+      (TimeType(6), readAs(TimeType(6)), TimeType(9)),
+      (DayTimeIntervalType(0, 1), readAs(DayTimeIntervalType(0, 1)), DayTimeIntervalType()),
+      (TimestampNTZNanosType(7), readAs(TimestampNTZNanosType(7)), TimestampNTZNanosType(9)),
+      (DateType, readAs(DateType), YearMonthIntervalType())
+    ).foreach { case (columnType, function, keyType) =>
+      val name = s"a $keyType key onto a $columnType column"
+      val cL = AttributeReference("cL", columnType)()
+      val cR = AttributeReference("cR", keyType)()
+      val layout = TransformExpression(function, Seq(cL), Some(4))
+      val left = DummySparkPlan(outputPartitioning =
+        KeyedPartitioning(Seq(layout), (0 until 4).map(InternalRow(_))))
+      val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+      val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
+        AttributeReference("value", IntegerType)() :: Nil, left, right)
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        val keyed = EnsureRequirements.apply(cogroup).collect {
+          case s: ShuffleExchangeExec => s.outputPartitioning
+        }.collect { case k: KeyedPartitioning => k }
+        assert(keyed.size == 1, s"$name: the right side is shuffled onto the bucket layout")
+        val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
+        val stored = BindReferences.bindReference(layout: Expression, Seq(cL))
+        values(keyType).foreach { v =>
+          assert(placed.eval(InternalRow(v)) == stored.eval(InternalRow(v)), s"$name: $v")
+        }
       }
     }
   }
 
   test("SPARK-60027: a cogroup shuffled from a key Spark cannot place fails while planning") {
     // A cogroup that does not coerce its keys, e.g. a Pandas or Arrow cogroup (SPARK-60782), can
-    // have another key of a type the layout's function does not take: a `BIGINT` against a
-    // function declaring `INT`,
-    // or a string of another collation, which master paired wrongly. Or one the function takes but
-    // that is stored otherwise than the layout's column, so the cogroup, which compares the key
-    // rows, would not pair its groups: an `INT` widened to a `BIGINT` column's declared type, which
-    // master failed on in a task, or a `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)`
-    // column, stored as a `long`. Falling back to a hash shuffle would pair the groups wrongly
-    // too, so it fails, while planning, with an error that names the key's type. The storage check
-    // needs no call, so nothing is logged about the transform not being evaluated first.
+    // have another key stored otherwise than the layout's column: a `BIGINT` against a function
+    // declaring `INT`, or a string of another collation, which master paired wrongly, an `INT`
+    // widened to a `BIGINT` column's declared type, which master failed on in a task, or a
+    // `DECIMAL(20,2)`, stored as bytes, against a `DECIMAL(10,2)` column, stored as a `long`. The
+    // cogroup compares the key rows, and falling back to a hash shuffle would pair such groups
+    // wrongly too, so it fails, while planning, with an error that names the key and its type. The
+    // storage check needs no call, so nothing is logged about the transform first. A key stored as
+    // the column is but that the function cannot take even by storage fails too: a nested decimal
+    // of more precision than declared.
     def bucket(valueType: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
       override def resultType(): DataType = IntegerType
@@ -1904,9 +1933,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         true),
       (LongType, IntegerType, "\"BIGINT\"", "\"INT\"", true),
       (DecimalType(10, 2), DecimalType(20, 2), "\"DECIMAL(10,2)\"", "\"DECIMAL(20,2)\"", true),
-      // SPARK-60813: stored as the column is, but a function declaring `TIMESTAMP` would read the
-      // nanoseconds of the day of a `TIME` as microseconds since the epoch.
-      (TimestampType, TimeType(), "\"TIMESTAMP\"", "\"TIME(6)\"", false)
+      (ArrayType(DecimalType(10, 2)), ArrayType(DecimalType(12, 2)),
+        "\"ARRAY<DECIMAL(10,2)>\"", "\"ARRAY<DECIMAL(12,2)>\"", false)
     ).foreach { case (columnType, keyType, declared, key, storedOtherwise) =>
       val cL = AttributeReference("cL", columnType)()
       val cR = AttributeReference("cR", keyType)()

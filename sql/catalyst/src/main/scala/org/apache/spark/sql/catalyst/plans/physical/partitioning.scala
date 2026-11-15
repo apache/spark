@@ -2641,8 +2641,10 @@ case class KeyedShuffleSpec(
       "Required distributions of join legs should be the same size.")
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        // `canCreatePartitioning` admits only a template over bare columns, see there.
-        rebuiltOver(te, clustering(positionSet.head))
+        // `canCreatePartitioning` admits only a template over bare columns, see there. Every key
+        // at the position is stored as the column is, or the check below fails, so it goes to the
+        // function by storage, see `storedKey`.
+        rebuiltOver(te, clustering(positionSet.head)).copy(storedKey = true)
       case (_, positionSet) => clustering(positionSet.head)
     }
     // The child shuffled onto this layout is placed by evaluating what is built here, which would
@@ -2652,13 +2654,15 @@ case class KeyedShuffleSpec(
       s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
     // A join's keys share their types, apart from nullability and field names, so that answers
     // for what is built too. A cogroup that does not coerce its keys, e.g. a Pandas or Arrow
-    // cogroup, need not have them (SPARK-60782). Its other key can be one the layout's function
-    // does not take, e.g. a `BIGINT` against a function declaring `INT`, or a string of another
-    // collation. Or one the function takes, but stored otherwise than
-    // the layout's column, e.g. an `INT` widened to a `BIGINT` column's declared type: every row is
-    // then placed, but the cogroup pairs its groups by comparing the two sides' key rows, so they
-    // do not pair, or the cogroup fails. Falling back to a hash shuffle would pair them wrongly
-    // too. So such a child fails here, while planning, with an error that names the key's type.
+    // cogroup, need not have them (SPARK-60782). Its other key can be stored otherwise than the
+    // layout's column, e.g. an `INT` against a `BIGINT` column, whether the function takes it
+    // through a widening cast or not, or a string of another collation. Its rows would then be
+    // placed by values other than the keyed side's, but the cogroup pairs its groups by comparing
+    // the two sides' key rows, so they do not pair, or the cogroup fails, and falling back to a
+    // hash shuffle would pair them wrongly too. So such a child fails here, while planning, with
+    // an error that names the key and its type. A key stored as the column is goes by storage and
+    // is placed by the keyed side's bytes, see `storedKey`, unless the function cannot take it
+    // even so, e.g. a nested decimal of more precision than declared, which fails here too.
     // This covers transform positions only. An identity position is rebuilt over the other key
     // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
     // before this check, and are left to SPARK-60782.

@@ -759,8 +759,9 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // Nothing casts a transform's arguments, the bucket count included, to its function's
     // `inputTypes()` after analysis, so the call would get the raw values. So the gates require
     // the arguments to suit the input types in number and type: types stored alike go as they
-    // are, and a narrower numeric argument, integral or floating-point, is cast, which gives the
-    // value Java's widening gave a magic `invoke`. Anything else is refused.
+    // are, apart from two datetime or interval types, see the table below, and a narrower numeric
+    // argument, integral or floating-point, is cast, which gives the value Java's widening gave a
+    // magic `invoke`. Anything else is refused.
     def bucketFunction(declared: DataType*): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = declared.toArray
       override def resultType(): DataType = IntegerType
@@ -828,14 +829,9 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // declared `DATE`, as Iceberg's `years` declares, and an `INT`, which a `DATE` is held as. Not
     // a `TIMESTAMP`, as the test catalog's `years` declares, which is held as a `BIGINT`, since
     // its cast takes the session time zone. Nor a `TIMESTAMP_NTZ`, also held as a `BIGINT`.
-    // SPARK-60813 and SPARK-61650: two datetime or interval types can share a physical type and
-    // still be read differently, so one goes as another only where Spark's cast would leave its
-    // value as it is: the same class at no finer a precision or end field. A `TIME` holds
-    // nanoseconds of the day where a `TIMESTAMP` holds microseconds since the epoch, a `YEAR TO
-    // MONTH` interval holds months where a `DATE` holds days, a `DAY TO SECOND` interval a
-    // duration where a `TIMESTAMP` holds an instant, and a `TIMESTAMP_NTZ` a local time, which the
-    // cast converts with the session time zone. A datetime type against the integer it is held as
-    // is taken as it is.
+    // SPARK-60813 and SPARK-61650: two datetime or interval types go as they are only where
+    // `TransformExpression.datetimeCastKeepsValue` says. A datetime type against the integer it
+    // is held as is taken as it is.
     // (the column's type, the function's input type, whether Spark can evaluate the transform)
     Seq(
       (DateType, DateType, true),
@@ -858,7 +854,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       (TimestampNTZNanosType(7), TimestampNTZNanosType(9), true),
       (TimestampNTZNanosType(9), TimestampNTZNanosType(7), false),
       (TimestampLTZNanosType(7), TimestampLTZNanosType(9), true),
-      (TimestampLTZNanosType(9), TimestampNTZNanosType(9), false),
       (TimestampType, LongType, true),
       (YearMonthIntervalType(), IntegerType, true)
     ).foreach { case (columnType, declared, evaluable) =>

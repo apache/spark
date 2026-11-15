@@ -58,18 +58,29 @@ case class TransformFunctionId(canonicalName: String, numBucketsOpt: Option[Int]
  *                    exactly that, and names the other half of the pairing that produced the space,
  *                    which is the only thing that tells two such key spaces apart. See
  *                    `KeyedShuffleSpec.reducersBothWays`, which is the only producer.
+ * @param storedKey whether this transform was rebuilt over a cogroup's key that is stored as the
+ *                  layout's column is (`TransformExpression.keysStoredAlike`), by
+ *                  `KeyedShuffleSpec.createPartitioning`. The cogroup pairs its groups by those
+ *                  bytes, so such a key goes to the function by storage, as the keyed side's
+ *                  column of the same bytes does, even where a datetime value of its type would
+ *                  be read differently (`datetimeCastKeepsValue`). Kept on the expression so that
+ *                  an executor resolves the call as the driver did.
  */
 case class TransformExpression(
     function: BoundFunction,
     children: Seq[Expression],
     numBucketsOpt: Option[Int] = None,
-    reducedWith: Option[TransformFunctionId] = None) extends Expression {
+    reducedWith: Option[TransformFunctionId] = None,
+    storedKey: Boolean = false) extends Expression {
 
   override def nullable: Boolean = true
 
-  /** Drops the trailing `reducedWith` when it is unset, so the ordinary form is unchanged. */
+  /**
+   * Prints `reducedWith` only when it is set, so the ordinary form is unchanged, and never
+   * `storedKey`, so a transform rebuilt over a cogroup's key prints as the layout's does.
+   */
   override protected def stringArgs: Iterator[Any] =
-    if (reducedWith.isEmpty) super.stringArgs.take(productArity - 1) else super.stringArgs
+    Iterator(function, children, numBucketsOpt) ++ Iterator(reducedWith).filter(_.isDefined)
 
   /** The identity of this expression's transform function. */
   lazy val functionId: TransformFunctionId =
@@ -239,7 +250,7 @@ case class TransformExpression(
       val arguments = callArguments
       val declaredTypes = scalarFunc.inputTypes().toSeq
       val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
-        TransformExpression.atDeclaredType(argument, declaredType)
+        TransformExpression.atDeclaredType(argument, declaredType, storedKey)
       }
       if (arguments.length == declaredTypes.length && typed.forall(_.isDefined)) {
         val call = V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten)
@@ -419,9 +430,13 @@ object TransformExpression extends Logging {
    * whose arguments all suit is still refused when the method it invokes cannot take them, see
    * `methodLookupFailure`.
    */
-  private def atDeclaredType(argument: Expression, declaredType: DataType): Option[Expression] =
+  private def atDeclaredType(
+      argument: Expression,
+      declaredType: DataType,
+      datetimeByStorage: Boolean): Option[Expression] =
     (argument.dataType, declaredType) match {
-      case (argumentType, _) if storedAlike(argumentType, declaredType, nested = false) =>
+      case (argumentType, _) if storedAlike(argumentType, declaredType, nested = false,
+          datetimeByStorage = datetimeByStorage) =>
         Some(argument)
       case (argumentType, _) if UpCastRule.legalNumericPrecedence(argumentType, declaredType) =>
         Some(Cast(argument, declaredType))
@@ -453,20 +468,21 @@ object TransformExpression extends Logging {
    * bytes in an unsafe row, and order alike read as either type. A cogroup pairs the groups of its
    * two sides by comparing their key rows, ordered by its left side's key types, so keys of other
    * types pair their groups wrongly, or fail, see `KeyedShuffleSpec.createPartitioning`. As
-   * `storedAlike` for a nested value, apart from decimals: two decimals of one scale are stored
+   * `storedAlike` for a nested value, apart from decimals and from two datetime or interval types.
+   * Two decimals of one scale are stored
    * alike, whatever their precision, when both are stored as a `long`, up to
    * `Decimal.MAX_LONG_DIGITS` digits, or both as bytes. A row, the key itself or a struct field,
    * reads a `long` at a smaller precision than its value has as it is. An array element, or a
    * map's key or value, is read with a check that fails for a value of more digits than that
    * precision, as one stored as bytes is anywhere. So a cogroup over such keys can fail, but never
-   * pairs its groups wrongly. Two datetime or interval types are compared by their storage alone,
-   * i.e. their physical type, e.g. a `TIME` key and a `TIMESTAMP` column, as the hash shuffle
-   * compares them. Nanosecond timestamps with and without a time zone have physical types of their
-   * own, so they are not taken for each other. Whether the layout's function reads such a key is
-   * asked separately, see `datetimeReadAsIs`.
+   * pairs its groups wrongly. Two datetime or interval types are compared by their physical type,
+   * e.g. a `TIME` key and a `TIMESTAMP` column, which the hash shuffle hashes alike. Nanosecond
+   * timestamps with and without a time zone, though stored and hashed alike, have physical types
+   * of their own, so they are not taken for each other. A key taken here goes to the layout's
+   * function by storage too, see `TransformExpression.storedKey`.
    */
   private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean =
-    storedAlike(from, to, nested = true, storageOnly = true)
+    storedAlike(from, to, nested = true, anyNestedPrecision = true, datetimeByStorage = true)
 
   /**
    * Whether a value of type `from` is stored the way one of type `to` is, so that a function
@@ -474,7 +490,7 @@ object TransformExpression extends Logging {
    *  - two types with one physical type, e.g. a `VARCHAR` and a string of the same collation, a
    *    `DATE` and an `INT`, or a `TIMESTAMP` and a `BIGINT`. A user-defined type is stored as its
    *    `sqlType`. A function reads one datetime or interval type as another only as
-   *    `datetimeReadAsIs` says;
+   *    `datetimeCastKeepsValue` says;
    *  - two structs, arrays or maps whose fields, elements, keys and values are stored alike, by
    *    position. Field names and nullability do not change how a value is stored. A function
    *    declaring a non-nullable field gets the values a nullable one holds;
@@ -485,44 +501,48 @@ object TransformExpression extends Logging {
    *    decimal is read at the declared precision: it is stored as a `long` up to
    *    `Decimal.MAX_LONG_DIGITS` digits and as bytes above, so there `to` needs no less precision,
    *    and both on one side of that.
-   * With `storageOnly`, as `keysStoredAlike` asks, by storage alone: a nested decimal of any
-   * precision on one side of that, and two datetime or interval types stored alike whatever they
-   * hold, e.g. a `TIME` and a `TIMESTAMP`.
+   * With `anyNestedPrecision`, a nested decimal of any precision on one side of that. With
+   * `datetimeByStorage`, two datetime or interval types by their physical type alone, whatever
+   * they hold, e.g. a `TIME` and a `TIMESTAMP`. `keysStoredAlike` asks both; a transform rebuilt
+   * over a cogroup's key stored alike (`storedKey`) asks only the latter, so that a nested decimal
+   * of more precision than declared still fails while planning.
    */
   private def storedAlike(
       from: DataType,
       to: DataType,
       nested: Boolean,
-      storageOnly: Boolean = false): Boolean =
+      anyNestedPrecision: Boolean = false,
+      datetimeByStorage: Boolean = false): Boolean = {
+    def alike(f: DataType, t: DataType, nested: Boolean): Boolean =
+      storedAlike(f, t, nested, anyNestedPrecision, datetimeByStorage)
     (from, to) match {
       case _ if from == to => true
-      case (udt: UserDefinedType[_], _) => storedAlike(udt.sqlType, to, nested, storageOnly)
-      case (_, udt: UserDefinedType[_]) => storedAlike(from, udt.sqlType, nested, storageOnly)
+      case (udt: UserDefinedType[_], _) => alike(udt.sqlType, to, nested)
+      case (_, udt: UserDefinedType[_]) => alike(from, udt.sqlType, nested)
       case (f: StructType, t: StructType) =>
         f.length == t.length && f.fields.zip(t.fields).forall { case (ff, tf) =>
-          storedAlike(ff.dataType, tf.dataType, nested = true, storageOnly)
+          alike(ff.dataType, tf.dataType, nested = true)
         }
-      case (f: ArrayType, t: ArrayType) =>
-        storedAlike(f.elementType, t.elementType, nested = true, storageOnly)
+      case (f: ArrayType, t: ArrayType) => alike(f.elementType, t.elementType, nested = true)
       case (f: MapType, t: MapType) =>
-        storedAlike(f.keyType, t.keyType, nested = true, storageOnly) &&
-          storedAlike(f.valueType, t.valueType, nested = true, storageOnly)
+        alike(f.keyType, t.keyType, nested = true) && alike(f.valueType, t.valueType, nested = true)
       case (f: DecimalType, t: DecimalType) =>
-        f.scale == t.scale && (!nested || ((storageOnly || f.precision <= t.precision) &&
+        f.scale == t.scale && (!nested || ((anyNestedPrecision || f.precision <= t.precision) &&
           DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t)))
       case (_: DatetimeType | _: AnsiIntervalType, _: DatetimeType | _: AnsiIntervalType)
-          if !storageOnly && !datetimeReadAsIs(from, to) => false
+          if !datetimeByStorage && !datetimeCastKeepsValue(from, to) => false
       case _ =>
         val physical = PhysicalDataType(from)
         physical != UninitializedPhysicalType && physical == PhysicalDataType(to)
     }
+  }
 
   /**
-   * Whether a function declaring the datetime or interval type `to` reads a value of the datetime
-   * or interval type `from` as it is: where Spark's cast to `to` would leave the value unchanged,
-   * so that the function gets one value however it reaches it, as it is or cast by the write path,
-   * whose implicit cast depends on `spark.sql.ansi.enabled`. That is a value of the same type, or
-   * of the same class at no finer a precision or end field, e.g. a `TIME(3)` against a `TIME(6)`,
+   * Whether Spark's cast from the datetime or interval type `from` to another one, `to`, leaves
+   * every value unchanged, which `storedAlike` asks besides one physical type, so that a function
+   * declaring `to` gets one value however it reaches it, as it is or cast by the write path, whose
+   * implicit cast depends on `spark.sql.ansi.enabled`. That holds for a type of the same class at
+   * no finer a precision or end field, e.g. a `TIME(3)` against a `TIME(6)`,
    * or a `DAY TO HOUR` interval against a `DAY TO SECOND` one. A timestamp goes by its family,
    * local or not, and its fractional precision (`TimestampFamily`), e.g. a `TIMESTAMP_NTZ(7)`
    * against a `TIMESTAMP_NTZ(9)`. Not one of a finer precision or end field, which the cast
@@ -532,12 +552,12 @@ object TransformExpression extends Logging {
    * duration where a `TIMESTAMP` holds an instant, and a `TIMESTAMP_NTZ` holds a local time where
    * a `TIMESTAMP` holds an instant, which the cast converts with the session time zone. Where the
    * write path passes such a value as it is, e.g. an interval, which it never casts, refusing it
-   * costs only the storage-partitioned plan.
+   * costs a join only its storage-partitioned plan. A cogroup's key stored as the layout's column
+   * is goes to the function by storage, see `storedKey`.
    */
-  private def datetimeReadAsIs(from: DataType, to: DataType): Boolean =
+  private def datetimeCastKeepsValue(from: DataType, to: DataType): Boolean =
     (TimestampFamily.fractionalPrecision(from), TimestampFamily.fractionalPrecision(to)) match {
       case (Some(f), Some(t)) => TimestampFamily.isLtz(from) == TimestampFamily.isLtz(to) && f <= t
-      case (Some(_), None) | (None, Some(_)) => false
       case _ => (from, to) match {
         case (f: TimeType, t: TimeType) => f.precision <= t.precision
         case (f: DayTimeIntervalType, t: DayTimeIntervalType) => f.endField <= t.endField
