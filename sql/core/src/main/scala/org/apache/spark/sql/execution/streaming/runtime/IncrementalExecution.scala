@@ -29,9 +29,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.{EventTimeCopies, StreamingJoinHelper, WidenStatefulOperatorAttributeNullability}
+import org.apache.spark.sql.catalyst.analysis.{LegacyEventTimeKeys, StreamingJoinHelper, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, SessionWindow, TimeWindow}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -171,12 +170,14 @@ class IncrementalExecution(
   private val allowMultipleStatefulOperators: Boolean =
     sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-  // The analysis check reads the same pairs from the same analyzed plan.
-  private lazy val eventTimeCopies: EventTimeCopies =
+  // The analysis check computes the same keys from the plan it checks. Both read the operators
+  // of the query, which every batch's analyzed plan keeps; a batch only puts each source's data
+  // in place of the source. The walk needs no state from analysis, such as tags.
+  private lazy val legacyKeys: Option[LegacyEventTimeKeys] =
     if (allowMultipleStatefulOperators) {
-      EventTimeCopies.empty
+      None
     } else {
-      StreamingJoinHelper.findEventTimeCopies(analyzed)
+      Some(StreamingJoinHelper.findLegacyEventTimeKeys(analyzed))
     }
 
   /**
@@ -654,8 +655,7 @@ class IncrementalExecution(
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
               iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators,
-              eventTimeCopies),
-          eventTimeCopies = eventTimeCopies
+              legacyKeys)
         )
     }
   }
@@ -795,6 +795,11 @@ class IncrementalExecution(
      * the aggregation would never emit a result. Only an aggregation that the tracer of
      * [[joinWatermarkConsumers]] reaches fails; with the finalization check disabled, it is only
      * logged.
+     *
+     * TODO(SPARK-61509): Also reject the other operators that stall behind the held output
+     * watermark: a later outer join, event-time timeouts in `flatMapGroupsWithState` and
+     * `transformWithState`, and an aggregation behind a later join. They run today and keep that
+     * input's rows in state without emitting results that wait for the watermark.
      */
     private def checkJoinOutputWatermarkConsumers(plan: SparkPlan): Unit = {
       val joins = plan.collect {
@@ -824,20 +829,18 @@ class IncrementalExecution(
           val join = joins(joinOperatorId)
           val (other, otherOutput) =
             if (side == LeftSide) ("right", join.right.output) else ("left", join.left.output)
-          val constraint = s"a time constraint that limits how late a matching $other row can " +
-            "arrive"
-          val requirement =
+          val subClass =
             if (otherOutput.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
-              constraint
+              "TIME_CONSTRAINT"
             } else {
-              s"a watermark on the $other input and $constraint"
+              "WATERMARK_AND_TIME_CONSTRAINT"
             }
           val error = new AnalysisException(
-            errorClass = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME",
+            errorClass = s"STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME.$subClass",
             messageParameters = Map(
               "eventTime" -> eventTime.name,
               "side" -> side.toString,
-              "requirement" -> requirement,
+              "otherSide" -> other,
               "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
           if (conf.getConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED)) {
             throw error
@@ -846,54 +849,6 @@ class IncrementalExecution(
           }
         case _ =>
       }
-    }
-
-    /**
-     * In legacy mode the analysis check accepts an equality key that copies, or is a time window
-     * over, the late-filtered column of its input in the analyzed plan. The planned input can
-     * filter late rows by another column, for example when the optimizer prunes that one. Then
-     * the key no longer bounds the other input's state, and an outer or left semi join would
-     * never finalize the rows it kept. Fail before state is opened, or only warn when the
-     * finalization check is disabled.
-     */
-    private def checkEventTimeCopyKeysPlanned(plan: SparkPlan): Unit = plan.foreach {
-      case j: StreamingSymmetricHashJoinExec =>
-        val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-          j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-          Some(1000000L), None, useFirstEventTimeColumn = true, eventTimeCopies)
-        // Each finalized input, with the other input whose key bounds it.
-        val finalized = j.joinType match {
-          case LeftOuter | LeftSemi => Seq((LeftSide, predicates.left, j.right, j.rightKeys))
-          case RightOuter => Seq((RightSide, predicates.right, j.left, j.leftKeys))
-          case FullOuter => Seq((LeftSide, predicates.left, j.right, j.rightKeys),
-            (RightSide, predicates.right, j.left, j.leftKeys))
-          case _ => Nil
-        }
-        finalized.foreach {
-          case (side, None, boundingInput, boundingKeys) =>
-            boundingKeys.collectFirst {
-              case key: Attribute if eventTimeCopies.keys.contains(key.exprId) => key
-            }.foreach { key =>
-              val lateFiltered = boundingInput.output.find(
-                _.metadata.contains(EventTimeWatermark.delayKey)).map(_.name).getOrElse("none")
-              val error = new AnalysisException(
-                errorClass = "STREAMING_JOIN_EVENT_TIME_KEY_NOT_PLANNED",
-                messageParameters = Map(
-                  "joinType" -> j.joinType.toString,
-                  "side" -> side.toString,
-                  "otherSide" -> (if (side == LeftSide) RightSide else LeftSide).toString,
-                  "key" -> key.name,
-                  "lateFilteredColumn" -> lateFiltered,
-                  "config" -> SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key))
-              if (conf.getConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED)) {
-                throw error
-              } else {
-                logWarning(log"${MDC(ERROR, error.getMessage)}")
-              }
-            }
-          case _ =>
-        }
-      case _ =>
     }
 
     private lazy val composedRule: PartialFunction[SparkPlan, SparkPlan] = {
@@ -1045,9 +1000,6 @@ class IncrementalExecution(
       // With a single global watermark, the join's output watermark does not reach the consumers.
       if (isFirstBatch && allowMultipleStatefulOperators) {
         checkJoinOutputWatermarkConsumers(planWithStateOpId)
-      }
-      if (isFirstBatch && eventTimeCopies.pairs.nonEmpty) {
-        checkEventTimeCopyKeysPlanned(planWithStateOpId)
       }
       // Need to check before write to metadata because we need to detect add operator
       // Only check when streaming is restarting and is first batch

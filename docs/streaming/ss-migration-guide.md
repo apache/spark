@@ -79,18 +79,24 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   deduplication still emit rows. Add a watermark on the other input to bound those rows.
 
 - With `spark.sql.streaming.statefulOperator.allowMultiple` set to `false`, an input of a
-  stream-stream join can keep its event time together with a copy of it or a time window over
-  it, all watermarked, and late rows are filtered by whichever of them comes first. Since Spark
-  4.4, an equality key on a watermarked column that comes after the first one bounds the other
-  input's state only when Spark can see that the input builds it from the first one: as a copy,
-  or as a tumbling or sliding window over it, through projections, filters and unions whose
-  inputs all build it that way. So an input built with `withColumn("window", window($"ts", ...))`
-  is still bounded by its window. Earlier versions also used such a key when it was built in any
-  other way, for example as a window over a different column, which could remove rows that could
-  still match. Outer and left semi joins on such a key, including a session window, now fail,
-  and inner joins keep the other input's rows for the life of the query. To bound state by such a
-  key, select it before the other watermarked columns of its input. Checkpoints of these inputs
-  from earlier versions are rejected at restart, as described below.
+  stream-stream join can keep several watermarked columns, such as its event time together with a
+  copy of it or a time window over it, and late rows are filtered by whichever of them comes
+  first. As in earlier versions, an equality key on any watermarked column of an input bounds the
+  other input's state, so an input built with `withColumn("window", window($"ts", ...))` is still
+  bounded by its window. Since Spark 4.4, such a key no longer bounds state when Spark can see
+  that some rows of the input hold the key below a watermarked column before it: when the key is
+  built from a time shifted backward, when it copies a column that an earlier watermarked window
+  is built over, or when an input of a union builds it from another column. Earlier versions
+  removed rows that could still match in these cases. A copy placed after a window needs this
+  because the query filters late rows by the first watermarked column of the planned input, and
+  whether the copied column survives column pruning, which analysis cannot see, decides whether
+  that is the copy's source or the window. If the optimizer prunes the column, rows are filtered
+  by the window, and evicting by the copy drops rows that can still match. Outer and left semi
+  joins on such a key now fail, and inner joins keep the other input's rows for the life of the
+  query. To bound state, join on the first watermarked column itself or on a time window over it,
+  or select the key before the other watermarked columns of its input. Checkpoints from earlier
+  versions of joins on a watermarked column after the first one are rejected at restart, as
+  described below.
 
 - Spark 4.4 holds back the output watermark of a stream-stream join when retained state can
   still emit old event times. Downstream stateful operators may retain more state, take longer
