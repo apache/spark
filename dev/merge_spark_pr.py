@@ -836,10 +836,31 @@ def merge_commit_candidates(pr_events):
     >>> merge_commit_candidates([{"event": "referenced", "commit_id": "c", "created_at": "t2"},
     ...                          {"event": "referenced", "commit_id": "b", "created_at": "t1"}])
     ([], ['b', 'c'])
+
+    Fork references retain the original footer but are not Apache merges:
+
+    >>> merge_commit_candidates([
+    ...     {"event": "referenced", "commit_id": "fork", "created_at": "t3",
+    ...      "commit_url": "https://api.github.com/repos/me/spark/commits/fork"},
+    ...     {"event": "referenced", "commit_id": "apache", "created_at": "t2",
+    ...      "commit_url": GITHUB_API_BASE + "/commits/apache"},
+    ...     {"event": "closed", "commit_id": "closed", "created_at": "t1"},
+    ... ])
+    (['closed'], ['apache'])
     """
 
     def commits_of(event_name):
-        matched = [e for e in pr_events if e["event"] == event_name and e["commit_id"] is not None]
+        matched = [
+            e
+            for e in pr_events
+            if e["event"] == event_name
+            and e["commit_id"] is not None
+            and (
+                event_name != "referenced"
+                or not e.get("commit_url")
+                or e["commit_url"].startswith(GITHUB_API_BASE + "/commits/")
+            )
+        ]
         return [e["commit_id"] for e in sorted(matched, key=lambda x: x["created_at"])]
 
     return commits_of("closed"), commits_of("referenced")
@@ -1211,6 +1232,10 @@ class DryRunGit(Git):
 git = Git()
 
 
+class _PreserveLocalState(SystemExit):
+    """Exit without retrying cleanup over local edits after a refused checkout."""
+
+
 class SkipCherryPick(Exception):
     """Signals that the committer skipped this branch: declined a conflict or a pre-push check,
     or answered [s] at the landing prompt.
@@ -1284,7 +1309,6 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
     ...     patch("builtins.input", side_effect=["", "a"]),
     ...     patch.object(git, "run", side_effect=[refused, refused]),
     ...     patch.dict(continue_maybe.__globals__, original_head="master"),
-    ...     patch.object(sys.modules[__name__], "clean_up"),
     ...     redirect_stdout(StringIO()),
     ... ):
     ...     try:
@@ -1350,7 +1374,8 @@ def _restore_original_head():
             # git already printed why it refused.
             prompt = "Stash or discard those changes elsewhere, then Enter to retry, or [a]bort: "
             if get_input(prompt, ["", "a"]) == "a":
-                fail("Okay, exiting")
+                print_error("Okay, exiting; local edits and temporary branches are preserved.")
+                raise _PreserveLocalState(-1)
 
 
 def clean_up():
@@ -1872,7 +1897,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     ...     ask = Mock()
     ...     with (
     ...         patch.object(git, "run", side_effect=git_run) as run,
-    ...         patch.object(git, "push"),
+    ...         patch.object(git, "push") as push,
     ...         patch.multiple(sys.modules[__name__], continue_maybe=ask, clean_up=Mock()),
     ...         patch("builtins.input", side_effect=AssertionError("no author prompt")),
     ...         redirect_stdout(StringIO()),
@@ -1881,6 +1906,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     ...         fixups = ["F <f@e.org>", "B <b@e.org>"]
     ...         merge_pr(9, "branch-4.2", "[SPARK-1][4.2][SQL] Fix", body,
     ...                  "me/backport-pr7-branch-4.2", "O <o@e.org>", fixups)
+    ...     push.assert_called_once_with(
+    ...         PUSH_REMOTE_NAME, "PR_TOOL_MERGE_PR_9_BRANCH-4.2", "branch-4.2")
     ...     commit = [c.args[0] for c in run.call_args_list if c.args[0][:2] == ["git", "commit"]]
     ...     prompts = [c.args[0].split(",")[0] for c in ask.call_args_list]
     ...     asked = [p for p in prompts if "Backport-of" in p]
@@ -1916,6 +1943,19 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     >>> lead = quoted + pick.replace("Authored-by: A", "Lead-authored-by: L")
     >>> merge(lead, lead)[0]
     '--author="L <a@e.org>"'
+
+    A fixup author mentioned in prose or a sign-off still gets authorship credit:
+
+    >>> signed = "Discuss F <f@e.org>.\\n\\n" + pick + "\\nSigned-off-by: F <f@e.org>"
+    >>> merge(signed, signed)[1].count("Co-authored-by: F <f@e.org>")
+    1
+    >>> credited = pick + "\\nCo-authored-by: F <f@e.org>"
+    >>> merge(credited, credited)[1].count("Co-authored-by: F <f@e.org>")
+    1
+    >>> quoted_fixup = "Co-authored-by: F <f@e.org>\\n\\n" + pick
+    >>> merge(quoted_fixup, quoted_fixup)[1].rsplit("\\n\\n", 1)[-1].count(
+    ...     "Co-authored-by: F <f@e.org>")
+    1
     """
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
@@ -1972,14 +2012,18 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         # and ours join the original's.
         if had_conflicts:
             merge_message_flags += ["-m", conflicts]
-        # Credit others who pushed fixups to the backport PR; main() leaves out its author,
-        # usually the committer who opened it. Match on the "<email>": the pick's own commit
-        # is the original author's, maybe under another display name.
+        # Deduplicate original authors by email; sign-offs do not credit fixup authors.
+        credited = re.findall(
+            r"^(?:Lead-authored-by|Authored-by|Co-authored-by): (.+)$",
+            backport[1].rsplit("\n\n", 1)[-1],
+            re.MULTILINE,
+        )
+        credited_emails = {"<" + a.split("<")[-1] for a in credited}
         trailers = [backport_pr_trailer(pr_num)]
         trailers += [
             "Co-authored-by: %s" % a
             for a in co_authors
-            if "<" + a.split("<")[-1] not in backport[1]
+            if "<" + a.split("<")[-1] not in credited_emails
         ]
         merge_message_flags += ["-m", "\n".join([backport[1]] + trailers + [signoff])]
     else:
@@ -2470,8 +2514,8 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     >>> land(["p", "s"], via_fork=[None])
     ('skipped', [])
     >>> result, pushes = land(["d"])
-    >>> result, [c.args[2] for c in pushes]
-    (('branch-4.2', 'head'), ['branch-4.2'])
+    >>> result, pushes == [call(PUSH_REMOTE_NAME, "PR_TOOL_PICK_PR_1_BRANCH-4.2", "branch-4.2")]
+    (('branch-4.2', 'head'), True)
     >>> land(["d", "s"], push_error=OSError("rejected"))[0]
     'skipped'
 
@@ -5004,13 +5048,13 @@ def main():
         pr_author_email = "%s+%s@users.noreply.github.com" % (pr_author_info["id"], user_login)
     pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
 
-    # Collect co-authors: commit authors whose GitHub login differs from the PR author.
-    # This deduplicates the PR author (who may use multiple emails across commits) by login.
+    # A backport opener may author fixups; credit them alongside the original authors.
+    backport = _backport_of(body, base_ref, target_ref)
     co_authors = []
     seen = set()
     for c in pr_commits:
         gh_author = c.get("author")
-        if gh_author and gh_author.get("login") == user_login:
+        if not backport and gh_author and gh_author.get("login") == user_login:
             continue
         raw = "%s <%s>" % (c["commit"]["author"]["name"], c["commit"]["author"]["email"])
         if raw not in seen:
@@ -5031,7 +5075,6 @@ def main():
 
     # target_ref, the merge sink, is never to be re-picked. A merged backport PR also inherits
     # the original's branches, so [p] does not force-push over its other open backport PRs.
-    backport = _backport_of(body, base_ref, target_ref)
     if backport:
         picks = _seed_picks(backport[0], target_ref, branch_names)
     else:
@@ -5076,6 +5119,35 @@ def main():
 
 
 __test__ = {
+    "abort_entrypoint": """
+    Aborting a refused checkout bypasses the CLI cleanup; ordinary exits still clean up.
+
+    >>> import ast, doctest
+    >>> from pathlib import Path
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, patch
+    >>> entrypoint = ast.parse(Path(__file__).read_text()).body[-1]
+    >>> code = compile(ast.Module(body=[entrypoint], type_ignores=[]), __file__, "exec")
+    >>> refused = subprocess.CalledProcessError(1, "git checkout")
+    >>> def ordinary_exit():
+    ...     raise SystemExit(-1)
+    >>> for entry, expected in ((_restore_original_head, 0), (ordinary_exit, 1)):
+    ...     clean = Mock()
+    ...     namespace = dict(globals(), __name__="__main__", main=entry, clean_up=clean)
+    ...     with (
+    ...         patch.object(doctest, "testmod", return_value=(0, 0)),
+    ...         patch.dict(_restore_original_head.__globals__, original_head="master"),
+    ...         patch.object(git, "run", side_effect=refused) as run,
+    ...         patch("builtins.input", side_effect=["a"]), redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             exec(code, namespace)
+    ...         except SystemExit as e:
+    ...             assert e.code == -1
+    ...     assert clean.call_count == expected
+    ...     assert run.call_count == (1 if entry is _restore_original_head else 0)
+    """,
     "revert_jira_issue": """
     A revert removes the versions for its branches while preserving released, archived,
     and unrelated versions. JIRA receives individual removals so concurrent additions survive.
@@ -5639,6 +5711,10 @@ __test__ = {
     ...             return [{"name": b} for b in names]
     ...         if url.endswith("/pulls/1"):
     ...             return pr
+    ...         if url.endswith("/pulls/1/commits"):
+    ...             return [{"author": {"login": login}, "commit": {"author": {
+    ...                 "name": name, "email": email}}} for login, name, email in
+    ...                 (("x", "X", "x@x"), ("f", "F", "f@f"))]
     ...         if url.endswith("/users/x"):
     ...             return {"name": "X", "email": "x@x", "id": 1}
     ...         return []
@@ -5650,7 +5726,7 @@ __test__ = {
     ...         picked.append((already_picked, sorted(pending)))
     ...         return [("branch-4.x", "https://x/pull/10")]
     ...     default = Mock(return_value="branch-4.x")
-    ...     update = Mock()
+    ...     update, merge = Mock(), Mock(return_value="abc")
     ...     found = (None, None) if message is None else ("abc", message)
     ...     with (
     ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
@@ -5661,7 +5737,7 @@ __test__ = {
     ...                    find_merge_commit=Mock(return_value=found),
     ...                    git=Mock(), github=Mock(), check_linked_jira_issues=Mock(),
     ...                    continue_maybe=Mock(), get_input=ask,
-    ...                    merge_pr=Mock(return_value="abc"), post_merge_comment=Mock(),
+    ...                    merge_pr=merge, post_merge_comment=Mock(),
     ...                    prompt_for_components=Mock(return_value=["SQL"]),
     ...                    branches_with_merge_footer=lambda pr, names: ["branch-4.2"]
     ...                    if pr == 7 else [],
@@ -5675,6 +5751,9 @@ __test__ = {
     ...             main()
     ...         except SystemExit:
     ...             pass
+    ...     if message is None:
+    ...         authors = ["X <x@x>", "F <f@f>"] if head.startswith("backport-pr") else ["F <f@f>"]
+    ...         assert merge.call_args.args[-1] == authors
     ...     return sorted(default.call_args_list[0].args[1]), picked[0], update.call_args.args[2]
 
     A merge seeds only the merged branch; the pick that comes back pending is not landed:
@@ -6064,6 +6143,8 @@ if __name__ == "__main__":
         sys.exit(-1)
     try:
         main()
+    except _PreserveLocalState:
+        raise
     except BaseException:
         clean_up()
         raise
