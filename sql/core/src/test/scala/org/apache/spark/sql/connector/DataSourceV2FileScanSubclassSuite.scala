@@ -42,6 +42,7 @@ import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The built-in formats opt in to runtime partition pruning through
@@ -49,6 +50,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * neither handed Catalyst runtime filters nor rejected for implementing another runtime-filtering
  * interface.
  */
+@DataSourceV2Test
 class DataSourceV2FileScanSubclassSuite extends QueryTest with SharedSparkSession {
 
   private val plain = "SELECT id, part FROM fact"

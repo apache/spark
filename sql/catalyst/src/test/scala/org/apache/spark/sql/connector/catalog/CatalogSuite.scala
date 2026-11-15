@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, GeneralScalarExpression, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.write.LogicalWriteInfoImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -128,6 +129,71 @@ class CatalogSuite extends SparkFunSuite {
     val snapshot = catalog.loadTable(testIdent, "snapshot")
     assert(snapshot.properties() === util.Map.of("persisted", "stored"))
     assert(snapshot.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+  }
+
+  // Columns that hold what a StructField does not: an identity column spec, the connector
+  // expressions of a generation expression and of a default value, and a connector class that
+  // implements only the legacy getter of the generation expression.
+  private def columnsBeyondStructFields(): Array[Column] = {
+    val legacyGeneratedColumn = new Column {
+      override def name(): String = "legacy"
+      override def dataType(): DataType = LongType
+      override def nullable(): Boolean = true
+      override def comment(): String = null
+      override def defaultValue(): ColumnDefaultValue = null
+      override def generationExpression(): String = "id * 2"
+      override def identityColumnSpec(): IdentityColumnSpec = null
+      override def metadataInJSON(): String = null
+    }
+    val plusOne = new GeneralScalarExpression(
+      "+", Array(Expressions.column("id"), Expressions.literal(1L)))
+    Array(
+      Column.builderFor("id", LongType)
+        .identityColumnSpec(new IdentityColumnSpec(1, 1, false)).build(),
+      Column.builderFor("gen", LongType)
+        .generationExpression(new GenerationExpression("id + 1", plusOne)).build(),
+      Column.builderFor("def", IntegerType)
+        .defaultValue(new ColumnDefaultValue(
+          "42", Expressions.literal(42), Expressions.literal(42))).build(),
+      legacyGeneratedColumn)
+  }
+
+  gridTest("SPARK-61659: columns survive creation and alterations that do not change them")(Seq(
+      "InMemoryTableCatalog",
+      "InMemoryRowLevelOperationTableCatalog",
+      "PartialSchemaEvolutionCatalog")) { catalogName =>
+    val catalog = catalogName match {
+      case "InMemoryTableCatalog" => new InMemoryTableCatalog
+      case "InMemoryRowLevelOperationTableCatalog" => new InMemoryRowLevelOperationTableCatalog
+      case "PartialSchemaEvolutionCatalog" => new PartialSchemaEvolutionCatalog
+    }
+    catalog.initialize("test", CaseInsensitiveStringMap.empty())
+    val keptColumns = columnsBeyondStructFields()
+    catalog.createTable(testIdent, new TableInfo.Builder().withColumns(keptColumns).build())
+    catalog.alterTable(testIdent, TableChange.addColumn(Array("added"), IntegerType))
+    assert(catalog.loadTable(testIdent).columns().take(keptColumns.length) === keptColumns)
+  }
+
+  test("SPARK-61659: columns survive transactional alterations that do not change them") {
+    val catalog = new InMemoryRowLevelOperationTableCatalog
+    catalog.initialize("test", CaseInsensitiveStringMap.empty())
+    val keptColumns = columnsBeyondStructFields()
+    catalog.createTable(testIdent, new TableInfo.Builder().withColumns(keptColumns).build())
+    val txnCatalog = new TxnTableCatalog(catalog)
+    txnCatalog.loadTable(testIdent)
+    txnCatalog.alterTable(testIdent, TableChange.addColumn(Array("added"), IntegerType))
+    assert(txnCatalog.loadTable(testIdent).columns().take(keptColumns.length) === keptColumns)
+  }
+
+  test("SPARK-61682: columns survive writes that append other columns") {
+    val catalog = newCatalog()
+    val keptColumns = columnsBeyondStructFields()
+    catalog.createTable(testIdent, new TableInfo.Builder().withColumns(keptColumns).build())
+    val schema = CatalogV2Util.v2ColumnsToStructType(keptColumns).add("written", StringType)
+    val info = LogicalWriteInfoImpl("query", schema, CaseInsensitiveStringMap.empty())
+    val table = catalog.liveTable(testIdent).asInstanceOf[SupportsWrite]
+    table.newWriteBuilder(info).build().toBatch
+    assert(catalog.loadTable(testIdent).columns().take(keptColumns.length) === keptColumns)
   }
 
   test("listTables") {

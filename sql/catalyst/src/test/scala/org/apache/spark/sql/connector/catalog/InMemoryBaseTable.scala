@@ -1067,11 +1067,16 @@ abstract class InMemoryBaseTable(
 
       override def toBatch: BatchWrite = {
         val newSchema = info.schema()
+        val oldColumns = columns()
         val mergedSchema = mergeSchema(
-          oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
+          oldType = CatalogV2Util.v2ColumnsToStructType(oldColumns),
           newType = newSchema)
-        tableColumns = InMemoryBaseTable.assignMissingIds(
-          CatalogV2Util.structTypeToV2Columns(mergedSchema))
+        // Keep the existing columns as they are and convert only the appended fields: converting
+        // a column to a StructField and back loses what a StructField does not hold, such as a
+        // connector expression or an identity column spec.
+        val newColumns = CatalogV2Util.structTypeToV2Columns(
+          StructType(mergedSchema.fields.drop(oldColumns.length)))
+        tableColumns = oldColumns ++ InMemoryBaseTable.assignMissingIds(newColumns)
         writer
       }
 
