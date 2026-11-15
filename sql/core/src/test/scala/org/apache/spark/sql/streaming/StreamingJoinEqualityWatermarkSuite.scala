@@ -403,7 +403,10 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
         logAppender.loggingEvents.count(_.getMessage.getFormattedMessage.contains(
           "Final expression to evaluate constraint"))
       }
-      assert(solverLogLines(numPartitions = 1) === solverLogLines(numPartitions = 5))
+      // Both counts are 0 if the solver's log line changes, which would hide a per-task derivation.
+      val singlePartitionLines = solverLogLines(numPartitions = 1)
+      assert(singlePartitionLines > 0)
+      assert(singlePartitionLines === solverLogLines(numPartitions = 5))
     }
   }
 }

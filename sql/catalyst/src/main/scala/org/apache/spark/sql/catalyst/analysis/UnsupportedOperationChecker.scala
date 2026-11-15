@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, TimeWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -195,13 +195,13 @@ object UnsupportedOperationChecker extends Logging {
         "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
     }
 
-    // Execution reads the same pairs from the same analyzed plan; see
-    // StreamingJoinHelper.findEventTimeCopies.
-    lazy val eventTimeCopies =
+    // Execution computes the same keys from its own analyzed plan; see
+    // StreamingJoinHelper.findLegacyEventTimeKeys.
+    lazy val legacyKeys =
       if (SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
-        EventTimeCopies.empty
+        None
       } else {
-        StreamingJoinHelper.findEventTimeCopies(plan)
+        Some(StreamingJoinHelper.findLegacyEventTimeKeys(plan))
       }
 
     /** Collect all the streaming aggregates in a sub plan */
@@ -535,7 +535,7 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("FullOuter joins with streaming DataFrames/Datasets on the right " +
                   "and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                checkForStreamStreamJoinWatermark(j, eventTimeCopies)
+                checkForStreamStreamJoinWatermark(j, legacyKeys)
               }
 
             case LeftAnti =>
@@ -551,7 +551,7 @@ object UnsupportedOperationChecker extends Logging {
                 throwError(s"$joinType join with a streaming DataFrame/Dataset " +
                   "on the right and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                checkForStreamStreamJoinWatermark(j, eventTimeCopies)
+                checkForStreamStreamJoinWatermark(j, legacyKeys)
               }
 
             // We support streaming right outer joins with static on the left always, and with
@@ -561,7 +561,7 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("RightOuter join with a streaming DataFrame/Dataset on the left and " +
                     "a static DataFrame/DataSet on the right not supported")
               } else if (left.isStreaming && right.isStreaming) {
-                checkForStreamStreamJoinWatermark(j, eventTimeCopies)
+                checkForStreamStreamJoinWatermark(j, legacyKeys)
               }
 
             case NaturalJoin(_) | UsingJoin(_, _) =>
@@ -717,7 +717,7 @@ object UnsupportedOperationChecker extends Logging {
 
   private def checkForStreamStreamJoinWatermark(
       join: Join,
-      eventTimeCopies: EventTimeCopies): Unit = {
+      legacyKeys: Option[LegacyEventTimeKeys]): Unit = {
     val keys = ExtractEquiJoinKeys.unapply(join)
     val leftKeys = keys.map(_._2).getOrElse(Nil)
     val rightKeys = keys.map(_._3).getOrElse(Nil)
@@ -731,7 +731,7 @@ object UnsupportedOperationChecker extends Logging {
         exactForUnwatermarkedColumns: Boolean = true): Boolean = {
       val eventTime = otherInput.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
       StreamingJoinHelper.getStateKeyWatermarkOrdinal(
-        otherKeys, otherInput.output, eventTimeCopies).isDefined ||
+        otherKeys, otherInput.output, legacyKeys).isDefined ||
         StreamingJoinHelper.getStateValueWatermark(stateInput.outputSet,
           AttributeSet(eventTime.toSeq), join.condition, Some(1000000),
           exactForUnwatermarkedColumns).isDefined
@@ -770,8 +770,12 @@ object UnsupportedOperationChecker extends Logging {
         case RightOuter => "a watermark on the left input and a time constraint"
         case _ => "a watermark on the right input and a time constraint"
       }
-      // The join holds back its output watermark for an input whose state is unbounded.
+      val allowMultiple = SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+      // The join holds back its output watermark for an input whose state is unbounded. Legacy
+      // mode gives every operator the one global watermark and ignores the join's output
+      // watermark, so a later operator neither fails at start nor stalls there.
       val downstreamRequirement = join.joinType match {
+        case _ if !allowMultiple => None
         case LeftOuter => Some(("right", "left"))
         case RightOuter => Some(("left", "right"))
         case _ => None
@@ -787,32 +791,35 @@ object UnsupportedOperationChecker extends Logging {
             "operators keep that input's rows in state and do not emit results that wait for " +
             "the watermark."
         }.getOrElse("")
-      // In legacy mode an input can keep its event time and a window, both watermarked. Late
-      // rows are filtered by the first of them, so a window after it bounds state only when the
-      // input builds it from that column.
-      val legacyWindowNote = if (SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
+      // In legacy mode an input can keep several watermarked columns and filters late rows by
+      // the first of them. A later watermarked key bounds state unless the plan shows that some
+      // rows hold it below a watermarked column before it.
+      val legacyKeyNote = if (allowMultiple) {
         ""
       } else {
-        def windowNote(input: LogicalPlan, inputKeys: Seq[Expression], side: String): String = {
+        def keyNote(input: LogicalPlan, inputKeys: Seq[Expression], side: String): String = {
           val eventTime = input.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
-          val windowKey = inputKeys.collectFirst {
-            case a: Attribute if (a.metadata.contains(TimeWindow.marker) ||
-                a.metadata.contains(SessionWindow.marker)) &&
-                a.metadata.contains(EventTimeWatermark.delayKey) &&
-                !eventTime.exists(_.semanticEquals(a)) => a
+          val rejectedKey = inputKeys.collectFirst {
+            case n: NamedExpression if n.metadata.contains(EventTimeWatermark.delayKey) &&
+                !eventTime.exists(_.semanticEquals(n)) &&
+                !legacyKeys.exists(_.isEventTimeKey(n)) => n
           }
-          val note = for (first <- eventTime; window <- windowKey) yield {
+          val note = for (first <- eventTime; key <- rejectedKey) yield {
             s" With ${SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key}=false, the $side input " +
-              s"filters late rows by its first watermarked column, ${first.name}, so its window " +
-              s"key ${window.name} is a time constraint only if that input computes it as a " +
-              s"tumbling or sliding window over ${first.name} itself, through projections, " +
-              s"filters and unions only. Otherwise, put ${window.name} before ${first.name} in " +
-              s"that input's columns, or drop ${first.name}, to bound state by the window."
+              s"filters late rows by its first watermarked column, ${first.name}, and some of " +
+              s"its rows can hold the key ${key.name} below a watermarked column before it, so " +
+              s"${key.name} does not bound state. This happens when ${key.name} is built from a " +
+              "time shifted backward, when it copies a column that an earlier watermarked " +
+              "window is built over, or when an input of a union builds it from another " +
+              "column. Column pruning can change which column the planned input filters late " +
+              s"rows by, and analysis cannot see it. Join on ${first.name} itself or on a time " +
+              s"window over it, or put ${key.name} before the other watermarked columns of " +
+              "that input."
           }
           note.getOrElse("")
         }
-        val leftNote = if (rightCanEvict) "" else windowNote(join.left, leftKeys, "left")
-        val rightNote = if (leftCanEvict) "" else windowNote(join.right, rightKeys, "right")
+        val leftNote = if (rightCanEvict) "" else keyNote(join.left, leftKeys, "left")
+        val rightNote = if (leftCanEvict) "" else keyNote(join.right, rightKeys, "right")
         join.joinType match {
           case LeftOuter | LeftSemi => rightNote
           case RightOuter => leftNote
@@ -856,7 +863,7 @@ object UnsupportedOperationChecker extends Logging {
           "finalized input's windows are at least as long as the other input's. " +
           "When upgrading an existing query, correct its watermarks and time constraints, " +
           "then use a new checkpoint and replay the input, reconciling prior sink output." +
-          legacyWindowNote + inexactNote + downstreamNote("fails at start") + disableNote
+          legacyKeyNote + inexactNote + downstreamNote("fails at start") + disableNote
       if (SQLConf.get.streamingJoinCheckFinalizationEnabled || !canDisableCheck) {
         throwError(message)(join)
       } else {
@@ -864,7 +871,7 @@ object UnsupportedOperationChecker extends Logging {
           s"Stream-stream ${join.joinType} join runs with $checkConf set to false, although " +
             s"it requires $requirement that allow unmatched state to be finalized. The query " +
             "keeps that state without bound, and an outer join never outputs those unmatched " +
-            "rows." + legacyWindowNote + downstreamNote("never emits results")
+            "rows." + legacyKeyNote + downstreamNote("never emits results")
         logWarning(log"${MDC(ANALYSIS_ERROR, warning)};\n${MDC(QUERY_PLAN, join)}")
       }
     }
