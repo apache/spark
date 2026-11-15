@@ -110,31 +110,65 @@ case class AdaptiveSparkPlanExec(
     AQEUtils.getRequiredDistribution(inputPlan)
   }
 
+  // Read once for this execution so that the union barriers in the lists below, which run per
+  // re-planning round and per stage created, cannot answer from different values. Taken from the
+  // same session conf this query's `QueryExecution.preparations` reads.
+  @transient private val unionConf = UnionConfSnapshot(context.session.sessionState.conf)
+
+  // One value for the rule, EnsureRequirements and the cost evaluator: a rule gated off adds no
+  // marks, and treating those unions as pushed would skew the plan comparison.
+  @transient private val pushDownShuffleThroughUnionEnabled = {
+    unionConf.outputPartitioning &&
+      conf.pushDownShuffleThroughUnionEnabled &&
+      (!context.queryContainsSubqueries || conf.getConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED))
+  }
+
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) =>
         CostEvaluator.instantiate(className, context.session.sparkContext.getConf)
       case _ => SimpleCostEvaluator(
         conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
-        conf.costEvaluatorCountLocalSortEnabled)
+        conf.costEvaluatorCountLocalSortEnabled,
+        pushDownShuffleThroughUnionEnabled)
     }
+
+  // The same record the listed passes write, for the two places that need it between two rules
+  // rather than as a pass of their own. See `SnapshotUnionPreparationConf`.
+  @transient private val recordUnionConf = new SnapshotUnionPreparationConf(unionConf)
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
-  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = {
+  // Visible in the package so that a test can assert where the two union barriers below sit.
+  @transient private[adaptive] val queryStagePreparationRules: Seq[Rule[SparkPlan]] = {
     // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
     // the final plan, but we do need to respect the user-specified repartition. Here we ask
     // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
     // around this case.
     val ensureRequirements =
-      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution,
+        pushDownShuffleThroughUnionEnabled = pushDownShuffleThroughUnionEnabled)
     // CoalesceBucketsInJoin can help eliminate shuffles and must be run before
     // EnsureRequirements
     Seq(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
+      // Must run before `ensureRequirements`, which asks a `UnionExec` what it reports: it
+      // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
+      // decision under the same value the exchanges were planned against.
+      new SnapshotUnionPreparationConf(unionConf),
       ensureRequirements,
+      // Must run after `EnsureRequirements`, whose exchanges it moves, and before
+      // `StampUnionDecisions`, which would freeze a rebuilt union's partitioning before the
+      // rewrite can take it. It shares the instance above, which carries the root distribution
+      // the rewrite must keep.
+      PushDownShuffleExchangeThroughUnion(ensureRequirements),
+      // Must run after `EnsureRequirements` and the shuffle push-down: it fixes each `UnionExec`'s
+      // partitioning decision, so every rule below and the execution itself read the answer the
+      // exchanges above it were planned against.
+      new StampUnionDecisions(unionConf),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
@@ -163,7 +197,11 @@ case class AdaptiveSparkPlanExec(
       // channel, opt-in). Runs last so skew handling and sort cleanup have settled
       // before placement is decided.
       AQEEnablePipelinedShuffle
-    ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+    ) ++ SnapshotUnionPreparationConf.before(
+      unionConf, context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules) :+
+      // A barrier for a `UnionExec` an injected prep rule just created. Decisions already stamped
+      // above are kept.
+      new StampUnionDecisions(unionConf)
   }
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -187,7 +225,12 @@ case class AdaptiveSparkPlanExec(
   // plan to these rules has exchange as its root node.
   private def postStageCreationRules(outputsColumnar: Boolean) = Seq(
     ApplyColumnarRulesAndInsertTransitions(
-      context.session.sessionState.columnarRules, outputsColumnar),
+      SnapshotUnionPreparationConf.after(unionConf, context.session.sessionState.columnarRules),
+      outputsColumnar),
+    // A barrier for a `UnionExec` an injected stage-optimizer or columnar rule just created, which
+    // has no decision yet and would otherwise take one wherever it is first asked. A decision
+    // already stamped on a node is kept, so this pass cannot move one.
+    new StampUnionDecisions(unionConf),
     collapseCodegenStagesRule
   )
 
@@ -200,6 +243,14 @@ case class AdaptiveSparkPlanExec(
     }
     val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
+      if (applied ne latestPlan) {
+        // A `UnionExec` this rule just created carries no record of the confs this execution
+        // answers from, and the next rule reads the plan before the barrier in
+        // `postStageCreationRules` stamps it. So does the `ValidateRequirements` check below, for a
+        // rule that is itself an `AQEShuffleReadRule`. A rule that returned its input added
+        // nothing.
+        recordUnionConf(applied)
+      }
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
           val distribution = if (isFinalStage) {
@@ -229,7 +280,11 @@ case class AdaptiveSparkPlanExec(
   private def applyQueryPostPlannerStrategyRules(plan: SparkPlan): SparkPlan = {
     applyPhysicalRules(
       plan,
-      context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
+      // These rules run before `ensureRequirements`, so one of them can still add or drop an
+      // exchange over a `UnionExec` another just created. A snapshot pass ahead of each is what
+      // keeps that read off the live conf.
+      SnapshotUnionPreparationConf.before(
+        unionConf, context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules),
       "AQE Query Post Planner Strategy Rules"
     )
   }
@@ -1246,6 +1301,14 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
+  /**
+   * Whether the query contains an adaptive subquery. Derived from the pre-preparation physical
+   * plan, which still carries the subquery expressions, so it does not depend on `apply` running
+   * before the first adaptive plan is built.
+   */
+  lazy val queryContainsSubqueries: Boolean =
+    qe.sparkPlan.containsAnyPattern(PlanAdaptiveSubqueries.patterns: _*)
+
   /**
    * The subquery-reuse map shared across the entire query.
    */

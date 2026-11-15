@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedIntEncoder,
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Expression, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
-import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.catalyst.util.{sideBySide, DateTimeUtils}
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -1956,6 +1956,52 @@ class DatasetSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61088: self-join of a checkpointed Dataset should not use the partitioning, " +
+      "ordering and constraints of the other copy") {
+    // The partitioning, the ordering and the constraints refer to `t.id`, while the output is
+    // `s.id`. With AQE, the checkpoint would not keep the partitioning and the ordering.
+    val cp = withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      spark.range(16).as("t").where($"t.id" > 5).repartition($"t.id")
+        .sortWithinPartitions($"t.id").as("s").localCheckpoint()
+    }
+    val renewed = cp.logicalPlan.asInstanceOf[LogicalRDD].newInstance()
+    assert(renewed.outputOrdering.map(_.references) === Seq(renewed.outputSet))
+    val (x, y) = (cp.as("x"), cp.as("y"))
+    val agg = broadcast(x).join(y, $"x.id" % 2 === $"y.id" % 2).groupBy($"x.id").count()
+    checkAnswer(agg, (6L until 16L).map(Row(_, 5L)))
+    val outer = x.join(y, $"x.id" === $"y.id" + 1, "right_outer").where($"y.id" > 0)
+    checkAnswer(outer, (6L until 15L).map(i => Row(i + 1, i)) :+ Row(null, 15L))
+
+    // The output columns sharing an exprId keep their names.
+    val cp2 = spark.range(3).select($"id", $"ID").localCheckpoint()
+    assert(cp2.join(cp2).columns === Array("id", "ID", "id", "ID"))
+  }
+
+  test("SPARK-61256: checkpoint should not use the partitioning and ordering over the columns " +
+      "of its source Dataset") {
+    val src = spark.range(0, 16, 1, 4)
+    // `RemoveRedundantAliases` removes the root alias, so the executed plan reports the
+    // partitioning and the ordering over the `id` of `src`.
+    val cp = src.select($"id".as("id")).localCheckpoint().logicalPlan.asInstanceOf[LogicalRDD]
+    assert(cp.outputPartitioning.asInstanceOf[Expression].references === cp.outputSet)
+    assert(cp.outputOrdering.map(_.references) === Seq(cp.outputSet))
+
+    // A typed `map` reports the partitioning of its input, which is not in its output.
+    val cp2 = src.as[Long].map(x => x).toDF().localCheckpoint()
+    val agg = broadcast(src).join(cp2, src("id") % 2 === cp2("value") % 2)
+      .groupBy(src("id")).count()
+    checkAnswer(agg, (0L until 16L).map(Row(_, 8L)))
+
+    // A column-pruned scan of a cache reports the ordering over `id`, which is not in its output.
+    val single = spark.range(0, 16, 1, 1)
+    val cached = single.select($"id", ($"id" % 2).as("p")).cache()
+    val cp3 = cached.select($"p").localCheckpoint()
+    val sorted = broadcast(single).join(cp3, single("id") % 2 === cp3("p"))
+      .orderBy(single("id")).select(single("id"))
+    checkAnswer(sorted, (0L until 16L).flatMap(i => Seq.fill(8)(Row(i))))
+    cached.unpersist()
+  }
+
   test("Dataset().localCheckpoint() lazy with StorageLevel") {
     val df = spark.range(10).repartition($"id" % 2)
     val checkpointedDf = df.localCheckpoint(eager = false, StorageLevel.DISK_ONLY)
@@ -2436,6 +2482,15 @@ class DatasetSuite extends SharedSparkSession
   test("implicit encoder for LocalTime") {
     val localTime = java.time.LocalTime.of(19, 30, 30)
     assert(spark.range(1).map { _ => localTime }.head() === localTime)
+  }
+
+  test("SPARK-60346: collect an array of TIME(p)") {
+    val nanos = DateTimeUtils.localTimeToNanos(java.time.LocalTime.parse("12:00:00.123456789"))
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      val df = sql(s"SELECT array(CAST(TIME '12:00:00.123456789' AS TIME($p)))")
+      val time = DateTimeUtils.nanosToLocalTime(DateTimeUtils.truncateTimeToPrecision(nanos, p))
+      checkAnswer(df, Row(Seq(time)))
+    }
   }
 
   val dotColumnTestModes = Table(
@@ -2933,6 +2988,18 @@ class DatasetSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60247: UDF DataFrame query context points to the user call site") {
+    withSQLConf(SQLConf.DATA_FRAME_QUERY_CONTEXT_ENABLED.key -> "true") {
+      val myUdf = udf((i: Int) => i)
+      // Typed/UDF columns are constructed via UserDefinedFunction.apply; the captured query
+      // context should skip that internal frame and point at this test (user code) rather than
+      // at UserDefinedFunction.apply.
+      val callSite = myUdf(lit(1)).node.origin.getQueryContext.head.callSite()
+      assert(callSite.contains("DatasetSuite"), s"unexpected call site: $callSite")
+      assert(!callSite.contains("UserDefinedFunction"), s"unexpected call site: $callSite")
+    }
+  }
+
   test("SPARK-51312: createDataFrame should work with both Date and LocalDate") {
     for (confVal <- Seq("true", "false")) {
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> confVal) {
@@ -3083,6 +3150,22 @@ class DatasetSuite extends SharedSparkSession
         result.write.parquet(path.getAbsolutePath)
       }
       assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
+  }
+
+  test("SPARK-59682: RemoveRedundantAliases cannot be excluded via excludedRules") {
+    // RemoveRedundantAliases must stay in nonExcludableRules: excluding it lets the
+    // exprId-preserving Alias that EliminateSerialization inserts around a collapsed
+    // DeserializeToObject/SerializeFromObject pair leak into execution as an unsupported
+    // ObjectType projection, which fails in both codegen and the interpreted fallback.
+    withSQLConf(
+        "spark.sql.optimizer.excludedRules" ->
+          "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAliases") {
+      val grouped = Seq(ClassData("a", 1), ClassData("a", 2), ClassData("b", 3)).toDS()
+        .groupByKey(_.a)
+        .mapGroups { (k: String, it: Iterator[ClassData]) => ClassData(k, it.map(_.b).sum) }
+      val result = grouped.mapPartitions(iter => iter).collect()
+      assert(result.toSet == Set(ClassData("a", 3), ClassData("b", 3)))
     }
   }
 }

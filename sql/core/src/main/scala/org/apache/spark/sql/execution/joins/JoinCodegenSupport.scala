@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{BindReferences, BoundReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, BoundReference, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
@@ -26,6 +26,45 @@ import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
  * An interface for those join physical operators that support codegen.
  */
 trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
+
+  /** Generates the code for join keys `keys` read from `row`, whose columns are `input`. */
+  protected def createJoinKey(
+      ctx: CodegenContext,
+      row: String,
+      keys: Seq[Expression],
+      input: Seq[Attribute]): Seq[ExprCode] = {
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    BindReferences.bindReferences(keys, input).map(_.genCode(ctx))
+  }
+
+  /** Copies join keys into class members, so they can be used in a later function call. */
+  protected def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
+    vars.zipWithIndex.map { case (ev, i) =>
+      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
+    }
+  }
+
+  /** Generates the code that sets `comp` to the order of the join keys `a` and `b`. */
+  protected def genComparison(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
+    // The first key compare always runs, so emit it unguarded. Each subsequent key compare runs
+    // only when previous keys were equal (comp == 0).
+    val pairs = a.zip(b).zipWithIndex
+    val firstCompare = pairs.headOption.map { case ((l, r), i) =>
+      s"comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};"
+    }.getOrElse("comp = 0;")
+    val restCompares = pairs.drop(1).map { case ((l, r), i) =>
+      s"""
+         |if (comp == 0) {
+         |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
+         |}
+       """.stripMargin.trim
+    }
+    s"""
+       |$firstCompare
+       |${restCompares.mkString("\n")}
+     """.stripMargin
+  }
 
   /**
    * Generate the (non-equi) condition used to filter joined rows.

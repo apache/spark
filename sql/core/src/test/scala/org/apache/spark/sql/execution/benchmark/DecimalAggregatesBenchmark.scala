@@ -89,8 +89,7 @@ import org.apache.spark.sql.types.Decimal
  * }}}
  *
  * Committed results:
- *   `sql/core/benchmarks/DecimalAggregatesBenchmark-results.txt` (JDK 17).
- *   `sql/core/benchmarks/DecimalAggregatesBenchmark-jdk21-results.txt`.
+ *   `sql/core/benchmarks/DecimalAggregatesBenchmark-results.txt` (JDK 21).
  *   `sql/core/benchmarks/DecimalAggregatesBenchmark-jdk25-results.txt`.
  */
 object DecimalAggregatesBenchmark extends SqlBasedBenchmark {

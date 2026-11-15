@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.tags.DataSourceV2Test
 
 // SQL-based tests for delta-based row-level operations
+@DataSourceV2Test
 class DeltaBasedMergeIntoSchemaEvolutionSQLSuite
   extends MergeIntoSchemaEvolutionSQLSuiteBase
   with MergeIntoSchemaEvolutionTests
@@ -31,7 +33,23 @@ class DeltaBasedMergeIntoSchemaEvolutionSQLSuite
   }
 }
 
+// SQL-based tests for delta-based row-level operations that split updates into deletes and inserts
+@DataSourceV2Test
+class DeltaBasedMergeIntoSchemaEvolutionUpdateAsDeleteAndInsertSQLSuite
+  extends MergeIntoSchemaEvolutionSQLSuiteBase
+  with MergeIntoSchemaEvolutionTests
+  with MergeIntoSchemaEvolutionExtraSQLTests {
+
+  override protected lazy val extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("supports-deltas", "true")
+    props.put("split-updates", "true")
+    props
+  }
+}
+
 // Scala/DataFrame API-based tests for delta-based row-level operations
+@DataSourceV2Test
 class DeltaBasedMergeIntoSchemaEvolutionScalaSuite
   extends MergeIntoSchemaEvolutionScalaSuiteBase
   with MergeIntoSchemaEvolutionTests

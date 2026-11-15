@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.Artifact.{newCacheArtifact, newIvyArtifacts}
-import org.apache.spark.util.{SparkFileUtils, SparkStringUtils, SparkThreadUtils}
+import org.apache.spark.util.{MavenUtils, SparkFileUtils, SparkStringUtils, SparkThreadUtils}
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
@@ -66,6 +66,22 @@ class ArtifactManager(
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
   private[this] val stubState = stub.stubState
 
+  private sealed trait ArtifactEntry {
+    def size: Long
+  }
+  private case class UploadedArtifact(artifact: Artifact) extends ArtifactEntry {
+    override def size: Long = artifact.size
+  }
+  private case class MavenDependency(uri: URI) extends ArtifactEntry {
+    override lazy val size: Long = proto.AddArtifactsRequest.ArtifactEntry
+      .newBuilder()
+      .setMavenDependency(
+        proto.AddArtifactsRequest.MavenDependency.newBuilder().setUri(uri.toString))
+      .build()
+      .getSerializedSize
+      .toLong
+  }
+
   /**
    * Register a [[ClassFinder]] for dynamically generated classes.
    */
@@ -80,7 +96,7 @@ class ArtifactManager(
     addArtifact(SparkFileUtils.resolveURI(path))
   }
 
-  private def parseArtifacts(uri: URI): Seq[Artifact] = {
+  private def parseArtifacts(uri: URI, ivySettingsPath: Option[String]): Seq[Artifact] = {
     // Currently only local files with extensions .jar and .class are supported.
     uri.getScheme match {
       case "file" =>
@@ -92,19 +108,34 @@ class ArtifactManager(
         Seq[Artifact](artifact)
 
       case "ivy" =>
-        newIvyArtifacts(uri)
+        newIvyArtifacts(uri, ivySettingsPath)
 
       case other =>
         throw new UnsupportedOperationException(s"Unsupported scheme: $other")
     }
   }
 
+  private def hasRequestedRepositories(uri: URI): Boolean = {
+    val (_, _, repositories) = MavenUtils.parseQueryParams(uri)
+    repositories.split(",").exists(_.trim.nonEmpty)
+  }
+
+  private[client] def isServerSideMavenCandidate(uri: URI): Boolean =
+    uri.getScheme == "ivy" && !hasRequestedRepositories(uri)
+
   /**
    * Add a single artifact to the session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    */
-  def addArtifact(uri: URI): Unit = addArtifacts(parseArtifacts(uri))
+  def addArtifact(uri: URI): Unit =
+    addArtifact(uri, serverSideMavenArtifacts = false, ivySettingsPath = None)
+
+  private[client] def addArtifact(
+      uri: URI,
+      serverSideMavenArtifacts: Boolean,
+      ivySettingsPath: Option[String]): Unit =
+    addArtifacts(Seq(uri), serverSideMavenArtifacts, ivySettingsPath)
 
   /**
    * Add a single in-memory artifact to the session while preserving the directory structure
@@ -160,7 +191,30 @@ class ArtifactManager(
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
    */
-  def addArtifacts(uris: Seq[URI]): Unit = addArtifacts(uris.flatMap(parseArtifacts))
+  def addArtifacts(uris: Seq[URI]): Unit =
+    addArtifacts(uris, serverSideMavenArtifacts = false, ivySettingsPath = None)
+
+  private[client] def addArtifacts(uris: Seq[URI], serverSideMavenArtifacts: Boolean): Unit =
+    addArtifacts(uris, serverSideMavenArtifacts, ivySettingsPath = None)
+
+  private[client] def addArtifacts(
+      uris: Seq[URI],
+      serverSideMavenArtifacts: Boolean,
+      ivySettingsPath: Option[String]): Unit = {
+    if (serverSideMavenArtifacts) {
+      val entries = uris.flatMap { uri =>
+        uri.getScheme match {
+          // Resolve explicit repositories on the client so arbitrary repositories are never
+          // accessed from the server.
+          case "ivy" if !hasRequestedRepositories(uri) => MavenDependency(uri) :: Nil
+          case _ => parseArtifacts(uri, ivySettingsPath).map(UploadedArtifact)
+        }
+      }
+      addArtifactEntries(entries, useOrderedEntries = true)
+    } else {
+      addArtifacts(uris.flatMap(uri => parseArtifacts(uri, ivySettingsPath)))
+    }
+  }
 
   private[client] def isCachedArtifact(hash: String): Boolean = {
     val artifactName = s"${Artifact.CACHE_PREFIX}/$hash"
@@ -293,13 +347,19 @@ class ArtifactManager(
    * Add a number of artifacts to the session.
    */
   private[client] def addArtifacts(artifacts: Iterable[Artifact]): Unit = {
-    if (artifacts.isEmpty) {
+    addArtifactEntries(artifacts.map(UploadedArtifact), useOrderedEntries = false)
+  }
+
+  private def addArtifactEntries(
+      entries: Iterable[ArtifactEntry],
+      useOrderedEntries: Boolean): Unit = {
+    if (entries.isEmpty) {
       return
     }
 
     try {
       stubState.retryHandler.retry {
-        addArtifactsImpl(artifacts)
+        addArtifactsImpl(entries, useOrderedEntries)
       }
     } catch {
       case ex: StatusRuntimeException =>
@@ -307,7 +367,9 @@ class ArtifactManager(
     }
   }
 
-  private[client] def addArtifactsImpl(artifacts: Iterable[Artifact]): Unit = {
+  private def addArtifactsImpl(
+      entries: Iterable[ArtifactEntry],
+      useOrderedEntries: Boolean): Unit = {
     val promise = Promise[Seq[ArtifactSummary]]()
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
@@ -329,36 +391,33 @@ class ArtifactManager(
       }
     }
     val stream = stub.addArtifacts(responseHandler)
-    val currentBatch = mutable.Buffer.empty[Artifact]
+    val currentBatch = mutable.Buffer.empty[ArtifactEntry]
     var currentBatchSize = 0L
 
-    def addToBatch(dep: Artifact, size: Long): Unit = {
+    def addToBatch(dep: ArtifactEntry): Unit = {
       currentBatch += dep
-      currentBatchSize += size
+      currentBatchSize += dep.size
     }
 
     def writeBatch(): Unit = {
-      addBatchedArtifacts(currentBatch.toSeq, stream)
+      addBatchedArtifacts(currentBatch.toSeq, stream, useOrderedEntries)
       currentBatch.clear()
       currentBatchSize = 0
     }
 
-    artifacts.iterator.foreach { artifact =>
-      val data = artifact.storage
-      val size = data.size
-      if (size > CHUNK_SIZE) {
+    entries.iterator.foreach {
+      case UploadedArtifact(artifact) if artifact.size > CHUNK_SIZE =>
         // Payload can either be a batch OR a single chunked artifact. Write batch if non-empty
         // before chunking current artifact.
         if (currentBatch.nonEmpty) {
           writeBatch()
         }
         addChunkedArtifact(artifact, stream)
-      } else {
-        if (currentBatchSize + size > CHUNK_SIZE) {
+      case entry =>
+        if (currentBatch.nonEmpty && currentBatchSize + entry.size > CHUNK_SIZE) {
           writeBatch()
         }
-        addToBatch(artifact, size)
-      }
+        addToBatch(entry)
     }
     if (currentBatch.nonEmpty) {
       writeBatch()
@@ -376,33 +435,46 @@ class ArtifactManager(
    * single [[proto.AddArtifactsRequest]].
    */
   private def addBatchedArtifacts(
-      artifacts: Seq[Artifact],
-      stream: StreamObserver[proto.AddArtifactsRequest]): Unit = {
+      entries: Seq[ArtifactEntry],
+      stream: StreamObserver[proto.AddArtifactsRequest],
+      useOrderedEntries: Boolean): Unit = {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
       .setUserContext(clientConfig.userContext)
       .setClientType(clientConfig.userAgent)
       .setSessionId(sessionId)
-    artifacts.foreach { artifact =>
-      val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
-      try {
-        val data = proto.AddArtifactsRequest.ArtifactChunk
-          .newBuilder()
-          .setData(ByteString.readFrom(in))
-          .setCrc(in.getChecksum.getValue)
-
+    entries.foreach {
+      case UploadedArtifact(artifact) =>
+        val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
+        try {
+          val data = proto.AddArtifactsRequest.ArtifactChunk
+            .newBuilder()
+            .setData(ByteString.readFrom(in))
+            .setCrc(in.getChecksum.getValue)
+          val uploaded = proto.AddArtifactsRequest.SingleChunkArtifact
+            .newBuilder()
+            .setName(artifact.path.toString)
+            .setData(data)
+          if (useOrderedEntries) {
+            builder.getBatchBuilder.addEntriesBuilder().setArtifact(uploaded)
+          } else {
+            builder.getBatchBuilder.addArtifacts(uploaded)
+          }
+          ()
+        } catch {
+          case NonFatal(e) =>
+            stream.onError(e)
+            throw e
+        } finally {
+          in.close()
+        }
+      case MavenDependency(uri) =>
+        require(useOrderedEntries)
         builder.getBatchBuilder
-          .addArtifactsBuilder()
-          .setName(artifact.path.toString)
-          .setData(data)
-          .build()
-      } catch {
-        case NonFatal(e) =>
-          stream.onError(e)
-          throw e
-      } finally {
-        in.close()
-      }
+          .addEntriesBuilder()
+          .getMavenDependencyBuilder
+          .setUri(uri.toString)
+        ()
     }
     stream.onNext(builder.build())
   }

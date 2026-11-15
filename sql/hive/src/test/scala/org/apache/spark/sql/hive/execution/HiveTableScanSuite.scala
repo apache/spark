@@ -254,6 +254,24 @@ class HiveTableScanSuite extends HiveComparisonTest with QueryTest with TestHive
     }
   }
 
+  test("SPARK-60801: Read the default partition name as null") {
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("t1", "t2") {
+        // The name fails the ANSI cast to a non-string partition column.
+        sql("CREATE TABLE t1 (a INT) USING hive PARTITIONED BY (p INT)")
+        sql("INSERT INTO t1 PARTITION (p) VALUES (10, NULL), (11, 5)")
+        checkAnswer(sql("SELECT a, p FROM t1"), Seq(Row(10, null), Row(11, 5)))
+
+        // The name survives the cast to a string partition column.
+        sql("CREATE TABLE t2 (a INT) USING hive PARTITIONED BY (p STRING)")
+        sql("INSERT INTO t2 PARTITION (p) VALUES (10, NULL), (11, 'x')")
+        checkAnswer(sql("SELECT a, p FROM t2"), Seq(Row(10, null), Row(11, "x")))
+      }
+    }
+  }
+
   test("SPARK-32069: Improve error message on reading unexpected directory") {
     withTable("t") {
       withTempDir { f =>
@@ -273,6 +291,44 @@ class HiveTableScanSuite extends HiveComparisonTest with QueryTest with TestHive
             s"when `mapreduce.input.fileinputformat.input.dir.recursive` is false."))
         }
         dir.delete()
+      }
+    }
+  }
+
+  test("SPARK-60796: Treat the default partition name as null when pruning partitions") {
+    withTable("fact", "dim") {
+      sql("CREATE TABLE dim (k STRING, x INT) USING hive")
+      sql("INSERT INTO dim VALUES ('1', 1)")
+      sql("CREATE TABLE fact (a INT) USING hive PARTITIONED BY (p1 STRING, p2 INT)")
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql(
+          """
+            |INSERT INTO fact PARTITION (p1, p2)
+            |VALUES (10, '1', NULL), (11, '1', 5), (12, NULL, 5), (13, '2', 5)
+          """.stripMargin)
+      }
+
+      // The dynamic pruning filter references only `p1`, but all the partition values are cast to
+      // evaluate it. `p2` of the default partition fails the ANSI cast unless it is null.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT /*+ BROADCAST(d) */ f.a
+              |FROM fact f JOIN (SELECT k FROM dim WHERE x = 1) d ON f.p1 = d.k
+            """.stripMargin),
+          Seq(Row(10), Row(11)))
+      }
+
+      // `PruneHiveTablePartitions` skips a filter with a subquery, so the scan has to prune all the
+      // listed partitions. No cast fails without ANSI, but `p1` of the row `a = 12` must still be
+      // null rather than the name to match `IS NULL`.
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "false",
+        SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> "false") {
+        checkAnswer(
+          sql("SELECT a FROM fact WHERE p1 IS NULL OR p1 = (SELECT max(k) FROM dim)"),
+          Seq(Row(10), Row(11), Row(12)))
       }
     }
   }

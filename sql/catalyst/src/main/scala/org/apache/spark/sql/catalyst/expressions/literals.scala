@@ -370,6 +370,21 @@ object Literal {
           FunctionIdentifier(u.nameParts.head), u.arguments)
     }
   }
+
+  /**
+   * Pads the fraction of a formatted time or timestamp `ts` with trailing zeros to `precision`
+   * digits, as the parser takes the precision of a literal from its fraction digits. A fraction
+   * with more digits is returned as is.
+   */
+  private[catalyst] def padToNanosPrecision(ts: String, precision: Int): String = {
+    val dotIdx = ts.indexOf('.')
+    if (dotIdx < 0) {
+      ts + "." + "0" * precision
+    } else {
+      val fracLen = ts.length - dotIdx - 1
+      if (fracLen < precision) ts + "0" * (precision - fracLen) else ts
+    }
+  }
 }
 
 /**
@@ -636,19 +651,6 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     }
   }
 
-  private def padToNanosPrecision(ts: String, precision: Int): String = {
-    val dotIdx = ts.indexOf('.')
-    if (dotIdx < 0) {
-      ts + "." + "0" * precision
-    } else {
-      val fracLen = ts.length - dotIdx - 1
-      // fracLen can never exceed precision: formatNanos/formatWithoutTimeZoneNanos truncate
-      // the value to `precision` digits before formatting, and the fractionFormatter only
-      // strips trailing zeros (never adds digits); the else branch handles fracLen == precision.
-      if (fracLen < precision) ts + "0" * (precision - fracLen) else ts
-    }
-  }
-
   override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
@@ -688,6 +690,13 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
+    // The parser derives TIME(7)..TIME(9) from the number of fractional digits (6 or fewer give
+    // TIME(6)), so render exactly `precision` digits: truncate the value like formatNanos does
+    // for the nanosecond timestamps, and pad back the trailing zeros the formatter strips.
+    case (v: Long, t: TimeType) if t.precision > TimeType.MICROS_PRECISION =>
+      val truncated = DateTimeUtils.truncateTimeToPrecision(v, t.precision)
+      val time = new FractionTimeFormatter().format(truncated)
+      s"TIME '${Literal.padToNanosPrecision(time, t.precision)}'"
     case (_: Long, _: TimeType) =>
       s"TIME '$toString'"
     case (v: Long, TimestampType) =>
@@ -697,9 +706,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     // toString strips trailing zeros (display-only); pad back to exactly `precision` digits
     // here so the SQL literal round-trips correctly through the parser.
     case (_: TimestampNanosVal, t: TimestampNTZNanosType) =>
-      s"TIMESTAMP_NTZ '${padToNanosPrecision(toString, t.precision)}'"
+      s"TIMESTAMP_NTZ '${Literal.padToNanosPrecision(toString, t.precision)}'"
     case (_: TimestampNanosVal, t: TimestampLTZNanosType) =>
-      s"TIMESTAMP_LTZ '${padToNanosPrecision(toString, t.precision)}'"
+      s"TIMESTAMP_LTZ '${Literal.padToNanosPrecision(toString, t.precision)}'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${HexFormat.of().withUpperCase().formatHex(v)}'"

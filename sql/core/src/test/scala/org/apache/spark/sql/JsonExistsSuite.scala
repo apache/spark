@@ -61,6 +61,70 @@ class JsonExistsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59685: default-clause JSON_EXISTS canonical SQL reparses to the built-in under a " +
+      "shadowing PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_exists(a STRING, b STRING) RETURNS BOOLEAN " +
+          "RETURN false")
+        sql("SET PATH = system.session, system.builtin")
+        // A built-in JSON_EXISTS whose only clause is the default FALSE ON ERROR: the clause makes
+        // it the built-in even under the shadow, but its canonical `sql` would drop the default.
+        val jsonExists = sql(s"SELECT json_exists('$doc', '$$.addr.city' FALSE ON ERROR)")
+          .queryExecution.analyzed.expressions
+          .flatMap(_.collect { case je: JsonExists => je }).head
+        // The rendering must reparse back to the built-in, not the same-named routine on the PATH.
+        val reparsed = sql(s"SELECT ${jsonExists.sql}")
+        assert(reparsed.queryExecution.analyzed.expressions
+          .exists(_.exists(_.isInstanceOf[JsonExists])),
+          s"canonical SQL bound the shadow instead of the built-in: ${jsonExists.sql}")
+        // Valid input returns true under every ON ERROR mode, so also assert the emitted clause is
+        // the default FALSE ON ERROR -- otherwise a renderer that changed the default would still
+        // bind to the built-in and pass this round-trip.
+        assert(jsonExists.sql.contains("FALSE ON ERROR"),
+          s"canonical SQL changed the default ON ERROR mode: ${jsonExists.sql}")
+        checkAnswer(reparsed, Row(true))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_exists")
+      }
+    }
+  }
+
+  test("SPARK-59685: explicit-clause JSON_EXISTS canonical SQL keeps its clause and appends no " +
+      "default ON ERROR") {
+    // The ownership clause (FALSE ON ERROR) is appended only to an otherwise clause-free render, so
+    // an explicit ON ERROR must suppress it. Malformed input makes the mode observable: were the
+    // explicit TRUE ON ERROR dropped or replaced by the default, the round-trip result would flip
+    // from true to false.
+    val jsonExists = sql(s"SELECT json_exists('not json', '$$.a' TRUE ON ERROR)")
+      .queryExecution.analyzed.expressions
+      .flatMap(_.collect { case je: JsonExists => je }).head
+    val rendered = jsonExists.sql
+    assert(!rendered.contains("FALSE ON ERROR"),
+      s"canonical SQL appended a duplicate default clause: $rendered")
+    val reparsed = sql(s"SELECT $rendered")
+    assert(reparsed.queryExecution.analyzed.expressions
+      .exists(_.exists(_.isInstanceOf[JsonExists])),
+      s"canonical SQL did not reparse to the built-in: $rendered")
+    checkAnswer(reparsed, Row(true))
+  }
+
+  test("SPARK-59685: a default JSON_EXISTS keeps a clean auto-generated column name") {
+    val name = sql(s"SELECT json_exists('$doc', '$$.addr.city')").schema.head.name
+    assert(!name.contains("ON ERROR"), s"column name leaked the ownership clause: $name")
+  }
+
+  test("SPARK-59685: a nested SQL/JSON source keeps a clean auto-generated column name") {
+    // The JSON source is itself a routed built-in constructor; it is rendered in place, so its
+    // clause-free display form must not leak the round-trip RETURNING clause into the name.
+    val name = sql("SELECT json_exists(json_array(1), '$[0]')").schema.head.name
+    assert(!name.contains("RETURNING"), s"nested source leaked the ownership clause: $name")
+    assert(name.contains("JSON_ARRAY(1)"), s"unexpected name: $name")
+  }
+
   test("returns BOOLEAN") {
     assert(sql(s"SELECT json_exists('$doc', '$$.id')").schema.head.dataType === BooleanType)
   }

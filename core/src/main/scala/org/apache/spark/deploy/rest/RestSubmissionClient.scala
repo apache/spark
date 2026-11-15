@@ -32,7 +32,7 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
-import org.apache.spark.deploy.SparkApplication
+import org.apache.spark.deploy.{DriverEnvironment, SparkApplication}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.Utils
@@ -530,21 +530,9 @@ private[spark] object RestSubmissionClient {
 
   val supportedMasterPrefixes = Seq("spark://")
 
-  // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
-  // on the remote machine (SPARK-12345) (SPARK-25934)
-  private val EXCLUDED_SPARK_ENV_VARS = Set("SPARK_ENV_LOADED", "SPARK_HOME", "SPARK_CONF_DIR")
   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
   private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
-
-  /**
-   * Filter non-spark environment variables from any environment.
-   */
-  private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
-    env.filter { case (k, _) =>
-      k.startsWith("SPARK_") && !EXCLUDED_SPARK_ENV_VARS.contains(k)
-    }
-  }
 
   private[spark] def supportsRestClient(master: String): Boolean = {
     supportedMasterPrefixes.exists(master.startsWith)
@@ -578,7 +566,7 @@ private[spark] class RestSubmissionClientApp extends SparkApplication {
     val appResource = args(0)
     val mainClass = args(1)
     val appArgs = args.slice(2, args.length)
-    val env = RestSubmissionClient.filterSystemEnvironment(sys.env)
+    val env = DriverEnvironment.filterSystemEnvironment(sys.env)
     run(appResource, mainClass, appArgs, conf, env)
   }
 }

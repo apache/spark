@@ -16,7 +16,7 @@
 #
 
 # 1.Set env variable.
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64
 export PATH=$JAVA_HOME/bin:$PATH
 export SPARK_DOCS_IS_BUILT_ON_HOST=1
 # We expect to compile the R document on the host.

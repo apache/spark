@@ -507,3 +507,12 @@ See Also
 * :func:`udf` -- Create a Python UDF (with optional Arrow optimization)
 * :func:`arrow_udtf` -- Create a vectorized Arrow UDTF (see `Arrow Python UDTFs <arrow_python_udtf.rst>`_)
 * :func:`pandas_udf` -- Create a Pandas UDF
+
+In-process execution
+--------------------
+
+For opt-in execution inside the executor JVM, see
+:func:`pyspark.inprocess.inprocess_udf` and the
+`setup guide <https://spark.apache.org/docs/latest/sql-pyspark-inprocess-udf.html>`_.
+This mode requires an executor plugin and native dependencies, shares the executor
+process, and supports Spark Classic only.

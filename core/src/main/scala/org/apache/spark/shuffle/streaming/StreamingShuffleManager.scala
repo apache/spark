@@ -110,8 +110,9 @@ private[spark] class StreamingShuffleManager extends PipelinedShuffleManager wit
   }
 
   /**
-   * For the streaming shuffle, the startMapIndex, endMapIndex, startPartition, and endPartition
-   * arguments are not relevant.
+   * For the streaming shuffle, startMapIndex and endMapIndex are not relevant because a reader
+   * reads from all writers, and the range of reduce partitions must be exactly one partition,
+   * startPartition. That partition can differ from the reduce task's partition.
    */
   override def getReader[K, C](
       handle: ShuffleHandle,
@@ -121,8 +122,14 @@ private[spark] class StreamingShuffleManager extends PipelinedShuffleManager wit
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    if (endPartition != startPartition + 1) {
+      throw SparkException.internalError(
+        s"Streaming shuffle ${handle.shuffleId} must be read one reduce partition at a time, " +
+          s"but got reduce partitions [$startPartition, $endPartition)")
+    }
     val streamingShuffleHandle = handle.asInstanceOf[StreamingShuffleHandle[K, _, C]]
-    new StreamingShuffleReader[K, C](streamingShuffleHandle, context)
+    new StreamingShuffleReader[K, C](
+      streamingShuffleHandle, context, reducePartitionId = startPartition)
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {

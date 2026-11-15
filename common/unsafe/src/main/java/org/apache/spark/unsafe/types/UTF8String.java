@@ -293,11 +293,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Private helper method to calculate the number of code points in the UTF-8 string. Counting
    * the code points is a linear time operation, as we need to scan the entire UTF-8 string.
    * Hence, this method should generally only be called once for non-empty UTF-8 strings.
+   *
+   * Because the scan reads every lead byte, it also caches ASCII-ness for free (see
+   * {@link #isFullAscii()}): any lead byte >= 0x80 (a multi-byte or invalid byte) is non-ASCII.
+   * The flag is only set when still UNKNOWN, preserving a value already computed elsewhere.
    */
   private int getNumChars() {
     int len = 0;
-    for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
+    boolean ascii = true;
+    int i = 0;
+    while (i < numBytes) {
+      byte b = getByte(i);
+      ascii &= b >= 0;
+      i += numBytesForFirstByte(b);
       len += 1;
+    }
+    if (isFullAscii == IsFullAscii.UNKNOWN) {
+      isFullAscii = ascii ? IsFullAscii.FULL_ASCII : IsFullAscii.NOT_ASCII;
     }
     return len;
   }
@@ -635,20 +647,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    int i = 0;
-    int c = 0;
-    while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
-
-    int j = i;
-    if (until == Integer.MAX_VALUE) {
-      i = numBytes;
+    int i;
+    int j;
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII fast-path: code point index == byte index, so locate directly. The scan below
+      // clamps a negative start to 0 and stops at numBytes; replicate that with min/max.
+      j = Math.max(start, 0);
+      i = (until == Integer.MAX_VALUE) ? numBytes : Math.min(until, numBytes);
     } else {
-      while (i < numBytes && c < until) {
+      i = 0;
+      int c = 0;
+      while (i < numBytes && c < start) {
         i += numBytesForFirstByte(getByte(i));
         c += 1;
+      }
+      j = i;
+      if (until == Integer.MAX_VALUE) {
+        i = numBytes;
+      } else {
+        while (i < numBytes && c < until) {
+          i += numBytesForFirstByte(getByte(i));
+          c += 1;
+        }
       }
     }
 
@@ -716,6 +736,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int getChar(int charIndex) {
     Objects.checkIndex(charIndex, numChars());
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, and checkIndex guarantees it is in range.
+      return codePointFrom(charIndex);
+    }
     int charCount = 0, byteCount = 0;
     while (charCount < charIndex) {
       byteCount += numBytesForFirstByte(getByte(byteCount));
@@ -1196,24 +1220,38 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return this;
     }
 
-    if (numBytes == 1) {
-      byte[] newBytes = new byte[times];
-      byte b = getByte(0);
-      Arrays.fill(newBytes, b);
-      return fromBytes(newBytes);
-    }
-
     byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
-    copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
+    fillRepeated(newBytes, 0, this.base, this.offset, numBytes, times);
+    return UTF8String.fromBytes(newBytes);
+  }
 
+  /**
+   * Writes `count` back-to-back copies of the `patternNumBytes` bytes at
+   * `(patternBase, patternOffset)` into `data` starting at byte index `destPos`, using exponential
+   * doubling so the fill takes O(log count) copies rather than O(count). Returns the byte index
+   * just past the written region.
+   */
+  private static int fillRepeated(
+      byte[] data, int destPos, Object patternBase, long patternOffset, int patternNumBytes,
+      int count) {
+    if (count <= 0 || patternNumBytes == 0) {
+      return destPos;
+    }
+    if (patternNumBytes == 1) {
+      // Single-byte pattern (e.g. padding with a space or '0'): one Arrays.fill beats the loop.
+      int end = destPos + count;
+      Arrays.fill(data, destPos, end, Platform.getByte(patternBase, patternOffset));
+      return end;
+    }
+    copyMemory(patternBase, patternOffset, data, BYTE_ARRAY_OFFSET + destPos, patternNumBytes);
     int copied = 1;
-    while (copied < times) {
-      int toCopy = Math.min(copied, times - copied);
-      System.arraycopy(newBytes, 0, newBytes, copied * numBytes, numBytes * toCopy);
+    while (copied < count) {
+      int toCopy = Math.min(copied, count - copied);
+      System.arraycopy(data, destPos, data, destPos + copied * patternNumBytes,
+        patternNumBytes * toCopy);
       copied += toCopy;
     }
-
-    return UTF8String.fromBytes(newBytes);
+    return destPos + count * patternNumBytes;
   }
 
   /**
@@ -1376,6 +1414,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (charPos < 0) {
       return -1;
     }
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, clamped to the end of the string.
+      return Math.min(charPos, numBytes);
+    }
 
     int i = 0;
     int c = 0;
@@ -1387,6 +1429,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public int bytePosToChar(int bytePos) {
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: char index == byte index, clamped to [0, numBytes].
+      return Math.max(0, Math.min(bytePos, numBytes));
+    }
     int i = 0;
     int c = 0;
     while (i < numBytes && i < bytePos) {
@@ -1505,13 +1551,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
-      int offset = this.numBytes;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, this.numBytes, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
 
       return UTF8String.fromBytes(data);
@@ -1544,13 +1584,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
 
-      int offset = 0;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, 0, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
       offset += remain.numBytes;
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());

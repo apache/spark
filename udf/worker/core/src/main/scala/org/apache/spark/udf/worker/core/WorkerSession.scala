@@ -50,7 +50,7 @@ import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, I
  *
  * '''Lifecycle:'''
  *  - [[init]] must be called exactly once before [[process]]; it returns the
- *    worker's [[InitResponse]] (init-callback result + metrics).
+ *    worker's [[InitResponse]] (init-callback result).
  *  - [[process]] must be called at most once per session. It returns the
  *    result iterator; consuming that iterator drives the data exchange and
  *    surfaces any UDF / data-phase error (as an exception from `next()` /
@@ -148,7 +148,7 @@ abstract class WorkerSession(
   /**
    * Initializes the UDF execution. Must be called exactly once before
    * [[process]]. Returns the worker's [[InitResponse]] (carrying the
-   * init-callback result and metrics) on success; throws if the worker
+   * init-callback result) on success; throws if the worker
    * reports an init error or the stream fails before init completes.
    *
    * @param message the [[Init]] message carrying the UDF body, data

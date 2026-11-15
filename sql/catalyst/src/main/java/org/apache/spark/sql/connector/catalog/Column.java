@@ -171,10 +171,12 @@ public interface Column {
    * Returns the generation expression of this table column as a SQL string. Null means no
    * generation expression.
    * <p>
-   * This returns only the SQL string form. Prefer {@link #columnGenerationExpression()}, which can
-   * also carry a connector {@link org.apache.spark.sql.connector.expressions.Expression} and
-   * captures the semantics unambiguously. It is up to the data source to verify expression
-   * compatibility and reject writes as necessary.
+   * This returns only the SQL string form. {@link #columnGenerationExpression()} can also carry a
+   * connector {@link org.apache.spark.sql.connector.expressions.Expression}. See
+   * {@link GenerationExpression} for how Spark reads each form. It is up to the data source to
+   * verify expression compatibility and reject writes as necessary.
+   * If the object returned by {@code columnGenerationExpression()} has no SQL string, Spark uses
+   * this method's SQL string as the fallback when its modeled expression cannot be converted.
    */
   @Nullable
   default String generationExpression() {

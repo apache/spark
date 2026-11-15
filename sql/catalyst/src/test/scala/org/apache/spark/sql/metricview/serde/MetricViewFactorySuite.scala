@@ -141,7 +141,8 @@ class MetricViewFactorySuite extends SparkFunSuite {
     val exception = intercept[MetricViewValidationException] {
       MetricViewFactory.fromYAML(yaml)
     }
-    assert(exception.getMessage.contains("Invalid YAML version: 99.9"))
+    assert(exception.getMessage ===
+      "Invalid YAML version: 99.9. Supported YAML versions: 0.1")
   }
 
   test("fromYAML - malformed YAML") {
@@ -151,6 +152,20 @@ class MetricViewFactorySuite extends SparkFunSuite {
       MetricViewFactory.fromYAML(yaml)
     }
     assert(exception.getMessage.contains("Failed to parse YAML"))
+  }
+
+  test("toYAML - invalid YAML version") {
+    val metricView = MetricView(
+      version = "99.9",
+      from = AssetSource("my_table"),
+      where = None,
+      select = Seq.empty)
+
+    val exception = intercept[MetricViewValidationException] {
+      MetricViewFactory.toYAML(metricView)
+    }
+    assert(exception.getMessage ===
+      "Invalid YAML version: 99.9. Supported YAML versions: 0.1")
   }
 
   test("toYAML - serialize basic metric view") {

@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     nodejs \
     npm \
-    openjdk-17-jdk-headless \
+    openjdk-21-jdk-headless \
     pandoc \
     pkg-config \
     python3.12 \

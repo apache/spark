@@ -163,6 +163,9 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxBins(10)
       .setNumTrees(3)
       .setSeed(123)
+    assert(rf.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    rf.setIntermediateStorageLevel("DISK_ONLY")
+    assert(rf.getIntermediateStorageLevel === "DISK_ONLY")
 
     val df = orderedLabeledPoints50_1000.toDF()
     val model = rf.fit(df)

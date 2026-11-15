@@ -151,6 +151,43 @@ class MatricesSuite extends SparkFunSuite {
     assert(!sparseMat.toArray.eq(sparseCopy.toArray))
   }
 
+  test("SPARK-60296: DenseMatrix.hashCode is consistent with equals") {
+    val dm = new DenseMatrix(3, 2, Array(1.0, -0.0, 2.0, 0.0, 3.0, 0.0))
+    assert(dm.hashCode === dm.hashCode)
+    assert(dm.copy === dm)
+    assert(dm.copy.hashCode === dm.hashCode)
+
+    // The same matrix with the values stored in row major.
+    val dmt = new DenseMatrix(3, 2, Array(1.0, 0.0, -0.0, 3.0, 2.0, 0.0), isTransposed = true)
+    val dmtColMajor = new DenseMatrix(3, 2, dmt.toArray)
+    assert(dmt === dmtColMajor)
+    assert(dmt.hashCode === dmtColMajor.hashCode)
+
+    // The same matrix with an explicit 0.0 and an explicit -0.0.
+    val sm = new SparseMatrix(3, 2, Array(0, 3, 5), Array(0, 1, 2, 0, 1),
+      Array(1.0, 0.0, 2.0, -0.0, 3.0))
+    Seq(dm, dmt).foreach { m =>
+      assert(m === sm)
+      assert(m.hashCode === sm.hashCode)
+      assert(m.transpose === sm.transpose)
+      assert(m.transpose.hashCode === sm.transpose.hashCode)
+    }
+  }
+
+  test("SPARK-60491: Matrix.hashCode depends on the shape and the positions of the entries") {
+    val values = Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    val matrices = Seq(new DenseMatrix(2, 3, values), new DenseMatrix(3, 2, values),
+      new DenseMatrix(3, 2, Array(1.0, 0.0, 2.0, 0.0, 3.0, 0.0)),
+      new DenseMatrix(3, 2, Array(1.0, 2.0, 0.0, 3.0, 0.0, 0.0)))
+    assert(matrices.map(_.hashCode).distinct.length === matrices.length)
+    matrices.foreach { m =>
+      assert(m.toSparse === m)
+      assert(m.toSparse.hashCode === m.hashCode)
+      assert(m.toSparse.transpose === m.transpose)
+      assert(m.toSparse.transpose.hashCode === m.transpose.hashCode)
+    }
+  }
+
   test("matrix indexing and updating") {
     val m = 3
     val n = 2
@@ -250,6 +287,28 @@ class MatricesSuite extends SparkFunSuite {
 
     assert(dAT.toSparse.asBreeze === sATexpected.asBreeze)
     assert(sAT.toDense.asBreeze === dATexpected.asBreeze)
+  }
+
+  test("SPARK-60300: copy preserves isTransposed") {
+    val denseMatrices = Seq(
+      new DenseMatrix(2, 2, Array(1.0, 2.0, 3.0, 4.0)).transpose,
+      new DenseMatrix(2, 3, Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)).transpose)
+    denseMatrices.foreach { m =>
+      val copy = m.copy
+      assert(copy === m)
+      assert(copy.isTransposed === m.isTransposed)
+      assert(!copy.values.eq(m.values), "has to have a new array")
+    }
+
+    val sparseMatrices = Seq(
+      new SparseMatrix(2, 2, Array(0, 2, 3), Array(0, 1, 1), Array(1.0, 2.0, 3.0)).transpose,
+      new SparseMatrix(2, 3, Array(0, 1, 2, 3), Array(0, 1, 0), Array(1.0, 2.0, 3.0)).transpose)
+    sparseMatrices.foreach { m =>
+      val copy = m.copy
+      assert(copy === m)
+      assert(copy.isTransposed === m.isTransposed)
+      assert(!copy.values.eq(m.values), "has to have a new array")
+    }
   }
 
   test("foreachActive") {

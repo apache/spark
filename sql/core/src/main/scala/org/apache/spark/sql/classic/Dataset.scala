@@ -1073,6 +1073,61 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column]): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = alignTo,
+      binStartName = null,
+      binEndName = null,
+      binDistributeRatioName = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column,
+      binStartName: String,
+      binEndName: String,
+      binDistributeRatioName: String): DataFrame = withPlan {
+    UnresolvedBinBy(
+      binWidthExpr = binWidth.expr,
+      rangeStartCol = rangeStart.expr,
+      rangeEndCol = rangeEnd.expr,
+      originExpr = Option(alignTo).map(_.expr),
+      distributeColumns = distributeUniform.map(_.expr).toImmutableArraySeq,
+      outputAliases = BinByOutputAliases(
+        binStart = Option(binStartName),
+        binEnd = Option(binEndName),
+        binRatio = Option(binDistributeRatioName)),
+      child = logicalPlan)
+  }
+
+  /** @inheritdoc */
   def unpivot(
       ids: Array[Column],
       values: Array[Column],
