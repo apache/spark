@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperatio
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -67,6 +68,39 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
         relation.catalog.get, relation.identifier.get,
         s"${command.toString} with generated columns")
     }
+  }
+
+  // AddMetadataColumns may add the metadata columns to the target table of an UPDATE or a MERGE on
+  // a table that accepts any schema, so its aligned assignments may include one for each metadata
+  // column. However, only data columns are written, and the metadata values passed to the writer
+  // are defined by MetadataColumn (e.g. PRESERVE_ON_UPDATE). So an assignment that the alignment
+  // adds for a metadata column is removed, and any other assignment to a metadata column is
+  // rejected unless the legacy behavior is enabled, as ResolveRowLevelCommandAssignments does for
+  // other tables.
+  protected def removeMetadataAssignments(
+      assignments: Seq[Assignment],
+      isAddedByAlignment: Assignment => Boolean): Seq[Assignment] = {
+    val (metadataAssignments, dataAssignments) = assignments.partition {
+      case Assignment(MetadataAttribute(_), _) => true
+      case _ => false
+    }
+    val invalidAssignments = metadataAssignments.filterNot(isAddedByAlignment)
+    if (invalidAssignments.nonEmpty &&
+        !conf.getConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS)) {
+      val errors = RowLevelAssignmentResolution.metadataColumnAssignmentErrors(invalidAssignments)
+      throw QueryCompilationErrors.invalidRowLevelOperationAssignments(assignments, errors)
+    }
+    dataAssignments
+  }
+
+  // aligning UPDATE assignments assigns each column that is not updated to itself
+  protected def isSelfAssignment(assignment: Assignment): Boolean = {
+    assignment.key.semanticEquals(assignment.value)
+  }
+
+  // the output of the target table may include metadata columns (see removeMetadataAssignments)
+  protected def dataAttrs(relation: DataSourceV2Relation): Seq[AttributeReference] = {
+    relation.output.filterNot(attr => MetadataAttribute.isValid(attr.metadata))
   }
 
   protected def buildOperationTable(

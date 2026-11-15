@@ -25,9 +25,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -45,7 +43,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, UPDATE)
-          val dataAssignments = removeMetadataAssignments(assignments)
+          val dataAssignments = removeMetadataAssignments(assignments, isSelfAssignment)
           val table = buildOperationTable(tbl, UPDATE, r.options)
           val updateCond = cond.getOrElse(TrueLiteral)
           table.operation match {
@@ -60,31 +58,6 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
         case _ =>
           u
       }
-  }
-
-  // AddMetadataColumns may add the metadata columns to the target table of an UPDATE on a table
-  // that accepts any schema, so its aligned assignments may include one for each metadata column.
-  // However, only data columns are written, and the metadata values passed to the writer are
-  // defined by MetadataColumn (e.g. PRESERVE_ON_UPDATE). So an assignment of a metadata column to
-  // itself is removed, and any other assignment to a metadata column is rejected unless the legacy
-  // behavior is enabled, as ResolveRowLevelCommandAssignments does for other tables.
-  private def removeMetadataAssignments(assignments: Seq[Assignment]): Seq[Assignment] = {
-    val (metadataAssignments, dataAssignments) = assignments.partition {
-      case Assignment(MetadataAttribute(_), _) => true
-      case _ => false
-    }
-    val invalidAssignments = metadataAssignments.filterNot(a => a.key.semanticEquals(a.value))
-    if (invalidAssignments.nonEmpty &&
-        !conf.getConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS)) {
-      val errors = RowLevelAssignmentResolution.metadataColumnAssignmentErrors(invalidAssignments)
-      throw QueryCompilationErrors.invalidRowLevelOperationAssignments(assignments, errors)
-    }
-    dataAssignments
-  }
-
-  // the output of the target table may include metadata columns (see removeMetadataAssignments)
-  private def dataAttrs(relation: DataSourceV2Relation): Seq[AttributeReference] = {
-    relation.output.filterNot(attr => MetadataAttribute.isValid(attr.metadata))
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
