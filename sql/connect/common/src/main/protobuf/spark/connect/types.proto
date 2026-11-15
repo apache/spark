@@ -81,6 +81,17 @@ message DataType {
     // even though their physical value is identical, mirroring timestamp vs timestamp_ntz.
     TimestampNTZNanos timestamp_ntz_nanos = 29;
     TimestampLTZNanos timestamp_ltz_nanos = 30;
+
+    // A reference to a file, with metadata describing the file.
+    File file = 31;
+  }
+
+  // The mode of a File type.
+  enum FileTypeMode {
+    FILE_TYPE_MODE_UNSPECIFIED = 0;
+    FILE_TYPE_MODE_UNKNOWN = 1;
+    reserved 2;
+    FILE_TYPE_MODE_EXTERNAL = 3;
   }
 
   message Boolean {
@@ -231,6 +242,13 @@ message DataType {
 
   message Variant {
     uint32 type_variation_reference = 1;
+  }
+
+  message File {
+    // (Required) The mode of the file. A mode other than FILE_TYPE_MODE_EXTERNAL is read as
+    // FILE_TYPE_MODE_UNKNOWN.
+    FileTypeMode mode = 1;
+    uint32 type_variation_reference = 2;
   }
 
   message UDT {

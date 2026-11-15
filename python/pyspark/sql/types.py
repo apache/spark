@@ -29,6 +29,7 @@ import sys
 import time
 from array import array
 from collections.abc import Iterable
+from enum import Enum
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
@@ -115,6 +116,8 @@ __all__ = [
     "VariantVal",
     "GeographyType",
     "GeometryType",
+    "FileType",
+    "FileTypeMode",
 ]
 
 
@@ -233,6 +236,7 @@ class DataType:
                 YearMonthIntervalType,
                 TimeType,
                 AnyTimestampNanoType,
+                FileType,
             ),
         ):
             return dataType.simpleString()
@@ -1216,6 +1220,7 @@ class ArrayType(DataType):
         collationsMap: Optional[Dict[str, str]] = None,
         charVarcharCollationsMap: Optional[Dict[str, str]] = None,
         remainingCharVarcharPaths: Optional[Set[str]] = None,
+        inStructField: bool = False,
     ) -> "ArrayType":
         elementType = _parse_datatype_json_value(
             json["elementType"],
@@ -1223,6 +1228,7 @@ class ArrayType(DataType):
             collationsMap,
             charVarcharCollationsMap,
             remainingCharVarcharPaths,
+            inStructField,
         )
         return ArrayType(elementType, json["containsNull"])
 
@@ -1362,6 +1368,7 @@ class MapType(DataType):
         collationsMap: Optional[Dict[str, str]] = None,
         charVarcharCollationsMap: Optional[Dict[str, str]] = None,
         remainingCharVarcharPaths: Optional[Set[str]] = None,
+        inStructField: bool = False,
     ) -> "MapType":
         keyType = _parse_datatype_json_value(
             json["keyType"],
@@ -1369,6 +1376,7 @@ class MapType(DataType):
             collationsMap,
             charVarcharCollationsMap,
             remainingCharVarcharPaths,
+            inStructField,
         )
         valueType = _parse_datatype_json_value(
             json["valueType"],
@@ -1376,6 +1384,7 @@ class MapType(DataType):
             collationsMap,
             charVarcharCollationsMap,
             remainingCharVarcharPaths,
+            inStructField,
         )
         return MapType(
             keyType,
@@ -1494,7 +1503,8 @@ class StructField(DataType):
         string_metadata: Dict[str, str],
         char_varchar_metadata: Dict[str, str],
     ) -> Union[str, Dict[str, Any]]:
-        if not string_metadata and not char_varchar_metadata:
+        has_file = _has_type(self.dataType, FileType)
+        if not string_metadata and not char_varchar_metadata and not has_file:
             return self.dataType.jsonValue()
 
         def removeCollations(dt: DataType) -> DataType:
@@ -1517,9 +1527,35 @@ class StructField(DataType):
             else:
                 return dt
 
+        # An external file in a field is the plain "file", the form of a schema written without a
+        # mode. Only array and map types are visited, as in `removeCollations`.
+        def fileTypeJson(dt: DataType) -> Union[str, Dict[str, Any]]:
+            if isinstance(dt, ArrayType):
+                return {
+                    "type": dt.typeName(),
+                    "elementType": fileTypeJson(dt.elementType),
+                    "containsNull": dt.containsNull,
+                }
+            elif isinstance(dt, MapType):
+                return {
+                    "type": dt.typeName(),
+                    "keyType": fileTypeJson(dt.keyType),
+                    "valueType": fileTypeJson(dt.valueType),
+                    "valueContainsNull": dt.valueContainsNull,
+                }
+            elif isinstance(dt, FileType) and dt.mode == FileTypeMode.EXTERNAL:
+                return "file"
+            else:
+                return dt.jsonValue()
+
         # As we want to be backwards compatible we should remove all collations information from the
         # json and only keep that information in the metadata.
-        return removeCollations(self.dataType).jsonValue()
+        dataType = (
+            removeCollations(self.dataType)
+            if string_metadata or char_varchar_metadata
+            else self.dataType
+        )
+        return fileTypeJson(dataType)
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
@@ -1537,7 +1573,12 @@ class StructField(DataType):
 
         remaining: Set[str] = set(charVarcharCollationsMap)
         parsed_type = _parse_datatype_json_value(
-            json["type"], json["name"], collationsMap, charVarcharCollationsMap, remaining
+            json["type"],
+            json["name"],
+            collationsMap,
+            charVarcharCollationsMap,
+            remaining,
+            inStructField=True,
         )
         if remaining:
             raise PySparkTypeError(
@@ -2112,6 +2153,80 @@ class VariantType(AtomicType):
         return {"value": variant.value, "metadata": variant.metadata}
 
 
+class FileTypeMode(Enum):
+    """
+    The mode of a :class:`FileType`.
+
+    ``EXTERNAL`` files are simple references whose lifecycle is independent of the table.
+    ``UNKNOWN`` is used while the mode is not yet determined, such as for the result of a cast or
+    of a function.
+
+    .. versionadded:: 4.4.0
+    """
+
+    EXTERNAL = "external"
+    UNKNOWN = "unknown"
+
+
+class FileType(DataType):
+    """
+    File data type, representing a reference to a file, with metadata describing the file.
+
+    In SQL the type is named ``FILE``. A table column must be declared as ``FILE EXTERNAL``,
+    while the signature of a function declares a plain ``FILE``. The mode is part of the type
+    identity: ``FileType()`` and ``FileType.external()`` are different types.
+
+    The JSON form carries the mode, as ``"file external"`` or ``"file unknown"``, except that an
+    external file directly in a struct field, or in an array or map of one, is the plain
+    ``"file"``. A plain ``"file"`` is read as external in a struct field and as unknown elsewhere.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    mode : :class:`FileTypeMode`, optional
+        The mode of the file. Defaults to ``FileTypeMode.UNKNOWN``.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import FileType
+    >>> FileType.external().simpleString()
+    'file external'
+    >>> FileType().json()
+    '"file unknown"'
+    """
+
+    def __init__(self, mode: FileTypeMode = FileTypeMode.UNKNOWN):
+        if not isinstance(mode, FileTypeMode):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "mode",
+                    "expected_type": "FileTypeMode",
+                    "arg_type": type(mode).__name__,
+                },
+            )
+        self.mode = mode
+
+    @classmethod
+    def external(cls) -> "FileType":
+        """Returns an external :class:`FileType`."""
+        return cls(FileTypeMode.EXTERNAL)
+
+    def simpleString(self) -> str:
+        if self.mode == FileTypeMode.EXTERNAL:
+            return "file external"
+        return "file"
+
+    def jsonValue(self) -> str:
+        return "file %s" % self.mode.value
+
+    def __repr__(self) -> str:
+        if self.mode == FileTypeMode.EXTERNAL:
+            return "FileType(FileTypeMode.EXTERNAL)"
+        return "FileType()"
+
+
 class UserDefinedType(DataType):
     """User-defined type (UDT).
 
@@ -2522,6 +2637,7 @@ _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 _TIME = re.compile(r"time\(\s*(\d+)\s*\)")
 _TIMESTAMP_NTZ_PRECISION = re.compile(r"timestamp_ntz\(\s*(\d+)\s*\)")
 _TIMESTAMP_LTZ_PRECISION = re.compile(r"timestamp_ltz\(\s*(\d+)\s*\)")
+_FILE = re.compile(r"file(?:\s+(external|unknown))?")
 _GEOMETRY = re.compile(r"^geometry$")
 _GEOMETRY_CRS = re.compile(r"geometry\(\s*([\w]+:-?[\w]+)\s*\)")
 _GEOGRAPHY = re.compile(r"^geography$")
@@ -2677,6 +2793,7 @@ def _parse_datatype_json_value(  # type: ignore[return]
     collationsMap: Optional[Dict[str, str]] = None,
     charVarcharCollationsMap: Optional[Dict[str, str]] = None,
     remainingCharVarcharPaths: Optional[Set[str]] = None,
+    inStructField: bool = False,
 ) -> DataType:
     in_string = collationsMap is not None and fieldPath in collationsMap
     in_char_varchar = charVarcharCollationsMap is not None and fieldPath in charVarcharCollationsMap
@@ -2710,6 +2827,12 @@ def _parse_datatype_json_value(  # type: ignore[return]
             return _parse_parameterized_timestamp_type(int(m.group(1)), ntz=True)
         elif m := _TIMESTAMP_LTZ_PRECISION.fullmatch(json_value):
             return _parse_parameterized_timestamp_type(int(m.group(1)), ntz=False)
+        elif m := _FILE.fullmatch(json_value):
+            # A plain "file" has no mode, as in a schema written without one: in a struct field
+            # it is an external file, elsewhere an unknown one.
+            if m.group(1) == "external" or (m.group(1) is None and inStructField):
+                return FileType.external()
+            return FileType()
         elif m := _INTERVAL_DAYTIME.match(json_value):
             inverted_fields = DayTimeIntervalType._inverted_fields
             first_field = inverted_fields.get(m.group(1))
@@ -2778,6 +2901,7 @@ def _parse_datatype_json_value(  # type: ignore[return]
                     collationsMap,
                     charVarcharCollationsMap,
                     remainingCharVarcharPaths,
+                    inStructField,
                 )
             elif complex_type is MapType:
                 return MapType.fromJson(
@@ -2786,6 +2910,7 @@ def _parse_datatype_json_value(  # type: ignore[return]
                     collationsMap,
                     charVarcharCollationsMap,
                     remainingCharVarcharPaths,
+                    inStructField,
                 )
             return StructType.fromJson(json_value)
         elif tpe == "udt":
