@@ -412,6 +412,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
     import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
     import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
     import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+    import org.apache.spark.sql.execution.datasources.v2.{FileTable, TextBasedFileScan}
     import org.apache.spark.sql.execution.datasources.v2.csv.{CSVScan, CSVTable}
     import org.apache.spark.sql.execution.datasources.v2.json.{JsonScan, JsonTable}
     import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
@@ -431,7 +432,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
         val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
         val files = fs.listStatus(new Path(path)).filterNot(_.getPath.getName.startsWith("_")).toSeq
 
-        def createTable() = format match {
+        def createTable(): FileTable = format match {
           case "parquet" =>
             new ParquetTable("t", spark, dsOptions, Seq(path), None, classOf[ParquetFileFormat])
           case "orc" =>
@@ -454,10 +455,10 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
           SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true",
           "fs.file.impl" -> classOf[org.apache.spark.sql.FakeFileSystemRequiringDSOption].getName,
           "fs.file.impl.disable.cache" -> "true") {
-          val err = intercept[ Throwable] {
+          val err = intercept[Throwable] {
             createTable().inferSchema(files)
           }
-          assert(org.apache.commons.lang3.exception.ExceptionUtils.getRootCause(err)
+          assert(org.apache.spark.util.SparkErrorUtils.getRootCause(err)
             .isInstanceOf[IllegalArgumentException])
         }
       }
@@ -505,7 +506,7 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
     val dummyIndex = new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     val schema = new StructType().add("v", StringType)
 
-    def createScans() = Seq(
+    def createScans(): Seq[TextBasedFileScan] = Seq(
       CSVScan(spark, dummyIndex, schema, schema, new StructType(), codecOpts, Array.empty),
       JsonScan(spark, dummyIndex, schema, schema, new StructType(), codecOpts, Array.empty),
       TextScan(spark, dummyIndex, schema, schema, new StructType(), codecOpts))

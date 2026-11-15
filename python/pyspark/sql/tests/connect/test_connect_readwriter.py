@@ -652,7 +652,7 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
             with open(os.path.join(d, "_logs"), "w") as f:
                 f.write("filtered\n")
 
-            with self.sql_conf(
+            with self.connect_conf(
                 {"spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf": "false"}
             ):
                 rows = (
@@ -666,7 +666,7 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
                 )
                 self.assertEqual([r[0] for r in rows], ["visible"])
 
-            with self.sql_conf(
+            with self.connect_conf(
                 {"spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf": "true"}
             ):
                 rows = (
