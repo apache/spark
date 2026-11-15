@@ -551,6 +551,37 @@ class DataFrameSuite extends SharedSparkSession
     checkAnswer(data.orderBy(desc_nulls_last("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
   }
 
+  test("SPARK-46349: sort direction cannot be applied to a sort expression") {
+    val df = spark.range(10)
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.orderBy($"id".desc.asc).collect()
+      },
+      condition = "NESTED_SORT_ORDER",
+      sqlState = Some("42K0E"),
+      parameters = Map("sortOrder" -> "\"id DESC NULLS LAST\""),
+      queryContext = Array(
+        ExpectedContext(fragment = "asc", callSitePattern = getCurrentClassCallSitePattern)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.sortWithinPartitions(desc("id").desc_nulls_first).collect()
+      },
+      condition = "NESTED_SORT_ORDER",
+      sqlState = Some("42K0E"),
+      parameters = Map("sortOrder" -> "\"id DESC NULLS LAST\""),
+      queryContext = Array(ExpectedContext(
+        fragment = "desc_nulls_first", callSitePattern = getCurrentClassCallSitePattern)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(row_number().over(Window.orderBy($"id".asc.desc))).collect()
+      },
+      condition = "NESTED_SORT_ORDER",
+      sqlState = Some("42K0E"),
+      parameters = Map("sortOrder" -> "\"id ASC NULLS FIRST\""),
+      queryContext = Array(
+        ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)))
+  }
+
   test("global sorting") {
     checkAnswer(
       testData2.orderBy($"a".asc, $"b".asc),

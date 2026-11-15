@@ -6781,6 +6781,12 @@
     ],
     "sqlState" : "42601"
   },
+  "NESTED_SORT_ORDER" : {
+    "message" : [
+      "Cannot apply a sort direction to the sort expression <sortOrder>. Specify the sort direction and null ordering of an expression only once, for example by removing the extra asc/desc call or the `ascending` argument."
+    ],
+    "sqlState" : "42K0E"
+  },
   "NEW_CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
       "The new check constraint (<expression>) cannot be added because it would be violated by existing data in table <tableName>. Please ensure all existing rows satisfy the constraint before adding it."

@@ -653,6 +653,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case UnresolvedWindowExpression(_, WindowSpecReference(windowName)) =>
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
 
+          // A sort direction applied twice, e.g. `$"a".desc.asc` or PySpark's
+          // `orderBy(desc("a"), ascending=False)`, passes the type check and only fails at
+          // execution time with an internal codegen error.
+          case s @ SortOrder(_: SortOrder, _, _, _) =>
+            throw QueryCompilationErrors.nestedSortOrderError(s)
+
           case e: Expression if e.checkInputDataTypes().isFailure =>
             TypeCoercionValidation.failOnTypeCheckResult(e, Some(operator))
 
