@@ -25,9 +25,10 @@ import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.catalyst.plans.logical.{Window => LogicalWindow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.window.WindowExec
+import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec}
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1885,6 +1886,276 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
         assertSpilled(sparkContext, "select") {
           df.select($"key", sum("value").over(window)).collect()
         }
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec supports codegen for row_number, rank and dense_rank") {
+    // Ties (the repeated 2s) within each `key` group exercise `Rank`'s skip-across-ties and
+    // `DenseRank`'s no-skip behavior, not just the simpler `RowNumber` count.
+    val df = Seq(
+      ("a", 1), ("a", 1), ("a", 2), ("a", 3),
+      ("b", 1), ("b", 2), ("b", 2), ("b", 3),
+      ("c", 1)).toDF("key", "value")
+
+    def topRows(partitioned: Boolean, rankLikeFunc: Column): DataFrame = {
+      val w = if (partitioned) {
+        Window.partitionBy($"key").orderBy($"value")
+      } else {
+        Window.orderBy($"value")
+      }
+      df.withColumn("rn", rankLikeFunc.over(w)).where($"rn" <= 2)
+    }
+
+    // None when the plan has no `WindowGroupLimitExec` at all: without a `partitionBy`, Spark may
+    // rewrite `row_number`'s window into a `TakeOrderedAndProjectExec` instead, which is unrelated
+    // to this change and never goes through `WindowGroupLimitExec`.
+    def windowGroupLimitIsFused(plan: SparkPlan): Option[Boolean] = plan.collectFirst {
+      case WholeStageCodegenExec(_: WindowGroupLimitExec) => true
+      case _: WindowGroupLimitExec => false
+    }
+
+    // AQE can reshape the plan for such a tiny input (e.g. a local shuffle reader optimization),
+    // which would make the shape assertions below flaky; disable it, as SQLMetricsSuite's
+    // "SPARK-37099" WindowGroupLimitExec test also does.
+    Seq(true, false).foreach { partitioned =>
+      Seq(row_number(), rank(), dense_rank()).foreach { rankLikeFunc =>
+        val expectedRows = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          topRows(partitioned, rankLikeFunc).collect().toSeq
+        }
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          val codegenDf = topRows(partitioned, rankLikeFunc)
+          checkAnswer(codegenDf, expectedRows)
+          val fused = windowGroupLimitIsFused(codegenDf.queryExecution.executedPlan)
+          if (partitioned) {
+            // Partitioned top-k always goes through `WindowGroupLimitExec`, so this must be
+            // present and fused.
+            assert(fused == Some(true),
+              s"$rankLikeFunc's WindowGroupLimit should be fused into WholeStageCodegenExec")
+          } else {
+            fused.foreach { isFused =>
+              assert(isFused,
+                s"$rankLikeFunc's WindowGroupLimit should be fused into WholeStageCodegenExec")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Verifies `buildQuery()` (a `row_number`/`rank`/`dense_rank` top-k query, named by `funcName`)
+   * gives the same answer under codegen as under the interpreted path, and -- for `rank`/
+   * `dense_rank` only -- the same answer as a ground truth computed with the `WindowGroupLimit`
+   * optimizer rule disabled (a structurally different plan, with no `WindowGroupLimitExec` at
+   * all). Checking against that ground truth, not just interpreted-vs-codegen, catches a bug
+   * shared by both execution strategies, e.g. a `WindowGroupLimitExec` that under- or
+   * over-filters in a way that happens to agree between the two.
+   *
+   * The ground-truth check is skipped for `row_number`: every tied row in a group gets the same
+   * `rank`/`dense_rank`, but ties can get arbitrary distinct `row_number`s, so a `limit` that
+   * splits a tied group can legitimately see different per-row assignments (though the same *set*
+   * of rows) under a different plan. Codegen and interpreted are still compared for `row_number`
+   * -- they run the exact same optimized plan, so rows reach `WindowExec` in identical order
+   * either way and must match exactly, tie-breaks included.
+   *
+   * AQE is disabled throughout: it can reshape the plan for small inputs (e.g. a local shuffle
+   * reader optimization), which would make these plan-shape-sensitive checks flaky, as
+   * `SQLMetricsSuite`'s "SPARK-37099" `WindowGroupLimitExec` test also notes.
+   */
+  private def checkWindowGroupLimitCodegen(funcName: String)(buildQuery: => DataFrame): Unit = {
+    val interpreted = withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      buildQuery.collect().toSeq
+    }
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnswer(buildQuery, interpreted)
+    }
+    if (funcName != "row_number") {
+      val groundTruth = withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        buildQuery.collect().toSeq
+      }
+      assert(interpreted.sortBy(_.toString) == groundTruth.sortBy(_.toString))
+    }
+  }
+
+  test("WindowGroupLimitExec codegen matches interpreted across partition/order/limit " +
+    "combinations") {
+    // Covers, across partitions: varying group sizes (including a 1-row group), ties on the
+    // order column, a null order-column value, and a null partition key (its own group).
+    val data = Seq(
+      (Some("a"), Some(3)),
+      (Some("a"), Some(1)),
+      (Some("a"), Some(1)),
+      (Some("a"), None),
+      (Some("b"), Some(2)),
+      (Some("b"), Some(2)),
+      (Some("b"), Some(1)),
+      (None, Some(1)),
+      (None, Some(1)),
+      (None, None),
+      (Some("c"), Some(1))
+    ).toDF("key", "value")
+
+    val orderVariants: Seq[(String, Column)] = Seq(
+      "asc nulls first" -> $"value".asc_nulls_first,
+      "asc nulls last" -> $"value".asc_nulls_last,
+      "desc nulls first" -> $"value".desc_nulls_first,
+      "desc nulls last" -> $"value".desc_nulls_last
+    )
+
+    val rankLikeFuncs: Seq[(String, Column)] = Seq(
+      "row_number" -> row_number(),
+      "rank" -> rank(),
+      "dense_rank" -> dense_rank())
+
+    def topRows(partitioned: Boolean, orderCol: Column, rankLikeFunc: Column,
+        limit: Int): DataFrame = {
+      val w = if (partitioned) {
+        Window.partitionBy($"key").orderBy(orderCol)
+      } else {
+        Window.orderBy(orderCol)
+      }
+      data.withColumn("rn", rankLikeFunc.over(w)).where($"rn" <= limit)
+    }
+
+    for {
+      partitioned <- Seq(true, false)
+      (orderDesc, orderCol) <- orderVariants
+      // 1 and 2 land mid-tie-group; 3 lands exactly on a tie boundary; 10 exceeds every group's
+      // size, so the limit is never reached and every row of the group must pass through.
+      limit <- Seq(1, 2, 3, 10)
+      (funcName, rankLikeFunc) <- rankLikeFuncs
+    } {
+      withClue(s"partitioned=$partitioned order=($orderDesc) limit=$limit func=$funcName: ") {
+        checkWindowGroupLimitCodegen(funcName)(topRows(partitioned, orderCol, rankLikeFunc, limit))
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec codegen matches interpreted with a multi-column partition key") {
+    val data = Seq(
+      (Some("a"), Some(1), Some(3)),
+      (Some("a"), Some(1), Some(1)),
+      (Some("a"), Some(1), Some(1)),
+      (Some("a"), Some(2), Some(1)),
+      (Some("a"), None, Some(1)),
+      (None, Some(1), Some(1)),
+      (None, None, None)
+    ).toDF("key1", "key2", "value")
+
+    def topRows(rankLikeFunc: Column, limit: Int): DataFrame = {
+      val w = Window.partitionBy($"key1", $"key2").orderBy($"value".asc_nulls_first)
+      data.withColumn("rn", rankLikeFunc.over(w)).where($"rn" <= limit)
+    }
+
+    for {
+      limit <- Seq(1, 2, 10)
+      (funcName, rankLikeFunc) <-
+        Seq("row_number" -> row_number(), "rank" -> rank(), "dense_rank" -> dense_rank())
+    } {
+      withClue(s"limit=$limit func=$funcName: ") {
+        checkWindowGroupLimitCodegen(funcName)(topRows(rankLikeFunc, limit))
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec codegen matches interpreted when the partition and order columns " +
+    "overlap") {
+    // `doConsumeRank`/`doConsumeDenseRank` call `genKeyProjection` twice against the same `input`
+    // -- once for `partitionSpec` (via `genKeyChangeCode`), once for `orderSpec` -- which is
+    // exactly the column-sharing shape that `evaluateRequiredVariables`'s clear-after-emit must
+    // get right to avoid re-evaluating a shared column. `PARTITION BY value ORDER BY value` makes
+    // both calls target the identical column.
+    val data = Seq(
+      (Some("a"), Some(1)),
+      (Some("a"), Some(1)),
+      (Some("a"), Some(2)),
+      (Some("a"), Some(3)),
+      (Some("b"), Some(1)),
+      (Some("b"), Some(2)),
+      (Some("b"), Some(2)),
+      (None, Some(1)),
+      (None, None)
+    ).toDF("key", "value")
+
+    def topRows(rankLikeFunc: Column, limit: Int): DataFrame = {
+      val w = Window.partitionBy($"value").orderBy($"value".asc_nulls_first)
+      data.withColumn("rn", rankLikeFunc.over(w)).where($"rn" <= limit)
+    }
+
+    for {
+      limit <- Seq(1, 2, 5)
+      (funcName, rankLikeFunc) <-
+        Seq("row_number" -> row_number(), "rank" -> rank(), "dense_rank" -> dense_rank())
+    } {
+      withClue(s"limit=$limit func=$funcName: ") {
+        checkWindowGroupLimitCodegen(funcName)(topRows(rankLikeFunc, limit))
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec codegen matches interpreted with a multi-column order-by") {
+    // `orderKeyOrdering()`/`genKeyProjection(orderSpec.map(_.child))` are written generically for
+    // N order columns; exercise N=2 (with mixed directions, to also cover `orderKeyOrdering`
+    // rebinding each `SortOrder`'s own direction/null-ordering at its new ordinal) rather than
+    // just the single-column case every other test here uses.
+    val data = Seq(
+      (Some("a"), Some(1), Some(2)),
+      (Some("a"), Some(1), Some(1)),
+      (Some("a"), Some(2), Some(5)),
+      (Some("a"), Some(2), Some(3)),
+      (Some("b"), Some(1), None),
+      (Some("b"), Some(1), Some(1)),
+      (None, Some(1), Some(1))
+    ).toDF("key", "value1", "value2")
+
+    def topRows(rankLikeFunc: Column, limit: Int): DataFrame = {
+      val w = Window.partitionBy($"key")
+        .orderBy($"value1".asc_nulls_first, $"value2".desc_nulls_last)
+      data.withColumn("rn", rankLikeFunc.over(w)).where($"rn" <= limit)
+    }
+
+    for {
+      limit <- Seq(1, 2, 10)
+      (funcName, rankLikeFunc) <-
+        Seq("row_number" -> row_number(), "rank" -> rank(), "dense_rank" -> dense_rank())
+    } {
+      withClue(s"limit=$limit func=$funcName: ") {
+        checkWindowGroupLimitCodegen(funcName)(topRows(rankLikeFunc, limit))
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec codegen matches interpreted on randomized data") {
+    // A fixed seed keeps the test deterministic across runs while still exercising many more
+    // key/value/tie combinations than the hand-picked cases above.
+    val rand = new scala.util.Random(42)
+    val keys = Seq(None, Some("a"), Some("b"), Some("c"), Some("d"))
+    // A narrow value range (0-4) forces frequent ties within each partition.
+    val values = Seq(None) ++ (0 to 4).map(Some(_))
+    val rows = (1 to 2000).map { _ =>
+      (keys(rand.nextInt(keys.length)), values(rand.nextInt(values.length)))
+    }
+    val data = rows.toDF("key", "value")
+
+    def topRows(orderCol: Column, rankLikeFunc: Column, limit: Int): DataFrame = {
+      val w = Window.partitionBy($"key").orderBy(orderCol)
+      data.withColumn("rn", rankLikeFunc.over(w)).where($"rn" <= limit)
+    }
+
+    for {
+      orderCol <- Seq($"value".asc_nulls_first, $"value".desc_nulls_last)
+      limit <- Seq(1, 3, 8)
+      (funcName, rankLikeFunc) <-
+        Seq("row_number" -> row_number(), "rank" -> rank(), "dense_rank" -> dense_rank())
+    } {
+      withClue(s"order=$orderCol limit=$limit func=$funcName: ") {
+        checkWindowGroupLimitCodegen(funcName)(topRows(orderCol, rankLikeFunc, limit))
       }
     }
   }
