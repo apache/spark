@@ -198,7 +198,7 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
     }
   }
 
-  test("createAtomic fails when the renamed checkpoint file does not exist") {
+  test("SPARK-60533: renamed file check detects a rename that did not produce the file") {
     import LostRenameFileSystem.scheme
     val hadoopConf = new Configuration()
     hadoopConf.set(s"fs.$scheme.impl", classOf[LostRenameFileSystem].getName)
@@ -213,12 +213,13 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
         out.close()
       }
 
-      val e = intercept[IllegalStateException](write())
-      assert(e.getMessage.contains(s"But $file does not exist"))
+      // By default, the write succeeds silently and no file is created.
+      write()
+      assert(!fm.exists(file))
 
-      withSQLConf(SQLConf.CHECKPOINT_RENAMEDFILE_CHECK_ENABLED.key -> "false") {
-        write()
-        assert(!fm.exists(file))
+      withSQLConf(SQLConf.CHECKPOINT_RENAMEDFILE_CHECK_ENABLED.key -> "true") {
+        val e = intercept[IllegalStateException](write())
+        assert(e.getMessage.contains(s"But $file does not exist"))
       }
     }
   }
