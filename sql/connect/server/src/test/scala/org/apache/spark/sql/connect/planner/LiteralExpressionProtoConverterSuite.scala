@@ -90,7 +90,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     }
   }
 
-  test("FILE DataType proto round-trip preserves the mode") {
+  test("SPARK-61751: FILE DataType proto round-trip preserves the mode") {
     val dataTypes = Seq(
       FileType(),
       FileType.external,
@@ -106,9 +106,14 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       proto.DataType.FileTypeMode.FILE_TYPE_MODE_EXTERNAL)
     assert(DataTypeProtoConverter.toConnectProtoType(FileType()).getFile.getMode ==
       proto.DataType.FileTypeMode.FILE_TYPE_MODE_UNKNOWN)
-    // A file without a mode is an unknown file.
-    val noMode = proto.DataType.newBuilder().setFile(proto.DataType.File.newBuilder()).build()
-    assertResult(FileType())(DataTypeProtoConverter.toCatalystType(noMode))
+    // A file without a mode, or with a mode this side does not know, such as the reserved value
+    // 2 or a value added later, is an unknown file.
+    Seq(None, Some(2), Some(42)).foreach { modeValue =>
+      val file = proto.DataType.File.newBuilder()
+      modeValue.foreach(file.setModeValue)
+      val protoType = proto.DataType.newBuilder().setFile(file).build()
+      assertResult(FileType())(DataTypeProtoConverter.toCatalystType(protoType))
+    }
   }
 
   test("SPARK-59276: CHAR/VARCHAR DataType proto round-trip preserves collations") {

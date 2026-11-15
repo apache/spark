@@ -90,6 +90,7 @@ message DataType {
   enum FileTypeMode {
     FILE_TYPE_MODE_UNSPECIFIED = 0;
     FILE_TYPE_MODE_UNKNOWN = 1;
+    // Held for another file mode, so that the values of the modes above and below stay stable.
     reserved 2;
     FILE_TYPE_MODE_EXTERNAL = 3;
   }
@@ -245,8 +246,7 @@ message DataType {
   }
 
   message File {
-    // (Required) The mode of the file. A mode other than FILE_TYPE_MODE_EXTERNAL is read as
-    // FILE_TYPE_MODE_UNKNOWN.
+    // The mode of the file. Unset or unrecognized values are read as FILE_TYPE_MODE_UNKNOWN.
     FileTypeMode mode = 1;
     uint32 type_variation_reference = 2;
   }

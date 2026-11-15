@@ -879,9 +879,7 @@ class DataType(google.protobuf.message.Message):
         MODE_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
         mode: global___DataType.FileTypeMode.ValueType
-        """(Required) The mode of the file. A mode other than FILE_TYPE_MODE_EXTERNAL is read as
-        FILE_TYPE_MODE_UNKNOWN.
-        """
+        """The mode of the file. Unset or unrecognized values are read as FILE_TYPE_MODE_UNKNOWN."""
         type_variation_reference: builtins.int
         def __init__(
             self,

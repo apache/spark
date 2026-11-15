@@ -1122,11 +1122,17 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             proto.DataType.FILE_TYPE_MODE_UNKNOWN,
             pyspark_types_to_proto_types(FileType()).file.mode,
         )
-        # A file without a mode is an unknown file.
-        self.assertEqual(
-            FileType(),
-            proto_schema_to_pyspark_data_type(proto.DataType(file=proto.DataType.File())),
-        )
+        # A file without a mode, or with a mode this side does not know, such as the reserved
+        # value 2 or a value added later, is an unknown file.
+        for file in [
+            proto.DataType.File(),
+            proto.DataType.File(mode=2),
+            proto.DataType.File(mode=42),
+        ]:
+            with self.subTest(file=str(file)):
+                self.assertEqual(
+                    FileType(), proto_schema_to_pyspark_data_type(proto.DataType(file=file))
+                )
 
     def test_timestamp_nanos_datatype_conversion(self):
         # SPARK-57462: the nanosecond timestamp types round-trip through the DataType proto.

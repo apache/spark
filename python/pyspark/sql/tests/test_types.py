@@ -3816,8 +3816,31 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                 self.assertEqual(dt, _parse_datatype_json_string(dt.json()))
         for json_value in ["file managed", "file external unknown", "files"]:
             with self.subTest(json_value=json_value):
-                with self.assertRaises(PySparkValueError):
+                with self.assertRaises(PySparkValueError) as pe:
                     _parse_datatype_json_value(json_value)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CANNOT_PARSE_DATATYPE",
+                    messageParameters={"msg": json_value},
+                )
+        # Outside a struct field, a plain "file" in an array or a map is unknown too.
+        self.assertEqual(
+            ArrayType(FileType()),
+            _parse_datatype_json_value(
+                {"type": "array", "elementType": "file", "containsNull": True}
+            ),
+        )
+        self.assertEqual(
+            MapType(StringType(), FileType()),
+            _parse_datatype_json_value(
+                {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "file",
+                    "valueContainsNull": True,
+                }
+            ),
+        )
 
         # In a struct field, and in an array or map of one, an external file is the plain "file"
         # and a plain "file" is read as external. An unknown file keeps its mode.
