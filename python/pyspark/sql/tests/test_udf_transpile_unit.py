@@ -209,30 +209,37 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "spark.sql.experimental.optimizer.pyTranspilers; registered transpilers are "
             f"{sorted(AbstractTranspiler.varieties)}"
         )
-        with self.sql_conf(
-            dict(
-                _TRANSPILE_ON,
-                **{"spark.sql.experimental.optimizer.pyTranspilers": "catalyst,catalist"},
-            )
-        ):
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always")
-                pudf = UserDefinedFunction(plus_one, LongType())
-            self.assertTrue(pudf.transpiled)
-            self.assertEqual([str(w.message) for w in caught], [expected])
+        for names, lowered in [("catalyst,catalist", True), ("catalist", False)]:
+            with (
+                self.subTest(names=names),
+                self.sql_conf(
+                    dict(
+                        _TRANSPILE_ON,
+                        **{"spark.sql.experimental.optimizer.pyTranspilers": names},
+                    )
+                ),
+            ):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("default")
+                    pudf = UserDefinedFunction(plus_one, LongType())
+                self.assertEqual(bool(pudf.transpiled), lowered)
+                expected_warnings = (
+                    [expected] if lowered else [f"Unable to transpile UDF {plus_one}", expected]
+                )
+                self.assertEqual([str(w.message) for w in caught], expected_warnings)
 
-            with warnings.catch_warnings():
-                warnings.simplefilter("error")
-                warnings.filterwarnings("ignore", message="Unable to transpile UDF")
-                with self.assertRaises(UserWarning) as raised:
-                    UserDefinedFunction(plus_one, LongType())
-            self.assertEqual(str(raised.exception), expected)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error")
+                    warnings.filterwarnings("ignore", message="Unable to transpile UDF")
+                    with self.assertRaises(UserWarning) as raised:
+                        UserDefinedFunction(plus_one, LongType())
+                self.assertEqual(str(raised.exception), expected)
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings("error", message="Ignoring unknown transpilers")
-                with self.assertRaises(UserWarning) as raised:
-                    UserDefinedFunction(plus_one, LongType())
-            self.assertEqual(str(raised.exception), expected)
+                with warnings.catch_warnings(record=True):
+                    warnings.filterwarnings("error", message="Ignoring unknown transpilers")
+                    with self.assertRaises(UserWarning) as raised:
+                        UserDefinedFunction(plus_one, LongType())
+                self.assertEqual(str(raised.exception), expected)
 
         for names in ("catalyst", "catalyst,", "catalyst,,catalyst", "catalyst, "):
             with self.subTest(names=names):
