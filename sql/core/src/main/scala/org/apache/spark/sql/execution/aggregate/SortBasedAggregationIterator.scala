@@ -108,13 +108,7 @@ class SortBasedAggregationIterator(
     }
 
     groupKeyEqualityCheck =
-      if (groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))) {
-        (key1: UnsafeRow, key2: UnsafeRow) => key1.equals(key2)
-      } else {
-        val types = groupingAttributes.map(_.dataType).toIndexedSeq
-        val ordering = InterpretedOrdering.forSchema(types)
-        (key1: UnsafeRow, key2: UnsafeRow) => ordering.compare(key1, key2) == 0
-      }
+      UnsafeRowUtils.rowEqualityChecker(groupingAttributes.map(_.dataType))
   }
 
   initialize()

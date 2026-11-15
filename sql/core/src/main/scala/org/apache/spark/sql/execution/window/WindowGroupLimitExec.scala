@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.window
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, InterpretedOrdering, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -206,18 +206,12 @@ class GroupedLimitIterator(
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
+  // A non-binary-stable key (e.g. a collated STRING) makes the checker fall back to an
+  // ordering-based comparison over all fields. Float and double keys arrive already
+  // normalized by NormalizeFloatingNumbers (-0.0 becomes 0.0, NaNs are canonical), so
+  // both branches group them the same way WindowExec does.
   private val groupEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
-    if (partitionSpec.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))) {
-      (key1, key2) => key1.equals(key2)
-    } else {
-      // InterpretedOrdering is applied to all fields when any field is non-binary-stable
-      // (e.g. a collated STRING). As a side effect, any DOUBLE/FLOAT fields in the same
-      // spec use SQLOrderingUtil.compareDoubles, so -0.0 and +0.0 compare as equal --
-      // consistent with the sort order, but different from a pure-Double spec (binary path).
-      val types = partitionSpec.map(_.dataType)
-      val ordering = InterpretedOrdering.forSchema(types)
-      (key1, key2) => ordering.compare(key1, key2) == 0
-    }
+    UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType))
 
   // Manage the stream and the grouping.
   var nextRow: UnsafeRow = null

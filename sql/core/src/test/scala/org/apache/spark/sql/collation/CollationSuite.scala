@@ -3422,18 +3422,38 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("WindowGroupLimitExec collation grouping with Double in mixed partition spec") {
-    withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "1") {
+    // A mixed spec with one DOUBLE and one collated STRING key takes the InterpretedOrdering
+    // path, which must compare every field: with byte grouping 'foo'/'FOO' split each d value
+    // into separate groups so the Final node forwards all 5 rows, while a comparator over s
+    // alone would collapse the d = 1.0 and d = 2.0 groups into one and forward a single row
+    // (dropping the d = 2.0 survivor). Only collation-aware grouping over all fields forwards
+    // exactly one survivor per (d, collated s) group. We assert on the Final node's
+    // numOutputRows (deterministic with one shuffle partition, see the test above) because
+    // the final query answer alone cannot distinguish these cases.
+    withSQLConf(
+        SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       withTable("t_dbl") {
         sql("CREATE TABLE t_dbl (d DOUBLE, s STRING COLLATE UTF8_LCASE, i INT) USING PARQUET")
-        sql("INSERT INTO t_dbl VALUES (-0.0, 'foo', 1), (0.0, 'foo', 2)")
-        // UTF8_LCASE on s is non-binary-stable, so InterpretedOrdering is used for all
-        // fields including d. SQLOrderingUtil.compareDoubles treats -0.0 == +0.0, so both
-        // rows land in one partition group and only the rank-1 row survives the filter.
-        val df = sql(
-          """SELECT d, s, i FROM (
-            |  SELECT d, s, i, RANK() OVER (PARTITION BY d, s ORDER BY i) AS r
-            |  FROM t_dbl) WHERE r <= 1""".stripMargin)
-        assert(df.count() == 1, "-0.0 and +0.0 should be treated as equal partition keys")
+        // Alternating spellings within each (d, s) partition maximize the gap between byte
+        // and collation grouping. Distinct ORDER BY values (i) keep which row survives
+        // WHERE r <= 1 deterministic (no ties).
+        sql("""INSERT INTO t_dbl VALUES
+              |  (1.0D, 'foo', 1), (1.0D, 'FOO', 2), (1.0D, 'foo', 3),
+              |  (2.0D, 'foo', 4), (2.0D, 'FOO', 5)""".stripMargin)
+        val df = sql("""SELECT d, s, i FROM (
+                       |  SELECT d, s, i, ROW_NUMBER() OVER (PARTITION BY d, s ORDER BY i) AS r
+                       |  FROM t_dbl) WHERE r <= 1""".stripMargin)
+        checkAnswer(df, Row(1.0, "foo", 1) :: Row(2.0, "foo", 4) :: Nil)
+        val finalForwarded = collect(df.queryExecution.executedPlan) {
+          case w: WindowGroupLimitExec if w.mode == Final =>
+            w.metrics("numOutputRows").value
+        }.sum
+        // Post-fix: one survivor per (d, collated s) group = 2 rows. Pre-fix byte grouping
+        // forwards all 5 rows; a comparator over s alone would forward only 1.
+        assert(finalForwarded == 2,
+          s"WindowGroupLimitExec(Final) should forward 2 rows, got $finalForwarded")
       }
     }
   }

@@ -390,6 +390,38 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
     }
   }
 
+  test("rowEqualityChecker for binary-stable and collated grouping keys") {
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val schema = StructType(Seq(
+      StructField("s", collatedString, nullable = false),
+      StructField("i", IntegerType, nullable = false)))
+    val projection = UnsafeProjection.create(schema)
+    def key(s: String, i: Int): UnsafeRow = {
+      val row = new SpecificInternalRow(schema)
+      row.update(0, UTF8String.fromString(s))
+      row.setInt(1, i)
+      projection(row).copy()
+    }
+
+    val binaryChecker = UnsafeRowUtils.rowEqualityChecker(Seq(StringType, IntegerType))
+    val collatedChecker = UnsafeRowUtils.rowEqualityChecker(Seq(collatedString, IntegerType))
+
+    // Byte-identical keys are equal under both checkers.
+    val foo1 = key("foo", 1)
+    assert(binaryChecker(foo1, key("foo", 1)))
+    assert(collatedChecker(foo1, key("foo", 1)))
+
+    // 'foo' and 'FOO' differ in bytes, so they are equal only under the collated checker.
+    assert(!binaryChecker(foo1, key("FOO", 1)))
+    assert(collatedChecker(foo1, key("FOO", 1)))
+
+    // The collated checker still compares the remaining fields, and distinguishes values
+    // that differ under the collation.
+    assert(!collatedChecker(foo1, key("foo", 2)))
+    assert(!collatedChecker(foo1, key("FOO", 2)))
+    assert(!collatedChecker(foo1, key("bar", 1)))
+  }
+
   test("PaddingProvider handles endianness") {
     // The following arrays contain the same 8 byte field values as represented
     // in memory on little endian and big endian platforms. They are

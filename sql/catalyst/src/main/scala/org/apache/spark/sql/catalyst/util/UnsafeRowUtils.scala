@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeRow}
 import org.apache.spark.sql.types._
 
 object UnsafeRowUtils {
@@ -236,5 +236,23 @@ object UnsafeRowUtils {
     case st: StringType =>
       !st.supportsBinaryEquality
     case _ => false
+  }
+
+  /**
+   * Returns an equality checker for grouping keys (UnsafeRows) of the given data types.
+   * If every type is binary-stable, equality is a plain binary comparison. Otherwise (e.g.
+   * a STRING with a non-binary collation), values that are semantically equal can have
+   * different binary representations, so the checker falls back to an ordering-based
+   * comparison that applies to all fields. Byte-identical rows compare equal under every
+   * collation and SQL ordering, so the fallback checks the bytes first to keep the common
+   * same-spelling case cheap.
+   */
+  def rowEqualityChecker(dataTypes: Seq[DataType]): (UnsafeRow, UnsafeRow) => Boolean = {
+    if (dataTypes.forall(isBinaryStable)) {
+      (key1, key2) => key1.equals(key2)
+    } else {
+      val ordering = InterpretedOrdering.forSchema(dataTypes)
+      (key1, key2) => key1.equals(key2) || ordering.compare(key1, key2) == 0
+    }
   }
 }
