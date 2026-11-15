@@ -564,7 +564,9 @@ class SparkSession:
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
                 return DataFrame(LocalRelation(table=None, schema=_schema.json()), self)
-            else:
+            # An empty NumPy array or PyArrow Table still carries its column types,
+            # so there is nothing to infer. They are converted below like non-empty ones.
+            elif not isinstance(data, (np.ndarray, pa.Table)):
                 raise PySparkValueError(
                     errorClass="CANNOT_INFER_EMPTY_SCHEMA",
                     messageParameters={},
