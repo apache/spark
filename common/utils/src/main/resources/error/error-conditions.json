@@ -3227,19 +3227,19 @@
   },
   "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY" : {
     "message" : [
-      "The FILE type cannot be a map key in the return type of <routineType> <routineName>. Use FILE only as a map value, array element, or struct field."
+      "The FILE type cannot be a map key in the return type of <routineName>. Use FILE only as a map value, array element, or struct field."
     ],
     "sqlState" : "42601"
   },
   "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER" : {
     "message" : [
-      "The FILE type in <routineType> <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
+      "The FILE type in the signature of <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
     ],
     "sqlState" : "42601"
   },
   "FILE_TYPE_MISSING_QUALIFIER" : {
     "message" : [
-      "FILE type requires the EXTERNAL qualifier in a column definition. Use FILE EXTERNAL."
+      "The column <colName> of type <dataType> holds a FILE without a qualifier, which a column definition requires. Use FILE EXTERNAL."
     ],
     "sqlState" : "42601"
   },
@@ -3254,6 +3254,16 @@
       "The column <colName> of type <dataType> holds a FILE, which is not comparable."
     ],
     "subClass" : {
+      "BUCKET_COLUMN" : {
+        "message" : [
+          "It cannot be a bucket column."
+        ]
+      },
+      "BUCKET_SORT_COLUMN" : {
+        "message" : [
+          "It cannot be a column that sorts the buckets."
+        ]
+      },
       "CLUSTERING_COLUMN" : {
         "message" : [
           "It cannot be a clustering column."

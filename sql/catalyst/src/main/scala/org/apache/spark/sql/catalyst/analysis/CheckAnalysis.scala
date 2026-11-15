@@ -1004,12 +1004,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case CreateTableLike(_: ResolvedIdentifier, source, _, _, _, _, _) =>
             source match {
               case ResolvedTable(_, _, table, _) =>
-                TypeUtils.checkNoUnknownFileTypeInTableSchema(
+                TypeUtils.checkNoUnknownFileTypeWrite(
                   CatalogV2Util.v2ColumnsToStructType(table.columns))
               case view: ResolvedPersistentView =>
-                TypeUtils.checkNoUnknownFileTypeInTableSchema(view.info.schema)
+                TypeUtils.checkNoUnknownFileTypeWrite(view.info.schema)
               case ResolvedTempView(_, metadata) =>
-                TypeUtils.checkNoUnknownFileTypeInTableSchema(metadata.schema)
+                TypeUtils.checkNoUnknownFileTypeWrite(metadata.schema)
               case _ =>
             }
 

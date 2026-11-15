@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{V2CreateTableAsSelectPlan, V2CreateTablePlan}
-import org.apache.spark.sql.catalyst.util.{TypeUtils, WriteDistributionAndOrdering}
+import org.apache.spark.sql.catalyst.util.{FileTypeColumnUsage, TypeUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.expressions.ClusterByTransform
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, NamedReference, SortedBucketTransform}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.SchemaUtils
@@ -68,27 +68,33 @@ private[sql] object CreateTableValidation {
     create match {
       // The columns of CREATE TABLE AS SELECT come from its query, not from DDL.
       case ctas: V2CreateTableAsSelectPlan =>
-        TypeUtils.checkNoUnknownFileTypeWrite(ctas.query.output)
+        TypeUtils.checkNoUnknownFileTypeWrite(ctas.query.schema)
       case _ =>
         TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
     }
-    // FILE is not comparable, so it cannot be a partition, clustering or write-ordering column.
-    create.partitioning.foreach { transform =>
-      val usage = transform match {
-        case _: ClusterByTransform => "CLUSTERING_COLUMN"
-        case _ => "PARTITION_COLUMN"
-      }
-      transform.references.foreach { ref =>
+    // FILE is not comparable, so it cannot be a partition, bucket, clustering or write-ordering
+    // column.
+    def checkNoFileTypeInColumns(refs: Seq[NamedReference], usage: FileTypeColumnUsage): Unit =
+      refs.foreach { ref =>
         create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
-          case (_, field) => TypeUtils.checkNoFileTypeInColumnUsage(field, usage)
+          case (parentPath, field) =>
+            TypeUtils.checkNoFileTypeInColumnUsage(parentPath :+ field.name, field.dataType, usage)
         }
       }
+    create.partitioning.foreach {
+      case clusterBy: ClusterByTransform =>
+        checkNoFileTypeInColumns(clusterBy.references.toSeq, FileTypeColumnUsage.ClusteringColumn)
+      case bucket: BucketTransform =>
+        checkNoFileTypeInColumns(bucket.columns, FileTypeColumnUsage.BucketColumn)
+      case bucket: SortedBucketTransform =>
+        checkNoFileTypeInColumns(bucket.columns, FileTypeColumnUsage.BucketColumn)
+        checkNoFileTypeInColumns(bucket.sortedColumns, FileTypeColumnUsage.BucketSortColumn)
+      case transform =>
+        checkNoFileTypeInColumns(transform.references.toSeq, FileTypeColumnUsage.PartitionColumn)
     }
-    create.writeOrdering.flatMap(_.expression.references).foreach { ref =>
-      create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
-        case (_, field) => TypeUtils.checkNoFileTypeInColumnUsage(field, "WRITE_ORDERING_COLUMN")
-      }
-    }
+    checkNoFileTypeInColumns(
+      create.writeOrdering.toSeq.flatMap(_.expression.references.toSeq),
+      FileTypeColumnUsage.WriteOrderingColumn)
 
     // Validate generated column expressions
     create.columns.foreach { col =>

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, Resolver, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryErrorsBase}
@@ -175,60 +175,69 @@ object TypeUtils extends QueryErrorsBase {
     }
   }
 
-  private def containsUnknownFileType(dataType: DataType): Boolean = {
-    dataType.existsRecursively {
-      case ft: FileType => ft.mode == FileTypeMode.UNKNOWN
-      case _ => false
+  /**
+   * Returns the paths of the columns that hold a FILE without a qualifier, for a column at `path`
+   * of type `dataType`. The path descends into struct fields, so a FILE in a field of a struct
+   * column is reported at that field. A FILE in an array or a map is reported at the column of
+   * the array or map.
+   */
+  private def unknownFileTypePaths(
+      path: Seq[String],
+      dataType: DataType): Seq[(Seq[String], DataType)] = dataType match {
+    case st: StructType =>
+      st.fields.toSeq.flatMap(f => unknownFileTypePaths(path :+ f.name, f.dataType))
+    case dt if dt.existsRecursively {
+        case ft: FileType => ft.mode == FileTypeMode.UNKNOWN
+        case _ => false
+      } => Seq(path -> dt)
+    case _ => Seq.empty
+  }
+
+  /**
+   * Fails if a FILE in any of `columns`, given as the path of a column and its type, has no
+   * qualifier, as a FILE in a table column definition must be declared `FILE EXTERNAL`.
+   */
+  def checkFileTypeHasQualifier(columns: Seq[(Seq[String], DataType)]): Unit = {
+    columns.iterator.flatMap { case (path, dataType) => unknownFileTypePaths(path, dataType) }
+      .take(1).foreach { case (path, dataType) =>
+        throw QueryCompilationErrors.fileTypeMissingQualifierError(path, dataType)
+      }
+  }
+
+  /** Fails if a FILE in a column of `schema` has no qualifier. */
+  def checkFileTypeHasQualifier(schema: StructType): Unit = {
+    checkFileTypeHasQualifier(schema.fields.toSeq.map(f => Seq(f.name) -> f.dataType))
+  }
+
+  /**
+   * Fails if any of `columns`, which a write such as CREATE TABLE AS SELECT, CREATE TABLE LIKE or
+   * schema evolution stores in a table, holds a FILE without a qualifier, as a table cannot store
+   * one. A column is given as its path and the type it would be stored with.
+   */
+  def checkNoUnknownFileTypeWrite(columns: Seq[(Seq[String], DataType)]): Unit = {
+    val unknownPaths = columns.flatMap { case (path, dataType) =>
+      unknownFileTypePaths(path, dataType).map(_._1)
+    }
+    if (unknownPaths.nonEmpty) {
+      throw QueryCompilationErrors.fileTypeUnknownWriteError(unknownPaths)
     }
   }
 
-  /**
-   * Fails if a FILE in `dataType`, at any nesting depth, has no qualifier, as a FILE in a table
-   * column definition must be declared `FILE EXTERNAL`.
-   */
-  def checkFileTypeHasQualifier(dataType: DataType): Unit = {
-    if (containsUnknownFileType(dataType)) {
-      throw QueryCompilationErrors.fileTypeMissingQualifierError()
-    }
+  /** Fails if a column of `schema`, which a write stores in a table, holds an unknown FILE. */
+  def checkNoUnknownFileTypeWrite(schema: StructType): Unit = {
+    checkNoUnknownFileTypeWrite(schema.fields.toSeq.map(f => Seq(f.name) -> f.dataType))
   }
 
   /**
-   * Fails if any of `columns`, which a write such as CREATE TABLE AS SELECT stores in a table,
-   * holds a FILE without a qualifier, as a table cannot store one.
+   * Fails if the column at `path`, of type `dataType`, holds a FILE, as FILE is not comparable
+   * and so cannot have the given `usage`, such as a partition or clustering column.
    */
-  def checkNoUnknownFileTypeWrite(columns: Seq[Attribute]): Unit = {
-    checkNoUnknownFileTypeInColumns(columns.map(c => Seq(c.name) -> c.dataType))
-  }
-
-  /**
-   * Fails if a column of `schema`, which a command such as CREATE TABLE LIKE stores in a new
-   * table, holds a FILE without a qualifier.
-   */
-  def checkNoUnknownFileTypeInTableSchema(schema: StructType): Unit = {
-    checkNoUnknownFileTypeInColumns(schema.fields.toSeq.map(f => Seq(f.name) -> f.dataType))
-  }
-
-  /**
-   * Fails if any of `columns`, given as the path of a column and the type it would be stored
-   * with, holds a FILE without a qualifier.
-   */
-  def checkNoUnknownFileTypeInColumns(columns: Seq[(Seq[String], DataType)]): Unit = {
-    val unknownCols = columns.collect {
-      case (path, dataType) if containsUnknownFileType(dataType) => path
-    }
-    if (unknownCols.nonEmpty) {
-      throw QueryCompilationErrors.fileTypeUnknownWriteError(unknownCols)
-    }
-  }
-
-  /**
-   * Fails if `field` holds a FILE, as FILE is not comparable and so cannot be a partition column
-   * (`usage` is `PARTITION_COLUMN`), a clustering column (`CLUSTERING_COLUMN`) or a write-ordering
-   * column (`WRITE_ORDERING_COLUMN`).
-   */
-  def checkNoFileTypeInColumnUsage(field: StructField, usage: String): Unit = {
-    if (field.dataType.existsRecursively(_.isInstanceOf[FileType])) {
-      throw QueryCompilationErrors.fileTypeUnsupportedColumnUsageError(field, usage)
+  def checkNoFileTypeInColumnUsage(
+      path: Seq[String],
+      dataType: DataType,
+      usage: FileTypeColumnUsage): Unit = {
+    if (dataType.existsRecursively(_.isInstanceOf[FileType])) {
+      throw QueryCompilationErrors.fileTypeUnsupportedColumnUsageError(path, dataType, usage)
     }
   }
 
@@ -242,19 +251,23 @@ object TypeUtils extends QueryErrorsBase {
       schema: StructType,
       clusterBySpec: ClusterBySpec,
       resolver: Resolver): Unit = {
-    def find(schema: StructType, path: Seq[String]): Option[StructField] =
+    // Returns the path of the column, with the names of the schema, and its field.
+    def find(schema: StructType, path: Seq[String]): Option[(Seq[String], StructField)] =
       schema.fields.find(f => resolver(f.name, path.head)).flatMap { field =>
         (path.tail, field.dataType) match {
-          case (Seq(), _) => Some(field)
-          case (tail, s: StructType) => find(s, tail)
-          case (tail, ArrayType(s: StructType, _)) => find(s, tail)
+          case (Seq(), _) => Some(Seq(field.name) -> field)
+          case (tail, s: StructType) => find(s, tail).map { case (p, f) => (field.name +: p, f) }
+          case (tail, ArrayType(s: StructType, _)) =>
+            find(s, tail).map { case (p, f) => (field.name +: p, f) }
           case _ => None
         }
       }
     if (schema.existsRecursively(_.isInstanceOf[FileType])) {
       clusterBySpec.columnNames.map(_.fieldNames.toImmutableArraySeq).filter(_.nonEmpty)
         .flatMap(find(schema, _))
-        .foreach(checkNoFileTypeInColumnUsage(_, "CLUSTERING_COLUMN"))
+        .foreach { case (path, field) =>
+          checkNoFileTypeInColumnUsage(path, field.dataType, FileTypeColumnUsage.ClusteringColumn)
+        }
     }
   }
 
@@ -262,17 +275,13 @@ object TypeUtils extends QueryErrorsBase {
    * Fails if a FILE in the parameter or return types of a routine has a qualifier. Routines
    * declare a plain FILE. `routineName` is quoted already.
    */
-  def checkNoQualifierInRoutineSignature(
-      dataTypes: Seq[DataType],
-      routineType: String,
-      routineName: String): Unit = {
+  def checkNoQualifierInRoutineSignature(dataTypes: Seq[DataType], routineName: String): Unit = {
     val hasQualified = dataTypes.exists(_.existsRecursively {
       case ft: FileType => ft.mode != FileTypeMode.UNKNOWN
       case _ => false
     })
     if (hasQualified) {
-      throw QueryCompilationErrors.fileTypeInRoutineSignatureUnsupportedQualifierError(
-        routineType, routineName)
+      throw QueryCompilationErrors.fileTypeInRoutineSignatureUnsupportedQualifierError(routineName)
     }
   }
 
@@ -289,8 +298,7 @@ object TypeUtils extends QueryErrorsBase {
       case _ => false
     }
     if (fileTypeInMapKey(returnType)) {
-      throw QueryCompilationErrors.fileTypeInRoutineSignatureUnsupportedMapKeyError(
-        "function", routineName)
+      throw QueryCompilationErrors.fileTypeInRoutineSignatureUnsupportedMapKeyError(routineName)
     }
   }
 
@@ -305,7 +313,7 @@ object TypeUtils extends QueryErrorsBase {
       routineName: String): Unit = {
     if (SQLConf.get.isFileTypeEnabled) {
       val quotedName = toSQLId(Seq(routineName))
-      checkNoQualifierInRoutineSignature(Seq(returnType), "function", quotedName)
+      checkNoQualifierInRoutineSignature(Seq(returnType), quotedName)
       checkNoFileTypeMapKeyInReturnType(returnType, quotedName)
     }
   }

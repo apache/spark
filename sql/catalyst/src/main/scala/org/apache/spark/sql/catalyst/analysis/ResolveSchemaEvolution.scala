@@ -52,7 +52,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
           // A table cannot store a FILE without a qualifier, so schema evolution cannot add one.
           // This is checked before the catalog changes the table.
-          TypeUtils.checkNoUnknownFileTypeInColumns(write.pendingSchemaChanges.collect {
+          TypeUtils.checkNoUnknownFileTypeWrite(write.pendingSchemaChanges.collect {
             case add: TableChange.AddColumn =>
               add.fieldNames.toImmutableArraySeq -> add.dataType
             case update: TableChange.UpdateColumnType =>
