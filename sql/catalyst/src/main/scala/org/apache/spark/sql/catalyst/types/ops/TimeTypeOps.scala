@@ -70,6 +70,9 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
     (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
 
+  // 8 bytes: Long values are stored directly in the fixed-size region (not as a pointer).
+  override def getElementSize: Int = 8
+
   // ==================== Literal Creation ====================
 
   override def getDefaultLiteral: Literal = Literal.create(0L, t)

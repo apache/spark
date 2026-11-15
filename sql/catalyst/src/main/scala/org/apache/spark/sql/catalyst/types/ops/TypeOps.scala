@@ -53,6 +53,12 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *   }
  * }}}
  *
+ * PHYSICAL TYPE CONTRACT: getPhysicalType must return the raw physical storage type (e.g.,
+ * PhysicalLongType for Long-backed types, PhysicalStructType for struct-backed types). All
+ * row infrastructure dispatchers (SpecializedGettersReader, InterpretedUnsafeProjection,
+ * CodeGenerator, etc.) use PhysicalDataType dispatch and handle the raw type automatically.
+ * Logical conversion (raw value <-> external type) happens at boundaries via toScala/toCatalyst.
+ *
  * IMPLEMENTATION - to add a new type to the framework:
  *   1. Create a case class extending the matching `*TypeApiOps` and mixing in `TypeOps`
  *      (e.g., `case class FooTypeOps(...) extends FooTypeApiOps(...) with TypeOps`)
@@ -70,10 +76,17 @@ trait TypeOps extends TypeApiOps {
   /**
    * Returns the physical data type representation.
    *
-   * Determines how values are stored in memory and accessed from InternalRow.
+   * Determines how values are stored in memory and accessed from InternalRow. Must return the
+   * raw physical type (e.g., PhysicalLongType, PhysicalStructType) - not a wrapper. All row
+   * infrastructure dispatchers match on PhysicalDataType and handle these types automatically,
+   * including both interpreted and whole-stage codegen paths.
+   *
+   * For struct-backed types, return PhysicalStructType(fields) where fields describes the
+   * physical struct layout. The internal representation will be InternalRow.
    *
    * @return
-   *   PhysicalDataType (e.g., PhysicalLongType for TimeType)
+   *   PhysicalDataType (e.g., PhysicalLongType for TimeType, PhysicalStructType for a
+   *   struct-backed type)
    */
   def getPhysicalType: PhysicalDataType
 
@@ -114,6 +127,48 @@ trait TypeOps extends TypeApiOps {
    *   writer function (InternalRow, Any) => Unit
    */
   def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit
+
+  /**
+   * Returns the number of bytes this type occupies in the fixed-size region of an
+   * [[org.apache.spark.sql.catalyst.expressions.UnsafeArrayData UnsafeArrayData]].
+   *
+   * Variable-length types (struct, array, map, binary, string) use 8 bytes because
+   * the fixed region stores an offset+size pointer into the variable-length region.
+   * Fixed-size primitive types use their natural size (1 for byte/boolean, 2 for short,
+   * 4 for int/float, 8 for long/double).
+   *
+   * Consumed by [[org.apache.spark.sql.catalyst.expressions.InterpretedUnsafeProjection]]
+   * when writing arrays or maps that contain framework type elements.
+   *
+   * @return
+   *   element size in bytes
+   */
+  def getElementSize: Int
+
+  /**
+   * Returns an equivalent built-in DataType for infrastructure dispatch.
+   *
+   * Framework types backed by complex physical storage (struct, array, map) return
+   * the corresponding built-in DataType so that row infrastructure code (codegen,
+   * projection, comparison, etc.) can handle them through existing code paths via
+   * self-recursion - no per-physical-type matching needed at call sites.
+   *
+   * Primitive-backed types (e.g., TimeType backed by Long) return None because
+   * existing infrastructure default paths already handle primitives correctly.
+   *
+   * This is NOT a type alias - the framework type retains its identity in schemas,
+   * expressions, proto serialization, and error messages. This is solely a dispatch
+   * hint for row infrastructure internals.
+   *
+   * IMPORTANT: Must return a built-in DataType (StructType, ArrayType, MapType) - never
+   * another framework type. Infrastructure sites recurse through this method, and returning
+   * a framework type would cause infinite recursion. Must also be consistent with
+   * [[getPhysicalType]] - e.g., if getPhysicalType returns PhysicalStructType(fields),
+   * rowRepresentationType should return StructType(fields).
+   *
+   * @return Some(DataType) for complex-backed types, None for primitive-backed types
+   */
+  def rowRepresentationType: Option[DataType] = None
 
   // ==================== Literal Creation ====================
 
@@ -246,6 +301,21 @@ object TypeOps {
     case t: TimestampNTZNanosType => Some(TimestampNTZNanosTypeOps(t))
     case t: TimestampLTZNanosType => Some(TimestampLTZNanosTypeOps(t))
     // Add new types here - single registration point
+    case ft: TestableFrameworkType => Some(ft.createTypeOps())
     case _ => None
   }
+}
+
+/**
+ * Marker trait for test-only DataTypes that participate in the Types Framework.
+ *
+ * Test DataTypes implement this trait to register themselves with TypeOps.apply()
+ * without requiring mutable global state. Each test type carries its own TypeOps
+ * factory, making this safe for concurrent test execution (SBT parallel tests).
+ *
+ * Production types (TimeType, the nanosecond timestamp types, etc.) do NOT use this trait -
+ * they are registered directly in the TypeOps.apply() match.
+ */
+private[ops] trait TestableFrameworkType {
+  def createTypeOps(): TypeOps
 }

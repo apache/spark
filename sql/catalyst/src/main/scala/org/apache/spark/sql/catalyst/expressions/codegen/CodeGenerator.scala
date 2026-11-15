@@ -741,7 +741,9 @@ class CodegenContext extends Logging {
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
-    val code = UserDefinedType.sqlType(dataType) match {
+    val resolved = TypeOps(dataType).flatMap(_.rowRepresentationType)
+      .getOrElse(UserDefinedType.sqlType(dataType))
+    val code = resolved match {
       case _: StringType => code"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
       case _ => code"$value = $initCode;"
@@ -1067,7 +1069,12 @@ class CodegenContext extends Logging {
   /**
    * Generates code for equal expression in Java.
    */
-  def genEqual(dataType: DataType, c1: String, c2: String): String = dataType match {
+  def genEqual(dataType: DataType, c1: String, c2: String): String =
+    TypeOps(dataType).flatMap(_.rowRepresentationType).map(genEqual(_, c1, c2))
+      .getOrElse(genEqualDefault(dataType, c1, c2))
+
+  private def genEqualDefault(
+      dataType: DataType, c1: String, c2: String): String = dataType match {
     case BinaryType => s"java.util.Arrays.equals($c1, $c2)"
     case FloatType =>
       s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
@@ -1094,7 +1101,12 @@ class CodegenContext extends Logging {
    * @param c1 name of the variable of expression 1's output
    * @param c2 name of the variable of expression 2's output
    */
-  def genComp(dataType: DataType, c1: String, c2: String): String = dataType match {
+  def genComp(dataType: DataType, c1: String, c2: String): String =
+    TypeOps(dataType).flatMap(_.rowRepresentationType).map(genComp(_, c1, c2))
+      .getOrElse(genCompDefault(dataType, c1, c2))
+
+  private def genCompDefault(
+      dataType: DataType, c1: String, c2: String): String = dataType match {
     // java boolean doesn't support > or < operator
     case BooleanType => s"($c1 == $c2 ? 0 : ($c1 ? 1 : -1))"
     case DoubleType =>
@@ -2876,8 +2888,13 @@ object CodeGenerator extends Logging {
   /**
    * Returns the code to update a column in Row for a given DataType.
    */
+  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String =
+    TypeOps(dataType).flatMap(_.rowRepresentationType).map(setColumn(row, _, ordinal, value))
+      .getOrElse(setColumnDefault(row, dataType, ordinal, value))
+
   @tailrec
-  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
+  private def setColumnDefault(
+      row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
@@ -2885,7 +2902,7 @@ object CodeGenerator extends Logging {
       case _: TimestampNTZNanosType => s"$row.setTimestampNTZNanos($ordinal, $value)"
       case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      case udt: UserDefinedType[_] => setColumnDefault(row, udt.sqlType, ordinal, value)
       // The UTF8String, BinaryView, InternalRow, ArrayData and MapData may came from UnsafeRow, we
       // should copy it to avoid keeping a "pointer" to a memory region which may get updated
       // afterwards.
@@ -3011,9 +3028,11 @@ object CodeGenerator extends Logging {
       case _ => dataType
     }
 
-    if (sqlDataType.isInstanceOf[StructType]) {
-      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
-      // `ordinal` parameter.
+    // ColumnVector.getStruct takes a single arg (rowId), unlike InternalRow.getStruct which
+    // takes two args (ordinal, numFields). Resolve framework types so struct-backed types
+    // hit the StructType path.
+    val resolved = TypeOps(sqlDataType).flatMap(_.rowRepresentationType).getOrElse(sqlDataType)
+    if (resolved.isInstanceOf[StructType]) {
       s"$vector.getStruct($rowId)"
     } else {
       getValue(vector, sqlDataType, rowId)

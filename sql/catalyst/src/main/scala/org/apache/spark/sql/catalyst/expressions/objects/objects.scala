@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1176,7 +1177,9 @@ case class MapObjects private(
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
       s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
-    val genFunctionValue: String = lambdaFunction.dataType match {
+    // Resolve framework types so that struct-backed types are copied like a StructType.
+    val genFunctionValue: String = TypeOps(lambdaFunction.dataType)
+        .flatMap(_.rowRepresentationType).getOrElse(lambdaFunction.dataType) match {
       case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
       case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
       case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
@@ -1444,8 +1447,10 @@ case class CatalystToExternalMap private(
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
       s"$value instanceof ${clazz.getSimpleName}? $value.copy() : $value"
+    // Resolve framework types so that struct-backed types are copied like a StructType.
     def genFunctionValue(lambdaFunction: Expression, genFunction: ExprCode) =
-      lambdaFunction.dataType match {
+      TypeOps(lambdaFunction.dataType)
+        .flatMap(_.rowRepresentationType).getOrElse(lambdaFunction.dataType) match {
         case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
         case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
         case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)

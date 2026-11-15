@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -136,15 +137,22 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[MapData]))
   }
 
-  @tailrec
   private def convertToSafe(
+      ctx: CodegenContext,
+      input: ExprValue,
+      dataType: DataType): ExprCode =
+    TypeOps(dataType).flatMap(_.rowRepresentationType).map(convertToSafe(ctx, input, _))
+      .getOrElse(convertToSafeDefault(ctx, input, dataType))
+
+  @tailrec
+  private def convertToSafeDefault(
       ctx: CodegenContext,
       input: ExprValue,
       dataType: DataType): ExprCode = dataType match {
     case s: StructType => createCodeForStruct(ctx, input, s)
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
-    case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
+    case udt: UserDefinedType[_] => convertToSafeDefault(ctx, input, udt.sqlType)
     case _ => ExprCode(FalseLiteral, input)
   }
 

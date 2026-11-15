@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.types._
 
 /**
@@ -36,7 +37,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   case class Schema(dataType: DataType, nullable: Boolean)
 
   /** Returns true iff we support this data type. */
-  def canSupport(dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
+  def canSupport(dataType: DataType): Boolean =
+    TypeOps(dataType).flatMap(_.rowRepresentationType).map(canSupport)
+      .getOrElse(canSupportDefault(dataType))
+
+  private def canSupportDefault(
+      dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
     case NullType => true
     case _: AnyTimestampNanoType => true
     case _: AtomicType => true
@@ -106,6 +112,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       // rows keep the if/else form.
       dt match {
         case _: StructType | _: ArrayType | _: MapType | NullType => None
+        // Framework types with a row representation are written by `writeElement` through that
+        // representation (e.g. as an InternalRow), so keep the if/else form for them.
+        case _ if TypeOps(dt).flatMap(_.rowRepresentationType).isDefined => None
         case DecimalType.Fixed(precision, scale) =>
           Some(s"$rowWriter.writeNullable($index, ${input.value}, ${input.isNull}, " +
             s"$precision, $scale);")
@@ -314,6 +323,15 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   private def writeElement(
+      ctx: CodegenContext,
+      input: String,
+      index: String,
+      dt: DataType,
+      writer: String): String =
+    TypeOps(dt).flatMap(_.rowRepresentationType).map(writeElement(ctx, input, index, _, writer))
+      .getOrElse(writeElementDefault(ctx, input, index, dt, writer))
+
+  private def writeElementDefault(
       ctx: CodegenContext,
       input: String,
       index: String,

@@ -20,6 +20,7 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -40,10 +41,18 @@ public final class ColumnarRow extends InternalRow {
   private final int numFields;
 
   public ColumnarRow(ColumnVector data, int rowId) {
-    assert (data.dataType() instanceof StructType);
     this.data = data;
     this.rowId = rowId;
-    this.numFields = ((StructType) data.dataType()).size();
+    DataType dt = data.dataType();
+    if (dt instanceof StructType) {
+      this.numFields = ((StructType) dt).size();
+    } else {
+      // Struct-backed framework types map to PhysicalStructType but are not StructType.
+      PhysicalDataType pdt = PhysicalDataType.apply(dt);
+      assert pdt instanceof PhysicalStructType :
+        "ColumnarRow requires a struct-backed type, got: " + dt;
+      this.numFields = ((PhysicalStructType) pdt).fields().length;
+    }
   }
 
   @Override
@@ -232,6 +241,13 @@ public final class ColumnarRow extends InternalRow {
     } else if (dataType instanceof UserDefinedType<?> udt) {
       return get(ordinal, udt.sqlType());
     } else {
+      // Framework types: dispatch through PhysicalDataType which resolves the raw
+      // physical type (e.g., PhysicalStructType for struct-backed framework types).
+      // Gate on resolved type to preserve original error for truly unrecognized types.
+      PhysicalDataType pdt = PhysicalDataType.apply(dataType);
+      if (pdt != UninitializedPhysicalType$.MODULE$) {
+        return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
+      }
       throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3155");
     }
   }
