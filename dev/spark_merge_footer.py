@@ -134,6 +134,12 @@ def backport_pr(message):
     >>> backport_pr("Fix\\n\\nBackport-PR: #9") is None
     True
 
+    A backport of a merged backport PR carries both trailers; the last one is the PR merged:
+
+    >>> chained = "Fix\\n\\n%s\\nBackport-PR: #9\\nBackport-PR: #10" % footer
+    >>> backport_pr(chained), has_merge_footer(chained, 10), has_merge_footer(chained, 9)
+    (10, True, False)
+
     A trailing `skip-checks` paragraph, added for the post-merge CI sampling, does not hide it:
 
     >>> backport_pr("Fix\\n\\n%s\\nBackport-PR: #9\\n\\n\\nskip-checks: true\\n" % footer)
