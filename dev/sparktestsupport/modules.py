@@ -107,7 +107,6 @@ ignored_file_patterns = (
     "/dev/sbt-checkstyle",
     "/dev/scalafmt",
     "/dev/scalastyle",
-    "/dev/spark-test-image/lint/",
     "/dev/structured_logging_style.py",
     "/scalastyle-config.xml",
     # Maintainer tools.
@@ -141,8 +140,8 @@ ignored_file_patterns = (
     # Binder infra. CI does not test this.
     "/binder/",
     # UI test harness files. UI tests are typically triggered by the
-    # `precondition` job regardless of modifications to these files. Files under
-    # `ui-test/tests/` are not ignored because `lint-js` checks them.
+    # `precondition` job regardless of modifications to these files. Nested
+    # files under `ui-test/` are not ignored because `lint-js` claims them.
     "/ui-test/*",
 )
 
@@ -1945,10 +1944,13 @@ lint_js = Module(
         r"core/src/main/resources/org/apache/spark/ui/static/.*\.js$",
         r"sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/.*\.js$",
         r"docs/js/.*\.js$",
-        r"ui-test/tests/.*\.js$",
         r"dev/lint-js$",
         r"dev/eslint\.js$",
         r"dev/package(-lock)?\.json$",
+        # Broader than the lint targets so nested files do not fall through to
+        # the root module. Direct children of ui-test/ stay ignored above.
+        r"ui-test/",
+        r"dev/spark-test-image/lint/",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/lint-js")],
 )

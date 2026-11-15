@@ -47,9 +47,21 @@ class DetermineModulesForFilesTests(unittest.TestCase):
             "dev/eslint.js",
             "dev/package.json",
             "dev/package-lock.json",
+            "dev/spark-test-image/lint/Dockerfile",
+            "ui-test/tests/__snapshots__/utils.test.js.snap",
+            "ui-test/helpers/setup.js",
         ):
             with self.subTest(filename=filename):
                 self.assertIn(modules.lint_js, determine_modules_for_files([filename]))
+
+    def test_lint_image_and_nested_ui_test_files_select_only_lint_js(self):
+        for filename in (
+            "dev/spark-test-image/lint/Dockerfile",
+            "ui-test/tests/__snapshots__/utils.test.js.snap",
+            "ui-test/helpers/setup.js",
+        ):
+            with self.subTest(filename=filename):
+                self.assertEqual(determine_modules_for_files([filename]), {modules.lint_js})
 
     def test_non_lint_js_inputs_do_not_select_lint_js(self):
         for filename in (
