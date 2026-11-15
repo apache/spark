@@ -481,7 +481,8 @@ class CanonicalizeSuite extends SparkFunSuite {
   }
 
   test("SPARK-60178: Do not re-associate floating-point Add/Multiply in canonicalization") {
-    Seq(FloatType, DoubleType).foreach { dt =>
+    // A DECIMAL(38, 18) sum or product has the maximum precision, so its steps round.
+    Seq(FloatType, DoubleType, DecimalType(DecimalType.MAX_PRECISION, 18)).foreach { dt =>
       val a = AttributeReference("a", dt)()
       val b = AttributeReference("b", dt)()
       val c = AttributeReference("c", dt)()
@@ -497,12 +498,18 @@ class CanonicalizeSuite extends SparkFunSuite {
             // Re-association changes the floating-point result.
             assert(!op(op(a, b), c).semanticEquals(op(a, op(b, c))))
             assert(!op(op(a, b), c).semanticEquals(op(op(a, c), b)))
+            assert(!op(op(a, b), c).canonicalized.isInstanceOf[MultiCommutativeOp])
           }
         } finally {
           SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
         }
       }
     }
+
+    // Below the maximum precision every decimal step is exact, so the chain still re-associates.
+    val Seq(x, y, z) = Seq("x", "y", "z").map(AttributeReference(_, DecimalType(10, 2))())
+    assert(Add(Add(x, y), z).semanticEquals(Add(x, Add(y, z))))
+    assert(Multiply(Multiply(x, y), z).semanticEquals(Multiply(x, Multiply(y, z))))
   }
 
   test("unit test for gatherCommutative()") {
