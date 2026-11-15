@@ -920,52 +920,42 @@ mod tests {
 
         // [{"a": 1}, null], where the null map still spans an entry with a null key and a null
         // value: neither counts, even though the schema to read declares both not nullable.
-        let fields = Fields::from(vec![
-            Field::new("key", DataType::Utf8, true),
-            Field::new("value", DataType::Int32, true),
-        ]);
-        let keys: ArrayRef = Arc::new(StringArray::from(vec![Some("a"), None]));
-        let values: ArrayRef = Arc::new(Int32Array::from(vec![Some(1), None]));
-        let entries = StructArray::try_new(fields.clone(), vec![keys, values], None).unwrap();
-        let entries_field = Arc::new(Field::new("entries", DataType::Struct(fields), false));
-        let mut offsets = OffsetBufferBuilder::<i32>::new(2);
-        offsets.push_length(1);
-        offsets.push_length(1);
-        let mut slots = NullBufferBuilder::new(2);
-        slots.append_non_null();
-        slots.append_null();
-        let (offsets, slots) = (offsets.finish(), slots.finish());
-        let map = MapArray::try_new(entries_field, offsets, entries, slots, false).unwrap();
-        let actual = Arc::new(Schema::new(vec![Field::new(
-            "map",
-            map.data_type().clone(),
-            true,
-        )]));
-        let batch = RecordBatch::try_new(actual, vec![Arc::new(map)]).unwrap();
+        let batch = map_batch(vec![Some(1), None], &[1, 1], &[true, false]);
         assert_eq!(batch_error(batch, &required), None);
     }
 
-    #[test]
-    fn map_keys_cannot_be_null_whatever_the_schema_to_read_declares() {
-        // MapBuilder rejects null keys, but a map whose key field is nullable can have them.
+    /// Builds a batch with one nullable column "map" over the keys ["a", null] and `values`,
+    /// with a map of each of `lengths` entries, null where `slots` is false. MapBuilder rejects
+    /// null keys, but a map whose key field is nullable can have them.
+    fn map_batch(values: Vec<Option<i32>>, lengths: &[usize], slots: &[bool]) -> RecordBatch {
         let fields = Fields::from(vec![
             Field::new("key", DataType::Utf8, true),
             Field::new("value", DataType::Int32, true),
         ]);
         let keys: ArrayRef = Arc::new(StringArray::from(vec![Some("a"), None]));
-        let values: ArrayRef = Arc::new(Int32Array::from(vec![1, 2]));
+        let values: ArrayRef = Arc::new(Int32Array::from(values));
         let entries = StructArray::try_new(fields.clone(), vec![keys, values], None).unwrap();
         let entries_field = Arc::new(Field::new("entries", DataType::Struct(fields), false));
-        let mut offsets = OffsetBufferBuilder::<i32>::new(1);
-        offsets.push_length(2);
-        let map = MapArray::try_new(entries_field, offsets.finish(), entries, None, false).unwrap();
+        let mut offsets = OffsetBufferBuilder::<i32>::new(lengths.len());
+        for &length in lengths {
+            offsets.push_length(length);
+        }
+        let mut nulls = NullBufferBuilder::new(slots.len());
+        nulls.append_slice(slots);
+        let (offsets, nulls) = (offsets.finish(), nulls.finish());
+        let map = MapArray::try_new(entries_field, offsets, entries, nulls, false).unwrap();
         let schema = Arc::new(Schema::new(vec![Field::new(
             "map",
             map.data_type().clone(),
             true,
         )]));
-        let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(map)]).unwrap();
-        let error = batch_error(batch, &schema).unwrap();
+        RecordBatch::try_new(schema, vec![Arc::new(map)]).unwrap()
+    }
+
+    #[test]
+    fn map_keys_cannot_be_null_whatever_the_schema_to_read_declares() {
+        let batch = map_batch(vec![Some(1), Some(2)], &[2], &[true]);
+        let error = batch_error(batch.clone(), &batch.schema()).unwrap();
         assert!(error.contains("The column map.key has a null"), "{error}");
     }
 
