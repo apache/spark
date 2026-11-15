@@ -1277,6 +1277,23 @@ def continue_maybe(prompt: str, cherry: bool = False) -> None:
     [['git', 'checkout', 'master'], ['git', 'checkout', 'master']]
     >>> inp.call_count, clean.call_count
     (2, 1)
+
+    A checkout git keeps refusing, e.g. over a stale index.lock, can be given up on:
+
+    >>> with (
+    ...     patch("builtins.input", side_effect=["", "a"]),
+    ...     patch.object(git, "run", side_effect=[refused, refused]),
+    ...     patch.dict(continue_maybe.__globals__, original_head="master"),
+    ...     patch.object(sys.modules[__name__], "clean_up"),
+    ...     redirect_stdout(StringIO()),
+    ... ):
+    ...     try:
+    ...         continue_maybe("Push anyway?", cherry=True)
+    ...         exited = False
+    ...     except SystemExit:
+    ...         exited = True
+    >>> exited
+    True
     """
     if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
@@ -1319,19 +1336,21 @@ def _cherry_pick_in_progress() -> bool:
 def _restore_original_head():
     """Check out original_head, waiting for the committer while git refuses over local edits.
 
-    The committed pick is discarded by clean_up() afterwards; the edits are theirs to keep."""
+    The committed pick is discarded by clean_up() afterwards; the edits are theirs to keep, and
+    any git carries over to original_head are listed."""
     if "original_head" not in globals():
         return
     while True:
         try:
-            git.run(["git", "checkout", original_head])
+            carried = git.run(["git", "checkout", original_head]).strip()
+            if carried:
+                print("Uncommitted changes carried over to %s:\n%s" % (original_head, carried))
             return
         except subprocess.CalledProcessError:
-            # git already printed which files block it.
-            get_input(
-                "Stash or discard those changes in another terminal, then press Enter to retry: ",
-                [""],
-            )
+            # git already printed why it refused.
+            prompt = "Stash or discard those changes elsewhere, then Enter to retry, or [a]bort: "
+            if get_input(prompt, ["", "a"]) == "a":
+                fail("Okay, exiting")
 
 
 def clean_up():
@@ -1587,9 +1606,10 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
 
     The diff is forced plain: without --no-color a committer with ``color.ui = always`` gets
     added lines behind an ANSI escape, no line starts with "+", and the check reports nothing
-    while looking like it ran. --no-relative does the same for ``diff.relative = true``, which
-    would cut the diff down to dev/. Like branches_with_merge_footer, a git failure only warns: this
-    runs after the merge has already been pushed.
+    while looking like it ran. ``-c diff.relative=false`` does the same for a committer's
+    ``diff.relative = true``, which would cut the diff down to dev/. Like
+    branches_with_merge_footer, a git failure only warns: this runs after the merge has
+    already been pushed.
 
     `never` below is how these tests assert "does not prompt": a bare input mock would return a
     MagicMock that get_input's loop never accepts, so a regressed guard would hang the script at
@@ -1621,9 +1641,9 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
     ...     redirect_stdout(StringIO()),
     ... ):
     ...     maybe_binding_policy_warning("branch-4.1", "deadbeef")
-    >>> run.call_args[0][0][:7]
-    ['git', 'diff', '--no-relative', '--no-color', '--no-ext-diff', 'deadbeef', 'HEAD']
-    >>> run.call_args[0][0][7:]
+    >>> run.call_args[0][0][:8]
+    ['git', '-c', 'diff.relative=false', 'diff', '--no-color', '--no-ext-diff', 'deadbeef', 'HEAD']
+    >>> run.call_args[0][0][8:]
     ['--', ':(top)*.scala', ':(top)*.java']
 
     Warns and prompts when the change adds a token on a pre-4.2 branch; accepting continues
@@ -1676,7 +1696,8 @@ def maybe_binding_policy_warning(ref: str, base_head: str) -> None:
         return
     try:
         diff = git.run(
-            ["git", "diff", "--no-relative", "--no-color", "--no-ext-diff", base_head, "HEAD", "--"]
+            ["git", "-c", "diff.relative=false", "diff", "--no-color", "--no-ext-diff", base_head]
+            + ["HEAD", "--"]
             + list(BINDING_POLICY_PATHSPECS)
         )
     except Exception as e:
