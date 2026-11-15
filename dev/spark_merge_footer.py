@@ -232,6 +232,26 @@ def branches_with_merge_footer(pr_num, remote, run_git):
     Scoping the walk to `--remotes=<remote>` keeps fork refs and tags from adding noise or
     cost. Every commit `--grep` returns is validated before its branches count, so a commit
     that merely quotes the trailer cannot make a branch look like it has the change.
+
+    A merged backport PR #9 is found by its Backport-PR trailer, though the footer closes #7;
+    a commit that only quotes the trailer outside its final paragraph is not:
+
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>"
+    >>> commits = {
+    ...     "m1": ("Fix\\n\\n" + footer, "up/master"),
+    ...     "b9": ("Fix\\n\\n" + footer + "\\nBackport-PR: #9", "up/branch-4.2"),
+    ...     "q9": ("See\\n\\nBackport-PR: #9\\n\\n" + footer, "up/branch-4.1"),
+    ... }
+    >>> def run_git(args):
+    ...     if args[0] == "log":
+    ...         greps = [args[i + 1] for i, a in enumerate(args) if a == "--grep"]
+    ...         return "".join("%s %s\\x00" % (h, m) for h, (m, _) in commits.items()
+    ...                        if any(g in m for g in greps))
+    ...     return commits[args[2]][1] + "\\n"
+    >>> branches_with_merge_footer(9, "up", run_git)
+    {'branch-4.2': 'b9'}
+    >>> sorted(branches_with_merge_footer(7, "up", run_git))
+    ['branch-4.1', 'branch-4.2', 'master']
     """
     out = run_git(
         [
