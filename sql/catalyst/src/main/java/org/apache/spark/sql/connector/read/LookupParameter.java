@@ -28,7 +28,8 @@ import org.apache.spark.sql.types.DataType;
  * {@code tenant = ?}; its values arrive in {@link ExternalLookupReader#lookupBatch}. Each
  * candidate has exactly one instance of its own, and equality is identity, so same-shaped
  * candidates are distinct. Instances are serializable, so a connector may keep selected
- * predicates in its {@link ExternalLookupReaderFactory}.
+ * predicates in its {@link ExternalLookupReaderFactory}. Parameter rows are read-only: the
+ * connector must not modify them.
  *
  * @since 4.4.0
  */

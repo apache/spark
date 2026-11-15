@@ -616,6 +616,93 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60871: no runtime filters for nonbinary collated join keys") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB") {
+      withTable("bf_variant_fact", "bf_variant_dim") {
+        sql("CREATE TABLE bf_variant_fact (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_fact SELECT id, parse_json(j) FROM VALUES
+              |  (1, '{"k": "Open"}'), (2, '{"k": "x"}') AS t(id, j)""".stripMargin)
+        sql("CREATE TABLE bf_variant_dim (id INT, v VARIANT) USING parquet")
+        sql("""INSERT INTO bf_variant_dim SELECT id, parse_json(j) FROM VALUES
+              |  (10, '{"k": "open"}'), (20, '{"k": "y"}') AS t(id, j)""".stripMargin)
+
+        val dim = "(SELECT * FROM bf_variant_dim WHERE id = 10) d"
+        def queries(targetType: String): Seq[String] = {
+          val on = s"ON variant_get(f.v, '$$.k', '$targetType') = " +
+            s"variant_get(d.v, '$$.k', '$targetType')"
+          Seq(
+            s"SELECT f.id FROM bf_variant_fact f JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f LEFT SEMI JOIN $dim $on",
+            s"SELECT f.id FROM bf_variant_fact f RIGHT OUTER JOIN $dim $on",
+            s"SELECT f.id FROM $dim LEFT OUTER JOIN bf_variant_fact f $on")
+        }
+
+        // Binary keys get a Bloom filter on the fact side.
+        queries("STRING").foreach(assertRewroteWithBloomFilter(_))
+        // A Bloom filter over UTF8_LCASE keys would drop the fact row 'Open', which the join
+        // matches with 'open'.
+        queries("STRING COLLATE UTF8_LCASE").foreach { query =>
+          assertDidNotRewriteWithBloomFilter(query)
+          checkAnswer(sql(query), Row(1))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60871: runtime filters for casts of collated join key columns") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB") {
+      withTable("bf_cast_fact", "bf_cast_dim") {
+        Seq("bf_cast_fact", "bf_cast_dim").foreach { t =>
+          sql(s"CREATE TABLE $t (id INT, k STRING COLLATE UTF8_LCASE, p STRING) USING parquet")
+        }
+        sql("INSERT INTO bf_cast_fact VALUES (1, 'Open', 'Open'), (2, 'x', 'x')")
+        sql("INSERT INTO bf_cast_dim VALUES (10, 'open', 'open'), (20, 'y', 'y')")
+
+        val dim = "(SELECT * FROM bf_cast_dim WHERE id = 10) d"
+        // Inner, left semi, right outer and left outer joins with the fact table as the
+        // application side.
+        def queries(key: String => String): Seq[String] = {
+          val on = s"ON ${key("f")} = ${key("d")}"
+          Seq(
+            s"SELECT f.id FROM bf_cast_fact f JOIN $dim $on",
+            s"SELECT f.id FROM bf_cast_fact f LEFT SEMI JOIN $dim $on",
+            s"SELECT f.id FROM bf_cast_fact f RIGHT OUTER JOIN $dim $on",
+            s"SELECT f.id FROM $dim LEFT OUTER JOIN bf_cast_fact f $on")
+        }
+        val matched = Seq.fill(4)(Seq(Row(1)))
+        val unmatched = Seq(Seq.empty, Seq.empty, Seq(Row(null)), Seq(Row(null)))
+
+        // Column keys get a Bloom filter on their collation keys.
+        queries(t => s"$t.k").zip(matched).foreach { case (query, answer) =>
+          assertRewroteWithBloomFilter(query)
+          checkAnswer(sql(query), answer)
+        }
+        // Casts of the UTF8_LCASE column to STRING are binary keys, so 'Open' and 'open' differ.
+        Seq[String => String](t => s"CAST($t.k AS STRING)", t => s"$t.k::STRING").foreach { key =>
+          queries(key).zip(unmatched).foreach { case (query, answer) =>
+            assertRewroteWithBloomFilter(query)
+            checkAnswer(sql(query), answer)
+          }
+        }
+        // Casts to UTF8_LCASE are non-binary expression keys, so they get no Bloom filter.
+        Seq[String => String](
+            t => s"CAST($t.p AS STRING COLLATE UTF8_LCASE)",
+            t => s"$t.p::STRING COLLATE UTF8_LCASE").foreach { key =>
+          queries(key).zip(matched).foreach { case (query, answer) =>
+            assertDidNotRewriteWithBloomFilter(query)
+            checkAnswer(sql(query), answer)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-58272: use materialized caches without predicates only with pruning statistics") {
     withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
@@ -1017,6 +1104,29 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       // left anti join unsupported and hasn't selective filter.
       assertRewroteWithBloomFilter("select * from (select * from bf1 left anti join bf2 on " +
         "(bf1.c1 = bf2.c2 and bf1.a1 = 5)) as a join bf3 on bf3.c3 = a.c1", 0)
+    }
+  }
+
+  test("SPARK-61652: add bloom filter if the join type or a hint rules out broadcasting the " +
+    "small side") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+      // The left side is small enough to broadcast, but a left outer join cannot broadcast it, so
+      // the join shuffles `bf2`.
+      val query = "select * from (select c1 from bf1 where a1 = 5) a left join bf2 on a.c1 = bf2.c2"
+      assertRewroteWithBloomFilter(query)
+      assert(bloomFilterKeyNames(query) == Seq("c2"))
+      // A shuffle hash or merge hint rules out broadcasting the small side of an inner join too.
+      def hinted(hint: String): String = s"select /*+ $hint(a) */ * from bf2 join " +
+        "(select c1 from bf1 where a1 = 5) a on a.c1 = bf2.c2"
+      assertRewroteWithBloomFilter(hinted("shuffle_hash"))
+      assertRewroteWithBloomFilter(hinted("merge"))
+      // Below a broadcast hash join, the same join shuffles `bf1`. A broadcast nested loop join
+      // broadcasts the small side instead.
+      def belowBroadcastJoin(condition: String): String = "select * from (select c1 from bf1) a " +
+        s"left join bf2 on $condition join (select c3 from bf3 where a3 = 5) b on a.c1 = b.c3"
+      assertRewroteWithBloomFilter(belowBroadcastJoin("a.c1 = bf2.c2"))
+      assertDidNotRewriteWithBloomFilter(belowBroadcastJoin("a.c1 < bf2.c2"))
     }
   }
 
@@ -1654,7 +1764,12 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         val query = "select v from testcat.cf where k in (select k from testcat.cd where flag = 1)"
         withDppTestConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
             SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0") {
-          assertBloomFilterWithoutDpp(query)
+          // Nothing wraps the semi join's keys in CollationKey, so they get no bloom filter
+          // without DPP either (SPARK-60871).
+          assertBloomFilterWithoutDpp(query, numBloomFilters = 0)
+          withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+            checkAnswer(sql(query), Row(1))
+          }
           assert(bloomFilterKeys(query).isEmpty)
           checkAnswer(sql(query), Row(1))
         }

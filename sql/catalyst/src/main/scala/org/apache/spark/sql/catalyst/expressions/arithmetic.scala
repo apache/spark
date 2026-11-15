@@ -60,6 +60,8 @@ case class UnaryMinus(
 
   override def dataType: DataType = child.dataType
 
+  override def isTotal: Boolean = UnaryArithmetic.isTotal(child.dataType, failOnError)
+
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def toString: String = s"-$child"
@@ -174,6 +176,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
 
   override def dataType: DataType = child.dataType
 
+  override def isTotal: Boolean = UnaryArithmetic.isTotal(child.dataType, failOnError)
+
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   private lazy val numeric = (dataType match {
@@ -205,6 +209,20 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
+private[expressions] object UnaryArithmetic {
+  /**
+   * Whether [[UnaryMinus]] or [[Abs]] over a value of `dataType` is total, see
+   * [[Expression.isTotal]]. They check for an overflow only over the integral types, and only
+   * when `failOnError` is set. Over a DAY TO SECOND or YEAR TO MONTH interval, they can overflow
+   * in every mode, and intervals are left out.
+   */
+  def isTotal(dataType: DataType, failOnError: Boolean): Boolean = dataType match {
+    case _: FractionalType => true
+    case _: IntegralType => !failOnError
+    case _ => false
+  }
+}
+
 abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 
@@ -214,6 +232,21 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
   val evalContext: NumericEvalContext
 
   def evalMode: EvalMode.Value = evalContext.evalMode
+
+  /**
+   * Whether both operands are numbers of a non-negative scale. This is what the subclasses that
+   * override [[isTotal]] require first: arithmetic over a DAY TO SECOND or YEAR TO MONTH interval
+   * can overflow in every eval mode, and over a decimal of a negative scale
+   * (`spark.sql.legacy.allowNegativeScaleOfDecimal`) `Decimal.%` raises for a very negative one.
+   * A subclass that does not override [[isTotal]] is not taken as total.
+   */
+  protected def hasTotalNumericOperands: Boolean = children.forall { e =>
+    e.dataType.isInstanceOf[NumericType] && !TypeUtils.hasNegativeScale(e.dataType)
+  }
+
+  /** Whether both operands are FLOAT or DOUBLE, and not DECIMAL. */
+  protected def hasFloatOrDoubleOperands: Boolean =
+    children.forall(e => e.dataType == FloatType || e.dataType == DoubleType)
 
   private lazy val internalDataType: DataType = (left.dataType, right.dataType) match {
     case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
@@ -427,6 +460,12 @@ case class Add(
   def this(left: Expression, right: Expression) =
     this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
+  // Outside ANSI mode, it wraps an integral overflow in LEGACY mode and returns NULL for it in TRY
+  // mode, and returns NULL on a decimal overflow. Over FLOAT and DOUBLE, it does not check for an
+  // overflow in ANSI mode either, and returns an infinity or NaN; over DECIMAL, it does.
+  override def isTotal: Boolean =
+    hasTotalNumericOperands && (evalMode != EvalMode.ANSI || hasFloatOrDoubleOperands)
+
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "+"
@@ -525,6 +564,12 @@ case class Subtract(
   def this(left: Expression, right: Expression) =
     this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
+  // Outside ANSI mode, it wraps an integral overflow in LEGACY mode and returns NULL for it in TRY
+  // mode, and returns NULL on a decimal overflow. Over FLOAT and DOUBLE, it does not check for an
+  // overflow in ANSI mode either, and returns an infinity or NaN; over DECIMAL, it does.
+  override def isTotal: Boolean =
+    hasTotalNumericOperands && (evalMode != EvalMode.ANSI || hasFloatOrDoubleOperands)
+
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
   override def symbol: String = "-"
@@ -614,6 +659,12 @@ case class Multiply(
 
   def this(left: Expression, right: Expression) =
     this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
+
+  // Outside ANSI mode, it wraps an integral overflow in LEGACY mode and returns NULL for it in TRY
+  // mode, and returns NULL on a decimal overflow. Over FLOAT and DOUBLE, it does not check for an
+  // overflow in ANSI mode either, and returns an infinity or NaN; over DECIMAL, it does.
+  override def isTotal: Boolean =
+    hasTotalNumericOperands && (evalMode != EvalMode.ANSI || hasFloatOrDoubleOperands)
 
   override def inputType: AbstractDataType = NumericType
 
@@ -876,6 +927,11 @@ case class Divide(
   def this(left: Expression, right: Expression) =
     this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
+  // Outside ANSI mode, it returns NULL on a division by zero or a decimal overflow: TRY mode
+  // behaves as LEGACY mode here. In ANSI mode, it raises on a zero divisor, also over FLOAT and
+  // DOUBLE.
+  override def isTotal: Boolean = hasTotalNumericOperands && evalMode != EvalMode.ANSI
+
   // `try_divide` has exactly the same behavior as the legacy divide, so here it only executes
   // the error code path when `evalMode` is `ANSI`.
   protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
@@ -964,6 +1020,10 @@ case class IntegralDivide(
 
   def this(left: Expression, right: Expression) = this(left, right,
     NumericEvalContext.fromSQLConf(SQLConf.get))
+
+  // Only in LEGACY mode: it overrides `eval` without the catch of TRY mode, and checks a zero
+  // divisor there as in ANSI mode.
+  override def isTotal: Boolean = hasTotalNumericOperands && evalMode == EvalMode.LEGACY
 
   override def checkDivideOverflow: Boolean = left.dataType match {
     case LongType if failOnError => true
@@ -1077,6 +1137,11 @@ case class Remainder(
   def this(left: Expression, right: Expression) =
     this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
 
+  // Outside ANSI mode, it returns NULL on a division by zero or a decimal overflow: TRY mode
+  // behaves as LEGACY mode here. In ANSI mode, it raises on a zero divisor, also over FLOAT and
+  // DOUBLE.
+  override def isTotal: Boolean = hasTotalNumericOperands && evalMode != EvalMode.ANSI
+
   override def inputType: AbstractDataType = NumericType
 
   // `try_mod` has exactly the same behavior as the legacy divide, so here it only executes
@@ -1171,6 +1236,10 @@ case class Pmod(
 
   def this(left: Expression, right: Expression) =
     this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
+
+  // Only in LEGACY mode: it overrides `eval` without the catch of TRY mode, and checks a zero
+  // divisor there as in ANSI mode.
+  override def isTotal: Boolean = hasTotalNumericOperands && evalMode == EvalMode.LEGACY
 
   override def toString: String = s"pmod($left, $right)"
 
@@ -1338,6 +1407,116 @@ case class Pmod(
 object Pmod {
   def apply(left: Expression, right: Expression, evalMode: EvalMode.Value): Pmod =
     new Pmod(left, right, NumericEvalContext(evalMode))
+}
+
+/**
+ * Python-style modulo for pandas API on Spark, registered as the internal function `pandas_mod`.
+ * The result takes the sign of the divisor, as Python's and NumPy's `%` do, and a zero or null
+ * divisor gives null in every evaluation mode. Each operand is evaluated once per row.
+ *
+ * A decimal result has the type that `((left % right) + right) % right` has, and is computed
+ * exactly before it is rounded half-up to that type once. Other results have the type of `%`.
+ */
+case class PandasMod(
+    left: Expression,
+    right: Expression,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+  extends BinaryArithmetic {
+
+  def this(left: Expression, right: Expression) =
+    this(left, right, NumericEvalContext.fromSQLConf(SQLConf.get))
+
+  override def inputType: AbstractDataType = NumericType
+
+  override def symbol: String = "pandas_mod"
+
+  override def prettyName: String = "pandas_mod"
+
+  override def nullable: Boolean = true
+
+  // A zero divisor gives null in every mode, so only a decimal overflow can fail, under ANSI.
+  protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
+
+  override def resultDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val l = Literal(null, DecimalType(p1, s1))
+    val r = Literal(null, DecimalType(p2, s2))
+    Remainder(Add(Remainder(l, r, evalContext), r, evalContext), r, evalContext)
+      .dataType.asInstanceOf[DecimalType]
+  }
+
+  private lazy val isZero: Any => Boolean = right.dataType match {
+    case _: DecimalType => x => x.asInstanceOf[Decimal].isZero
+    case _ => x => x == 0
+  }
+
+  private lazy val modFunc: (Any, Any) => Any = dataType match {
+    case IntegerType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Int], r.asInstanceOf[Int])
+    case LongType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Long], r.asInstanceOf[Long])
+    case ShortType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Short], r.asInstanceOf[Short])
+    case ByteType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
+    case FloatType => (l, r) => MathUtils.pythonMod(l.asInstanceOf[Float], r.asInstanceOf[Float])
+    case DoubleType =>
+      (l, r) => MathUtils.pythonMod(l.asInstanceOf[Double], r.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, scale) => (l, r) => checkDecimalOverflow(
+      MathUtils.pythonMod(l.asInstanceOf[Decimal], r.asInstanceOf[Decimal]), precision, scale)
+  }
+
+  final override def eval(input: InternalRow): Any = {
+    // Evaluate the divisor first, to skip the dividend for a zero or null divisor.
+    val input2 = right.eval(input)
+    if (input2 == null || isZero(input2)) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) null else modFunc(input1, input2)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
+    val isZero = if (right.dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.value}.isZero()"
+    } else {
+      s"${eval2.value} == 0"
+    }
+    val javaType = CodeGenerator.javaType(dataType)
+    val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+    val result = dataType match {
+      case DecimalType.Fixed(precision, scale) =>
+        val errorContext = getContextOrNullCode(ctx, failOnError)
+        s"""
+           |${ev.value} = $mathUtils.pythonMod(${eval1.value}, ${eval2.value}).toPrecision(
+           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContext);
+           |${ev.isNull} = ${ev.value} == null;
+           |""".stripMargin
+      case _ =>
+        s"${ev.value} = $mathUtils.pythonMod(${eval1.value}, ${eval2.value});"
+    }
+    // Evaluate the divisor first, to skip the dividend for a zero or null divisor.
+    ev.copy(code = code"""
+      ${eval2.code}
+      boolean ${ev.isNull} = false;
+      $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      if (${eval2.isNull} || $isZero) {
+        ${ev.isNull} = true;
+      } else {
+        ${eval1.code}
+        if (${eval1.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          $result
+        }
+      }""")
+  }
+
+  override def toString: String = s"$prettyName($left, $right)"
+
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): PandasMod =
+    copy(left = newLeft, right = newRight)
 }
 
 /**

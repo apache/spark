@@ -1630,6 +1630,7 @@ class FunctionsTestsMixin:
         self.assertTrue(isinstance(aqt[1], list))
         self.assertEqual(len(aqt[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqt[1]))
+        self.assertEqual(df.stat.approxQuantile("a", [0, 0.5, 1], 0.0), [0.0, 4.0, 9.0])
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))

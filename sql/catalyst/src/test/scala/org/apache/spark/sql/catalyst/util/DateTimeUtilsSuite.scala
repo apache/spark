@@ -1136,6 +1136,80 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       parameters = Map("string" -> "\"quote"))
   }
 
+  test("SPARK-60929: getNextDateForDayOfWeek near the DATE range bounds") {
+    val min = Int.MinValue // -5877641-06-23, a Tuesday
+    val max = Int.MaxValue // +5881580-07-11, a Friday
+    def nextDay(startDay: Int, dayOfWeek: String): Int =
+      getNextDateForDayOfWeek(startDay, getDayOfWeekFromString(UTF8String.fromString(dayOfWeek)))
+    // The right weekday: `dayOfWeek - 1 - startDay` used to wrap.
+    assert(nextDay(min, "MO") === min + 6)
+    assert(nextDay(min, "FR") === min + 3)
+    assert(nextDay(min, "TU") === min + 7)
+    (min to min + 10).foreach { startDay =>
+      (0 to 6).foreach { dayOfWeek =>
+        val result = getNextDateForDayOfWeek(startDay, dayOfWeek)
+        assert(result > startDay && result <= startDay + 7)
+        assert(Math.floorMod(result, 7) === dayOfWeek)
+      }
+    }
+    // The largest results that fit.
+    assert(nextDay(max - 7, "FR") === max)
+    assert(nextDay(max - 6, "FR") === max)
+    assert(nextDay(max - 1, "FR") === max)
+    // Later than the maximum DATE.
+    Seq(
+      (max - 6, "SA", "SATURDAY", "+5881580-07-05"),
+      (max, "MO", "MONDAY", "+5881580-07-11"),
+      (max, "FR", "FRIDAY", "+5881580-07-11")).foreach { case (startDay, dow, name, date) =>
+      checkError(
+        exception = intercept[SparkArithmeticException](nextDay(startDay, dow)),
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> s"find the next $name after DATE '$date'"))
+    }
+  }
+
+  test("SPARK-60929: getLastDayOfMonth near the DATE range bounds") {
+    // -5877641-06-23 -> -5877641-06-30
+    assert(getLastDayOfMonth(Int.MinValue) === Int.MinValue + 7)
+    // +5881580-06-30 is the largest result that fits.
+    assert(getLastDayOfMonth(Int.MaxValue - 11) === Int.MaxValue - 11)
+    // +5881580-07-01 .. +5881580-07-11: +5881580-07-31 is later than the maximum DATE.
+    (Int.MaxValue - 10 to Int.MaxValue).foreach { days =>
+      val date = f"+5881580-07-${days - (Int.MaxValue - 11)}%02d"
+      checkError(
+        exception = intercept[SparkArithmeticException](getLastDayOfMonth(days)),
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> s"find the last day of the month of DATE '$date'"))
+    }
+  }
+
+  test("SPARK-60929: truncDate near the minimum DATE") {
+    val min = Int.MinValue // -5877641-06-23, a Tuesday
+    def assertOverflow(days: Int, level: Int, unit: String): Unit = {
+      checkError(
+        exception = intercept[SparkArithmeticException](truncDate(days, level)),
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> s"truncate DATE '${daysToLocalDate(days)}' to $unit"))
+    }
+    // WEEK: min + 6 (-5877641-06-29) is the first Monday of the DATE range.
+    (min to min + 5).foreach(assertOverflow(_, TRUNC_TO_WEEK, "WEEK"))
+    (min + 6 to min + 12).foreach(d => assert(truncDate(d, TRUNC_TO_WEEK) === min + 6))
+    // MONTH and QUARTER: min + 8 is -5877641-07-01.
+    (min to min + 7).foreach { d =>
+      assertOverflow(d, TRUNC_TO_MONTH, "MONTH")
+      assertOverflow(d, TRUNC_TO_QUARTER, "QUARTER")
+    }
+    (min + 8 to min + 38).foreach(d => assert(truncDate(d, TRUNC_TO_MONTH) === min + 8))
+    (min + 8 to min + 99).foreach(d => assert(truncDate(d, TRUNC_TO_QUARTER) === min + 8))
+    // YEAR: every date of year -5877641.
+    val nextYear = LocalDate.of(-5877640, 1, 1)
+    val nextYearDays = localDateToDays(nextYear)
+    (min until nextYearDays).foreach(assertOverflow(_, TRUNC_TO_YEAR, "YEAR"))
+    (nextYearDays until nextYearDays + nextYear.lengthOfYear).foreach { d =>
+      assert(truncDate(d, TRUNC_TO_YEAR) === nextYearDays)
+    }
+  }
+
   test("SPARK-34761: timestamp add day-time interval") {
     // transit from Pacific Standard Time to Pacific Daylight Time
     assert(timestampAddDayTime(

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import inspect
 import itertools
+import os
 import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
@@ -870,6 +871,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def serializer(self) -> ArrowStreamSerializer:
         return ArrowStreamSerializer(
             write_start_stream=True,
+            flush_per_batch=os.environ.get("SPARK_PIPELINED_UDF") == "1",
             collect_timing=self._runner_conf.detailed_timing_enabled,
         )
 
