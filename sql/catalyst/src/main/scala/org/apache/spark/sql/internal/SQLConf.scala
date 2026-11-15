@@ -2577,6 +2577,23 @@ object SQLConf {
       .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
       .createWithDefaultString("64m")
 
+  val JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS =
+    buildConf("spark.sql.join.externalLookup.realTimeMode.maxBatchRows")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Number of stream rows at which an external lookup join stops adding rows to a " +
+        "lookup request in Real-Time Mode. A Real-Time Mode batch runs until its duration " +
+        "elapses, not until its input ends, so a row in a request that is not full waits for " +
+        "more rows or for the end of the batch. With the default of 1, the join sends each " +
+        "row's request as soon as it reads the row, and the lookup cache, when enabled, serves " +
+        "keys that repeat. A larger value sends fewer requests, but a row can wait longer for " +
+        "its output. A request also keeps the other bounds of a micro-batch request, which " +
+        "spark.sql.join.externalLookup.maxBatchBytes describes. Micro-batch queries do not use " +
+        "this configuration.")
+      .version("4.4.0")
+      .intConf
+      .checkValue(_ > 0, "External lookup join real-time mode max batch rows must be positive")
+      .createWithDefault(1)
+
   val JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED =
     buildConf("spark.sql.join.externalLookup.startupCheck.enabled")
       .internal()

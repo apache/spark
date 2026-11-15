@@ -48,9 +48,9 @@ import org.apache.spark.util.Utils
  * tasks, so it holds only what they need; the plan node and its scan stay on the driver.
  *
  * An evaluator joins its partition one batch of up to `maxParameterRowsPerRequest` stream rows at
- * a time, or, with `oneKeyPerBatch`, of up to
- * [[ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST]] stream rows that share one key, whose
- * request holds one parameter row, whatever the source's limit. For each batch it sends one
+ * a time, or, with `oneKeyPerBatch`, of stream rows that share one key, whose request holds one
+ * parameter row, whatever the source's limit. Either batch takes at most `maxStreamRowsPerBatch`
+ * stream rows, Spark's own cap, or fewer in real-time mode. For each batch it sends one
  * request with the distinct parameters that can match and are not cached, and streams the
  * connector's result rows into output rows. Parameters are deduplicated within a batch. With the
  * cache enabled, a key whose complete result an earlier request of the same input partition
@@ -83,6 +83,7 @@ class ExternalLookupJoinEvaluatorFactory(
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
     oneKeyPerBatch: Boolean,
+    maxStreamRowsPerBatch: Int,
     maxBatchBytes: Long,
     cacheOptions: ExternalLookupCacheOptions,
     cacheTicker: Ticker,
@@ -180,10 +181,10 @@ class ExternalLookupJoinEvaluatorFactory(
     private var keptRequestRow: UnsafeRow = null
 
     // A batch of one key holds one parameter row in its request, whatever the source's limit, so
-    // only Spark's own cap and maxBatchBytes end it before another key does.
+    // only Spark's own row cap and maxBatchBytes end it before another key does.
     private val maxBatchRows =
-      if (oneKeyPerBatch) ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST
-      else maxParameterRowsPerRequest
+      if (oneKeyPerBatch) maxStreamRowsPerBatch
+      else math.min(maxStreamRowsPerBatch, maxParameterRowsPerRequest)
 
     private def hasInput: Boolean = heldRow != null || input.hasNext
 
@@ -233,7 +234,8 @@ class ExternalLookupJoinEvaluatorFactory(
       val rowsThatCannotMatch = mutable.ArrayBuffer.empty[Int]
       var bytes = 0L
       var keyChanged = false
-      while (!keyChanged && rows.length < maxBatchRows && bytes < maxBatchBytes && hasInput) {
+      def full: Boolean = keyChanged || rows.length >= maxBatchRows || bytes >= maxBatchBytes
+      while (!full && hasInput) {
         val row = nextKeptRow()
         if (row != null) {
           val requestRow = keptRequestRow
@@ -259,8 +261,7 @@ class ExternalLookupJoinEvaluatorFactory(
           }
         }
       }
-      val endedInput = !keyChanged && rows.length < maxBatchRows && bytes < maxBatchBytes
-      StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray, endedInput)
+      StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray, !full)
     }
   }
 
@@ -332,8 +333,13 @@ class ExternalLookupJoinEvaluatorFactory(
       }
 
     // Only a later batch of the partition reads what this one caches, so the last batch caches
-    // nothing. A last batch that stopped full is not known as the last, and caches what no batch
-    // reads, within the cache's bounds.
+    // nothing. A last batch that stopped full is not known as the last. This is not limited to an
+    // input that ends at a full batch: when a batch takes one row, as with a source that allows
+    // one parameter row per request, or by default in real-time mode, every batch stops full, so
+    // the last batch of every partition is one. It caches what no batch reads, and a left semi or
+    // left anti join whose residual condition reads a lookup column then reads every row of a key
+    // to complete the cache, rather than stopping at the first match. Both are bounded, by the
+    // cache and by the rows of the batch's keys, and the output does not change.
     private lazy val cacheWriter = if (batch.endedInput) None else {
       cache.map(new CacheWriter(_, keyEntries.map(_.requestRow)))
     }
