@@ -62,7 +62,7 @@ private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
       <div>
-        <p><a href="/">Back to Master</a></p>
+        <p><a href={UIUtils.prependBaseUri(request, "/")}>Back to Master</a></p>
         {range}
         <div class="log-content overflow-auto p-1" style="height:80vh;">
           <div>{moreButton}</div>

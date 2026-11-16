@@ -47,6 +47,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     // A tar archive is decompressed/unpacked as a sequential stream, so it must be read as a
     // single split rather than carved into byte ranges.
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, parsedOptions.decompressionCodec)
       return false
     }
     CSVDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)

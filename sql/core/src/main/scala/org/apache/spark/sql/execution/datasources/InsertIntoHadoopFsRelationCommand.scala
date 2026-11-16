@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -119,6 +120,7 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
+    var deleteMatchingOutput = false
     val doInsertion = if (mode == SaveMode.Append) {
       true
     } else {
@@ -133,7 +135,9 @@ case class InsertIntoHadoopFsRelationCommand(
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
-            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+            // Deleted in `beforeSetupJob` below, so that a write that fails the driver side
+            // checks of FileFormatWriter (e.g. an invalid write option) keeps the existing data.
+            deleteMatchingOutput = true
             true
           }
         case (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -192,7 +196,13 @@ case class InsertIntoHadoopFsRelationCommand(
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options,
-          numStaticPartitionCols = staticPartitions.size)
+          numStaticPartitionCols = staticPartitions.size,
+          beforeSetupJob = () => {
+            getTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB).foreach(_())
+            if (deleteMatchingOutput) {
+              deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
+            }
+          })
 
 
       // update metastore partition metadata
@@ -210,7 +220,11 @@ case class InsertIntoHadoopFsRelationCommand(
       // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())
       // refresh data cache if table is cached
-      sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, outputPath, fs)
+      sparkSession.sharedState.cacheManager.recacheByPath(
+        sparkSession,
+        outputPath,
+        fs,
+        includeTimeTravel = false)
 
       if (catalogTable.nonEmpty) {
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
@@ -285,4 +299,14 @@ case class InsertIntoHadoopFsRelationCommand(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): InsertIntoHadoopFsRelationCommand = copy(query = newChild)
+}
+
+object InsertIntoHadoopFsRelationCommand {
+
+  /**
+   * A callback that runs right before the write job starts, after the write passes the driver
+   * side checks of [[FileFormatWriter]]. A CTAS that replaces an existing table drops the table
+   * there, so that a write that fails these checks keeps the table.
+   */
+  val BEFORE_WRITE_JOB = TreeNodeTag[() => Unit]("before_write_job")
 }

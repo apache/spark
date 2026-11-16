@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.security.UserGroupInformation
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, L
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveVersion
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType, VariantType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -48,6 +49,27 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   private val emptyDir = Utils.createTempDir().getCanonicalPath
 
   private val ver = IsolatedClientLoader.hiveVersion(version)
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    System.gc() // Hack to avoid SEGV on some JVM versions.
+    val hadoopConf = new Configuration()
+    hadoopConf.set("test", "success")
+    client = buildClient(hadoopConf)
+    versionSpark = TestHiveVersion(client)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      if (versionSpark != null) {
+        versionSpark.reset()
+        versionSpark = null
+      }
+      client = null
+    } finally {
+      super.afterAll()
+    }
+  }
 
   /**
    * Drops table `tableName` after calling `f`.
@@ -61,13 +83,8 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("create client") {
-    client = null
-    System.gc() // Hack to avoid SEGV on some JVM versions.
-    val hadoopConf = new Configuration()
-    hadoopConf.set("test", "success")
-    client = buildClient(hadoopConf)
-    if (versionSpark != null) versionSpark.reset()
-    versionSpark = TestHiveVersion(client)
+    assert(client != null, "client should be initialized in beforeAll")
+    assert(versionSpark != null, "versionSpark should be initialized in beforeAll")
     assert(versionSpark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
       .client.version.fullVersion.startsWith(version))
   }
@@ -209,6 +226,22 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     client.createTable(table("default", tableName = "temporary"), ignoreIfExists = false)
     client.createTable(table("default", tableName = "view1", tableType = CatalogTableType.VIEW),
       ignoreIfExists = false)
+  }
+
+  test("validateTable") {
+    val tbl = table("default", tableName = "validated")
+    client.validateTable(tbl)
+    Seq(
+      // Hive column names are case insensitive.
+      new StructType().add("key", "int").add("KEY", "int"),
+      // The Hive SerDe can't parse the type.
+      new StructType().add("key", "int").add("value", VariantType)
+    ).foreach { schema =>
+      val e = intercept[Exception](client.validateTable(tbl.copy(schema = schema)))
+      // Compare the class names because the Hive client has its own class loader.
+      assert(e.getClass.getName === classOf[HiveException].getName)
+    }
+    assert(!client.tableExists("default", "validated"))
   }
 
   test("create/alter table with collations") {

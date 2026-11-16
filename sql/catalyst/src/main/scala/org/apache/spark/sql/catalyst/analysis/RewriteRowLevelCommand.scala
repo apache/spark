@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperatio
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -67,6 +68,39 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
         relation.catalog.get, relation.identifier.get,
         s"${command.toString} with generated columns")
     }
+  }
+
+  // AddMetadataColumns may add the metadata columns to the target table of an UPDATE or a MERGE on
+  // a table that accepts any schema, so its aligned assignments may include one for each metadata
+  // column. However, only data columns are written, and the metadata values passed to the writer
+  // are defined by MetadataColumn (e.g. PRESERVE_ON_UPDATE). So an assignment that the alignment
+  // adds for a metadata column is removed, and any other assignment to a metadata column is
+  // rejected unless the legacy behavior is enabled, as ResolveRowLevelCommandAssignments does for
+  // other tables.
+  protected def removeMetadataAssignments(
+      assignments: Seq[Assignment],
+      isAddedByAlignment: Assignment => Boolean): Seq[Assignment] = {
+    val (metadataAssignments, dataAssignments) = assignments.partition {
+      case Assignment(MetadataAttribute(_), _) => true
+      case _ => false
+    }
+    val invalidAssignments = metadataAssignments.filterNot(isAddedByAlignment)
+    if (invalidAssignments.nonEmpty &&
+        !conf.getConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS)) {
+      val errors = RowLevelAssignmentResolution.metadataColumnAssignmentErrors(invalidAssignments)
+      throw QueryCompilationErrors.invalidRowLevelOperationAssignments(assignments, errors)
+    }
+    dataAssignments
+  }
+
+  // aligning UPDATE assignments assigns each column that is not updated to itself
+  protected def isSelfAssignment(assignment: Assignment): Boolean = {
+    assignment.key.semanticEquals(assignment.value)
+  }
+
+  // the output of the target table may include metadata columns (see removeMetadataAssignments)
+  protected def dataAttrs(relation: DataSourceV2Relation): Seq[AttributeReference] = {
+    relation.output.filterNot(attr => MetadataAttribute.isValid(attr.metadata))
   }
 
   protected def buildOperationTable(
@@ -107,6 +141,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     V2ExpressionUtils.resolveRefs[AttributeReference](
       operation.requiredMetadataAttributes.toImmutableArraySeq,
       relation)
+  }
+
+  // metadata attrs referenced in the command (e.g. in the condition) must be read even if they are
+  // not required by the operation as the row-level operation table exposes no metadata columns
+  // such attrs are only read, the write projections include only required metadata attrs
+  protected def resolveReferencedMetadataAttrs(
+      relation: DataSourceV2Relation,
+      exprs: Seq[Expression]): Seq[AttributeReference] = {
+
+    val references = AttributeSet(exprs.flatMap(_.references)) -- relation.outputSet
+    relation.metadataOutput.filter(references.contains)
   }
 
   protected def resolveRowIdAttrs(
@@ -212,13 +257,14 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       rowAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
+    val findColOrdinal = colOrdinalFinder(plan)
 
     val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-    val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
+    val rowProjection = newLazyProjection(findColOrdinal, outputsWithRow, rowAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(findColOrdinal, outputsWithMetadata, metadataAttrs))
     } else {
       None
     }
@@ -232,20 +278,21 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       rowIdAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute]): WriteDeltaProjections = {
     val outputs = extractOutputs(plan)
+    val findColOrdinal = colOrdinalFinder(plan)
 
     val rowProjection = if (rowAttrs.nonEmpty) {
       val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
-      Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
+      Some(newLazyProjection(findColOrdinal, outputsWithRow, rowAttrs))
     } else {
       None
     }
 
     val outputsWithRowId = filterOutputs(outputs, OPERATIONS_WITH_ROW_ID)
-    val rowIdProjection = newLazyRowIdProjection(plan, outputsWithRowId, rowIdAttrs)
+    val rowIdProjection = newLazyRowIdProjection(findColOrdinal, outputsWithRowId, rowIdAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
       val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
-      Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
+      Some(newLazyProjection(findColOrdinal, outputsWithMetadata, metadataAttrs))
     } else {
       None
     }
@@ -276,22 +323,22 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   }
 
   private def newLazyProjection(
-      plan: LogicalPlan,
+      findColOrdinal: String => Int,
       outputs: Seq[Seq[Expression]],
       attrs: Seq[Attribute]): ProjectingInternalRow = {
-    val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
+    val colOrdinals = attrs.map(attr => findColOrdinal(attr.name))
     createProjectingInternalRow(outputs, colOrdinals, attrs)
   }
 
   // if there are assignment to row ID attributes, original values are projected as special columns
   // this method honors such special columns if present
   private def newLazyRowIdProjection(
-      plan: LogicalPlan,
+      findColOrdinal: String => Int,
       outputs: Seq[Seq[Expression]],
       rowIdAttrs: Seq[Attribute]): ProjectingInternalRow = {
     val colOrdinals = rowIdAttrs.map { attr =>
-      val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
-      if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
+      val originalValueIndex = findColOrdinal(ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
+      if (originalValueIndex != -1) originalValueIndex else findColOrdinal(attr.name)
     }
     createProjectingInternalRow(outputs, colOrdinals, rowIdAttrs)
   }
@@ -300,15 +347,25 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       outputs: Seq[Seq[Expression]],
       colOrdinals: Seq[Int],
       attrs: Seq[Attribute]): ProjectingInternalRow = {
-    val schema = StructType(attrs.zipWithIndex.map { case (attr, index) =>
-      val nullable = outputs.exists(output => output(colOrdinals(index)).nullable)
+    val indexedOutputs = outputs.map(_.toIndexedSeq)
+    val schema = StructType(attrs.zip(colOrdinals).map { case (attr, colOrdinal) =>
+      val nullable = indexedOutputs.exists(output => output(colOrdinal).nullable)
       StructField(attr.name, attr.dataType, nullable, attr.metadata)
     })
     ProjectingInternalRow(schema, colOrdinals)
   }
 
-  private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
-    plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+  // prefer the exact name as the plan may have columns whose names differ only by case
+  // fall back to the resolver as connectors may refer to columns using a different case
+  // the output is computed once as plans like Project create new attributes on every call
+  private def colOrdinalFinder(plan: LogicalPlan): String => Int = {
+    val output = plan.output.toIndexedSeq
+    val exactOrdinals = mutable.HashMap.empty[String, Int]
+    output.zipWithIndex.foreach { case (attr, ordinal) =>
+      // keep the first ordinal of each name like indexWhere
+      exactOrdinals.getOrElseUpdate(attr.name, ordinal)
+    }
+    name => exactOrdinals.getOrElse(name, output.indexWhere(a => conf.resolver(a.name, name)))
   }
 
   protected def buildOriginalRowIdValues(
@@ -332,14 +389,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       attrs: Seq[Attribute],
       outputs: Seq[Seq[Expression]]): Seq[Attribute] = {
 
-    // build a correct nullability map for output attributes
     // an attribute is nullable if at least one output may produce null
-    val nullabilityMap = attrs.indices.map { index =>
-      index -> outputs.exists(output => output(index).nullable)
-    }.toMap
-
+    val indexedOutputs = outputs.map(_.toIndexedSeq)
     attrs.zipWithIndex.map { case (attr, index) =>
-      AttributeReference(attr.name, attr.dataType, nullabilityMap(index), attr.metadata)()
+      val nullable = indexedOutputs.exists(output => output(index).nullable)
+      AttributeReference(attr.name, attr.dataType, nullable, attr.metadata)()
     }
   }
 }

@@ -549,7 +549,7 @@ class Resolver(
   /**
    * [[Distinct]] operator doesn't require any special resolution.
    * We validate results of the resolution using the [[OperatorWithUncomparableTypeValidator]]
-   * ([[MapType]] and [[VariantType]] are not supported under [[Distinct]] operator).
+   * ([[MapType]], [[VariantType]] and [[FileType]] are not supported under [[Distinct]] operator).
    *
    * `hiddenOutput` and `availableAliases` are reset when [[Distinct]] is reached during tree
    * traversal.
@@ -639,6 +639,9 @@ class Resolver(
    * Note: By default if all the inline table expressions can be evaluated eagerly, the parser
    * would produce a [[LocalRelation]] and the analysis would just skip this step and go straight
    * to `resolveLocalRelation` (SPARK-48967, SPARK-49269).
+   *
+   * Inline tables with expressions that are evaluated when the query runs, such as `rand()`,
+   * become an [[Expand]], which only the fixed-point Analyzer supports.
    */
   private def resolveInlineTable(unresolvedInlineTable: UnresolvedInlineTable): LogicalPlan = {
     val withResolvedExpressions = UnresolvedInlineTable(
@@ -653,6 +656,13 @@ class Resolver(
 
     val resolvedRelation = EvaluateUnresolvedInlineTable
       .evaluateUnresolvedInlineTable(withResolvedExpressions)
+
+    resolvedRelation match {
+      case _: Expand =>
+        throw new ExplicitlyUnsupportedResolverFeature(
+          "VALUES lists with expressions that are evaluated when the query runs")
+      case _ =>
+    }
 
     resolve(resolvedRelation)
   }

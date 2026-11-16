@@ -16,6 +16,9 @@ Before the first code edit or running test in a session, ensure a clean working 
 
 SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read the class documentation before running or updating these tests. DO NOT edit the generated golden files (`.sql.out`) directly. Always regenerate them when needed, and carefully review the diff to make sure it's expected.
 
+When adding new SQL syntax or a user-visible SQL feature, follow the streaming test coverage
+guidance in the `SQLQueryTestSuite` class documentation.
+
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
 When adding a member to an existing class or object, follow the sectioning the file already uses and put the new member with the code it belongs with. The common failure mode is dropping it wherever it is first used without checking how the file is organized, splitting a section of unrelated code in the process. Beyond grouping related code there is no prescribed order -- the Databricks Scala guide, which Spark follows, asks only that a long class group its members into logical sections with comment headers. Do not reorganize existing members unless the change requires it.
@@ -101,7 +104,7 @@ These are combined with a base above rather than used on their own:
 
 ## Build and Test
 
-Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
+Build and tests can take a long time, so prefer the narrowest relevant build or test command.
 
 For build and test setup, including how to run tests and troubleshoot common
 local failures, see `docs/building-spark.md`.
@@ -205,7 +208,7 @@ It lists `master` and the latest major's release branches the commit reached (e.
 
 ## Pull Request Workflow
 
-PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
+PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag comes from the `COMPONENTS` registry in `dev/merge_spark_pr.py`, the source of truth: each entry pairs a PR-title tag with its canonical JIRA component name and accepted aliases (e.g. `Documentation` → `[DOC]`, `Pandas API on Spark` → `[PS]`, `SQL` → `[SQL]`). Read that registry to pick the right tag.
 
 Use `[FOLLOWUP]` only for small PRs that directly modify or correct unreleased earlier PRs. For separately planned work, non-trivial changes, or work outside the earlier JIRA's scope, create a separate JIRA ticket for each PR and use the normal title format without `[FOLLOWUP]`.
 

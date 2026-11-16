@@ -138,8 +138,11 @@ trait FileScan extends Scan
       "Location" -> locationDesc)
   }
 
-  protected def partitions: Seq[FilePartition] = {
-    val selectedPartitions = fileIndex.listFiles(partitionFilters, dataFilters)
+  protected def partitions: Seq[FilePartition] =
+    filePartitions(fileIndex.listFiles(partitionFilters, dataFilters))
+
+  /** Splits the files of `selectedPartitions`, sized for them, and packs them into partitions. */
+  protected def filePartitions(selectedPartitions: Seq[PartitionDirectory]): Seq[FilePartition] = {
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
     val partitionAttributes = toAttributes(fileIndex.partitionSchema)
     val attributeMap = partitionAttributes.map(a => normalizeName(a.name) -> a).toMap
@@ -220,4 +223,8 @@ trait FileScan extends Scan
       name.toLowerCase(Locale.ROOT)
     }
   }
+
+  // A separate name, since widening `normalizeName` would clash with a method of that name in a
+  // subclass outside Spark.
+  private[v2] def normalizePartitionColumnName(name: String): String = normalizeName(name)
 }

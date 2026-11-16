@@ -391,7 +391,7 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int):
         org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
-      STUtils.deserializeGeom(row.getBinaryView(0), dataType)
+      STUtils.deserializeGeom(row.getBinaryView(column), dataType)
     }
   }
 
@@ -411,7 +411,7 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int):
         org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
-      STUtils.deserializeGeog(row.getBinaryView(0), dataType)
+      STUtils.deserializeGeog(row.getBinaryView(column), dataType)
     }
   }
 

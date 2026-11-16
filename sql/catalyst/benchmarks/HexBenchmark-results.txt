@@ -2,13 +2,13 @@
 UnHex Comparison
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
 AMD EPYC 7763 64-Core Processor
 Cardinality 1000000:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Common Codecs                                      4433           4453          18          0.2        4433.1       1.0X
-Java                                               2629           2631           2          0.4        2629.5       1.7X
-Spark                                              3972           4004          45          0.3        3972.5       1.1X
-Spark Binary                                       2690           2694           5          0.4        2689.9       1.6X
+Common Codecs                                      5017           5038          19          0.2        5017.0       1.0X
+Java                                               5610           5627          17          0.2        5609.8       0.9X
+Spark                                              3515           3536          19          0.3        3514.8       1.4X
+Spark Binary                                       2651           2656           5          0.4        2651.4       1.9X
 
 

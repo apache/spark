@@ -208,6 +208,54 @@ struct<to_timestamp(2020-12-31-366, yyyy-MM-dd-DDD):timestamp>
 
 
 -- !query
+select to_timestamp(20201231, 'yyyyMMdd')
+-- !query schema
+struct<to_timestamp(20201231, yyyyMMdd):timestamp>
+-- !query output
+2020-12-31 00:00:00
+
+
+-- !query
+select to_timestamp(20260924073325, 'yyyyMMddHHmmss')
+-- !query schema
+struct<to_timestamp(20260924073325, yyyyMMddHHmmss):timestamp>
+-- !query output
+2026-09-24 07:33:25
+
+
+-- !query
+select to_timestamp(1.5BD, 'yyyy')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "func" : "`try_to_timestamp`",
+    "message" : "Text '1.5' could not be parsed at index 0"
+  }
+}
+
+
+-- !query
+select try_to_timestamp(20201231, 'yyyyMMdd')
+-- !query schema
+struct<try_to_timestamp(20201231, yyyyMMdd):timestamp>
+-- !query output
+2020-12-31 00:00:00
+
+
+-- !query
+select to_timestamp(1)
+-- !query schema
+struct<to_timestamp(1):timestamp>
+-- !query output
+1969-12-31 16:00:01
+
+
+-- !query
 select to_time('00:00:00')
 -- !query schema
 struct<to_time(00:00:00):time(6)>

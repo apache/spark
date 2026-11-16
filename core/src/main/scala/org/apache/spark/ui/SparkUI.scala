@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, WEB_URL}
 import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1._
@@ -54,6 +55,8 @@ private[spark] class SparkUI private (
   with UIRoot {
 
   val killEnabled = sc.map(_.conf.get(UI_KILL_ENABLED)).getOrElse(false)
+
+  val actionsViaGetEnabled = SparkUI.actionsViaGetEnabled(conf)
 
   val holdEnabled = sc.map(_.conf.get(UI_HOLD_ENABLED)).getOrElse(false)
 
@@ -121,16 +124,24 @@ private[spark] class SparkUI private (
       attachHandler(PrometheusResource.getServletHandler(this))
     }
 
-    // These should be POST only, but, the YARN AM proxy won't proxy POSTs
+    // These endpoints change state, so they require the per-UI CSRF token and reject
+    // prefetch requests (see JettyUtils.createRedirectHandler). They also accept GET
+    // where a proxy in front of the UI cannot forward POST -- the token rides in the
+    // request parameters, which such proxies do forward. See SparkUI.actionsViaGetEnabled.
+    val actionHttpMethods: Set[String] =
+      if (actionsViaGetEnabled) Set("GET", "POST") else Set("POST")
     attachHandler(createRedirectHandler(
-      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = Set("GET", "POST")))
+      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = actionHttpMethods,
+      csrfToken = Some(csrfToken)))
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
-      httpMethods = Set("GET", "POST")))
+      httpMethods = actionHttpMethods, csrfToken = Some(csrfToken)))
     attachHandler(createRedirectHandler(
-      "/jobs/hold", "/jobs/", jobsTab.handleHoldRequest, httpMethods = Set("GET", "POST")))
+      "/jobs/hold", "/jobs/", jobsTab.handleHoldRequest, httpMethods = actionHttpMethods,
+      csrfToken = Some(csrfToken)))
     attachHandler(createRedirectHandler(
-      "/jobs/resume", "/jobs/", jobsTab.handleResumeRequest, httpMethods = Set("GET", "POST")))
+      "/jobs/resume", "/jobs/", jobsTab.handleResumeRequest, httpMethods = actionHttpMethods,
+      csrfToken = Some(csrfToken)))
   }
 
   initialize()
@@ -254,6 +265,16 @@ private[spark] object SparkUI {
 
   def getUIPort(conf: SparkConf): Int = {
     conf.get(UI_PORT)
+  }
+
+  /**
+   * Whether the state-changing endpoints (kill, hold, resume) accept GET as well as POST.
+   * Unset, this follows the cluster manager: on for YARN, whose ResourceManager/AM proxy
+   * does not forward POST (SPARK-6846), and off everywhere else.
+   */
+  def actionsViaGetEnabled(conf: SparkConf): Boolean = {
+    conf.get(UI_ACTIONS_VIA_GET_ENABLED)
+      .getOrElse(conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn")
   }
 
   /**

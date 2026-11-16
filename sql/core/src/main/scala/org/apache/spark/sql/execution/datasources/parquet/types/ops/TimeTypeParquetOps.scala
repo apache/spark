@@ -163,6 +163,15 @@ private[ops] object TimeTypeParquetOps {
       override def acceptsValue(value: Any): Boolean =
         value.isInstanceOf[LocalTime] && isMicrosResolution(value.asInstanceOf[LocalTime])
 
+      // Below microsecond precision, the reader truncates the stored micros to the read precision
+      // (see TimeTypeParquetOps.newConverter and TimeVectorUpdater), while a pushed down predicate
+      // compares the stored micros. E.g. a stored 12:00:00.1005 is read as 12:00:00.100 for
+      // TIME(3), so a pushed down `t = 12:00:00.100` would skip it.
+      override def acceptsReadType(readType: DataType): Boolean = readType match {
+        case t: TimeType => t.precision >= TimeType.MICROS_PRECISION
+        case _ => true
+      }
+
       override protected def toLong(value: Any): JLong =
         value.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
     }

@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -138,6 +139,74 @@ public class ExternalShuffleBlockResolverSuite {
       context.cleanup();
       outsideFile.delete();
     }
+  }
+
+  @Test
+  public void testIndexFileResolvingOutsideLocalDirsRejected() throws IOException {
+    // The index file is verified when it is loaded into the index cache.
+    File outsideFile = File.createTempFile("outside", ".index");
+    TestShuffleDataContext context = new TestShuffleDataContext(2, 5);
+    context.create();
+    try {
+      context.insertSortShuffleData(1, 0, new byte[][] {
+        "AAAA".getBytes(StandardCharsets.UTF_8),
+        "BBBB".getBytes(StandardCharsets.UTF_8)});
+      ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
+      resolver.registerExecutor("app1", "exec0", context.createExecutorInfo(SORT_MANAGER));
+
+      // Replace the index file with a link to a valid copy outside the registered local dirs.
+      File indexFile = new File(ExecutorDiskUtils.getFilePath(
+        context.localDirs, context.subDirsPerLocalDir, "shuffle_1_0_0.index"));
+      Files.copy(indexFile.toPath(), outsideFile.toPath(),
+        StandardCopyOption.REPLACE_EXISTING);
+      assertTrue(indexFile.delete());
+      try {
+        Files.createSymbolicLink(indexFile.toPath(), outsideFile.toPath());
+      } catch (UnsupportedOperationException | IOException e) {
+        // Filesystems without symlink support cannot exercise this case.
+        Assumptions.assumeTrue(false, "symlinks unsupported on this filesystem");
+      }
+
+      RuntimeException e = assertThrows(RuntimeException.class,
+        () -> resolver.getBlockData("app1", "exec0", 1, 0, 0));
+      assertTrue(e.getMessage().contains("resolves outside"), "Bad error message: " + e);
+    } finally {
+      context.cleanup();
+      outsideFile.delete();
+    }
+  }
+
+  @Test
+  public void canonicalLocalDirsEvictedOnApplicationRemoved() throws IOException {
+    ExternalShuffleBlockResolver resolver =
+      new ExternalShuffleBlockResolver(conf, null, Runnable::run);
+    String root = new File(System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString())
+      .getAbsolutePath();
+    String sharedDir = root + "/shared";
+    int numExecutors = 100;
+    for (String appId : new String[] {"app1", "app2"}) {
+      for (int i = 0; i < numExecutors; i++) {
+        String[] localDirs = {root + "/" + appId + "/exec" + i, sharedDir};
+        resolver.registerExecutor(appId, "exec" + i,
+          new ExecutorShuffleInfo(localDirs, 64, SORT_MANAGER));
+      }
+    }
+    assertEquals(2 * numExecutors + 1, resolver.canonicalLocalDirs.size());
+
+    // Executor removal keeps the executor registered, so its dirs stay cached.
+    for (int i = 0; i < numExecutors; i++) {
+      resolver.executorRemoved("exec" + i, "app1");
+    }
+    assertEquals(2 * numExecutors + 1, resolver.canonicalLocalDirs.size());
+
+    // A dir still referenced by another application's executor is kept.
+    resolver.applicationRemoved("app1", false);
+    assertEquals(numExecutors + 1, resolver.canonicalLocalDirs.size());
+    assertTrue(resolver.canonicalLocalDirs.containsKey(sharedDir));
+
+    resolver.applicationRemoved("app2", false);
+    assertTrue(resolver.canonicalLocalDirs.isEmpty());
+    assertEquals(0, resolver.getRegisteredExecutorsSize());
   }
 
   @Test

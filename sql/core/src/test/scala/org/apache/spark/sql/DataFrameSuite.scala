@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -109,6 +110,24 @@ class DataFrameSuite extends SharedSparkSession
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select($"word"),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
+  }
+
+  for (seed <- Seq(0L, 42L, Long.MinValue); codegen <- Seq(true, false)) {
+    test(s"SPARK-60634: Dataset.explode initializes UUID arguments ($seed, $codegen)") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val result = spark.range(0, 6, 1, 2).explode(
+          expr(s"uuid($seed)"), lit(null).cast(StringType), struct(lit(7))) { row: Row =>
+          Seq((row.getString(0), row.isNullAt(1), row.getStruct(2).getInt(0)))
+        }
+        val expected = (0 until 2).flatMap { partition =>
+          val generator = RandomUUIDGenerator(seed + partition)
+          (0 until 3).map { offset =>
+            Row(partition * 3L + offset, generator.getNextUUID().toString, true, 7)
+          }
+        }
+        checkAnswer(result.select("id", "_1", "_2", "_3"), expected)
+      }
+    }
   }
 
   test("explode") {
@@ -1680,6 +1699,16 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61254: LogicalRDD constraints should not reference the origin Dataset columns") {
+    val df = spark.range(16).as("t").where($"t.id" > 5)
+    // The optimizer removes the root alias, so the constraint `t.id > 5` differs from the
+    // optimized output `id` only in qualifier.
+    val cp = df.select($"id".as("id")).localCheckpoint()
+    checkAnswer(
+      df.join(cp, df("id") === cp("id") + 1, "right_outer").where(cp("id") > 0),
+      (6L to 14L).map(i => Row(i + 1, i)) :+ Row(null, 15L))
+  }
+
   test("SPARK-10656: completely support special chars") {
     val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
     checkAnswer(df.select(df("*")), Row(1, "a"))
@@ -2807,6 +2836,248 @@ class DataFrameSuite extends SharedSparkSession
     val relation = LocalRelation.fromExternalRows(attrs, Seq(Row(1, 2)))
     val df = classic.Dataset.ofRows(spark, relation)
     checkAnswer(df.select("b"), Row(2))
+  }
+
+  test("SPARK-55014: only evaluate expensive projections for the rows a filter kept") {
+    val magicCalls = sparkContext.longAccumulator("magicCalls")
+    val otherCalls = sparkContext.longAccumulator("otherCalls")
+    val magic = udf((i: Long) => {
+      magicCalls.add(1)
+      i % 2 == 0
+    })
+    val other = udf((i: Long) => {
+      otherCalls.add(1)
+      i % 3 == 0
+    })
+    // A single partition so that the call counts below are exact.
+    def query(): DataFrame = spark.range(0, 30, 1, 1)
+      .select($"id", magic($"id") as "m", other($"id") as "o")
+      .where($"m" && $"o")
+    val expected = Seq(0L, 6L, 12L, 18L, 24L).map(Row(_, true, true))
+
+    // Codegen already defers a projected expression past a filter that does not need it
+    // (CodegenSupport.evaluateRequiredVariables); splitting buys the same saving on the paths
+    // codegen does not cover -- interpreted projections, operators it bails out of, Python UDFs.
+    // Measure with codegen off.
+    Seq(true, false).foreach { split =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        magicCalls.reset()
+        otherCalls.reset()
+        // Collect, not checkAnswer, so the plan runs exactly once.
+        assert(query().collect().toSeq === expected)
+        assert(magicCalls.value === 30)
+        // Splitting around the filter on `m` means `other` never sees the odd ids.
+        assert(otherCalls.value === (if (split) 15 else 30))
+      }
+    }
+
+    // However the plan is built, the answer is the same.
+    for (codegen <- Seq(true, false); split <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        checkAnswer(query(), expected)
+      }
+    }
+  }
+
+  test("SPARK-55014: no split when projected expressions share the expensive work") {
+    val calls = sparkContext.longAccumulator("udfCalls")
+    val u = udf((i: Long) => {
+      calls.add(1)
+      i
+    })
+    // x and y share one UDF call: subexpression elimination collapses it in one projection but
+    // cannot reach across a filter, so splitting would re-run it on every row below and again on
+    // every survivor. Leave the projection alone; the count stays at one per input row.
+    def query(): DataFrame = spark.range(0, 30, 1, 1)
+      .select($"id", u($"id") as "x", (u($"id") + 1) as "y")
+      .where($"x" % 2 === 0 && $"y" % 3 === 0)
+
+    Seq(true, false).foreach { codegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        calls.reset()
+        assert(query().collect().length === 5)
+        assert(calls.value === 30)
+      }
+    }
+  }
+
+  test("SPARK-55014: splitting follows the filter's order, not the projection's") {
+    val earlyCalls = sparkContext.longAccumulator("earlyCalls")
+    val lateCalls = sparkContext.longAccumulator("lateCalls")
+    val early = udf((i: Long) => {
+      earlyCalls.add(1)
+      i % 3 == 0
+    })
+    val late = udf((i: Long) => {
+      lateCalls.add(1)
+      i % 2 == 0
+    })
+    // `l` is projected before `e` but filtered on after it. Split order must follow the filter:
+    // the condition order is the only selectivity signal we have, and ordering by the projection
+    // would run `late` over every row and could do more work than not splitting at all.
+    def query(): DataFrame = spark.range(0, 30, 1, 1)
+      .select($"id", late($"id") as "l", early($"id") as "e")
+      .where($"e" && $"l")
+    val expected = Seq(0L, 6L, 12L, 18L, 24L).map(Row(_, true, true))
+
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "true") {
+      assert(query().collect().toSeq === expected)
+      assert(earlyCalls.value === 30)
+      // Only the ten ids divisible by three reach `late`.
+      assert(lateCalls.value === 10)
+    }
+  }
+
+  test("SPARK-60602: a throwable filter condition is not evaluated ahead of its order") {
+    val f = udf((i: Long) => i)
+    val g = udf((i: Long) => i)
+    val h = udf((i: Long) => i)
+    // `assert_true(g > 5)` only holds for the ids the first conjunct (`f + g > 10`) keeps, so the
+    // `AND` short-circuit must keep it away from the other rows however the filter is pushed.
+    // With `id >= 0` the rule also rebuilds the plan, pushing that conjunct below the projection,
+    // and only the order of the conjuncts left above keeps the throwable one behind the first.
+    def splitQuery(extra: Column): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", g($"id") as "g")
+      .where($"f" + $"g" > 10 && assert_true($"g" > 5).isNull && extra)
+    // The same with the throwable conjunct referencing no projected UDF at all.
+    def cheapQuery(extra: Column): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f")
+      .where($"f" > 5 && assert_true($"id" > 5).isNull && extra)
+    // The same two shapes with the throwable part inside a projected alias.
+    def cheapAliasQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", assert_true($"id" > 5) as "t")
+      .where($"f" > 5 && $"t".isNull)
+    def splitAliasQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", h($"id") as "h",
+        when(g($"id") > 5, g($"id")).otherwise(raise_error(lit("boom"))) as "g")
+      .where($"f" + $"h" > 10 && $"g" > 5)
+    val expected = (6L until 10L).map(i => Row(i, i, i))
+    for (codegen <- Seq(true, false); split <- Seq(true, false); avoid <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid.toString,
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        Seq(lit(true), $"id" >= 0).foreach { extra =>
+          checkAnswer(splitQuery(extra), expected)
+          checkAnswer(cheapQuery(extra), (6L until 10L).map(i => Row(i, i)))
+        }
+        // An interpreted projection computes every projected column for every row it gets, so
+        // a throwable alias only waits for the filter when codegen defers it past the filter
+        // or the whole filter is pushed below the projection.
+        if (codegen || !avoid) {
+          checkAnswer(cheapAliasQuery(), (6L until 10L).map(i => Row(i, i, null)))
+          checkAnswer(splitAliasQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60633: a throwable filter condition is not pushed through an operator ahead of " +
+    "its order") {
+    def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
+    // `assert_true(id > 5)` only holds for the rows the conjunct before it keeps, and that
+    // conjunct cannot be pushed through the operator below the filter. Each query is built
+    // inside the config loop, so it is planned under that config.
+    def generateQuery(): DataFrame = df.select($"id", explode(array($"id")) as "x")
+      .where($"x" > 5 && assert_true($"id" > 5).isNull)
+    def aggregateQuery(): DataFrame = df.groupBy($"id").agg(max($"id") as "m")
+      .where($"m" > 5 && assert_true($"id" > 5).isNull)
+    def windowQuery(): DataFrame =
+      df.select($"id", max($"id").over(Window.partitionBy($"id")) as "m")
+        .where($"m" > 5 && assert_true($"id" > 5).isNull)
+    // `rand(0) < 0` keeps no row, so `assert_true` never runs.
+    def unionQuery(): DataFrame =
+      df.union(df).where(rand(0) < 0 && assert_true($"id" > 100).isNull)
+    // The generate only outputs the rows with `id > 5`, so the filter above it never raises,
+    // although its only condition is written first.
+    def droppingGenerateQuery(): DataFrame =
+      df.select($"id", explode(filter(array($"id"), x => x > 5)) as "x")
+        .where(assert_true($"id" > 5).isNull)
+    // The throwable part is an aggregate result column, which the filter only reads.
+    def aggregateAliasQuery(): DataFrame =
+      df.groupBy($"id").agg(max($"id") as "m", assert_true($"id" > 5) as "x")
+        .where($"m" > 5 && $"x".isNull)
+    val expected = (6L until 10L).map(i => Row(i, i))
+    Seq(true, false).foreach { codegen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        checkAnswer(generateQuery(), expected)
+        checkAnswer(aggregateQuery(), expected)
+        checkAnswer(windowQuery(), expected)
+        checkAnswer(unionQuery(), Nil)
+        checkAnswer(droppingGenerateQuery(), expected)
+        // An interpreted aggregate computes every result column for every group, so the
+        // throwable alias only waits for the filter when codegen defers it past the filter.
+        if (codegen) {
+          checkAnswer(aggregateAliasQuery(), (6L until 10L).map(i => Row(i, i, null)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60980: a filter condition that can fail is not evaluated ahead of a " +
+    "non-deterministic one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The first conjunct of the outer filter is false on every row, so the `AND` short-circuit
+      // keeps the division by zero on id 3 from being evaluated.
+      val df = spark.range(0, 10, 1, 1).toDF()
+        .where($"id" >= 0)
+        .where(rand(10) * 10 > 100 && lit(10L) / ($"id" - 3) > 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
+  test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
+    withTempPath { dir =>
+      // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On
+      // (3000000000, 1), neither does the cast of `y`, but the cast of `x` overflows.
+      Seq((0L, 6L), (6L, 6L), (3000000000L, 1L)).toDF("x", "y").write.parquet(dir.getCanonicalPath)
+      val df = spark.read.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(df.where($"x" === $"y" && lit(10L) / $"y" > 0), Row(6L, 6L))
+        checkAnswer(
+          df.select($"x").distinct().join(df.select($"y").distinct(), $"x" === $"y")
+            .where(lit(10L) / $"y" > 0),
+          Row(6L, 6L))
+        checkAnswer(
+          df.where($"x" === $"y" && $"y".cast("float").cast("int") > 0), Row(6L, 6L))
+        // The binding `a.y = 0` turns `b.y = 10 / a.y` into `b.y = 10 / 0`, which no row reaches.
+        checkAnswer(
+          df.as("a").join(df.as("b"), $"a.x" === $"b.x" && $"b.y" === lit(10L) / $"a.y")
+            .where($"a.y" === 0),
+          Seq.empty)
+      }
+    }
+  }
+
+  test("SPARK-60985: a correlated subquery is inferred with its correlation condition") {
+    withTempPath { dir =>
+      // `r.y` is 0 on one row, which the correlation condition `s.b = 10 / r.y` would divide by.
+      Seq(6L).toDF("x").write.parquet(s"${dir.getCanonicalPath}/l")
+      Seq(0L, 6L).toDF("y").write.parquet(s"${dir.getCanonicalPath}/r")
+      Seq((0L, 1L), (6L, 1L)).toDF("a", "b").write.parquet(s"${dir.getCanonicalPath}/s")
+      withTempView("l", "r", "s") {
+        Seq("l", "r", "s").foreach { t =>
+          spark.read.parquet(s"${dir.getCanonicalPath}/$t").createOrReplaceTempView(t)
+        }
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+          checkAnswer(
+            sql("SELECT * FROM l LEFT JOIN r ON l.x = r.y AND " +
+              "l.x IN (SELECT a FROM s WHERE s.b = 10 / l.x)"),
+            Row(6L, null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60528: collect a nested empty struct") {
+    val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
+    checkAnswer(df, Row(0L, Row(Row())))
   }
 }
 

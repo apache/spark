@@ -191,11 +191,14 @@ class SparkConnectResultSetSuite extends ConnectFunSuite with RemoteSparkSession
     // The server sends the schema response before any arrow batch, so executeQuery
     // returns successfully and the runtime error surfaces while iterating rows.
     withStatement { stmt =>
+      // Division by zero only fails under ANSI mode, so enable it explicitly for this session
+      // instead of relying on the default, which is off when SPARK_ANSI_SQL_MODE=false.
+      stmt.execute("SET spark.sql.ansi.enabled=true")
       val rs = stmt.executeQuery("SELECT 10 / (5 - id) FROM range(10)")
       val e = intercept[SQLException] {
         while (rs.next()) {}
       }
-      // DIVIDE_BY_ZERO under ANSI mode
+      // DIVIDE_BY_ZERO
       assert(e.getSQLState === "22012")
       assert(e.getCause != null)
     }

@@ -14,10 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
 import os
 import tempfile
+import zipfile
+from pathlib import Path
 
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, SparkRuntimeException
 from pyspark.sql.functions import assert_true, lit, udf
 from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -103,6 +106,72 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
                 exception=pe.exception,
                 errorClass="DUPLICATED_ARTIFACT",
                 messageParameters={"normalized_path": pyfile_path},
+            )
+
+    def test_add_native_data_source_package(self):
+        # A new session, so that the packages do not affect the other tests.
+        spark = self.spark.newSession()
+        with tempfile.TemporaryDirectory(prefix="test_add_native_data_source_package") as d:
+            ffi = spark._jvm.org.apache.spark.sql.execution.datasources.v2.ffi
+            platform = ffi.NativePlatform.current()
+
+            def new_file(name):
+                file_path = os.path.join(d, name)
+                if name.endswith(".sparkpkg"):
+                    # Spark checks the manifest of a package when a session adds it, which has to
+                    # have a library for the platform of the driver.
+                    manifest = {
+                        "abiVersion": 1,
+                        "dataSources": ["my_source"],
+                        "libraries": {platform: "lib.so"},
+                    }
+                    with zipfile.ZipFile(file_path, "w") as z:
+                        z.writestr("spark-native-datasource.json", json.dumps(manifest))
+                        z.writestr("lib.so", name)
+                else:
+                    with open(file_path, "wb") as f:
+                        f.write(name.encode("utf-8"))
+                return file_path
+
+            spark.addArtifact(new_file("my_source.sparkpkg"))
+            # Packages are added to the session whatever the flags, as with Spark Connect, also
+            # together with other files.
+            spark.addArtifact(new_file("my_file_source.sparkpkg"), file=True)
+            spark.addArtifacts(new_file("my_other_source.sparkpkg"), new_file("other.txt"))
+            # A URI, and paths relative to the working directory of Python, which is not the
+            # one of the JVM, also with a colon, which is not the scheme of a URI.
+            spark.addArtifact(Path(new_file("my_uri_source.sparkpkg")).as_uri())
+            new_file("my_relative_source.sparkpkg")
+            new_file("my_source:1.sparkpkg")
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                spark.addArtifact("my_relative_source.sparkpkg")
+                spark.addArtifact("my_source:1.sparkpkg")
+            finally:
+                os.chdir(cwd)
+            # A file that is not a valid package is rejected.
+            invalid = os.path.join(d, "invalid.sparkpkg")
+            with open(invalid, "wb") as f:
+                f.write(b"not a zip")
+            with self.assertRaises(SparkRuntimeException) as e:
+                spark.addArtifact(invalid)
+            self.assertEqual(
+                e.exception.getCondition(), "INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST"
+            )
+            # It names the file of the user, which the JVM resolves to its canonical path.
+            self.assertEqual(e.exception.getMessageParameters()["path"], os.path.realpath(invalid))
+            packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
+            self.assertEqual(
+                sorted(packages.apply(i).getName() for i in range(packages.size())),
+                [
+                    "my_file_source.sparkpkg",
+                    "my_other_source.sparkpkg",
+                    "my_relative_source.sparkpkg",
+                    "my_source.sparkpkg",
+                    "my_source:1.sparkpkg",
+                    "my_uri_source.sparkpkg",
+                ],
             )
 
     def test_add_zipped_package(self):

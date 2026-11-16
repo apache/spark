@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.CreatePipelineDatasetAsSelectParserSuiteBase
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `CREATE MATERIALIZED VIEW ... AS ...` command
  */
+@DataSourceV2Test
 class CreateMaterializedViewAsSelectParserSuite
   extends CreatePipelineDatasetAsSelectParserSuiteBase {
   override val datasetSqlSyntax: String = "MATERIALIZED VIEW"

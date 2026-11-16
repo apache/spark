@@ -208,6 +208,46 @@ struct<to_timestamp(2020-12-31-366, yyyy-MM-dd-DDD):timestamp>
 
 
 -- !query
+select to_timestamp(20201231, 'yyyyMMdd')
+-- !query schema
+struct<to_timestamp(20201231, yyyyMMdd):timestamp>
+-- !query output
+2020-12-31 00:00:00
+
+
+-- !query
+select to_timestamp(20260924073325, 'yyyyMMddHHmmss')
+-- !query schema
+struct<to_timestamp(20260924073325, yyyyMMddHHmmss):timestamp>
+-- !query output
+2026-09-24 07:33:25
+
+
+-- !query
+select to_timestamp(1.5BD, 'yyyy')
+-- !query schema
+struct<to_timestamp(1.5, yyyy):timestamp>
+-- !query output
+0001-01-01 00:00:00
+
+
+-- !query
+select try_to_timestamp(20201231, 'yyyyMMdd')
+-- !query schema
+struct<try_to_timestamp(20201231, yyyyMMdd):timestamp>
+-- !query output
+2020-12-31 00:00:00
+
+
+-- !query
+select to_timestamp(1)
+-- !query schema
+struct<to_timestamp(1):timestamp>
+-- !query output
+1969-12-31 16:00:01
+
+
+-- !query
 select to_time('00:00:00')
 -- !query schema
 struct<to_time(00:00:00):time(6)>

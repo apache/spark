@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.LogKeys.{SQL_TEXT, UNSUPPORTED_EXPR}
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, LambdaFunction, Literal, MapFilter, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, IsNotNull, LambdaFunction, Like, Literal, MapFilter, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertStarAction, Join, LogicalPlan, MergeAction, MergeIntoTable, ReplaceData, UpdateAction, UpdateStarAction, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INSET, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.catalyst.trees.TreePattern.{INSET, LIKE_FAMLIY, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.types.{BooleanType, StringType}
 import org.apache.spark.util.Utils
 
 
@@ -53,7 +53,7 @@ import org.apache.spark.util.Utils
 object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL, INSET), ruleId) {
+    _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL, INSET, LIKE_FAMLIY), ruleId) {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
     case rd @ ReplaceData(_, cond, _, _, _, groupFilterCond, _) =>
@@ -99,8 +99,9 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   }
 
   /**
-   * Recursively traverse the Boolean-type expression to replace
-   * `Literal(null, BooleanType)` with `FalseLiteral`, if possible.
+   * Recursively traverse the Boolean-type expression to replace, where possible,
+   * `Literal(null, BooleanType)` with `FalseLiteral` -- and, in the same null-as-false spirit
+   * within a predicate, a match-all `x LIKE '%'` with `IsNotNull(x)`.
    *
    * Note that `transformExpressionsDown` can not be used here as we must stop as soon as we hit
    * an expression that is not [[CaseWhen]], [[If]], [[And]], [[Or]] or
@@ -119,6 +120,14 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       FalseLiteral
     case Not(InSet(value, list)) if isNullLiteral(value) || list.contains(null) =>
       FalseLiteral
+
+    // `x LIKE '%'` (a pattern of only unescaped `%`) is true for any non-null value and null for
+    // null. In a predicate, null is treated as false, so it is equivalent to `IsNotNull(x)`,
+    // which is cheaper and can be pushed down. This case is reached only through null-preserving
+    // operators, so it never fires under `Not`, where the rewrite would be unsafe.
+    case Like(child, Literal(pattern, _: StringType), escapeChar)
+        if pattern != null && isMatchAllLikePattern(pattern.toString, escapeChar) =>
+      IsNotNull(child)
 
     case And(left, right) =>
       And(replaceNullWithFalse(left), replaceNullWithFalse(right))
@@ -166,4 +175,9 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
     case Literal(null, _) => true
     case _ => false
   }
+
+  // A `LIKE` pattern that matches any non-null value: one or more `%` wildcards and nothing else.
+  // `%` must be an actual wildcard, so the escape character must not be `%`.
+  private def isMatchAllLikePattern(pattern: String, escapeChar: Char): Boolean =
+    escapeChar != '%' && pattern.nonEmpty && pattern.forall(_ == '%')
 }

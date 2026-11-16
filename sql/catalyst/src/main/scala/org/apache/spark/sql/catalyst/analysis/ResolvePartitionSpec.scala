@@ -19,16 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2PartitionCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.PartitioningUtils.{castPartitionSpec, normalizePartitionSpec, requireExactMatchedPartitionSpec}
-import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.sql.types.StructField
 
 /**
  * Resolve [[UnresolvedPartitionSpec]] to [[ResolvedPartitionSpec]] in partition related commands.
@@ -43,50 +38,20 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
           command.transformExpressions {
             case partSpecs: UnresolvedPartitionSpec =>
               val partitionSchema = table.partitionSchema()
-              resolvePartitionSpec(
+              PartitionSpecResolution.resolvePartitionSpec(
                 r.name,
                 partSpecs,
                 partitionSchema,
-                command.allowPartialPartitionSpec)
+                command.allowPartialPartitionSpec,
+                conf)
           }
         case _ => command
       }
   }
 
-  private def resolvePartitionSpec(
-      tableName: String,
-      partSpec: UnresolvedPartitionSpec,
-      partSchema: StructType,
-      allowPartitionSpec: Boolean): ResolvedPartitionSpec = {
-    val normalizedSpec = normalizePartitionSpec(
-      partSpec.spec,
-      partSchema,
-      tableName,
-      conf.resolver)
-    if (!allowPartitionSpec) {
-      requireExactMatchedPartitionSpec(tableName, normalizedSpec,
-        partSchema.fieldNames.toImmutableArraySeq)
-    }
-    val partitionNames = normalizedSpec.keySet
-    val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))
-    ResolvedPartitionSpec(
-      requestedFields.map(_.name),
-      convertToPartIdent(normalizedSpec, requestedFields),
-      partSpec.location)
-  }
-
   private[sql] def convertToPartIdent(
       partitionSpec: TablePartitionSpec,
       schema: Seq[StructField]): InternalRow = {
-    val partValues = schema.map { part =>
-      val raw = partitionSpec.get(part.name).orNull
-      val dt = CharVarcharUtils.replaceCharVarcharWithString(part.dataType)
-      if (SQLConf.get.getConf(SQLConf.SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION)) {
-        Cast(Literal.create(raw, StringType), dt, Some(conf.sessionLocalTimeZone)).eval()
-      } else {
-        castPartitionSpec(raw, dt, conf).eval()
-      }
-    }
-    InternalRow.fromSeq(partValues)
+    PartitionSpecResolution.convertToPartIdent(partitionSpec, schema, conf)
   }
 }

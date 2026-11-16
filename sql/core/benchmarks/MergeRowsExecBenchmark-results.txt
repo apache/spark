@@ -2,53 +2,53 @@
 MergeRowsExec Codegen Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 merge - matched update only:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-merge - matched update only wholestage off           2283           2303          26          9.2         108.9       1.0X
-merge - matched update only wholestage on             878            888           8         23.9          41.9       2.6X
+merge - matched update only wholestage off           4870           6374        1588          4.3         232.2       1.0X
+merge - matched update only wholestage on             845            865          17         24.8          40.3       5.8X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 merge - not matched insert only:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-merge - not matched insert only wholestage off           2389           2410          20          8.8         113.9       1.0X
-merge - not matched insert only wholestage on             861            872          11         24.4          41.1       2.8X
+merge - not matched insert only wholestage off           7731           7787          68          2.7         368.7       1.0X
+merge - not matched insert only wholestage on             852            867          12         24.6          40.6       9.1X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 merge - matched update + not matched insert:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------------
-merge - matched update + not matched insert wholestage off           2665           2676          10          7.9         127.1       1.0X
-merge - matched update + not matched insert wholestage on             949            964           8         22.1          45.2       2.8X
+merge - matched update + not matched insert wholestage off           5617           5642          21          3.7         267.8       1.0X
+merge - matched update + not matched insert wholestage on             916            925           9         22.9          43.7       6.1X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 merge - matched delete:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-merge - matched delete wholestage off              1071           1083          13         19.6          51.1       1.0X
-merge - matched delete wholestage on                139            146           7        150.5           6.6       7.7X
+merge - matched delete wholestage off              2951           2958           7          7.1         140.7       1.0X
+merge - matched delete wholestage on                183            191           9        114.5           8.7      16.1X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 merge - conditional clauses:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-merge - conditional clauses wholestage off           2685           2694          10          7.8         128.0       1.0X
-merge - conditional clauses wholestage on            1011           1022          12         20.7          48.2       2.7X
+merge - conditional clauses wholestage off           5475           5488          12          3.8         261.1       1.0X
+merge - conditional clauses wholestage on             979            989           7         21.4          46.7       5.6X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 merge - matched + not matched + not matched by source:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------------------------
-merge - matched + not matched + not matched by source wholestage off           3213           3228          18          6.5         153.2       1.0X
-merge - matched + not matched + not matched by source wholestage on             794            801           5         26.4          37.9       4.0X
+merge - matched + not matched + not matched by source wholestage off           5086           5091           8          4.1         242.5       1.0X
+merge - matched + not matched + not matched by source wholestage on             774            783          10         27.1          36.9       6.6X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 merge - split update (delete + insert):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------
-merge - split update (delete + insert) wholestage off           3394           3425          40          6.2         161.8       1.0X
-merge - split update (delete + insert) wholestage on            2153           2166          11          9.7         102.7       1.6X
+merge - split update (delete + insert) wholestage off           3646           3652           7          5.8         173.9       1.0X
+merge - split update (delete + insert) wholestage on            2159           2170           9          9.7         102.9       1.7X
 
 

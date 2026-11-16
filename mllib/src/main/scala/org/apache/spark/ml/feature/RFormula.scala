@@ -487,6 +487,16 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
   }
 }
 
+/** Creates minimal RFormulaModel containers for nested class-loading tests. */
+private[spark] object RFormulaModelTestHelper {
+
+  def withStage(stage: Transformer): RFormulaModel = {
+    val pipeline = new PipelineModel("pipelineFixture", Array(stage))
+    val formula = ResolvedRFormula("y", Seq(Seq("x")), hasIntercept = true)
+    new RFormulaModel("rFormulaFixture", formula, pipeline)
+  }
+}
+
 /**
  * Utility transformer for removing temporary columns from a DataFrame.
  * TODO(ekl) make this a public transformer
