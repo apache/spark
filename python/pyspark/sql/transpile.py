@@ -121,9 +121,9 @@ lowering would be actively wrong on a Series:
   ``isnull(a)`` would answer a different question; ``x.isnull()`` is the
   construct that means what ``x is None`` means for a scalar.
 * ``x < y`` and friends -- a missing value compares ``False`` under numpy
-  (never ``NULL``, and never a ``TypeError``, so the ``raise_error`` guard the
-  scalar lowering emits is wrong), and NaN compares ``False`` where Spark orders
-  it above every value.
+  (``True`` for ``!=``; never ``NULL``, and never a ``TypeError``, so the
+  ``raise_error`` guard the scalar lowering emits is wrong), and NaN compares
+  ``False`` where Spark orders it above every value.
 * a body that never references a parameter (``return 1``) -- the result is a
   scalar, which the interpreted path rejects with ``UDF_RETURN_TYPE``.
 
@@ -152,9 +152,8 @@ Every case is one where the transpiled expression raises or is exact and the
 interpreted one is lossy, silent, or inconsistent:
 
 * integer overflow wraps under numpy where ANSI raises ARITHMETIC_OVERFLOW. This
-  also covers the ``%`` boundaries the ``Mod`` lowering notes below
-  (``Long.MinValue % -1``), and a literal too wide for the column's dtype, where
-  numpy raises ``OverflowError`` and Catalyst widens exactly.
+  also covers a literal too wide for the column's dtype, where NumPy 2 raises
+  ``OverflowError`` (NumPy 1 widens the dtype to fit) and Catalyst widens exactly.
 * a ``float32`` column keeps ``float32`` through a ``float`` literal (NEP 50)
   where Catalyst promotes to double.
 * an integral column is converted to ``float64`` as soon as the batch contains a
@@ -162,11 +161,13 @@ interpreted one is lossy, silent, or inconsistent:
   on how rows happen to be batched, and is avoided by
   ``preferIntExtensionDtype=true``.
 
-One case runs the other way: a fractional body (e.g. ``s * 1.5``) declared with an
-integral return type. Interpreted, the float64 result fails the Arrow conversion and
+Two cases run the other way. A fractional body (e.g. ``s * 1.5``) declared with an
+integral return type: interpreted, the float64 result fails the Arrow conversion and
 raises; transpiled, the final ``Cast`` to the return type truncates instead. This is
 the general within-numeric return-type cast allowed below, not a special case for
-this UDF type -- see ``test_fractional_result_for_an_integral_return_type``.
+this UDF type -- see ``test_fractional_result_for_an_integral_return_type``. And the
+``%`` int64 boundaries (``Long.MinValue % -1``): numpy returns the exact remainder, but
+the ``Mod`` lowering's intermediate negate or ``abs`` raises ARITHMETIC_OVERFLOW.
 """
 
 import ast
@@ -193,6 +194,7 @@ from pyspark.sql.functions import (
     length,
     lit,
     lower,
+    nanvl,
     pmod,
     raise_error,
     repeat,
@@ -414,12 +416,10 @@ _SERIES_NULL_METHODS = {"isnull": True, "isna": True, "notnull": False, "notna":
 # lower them either.
 #
 # `Mult` is in the allowlist for numeric multiply and for string-repeat by an integer
-# LITERAL only (`s * 2`). Repeat by a numeric COLUMN is refused under series semantics in
-# `_convert_chunk`, because a Series count is unsound in every batch shape: pandas raises
-# TypeError on any genuine float value (so `_masked_arith_op` only succeeds when the whole
-# batch is missing, yielding NULL), while the lowered `repeat(s, cast(n as int))` returns a
-# repeated string for a real value and raises CAST_OVERFLOW for a NaN -- so an all-missing
-# batch turns a NULL-returning query into an error. See `_reject_series_string_repeat`.
+# LITERAL only (`s * 2`). Repeat by an integral COLUMN is refused under series semantics in
+# `_convert_chunk`: pandas repeats element-wise only while the batch has no NULL, because a
+# NULL makes it hold the count as float64 and `str * float64` raises TypeError, so the
+# outcome depends on batching. See `_reject_series_string_repeat`.
 _SERIES_SAFE_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Mod)
 _SERIES_SAFE_UNARYOPS = (ast.UAdd, ast.USub)
 
@@ -473,15 +473,26 @@ def _describe_unsupported_series_node(node: ast.AST) -> str:
     get a custom message; everything else falls through to a generic label.
     """
     match node:
-        case ast.Compare(ops=[ast.Is() | ast.IsNot(), *_]):
+        case ast.Compare(ops=[ast.Is(), *_]):
             return (
-                "an `is` / `is not` test (a Series object is never None, so this is always "
-                "False at runtime -- write `x.isnull()` for a per-element check)"
+                "an `is` test (a Series object is never None, so this is always False at "
+                "runtime -- write `x.isnull()` for a per-element check)"
             )
-        case ast.Compare():
+        case ast.Compare(ops=[ast.IsNot(), *_]):
             return (
-                "a comparison (on a Series a missing value compares False rather than "
-                "raising or yielding NULL, and NaN compares False where Spark orders it "
+                "an `is not` test (a Series object is never None, so this is always True at "
+                "runtime -- write `x.notnull()` for a per-element check)"
+            )
+        case ast.Compare(ops=[ast.Eq() | ast.NotEq(), *_]):
+            return (
+                "an `==` / `!=` comparison (on a Series a missing value or NaN is never equal "
+                "to anything, so `==` gives False and `!=` gives True there, where Spark "
+                "treats NaN as equal to itself)"
+            )
+        case ast.Compare(ops=[ast.Lt() | ast.LtE() | ast.Gt() | ast.GtE(), *_]):
+            return (
+                "an ordering comparison (on a Series a missing value compares False rather "
+                "than raising or yielding NULL, and NaN compares False where Spark orders it "
                 "above every value)"
             )
         case ast.BoolOp() | ast.UnaryOp(op=ast.Not()):
@@ -879,20 +890,19 @@ class CatalystTranspiler(AbstractTranspiler):
         """Refuse string-repeat by a non-literal count under series semantics.
 
         For a Python scalar, `'ab' * n` is a fine repeat and the lowering matches. For a
-        pandas Series the count is a whole column, and `Series(str) * Series(numeric)` is
-        unsound: pandas raises TypeError on any genuine float, so it only produces a value
-        when the batch is entirely missing (yielding NULL), while the lowered
-        `repeat(s, cast(n as int))` returns a repeated string for a real value and raises
-        CAST_OVERFLOW for a NaN. An integer literal count avoids all of this -- it cannot be
-        NaN or NULL -- so `s * 2` is kept and everything else falls back to interpreted
-        Python. A no-op for the scalar eval types (``series_semantics`` is False), which keep
-        the broader behavior for integer-valued counts.
+        pandas Series the count is a whole column, and `Series(str) * Series(int64)` repeats
+        element-wise only while the batch holds no NULL: with one, pandas holds the count as
+        float64 and raises TypeError, where the lowered `repeat(s, cast(n as int))` returns
+        values. Whether the query fails would depend on how rows are batched. An integer
+        literal count cannot be NULL, so `s * 2` is kept and everything else falls back to
+        interpreted Python. A no-op for the scalar eval types (``series_semantics`` is
+        False), which keep the broader behavior for integer-valued counts.
         """
         if self._series_semantics and not _is_int_literal(count_node):
             raise UnsupportedOperationException(
                 "string repeat by a non-literal count is not supported for a scalar pandas "
-                "UDF: the count is a Series, and `str * numeric` there is NULL for an "
-                "all-missing batch but a repeated string or CAST_OVERFLOW otherwise, so the "
+                "UDF: the count is a Series, and `str * Series` there repeats element-wise "
+                "only in a batch without NULLs and raises TypeError otherwise, so the "
                 "transpiler falls back to interpreted Python. Use an integer literal (`s * 2`)"
             )
 
@@ -910,13 +920,18 @@ class CatalystTranspiler(AbstractTranspiler):
         the module docstring.)
 
         Only fractional variants need the NaN arm. Integral and string variants represent
-        every missing input with NULL, so their arguments need only one reference.
+        every missing input with NULL, so their arguments need only one reference. A float
+        variant gets that too from ``nanvl(x, NULL)``; only the unknown-numeric catch-all
+        keeps the two-reference form.
 
         Neither ``isnull`` nor ``isnan`` ever returns NULL, so the ``notnull`` negation is
         total two-valued logic and matches pandas without a ``coalesce``.
         """
         subject = self._convert_chunk(params, receiver)
-        if self._category(params, receiver) in ("float", "numeric"):
+        category = self._category(params, receiver)
+        if category == "float":
+            missing = nanvl(subject.cast("double"), lit(None)).isNull()
+        elif category == "numeric":
             missing = subject.isNull() | isnan(subject.cast("double"))
         else:
             missing = subject.isNull()
@@ -1302,8 +1317,8 @@ class CatalystTranspiler(AbstractTranspiler):
                             # Long.MinValue` with `b < 0` (the `sign(b) * a` negate
                             # overflows) and `b = Long.MinValue` (the `abs(b)`
                             # overflows) -- where this raises ARITHMETIC_OVERFLOW
-                            # under ANSI while Python returns a value. That matches
-                            # the documented overflow caveat for `+`/`-`/`*` above.
+                            # under ANSI while Python returns a value. Unlike the
+                            # `+`/`-`/`*` caveat above, the interpreted side is exact.
                             # Use a CASE-based integer sign rather than sign() to
                             # avoid promoting operands to DoubleType, which loses
                             # precision near LongType boundaries.
@@ -1499,9 +1514,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 UserWarning,
                 stacklevel=2,
             )
-        if series_semantics and body_cat in ("float", "numeric"):
+        if series_semantics and body_cat == "float":
             # The default pandas return conversion masks NaN as NULL. Integral variants
-            # cannot produce NaN and must avoid duplicating their argument references.
+            # cannot produce NaN. `nanvl` reads the body once, where the CASE an unknown
+            # numeric body needs reads it twice and keeps the Python UDF for a non-cheap
+            # argument.
+            converted = nanvl(converted, lit(None))
+        elif series_semantics and body_cat == "numeric":
             converted = when(isnan(converted.cast("double")), lit(None)).otherwise(converted)
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it

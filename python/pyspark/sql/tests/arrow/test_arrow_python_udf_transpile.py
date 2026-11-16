@@ -25,11 +25,12 @@ flag did nothing on default configuration.
 This is a separate module from ``pyspark.sql.tests.test_udf_transpile_unit`` because the
 reference semantics differ. The pickled path coerces a UDF's return value through
 ``EvaluatePython.makeFromJava``, which NULLs a type mismatch; the Arrow path builds a
-``pa.array`` and falls back to a cast (``python/pyspark/worker.py``), which can raise or
-convert instead. So every differential here compares transpiled-Arrow against
-interpreted-**Arrow**: the question is whether the rewrite matches what this UDF would have
-done in its own eval mode. The cell-by-cell matrix for both regimes lives in the golden
-files under ``python/pyspark/sql/tests/coercion/``.
+``pa.array`` and falls back to a cast (``ArrowBatchedUDFArrowHandler.run`` in
+``python/pyspark/eval_handlers/_arrow.py``), which can raise or convert instead. So every
+differential here compares transpiled-Arrow against interpreted-**Arrow**: the question is
+whether the rewrite matches what this UDF would have done in its own eval mode. The
+cell-by-cell matrix for both regimes lives in the golden files under
+``python/pyspark/sql/tests/coercion/``.
 
 Naming trap: ``SQL_ARROW_BATCHED_UDF`` (101) is the Arrow-*optimized* regular UDF -- Arrow
 is only the transport, and the worker still calls the function once per row with Python
@@ -706,11 +707,10 @@ class ArrowUDFTranspilePlanShapeTests(ArrowUDFTranspileTestsMixin, ReusedSQLTest
         # ConvertToCatalyst keeps a transpilable UDF whose inputs are all Python UDFs,
         # because UDF -> UDF -> UDF pipelines into one Arrow batch.
         #
-        # Asserted on the PythonUDF expression count, not the operator count: the chain is
-        # evaluated as a pipeline inside a single ArrowEvalPythonExec, so the operator count
-        # is 1 whether or not the middle call was lowered. Three PythonUDF expressions means
-        # all three still run in Python; lowering the middle one leaves 1, since the option
-        # replaces it and the outer call's argument becomes plain arithmetic.
+        # Lowering the middle call would leave outer(cast(inner(id) + 1)). ExtractPythonUDFs
+        # chains a UDF only when its single child is itself a Python UDF, so inner and outer
+        # would land in two ArrowEvalPythonExec operators holding two PythonUDF expressions.
+        # Kept, all three run in one operator, so both counts below catch a regression.
         with self.sql_conf(_TRANSPILE_ON):
             outer = _arrow_udf(floor_halve, LongType())
             middle = _arrow_udf(add_one, LongType())
@@ -895,8 +895,8 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
         self.assertIsInstance(off_error, PythonException)
 
     def test_float_literal_body_with_integral_return_pickled_diverges(self):
-        # `x + 0.5` declared LongType() passes the body-vs-return-type check because
-        # _category lumps int and float into one "numeric" bucket, and lowers to a
+        # `x + 0.5` declared LongType() passes the body-vs-return-type check, which accepts
+        # any numeric body for a non-decimal numeric return type, and lowers to a
         # truncating cast. The interpreted PICKLED path instead NULLs the fractional
         # result, since makeFromJava accepts only integral Java types for LongType.
         df = self._one_row("bigint", 1)
@@ -927,6 +927,7 @@ class ArrowUDFTranspileConfInteractionTests(ArrowUDFTranspileTestsMixin, ReusedS
     """Confs that change what the interpreted Arrow path actually computes."""
 
     _LEGACY_PANDAS = "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled"
+    _INT_EXT_DTYPE = "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype"
     _SAFE_ARROW = "spark.sql.execution.pandas.convertToArrowArraySafely"
     _INT_TO_DECIMAL = "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled"
     _FALLBACK_ON_UDT = "spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT"
@@ -941,6 +942,13 @@ class ArrowUDFTranspileConfInteractionTests(ArrowUDFTranspileTestsMixin, ReusedS
         with self.sql_conf({**_TRANSPILE_ON, self._LEGACY_PANDAS: True}):
             pudf = _pickled_udf(add_one, LongType())
             self._assert_transpiled(pudf, "a pickled UDF under the legacy pandas conf")
+
+    def test_int_extension_dtype_does_not_disable_the_row_at_a_time_paths(self):
+        # The gate in udf.py must stay specific to scalar pandas UDFs.
+        with self.sql_conf({**_TRANSPILE_ON, self._INT_EXT_DTYPE: True}):
+            for build in (_pickled_udf, _arrow_udf):
+                with self.subTest(build=build.__name__):
+                    self._assert_transpiled(build(add_one, LongType()), build.__name__)
 
     def test_legacy_pandas_conversion_null_int_column_is_the_reason(self):
         # The evidence for the gate, on the interpreted path. Under the legacy regime an
