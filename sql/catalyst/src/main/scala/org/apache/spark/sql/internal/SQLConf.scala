@@ -6238,9 +6238,8 @@ object SQLConf {
     buildConf("spark.sql.function.kllMergeAgg.lowestCompactingK.enabled")
       .internal()
       .doc("When true, kll_merge_agg_* without k returns a sketch with the lowest k among its " +
-        "input sketches that have started compacting (estimation mode). If no input has " +
-        "started compacting, it takes the k of its first non-empty input. When false, it " +
-        "takes the k of its first input sketch.")
+        "first non-empty input sketch and the input sketches that have started compacting " +
+        "(estimation mode). When false, it takes the k of its first input sketch.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

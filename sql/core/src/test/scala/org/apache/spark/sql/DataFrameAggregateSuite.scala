@@ -23,7 +23,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch, KllSketch}
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.tuple.{Sketches => TupleSketches}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
@@ -4493,6 +4493,15 @@ class DataFrameAggregateSuite extends SharedSparkSession
     spark.range(n).selectExpr(s"kll_sketch_agg_$sketchType(CAST(id AS $sketchType), $k)")
       .head().getAs[Array[Byte]](0)
 
+  private def heapifyKll(sketchType: String, bytes: Array[Byte]): KllSketch = {
+    val mem = Memory.wrap(bytes)
+    sketchType match {
+      case "bigint" => KllLongsSketch.heapify(mem)
+      case "float" => KllFloatsSketch.heapify(mem)
+      case "double" => KllDoublesSketch.heapify(mem)
+    }
+  }
+
   // Puts `sketches` in order into `numPartitions` partitions, merges them, and returns the k and
   // n of the result.
   private def kllMergedKAndN(
@@ -4505,45 +4514,74 @@ class DataFrameAggregateSuite extends SharedSparkSession
       val bytes = spark.sparkContext.parallelize(sketches, numPartitions).toDF("s")
         .agg(expr(s"kll_merge_agg_$sketchType(s$kArg)"))
         .head().getAs[Array[Byte]](0)
-      val mem = Memory.wrap(bytes)
-      val merged = sketchType match {
-        case "bigint" => KllLongsSketch.heapify(mem)
-        case "float" => KllFloatsSketch.heapify(mem)
-        case "double" => KllDoublesSketch.heapify(mem)
-      }
+      val merged = heapifyKll(sketchType, bytes)
       (merged.getK, merged.getN)
     }
   }
 
   for (sketchType <- Seq("bigint", "float", "double")) {
     test(s"SPARK-61368: kll_merge_agg_$sketchType without k takes the lowest k among the " +
-        "inputs that have started compacting") {
-      // Input sketches as (k, n), then the expected k with the conf on. n = 10000 compacts at
-      // every k here, the other inputs stay exact, and n = 0 is an empty sketch.
-      val cases = Seq(
-        Seq((200, 0), (400, 10000)) -> 400,
+        "first input and the compacting inputs") {
+      // Input sketches as (k, n), merged in this order in one partition, then the expected k with
+      // the conf on: the lowest k among the first non-empty input and the inputs that compact
+      // (n > k). With the conf off, the result takes the k of the first input.
+      val c = 10000
+      val inOrder = Seq(
+        // No input compacts.
+        Seq((1000, 10), (200, 10), (8, 3)) -> 1000,
+        Seq((8, 3), (200, 10), (1000, 10)) -> 8,
+        Seq(1300, 1000, 1900, 1100, 1600, 1200, 1800, 1400, 1700, 1500).map((_, 1000)) -> 1300,
+        Seq((1000, 10), (100, 100)) -> 1000,
+        Seq((65535, 10), (8, 3)) -> 65535,
+        // Every input compacts.
+        Seq((400, c), (100, c), (1000, c)) -> 100,
+        Seq((100, c), (400, c)) -> 100,
+        // Some inputs compact.
+        Seq((8, 3), (200, c)) -> 8,
+        Seq((1000, 10), (200, c)) -> 200,
+        Seq((1000, 10), (100, 101)) -> 100,
+        Seq((65535, 10), (8, c)) -> 8,
+        Seq((400, c), (8, 3)) -> 400,
+        Seq((1000, 10), (8, 3), (200, c)) -> 200,
+        Seq((1000, 10), (400, c), (16, 5), (200, c), (50, 50)) -> 200,
+        Seq((200, c), (200, 50), (200, c)) -> 200,
+        // Empty inputs.
         Seq((200, 0), (400, 10)) -> 400,
-        Seq((400, 10000), (100, 10000)) -> 100,
-        Seq((8, 3), (200, 10000)) -> 200,
-        Seq((1000, 10), (200, 10000)) -> 200)
-      for ((inputs, lowestK) <- cases) {
-        val sketches = inputs.map { case (k, n) => kllSketch(sketchType, k, n) }
+        Seq((200, 0), (400, c)) -> 400,
+        Seq((8, 0), (100, 10), (400, c)) -> 100,
+        Seq((50, 0), (8, 0), (1000, c), (16, 3)) -> 1000,
+        Seq((400, c), (8, 0)) -> 400,
+        Seq((300, 0), (100, 0)) -> 300)
+      // One partition per sketch plus two empty partitions. The final aggregate merges the partial
+      // results in no fixed order, so these cases have the same result in every order.
+      val anyOrder = Seq(
+        Seq((1000, 10), (200, c), (400, 10)) -> 200,
+        Seq((400, c), (100, c), (1000, c)) -> 100,
+        Seq((8, 0), (100, 10)) -> 100)
+
+      val sketchOf = (inOrder ++ anyOrder).flatMap(_._1).distinct.map { case (k, n) =>
+        val bytes = kllSketch(sketchType, k, n)
+        assert(heapifyKll(sketchType, bytes).isEstimationMode == (n > k))
+        (k, n) -> bytes
+      }.toMap
+      for ((inputs, expectedK) <- inOrder) {
+        val sketches = inputs.map(sketchOf)
         val n = inputs.map(_._2.toLong).sum
-        val orders = Seq(sketches -> inputs.head._1, sketches.reverse -> inputs.last._1)
-        for ((ordered, firstK) <- orders) {
-          // One partition: the sketches arrive in this order.
-          assert(kllMergedKAndN(sketchType, ordered, 1, lowestCompactingK = false) == ((firstK, n)))
-          assert(kllMergedKAndN(sketchType, ordered, 1, lowestCompactingK = true) == ((lowestK, n)))
-          // One sketch per partition: the final aggregate merges the partial sketches.
-          assert(kllMergedKAndN(sketchType, ordered, ordered.size, lowestCompactingK = true) ==
-            ((lowestK, n)))
-        }
+        assert(kllMergedKAndN(sketchType, sketches, 1, lowestCompactingK = false) ==
+          ((inputs.head._1, n)), inputs)
+        assert(kllMergedKAndN(sketchType, sketches, 1, lowestCompactingK = true) ==
+          ((expectedK, n)), inputs)
+      }
+      for ((inputs, expectedK) <- anyOrder) {
+        val n = inputs.map(_._2.toLong).sum
+        assert(kllMergedKAndN(sketchType, inputs.map(sketchOf), inputs.size + 2,
+          lowestCompactingK = true) == ((expectedK, n)), inputs)
       }
 
       // An explicit k is kept.
-      val compacted = Seq.fill(2)(kllSketch(sketchType, 100, 10000))
+      val compacted = Seq.fill(2)(sketchOf((100, c)))
       assert(kllMergedKAndN(sketchType, compacted, 1, lowestCompactingK = true, kArg = ", 400") ==
-        ((400, 20000L)))
+        ((400, 2L * c)))
     }
   }
 

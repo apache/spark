@@ -808,8 +808,8 @@ abstract class KllMergeAggBase[T <: KllSketch]
 
   /**
    * Merges `input` into the buffer, which is created with the k of `input` if absent. Without k
-   * and with `lowestCompactingK`, the result takes the lowest k among the compacting inputs, or
-   * else the k of the first non-empty input.
+   * and with `lowestCompactingK`, the result takes the lowest k among the first non-empty input
+   * and the compacting inputs.
    */
   private def mergeSketch(sketchOption: Option[T], input: T): T = {
     val sketch = sketchOption match {
@@ -825,14 +825,13 @@ abstract class KllMergeAggBase[T <: KllSketch]
   }
 
   private def rebuildsAtInputK(buffer: T, input: T): Boolean =
-    kExpr.isEmpty && lowestCompactingK && input.getK() != buffer.getK() && {
+    kExpr.isEmpty && lowestCompactingK && !input.isEmpty() && {
       // An empty buffer takes the k of the first non-empty input, as in HllUnionAgg.mergeSketch.
-      val firstNonEmptyInput = buffer.isEmpty() && !input.isEmpty()
-      // Exact items carry no compaction error, so only a compacting input replaces the k of a
-      // non-empty buffer.
-      val compactingInput = input.isEstimationMode() &&
-        (!buffer.isEstimationMode() || input.getK() < buffer.getK())
-      firstNonEmptyInput || compactingInput
+      val firstNonEmptyInput = buffer.isEmpty() && input.getK() != buffer.getK()
+      // A compacting input already has the error of its k. An exact input has no error, so its k
+      // counts only when it is the first non-empty input.
+      val lowerCompactingK = input.isEstimationMode() && input.getK() < buffer.getK()
+      firstNonEmptyInput || lowerCompactingK
     }
 
   /** Merges an input sketch into the current aggregation buffer. */
