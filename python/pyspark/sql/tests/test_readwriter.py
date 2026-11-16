@@ -420,6 +420,25 @@ class ReadwriterV2TestsMixin:
         with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
             df.writeTo("test_table").overwrite(lit(True))
 
+    def test_write_modes_with_options_and_properties(self):
+        df = self.spark.range(3)
+        with self.table("test_table"):
+            writer = df.writeTo("test_table").using("parquet").option("compression", "snappy")
+            writer.tableProperty("prop", "value").create()
+            self.assertEqual(3, self.spark.table("test_table").count())
+            props = self.spark.sql("SHOW TBLPROPERTIES test_table").collect()
+            self.assertIn(("prop", "value"), [tuple(r) for r in props])
+
+            # The session catalog only has v1 tables, which reject the other V2 write modes.
+            with self.assertRaisesRegex(AnalysisException, "UNSUPPORTED_FEATURE.TABLE_OPERATION"):
+                df.writeTo("test_table").using("parquet").replace()
+            with self.assertRaisesRegex(AnalysisException, "UNSUPPORTED_FEATURE.TABLE_OPERATION"):
+                df.writeTo("test_table").using("parquet").createOrReplace()
+            with self.assertRaisesRegex(AnalysisException, "Cannot write into v1 table"):
+                df.writeTo("test_table").append()
+            with self.assertRaisesRegex(AnalysisException, "Cannot write into v1 table"):
+                df.writeTo("test_table").overwritePartitions()
+
     def test_cluster_by(self):
         data = [
             (1, "foo", 3.0),
