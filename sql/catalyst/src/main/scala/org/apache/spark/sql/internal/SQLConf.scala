@@ -8882,7 +8882,7 @@ object SQLConf {
       .internal()
       .doc("When true, the local sort for a non-root LIMIT/OFFSET is not inserted when a " +
         "generator sits between the sort and the limit, so the limit may keep arbitrary rows.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
