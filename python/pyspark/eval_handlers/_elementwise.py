@@ -325,8 +325,9 @@ class _VectorizedElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         The cast is always safe, as in the base ``SQL_SCALAR_ARROW_UDF`` and
         ``SQL_SCALAR_ARROW_ITER_UDF`` paths, so a result that does not fit the declared type
         raises instead of overflowing or truncating. ``runner_conf.safecheck``
-        (``spark.sql.execution.pandas.convertToArrowArraySafely``) applies to the pandas flavor
-        only."""
+        (``spark.sql.execution.pandas.convertToArrowArraySafely``) applies to pandas UDFs and
+        Arrow-optimized Python UDFs (the pandas flavor and ``ArrowElementwiseUDFHandler`` here),
+        not to Arrow UDFs."""
         import pyarrow as pa
 
         return ArrowBatchTransformer.enforce_schema(
