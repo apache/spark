@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Join, LogicalPlan, Project, UnaryNode, Union}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
@@ -31,16 +33,65 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * In legacy mode (spark.sql.streaming.statefulOperator.allowMultiple=false), the watermarked
- * equality keys that do not count as their input's event time. See
- * [[StreamingJoinHelper.findLegacyEventTimeKeys]].
+ * How far below a column that can filter its stream-stream join input's late rows one of the
+ * input's watermarked columns can be, for an equality key or a range condition on it: at most
+ * `micros` where the plan relates the two columns; by an amount that the plan does not bound when
+ * `unbounded`; and by an amount that it does not show when `unrelated`, because it does not relate
+ * the two. A window column is compared by its end, as eviction and late filtering compare it.
  */
-case class LegacyEventTimeKeys(rejected: Set[ExprId]) {
-  /** Whether the key carries a watermark and is not rejected, so it bounds as in Spark 4.3. */
-  def isEventTimeKey(key: Expression): Boolean = key match {
-    case n: NamedExpression => n.metadata.contains(delayKey) && !rejected(n.exprId)
-    case _ => false
-  }
+case class EventTimeLag(micros: Long, unrelated: Boolean, unbounded: Boolean) {
+  def max(other: EventTimeLag): EventTimeLag = EventTimeLag(math.max(micros, other.micros),
+    unrelated || other.unrelated, unbounded || other.unbounded)
+
+  /**
+   * The cutoff for the other input's equality key when this input's watermark is `watermark`.
+   * A key that the plan does not relate keeps the Spark 4.3 cutoff.
+   */
+  def keyWatermark(watermark: Long): Option[Long] =
+    if (unbounded) None else Some(watermark - EventTimeLag.ceilMillis(micros))
+
+  /**
+   * The watermark to substitute for the column in a range condition. Spark 4.3 substituted the
+   * watermark for every watermarked column; this does so only where the plan bounds the lag.
+   */
+  def rangeWatermark(watermark: Long): Option[Long] =
+    if (unbounded || unrelated) None else Some(watermark - EventTimeLag.ceilMillis(micros))
+}
+
+object EventTimeLag {
+  val zero: EventTimeLag = EventTimeLag(0L, unrelated = false, unbounded = false)
+  val unrelated: EventTimeLag = EventTimeLag(0L, unrelated = true, unbounded = false)
+  val unbounded: EventTimeLag = EventTimeLag(0L, unrelated = false, unbounded = true)
+
+  private def ceilMillis(micros: Long): Long =
+    micros / MICROS_PER_MILLIS + (if (micros % MICROS_PER_MILLIS == 0) 0 else 1)
+}
+
+/**
+ * The [[EventTimeLag]] of the watermarked columns of stream-stream join inputs, by expression ID;
+ * see [[StreamingJoinHelper.findEventTimeLags]]. A column missing from `lags` has lag zero, so
+ * `EventTimeLags(Map.empty)` gives every watermarked column lag zero. That is right when multiple
+ * stateful operators are allowed: execution then fails at start for a planned input with two
+ * distinct watermarked columns, so the only one left filters late rows itself.
+ */
+case class EventTimeLags(lags: Map[ExprId, EventTimeLag]) {
+  /**
+   * The lag of `column` in a join input with output `inputAttributes`, if it carries a watermark.
+   * The input's first watermarked column filters its late rows itself.
+   */
+  def lagOf(column: NamedExpression, inputAttributes: Seq[Attribute]): Option[EventTimeLag] =
+    if (!column.metadata.contains(delayKey)) {
+      None
+    } else if (inputAttributes.find(_.metadata.contains(delayKey))
+        .exists(_.exprId == column.exprId)) {
+      Some(EventTimeLag.zero)
+    } else {
+      Some(lags.getOrElse(column.exprId, EventTimeLag.zero))
+    }
+}
+
+object EventTimeLags {
+  val none: EventTimeLags = EventTimeLags(Map.empty)
 }
 
 /**
@@ -57,160 +108,175 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * leftTime = rightTime + INTERVAL 10 SECONDS or leftTime = timestampadd(HOUR, 1, rightTime),
    * is bounded too if the solver can count the intervals exactly or they never move a time
    * backward; see [[getStateKeyWatermark]]. The result does not depend on the session time zone,
-   * so neither does the V4 state layout.
+   * so neither does the V4 state layout. Without `lags`, only the input's first watermarked
+   * column counts as its event time; with them, every watermarked column that they bound does.
    */
   def getStateKeyWatermarkOrdinal(
       keys: Seq[Expression],
       inputAttributes: Seq[Attribute],
-      legacyKeys: Option[LegacyEventTimeKeys] = None): Option[Int] = {
-    getEventTimeKeyOrdinal(keys, inputAttributes, legacyKeys).orElse {
-      keys.indices.find(getStateKeyWatermark(keys, inputAttributes, _, Some(0L)).isDefined)
+      lags: Option[EventTimeLags] = None): Option[Int] = {
+    getEventTimeKeyOrdinal(keys, inputAttributes, lags).orElse {
+      keys.indices.find(getStateKeyWatermark(keys, inputAttributes, _, Some(0L), lags).isDefined)
     }
   }
 
   /**
-   * Find the equality key that is this input's event-time column itself, or else, in legacy
-   * mode, a watermarked key that `legacyKeys` does not reject. Spark 4.3 used every watermarked
-   * key so; see [[findLegacyEventTimeKeys]].
+   * Find the equality key that is this input's first watermarked column, or else, with `lags`,
+   * the watermarked key with the smallest lag that bounds it; see [[findEventTimeLags]].
    */
   def getEventTimeKeyOrdinal(
       keys: Seq[Expression],
       inputAttributes: Seq[Attribute],
-      legacyKeys: Option[LegacyEventTimeKeys] = None): Option[Int] = {
+      lags: Option[EventTimeLags] = None): Option[Int] = {
     // When multiple stateful operators are disabled, late filtering uses the first event-time
     // column. Otherwise, execution rejects multiple distinct event-time columns.
     inputAttributes.find(_.metadata.contains(delayKey)).flatMap { eventTime =>
-      Seq(keys.indexWhere(_.semanticEquals(eventTime)),
-        keys.indexWhere(key => legacyKeys.exists(_.isEventTimeKey(key)))).find(_ >= 0)
+      Some(keys.indexWhere(_.semanticEquals(eventTime))).filter(_ >= 0).orElse {
+        lags.flatMap { l =>
+          keys.indices.flatMap { i =>
+            keyLag(keys(i), inputAttributes, l).filterNot(_.unbounded).map(i -> _.micros)
+          }.sortBy(_._2).headOption.map(_._1)
+        }
+      }
     }
   }
 
+  /** The lag of a key that is a watermarked column of the input. */
+  private def keyLag(
+      key: Expression,
+      inputAttributes: Seq[Attribute],
+      lags: EventTimeLags): Option[EventTimeLag] = key match {
+    case n: NamedExpression => lags.lagOf(n, inputAttributes)
+    case _ => None
+  }
+
   /**
-   * In legacy mode (spark.sql.streaming.statefulOperator.allowMultiple=false), an input can keep
-   * several watermarked columns, such as its event time and a copy of it or a time window over
-   * it, and it filters late rows by the first of them. Spark 4.3 counted every watermarked
-   * equality key as the input's event time, which is right when the key is never below the
-   * column that filters late rows. Keep doing so, and reject only a key that `plan` shows some
-   * row can hold below a watermarked column before it, because the planned input filters late
-   * rows by one of those: the optimizer can prune the ones before it. Evicting by such a key
-   * would drop state that later rows still match. A key rejected by one stream-stream join input
-   * is rejected for every join, so the analysis check and execution, which read the result by
-   * expression ID on the analyzed and the planned join, decide the same.
+   * The lag of every watermarked column of each stream-stream join input in `plan`, combined
+   * over the inputs by [[EventTimeLag.max]]. This is for
+   * spark.sql.streaming.statefulOperator.allowMultiple=false, where an input can keep several
+   * watermarked columns, such as its event time and a copy of it or a time window over it, and
+   * filters late rows by the first of them. When `planned`, `plan` is the optimized plan that runs,
+   * so each input filters late rows by its first watermarked column, and a column's lag is taken
+   * against that one. Otherwise the optimizer can prune any watermarked column before a column, so
+   * its lag is the largest against all of them. Spark 4.3 bounded state by every watermarked
+   * column at the watermark. A lag lowers that cutoff; see [[EventTimeLag]].
    */
-  def findLegacyEventTimeKeys(plan: LogicalPlan): LegacyEventTimeKeys = {
-    val rejected = plan.collect {
+  def findEventTimeLags(plan: LogicalPlan, planned: Boolean): EventTimeLags = {
+    val lags = plan.collect {
       case j: Join if j.left.isStreaming && j.right.isStreaming => Seq(j.left, j.right)
     }.flatten.flatMap { input =>
       val watermarked = input.output.filter(_.metadata.contains(delayKey)).map(_.exprId).distinct
-      watermarked.indices.collect {
-        case i if watermarked.take(i).exists { eventTime =>
-          canBeBelow(input, watermarked(i), eventTime, SameValue, eventTimeIsWindow = false)
-        } => watermarked(i)
+      watermarked.indices.map { i =>
+        val lateFiltered = if (planned) watermarked.take(1) else watermarked.take(i)
+        watermarked(i) -> lateFiltered.filter(_ != watermarked(i)).map { eventTime =>
+          lagBelow(input, watermarked(i), eventTime, Some(0L), Some(0L))
+        }.foldLeft(EventTimeLag.zero)(_ max _)
       }
     }
-    LegacyEventTimeKeys(rejected.toSet)
+    EventTimeLags(lags.groupMapReduce(_._1)(_._2)(_ max _))
   }
 
-  /** How the join input's key relates to the column that [[canBeBelow]] follows for it. */
-  private sealed trait KeyBound
-  /** The key is that column. */
-  private case object SameValue extends KeyBound
-  /** The key is a time window over that column, which ends at most a window after it. */
-  private case object WindowEnd extends KeyBound
-  /** The key is at or above that column, by an amount the walk does not know. */
-  private case object AtOrAbove extends KeyBound
-  /** Some rows hold the key more than a microsecond below that column. */
-  private case object Below extends KeyBound
+  /** How a column relates to the column of a node's child that [[lagBelow]] follows for it. */
+  private case class Step(column: ExprId, offset: Option[Long])
 
   /**
-   * Whether `plan` shows that some row holds the join input's key below the bound of its column
-   * `eventTime`, which late filtering compares with the watermark: the column itself, or its end
-   * when `eventTimeIsWindow`. `bound` says how that key relates to the column `key` of `plan`.
-   * The walk follows both columns down by expression ID: through a projection or an expansion
-   * that passes them on, builds a time or session window from a single column, or shifts a
-   * timestamp by constant intervals; through any other node with one input that outputs both,
-   * as such a node keeps an expression ID only for an unchanged value; into the input of a join
-   * that outputs both; and into every input of a union, at the same positions. Where both reach
-   * the same column, a key below it, or equal to it while the late-filtered column is a window
-   * over it, can be below. A union input that does not watermark a column that the union, which
-   * takes its first input's metadata, watermarks builds it some other way. Everything else gives
-   * false, so such a key keeps the Spark 4.3 behaviour.
+   * How far `key` of `plan` can be below its column `eventTime`, which late filtering compares
+   * with the watermark. Both are compared by their bounds: a time, or a window's end. `keyLow` is
+   * the smallest that the join input's key is above `key`, and `eventTimeHigh` the largest that the
+   * join input's late-filtered column is above `eventTime`; None means without bound. The walk
+   * follows both columns down by expression ID: through a projection or an expansion that passes
+   * them on, builds a time or session window from a single column, or, for the key, shifts a
+   * timestamp by constant intervals; through any other node with one input that outputs both, as
+   * such a node keeps an expression ID only for an unchanged value; into the input of a join that
+   * outputs both; and into every input of a union, at the same positions. A union input that does
+   * not watermark a column that the union, which takes its first input's metadata, watermarks
+   * builds it some other way. Where both reach the same column, the lag is the difference of the
+   * two offsets. Everything else leaves the columns unrelated.
    */
-  private def canBeBelow(
+  private def lagBelow(
       plan: LogicalPlan,
       key: ExprId,
       eventTime: ExprId,
-      bound: KeyBound,
-      eventTimeIsWindow: Boolean): Boolean = {
+      keyLow: Option[Long],
+      eventTimeHigh: Option[Long]): EventTimeLag = {
     def outputsBoth(p: LogicalPlan): Boolean =
       p.output.exists(_.exprId == key) && p.output.exists(_.exprId == eventTime)
+    def follow(child: LogicalPlan, keyStep: Option[Step], eventTimeStep: Option[Step]) =
+      (keyStep, eventTimeStep) match {
+        case (Some(k), Some(t)) => lagBelow(child, k.column, t.column,
+          addOffsets(keyLow, k.offset), addOffsets(eventTimeHigh, t.offset))
+        case _ => EventTimeLag.unrelated
+      }
     if (key == eventTime) {
-      bound == Below || (eventTimeIsWindow && bound == SameValue)
+      (keyLow, eventTimeHigh) match {
+        case (Some(low), Some(high)) => Try(Math.subtractExact(high, low)).toOption match {
+          case Some(lag) => EventTimeLag(math.max(0L, lag), unrelated = false, unbounded = false)
+          case None => EventTimeLag.unbounded
+        }
+        case _ => EventTimeLag.unbounded
+      }
     } else {
       plan match {
         case p: Project =>
           def entry(id: ExprId): Option[NamedExpression] = p.projectList.find(_.exprId == id)
-          (entry(key).flatMap(keyStep(_, bound)),
-            entry(eventTime).flatMap(eventTimeStep(_, eventTimeIsWindow))) match {
-            case (Some((childKey, childBound)), Some((childEventTime, isWindow))) =>
-              canBeBelow(p.child, childKey, childEventTime, childBound, isWindow)
-            case _ => false
-          }
+          follow(p.child, entry(key).flatMap(keyStep), entry(eventTime).flatMap(eventTimeStep))
         case e: Expand =>
           // The rewrite of a sliding window puts one window per projection beside the child's
           // columns, which every projection passes on.
-          def entries(id: ExprId): Seq[Expression] =
-            e.output.indexWhere(_.exprId == id) match {
+          def step(id: ExprId, window: (Seq[Expression], Attribute) => Option[Long]) = {
+            val entries = e.output.indexWhere(_.exprId == id) match {
               case -1 => Nil
               case index => e.projections.map(_(index))
             }
-          def passedOn(entries: Seq[Expression]): Option[ExprId] = entries.map {
-            case a: Attribute => Some(a.exprId)
-            case _ => None
-          }.distinct match {
-            case Seq(id) => id
-            case _ => None
-          }
-          def windowSource(id: ExprId, entries: Seq[Expression]): Option[ExprId] =
-            if (e.output.exists(a => a.exprId == id && a.metadata.contains(TimeWindow.marker))) {
-              entries.map(singleReference).distinct match {
-                case Seq(source) => source.map(_.exprId)
-                case _ => None
-              }
-            } else {
-              None
+            entries.map {
+              case a: Attribute => Some(a.exprId)
+              case _ => None
+            }.distinct match {
+              case Seq(Some(passedOn)) => Some(Step(passedOn, Some(0L)))
+              case _ if e.output.exists(a => a.exprId == id &&
+                  a.metadata.contains(TimeWindow.marker)) =>
+                entries.map(timeWindowSource).distinct match {
+                  case Seq(Some(source)) => Some(Step(source.exprId, window(entries, source)))
+                  case _ => None
+                }
+              case _ => None
             }
-          val (keyEntries, eventTimeEntries) = (entries(key), entries(eventTime))
-          val childKey = passedOn(keyEntries).map(_ -> bound).orElse {
-            windowSource(key, keyEntries).filter(_ => bound == SameValue).map(_ -> WindowEnd)
           }
-          val childEventTime = passedOn(eventTimeEntries).map(_ -> eventTimeIsWindow).orElse {
-            windowSource(eventTime, eventTimeEntries).filter(_ => !eventTimeIsWindow).map(_ -> true)
-          }
-          (childKey, childEventTime) match {
-            case (Some((k, b)), Some((t, isWindow))) => canBeBelow(e.child, k, t, b, isWindow)
-            case _ => false
-          }
+          // A window ends after its time column, and at most its length after it.
+          follow(e.child, step(key, (_, _) => Some(0L)), step(eventTime, (entries, source) =>
+            entries.map(timeWindowLength(_, source)).reduceOption((a, b) =>
+              for (x <- a; y <- b) yield math.max(x, y)).flatten))
         case u: Union =>
           val keyIndex = u.output.indexWhere(_.exprId == key)
           val eventTimeIndex = u.output.indexWhere(_.exprId == eventTime)
           def unwatermarked(child: LogicalPlan, index: Int): Boolean =
             u.output(index).metadata.contains(delayKey) &&
               !child.output(index).metadata.contains(delayKey)
-          keyIndex >= 0 && eventTimeIndex >= 0 && u.children.exists { child =>
-            unwatermarked(child, keyIndex) || unwatermarked(child, eventTimeIndex) ||
-              canBeBelow(child, child.output(keyIndex).exprId,
-                child.output(eventTimeIndex).exprId, bound, eventTimeIsWindow)
+          if (keyIndex < 0 || eventTimeIndex < 0) {
+            EventTimeLag.unrelated
+          } else {
+            u.children.map { child =>
+              if (unwatermarked(child, keyIndex) || unwatermarked(child, eventTimeIndex)) {
+                EventTimeLag.unbounded
+              } else {
+                lagBelow(child, child.output(keyIndex).exprId,
+                  child.output(eventTimeIndex).exprId, keyLow, eventTimeHigh)
+              }
+            }.reduce(_ max _)
           }
         case j: Join =>
-          j.children.find(outputsBoth).exists(canBeBelow(_, key, eventTime, bound,
-            eventTimeIsWindow))
+          j.children.find(outputsBoth).map(lagBelow(_, key, eventTime, keyLow, eventTimeHigh))
+            .getOrElse(EventTimeLag.unrelated)
         case u: UnaryNode if outputsBoth(u.child) =>
-          canBeBelow(u.child, key, eventTime, bound, eventTimeIsWindow)
-        case _ => false
+          lagBelow(u.child, key, eventTime, keyLow, eventTimeHigh)
+        case _ => EventTimeLag.unrelated
       }
     }
   }
+
+  // An offset too large to count in microseconds has no bound.
+  private def addOffsets(a: Option[Long], b: Option[Long]): Option[Long] =
+    for (x <- a; y <- b; sum <- Try(Math.addExact(x, y)).toOption) yield sum
 
   /** The only attribute that `e` references, if there is one. */
   private def singleReference(e: Expression): Option[Attribute] = e.references.toSeq match {
@@ -219,105 +285,166 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * The column of the projection's child that [[canBeBelow]] follows for the key's projection
-   * entry `entry`, and how the key relates to it.
+   * The step of [[lagBelow]] for the key's projection entry `entry`: the column it follows and the
+   * smallest that the entry is above it, None without bound.
    */
-  private def keyStep(entry: NamedExpression, bound: KeyBound): Option[(ExprId, KeyBound)] =
-    entry match {
-      case a: Attribute => Some(a.exprId -> bound)
-      case Alias(a: Attribute, _) => Some(a.exprId -> bound)
-      case Alias(child, _) => singleReference(child).flatMap { source =>
-        // A window is a struct, so a key above it is the window itself.
-        if (entry.metadata.contains(TimeWindow.marker)) {
-          Some(source.exprId -> WindowEnd).filter(_ => bound == SameValue)
-        } else if (entry.metadata.contains(SessionWindow.marker)) {
-          // A session ends its gap after the column, which can be longer than a shift below.
-          Some(source.exprId -> AtOrAbove).filter(_ => bound == SameValue)
-        } else {
-          isForwardShift(child, source).flatMap {
-            case true => Some(bound).collect {
-              case SameValue | WindowEnd | AtOrAbove => source.exprId -> AtOrAbove
-            }
-            case false => Some(bound).collect {
-              case SameValue | WindowEnd | Below => source.exprId -> Below
-            }
-          }
+  private def keyStep(entry: NamedExpression): Option[Step] = entry match {
+    case a: Attribute => Some(Step(a.exprId, Some(0L)))
+    case Alias(a: Attribute, _) => Some(Step(a.exprId, Some(0L)))
+    // A window ends after its time column.
+    case Alias(child, _) if entry.metadata.contains(TimeWindow.marker) =>
+      timeWindowSource(child).map(source => Step(source.exprId, Some(0L)))
+    case Alias(child, _) if entry.metadata.contains(SessionWindow.marker) =>
+      sessionWindowSource(child).map(source => Step(source.exprId, Some(0L)))
+    case Alias(child, _) if child.dataType == TimestampType =>
+      singleReference(child).filter(_.dataType == TimestampType).flatMap { source =>
+        // A shift whose whole days, months or years can move a time backward has no bound
+        // here, as for equality keys.
+        intervalShift(child, source).map { shift =>
+          Step(source.exprId, Some(shift.min).filter(_ => shift.exact || shift.forward))
         }
       }
-      case _ => None
-    }
-
-  /**
-   * The column of the projection's child that [[canBeBelow]] follows for the late-filtered
-   * column's projection entry `entry`, and whether the late-filtered column is a window over it.
-   */
-  private def eventTimeStep(
-      entry: NamedExpression,
-      eventTimeIsWindow: Boolean): Option[(ExprId, Boolean)] = entry match {
-    case a: Attribute => Some(a.exprId -> eventTimeIsWindow)
-    case Alias(a: Attribute, _) => Some(a.exprId -> eventTimeIsWindow)
-    case Alias(child, _) if !eventTimeIsWindow && (entry.metadata.contains(TimeWindow.marker) ||
-        entry.metadata.contains(SessionWindow.marker)) =>
-      singleReference(child).map(_.exprId -> true)
     case _ => None
   }
 
   /**
-   * Whether the timestamp `expr` is `source` shifted by constant intervals that never move a
-   * time backward (true), or that move the epoch back by more than a microsecond (false), so
-   * some rows hold it below `source`. None for any other expression.
+   * The step of [[lagBelow]] for the late-filtered column's projection entry `entry`: the column
+   * it follows and the largest that the entry is above it, None without bound.
    */
-  private def isForwardShift(expr: Expression, source: Attribute): Option[Boolean] = {
-    if (expr.dataType != TimestampType || source.dataType != TimestampType) {
-      None
-    } else {
-      intervalShift(expr, source).flatMap {
-        case (_, true) => Some(true)
-        case _ =>
-          val atEpoch = try {
-            Option(expr.transform {
-              case a: Attribute if a.exprId == source.exprId => Literal(0L, TimestampType)
-            }.eval())
-          } catch {
-            case NonFatal(_) => None
-          }
-          atEpoch.collect { case micros: Long if micros < -1L => false }
+  private def eventTimeStep(entry: NamedExpression): Option[Step] = entry match {
+    case a: Attribute => Some(Step(a.exprId, Some(0L)))
+    case Alias(a: Attribute, _) => Some(Step(a.exprId, Some(0L)))
+    case Alias(child, _) if entry.metadata.contains(TimeWindow.marker) =>
+      timeWindowSource(child).map(source => Step(source.exprId, timeWindowLength(child, source)))
+    // A session ends its gap after the column, or without bound for a gap that is not constant.
+    case Alias(child, _) if entry.metadata.contains(SessionWindow.marker) =>
+      sessionWindowSource(child).map { source =>
+        val end = child match {
+          case CreateNamedStruct(Seq(_, _, _, end)) => Some(withoutConversions(end))
+          case _ => None
+        }
+        Step(source.exprId, end.flatMap(intervalShift(_, source)).map(_.max))
       }
+    case _ => None
+  }
+
+  /**
+   * The length of the time window that `window` builds from `source`, evaluated with `source` at
+   * the epoch. Spark counts window durations in fixed microseconds, so it is the same for every
+   * time.
+   */
+  private def timeWindowLength(window: Expression, source: Attribute): Option[Long] = {
+    try {
+      window.transform {
+        case a: Attribute if a.exprId == source.exprId => Literal(0L, source.dataType)
+      }.eval() match {
+        case row: InternalRow if !row.isNullAt(0) && !row.isNullAt(1) =>
+          Some(row.getLong(1) - row.getLong(0))
+        case _ => None
+      }
+    } catch {
+      case NonFatal(_) => None
     }
+  }
+
+  /**
+   * The time column of a time window, when the window is built from that column itself: the
+   * rewrite of window() reads its time column only through a conversion to microseconds.
+   */
+  private def timeWindowSource(window: Expression): Option[Attribute] =
+    window.collect { case PreciseTimestampConversion(time, _, LongType) => time }.distinct match {
+      case Seq(a: Attribute) if window.references.toSeq == Seq(a) => Some(a)
+      case _ => None
+    }
+
+  /** The time column of a session window, which is its start. */
+  private def sessionWindowSource(window: Expression): Option[Attribute] = window match {
+    case CreateNamedStruct(Seq(_, start, _, _)) => withoutConversions(start) match {
+      case a: Attribute => Some(a)
+      case _ => None
+    }
+    case _ => None
+  }
+
+  /** The expression without the conversions that the session window rewrite adds around it. */
+  private def withoutConversions(e: Expression): Expression = e match {
+    case PreciseTimestampConversion(child, _, _) => withoutConversions(child)
+    case KnownNullable(child) => withoutConversions(child)
+    case other => other
   }
 
   /**
    * Get the cutoff for the opposite input's equality key at `ordinal`, given this input's
    * watermark. `keys` and `inputAttributes` belong to this input, whose future rows have an event
    * time above the watermark. When the key is that event time, the equal key of any state row
-   * they can still match is above the watermark too. When the key is the event time shifted by
-   * exact intervals, solving `stateKey >= rightTime + INTERVAL 10 SECONDS` shifts the cutoff by
-   * that interval, less 1 ms as for range conditions. When the shift has whole days, months or
-   * years but never moves a time backward, the cutoff is the watermark itself. Returns None for
-   * any other key, including a shift with whole days, months or years that can move a time
-   * backward.
+   * they can still match is above the watermark too; with `lags`, so is a key on another
+   * watermarked column, less its lag. When the key is the event time shifted by exact intervals,
+   * solving `stateKey >= rightTime + INTERVAL 10 SECONDS` shifts the cutoff by that interval, less
+   * 1 ms as for range conditions. When the shift has whole days, months or years but never moves a
+   * time backward, the cutoff is the watermark itself. Returns None for any other key, including a
+   * shift with whole days, months or years that can move a time backward.
    */
   def getStateKeyWatermark(
       keys: Seq[Expression],
       inputAttributes: Seq[Attribute],
       ordinal: Int,
       eventWatermark: Option[Long],
-      legacyKeys: Option[LegacyEventTimeKeys] = None): Option[Long] = {
-    if (getEventTimeKeyOrdinal(keys, inputAttributes, legacyKeys).contains(ordinal)) {
-      eventWatermark
-    } else {
-      shiftOfKey(keys(ordinal), inputAttributes).flatMap {
+      lags: Option[EventTimeLags] = None): Option[Long] = {
+    // The watermark that bounds a watermarked column of this input.
+    def watermarkOf(column: NamedExpression): Option[Long] = lags match {
+      case Some(l) => l.lagOf(column, inputAttributes).flatMap { lag =>
+        eventWatermark.flatMap(lag.keyWatermark)
+      }
+      case None => eventWatermark.filter { _ =>
+        inputAttributes.find(_.metadata.contains(delayKey)).exists(_.semanticEquals(column))
+      }
+    }
+    keys(ordinal) match {
+      case column: NamedExpression if watermarkOf(column).isDefined => watermarkOf(column)
+      case key => shiftOfKey(key, inputAttributes, lags.isDefined).flatMap {
         case KeyShift(eventTime, true, _) =>
           val stateKey = AttributeReference("stateKey", TimestampType)()
           getStateValueWatermark(AttributeSet(Seq(stateKey)), AttributeSet(Seq(eventTime)),
-            Some(GreaterThanOrEqual(stateKey, withIntervalLiterals(keys(ordinal)))),
-            eventWatermark)
+            Some(GreaterThanOrEqual(stateKey, withIntervalLiterals(key))),
+            watermarkOf(eventTime))
         // The solver cannot count this shift, but it keeps the key of every future row at or
         // above that row's event time, which is above the watermark.
-        case KeyShift(_, false, true) => eventWatermark
+        case KeyShift(eventTime, false, true) => watermarkOf(eventTime)
         case _ => None
       }
     }
+  }
+
+  /**
+   * Get the cutoff for this input's range-bounded columns `stateAttributes` from the opposite
+   * input's watermark, as [[getStateValueWatermark]] does with the opposite input's
+   * `otherInputAttributes`. Without `lags`, only the opposite input's first watermarked column
+   * counts as its event time; with them, each of its watermarked columns does at its own
+   * watermark, the watermark less its lag, where they bound it; see [[EventTimeLag]].
+   * `exactForUnwatermarkedColumns` is passed on to [[getStateValueWatermark]].
+   */
+  def getStateValueWatermarkForLags(
+      stateAttributes: AttributeSet,
+      otherInputAttributes: Seq[Attribute],
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long],
+      lags: Option[EventTimeLags],
+      exactForUnwatermarkedColumns: Boolean = false): Option[Long] = {
+    val watermarked = otherInputAttributes.filter(_.metadata.contains(delayKey))
+    val eventTimes = lags match {
+      case Some(l) => watermarked.distinctBy(_.exprId).flatMap { column =>
+        l.lagOf(column, otherInputAttributes).flatMap { lag =>
+          eventWatermark.flatMap(lag.rangeWatermark)
+        }.map(column -> _)
+      }
+      case None => watermarked.headOption.toSeq.flatMap(c => eventWatermark.map(c -> _))
+    }
+    // A conjunct on two of these columns gets no cutoff either way, so solving for each column
+    // alone and taking the lowest gives the cutoff of all of them at their own watermarks.
+    eventTimes.flatMap { case (column, watermark) =>
+      getStateValueWatermark(stateAttributes, AttributeSet(Seq(column)), joinCondition,
+        Some(watermark), exactForUnwatermarkedColumns)
+    }.minOption
   }
 
   /**
@@ -361,85 +488,123 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    */
   private case class KeyShift(eventTime: Attribute, exact: Boolean, forward: Boolean)
 
-  /** How a timestamp key shifts the input's event time, if the solver or its sign bounds it. */
-  private def shiftOfKey(key: Expression, inputAttributes: Seq[Attribute]): Option[KeyShift] =
-    inputAttributes.find(_.metadata.contains(delayKey)).filter(_ => key.dataType == TimestampType)
-      .flatMap { eventTime =>
-        intervalShift(key, eventTime).collect {
-          case (exact, forward) if exact || forward => KeyShift(eventTime, exact, forward)
-        }
+  /**
+   * How a timestamp key shifts the input's event time, if the solver or its sign bounds it. With
+   * `anyWatermarkedColumn`, the shifted column can be any watermarked column of the input.
+   */
+  private def shiftOfKey(
+      key: Expression,
+      inputAttributes: Seq[Attribute],
+      anyWatermarkedColumn: Boolean = false): Option[KeyShift] = {
+    val eventTime = if (anyWatermarkedColumn) {
+      singleReference(key).filter { column =>
+        column.metadata.contains(delayKey) && inputAttributes.exists(_.exprId == column.exprId)
       }
+    } else {
+      inputAttributes.find(_.metadata.contains(delayKey))
+    }
+    eventTime.filter(_ => key.dataType == TimestampType).flatMap { eventTime =>
+      intervalShift(key, eventTime).collect {
+        case shift if shift.exact || shift.forward =>
+          KeyShift(eventTime, shift.exact, shift.forward)
+      }
+    }
+  }
 
   /**
-   * If the expression is the event time plus or minus constant intervals, whether the shift is
-   * exact and whether it never moves a time backward. Other functions and casts from other types
-   * are not accepted: a truncation such as CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a
-   * later event time below the watermark.
+   * A shift of a time by constant intervals. `exact` means that the solver counts it exactly, and
+   * `min` and `max` bound how far it moves a time, in microseconds, in every session time zone.
    */
-  private def intervalShift(expr: Expression, eventTime: Attribute): Option[(Boolean, Boolean)] = {
+  private case class Shift(exact: Boolean, min: Long, max: Long) {
+    /** Whether the shift never moves a time backward. */
+    def forward: Boolean = min >= 0
+    def plus(other: Shift): Shift = Shift(exact && other.exact,
+      Math.addExact(min, other.min), Math.addExact(max, other.max))
+    def negate: Shift = Shift(exact, Math.negateExact(max), Math.negateExact(min))
+  }
+
+  private object Shift {
+    def micros(value: Long): Shift = Shift(exact = true, value, value)
     // Spark adds whole days in the session time zone, where a day can be 23 or 25 hours across a
     // daylight saving change, and months vary in length, but the solver counts a day as 24 hours.
-    // So only intervals without whole days or months are exact, in every time zone.
-    def interval(e: Expression, negate: Boolean): Option[(Boolean, Boolean)] = {
-      def forward(parts: Long*): Boolean =
-        if (negate) parts.forall(_ <= 0) else parts.forall(_ >= 0)
+    // So only shifts without whole days or months are exact. To bound a shift without reading the
+    // time zone, a day counts as 12 to 36 hours, wider than any daylight saving change, and a
+    // month as 28 to 31 such days.
+    def days(n: Long): Shift = if (n >= 0) {
+      Shift(n == 0, Math.multiplyExact(n, 12 * MICROS_PER_HOUR),
+        Math.multiplyExact(n, 36 * MICROS_PER_HOUR))
+    } else {
+      days(Math.negateExact(n)).negate
+    }
+    def months(n: Long): Shift = if (n >= 0) {
+      Shift(n == 0, Math.multiplyExact(n, 28 * 12 * MICROS_PER_HOUR),
+        Math.multiplyExact(n, 31 * 36 * MICROS_PER_HOUR))
+    } else {
+      months(Math.negateExact(n)).negate
+    }
+  }
+
+  /**
+   * If the expression is the event time plus or minus constant intervals, the shift. Each term
+   * counts on its own, so a net forward compound shift such as
+   * rightTime + INTERVAL 1 DAY - INTERVAL 1 HOUR never moves a time backward. Other functions and
+   * casts from other types are not accepted: a truncation such as
+   * CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP) can map a later event time below the watermark.
+   */
+  private def intervalShift(expr: Expression, eventTime: Attribute): Option[Shift] = {
+    def interval(e: Expression): Option[Shift] = {
       // An interval that fails to evaluate gives no bound; the query reports the error at run time.
       def value: Option[Any] = try Option(e.eval()) catch { case NonFatal(_) => None }
       if (!e.foldable) {
         None
       } else {
         e.dataType match {
-          case _: DayTimeIntervalType =>
-            value.map { v =>
-              val micros = v.asInstanceOf[Long]
-              (-MICROS_PER_DAY < micros && micros < MICROS_PER_DAY, forward(micros))
-            }
-          case _: YearMonthIntervalType =>
-            value.map { v =>
-              val months = v.asInstanceOf[Int]
-              (months == 0, forward(months))
-            }
-          case CalendarIntervalType =>
-            value.map { v =>
-              val i = v.asInstanceOf[CalendarInterval]
-              (i.months == 0 && i.days == 0, forward(i.months, i.days, i.microseconds))
-            }
+          case _: DayTimeIntervalType => value.map { v =>
+            val micros = v.asInstanceOf[Long]
+            Shift.days(micros / MICROS_PER_DAY).plus(Shift.micros(micros % MICROS_PER_DAY))
+          }
+          case _: YearMonthIntervalType => value.map(v => Shift.months(v.asInstanceOf[Int]))
+          case CalendarIntervalType => value.map { v =>
+            val i = v.asInstanceOf[CalendarInterval]
+            Shift.months(i.months).plus(Shift.days(i.days)).plus(Shift.micros(i.microseconds))
+          }
           case _ => None
         }
       }
     }
-    def combine(
-        a: Option[(Boolean, Boolean)],
-        b: Option[(Boolean, Boolean)]): Option[(Boolean, Boolean)] =
-      for ((exactA, forwardA) <- a; (exactB, forwardB) <- b)
-        yield (exactA && exactB, forwardA && forwardB)
-    expr match {
-      case a: Attribute if a.semanticEquals(eventTime) => Some((true, true))
+    def combine(a: Option[Shift], b: Option[Shift]): Option[Shift] =
+      for (x <- a; y <- b) yield x.plus(y)
+    def shift(expr: Expression): Option[Shift] = expr match {
+      case a: Attribute if a.semanticEquals(eventTime) => Some(Shift.micros(0L))
       // The analyzer wraps timestamp + interval in a cast to the same timestamp type.
-      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
-        intervalShift(child, eventTime)
-      case TimestampAddInterval(start, i, _) =>
-        combine(interval(i, negate = false), intervalShift(start, eventTime))
-      case TimestampAddYMInterval(start, i, _) =>
-        combine(interval(i, negate = false), intervalShift(start, eventTime))
+      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType => shift(child)
+      case TimestampAddInterval(start, i, _) => combine(interval(i), shift(start))
+      case TimestampAddYMInterval(start, i, _) => combine(interval(i), shift(start))
       // timestampadd adds sub-day units exactly, and days, weeks, months, quarters and years in
       // the session time zone.
       case TimestampAdd(unit, quantity, start, _) if quantity.foldable =>
-        val exactUnit = timestampAddUnitMicros(unit).isDefined
-        val known = exactUnit || calendarTimestampAddUnits.contains(unit.toUpperCase(Locale.ROOT))
         val amount = try Option(quantity.eval()) catch { case NonFatal(_) => None }
-        val shift = amount.filter(_ => known).collect {
-          case n: Number => (exactUnit, n.longValue() >= 0)
+        val unitShift = amount.collect { case n: Number => n.longValue() }.flatMap { n =>
+          timestampAddUnitMicros(unit).map(u => Shift.micros(Math.multiplyExact(n, u))).orElse {
+            unit.toUpperCase(Locale.ROOT) match {
+              case "DAY" | "DAYOFYEAR" => Some(Shift.days(n))
+              case "WEEK" => Some(Shift.days(Math.multiplyExact(n, 7L)))
+              case "MONTH" => Some(Shift.months(n))
+              case "QUARTER" => Some(Shift.months(Math.multiplyExact(n, 3L)))
+              case "YEAR" => Some(Shift.months(Math.multiplyExact(n, 12L)))
+              case _ => None
+            }
+          }
         }
-        combine(shift, intervalShift(start, eventTime))
-      case DatetimeSub(_, _, replacement) => intervalShift(replacement, eventTime)
+        combine(unitShift, shift(start))
+      case DatetimeSub(_, _, replacement) => shift(replacement)
       case Add(left, right, _) =>
-        combine(interval(right, negate = false), intervalShift(left, eventTime)).orElse(
-          combine(interval(left, negate = false), intervalShift(right, eventTime)))
-      case Subtract(left, right, _) =>
-        combine(interval(right, negate = true), intervalShift(left, eventTime))
+        combine(interval(right), shift(left)).orElse(combine(interval(left), shift(right)))
+      case Subtract(left, right, _) => combine(interval(right).map(_.negate), shift(left))
       case _ => None
     }
+    // A shift too large to count in microseconds gives no bound.
+    try shift(expr) catch { case _: ArithmeticException => None }
   }
 
   /**
@@ -474,10 +639,6 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       case "HOUR" => Some(MICROS_PER_HOUR)
       case _ => None
     }
-
-  /** The timestampadd units that Spark adds as local days or months. */
-  private val calendarTimestampAddUnits =
-    Set("DAY", "DAYOFYEAR", "WEEK", "MONTH", "QUARTER", "YEAR")
 
   private def isIntervalType(dataType: DataType): Boolean = dataType match {
     case _: DayTimeIntervalType | _: YearMonthIntervalType | CalendarIntervalType => true

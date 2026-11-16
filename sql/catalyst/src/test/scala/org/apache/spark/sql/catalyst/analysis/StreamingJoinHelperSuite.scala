@@ -218,7 +218,22 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       "timestampadd(MONTH, 1, eventTime)" -> forward,
       "timestampadd(YEAR, 1, eventTime)" -> forward,
       "timestampadd(DAY, -1, eventTime)" -> unbounded,
-      "timestampadd(MONTH, -1, eventTime)" -> unbounded).foreach { case (keyStr, expected) =>
+      "timestampadd(MONTH, -1, eventTime)" -> unbounded,
+      // A compound shift counts each whole day as 12 to 36 hours, wider than any daylight
+      // saving change, and each month as 28 to 31 such days. It never moves a time backward
+      // when its smallest such shift is not negative.
+      "eventTime + INTERVAL 1 DAY - INTERVAL 1 HOUR" -> forward,
+      "eventTime - INTERVAL 1 HOUR + INTERVAL 1 DAY" -> forward,
+      "eventTime + INTERVAL 1 MONTH - INTERVAL 1 DAY" -> forward,
+      "timestampadd(DAY, 1, eventTime) - INTERVAL 1 HOUR" -> forward,
+      "timestampadd(HOUR, -11, timestampadd(DAY, 1, eventTime))" -> forward,
+      "eventTime - INTERVAL 1 DAY + INTERVAL 1 HOUR" -> unbounded,
+      "eventTime + INTERVAL 1 DAY - INTERVAL 13 HOURS" -> unbounded,
+      "eventTime + INTERVAL 1 MONTH - INTERVAL 15 DAYS" -> unbounded,
+      // Grouped, the intervals fold into one exact interval of 23 hours.
+      "eventTime + (INTERVAL 1 DAY - INTERVAL 1 HOUR)" ->
+        ((Some(10000L + 82800000L - 1), Some(10000L - 82800000L - 1), Some(0)))
+    ).foreach { case (keyStr, expected) =>
       Seq("UTC", "America/Los_Angeles").foreach { zone =>
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
           withClue(s"$keyStr $zone") {
@@ -233,7 +248,10 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     Seq(
       new CalendarInterval(0, 1, 0) -> forward,
       new CalendarInterval(1, 0, 0) -> forward,
-      new CalendarInterval(1, -1, 0) -> unbounded,
+      new CalendarInterval(1, -1, 0) -> forward,
+      new CalendarInterval(0, 1, -11 * 3600000000L) -> forward,
+      new CalendarInterval(0, 1, -13 * 3600000000L) -> unbounded,
+      new CalendarInterval(-1, 31, 0) -> unbounded,
       new CalendarInterval(0, -1, 0) -> unbounded,
       new CalendarInterval(0, 0, 2000000L) -> ((Some(11999L), Some(7999L), Some(0))),
       new CalendarInterval(0, 0, 2 * day * 1000L) ->
