@@ -1572,7 +1572,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def columnStatisticsDeserializationNotSupportedError(
       name: String, dataType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1089",
+      errorClass = "COLUMN_STATISTICS_DESERIALIZATION_NOT_SUPPORTED",
       messageParameters = Map("name" -> name, "dataType" -> dataType.toString))
   }
 
