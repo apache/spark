@@ -561,6 +561,15 @@ private[spark] class TaskSetManager(
     } catch {
       // If the task cannot be serialized, then there's no point to re-attempt the task,
       // as it will always fail. So just abort the whole task-set.
+      case e: OutOfMemoryError if Utils.isJavaArraySizeLimitExceeded(e) =>
+        // The task is larger than a Java array can hold. This is not heap exhaustion, so it is
+        // reported with a user-facing error that does not keep the OutOfMemoryError as cause.
+        val failure = JavaArraySizeLimitExceeded.forTask(e, task.stageId, task.partitionId)
+        logError(log"Failed to serialize task ${MDC(TASK_ID, taskId)} (stage " +
+          log"${MDC(STAGE_ID, task.stageId)}, partition ${MDC(PARTITION_ID, task.partitionId)}) " +
+          log"because it exceeded Java's maximum array size: ${MDC(ERROR, failure.jvmMessage)}")
+        abort(failure.getMessage, Some(failure))
+        throw SparkCoreErrors.failToSerializeTaskError(failure)
       case NonFatal(e) =>
         val msg = log"Failed to serialize task ${MDC(TASK_ID, taskId)}, not attempting to retry it."
         logError(msg, e)
@@ -966,8 +975,9 @@ private[spark] class TaskSetManager(
     val partitionId = tasks(index).partitionId
     // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so reducers can detect
     // the stale data in merged block chunks via chunkBitmaps and fallback if needed.
-    logInfo(s"[StalePush] Late/killed attempt tid=$tid for partition=$partitionId " +
-      s"(index=$index), attemptMapId=${mapStatus.mapId}. Marked as stale push.")
+    logInfo(log"[StalePush] Late/killed attempt tid=${MDC(TASK_ID, tid)} for " +
+      log"partition=${MDC(PARTITION_ID, partitionId)} (index=${MDC(INDEX, index)}), " +
+      log"attemptMapId=${MDC(MAP_ID, mapStatus.mapId)}. Marked as stale push.")
     sched.mapOutputTracker.markStalePushedPartition(sid, partitionId)
   }
 

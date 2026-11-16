@@ -458,7 +458,9 @@ private[joins] object UnsafeHashedRelation {
 
   /**
    * The size of the first data page of the map. Later pages double in size until they add up to
-   * the page size, and then all pages have the page size.
+   * the page size, and then all pages have the page size. If the page size leaves room for the
+   * header of an on-heap page, so does each growing page, and these sizes include that header (see
+   * `TaskMemoryManager.growingPageHeaderBytes`).
    *
    * Otherwise `BytesToBytesMap` rounds its first page up to the page size (`spark.buffer.pageSize`
    * or a default of up to 64 MiB), so even a few rows reserve a full page. A task that keeps many
@@ -581,6 +583,10 @@ private[execution] final class LongToUnsafeRowMap private (
   // Current write cursor in the page.
   private var cursor: Long = -1
 
+  // The bytes that the page leaves for the header of an on-heap page while it grows, see
+  // `TaskMemoryManager.growingPageHeaderBytes`.
+  private val pageHeaderBytes = TaskMemoryManager.growingPageHeaderBytes(mm.pageSizeBytes())
+
   // The number of bits for size in address
   private val SIZE_BITS = 28
   private val SIZE_MASK = 0xfffffff
@@ -618,7 +624,7 @@ private[execution] final class LongToUnsafeRowMap private (
       array = allocateArray(n * 2)
       array.zeroOut()
       mask = n * 2 - 2
-      page = allocatePage(LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
+      page = allocatePage(LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - pageHeaderBytes)
       cursor = page.getBaseOffset
     }
   }
@@ -849,7 +855,9 @@ private[execution] final class LongToUnsafeRowMap private (
       if (neededNumWords > (1 << 30)) {
         throw QueryExecutionErrors.cannotBuildHashedRelationLargerThan8GError()
       }
-      val newNumWords = math.max(neededNumWords, math.min(page.size() / 8 * 2, 1 << 30))
+      // The page doubles together with its header.
+      val doubledNumWords = ((page.size() + pageHeaderBytes) * 2 - pageHeaderBytes) / 8
+      val newNumWords = math.max(neededNumWords, math.min(doubledNumWords, 1 << 30))
       // newNumWords is a Long up to 1 << 30. Multiplying by 8 must stay in Long
       // arithmetic; `newNumWords.toInt * 8` (Int * Int) overflows to 0 at the
       // upper bound, causing `allocatePage(0)` to return a page of only
@@ -1025,7 +1033,9 @@ private[execution] final class LongToUnsafeRowMap private (
 
 private[execution] object LongToUnsafeRowMap {
   /**
-   * The size of the page that a new map starts with. The page grows by doubling from here.
+   * The size of the page that a new map starts with. The page grows by doubling from here. If the
+   * page size of the `TaskMemoryManager` leaves room for the header of an on-heap page, so does the
+   * page, and these sizes include that header (see `TaskMemoryManager.growingPageHeaderBytes`).
    */
   val INITIAL_PAGE_SIZE_BYTES: Long = 1L << 20
 

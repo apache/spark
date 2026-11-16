@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -401,26 +402,31 @@ abstract class HashedRelationSuite extends SharedSparkSession {
   }
 
   test("SPARK-60998: LongToUnsafeRowMap does not round its page up to the page size") {
-    val largeUmm = newMemoryManager(ByteUnit.MiB.toBytes(64), ByteUnit.GiB.toBytes(1))
-    val largeMm = new TaskMemoryManager(largeUmm, 0)
-    assert(largeMm.pageSizeBytes() === ByteUnit.MiB.toBytes(64))
+    // SPARK-61257: Like the default on-heap page size under G1 (SPARK-37593), a page size that
+    // leaves room for the header of a long[] makes the page leave the same room.
+    Seq(0L, Platform.LONG_ARRAY_OFFSET.toLong).foreach { header =>
+      val largeUmm = newMemoryManager(ByteUnit.MiB.toBytes(64) - header, ByteUnit.GiB.toBytes(1))
+      val largeMm = new TaskMemoryManager(largeUmm, 0)
+      assert(largeMm.pageSizeBytes() === ByteUnit.MiB.toBytes(64) - header)
 
-    // Capacity 16 gives an array of 32 longs, which does not grow for a single key.
-    val arrayBytes = 32 * 8L
-    val map = new LongToUnsafeRowMap(largeMm, 16)
-    assert(map.getMode === largeMm.getTungstenMemoryMode)
-    assert(map.getUsed === arrayBytes + LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
+      // Capacity 16 gives an array of 32 longs, which does not grow for a single key.
+      val arrayBytes = 32 * 8L
+      val map = new LongToUnsafeRowMap(largeMm, 16)
+      assert(map.getMode === largeMm.getTungstenMemoryMode)
+      assert(map.getUsed === arrayBytes + LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - header)
 
-    // A value larger than the initial page doubles the page to 2 MiB, not 64 MiB.
-    val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
-    val bigStr = UTF8String.fromString("x".repeat(3 << 19))
-    map.append(0L, unsafeProj(InternalRow(bigStr)))
-    assert(map.getUsed === arrayBytes + 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES)
+      // A value larger than the initial page doubles the page together with its header, to
+      // 2 MiB, not 64 MiB.
+      val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
+      val bigStr = UTF8String.fromString("x".repeat(3 << 19))
+      map.append(0L, unsafeProj(InternalRow(bigStr)))
+      assert(map.getUsed === arrayBytes + 2 * LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - header)
 
-    val resultRow = new UnsafeRow(1)
-    assert(map.getValue(0L, resultRow).getUTF8String(0) === bigStr)
-    map.free()
-    assert(largeUmm.executionMemoryUsed === 0)
+      val resultRow = new UnsafeRow(1)
+      assert(map.getValue(0L, resultRow).getUTF8String(0) === bigStr)
+      map.free()
+      assert(largeUmm.executionMemoryUsed === 0)
+    }
   }
 
   test("SPARK-60998: many LongToUnsafeRowMaps fit in one task when each holds little data") {

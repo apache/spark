@@ -24,6 +24,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
@@ -378,6 +379,18 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assertEvictBlocksToFreeSpaceCalled(ms, 50)
     assert(mm.storageMemoryUsed === 600L)
     UnifiedMemoryManager.shutdownUnmanagedMemoryPoller()
+  }
+
+  test("SPARK-61257: growing pages leave room for the array header with the default page size") {
+    // Under G1, ZGC and Shenandoah, the default on-heap page size leaves room for the header of a
+    // long[] (SPARK-37593), and the growing pages of hash join maps leave the same room.
+    val mm = createMemoryManager(1000L, isOffHeapEnabled = false)
+    val expected = if (Utils.isG1GC || Utils.isZGC || Utils.isShenandoahGC) {
+      Platform.LONG_ARRAY_OFFSET.toLong
+    } else {
+      0L
+    }
+    assert(TaskMemoryManager.growingPageHeaderBytes(mm.pageSizeBytes) === expected)
   }
 
   test("unmanaged memory tracking with memory mode separation") {

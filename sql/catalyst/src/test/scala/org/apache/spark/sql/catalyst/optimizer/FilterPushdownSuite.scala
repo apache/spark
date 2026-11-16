@@ -909,9 +909,9 @@ class FilterPushdownSuite extends PlanTest {
         val f = AttributeReference("f", IntegerType)()
         def evalPython(child: LogicalPlan): LogicalPlan =
           if (evalType == PythonEvalType.SQL_BATCHED_UDF) {
-            BatchEvalPython(Seq(pythonUDF), Seq(f), child)
+            BatchEvalPython(Seq(pythonUDF), child.output, Seq(f), child)
           } else {
-            ArrowEvalPython(Seq(pythonUDF), Seq(f), child, evalType)
+            ArrowEvalPython(Seq(pythonUDF), child.output, Seq(f), child, evalType)
           }
 
         // f > 5 cannot be pushed, so the throwable condition after it stays above too. b > 1
