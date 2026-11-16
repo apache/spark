@@ -21,12 +21,12 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PlannedScan}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class OrcV2SchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanHelper {
   override protected val dataSourceName: String = "orc"
   override protected val vectorizedReaderEnabledKey: String =
@@ -42,7 +42,7 @@ class OrcV2SchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanH
   override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
       collect(df.queryExecution.executedPlan) {
-        case BatchScanExec(_, PlannedScan(scan: OrcScan), _, _, _, _, _, _) => scan.readDataSchema
+        case BatchScanExec(_, scan: OrcScan, _, _, _, _, _, _) => scan.readDataSchema
       }
     assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
       s"Found ${fileSourceScanSchemata.size} file sources in dataframe, " +

@@ -368,7 +368,9 @@ object FileFormatWriter extends Logging {
     val maxWriters = sparkSession.sessionState.conf.maxConcurrentOutputFileWriters
     val concurrentWritersEnabled = maxWriters > 0 && sortColumns.isEmpty
     if (concurrentWritersEnabled) {
-      Some(ConcurrentOutputWriterSpec(maxWriters, () => sortPlan.createSorter()))
+      // Capture the sorter holder rather than the plan, which would ship the plan to the tasks.
+      val sorterHolder = sortPlan.sorterHolder
+      Some(ConcurrentOutputWriterSpec(maxWriters, () => sorterHolder.createSorter()))
     } else {
       None
     }

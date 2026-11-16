@@ -19,7 +19,9 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupBasedNoMetadataUpdateTableSuite extends UpdateTableSuiteBase {
 
   import testImplicits._

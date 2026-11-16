@@ -17,17 +17,22 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
 
+import com.google.common.base.Ticker
+import com.google.common.cache.{Cache, CacheBuilder, Weigher}
+
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkException,
   SparkIllegalStateException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow,
-  JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression,
+  GenericInternalRow, JoinedRow, Predicate, SpecializedGetters, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupCacheOptions,
+  ExternalLookupFilter, ExternalLookupProject, ExternalLookupTransform}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReader, ExternalLookupReaderFactory,
@@ -43,9 +48,14 @@ import org.apache.spark.util.Utils
  * tasks, so it holds only what they need; the plan node and its scan stay on the driver.
  *
  * An evaluator joins its partition one batch of up to `maxParameterRowsPerRequest` stream rows at
- * a time. For each batch it sends one request with the distinct parameters that can match, and
- * streams the connector's result rows into output rows. Parameters are deduplicated per request,
- * that is within one batch: a key repeated in a later batch is requested again.
+ * a time, or, with `oneKeyPerBatch`, of up to
+ * [[ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST]] stream rows that share one key, whose
+ * request holds one parameter row, whatever the source's limit. For each batch it sends one
+ * request with the distinct parameters that can match and are not cached, and streams the
+ * connector's result rows into output rows. Parameters are deduplicated within a batch. With the
+ * cache enabled, a key whose complete result an earlier request of the same input partition
+ * returned is served from the cache, within the cache's bounds; otherwise a key repeated in a
+ * later batch is requested again.
  *
  * Spark does not trust the connector with the selected lookup predicates: it evaluates
  * `lookupKeyCheck` on every row that the connector returns, against the request row that the row
@@ -64,19 +74,30 @@ class ExternalLookupJoinEvaluatorFactory(
     lookupKeyCheck: Option[Expression],
     streamOutput: Seq[Attribute],
     lookupInput: Seq[Attribute],
+    lookupTransforms: Seq[ExternalLookupTransform],
+    transformedLookup: Seq[Attribute],
     output: Seq[Attribute],
     joinType: JoinType,
     streamCondition: Option[Expression],
     residualCondition: Option[Expression],
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
+    oneKeyPerBatch: Boolean,
     maxBatchBytes: Long,
+    cacheOptions: ExternalLookupCacheOptions,
+    cacheTicker: Ticker,
     metrics: ExternalLookupJoinMetrics,
     readerMetrics: ExternalLookupReaderMetrics)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   require(lookupParameters.length == nullSafeParameters.length,
     "Every external lookup parameter must define its null semantics")
+
+  // Any row that a key returns gives a left semi or left anti join whose residual condition reads
+  // no lookup column the same answer, so its cache keeps one row per key, and an empty entry for a
+  // miss, as a shuffled hash join keeps one build row per key then.
+  private val cachesOneRowPerKey = (joinType == LeftSemi || joinType == LeftAnti) &&
+    residualCondition.forall(_.references.subsetOf(AttributeSet(streamOutput)))
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new ExternalLookupJoinEvaluator
@@ -96,7 +117,9 @@ class ExternalLookupJoinEvaluatorFactory(
     private val reader = new LookupReader
     private val parameters = new LookupParameters(partitionIndex)
     private val resultRows = new LookupResultRows
+    private val transforms = new LookupTransforms(partitionIndex)
     private val joinOutput = new JoinOutput(partitionIndex)
+    private var cache = if (cacheOptions.enabled) Some(new LookupCache) else None
     private var batch: Iterator[InternalRow] = Iterator.empty
     private var inputExhausted = false
 
@@ -120,20 +143,66 @@ class ExternalLookupJoinEvaluatorFactory(
       while (!batch.hasNext && !inputExhausted) {
         val next = readBatch()
         if (next.rows.nonEmpty) {
-          batch = new BatchJoinIterator(next, parameters, resultRows, joinOutput, reader)
+          batch = new BatchJoinIterator(next, parameters, resultRows, transforms, joinOutput,
+            cache, inputRemains = () => !inputExhausted, reader = reader)
         }
-        inputExhausted = !input.hasNext
+        inputExhausted = !hasInput
       }
-      if (inputExhausted && !batch.hasNext) reader.close()
+      // No later batch reads the cache, so neither it nor the drained batch is kept.
+      if (inputExhausted && !batch.hasNext) {
+        batch = Iterator.empty
+        cache = None
+        reader.close()
+      }
     }
 
     private lazy val toUnsafe = UnsafeProjection.create(streamOutput, streamOutput)
 
-    // An inner join emits nothing for a stream row that cannot match, because it fails the stream
-    // condition or has a null parameter that is not null-safe, as an ordinary inner join filters
-    // such a row out before it joins. So the row takes no place in a batch and is not copied: it
-    // counts only as an input row. A left outer join emits it, so a batch keeps it.
-    private val keepsRowsThatCannotMatch = joinType != Inner
+    // An inner or left semi join emits nothing for a stream row that cannot match, because it
+    // fails the stream condition or has a null parameter that is not null-safe, as an ordinary
+    // inner join filters such a row out before it joins. So the row takes no place in a batch and
+    // is not copied: it counts only as an input row. A left outer or left anti join emits it, so a
+    // batch keeps it.
+    private val keepsRowsThatCannotMatch = joinType != Inner && joinType != LeftSemi
+
+    // When a request holds one parameter row because of a selected range, a batch takes stream
+    // rows of one key. It ends before the first row with another key, which starts the next batch.
+    // A row that cannot match has no key, and any batch that keeps it takes it.
+    private var heldRow: UnsafeRow = null
+    private var heldRequestRow: UnsafeRow = null
+
+    // The request row of the row that nextKeptRow returned last, or null when that row cannot
+    // match. It is a reused row that the next request row overwrites, unless the row was held.
+    private var keptRequestRow: UnsafeRow = null
+
+    // A batch of one key holds one parameter row in its request, whatever the source's limit, so
+    // only Spark's own cap and maxBatchBytes end it before another key does.
+    private val maxBatchRows =
+      if (oneKeyPerBatch) ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST
+      else maxParameterRowsPerRequest
+
+    private def hasInput: Boolean = heldRow != null || input.hasNext
+
+    /** The next row that a batch keeps, copied, or null after a row that it leaves out. */
+    private def nextKeptRow(): UnsafeRow = if (heldRow != null) {
+      val row = heldRow
+      keptRequestRow = heldRequestRow
+      heldRow = null
+      heldRequestRow = null
+      row
+    } else {
+      val next = input.next()
+      keptRequestRow = requestRowOf(next)
+      if (keepsRowsThatCannotMatch || keptRequestRow != null) {
+        next match {
+          case unsafe: UnsafeRow => unsafe.copy()
+          case other => toUnsafe(other).copy()
+        }
+      } else {
+        metrics.inputRows += 1
+        null
+      }
+    }
 
     /**
      * The request row of a stream row that can match, in a reused row, or null. The stream
@@ -148,37 +217,40 @@ class ExternalLookupJoinEvaluatorFactory(
 
     // An array, because a batch's rows are read by position for every key, match and output row.
     // The batch holds its rows until its request is read, so it stops once their copies reach
-    // maxBatchBytes, keeping the row that reaches it, as well as at maxParameterRowsPerRequest
-    // rows. It always keeps one row, when one remains. It decides once for each row whether the
-    // row can match, and groups the rows that can by their request row, which it copies once.
+    // maxBatchBytes, keeping the row that reaches it, and at maxBatchRows rows. A batch of one key
+    // also stops at another key. It always keeps one row, when one remains. It decides once for
+    // each row whether the row can match, and groups the rows that can by their request row, a
+    // copy of which each group keeps.
     private def readBatch(): StreamBatch = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
       val rowsThatCannotMatch = mutable.ArrayBuffer.empty[Int]
       var bytes = 0L
-      while (rows.length < maxParameterRowsPerRequest && bytes < maxBatchBytes && input.hasNext) {
-        val next = input.next()
-        val requestRow = requestRowOf(next)
-        if (keepsRowsThatCannotMatch || requestRow != null) {
-          val row = next match {
-            case unsafe: UnsafeRow => unsafe.copy()
-            case other => toUnsafe(other).copy()
-          }
-          val index = rows.length
-          if (requestRow == null) {
-            rowsThatCannotMatch += index
+      var keyChanged = false
+      while (!keyChanged && rows.length < maxBatchRows && bytes < maxBatchBytes && hasInput) {
+        val row = nextKeptRow()
+        if (row != null) {
+          val requestRow = keptRequestRow
+          if (oneKeyPerBatch && requestRow != null && keyEntries.nonEmpty &&
+              !keyEntries.contains(requestRow)) {
+            heldRow = row
+            heldRequestRow = requestRow.copy()
+            keyChanged = true
           } else {
-            keyEntries.get(requestRow) match {
-              case Some(entry) => entry.rowIndexes += index
-              case None =>
-                val retained = requestRow.copy()
-                keyEntries.put(retained, KeyEntry(retained, mutable.ArrayBuffer(index)))
+            val index = rows.length
+            if (requestRow == null) {
+              rowsThatCannotMatch += index
+            } else {
+              keyEntries.get(requestRow) match {
+                case Some(entry) => entry.rowIndexes += index
+                case None =>
+                  val retained = requestRow.copy()
+                  keyEntries.put(retained, KeyEntry(retained, mutable.ArrayBuffer(index)))
+              }
             }
+            bytes += row.getSizeInBytes
+            rows += row
           }
-          bytes += row.getSizeInBytes
-          rows += row
-        } else {
-          metrics.inputRows += 1
         }
       }
       StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray)
@@ -188,11 +260,14 @@ class ExternalLookupJoinEvaluatorFactory(
   /** The stream rows that share a key, and the one request row sent for them. */
   private case class KeyEntry(requestRow: UnsafeRow, rowIndexes: mutable.ArrayBuffer[Int])
 
+  /** The stream rows that share a key, and the cached lookup rows that they join. */
+  private case class CachedKey(lookupRows: Array[UnsafeRow], rowIndexes: mutable.ArrayBuffer[Int])
+
   /**
    * The stream rows of a batch, with one entry for each distinct request row that can match, in
-   * the order of first occurrence, and the positions of the rows that a left outer join keeps
-   * although they cannot match, because they fail the stream condition or have a null parameter
-   * that is not null-safe.
+   * the order of first occurrence, and the positions of the rows that a left outer or left anti
+   * join keeps although they cannot match, because they fail the stream condition or have a null
+   * parameter that is not null-safe.
    */
   private case class StreamBatch(
       rows: Array[InternalRow],
@@ -212,7 +287,10 @@ class ExternalLookupJoinEvaluatorFactory(
       batch: StreamBatch,
       parameters: LookupParameters,
       resultRows: LookupResultRows,
+      transforms: LookupTransforms,
       joinOutput: JoinOutput,
+      cache: Option[LookupCache],
+      inputRemains: () => Boolean,
       reader: LookupReader) extends Iterator[InternalRow] {
     private val rows = batch.rows
     metrics.inputRows += rows.length
@@ -225,12 +303,47 @@ class ExternalLookupJoinEvaluatorFactory(
 
     // A row that can never match is finished right away, and its parameters are not requested.
     batch.rowsThatCannotMatch.foreach(finish)
-    private val keyEntries = batch.keyEntries
+    // The keys of the batch, as cache hits and as keys to request, each in the order of first
+    // occurrence. Each request row is classified once, as a cache hit or a row to request: every
+    // path fans out to all the rows sharing it, so it must not be both, e.g. across a TTL boundary.
+    private val cachedKeys = mutable.ArrayBuffer.empty[CachedKey]
+    private val keyEntries = batch.keyEntries.filter { entry =>
+      cache.flatMap(_.get(entry.requestRow)) match {
+        case Some(lookupRows) =>
+          metrics.cacheHits += 1
+          cachedKeys += CachedKey(lookupRows, entry.rowIndexes)
+          false
+        case None => true
+      }
+    }
+    // The cache hits are joined as the output is read, before the connector's rows: one cached row
+    // at a time, with every stream row of its key, so that their output rows do not pile up while
+    // the batch is built. A key's stream rows are finished after its last cached row.
+    private val cacheHits: Iterator[(CachedKey, Option[UnsafeRow])] =
+      cachedKeys.iterator.flatMap { cached =>
+        (cached.lookupRows.iterator.map(Some(_)) ++ Iterator.single(None)).map(cached -> _)
+      }
+
+    // Only a later batch of the partition reads what this one caches, so the last batch caches
+    // nothing. The partition knows whether input remains once the request is sent, before its
+    // results are read.
+    private lazy val cacheWriter = if (!inputRemains()) None else {
+      cache.map(new CacheWriter(_, keyEntries.map(_.requestRow)))
+    }
 
     // No connector request, and no reader, when no key can match.
     private var cursor: ExternalLookupResultCursor =
       if (keyEntries.isEmpty) EmptyLookupCursor
       else connectorCall(reader.lookup(keyEntries.map(_.requestRow)))
+
+    // A semi or anti join decides a stream row at its first match. Once every requested row has
+    // matched, no later result row can change the output, so the join reads no further, unless a
+    // later row can still change what it caches: a cache that keeps every row of a key keeps only
+    // complete results, while each key has its one row by then when the cache keeps one per key.
+    private var undecidedRows = keyEntries.iterator.map(_.rowIndexes.length).sum
+
+    private def decided: Boolean =
+      joinOutput.answeredByFirstMatch && undecidedRows == 0 && cacheWriter.forall(_.isFull)
 
     override def hasNext: Boolean = {
       tryFillPending()
@@ -247,7 +360,13 @@ class ExternalLookupJoinEvaluatorFactory(
     /** Reads more only when nothing is buffered; safe to call repeatedly. */
     private def tryFillPending(): Unit = {
       try {
-        while (pending.isEmpty && advanceCursor()) {
+        while (pending.isEmpty && cacheHits.hasNext) {
+          cacheHits.next() match {
+            case (cached, Some(lookupRow)) => cached.rowIndexes.foreach(joinMatch(_, lookupRow))
+            case (cached, None) => cached.rowIndexes.foreach(finish)
+          }
+        }
+        while (pending.isEmpty && !decided && advanceCursor()) {
           reader.resultRowRead()
           // The join checks for a close() before each connector call, so it makes none after it
           // has seen one.
@@ -263,11 +382,18 @@ class ExternalLookupJoinEvaluatorFactory(
           }
           val entry = requestedEntry(ordinal)
           reader.ensureOpen()
-          val resultRow = resultRows.validatedCopy(connectorRow)
+          val resultRow = resultRows.validated(connectorRow)
           if (parameters.selectedPredicatesHold(entry.requestRow, resultRow)) {
-            entry.rowIndexes.foreach(joinMatch(_, resultRow))
+            transforms(resultRow).foreach { lookupRow =>
+              cacheWriter.foreach(_.add(entry.requestRow, lookupRow))
+              entry.rowIndexes.foreach { index =>
+                if (joinMatch(index, lookupRow)) undecidedRows -= 1
+              }
+            }
           }
         }
+        // A decided batch closes its cursor before the end. Its rows have all matched, so none is
+        // waiting for its results, and no later row could change what it caches.
         if (pending.isEmpty) finishCursor(completed = true)
       } catch {
         case error: Throwable =>
@@ -308,19 +434,30 @@ class ExternalLookupJoinEvaluatorFactory(
       keyEntries(ordinal)
     }
 
-    private def joinMatch(index: Int, lookupRow: InternalRow): Unit = {
-      if (joinOutput.matches(rows(index), lookupRow)) {
+    /** Joins a lookup row with a stream row, and returns whether it is the row's first match. */
+    private def joinMatch(index: Int, lookupRow: InternalRow): Boolean = {
+      // A semi or anti join knows a stream row's answer at its first match, so it evaluates the
+      // residual condition no further for that row, as the other join operators do. It reads on
+      // while another stream row of the batch has not matched.
+      if (!(joinOutput.answeredByFirstMatch && matched(index)) &&
+          joinOutput.matches(rows(index), lookupRow)) {
+        val firstMatch = !matched(index)
         matched(index) = true
-        joinOutput.matched(lookupRow).foreach(emit(index, _))
+        joinOutput.matched(lookupRow, firstMatch).foreach(emit(index, _))
+        firstMatch
+      } else {
+        false
       }
     }
 
     /**
-     * Closes the cursor once. After a complete read, finishes every stream row that was waiting for
-     * its results. After a failure or a close, the results may be partial, so it finishes none:
-     * a row without a match could be a row whose match was never read. Once the reader is closed,
-     * its close owns the cursor and the reader's metrics, so the join makes no further connector
-     * call.
+     * Closes the cursor once. After a complete read, or once a semi or anti join has decided every
+     * stream row and no later row could change what it caches, caches the results and finishes
+     * every stream row that was waiting for them. After a failure or a close, the results may be
+     * partial, so it caches nothing and finishes no row: a row without a match could be a row
+     * whose match was never read. A failure fails the task, which discards the cache, and the join
+     * never retries a request. Once the reader is closed, its close owns the cursor and the
+     * reader's metrics, so the join makes no further connector call.
      */
     private def finishCursor(completed: Boolean): Unit = if (cursor ne EmptyLookupCursor) {
       cursor = EmptyLookupCursor
@@ -331,7 +468,10 @@ class ExternalLookupJoinEvaluatorFactory(
           reader.updateMetrics()
         }
       }
-      if (completed) keyEntries.foreach(_.rowIndexes.foreach(finish))
+      if (completed) {
+        cacheWriter.foreach(_.write())
+        keyEntries.foreach(_.rowIndexes.foreach(finish))
+      }
     }
 
     private def finish(index: Int): Unit = if (!finished.contains(index)) {
@@ -342,6 +482,93 @@ class ExternalLookupJoinEvaluatorFactory(
     private def emit(index: Int, lookupRow: InternalRow): Unit = {
       pending.enqueue(index -> lookupRow)
       metrics.outputRows += 1
+    }
+  }
+
+  /**
+   * The lookup results by key, within a task, per input partition (a task that reads several input
+   * partitions, e.g. after coalesce, has one cache per partition). Once its entries take more than
+   * `maxBytes`, the least recently used ones are evicted; an entry expires once it is older than
+   * the TTL, by `cacheTicker`. An entry takes the bytes of its key and of its rows, with the
+   * objects that hold each row, and of the objects that hold the entry and its key, so that a key
+   * without a result counts too.
+   * Its keys and rows are the batches' own copies, which are never changed.
+   */
+  private class LookupCache {
+    // One segment, so that eviction is exactly least recently used, and bounded by `maxBytes`.
+    private val entries: Cache[UnsafeRow, Array[UnsafeRow]] = {
+      val builder = CacheBuilder.newBuilder()
+        .concurrencyLevel(1)
+        .maximumWeight(cacheOptions.maxBytes)
+        .weigher(new Weigher[UnsafeRow, Array[UnsafeRow]] {
+          override def weigh(key: UnsafeRow, rows: Array[UnsafeRow]): Int = {
+            val bytes = ExternalLookupJoinEvaluatorFactory.CACHE_ENTRY_OVERHEAD_BYTES +
+              key.getSizeInBytes +
+              rows.iterator.map(ExternalLookupJoinEvaluatorFactory.cachedBytes).sum
+            math.min(bytes, Int.MaxValue).toInt
+          }
+        })
+        .ticker(cacheTicker)
+      val expiring = if (cacheOptions.ttlMillis > 0) {
+        builder.expireAfterWrite(cacheOptions.ttlMillis, TimeUnit.MILLISECONDS)
+      } else {
+        builder
+      }
+      expiring.build[UnsafeRow, Array[UnsafeRow]]()
+    }
+
+    def get(key: UnsafeRow): Option[Array[UnsafeRow]] = Option(entries.getIfPresent(key))
+
+    def put(key: UnsafeRow, values: Array[UnsafeRow]): Unit = entries.put(key, values)
+  }
+
+  /**
+   * Collects the result rows of one request by key, and caches them once the cursor is done. It
+   * receives only the rows that satisfy the selected lookup predicates, so the cache never holds a
+   * row that Spark's check dropped. When the cache keeps one row per key, it keeps each key's first
+   * row. A key whose rows take more than a
+   * [[ExternalLookupJoinEvaluatorFactory.CACHE_KEY_SHARE]]th of `maxBytes` is not cached, so that
+   * one large result cannot evict most of the cache, and the request holds at most `maxBytes` of
+   * rows for the cache, which could keep no more; a key whose rows would pass that is not cached
+   * either. Such a key is still joined in full. The rows are the batch's own copies, which are
+   * never changed.
+   */
+  private class CacheWriter(cache: LookupCache, keys: Array[UnsafeRow]) {
+    private class KeyResults(val rows: mutable.ArrayBuffer[UnsafeRow], var bytes: Long)
+    private val maxKeyBytes =
+      cacheOptions.maxBytes / ExternalLookupJoinEvaluatorFactory.CACHE_KEY_SHARE
+    private val resultsByKey =
+      mutable.HashMap.from(keys.map(_ -> new KeyResults(mutable.ArrayBuffer.empty, 0L)))
+    private val uncacheable = mutable.HashSet.empty[UnsafeRow]
+    private var bufferedBytes = 0L
+    // The keys whose entry a later row can still change: each key until it is uncacheable or,
+    // when the cache keeps one row per key, until it has that row.
+    private var openKeys = keys.length
+
+    def add(key: UnsafeRow, lookupRow: UnsafeRow): Unit = {
+      val results = resultsByKey(key)
+      if (!uncacheable.contains(key) && !(cachesOneRowPerKey && results.rows.nonEmpty)) {
+        val rowBytes = ExternalLookupJoinEvaluatorFactory.cachedBytes(lookupRow)
+        if (results.bytes + rowBytes > maxKeyBytes ||
+            bufferedBytes + rowBytes > cacheOptions.maxBytes) {
+          uncacheable += key
+          bufferedBytes -= results.bytes
+          results.rows.clear()
+          openKeys -= 1
+        } else {
+          results.rows += lookupRow
+          results.bytes += rowBytes
+          bufferedBytes += rowBytes
+          if (cachesOneRowPerKey) openKeys -= 1
+        }
+      }
+    }
+
+    /** Whether no later result row can change what it caches. */
+    def isFull: Boolean = openKeys == 0
+
+    def write(): Unit = keys.foreach { key =>
+      if (!uncacheable.contains(key)) cache.put(key, resultsByKey(key).rows.toArray)
     }
   }
 
@@ -357,8 +584,8 @@ class ExternalLookupJoinEvaluatorFactory(
   private type SlotCheck = (SpecializedGetters, Int) => Unit
 
   /**
-   * Validates each row that the connector returns, and copies it once into Spark's own row before
-   * Spark checks, joins or keeps it. A connector may reuse its row and its buffers, byte arrays
+   * Validates each row that the connector returns, and writes it into a row of Spark's own, which
+   * is reused, before Spark checks it. A connector may reuse its row and its buffers, byte arrays
    * included, so a row that Spark still holds must not share them. A value that breaks its type
    * fails the task, at any nested level: a null in a field, array element or map value that the
    * table or the read schema declares NOT NULL, or a decimal that does not fit its precision and
@@ -371,10 +598,10 @@ class ExternalLookupJoinEvaluatorFactory(
       slotCheck(field.dataType, field.nullable, Seq(field.name)).map(ordinal -> _)
     }
 
-    /** The row, validated and copied into a row that Spark owns. */
-    def validatedCopy(resultRow: InternalRow): UnsafeRow = {
+    /** The row, validated and written into a reused row that Spark owns. */
+    def validated(resultRow: InternalRow): UnsafeRow = {
       fieldChecks.foreach { case (ordinal, check) => check(resultRow, ordinal) }
-      copy(resultRow).copy()
+      copy(resultRow)
     }
 
     /** The check of a slot of this type, at this field path, or None if it has nothing to check. */
@@ -489,19 +716,49 @@ class ExternalLookupJoinEvaluatorFactory(
   }
 
   /**
+   * Applies the optimized lookup-side projections and filters to a result row, in evaluation
+   * order. A row that a filter rejects joins no stream row. Several stream rows can join the
+   * result, so it is retained: validation and each projection reuse their output rows, so the row
+   * that passes every stage is copied, once.
+   */
+  private class LookupTransforms(partitionIndex: Int) {
+    private val stages = lookupTransforms.map {
+      case ExternalLookupProject(projectList, input) =>
+        Left(UnsafeProjection.create(projectList, input))
+      case ExternalLookupFilter(condition, input) =>
+        Right(Predicate.create(condition, input))
+    }
+    stages.foreach {
+      case Left(projection) => projection.initialize(partitionIndex)
+      case Right(predicate) => predicate.initialize(partitionIndex)
+    }
+
+    def apply(resultRow: UnsafeRow): Option[UnsafeRow] =
+      stages.foldLeft(Option(resultRow)) {
+        case (Some(row), Left(projection)) => Some(projection(row))
+        case (Some(row), Right(predicate)) if predicate.eval(row) => Some(row)
+        case _ => None
+      }.map(_.copy())
+  }
+
+  /**
    * Evaluates the stream condition on stream rows and the residual condition on joined rows, and
    * builds output rows per join type.
    */
   private class JoinOutput(partitionIndex: Int) {
-    // Value rows follow the read schema, and the residual and output are bound to its fields.
-    private val joinedLookupInput =
-      if (joinType == LeftOuter) lookupInput.map(_.withNullability(true)) else lookupInput
+    // Lookup rows follow the last lookup-side stage, or the read schema without one, and the
+    // residual and output are bound to their fields.
+    private val joinedLookupInput = if (joinType == LeftOuter) {
+      transformedLookup.map(_.withNullability(true))
+    } else {
+      transformedLookup
+    }
     private val joinedInput = streamOutput ++ joinedLookupInput
     private val joinedRow = new JoinedRow()
     private val streamPredicate = streamCondition.map(Predicate.create(_, streamOutput))
     private val residual = residualCondition.map(Predicate.create(_, joinedInput))
     private val projection = UnsafeProjection.create(output, joinedInput)
-    private val nullLookupRow = new GenericInternalRow(lookupInput.length)
+    private val nullLookupRow = new GenericInternalRow(transformedLookup.length)
     streamPredicate.foreach(_.initialize(partitionIndex))
     residual.foreach(_.initialize(partitionIndex))
     projection.initialize(partitionIndex)
@@ -509,18 +766,26 @@ class ExternalLookupJoinEvaluatorFactory(
     /** Whether a stream row passes the stream condition; a row that fails it matches nothing. */
     def canMatch(streamRow: InternalRow): Boolean = streamPredicate.forall(_.eval(streamRow))
 
+    /** Whether the first match decides a stream row's output, as in a semi or anti join. */
+    val answeredByFirstMatch: Boolean = joinType == LeftSemi || joinType == LeftAnti
+
     def matches(streamRow: InternalRow, lookupRow: InternalRow): Boolean =
       residual.forall(_.eval(joinedRow(streamRow, lookupRow)))
 
-    /** The lookup row that the output for a match joins, if the join type emits one. */
-    def matched(lookupRow: InternalRow): Option[InternalRow] = joinType match {
-      case Inner | LeftOuter => Some(lookupRow)
-      case _ => None
-    }
+    /**
+     * The lookup row that the output for a match joins, if the join type emits one; a semi join
+     * emits only its first match.
+     */
+    def matched(lookupRow: InternalRow, firstMatch: Boolean): Option[InternalRow] =
+      joinType match {
+        case Inner | LeftOuter => Some(lookupRow)
+        case LeftSemi if firstMatch => Some(nullLookupRow)
+        case _ => None
+      }
 
     /** The lookup row that the output for a stream row without a match joins, if any. */
     def unmatched: Option[InternalRow] = joinType match {
-      case LeftOuter => Some(nullLookupRow)
+      case LeftOuter | LeftAnti => Some(nullLookupRow)
       case _ => None
     }
 
@@ -613,6 +878,32 @@ class ExternalLookupJoinEvaluatorFactory(
         if (reader != null) reader.close())
     }
   }
+}
+
+private object ExternalLookupJoinEvaluatorFactory {
+  /**
+   * The bytes that a cache entry takes besides its key's data and its rows, on a 64-bit JVM with
+   * compressed object pointers: Guava's entry with its links in the access and write orders (64
+   * bytes, or 48 without a TTL), the reference that holds the value and its weight (24), the
+   * entry's slot in the hash table and the table's spare room (8), the key's `UnsafeRow` object
+   * (40) and the 16-byte header of its data array, and the 16-byte header of the array of the
+   * entry's rows.
+   */
+  val CACHE_ENTRY_OVERHEAD_BYTES = 168L
+
+  /**
+   * The bytes that a cached row takes besides its data, on a 64-bit JVM with compressed object
+   * pointers: the 40 bytes of the `UnsafeRow` object (a 12-byte header, its five fields and the
+   * padding to 8 bytes), the 16-byte header of the array that holds its data, and its 4-byte
+   * reference in the array of the entry's rows.
+   */
+  val CACHE_ROW_OVERHEAD_BYTES = 60L
+
+  /** The bytes that a cached row takes on the heap. */
+  def cachedBytes(row: UnsafeRow): Long = row.getSizeInBytes + CACHE_ROW_OVERHEAD_BYTES
+
+  /** The share of the cache, as a divisor of its bytes, that the rows of one key may take. */
+  val CACHE_KEY_SHARE = 16
 }
 
 /**

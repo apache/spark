@@ -49,7 +49,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 abstract class CSVSuite
@@ -4621,7 +4621,7 @@ class CSVv1Suite extends CSVSuite {
   }
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class CSVv2Suite extends CSVSuite {
   override protected def sparkConf: SparkConf =
     super
