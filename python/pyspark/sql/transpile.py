@@ -1026,7 +1026,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 # `not` and boolean ops produce a boolean column. Labeling them
                 # "numeric" (the old catch-all) let booleans into
                 # arithmetic/equality lowerings where ANSI analysis fails (e.g.
-                # `(not x) + 1`, valid Python) instead of falling back.
+                # `(not (x > 0)) + 1`, valid Python) instead of falling back.
                 return "bool"
             case _:
                 # Remaining nodes (unsupported calls, subscripts, ...) don't
@@ -1144,8 +1144,8 @@ class CatalystTranspiler(AbstractTranspiler):
                     orelse[0] if orelse else None,
                 )
             case ast.Compare(left, ops, comps):
-                # `in` / `not in` are container membership, not a chainable value
-                # comparison, and need their own NULL analysis: Python's `in`
+                # `in` / `not in` are container membership rather than value comparisons,
+                # though one can be a link of a chain; they need their own NULL analysis: `in`
                 # semantics depend on the container -- equality for tuple/list,
                 # substring containment for str -- and a `None` probe can raise
                 # (`None in "abc"` -> TypeError). Not lowered yet, so refuse and
