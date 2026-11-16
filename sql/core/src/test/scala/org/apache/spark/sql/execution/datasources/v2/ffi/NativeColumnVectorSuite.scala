@@ -182,7 +182,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
    * the same vector, returns, as Spark uses it, or fails as it does. Its integral conversions are
    * those of the decimal of Spark's own column vectors, which hold the decimals that a long holds,
    * of a scale from 0 to their precision, as longs, while ArrowColumnVector holds BigDecimals,
-   * which Decimal rounds to bytes, shorts and ints through doubles.
+   * which Decimal truncates to bytes, shorts and ints on their exact values.
    */
   private def checkDecimal(
       expected: ArrowColumnVector,
@@ -291,9 +291,8 @@ class NativeColumnVectorSuite extends SparkFunSuite {
 
   test("the decimals of the fields of a struct still hold BigDecimals") {
     // ArrowColumnVector reads the fields of a struct, so that their decimals, unlike those of a
-    // top-level column, hold BigDecimals. Decimal rounds those to integers through doubles until
-    // SPARK-60843, so that the nested decimal then rounds to 123456790, a known inconsistency,
-    // which this test does not pin.
+    // top-level column, hold BigDecimals. Since SPARK-61572 Decimal truncates those on their exact
+    // values, so the nested decimal rounds to the same integer as the top-level one.
     withAllocator { allocator =>
       Using.resource(StructVector.empty("struct", allocator)) { struct =>
         val field = FieldType.nullable(new ArrowType.Decimal(18, 9, 128))
@@ -308,6 +307,7 @@ class NativeColumnVectorSuite extends SparkFunSuite {
         assert(top.toDebugString === "Decimal(compact, 123456789999999999, 18, 9)")
         assert(top.roundToInt() === 123456789)
         assert(nested.toDebugString === "Decimal(expanded, 123456789.999999999, 18, 9)")
+        assert(nested.roundToInt() === 123456789)
       }
     }
   }

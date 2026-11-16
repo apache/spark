@@ -2654,17 +2654,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
-  val LEGACY_CAST_DECIMAL_TO_INTEGRAL_TYPE_VIA_DOUBLE =
-    buildConf("spark.sql.legacy.castDecimalToIntegralTypeViaDouble")
-      .internal()
-      .doc("When true, an ANSI cast to TINYINT, SMALLINT or INT of a DECIMAL value stored as a " +
-        "BigDecimal (precision > 18) converts it to a Double first, so a value such as " +
-        "0.999999999999999999 becomes 1. When false, the exact value is truncated toward zero.")
-      .version("5.0.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
-
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
@@ -7158,6 +7147,18 @@ object SQLConf {
         "the type of number 1E10BD under legacy mode is DecimalType(2, -9), but is " +
         "Decimal(11, 0) in non legacy mode.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_CAST_DECIMAL_TO_INTEGRAL_TYPE_VIA_DOUBLE =
+    buildConf("spark.sql.legacy.castDecimalToIntegralTypeViaDouble")
+      .internal()
+      .doc("When true, an ANSI cast to TINYINT, SMALLINT or INT of a DECIMAL value held as a " +
+        "BigDecimal, such as a value of a DECIMAL column of precision above 18 or a decimal " +
+        "literal of any precision, converts it to a Double first, so 0.999999999999999999 " +
+        "becomes 1. When false, the exact value is truncated toward zero.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
