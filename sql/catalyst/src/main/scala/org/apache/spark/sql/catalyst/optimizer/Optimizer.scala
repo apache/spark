@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -2280,7 +2280,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
  * Generate a list of additional filters from an operator's existing constraint but remove those
  * that are either already part of the operator's condition or are part of the operator's child
  * constraints. These filters are currently inserted to the existing conditions in the Filter
- * operators and on either side of Join operators.
+ * operators and on either side of Join and AsOfJoin operators.
  *
  * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
  * Inner and LeftSemi joins.
@@ -2288,19 +2288,37 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
 object InferFiltersFromConstraints extends Rule[LogicalPlan]
   with PredicateHelper with ConstraintHelper {
 
+  // Marks the Filters the AsOfJoin case adds, so the Filter case adds no failable, IN or
+  // correlated EXISTS filter to them.
+  private val asOfInputFilterTag = TreeNodeTag[Unit]("asOfInputFilter")
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.constraintPropagationEnabled) {
-      inferFilters(plan)
+      inferFilters(plan, inferAcrossAsOfJoins(plan))
     } else {
       plan
     }
   }
 
-  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
+  // The main plan inlines the body of a correlated scalar or lateral subquery and runs this rule
+  // on it again, after later rules can have moved the Filters the AsOfJoin case added out of
+  // their tag. So only that run infers filters across as-of joins. A correlated EXISTS or IN
+  // body is inlined only after this batch, so it gets none, as before.
+  // TODO: An uncorrelated LATERAL subquery is inlined too, so its body still goes through the
+  //  AsOfJoin case twice.
+  private def inferAcrossAsOfJoins(plan: LogicalPlan): Boolean = plan match {
+    case s: Subquery if s.correlated => false
+    case _ => conf.inferFiltersAcrossAsOfJoinEnabled
+  }
+
+  private def inferFilters(
+      plan: LogicalPlan, acrossAsOfJoins: Boolean): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
     case filter @ Filter(condition, child) =>
+      val canAdd: Expression => Boolean =
+        if (filter.getTagValue(asOfInputFilterTag).isDefined) canBeAsOfFilter else canBeFilter
       val newFilters = (filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canBeFilter)
+        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canAdd)
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -2331,6 +2349,33 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
         case _ => join
       }
+
+    // A right row that fails the ON condition is never the match of any left row, so a filter
+    // that follows from the left constraints and the ON condition can drop it before the join.
+    // An inner join also drops the left rows without a match, so its left side gets one too.
+    case j: AsOfJoin if acrossAsOfJoins =>
+      lazy val allConstraints = getAllConstraints(j.left, j.right, j.condition)
+      val newLeft = j.joinType match {
+        case Inner => inferAsOfInputFilter(j.left, allConstraints)
+        case LeftOuter => j.left
+        case other =>
+          throw SparkException.internalError(s"Unexpected as-of join type: $other")
+      }
+      // The join reads the right input lazily and reads one row past each key group. A right
+      // filter changes which rows it reads, so a right ON key or a right input expression that
+      // can fail could fail on a row the join did not read before.
+      val rightKeys =
+        j.condition.toSeq.flatMap(AsOfJoin.extractEquiJoinKeys(_, j.left, j.right)._2)
+      val newRight = if (rightKeys.forall(cannotFail) && cannotFailAnywhere(j.right)) {
+        inferAsOfInputFilter(j.right, allConstraints)
+      } else {
+        j.right
+      }
+      // A self join loses its shared exchange when only one input gets a filter: the right input
+      // with LeftOuter, or the left input with Inner when the right one stays unfiltered above.
+      // Leaving the other input unfiltered too when both inputs are the same plan would keep it,
+      // but the filter drops rows before the shuffle.
+      j.copy(left = newLeft, right = newRight)
   }
 
   private def getAllConstraints(
@@ -2344,18 +2389,56 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       .union(inferConstraintsFromLiteralBindings(baseConstraints))
   }
 
-  private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
+  private def inferNewFilter(
+      plan: LogicalPlan,
+      constraints: ExpressionSet,
+      canAdd: Expression => Boolean = canBeFilter): LogicalPlan = {
     val newPredicates = (constraints
       .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
-      } -- plan.constraints).toSeq.filter(canBeFilter)
+      } -- plan.constraints).toSeq.filter(canAdd)
     if (newPredicates.isEmpty) {
       plan
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
   }
+
+  /** Whether no expression of `plan` can fail. Aliases and sort orders count as their child. */
+  private def cannotFailAnywhere(plan: LogicalPlan): Boolean = !plan.exists {
+    _.expressions.exists {
+      case a: Alias => !cannotFail(a.child)
+      case s: SortOrder => !cannotFail(s.child)
+      case e => !cannotFail(e)
+    }
+  }
+
+  private def inferAsOfInputFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
+    // Under the legacy flag, a later run of this rule infers with canBeFilter from a Filter that
+    // lost its tag, so an equality or literal added here could lead to a filter that can fail.
+    // IS NOT NULL takes no part in that inference.
+    val canAdd: Expression => Boolean = if (conf.legacyInferFailableFiltersFromConstraints) {
+      c => c.isInstanceOf[IsNotNull] && canBeAsOfFilter(c)
+    } else {
+      canBeAsOfFilter
+    }
+    val newPlan = inferNewFilter(plan, constraints, canAdd)
+    if (newPlan ne plan) newPlan.setTagValue(asOfInputFilterTag, ())
+    newPlan
+  }
+
+  private def canBeFilter(constraint: Expression): Boolean =
+    conf.legacyInferFailableFiltersFromConstraints || cannotFail(constraint)
+
+  /**
+   * An as-of input gets no filter that can fail, even with the legacy flag on, since as-of joins
+   * had no inferred filters before. Nor an IN or correlated EXISTS filter: a sort-merge semi join
+   * makes the as-of join sort that input again, and a NOT IN over nullable columns is a
+   * nested-loop join if it has several columns or spark.sql.optimizeNullAwareAntiJoin is off.
+   */
+  private def canBeAsOfFilter(constraint: Expression): Boolean =
+    !SubqueryExpression.hasInOrCorrelatedExistsSubquery(constraint) && cannotFail(constraint)
 
   /**
    * A constraint only says what holds on the rows an operator outputs. As a filter, it also runs
@@ -2366,10 +2449,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
    * rows use it, and a correlated one by its values and its correlation condition. Callers pass
    * the original expressions, because [[ExpressionSet.filter]] tests the canonicalized ones.
    */
-  private def canBeFilter(constraint: Expression): Boolean = {
-    conf.legacyInferFailableFiltersFromConstraints || ExprUtils.canEvaluateUnconditionally(
-      stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
-  }
+  private def cannotFail(constraint: Expression): Boolean = ExprUtils.canEvaluateUnconditionally(
+    stripCannotFail(ConstantFolding.constantFolding(constraint, isConditionalBranch = true)))
 
   private def stripCannotFail(e: Expression): Expression = e match {
     // An integral remainder by a non-zero constant, e.g. `x % 2 = 0`, never fails.
