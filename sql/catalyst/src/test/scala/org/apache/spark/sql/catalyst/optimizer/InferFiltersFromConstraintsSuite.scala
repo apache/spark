@@ -449,6 +449,22 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Some("l.x".attr === "r.y".attr))
   }
 
+  test("SPARK-61823: a constraint over a column that can fail is not inferred as a filter") {
+    // `i` can fail as the cast does, and `j` as it reads `i`, also through the sample, the
+    // projection and the filter above them. So no constraint over either, e.g. `i > 0` from
+    // `i = k AND k > 0`, goes ahead of the condition, while one over the non-deterministic `r`,
+    // which is computed on every row, does.
+    val projected = LocalRelation($"s".string, $"k".int)
+      .select($"k", Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("i"),
+        (Rand(1) * $"k").as("r"))
+      .sample(0.0, 0.5, withReplacement = false, 1L)
+      .select($"k", $"i", IsNull($"i").as("j"), $"r")
+    val condition = $"i" === $"k" && $"k" > 0 && $"j" && $"r" > 0.5
+    comparePlans(
+      InferFiltersFromConstraints(projected.where($"k" > 1).where(condition).analyze),
+      projected.where(IsNotNull($"k") && $"k" > 1).where(IsNotNull($"r") && condition).analyze)
+  }
+
   test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
     "instead of the root level nested type") {
     val structTestRelation = LocalRelation($"a".struct(StructType(
