@@ -1478,8 +1478,9 @@ class PlanParserSuite extends AnalysisTest {
     val fragment1 = "tablesample(bucket 4 out of 10 on x)"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0015",
-      parameters = Map("msg" -> "BUCKET x OUT OF y ON colname"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET x OUT OF y ON column"),
       context = ExpectedContext(
         fragment = fragment1,
         start = 16,
@@ -1500,8 +1501,9 @@ class PlanParserSuite extends AnalysisTest {
     val fragment3 = "TABLESAMPLE(300M)"
     checkError(
       exception = parseException(sql3),
-      condition = "_LEGACY_ERROR_TEMP_0015",
-      parameters = Map("msg" -> "byteLengthLiteral"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BYTES"),
       context = ExpectedContext(
         fragment = fragment3,
         start = 25,
@@ -1511,8 +1513,9 @@ class PlanParserSuite extends AnalysisTest {
     val fragment4 = "TABLESAMPLE(BUCKET 3 OUT OF 32 ON rand())"
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0015",
-      parameters = Map("msg" -> "BUCKET x OUT OF y ON function"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET x OUT OF y ON function()"),
       context = ExpectedContext(
         fragment = fragment4,
         start = 25,
@@ -2719,8 +2722,9 @@ class PlanParserSuite extends AnalysisTest {
     val fragment = "TIMESTAMP AS OF col"
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0056",
-      parameters = Map("reason" -> "timestamp expression cannot refer to any columns"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col\""),
       context = ExpectedContext(
         fragment = fragment,
         start = 20,
@@ -3055,10 +3059,16 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("CHANGES clause - error: column reference in timestamp") {
-    val e = intercept[ParseException] {
-      parsePlan("SELECT * FROM t CHANGES FROM TIMESTAMP col_name")
-    }
-    assert(e.getMessage.contains("timestamp expression cannot refer to any columns"))
+    val sql = "SELECT * FROM t CHANGES FROM TIMESTAMP col_name"
+    checkError(
+      exception = parseException(sql),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.COLUMN_REFERENCE",
+      sqlState = "42K0E",
+      parameters = Map("expr" -> "\"col_name\""),
+      context = ExpectedContext(
+        fragment = "t CHANGES FROM TIMESTAMP col_name",
+        start = 14,
+        stop = 46))
   }
 
   test("CHANGES clause - error: subquery in starting timestamp") {

@@ -1932,7 +1932,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0014",
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_TABLESAMPLE",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -2046,9 +2047,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0015",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "msg" : "byteLengthLiteral"
+    "sampleMethod" : "BYTES"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2068,9 +2070,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0016",
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLESAMPLE_METHOD",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "bytesStr" : "200"
+    "sampleMethod" : "200"
   },
   "queryContext" : [ {
     "objectType" : "",

@@ -1496,11 +1496,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = "ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT"
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map(
-        "operation" -> "Renaming column",
-        "command" -> "ALTER COLUMN",
-        "msg" -> ", please run RENAME COLUMN instead"),
+      condition = "UNSUPPORTED_CHANGE_COLUMN.RENAME",
+      sqlState = "0A000",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
         start = 0,
@@ -1567,8 +1565,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql6 = "ALTER TABLE table_name REPLACE COLUMNS (x string NOT NULL)"
     checkError(
       exception = parseException(sql6),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map("operation" -> "NOT NULL", "command" -> "REPLACE COLUMNS", "msg" -> ""),
+      condition = "UNSUPPORTED_REPLACE_COLUMNS.NOT_NULL",
+      sqlState = "0A000",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
         start = 0,
@@ -1577,11 +1576,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql7 = "ALTER TABLE table_name REPLACE COLUMNS (x string FIRST)"
     checkError(
       exception = parseException(sql7),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map(
-        "operation" -> "Column position",
-        "command" -> "REPLACE COLUMNS",
-        "msg" -> ""),
+      condition = "UNSUPPORTED_REPLACE_COLUMNS.COLUMN_POSITION",
+      sqlState = "0A000",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
         start = 0,
@@ -1590,11 +1587,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql8 = "ALTER TABLE table_name REPLACE COLUMNS (a.b.c string)"
     checkError(
       exception = parseException(sql8),
-      condition = "_LEGACY_ERROR_TEMP_0034",
-      parameters = Map(
-        "operation" -> "Replacing with a nested column",
-        "command" -> "REPLACE COLUMNS",
-        "msg" -> ""),
+      condition = "UNSUPPORTED_REPLACE_COLUMNS.NESTED_COLUMN",
+      sqlState = "0A000",
+      parameters = Map("columnName" -> "`a`.`b`.`c`"),
       context = ExpectedContext(
         fragment = sql8,
         start = 0,
@@ -3083,8 +3078,9 @@ class DDLParserSuite extends AnalysisTest {
     val sql = "CACHE TABLE a.b.c AS SELECT * FROM testData"
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0037",
-      parameters = Map("quoted" -> "a.b"),
+      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      sqlState = "42000",
+      parameters = Map("statement" -> "CACHE TABLE ... AS SELECT", "name" -> "`a`.`b`.`c`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,

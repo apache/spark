@@ -2873,7 +2873,7 @@ class AstBuilder extends DataTypeAstBuilder
         }
         val bytesStr = ctx.bytes.getText
         if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
-          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("byteLengthLiteral", ctx)
+          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("BYTES", ctx)
         } else {
           throw QueryParsingErrors.invalidByteLengthLiteralError(bytesStr, ctx)
         }
@@ -2884,10 +2884,10 @@ class AstBuilder extends DataTypeAstBuilder
         }
         if (ctx.identifier != null) {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            "BUCKET x OUT OF y ON colname", ctx)
+            "BUCKET x OUT OF y ON column", ctx)
         } else {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            "BUCKET x OUT OF y ON function", ctx)
+            "BUCKET x OUT OF y ON function()", ctx)
         }
 
       case ctx: SampleByBucketContext =>
@@ -3034,8 +3034,7 @@ class AstBuilder extends DataTypeAstBuilder
     val version = visitVersion(ctx.version)
     val timestamp = Option(ctx.timestamp).map(expression)
     if (timestamp.exists(_.references.nonEmpty)) {
-      throw QueryParsingErrors.invalidTimeTravelSpec(
-        "timestamp expression cannot refer to any columns", ctx.timestamp)
+      throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.timestamp)
     }
     RelationTimeTravel(plan, timestamp, version)
   }
@@ -3076,16 +3075,14 @@ class AstBuilder extends DataTypeAstBuilder
       // Timestamp-based range
       val startTs = expression(ctx.startingTimestamp)
       if (startTs.references.nonEmpty) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.startingTimestamp)
       }
       if (SubqueryExpression.hasSubquery(startTs)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
       }
       val endTs = Option(ctx.endingTimestamp).map(expression)
       if (endTs.exists(_.references.nonEmpty)) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.endingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.endingTimestamp)
       }
       if (endTs.exists(SubqueryExpression.hasSubquery)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
@@ -3125,8 +3122,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else if (ctx.startingTimestamp != null) {
       val startTs = expression(ctx.startingTimestamp)
       if (startTs.references.nonEmpty) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.startingTimestamp)
       }
       if (SubqueryExpression.hasSubquery(startTs)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
@@ -7048,13 +7044,10 @@ class AstBuilder extends DataTypeAstBuilder
     val columnNameParts = typedVisit[Seq[String]](ctx.colName)
     if (!conf.resolver(columnNameParts.last,
         getIdentifierText(ctx.colType().colName))) {
-      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError("Renaming column",
-        "ALTER COLUMN", ctx, Some("please run RENAME COLUMN instead"))
+      throw QueryParsingErrors.changeColumnRenameUnsupportedError(ctx)
     }
     if (ctx.colType.NULL != null) {
-      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-        "NOT NULL", "ALTER COLUMN", ctx,
-        Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
+      throw QueryParsingErrors.changeColumnNotNullUnsupportedError(ctx)
     }
 
     AlterColumns(
@@ -7079,20 +7072,17 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         val name = typedVisit[Seq[String]](colType.name)
         if (name.length > 1) {
-          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "Replacing with a nested column", "REPLACE COLUMNS", ctx)
+          throw QueryParsingErrors.replaceColumnsNestedColumnUnsupportedError(name, ctx)
         }
         var commentSpec: Option[CommentSpecContext] = None
         colType.colDefinitionDescriptorWithPosition.asScala.foreach { opt =>
           blockBang(opt.errorCapturingNot)
 
           if (opt.NULL != null) {
-            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-              "NOT NULL", "REPLACE COLUMNS", ctx)
+            throw QueryParsingErrors.replaceColumnsNotNullUnsupportedError(ctx)
           }
           if (opt.colPosition != null) {
-            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-              "Column position", "REPLACE COLUMNS", ctx)
+            throw QueryParsingErrors.replaceColumnsColumnPositionUnsupportedError(ctx)
           }
           if (Option(opt.defaultExpression()).map(visitDefaultExpression).isDefined) {
             throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
@@ -7583,7 +7573,7 @@ class AstBuilder extends DataTypeAstBuilder
     def singlePart(parts: Seq[String]): String = {
       if (parts.length > 1) {
         throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
-          parts.init.quoted, parentCtx)
+          parts, parentCtx)
       }
       parts.head
     }
