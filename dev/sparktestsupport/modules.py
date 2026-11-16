@@ -39,6 +39,8 @@ all_modules = []
 #   standard library.
 ignored_file_patterns = (
     # Contributor docs.
+    ".agents/*.md",
+    "/.ignore",  # lets rg search .agents/
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
@@ -116,6 +118,7 @@ ignored_file_patterns = (
     "/scalastyle-config.xml",
     # Maintainer tools.
     "/dev/*gen-protos.sh",
+    "/dev/agent_docs_lint.py",
     "/dev/change-scala-version.sh",
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
