@@ -1141,6 +1141,38 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-60451: default values and generated columns on a special datetime value") {
+    // Evaluating a cast does not give the value of a special value such as 'today' or 'epoch'. As
+    // for `current_date()`, these columns have no V2 expression, so writes read their SQL text.
+    val t = "testcat.ns.t"
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        withTable(t) {
+          sql(s"""CREATE TABLE $t (
+                 |  id INT,
+                 |  d DATE DEFAULT CAST('today' AS DATE),
+                 |  e DATE DEFAULT CAST('epoch' AS DATE),
+                 |  g DATE GENERATED ALWAYS AS (CAST('today' AS DATE))
+                 |) USING foo""".stripMargin)
+          val cols = catalog("testcat").loadTable(Identifier.of(Array("ns"), "t")).columns()
+          assert(cols(1).defaultValue().getExpression == null, ansi)
+          assert(cols(2).defaultValue().getExpression == null, ansi)
+          assert(cols(3).columnGenerationExpression().getExpression == null, ansi)
+          sql(s"INSERT INTO $t (id) VALUES (1)")
+          // The date can change between the INSERT and the SELECT.
+          checkAnswer(
+            sql(s"SELECT datediff(current_date(), d) IN (0, 1), e, " +
+              s"datediff(current_date(), g) IN (0, 1) FROM $t"),
+            Row(true, java.sql.Date.valueOf("1970-01-01"), true))
+          // ALTER TABLE builds the V2 expression of a new default value the same way.
+          sql(s"ALTER TABLE $t ALTER COLUMN e SET DEFAULT CAST('tomorrow' AS DATE)")
+          val altered = catalog("testcat").loadTable(Identifier.of(Array("ns"), "t")).columns()
+          assert(altered(2).defaultValue().getExpression == null, ansi)
+        }
+      }
+    }
+  }
+
   test("create/replace table with generated columns should have V2 Expression") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {

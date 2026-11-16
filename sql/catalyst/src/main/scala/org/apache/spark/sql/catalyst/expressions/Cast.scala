@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
+import org.apache.spark.sql.catalyst.optimizer.SpecialDatetimeValues
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
@@ -856,8 +857,16 @@ case class Cast(
   }
 
   override def contextIndependentFoldable: Boolean = {
-    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType) &&
+      !castsSpecialDatetimeValue
   }
+
+  /**
+   * Whether this casts a special value such as 'today' or 'epoch', which `SpecialDatetimeValues`
+   * replaces with its value. Evaluating the cast does not give that value.
+   */
+  private[sql] def castsSpecialDatetimeValue: Boolean = SpecialDatetimeValues.rewrites(dataType) &&
+    SpecialDatetimeValues.constantString(this).exists(SpecialDatetimeValues.replaces(_, dataType))
 
   def ansiEnabled: Boolean = {
     evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)

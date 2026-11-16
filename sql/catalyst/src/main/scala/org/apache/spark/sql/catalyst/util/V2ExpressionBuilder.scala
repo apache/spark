@@ -172,6 +172,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
+    // Like `current_date()`, such a cast has no V2 form, so that the SQL text is read instead.
+    case c: Cast if c.castsSpecialDatetimeValue => None
     case Cast(child, dataType, _, evalMode)
         if evalMode == EvalMode.ANSI || Cast.canUpCast(child.dataType, dataType) =>
       generateExpression(child).map(v => new V2Cast(v, child.dataType, dataType))

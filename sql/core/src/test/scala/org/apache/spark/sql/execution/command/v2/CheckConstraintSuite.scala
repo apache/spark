@@ -664,6 +664,39 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-60451: Check constraint added by CREATE or REPLACE TABLE on a special datetime") {
+    // Evaluating a cast does not give the value of a special value such as 'today' or 'epoch'. As
+    // for `current_date()`, the constraint is stored without a predicate and writes read its text.
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        Seq(
+          ("CREATE", "d DATE", "d <= CAST('today' AS DATE)", "current_date()",
+            "DATE'9999-12-31'"),
+          ("CREATE", "d DATE", "d <= 'today'", "current_date()", "DATE'9999-12-31'"),
+          ("CREATE", "d DATE", "d >= CAST('epoch' AS DATE)", "DATE'1970-01-01'",
+            "DATE'1969-12-31'"),
+          ("CREATE", "d TIMESTAMP", "d <= CAST('now' AS TIMESTAMP)", "current_timestamp()",
+            "TIMESTAMP'9999-12-31 00:00:00'"),
+          ("REPLACE", "d DATE", "d <= CAST('today' AS DATE)", "current_date()",
+            "DATE'9999-12-31'")
+        ).foreach { case (command, column, cond, accepted, rejected) =>
+          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+            if (command == "REPLACE") sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+            sql(s"$command TABLE $t (id INT, $column, CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+            val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+            assert(check.predicate() == null, s"$command $cond $ansi")
+            sql(s"INSERT INTO $t VALUES (1, $accepted)")
+            val error = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO $t VALUES (2, $rejected)")
+            }
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"$command $cond $ansi")
+            checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+          }
+        }
+      }
+    }
+  }
+
   private def withV2Function(name: String, function: UnboundFunction)(f: => Unit): Unit = {
     val funCatalog = spark.sessionState.catalogManager.catalog(s"fun_$catalog")
       .asInstanceOf[InMemoryCatalog]

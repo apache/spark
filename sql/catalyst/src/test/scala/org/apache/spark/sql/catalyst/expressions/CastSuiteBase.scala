@@ -2580,6 +2580,29 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60451: a cast of a special datetime value is not context independent foldable") {
+    // `SpecialDatetimeValues` replaces these casts, and evaluating them does not give the value.
+    Seq(
+      cast(Literal("today"), DateType),
+      cast(Literal(" Epoch "), DateType),
+      cast(Concat(Seq(Literal("tomor"), Literal("row"))), DateType),
+      cast(Literal("now"), TimestampNTZType),
+      cast(Literal("yesterday"), TimestampNTZType)
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(!expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
+    // Other strings are cast as they are evaluated.
+    Seq(
+      cast(Literal("abc"), DateType),
+      cast(Literal("2023-01-01 00:00:00"), TimestampNTZType)
+    ).foreach { expr =>
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
   test("SPARK-51562: cast alias - time function") {
     import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
     import org.apache.spark.sql.catalyst.FunctionIdentifier
