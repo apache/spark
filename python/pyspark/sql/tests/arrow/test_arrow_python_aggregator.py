@@ -348,43 +348,65 @@ class ArrowPythonAggregatorTestsMixin:
         with self.assertRaises(AnalysisException):
             df.groupBy("k").pivot("p").agg(udaf(Mean())(sf.col("v"))).collect()
 
-    def test_session_window_rejected(self):
-        # A batch session window groups by one provisional session per row and relies on the
-        # aggregate operator to merge the overlapping ones. The incremental operators do not
-        # merge sessions, so grouping by a session window is rejected rather than returning one
-        # row per unmerged session. A tumbling window needs no merging and still works.
-        df = self.spark.createDataFrame(
-            [
-                (datetime.datetime(2026, 1, 1, 10, 0), 1.0),
-                (datetime.datetime(2026, 1, 1, 10, 2), 3.0),
-            ],
-            "ts timestamp, v double",
-        )
-        mean = udaf(Mean())
-        df.createOrReplaceTempView("session_input")
-        self.spark.udf.register("session_mean", mean)
-        queries = {
-            "dataframe": lambda: df.groupBy(sf.session_window("ts", "5 minutes")).agg(
-                mean(sf.col("v"))
-            ),
-            "sql": lambda: self.spark.sql(
-                "SELECT session_mean(v) FROM session_input GROUP BY session_window(ts, '5 minutes')"
-            ),
-        }
-        for name, query in queries.items():
-            with self.subTest(query=name):
-                with self.assertRaises(AnalysisException) as ctx:
-                    query().collect()
-                self.assertEqual(
-                    ctx.exception.getCondition(),
-                    "UNSUPPORTED_FEATURE.PYTHON_AGGREGATOR_WITH_SESSION_WINDOW",
-                )
+    def _event_data(self):
+        # With a 5 minute gap, the rows of key 1 at 10:00, 10:03 and 10:07 chain into one session
+        # (10:07 overlaps only the session that 10:03 extends), and so do the rows of key 2 at 10:01
+        # and 10:04. The later rows of each key start sessions of their own.
+        def ts(minute):
+            return datetime.datetime(2026, 1, 1, 10, minute)
 
-        result = (
-            df.groupBy(sf.window("ts", "5 minutes")).agg(mean(sf.col("v")).alias("m")).collect()
-        )
-        expected = df.groupBy(sf.window("ts", "5 minutes")).agg(sf.avg("v").alias("m")).collect()
-        self.assertEqual(result, expected)
+        return self.spark.createDataFrame(
+            [
+                (1, ts(0), 1.0),
+                (1, ts(3), 3.0),
+                (1, ts(7), 5.0),
+                (1, ts(20), 7.0),
+                (2, ts(1), 2.0),
+                (2, ts(4), 4.0),
+                (2, ts(30), 6.0),
+            ],
+            "k int, ts timestamp, v double",
+        ).repartition(3)
+
+    def test_session_window(self):
+        # A batch session window starts as one session per row, so the overlapping sessions must
+        # be merged before they are aggregated, as for the built-in aggregate functions.
+        df = self._event_data()
+        mean = udaf(Mean())
+        groupings = {
+            "session window": ([sf.session_window("ts", "5 minutes")], 3),
+            "key and session window": (["k", sf.session_window("ts", "5 minutes")], 4),
+        }
+        for name, (keys, num_sessions) in groupings.items():
+            with self.subTest(grouping=name):
+                result = df.groupBy(*keys).agg(mean(sf.col("v")).alias("m")).collect()
+                expected = df.groupBy(*keys).agg(sf.avg("v").alias("m")).collect()
+                self.assertEqual(len(expected), num_sessions)
+                self.assertEqual(sorted(result), sorted(expected))
+
+        with self.subTest(grouping="SQL"):
+            df.createOrReplaceTempView("session_input")
+            self.spark.udf.register("session_mean", mean)
+            query = (
+                "SELECT k, session_window.start AS start, session_window.end AS end, {}(v) AS m "
+                "FROM session_input GROUP BY k, session_window(ts, '5 minutes')"
+            )
+            result = self.spark.sql(query.format("session_mean")).collect()
+            expected = self.spark.sql(query.format("avg")).collect()
+            self.assertEqual(sorted(result), sorted(expected))
+
+    def test_time_window(self):
+        # Tumbling and sliding windows need no merging: each row belongs to its fixed windows.
+        df = self._event_data()
+        windows = {
+            "tumbling": sf.window("ts", "5 minutes"),
+            "sliding": sf.window("ts", "5 minutes", "1 minute"),
+        }
+        for name, window in windows.items():
+            with self.subTest(window=name):
+                result = df.groupBy(window).agg(udaf(Mean())(sf.col("v")).alias("m")).collect()
+                expected = df.groupBy(window).agg(sf.avg("v").alias("m")).collect()
+                self.assertEqual(sorted(result), sorted(expected))
 
     def test_window_unbounded(self):
         # Unbounded partition frame: every row gets its whole group's aggregate. Cross-checked

@@ -2546,13 +2546,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionList" -> pythonAggregateNames.map(toSQLId).mkString(", ")))
   }
 
-  def pythonAggregateWithSessionWindowError(pythonAggregateNames: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.PYTHON_AGGREGATOR_WITH_SESSION_WINDOW",
-      messageParameters = Map(
-        "functionList" -> pythonAggregateNames.map(toSQLId).mkString(", ")))
-  }
-
   def invalidIncrementalPythonAggregatorBufferError(
       name: String, bufferType: DataType): Throwable = {
     new AnalysisException(
