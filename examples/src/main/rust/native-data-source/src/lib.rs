@@ -111,6 +111,10 @@ impl DataSource for RangeSource {
         if num_partitions == 0 || batch_size == 0 || max_rows_per_trigger == Some(0) {
             return Err("numPartitions, batchSize and maxRowsPerTrigger must be positive".into());
         }
+        // Spark limits a micro-batch to at most i64::MAX rows.
+        if max_rows_per_trigger.is_some_and(|rows| rows > i64::MAX as u64) {
+            return Err(format!("maxRowsPerTrigger must be at most {}", i64::MAX).into());
+        }
         // A failed allocation aborts the process, so bound the sizes that the reads allocate.
         if num_partitions > MAX_PARTITIONS || batch_size > MAX_BATCH_SIZE {
             return Err(format!(
@@ -518,6 +522,7 @@ mod tests {
             ("numpartitions", "0"),
             ("numpartitions", "100001"),
             ("maxrowspertrigger", "0"),
+            ("maxrowspertrigger", "9223372036854775808"),
             ("end", "-1"),
             ("start", "not-an-integer"),
             ("unknown", "1"),

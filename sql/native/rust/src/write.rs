@@ -254,12 +254,16 @@ pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result
 /// Imports a batch to write. Arrow does not validate the C data that it imports, which the safe
 /// accessors of the connector rely on, so this validates its layout and values: a Spark string
 /// may hold bytes that are not UTF-8, such as those of a cast from binary, which a Rust `&str`
-/// must not. It leaves nullability to Spark, for the reason that `validate` gives.
+/// must not. It leaves nullability to Spark, for the reason that `validate` gives. Arrow requires
+/// each buffer of fixed-width values to be aligned to its type, such as the 16 bytes of an `i128`
+/// for a decimal on x86_64 and aarch64, which the Arrow Java allocator of Spark does not promise,
+/// so this copies the buffers that are not aligned, and only those.
 ///
 /// # Safety
 /// As for write_batch: the array must be Arrow C data of `data_type`.
 unsafe fn import(array: ArrowArray, data_type: &DataType) -> Result<StructArray> {
-    let data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
+    let mut data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
+    data.align_buffers();
     validate(&data).map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
     Ok(StructArray::from(data))
 }
@@ -314,10 +318,12 @@ pub unsafe fn close_task(handle: *mut c_void) -> Result<()> {
 mod tests {
     use std::sync::Arc;
 
-    use arrow_array::builder::{Int64Builder, ListBuilder, MapBuilder, StringBuilder};
+    use arrow_array::builder::{
+        Int64BufferBuilder, Int64Builder, ListBuilder, MapBuilder, StringBuilder,
+    };
     use arrow_array::cast::AsArray;
     use arrow_array::ffi::FFI_ArrowArray;
-    use arrow_array::types::Int64Type;
+    use arrow_array::types::{Decimal128Type, Int64Type};
     use arrow_array::{
         make_array, Array, ArrayRef, BinaryArray, Int64Array, ListArray, StringArray, StructArray,
     };
@@ -476,6 +482,35 @@ mod tests {
             error.contains("has length smaller than expected"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn import_copies_decimal_values_that_are_not_aligned_to_i128() {
+        // The decimals [123.45, -0.01], as the low and high halves of each value, eight bytes
+        // into an allocation of a buffer builder, which is aligned to at least 32 bytes.
+        let mut words = Int64BufferBuilder::new(5);
+        words.append_slice(&[0, 12345, 0, -1, -1]);
+        let values = words.finish().slice(8);
+        let decimal = DataType::Decimal128(10, 2);
+        let prices = unsafe {
+            ArrayData::builder(decimal.clone())
+                .len(2)
+                .add_buffer(values)
+                .build_unchecked()
+        };
+        let fields = Fields::from(vec![Field::new("price", decimal, false)]);
+        let batch = unsafe {
+            ArrayData::builder(DataType::Struct(fields))
+                .len(2)
+                .child_data(vec![prices])
+                .build_unchecked()
+        };
+        let batch = import_data(&batch).unwrap();
+        let prices = batch.column(0).as_primitive::<Decimal128Type>();
+        let alignment = align_of::<i128>();
+        assert_eq!(prices.values().inner().as_ptr().align_offset(alignment), 0);
+        assert_eq!(prices.value(0), 12345);
+        assert_eq!(prices.value(1), -1);
     }
 
     #[test]

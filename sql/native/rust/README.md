@@ -160,10 +160,10 @@ readers.
 The reader owns its executor resources and cannot borrow its temporary factory.
 It may borrow `TaskContext` until the returned Arrow stream is released. Every host
 provides the task IDs of version 1 of the ABI, so the SDK rejects a task context shorter
-than in Spark 4.4.0, as it rejects the info structures and the read limit that Spark passes to
-the calls when they are shorter. It reads a field that a later release appends to one of them
-only when Spark passes it, so a connector built with a later version of the SDK still runs on
-4.4.0. `is_interrupted()` checks
+than in Spark 4.4.0, as it rejects the read limit and the info structures with fields besides
+their size that Spark passes to the calls when they are shorter. It reads a field that a later
+release appends to one of them only when Spark passes it, so a connector built with a later
+version of the SDK still runs on 4.4.0. `is_interrupted()` checks
 Spark's live cancellation callback, not a snapshot of its initial value; for a reader, it
 is also true once the task ended. Check it during long operations; blocking I/O still
 requires timeouts. `TaskContext::for_testing()`, with its `with_*` methods and
@@ -297,6 +297,9 @@ precision of a decimal. The SDK does validate the layout and values of each inco
 since the safe Arrow accessors rely on them, so a write fails on a string that is not UTF-8,
 such as one cast from binary, which a JVM sink writes through as it is. It leaves nullability
 to Spark, which accepts nulls under a null parent, even for an element that is not nullable.
+Arrow in Rust requires each buffer of fixed-width values to be aligned to its type, such as the
+16 bytes of the values of a decimal, which the Arrow Java allocator of Spark does not promise,
+so the SDK copies the buffers that are not aligned, and only those.
 Check cancellation during
 lengthy writes and use I/O timeouts.
 
@@ -403,6 +406,11 @@ When that version had a different `Offset` type, for example without a field tha
 one adds with `#[serde(default)]`, the same position encodes to different JSON, so Spark
 runs one micro-batch without rows. A failed call, including a panic or an offset that does
 not decode, stops the query: Spark makes no other call on the stream before it closes it.
+JSON has no NaN or infinite numbers: serde writes such a float as `null`. The SDK decodes the
+JSON of each offset that the stream returns before Spark stores it in the checkpoint, so the
+call fails when a NaN or an infinity is in an `f64` field, which does not decode from `null`,
+instead of failing every restart of the query. An `Option<f64>` field that holds one decodes
+as `None`, without an error.
 
 Streaming writes reuse the task writers of batch writes. Spark creates a `StreamingWrite`
 for each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the
@@ -426,7 +434,12 @@ the source: the SDK keeps those of the schema to read, by name and in its order,
 Spark rejects a stream with other columns. The first batch determines the Arrow schema of
 the stream, which every later batch must have; a reader without batches exports the
 schema to read. Exported arrays own their buffers independently of the reader: Spark may
-release a stream before releasing its previously returned batches.
+release a stream before releasing its previously returned batches. When a query stops reading
+a stream before its end, as with a LIMIT, Spark may release the last batch that it read only
+later, from a JVM Cleaner thread. Releasing a batch drops its references to its buffers, so
+the Drop of the owner of a buffer, such as one that returns memory to a pool, may run after the
+task and on another thread: it should be quick and not block. A panic there cannot be
+recovered; see [Scope and limitations](#scope-and-limitations).
 
 Stream callbacks, including release, may run on different threads, but never
 concurrently. Readers must be `Send`; they do not need to be `Sync` or tied to

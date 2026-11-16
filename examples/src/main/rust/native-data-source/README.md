@@ -58,7 +58,7 @@ options. A source created just for capability discovery is closed without creati
 | `end` | `100` | Exclusive end; must be at least `start` |
 | `numpartitions` | `2` | Maximum number of partitions; from 1 to 100000 |
 | `batchsize` | `1024` | Maximum rows per Arrow batch; from 1 to 1000000 |
-| `maxRowsPerTrigger` | none | Maximum rows per micro-batch of a streaming read; must be positive |
+| `maxRowsPerTrigger` | none | Maximum rows per micro-batch of a streaming read; 1 to 2^63 - 1 |
 
 Spark normalizes option names to lower case. Unknown options are rejected.
 

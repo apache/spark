@@ -385,9 +385,15 @@ struct SourceState<S> {
 }
 
 /// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they
-/// are, so they have no envelope: the library owns their format.
-fn encode_offset<T: Serialize>(offset: &T) -> Result<String> {
-    Ok(serde_json::to_string(offset)?)
+/// are, so they have no envelope: the library owns their format. JSON writes a NaN or an
+/// infinite float as `null`, which does not decode as a float, so this decodes the JSON before
+/// Spark stores it: a restarted query would otherwise fail on that offset every time.
+fn encode_offset<T: Serialize + DeserializeOwned>(offset: &T) -> Result<String> {
+    let json = serde_json::to_string(offset)?;
+    match serde_json::from_str::<T>(&json) {
+        Ok(_) => Ok(json),
+        Err(error) => Err(format!("the returned offset {json} does not decode: {error}").into()),
+    }
 }
 
 fn decode_offset<T: DeserializeOwned>(json: &str) -> Result<T> {
@@ -1036,6 +1042,29 @@ mod tests {
             .to_string()
             .contains("unsupported native state version"));
         assert_eq!(decode::<u64>(&encode(&42_u64).unwrap()).unwrap(), 42);
+    }
+
+    #[test]
+    fn offsets_that_do_not_decode_from_their_json_are_rejected() {
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Offset {
+            next: u64,
+            rate: f64,
+        }
+
+        let offset = Offset {
+            next: 10,
+            rate: 0.5,
+        };
+        let json = encode_offset(&offset).unwrap();
+        assert_eq!(json, r#"{"next":10,"rate":0.5}"#);
+        assert_eq!(decode_offset::<Offset>(&json).unwrap(), offset);
+        // JSON writes a NaN or an infinite float as null, which does not decode as an f64.
+        for rate in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = encode_offset(&Offset { next: 10, rate }).unwrap_err();
+            let expected = r#"offset {"next":10,"rate":null} does not decode"#;
+            assert!(error.to_string().contains(expected), "{error}");
+        }
     }
 
     #[test]
