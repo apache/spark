@@ -1591,6 +1591,14 @@ class BasePythonDataSourceTestsMixin:
                 tasks.append(rows)
         return tasks
 
+    def _input_tasks(self, df):
+        """Returns the rows in each non-empty partition of `df`, in `_read_tasks` form."""
+        # spark_partition_id rather than df.rdd, which Spark Connect does not support.
+        tasks = {}
+        for r in df.select("key", "value", spark_partition_id().alias("pid")).collect():
+            tasks.setdefault(r.pid, []).append([r.key, r.value])
+        return [tasks[pid] for pid in sorted(tasks)]
+
     def _write_df(self):
         # Start from several partitions with interleaved keys, so that a required
         # distribution has to move rows in order to co-locate them.
@@ -1604,9 +1612,7 @@ class BasePythonDataSourceTestsMixin:
             df = self._write_df()
             with self.sql_conf(self._write_conf()):
                 df.write.format("write_req_default").mode("append").save()
-                expected = [
-                    [[r.key, r.value] for r in rows] for rows in df.rdd.glom().collect() if rows
-                ]
+                expected = self._input_tasks(df)
             # A writer that asks for nothing gets the input partitioning untouched.
             self.assertEqual(self._read_tasks(d), expected)
 
@@ -1782,9 +1788,7 @@ class BasePythonDataSourceTestsMixin:
             df = self._write_df()
             with self.sql_conf(self._write_conf(enabled=False)):
                 df.write.format("write_req_disabled").mode("append").save()
-                expected = [
-                    [[r.key, r.value] for r in rows] for rows in df.rdd.glom().collect() if rows
-                ]
+                expected = self._input_tasks(df)
             # With the config off the requirements are ignored: the input layout is untouched.
             self.assertEqual(self._read_tasks(d), expected)
 
