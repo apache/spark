@@ -20,9 +20,9 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
+import org.apache.spark.sql.catalyst.analysis.{EventTimeLag, StreamingJoinHelper}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LogicalPlan, Union}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.functions._
@@ -31,8 +31,9 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * With spark.sql.streaming.statefulOperator.allowMultiple=false, an input filters late rows by
  * its first watermarked column. An equality key on a later watermarked column bounds the other
- * input's state, as in Spark 4.3, unless the plan shows that some rows of the input hold the key
- * below a watermarked column before it.
+ * input's state, as in Spark 4.3, lowered by how far the plan shows that some rows of the input
+ * can hold the key below a watermarked column before it, and not at all when the plan shows no
+ * bound on that.
  */
 class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
   import testImplicits._
@@ -100,12 +101,16 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
     key(eventTimeInput(memory, side), side)
       .select(col(s"${side}k"), col(s"${side}t"), col(s"${side}w"))
 
-  /** The keys that the shared rule rejects, by column name. */
-  private def rejectedKeys(df: DataFrame): Set[String] = {
-    val plan = df.queryExecution.analyzed
+  /** The lags of the join inputs' watermarked columns other than lag zero, by column name. */
+  private def lags(df: DataFrame, planned: Boolean = false): Map[String, EventTimeLag] = {
+    val plan = if (planned) df.queryExecution.optimizedPlan else df.queryExecution.analyzed
     val names = plan.flatMap(_.output).map(a => a.exprId -> a.name).toMap
-    StreamingJoinHelper.findLegacyEventTimeKeys(plan).rejected.map(names)
+    StreamingJoinHelper.findEventTimeLags(plan, planned).lags
+      .filter(_._2 != EventTimeLag.zero).map { case (id, lag) => names(id) -> lag }
   }
+
+  private def lagOf(seconds: Int): EventTimeLag =
+    EventTimeLag(seconds * 1000000L, unrelated = false, unbounded = false)
 
   private def joinWithRight(left: DataFrame, key: KeyBuilder = tumbling): DataFrame =
     left.join(keyed(MemoryStream[(Int, Int)], "r", key), expr("lk = rk AND lw = rw"))
@@ -117,65 +122,168 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
     "copy" -> copy,
     "window over a copy" -> copyThenWindow,
     "renamed window after a filter" -> renamedWindow).foreach { case (name, key) =>
-    test(s"$name of the event time after it is not rejected") {
-      assert(rejectedKeys(joinWithRight(keyed(MemoryStream[(Int, Int)], "l", key), key)).isEmpty)
+    test(s"$name of the event time after it has lag zero") {
+      assert(lags(joinWithRight(keyed(MemoryStream[(Int, Int)], "l", key), key)).isEmpty)
     }
   }
 
   throughNodes.foreach { case (name, through) =>
-    test(s"window of the event time behind a $name is not rejected") {
+    test(s"window of the event time behind a $name has lag zero") {
       withTempView("legacy_l", "legacy_r") {
         val left = through(keyed(MemoryStream[(Int, Int)], "l", tumbling), "l")
         val right = through(keyed(MemoryStream[(Int, Int)], "r", tumbling), "r")
-        assert(rejectedKeys(left.join(right, expr("lk = rk AND lw = rw"))).isEmpty)
+        assert(lags(left.join(right, expr("lk = rk AND lw = rw"))).isEmpty)
       }
     }
   }
 
-  test("window or copy of a time shifted backward is rejected") {
+  test("window or copy of a time shifted backward has the shift as its lag") {
     val left = shiftedWindow(eventTimeInput(MemoryStream[(Int, Int)], "l"), "l")
-    // ls is below lt in every row, and lw ends at most 10 seconds after ls.
-    assert(rejectedKeys(joinWithRight(left)) === Set("lw", "ls"))
-    assert(rejectedKeys(joinWithRight(keyed(MemoryStream[(Int, Int)], "l", shiftedCopy), copy))
-      === Set("lw"))
+    // ls is 20 seconds below lt in every row, and lw ends after ls.
+    assert(lags(joinWithRight(left)) === Map("lw" -> lagOf(20), "ls" -> lagOf(20)))
+    assert(lags(joinWithRight(keyed(MemoryStream[(Int, Int)], "l", shiftedCopy), copy))
+      === Map("lw" -> lagOf(20)))
   }
 
-  test("window over a time shifted backward is rejected behind a repartition") {
+  private val shiftedSlidingWindow: KeyBuilder = (df, side) =>
+    withShifted(df, side).withColumn(s"${side}w",
+      window(col(s"${side}s"), "10 seconds", "5 seconds"))
+
+  test("sliding window over a time shifted backward has the shift as its lag") {
+    // The walk follows the key through the expansion of the sliding window, to its source ls.
+    val left = shiftedSlidingWindow(eventTimeInput(MemoryStream[(Int, Int)], "l"), "l")
+    assert(lags(joinWithRight(left)) === Map("lw" -> lagOf(20), "ls" -> lagOf(20)))
+  }
+
+  test("window over a time shifted backward has the shift as its lag behind a stream-static " +
+      "join") {
+    // The walk follows both columns into the streaming input of the join.
+    val left = throughNodes.toMap.apply("stream-static join")(
+      keyed(MemoryStream[(Int, Int)], "l", shiftedWindow), "l")
+    assert(lags(joinWithRight(left)) === Map("lw" -> lagOf(20)))
+  }
+
+  // The shifted copy ls is 20 seconds below the event time lt in every row. The column before it
+  // is a window over lt, which ends up to 10 seconds after lt, so ls is up to 30 seconds below
+  // it. The walk follows that window through each way that the rewrite builds one.
+  Seq(
+    "tumbling" -> ((df: DataFrame) => df.withColumn("lw", window($"lt", "10 seconds"))),
+    "sliding" -> ((df: DataFrame) => df.withColumn("lw", window($"lt", "10 seconds", "5 seconds"))),
+    "session" -> ((df: DataFrame) => df.withColumn("lw", session_window($"lt", "10 seconds")))
+  ).foreach { case (kind, addWindow) =>
+    test(s"copy of a time shifted backward after a $kind window over the event time has the " +
+        "shift and the window's length as its lag") {
+      val left = withShifted(addWindow(eventTimeInput(MemoryStream[(Int, Int)], "l")), "l")
+        .select($"lk", $"lw", $"ls")
+      val right = keyed(MemoryStream[(Int, Int)], "r", copy)
+      assert(lags(left.join(right, expr("lk = rk AND ls = rw"))) === Map("ls" -> lagOf(30)))
+    }
+  }
+
+  test("window over a time shifted forward has lag zero") {
+    def forwardWindow(df: DataFrame, side: String): DataFrame = {
+      val forward = df.select(col("*"), (col(s"${side}t") + expr("INTERVAL 5 SECONDS"))
+        .as(s"${side}f", df.schema(s"${side}t").metadata))
+      forward.withColumn(s"${side}w", window(col(s"${side}f"), "10 seconds"))
+    }
+    val left = forwardWindow(eventTimeInput(MemoryStream[(Int, Int)], "l"), "l")
+    assert(lags(joinWithRight(left)).isEmpty)
+  }
+
+  test("window over a time shifted backward has the shift as its lag behind a repartition") {
     val left = keyed(MemoryStream[(Int, Int)], "l", shiftedWindow).repartition(3)
-    assert(rejectedKeys(joinWithRight(left)) === Set("lw"))
+    assert(lags(joinWithRight(left)) === Map("lw" -> lagOf(20)))
   }
 
-  test("copy of the event time after a window over it is rejected") {
-    // The planned input filters late rows by lw if the optimizer prunes lt, and lc can be at or
-    // below the watermark while lw ends after it.
-    val left = tumbling(eventTimeInput(MemoryStream[(Int, Int)], "l"), "l")
+  test("copy of a time shifted forward has lag zero") {
+    def forward(df: DataFrame, side: String): DataFrame = df.select(col("*"),
+      (col(s"${side}t") + expr("INTERVAL 1 DAY")).as(s"${side}w", df.schema(s"${side}t").metadata))
+    assert(lags(joinWithRight(keyed(MemoryStream[(Int, Int)], "l", forward), copy)).isEmpty)
+  }
+
+  test("copy of a time shifted backward by a whole day has no bound") {
+    def backward(df: DataFrame, side: String): DataFrame = df.select(col("*"),
+      (col(s"${side}t") - expr("INTERVAL 1 DAY")).as(s"${side}w", df.schema(s"${side}t").metadata))
+    assert(lags(joinWithRight(keyed(MemoryStream[(Int, Int)], "l", backward), copy)) ===
+      Map("lw" -> EventTimeLag.unbounded))
+  }
+
+  test("copy of the event time after a window over it has the window's length as its lag") {
+    // The planned input filters late rows by lw if the optimizer prunes lt, and lc is then
+    // above the watermark less the 10 seconds of lw.
+    Seq(tumbling -> 10, sliding -> 10, sessionWindow -> 10).foreach { case (window, length) =>
+      val left = window(eventTimeInput(MemoryStream[(Int, Int)], "l"), "l")
+        .withColumn("lc", $"lt")
+      assert(lags(joinWithRight(left)) === Map("lc" -> lagOf(length)))
+    }
+    // A session ends its gap after the event time, which is not bounded for a gap from a column.
+    val dynamicGap = eventTimeInput(MemoryStream[(Int, Int)], "l")
+      .withColumn("lw", session_window($"lt", when($"lk" > 0, "10 seconds").otherwise("1 hour")))
       .withColumn("lc", $"lt")
-    assert(rejectedKeys(joinWithRight(left)) === Set("lc"))
+    assert(lags(joinWithRight(dynamicGap)) === Map("lc" -> EventTimeLag.unbounded))
   }
 
-  test("window over another input's event time is not rejected") {
+  test("window after a longer window has the longer window's length as its lag") {
+    val left = eventTimeInput(MemoryStream[(Int, Int)], "l")
+      .withColumn("lh", window($"lt", "60 seconds"))
+      .withColumn("lw", window($"lt", "10 seconds"))
+    assert(lags(joinWithRight(left)) === Map("lw" -> lagOf(60)))
+  }
+
+  test("planned lags are against the column that the planned input filters late rows by") {
+    def withCopy(memory: MemoryStream[(Int, Int)], side: String): DataFrame =
+      tumbling(eventTimeInput(memory, side), side).withColumn(s"${side}c", col(s"${side}t"))
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val joined = withCopy(leftInput, "l")
+      .join(withCopy(rightInput, "r"), expr("lk = rk AND lc = rc"))
+    def plannedLags(times: Seq[String]): Map[String, EventTimeLag] = {
+      var result: Map[String, EventTimeLag] = Map.empty
+      withSQLConf(legacyMode) {
+        testStream(joined.select((Seq("lk", "rk") ++ times).map(col): _*))(
+          AddData(leftInput, (1, 5)),
+          CheckNewAnswer(),
+          Execute { query =>
+            val plan = query.lastExecution.optimizedPlan
+            val names = plan.flatMap(_.output).map(a => a.exprId -> a.name).toMap
+            result = StreamingJoinHelper.findEventTimeLags(plan, planned = true).lags
+              .filter(_._2 != EventTimeLag.zero).map { case (id, lag) => names(id) -> lag }
+          })
+      }
+      result
+    }
+    // With the event times read after the join, they filter late rows, so the copies have lag
+    // zero. Without them, the windows do, and the copies are up to 10 seconds below them.
+    assert(plannedLags(Seq("lt", "rt")).isEmpty)
+    assert(plannedLags(Seq("lw", "rw")) === Map("lc" -> lagOf(10), "rc" -> lagOf(10)))
+  }
+
+  test("window over another input's event time is unrelated") {
     val a = MemoryStream[(Int, Int)]
     val b = MemoryStream[(Int, Int)]
     val left = eventTimeInput(a, "a").join(eventTimeInput(b, "b"), expr("ak = bk AND at = bt"))
       .withColumn("lk", $"ak")
       .withColumn("lw", window($"bt", "10 seconds"))
-    // The walk does not compare columns of different join inputs, so it keeps the key, as
-    // Spark 4.3 did; here at = bt makes the window a window over at.
-    assert(rejectedKeys(joinWithRight(left)).isEmpty)
+    // The walk does not compare columns of different join inputs, so the key keeps its bound,
+    // as in Spark 4.3, but a range condition gets none from it; here at = bt makes the window a
+    // window over at.
+    assert(lags(joinWithRight(left)) ===
+      Map("bt" -> EventTimeLag.unrelated, "lw" -> EventTimeLag.unrelated))
   }
 
-  test("union is rejected when an input builds the key differently") {
+  test("union takes the largest lag of its inputs") {
     def union(first: KeyBuilder, second: KeyBuilder): DataFrame =
       keyed(MemoryStream[(Int, Int)], "l", first)
         .union(keyed(MemoryStream[(Int, Int)], "l", second))
-    assert(rejectedKeys(joinWithRight(union(tumbling, sliding))).isEmpty)
-    assert(rejectedKeys(joinWithRight(union(tumbling, shiftedWindow))) === Set("lw"))
-    assert(rejectedKeys(joinWithRight(union(shiftedWindow, tumbling))) === Set("lw"))
+    assert(lags(joinWithRight(union(tumbling, sliding))).isEmpty)
+    assert(lags(joinWithRight(union(tumbling, shiftedWindow))) === Map("lw" -> lagOf(20)))
+    assert(lags(joinWithRight(union(shiftedWindow, tumbling))) === Map("lw" -> lagOf(20)))
     // The union takes its first input's metadata, but the second does not watermark lw.
-    assert(rejectedKeys(joinWithRight(union(tumbling, unwatermarkedWindow))) === Set("lw"))
+    assert(lags(joinWithRight(union(tumbling, unwatermarkedWindow))) ===
+      Map("lw" -> EventTimeLag.unbounded))
   }
 
-  test("a key rejected by one join input is rejected for every join") {
+  test("a column takes its largest lag over every join input") {
     // The second join's left input is a union whose first input is the first join's input, so
     // both inputs output the same expression IDs, but only the first builds the window from lt.
     val windowed = keyed(MemoryStream[(Int, Int)], "l", tumbling).queryExecution.analyzed
@@ -184,10 +292,11 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
     val first = Join(windowed, right, Inner, None, JoinHint.NONE)
     val second = Join(Union(Seq(windowed, shifted)), right, Inner, None, JoinHint.NONE)
     val lw = windowed.output(2).exprId
-    assert(!StreamingJoinHelper.findLegacyEventTimeKeys(first).rejected.contains(lw))
-    assert(StreamingJoinHelper.findLegacyEventTimeKeys(second).rejected.contains(lw))
-    assert(StreamingJoinHelper.findLegacyEventTimeKeys(Union(Seq(first, second))).rejected
-      .contains(lw))
+    def lag(plan: LogicalPlan): Option[EventTimeLag] =
+      StreamingJoinHelper.findEventTimeLags(plan, planned = false).lags.get(lw)
+    assert(lag(first) === Some(EventTimeLag.zero))
+    assert(lag(second) === Some(lagOf(20)))
+    assert(lag(Union(Seq(first, second))) === Some(lagOf(20)))
   }
 
   // Batches of left and right rows of (key, seconds), with 10-second windows. The watermark is
@@ -382,67 +491,85 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
     }
   }
 
+  private def legacyLeftOuter(left: DataFrame, right: DataFrame): DataFrame =
+    left.join(right, expr("lk = rk AND lw = rw"), "left_outer")
+
   private def assertLegacyKeyHint(left: DataFrame, right: DataFrame): Unit = {
     withSQLConf(legacyMode) {
       val error = intercept[AnalysisException] {
-        testStream(left.join(right, expr("lk = rk AND lw = rw"), "left_outer"))(
-          StartStream(), CheckNewAnswer())
+        testStream(legacyLeftOuter(left, right))(StartStream(), CheckNewAnswer())
       }
       assert(error.getMessage.contains("the right input filters late rows by its first " +
         "watermarked column, rt, and some of its rows can hold the key rw below a watermarked " +
-        "column before it"))
+        "column before it by an amount that analysis cannot bound"))
       // Legacy mode has one global watermark, so nothing after the join waits for this one.
       assert(!error.getMessage.contains("stateful operator after the join"))
     }
   }
 
-  test("legacy-mode left outer join on a window over a shifted time fails analysis") {
-    assertLegacyKeyHint(keyed(MemoryStream[(Int, Int)], "l", tumbling),
+  private def assertAdmitted(left: DataFrame, right: DataFrame): Unit = {
+    withSQLConf(legacyMode) {
+      testStream(legacyLeftOuter(left, right))(StartStream(), CheckNewAnswer())
+    }
+  }
+
+  // Each of these keys bounds the left state at the watermark less its lag.
+  test("legacy-mode left outer join on a window over a shifted time passes analysis") {
+    assertAdmitted(keyed(MemoryStream[(Int, Int)], "l", tumbling),
       keyed(MemoryStream[(Int, Int)], "r", shiftedWindow))
   }
 
-  test("legacy-mode left outer join on a copy of a shifted time fails analysis") {
-    assertLegacyKeyHint(keyed(MemoryStream[(Int, Int)], "l", copy),
+  test("legacy-mode left outer join on a copy of a shifted time passes analysis") {
+    assertAdmitted(keyed(MemoryStream[(Int, Int)], "l", copy),
       keyed(MemoryStream[(Int, Int)], "r", shiftedCopy))
   }
 
-  test("legacy-mode left outer join on a shifted window behind a repartition fails analysis") {
-    assertLegacyKeyHint(keyed(MemoryStream[(Int, Int)], "l", tumbling),
+  test("legacy-mode left outer join on a shifted window behind a repartition passes analysis") {
+    assertAdmitted(keyed(MemoryStream[(Int, Int)], "l", tumbling),
       keyed(MemoryStream[(Int, Int)], "r", shiftedWindow).repartition(3))
   }
 
-  test("legacy-mode left outer join on a union of different windows fails analysis") {
-    Seq(shiftedWindow, unwatermarkedWindow).foreach { second =>
-      val right = keyed(MemoryStream[(Int, Int)], "r", tumbling)
-        .union(keyed(MemoryStream[(Int, Int)], "r", second))
-      assertLegacyKeyHint(keyed(MemoryStream[(Int, Int)], "l", tumbling), right)
-    }
+  test("legacy-mode left outer join on a union of a window and a shifted window passes " +
+      "analysis") {
+    val right = keyed(MemoryStream[(Int, Int)], "r", tumbling)
+      .union(keyed(MemoryStream[(Int, Int)], "r", shiftedWindow))
+    assertAdmitted(keyed(MemoryStream[(Int, Int)], "l", tumbling), right)
   }
 
-  test("legacy-mode right outer join on a copy of the event time after a window over it " +
-      "fails analysis") {
-    withSQLConf(legacyMode) {
-      def withCopy(side: String): DataFrame =
-        tumbling(eventTimeInput(MemoryStream[(Int, Int)], side), side)
-          .withColumn(s"${side}c", col(s"${side}t"))
-      val error = intercept[AnalysisException] {
-        testStream(withCopy("l").join(withCopy("r"), expr("lk = rk AND lc = rc"), "right_outer"))(
-          StartStream(), CheckNewAnswer())
-      }
-      assert(error.getMessage.contains("the left input filters late rows by its first " +
-        "watermarked column, lt, and some of its rows can hold the key lc below a watermarked " +
-        "column before it"))
-    }
+  test("legacy-mode left outer join on a union with an unwatermarked window fails analysis") {
+    val right = keyed(MemoryStream[(Int, Int)], "r", tumbling)
+      .union(keyed(MemoryStream[(Int, Int)], "r", unwatermarkedWindow))
+    assertLegacyKeyHint(keyed(MemoryStream[(Int, Int)], "l", tumbling), right)
   }
 
-  test("default-mode left outer join on a window after the event time still fails analysis") {
-    val error = intercept[AnalysisException] {
-      val joined = keyed(MemoryStream[(Int, Int)], "l", tumbling)
-        .join(keyed(MemoryStream[(Int, Int)], "r", tumbling), expr("lk = rk AND lw = rw"),
-          "left_outer")
-      testStream(joined)(StartStream(), CheckNewAnswer())
-    }
-    assert(error.getMessage.contains("allow unmatched state to be finalized"))
-    assert(!error.getMessage.contains(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
+  test("legacy-mode left outer join on a copy of a time shifted back by a day fails analysis") {
+    def backward(df: DataFrame, side: String): DataFrame = df.select(col("*"),
+      (col(s"${side}t") - expr("INTERVAL 1 DAY")).as(s"${side}w", df.schema(s"${side}t").metadata))
+    assertLegacyKeyHint(keyed(MemoryStream[(Int, Int)], "l", copy),
+      keyed(MemoryStream[(Int, Int)], "r", backward))
+  }
+
+  test("legacy-mode left outer join on a copy of the event time after a session window with a " +
+      "gap from a column fails analysis") {
+    def copyAfterSession(df: DataFrame, side: String): DataFrame =
+      df.withColumn(s"${side}x", session_window(col(s"${side}t"),
+          when(col(s"${side}k") > 0, "10 seconds").otherwise("1 hour")))
+        .withColumn(s"${side}w", col(s"${side}t"))
+    val right = copyAfterSession(eventTimeInput(MemoryStream[(Int, Int)], "r"), "r")
+    assertLegacyKeyHint(keyed(MemoryStream[(Int, Int)], "l", copy), right)
+  }
+
+  test("default-mode left outer join on a window after the event time, with the event time " +
+      "kept, fails at start") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    // Any watermarked key bounds state at analysis, as the planned input keeps one distinct
+    // watermarked column, or fails at start, as here, where the query reads both.
+    val joined = keyed(leftInput, "l", tumbling)
+      .join(keyed(rightInput, "r", tumbling), expr("lk = rk AND lw = rw"), "left_outer")
+    testStream(joined)(
+      MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
+      ExpectFailure[AnalysisException](assertFailure = error =>
+        assert(error.getMessage.contains("MULTIPLE_EVENT_TIME_COLUMNS"))))
   }
 }

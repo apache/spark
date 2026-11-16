@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.{LegacyEventTimeKeys, StreamingJoinHelper, WidenStatefulOperatorAttributeNullability}
+import org.apache.spark.sql.catalyst.analysis.{EventTimeLags, StreamingJoinHelper, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, SessionWindow, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -170,14 +170,17 @@ class IncrementalExecution(
   private val allowMultipleStatefulOperators: Boolean =
     sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-  // The analysis check computes the same keys from the plan it checks. Both read the operators
-  // of the query, which every batch's analyzed plan keeps; a batch only puts each source's data
-  // in place of the source. The walk needs no state from analysis, such as tags.
-  private lazy val legacyKeys: Option[LegacyEventTimeKeys] =
+  // The lags of the planned join inputs, against the columns that they filter late rows by. They
+  // read the optimized plan, whose expression IDs the planned joins use. The analysis check reads
+  // the analyzed plan with the same rule, against every column that pruning can leave first, so
+  // it bounds a column here whenever it bounds one there. The projections that build the later
+  // watermarked columns stay in every batch's optimized plan: they sit above the input's
+  // watermark node, which the optimizer keeps even for a batch without data.
+  private lazy val eventTimeLags: Option[EventTimeLags] =
     if (allowMultipleStatefulOperators) {
       None
     } else {
-      Some(StreamingJoinHelper.findLegacyEventTimeKeys(analyzed))
+      Some(StreamingJoinHelper.findEventTimeLags(optimizedPlan, planned = true))
     }
 
   /**
@@ -655,7 +658,7 @@ class IncrementalExecution(
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
               iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators,
-              legacyKeys)
+              eventTimeLags)
         )
     }
   }
