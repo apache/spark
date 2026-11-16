@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
-import org.apache.spark.sql.catalyst.analysis.{LegacyEventTimeKeys, StreamingJoinHelper}
+import org.apache.spark.sql.catalyst.analysis.{EventTimeLags, StreamingJoinHelper}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Cast, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
@@ -213,8 +213,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
   /**
    * Get the predicates defining the state watermarks for both sides of the join. In legacy mode,
-   * `legacyKeys` says which watermarked equality keys count as their input's event time; see
-   * [[StreamingJoinHelper.findLegacyEventTimeKeys]].
+   * `eventTimeLags` says how far below the column that each input filters late rows by its other
+   * watermarked columns can be, so that they bound the opposite state too; see
+   * [[StreamingJoinHelper.findEventTimeLags]]. Without them, only an input's first watermarked
+   * column bounds the opposite state.
    */
   def getStateWatermarkPredicates(
       leftAttributes: Seq[Attribute],
@@ -225,7 +227,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       eventTimeWatermarkForEviction: Option[Long],
       eventTimeWatermarkForLateEvents: Option[Long],
       useFirstEventTimeColumn: Boolean,
-      legacyKeys: Option[LegacyEventTimeKeys] = None): JoinStateWatermarkPredicates = {
+      eventTimeLags: Option[EventTimeLags] = None): JoinStateWatermarkPredicates = {
 
     // Perform assertions against multiple event time columns in the same DataFrame. This method
     // assumes there is only one event time column per each side (left / right) and it is not very
@@ -243,7 +245,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         otherSideJoinKeys: Seq[Expression]): Option[JoinStateWatermarkPredicate] = {
       // State is bounded by future input from the opposite side, not by its own watermark.
       val joinKeyOrdinalForWatermark = StreamingJoinHelper.getStateKeyWatermarkOrdinal(
-        otherSideJoinKeys, otherSideInputAttributes, legacyKeys)
+        otherSideJoinKeys, otherSideInputAttributes, eventTimeLags)
       val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
@@ -257,7 +259,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // StreamingJoinHelper.getStateKeyWatermark for which shifts qualify.
         def keyWatermark(watermark: Option[Long]): Option[Long] =
           StreamingJoinHelper.getStateKeyWatermark(
-            otherSideJoinKeys, otherSideInputAttributes, ordinal, watermark, legacyKeys)
+            otherSideJoinKeys, otherSideInputAttributes, ordinal, watermark, eventTimeLags)
         keyWatermark(eventTimeWatermarkForEviction).flatMap { stateWatermark =>
           watermarkExpression(Some(keyExprWithWatermark), Some(stateWatermark)).map { e =>
             // V4 can skip keys at or below the previous watermark only if late-input filtering
@@ -287,8 +289,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         //   admits a range bound without one.
         // TODO(SPARK-61348): the analysis check also admits a range bound on a column that is
         //   not TIMESTAMP, which this branch never evicts.
-        getStateValueWatermarkForInput(oneSideInputAttributes, otherSideInputAttributes,
-          condition, eventTimeWatermarkForEviction).flatMap { case (attribute, watermark) =>
+        getStateValueWatermarkForInput(oneSideInputAttributes, otherSideInputAttributes, condition,
+          eventTimeWatermarkForEviction, eventTimeLags).flatMap { case (attribute, watermark) =>
           // Late filtering only constrains the input's event-time column. A different indexed
           // column can admit values below the previous cutoff and must be scanned from the start.
           val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
@@ -296,8 +298,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
               .exists(_.semanticEquals(attribute))
           }.flatMap { lateWatermark =>
             // Also scan from the start if the derived cutoff exceeds the late-input watermark.
-            StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),
-              AttributeSet(otherSideInputAttributes), condition, Some(lateWatermark))
+            StreamingJoinHelper.getStateValueWatermarkForLags(AttributeSet(Seq(attribute)),
+              otherSideInputAttributes, condition, Some(lateWatermark), eventTimeLags)
               .filter(_ <= lateWatermark)
           }
           watermarkExpression(Some(attribute), Some(watermark)).map { e =>
@@ -321,7 +323,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       inputAttributes: Seq[Attribute],
       otherInputAttributes: Seq[Attribute],
       condition: Option[Expression],
-      eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
+      eventWatermark: Option[Long],
+      eventTimeLags: Option[EventTimeLags]): Option[(Attribute, Long)] = {
     // TODO(SPARK-61348): the analysis check admits a range bound on a column that is not
     //   TIMESTAMP, which no candidate below takes. A left, right or full outer join whose
     //   preserved side is bounded only through such a column cast to TIMESTAMP then keeps its
@@ -336,8 +339,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       attribute.dataType == TimestampType && !eventTime.exists(_.semanticEquals(attribute))
     }
     candidates.iterator.flatMap { attribute =>
-      StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(attribute)),
-        AttributeSet(otherInputAttributes), condition, eventWatermark).map(attribute -> _)
+      StreamingJoinHelper.getStateValueWatermarkForLags(AttributeSet(Seq(attribute)),
+        otherInputAttributes, condition, eventWatermark, eventTimeLags).map(attribute -> _)
     }.take(1).toSeq.headOption
   }
 
@@ -499,7 +502,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       } && inputs.forall { case (input, other) =>
         StreamingJoinHelper.getStateValueWatermark(AttributeSet(input), AttributeSet(other),
           Some(comparison), Some(1000000L)).isEmpty &&
-          getStateValueWatermarkForInput(input, other, Some(comparison), Some(1000000L)).isEmpty
+          getStateValueWatermarkForInput(input, other, Some(comparison), Some(1000000L), None)
+            .isEmpty
       }
     }
     // The solver reads bounds only from these conjunct shapes; other conjuncts give no bound in
