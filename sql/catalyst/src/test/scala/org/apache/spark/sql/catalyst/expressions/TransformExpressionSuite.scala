@@ -187,28 +187,6 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(!over(Add(a, Literal(1))).isSameFunction(over(a)))
   }
 
-  test("SPARK-50593: an argument whose type cannot be read is not reducible, and does not throw") {
-    // GetStructField over a non-struct column raises INTERNAL_ERROR from `dataType` rather than
-    // answering. `argsMatchInputTypes` is a gate -- it has to report "not reducible" and let the
-    // join shuffle, not fail the query.
-    val structAttr = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
-    val sf = GetStructField(structAttr, 0)
-    // Two declared input types, so the arity short-circuit does not hide the dataType read.
-    val fn = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "test.truncate2"
-      override def canonicalName(): String = name()
-    }
-    val unreadable = TransformExpression(fn,
-      Seq(GetStructField(AttributeReference("id", IntegerType)(), 0), Literal(3)))
-    assert(!unreadable.argsMatchInputTypes,
-      "an unreadable child type must read as not matching, not raise")
-
-    // A readable struct field of the declared type still matches.
-    assert(TransformExpression(fn, Seq(sf, Literal(3))).argsMatchInputTypes)
-  }
-
   test("SPARK-50593: hasSameReducedKeys tells nested transforms apart, like isSameFunction") {
     // A nested transform is part of the identity, so bucket(4, years(c)) and bucket(4, days(c))
     // reduce onto different key spaces, just as isSameFunction tells them apart.

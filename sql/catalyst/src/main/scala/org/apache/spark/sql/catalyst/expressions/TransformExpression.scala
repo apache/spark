@@ -30,7 +30,7 @@ import org.apache.spark.internal.LogKeys.{ARGS, CLASS_NAME, ERROR, FUNCTION_NAME
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, UninitializedPhysicalType}
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -227,44 +227,23 @@ case class TransformExpression(
     literalChildren.map(l => LiteralValue(l.value, l.dataType): V2Literal[_]).toArray
 
   /**
-   * Whether the `select`ed children match the bound function's declared input type at their
-   * positions. A child beyond the declared arity has no declared type to compare against (e.g. an
-   * arity-flexible function), so it is left to the connector reducer / other guards. The match
-   * ignores nullability (`containsNull`, `nullable`, `valueContainsNull`), which an equi-join
-   * also lets differ between its keys and which does not change how a value evaluates; any other
-   * mismatch, such as Decimal precision/scale, fails safe to a shuffle. See the two predicates
-   * below for the callers.
-   *
-   * Reading `dataType` can throw rather than answer, e.g. for a `GetStructField` over a non-struct
-   * column. Both callers are gates that must answer "not reducible" rather than fail the query, so
-   * a child whose type cannot be read is treated as not matching.
+   * Whether every literal parameter has the type the bound function declares at its position in
+   * `inputTypes()`. Asked before the generalized reducer, which gets the literals' values without
+   * Analyzer type coercion: a literal of another type (a legal implicit cast under
+   * [[BoundFunction]]) would be handed to a connector that reads it as the declared type. Then the
+   * generalized overload counts as not implemented, and the other overloads, which read no literal
+   * by type, may still be asked. A literal past the declared arity has no declared type to compare
+   * against, e.g. for an arity-flexible function. Column arguments are not checked, since they are
+   * not passed to the connector; where Spark evaluates a transform, [[evaluableFunction]] checks
+   * every argument.
    */
-  private def inputTypesMatch(select: Expression => Boolean): Boolean = {
+  lazy val literalParamsMatchInputTypes: Boolean = {
     val declaredTypes = function.inputTypes()
     children.zipWithIndex.forall {
-      case (c, i) =>
-        !select(c) || i >= declaredTypes.length ||
-          Try(c.dataType).toOption.exists(DataTypeUtils.sameType(_, declaredTypes(i)))
+      case (l: Literal, i) => i >= declaredTypes.length || l.dataType == declaredTypes(i)
+      case _ => true
     }
   }
-
-  /**
-   * Whether every literal parameter matches its declared input type. Used by the transform-vs-
-   * transform reducer path, which hands literal *values* to the connector reducer without Analyzer
-   * type coercion. A literal whose type differs from the declared input type (a legal implicit cast
-   * under [[BoundFunction]]) is not reducible: the join falls back to a shuffle rather than handing
-   * the connector a value the partitions were not built on, which it would then mis-cast. Column
-   * slots are not checked (they are not passed to the connector); the eval path uses
-   * [[argsMatchInputTypes]] instead.
-   */
-  lazy val literalParamsMatchInputTypes: Boolean = inputTypesMatch(_.isInstanceOf[Literal])
-
-  /**
-   * Whether every argument has its declared type, at exactly the declared arity. Required before
-   * evaluating the transform directly: no cast is applied, and a mismatch would fail at evaluation.
-   */
-  lazy val argsMatchInputTypes: Boolean =
-    children.length == function.inputTypes().length && inputTypesMatch(_ => true)
 
   /**
    * Whether each position holds a literal on both sides, a bare column on both sides, or the same

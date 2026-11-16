@@ -2465,9 +2465,8 @@ case class KeyedShuffleSpec(
 
   /**
    * `transform`, whose arguments other than its literal parameters are bare columns, with each
-   * replaced by `key`, which may be any
-   * expression. Any other argument would lose what surrounds its column, e.g. the `+ 1` of
-   * `bucket(4, b + 1)`.
+   * replaced by `key`, which may be any expression. Any other argument would lose what surrounds
+   * its column, e.g. the `+ 1` of `bucket(4, b + 1)`.
    */
   private def rebuiltOver(transform: TransformExpression, key: Expression)
       : TransformExpression = {
@@ -2500,16 +2499,6 @@ case class KeyedShuffleSpec(
       conf.v2BucketingAllowCompatibleTransforms
   }
 
-  /**
-   * `t` retargeted at the identity side's key `col`, or None if its argument types do not match
-   * the bound function's declared types, since evaluating it would then fail. The compatibility
-   * gate and `reducersBothWays` must agree on this -- a gate admitting a pair the reducer refuses
-   * would pair raw keys and drop matches -- so both call it.
-   */
-  private def retargetForIdentity(
-      t: TransformExpression,
-      col: AttributeReference): Option[TransformExpression] =
-    Some(rebuiltOver(t, col)).filter(_.argsMatchInputTypes)
 
   /**
    * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
@@ -2593,11 +2582,11 @@ case class KeyedShuffleSpec(
       // here, and `keyPositions` maps an expression with more references to no position.
       // `IdentityReducer` binds `a` to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
-        (retargetForIdentity(t, a).map(r => KeyReducer(IdentityReducer(r), t)), None)
+        (Some(KeyReducer(IdentityReducer(rebuiltOver(t, a)), t)), None)
 
       // Symmetric: identity transform on the other side.
       case (t: TransformExpression, a: AttributeReference) =>
-        (None, retargetForIdentity(t, a).map(r => KeyReducer(IdentityReducer(r), t)))
+        (None, Some(KeyReducer(IdentityReducer(rebuiltOver(t, a)), t)))
 
       case (_, _) => (None, None)
     }
@@ -2681,7 +2670,9 @@ case class KeyedShuffleSpec(
         val columnType = te.references.head.dataType
         positionSet.iterator.map(clustering)
           .find(key => !TransformExpression.keysStoredAlike(key.dataType, columnType))
-          .orElse(Option.when(!canEvaluate(t))(t.children.head))
+          // The key the transform was rebuilt over is its column argument; its other children
+          // are literal parameters.
+          .orElse(Option.when(!canEvaluate(t))(t.columnSlots.head))
           .foreach { key =>
             // `name()` and `inputTypes()` are connector code, which must not replace this error.
             val functionClass = t.function.getClass.getName

@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1927,6 +1927,39 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           "inputTypes" -> "(\"INT\", \"INT\")",
           "key" -> "\"y\"",
           "keyType" -> "\"BIGINT\""))
+    }
+  }
+
+  test("SPARK-50593: the key type error names the cogroup key, not a literal parameter") {
+    // The key is stored like the column, so the storage check passes, but the transform rebuilt
+    // over it cannot be evaluated: a nested decimal of more precision than the declared one. The
+    // error must name that key, though the transform's first child is its bucket count.
+    val narrow = ArrayType(DecimalType(10, 2))
+    val wide = ArrayType(DecimalType(12, 2))
+    val arrayBucket = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, narrow)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val c = AttributeReference("c", narrow)()
+    val x = AttributeReference("x", wide)()
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(arrayBucket, Seq(Literal(4), c))), (0 until 4).map(InternalRow(_))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(Seq(c), Seq(x), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val e = intercept[SparkException](EnsureRequirements.apply(cogroup))
+      assert(e.getCondition == "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH", e)
+      assert(e.getMessageParameters.get("key") == "\"x\"", e.getMessageParameters)
+      assert(e.getMessageParameters.get("transform") == "bucket(4)", e.getMessageParameters)
     }
   }
 

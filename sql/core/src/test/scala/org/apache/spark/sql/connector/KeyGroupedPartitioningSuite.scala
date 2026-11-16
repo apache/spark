@@ -8724,81 +8724,44 @@ class KeyGroupedPartitioningSuite
     assert(!nullBucket.isCompatible(bucket4))
   }
 
-  test("SPARK-50593: a column whose type differs from the declared input type is not reducible " +
-      "(identity-vs-transform, exact-typed literal)") {
-    // Models a cross-side join `a = b` on ShortType keys: left is identity(a), right is
-    // truncate(b, 4). The literal slot matches the declared input type exactly, but the column does
-    // not -- the identity reduce evals the transform (with the identity column substituted in),
-    // feeding it through SpecificInternalRow(inputTypes), so a ShortType column at an
-    // IntegerType-declared position would ClassCastException. argsMatchInputTypes checks the column
-    // too, so the pair is not reducible (shuffle). IntegerTruncateFunction declares
-    // (IntegerType, IntegerType).
-    val a = AttributeReference("a", ShortType)()   // left, identity side
-    val b = AttributeReference("b", ShortType)()   // right, transform's value column
+  test("SPARK-50593: an identity side is not reduced onto a transform whose column Spark cannot " +
+      "pass to its function") {
+    // A join `a = b` on BIGINT keys: identity(a) against truncate(b, 4) bound to a function that
+    // declares (INT, INT). The width has its declared type, but the identity reduce would evaluate
+    // the transform over a BIGINT column, which no cast narrows, so the pair shuffles.
+    val a = AttributeReference("a", LongType)()
+    val b = AttributeReference("b", LongType)()
     val identity = physical.KeyedPartitioning(Seq(a), Seq.empty)
     val truncated = physical.KeyedPartitioning(
       Seq(TransformExpression(IntegerTruncateFunction, Seq(b, Literal(4)))), Seq.empty)
     val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(a)))
     val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(b)))
-    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
-    // so these confs are what make this reach the check it pins.
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
-        "a mismatched-type column must not be reducible via the identity-vs-transform eval path")
+      assert(!idSpec.areKeysCompatible(trSpec, allowReduce = true))
+      assert(!trSpec.areKeysCompatible(idSpec, allowReduce = true), "symmetric")
     }
   }
 
-  test("SPARK-50593: retargetForIdentity validates the substituted identity column, not the " +
-      "transform's own column") {
-    // The transform's own column matches its declared input type, but the identity column actually
-    // evaluated (substituted in) does not. retargetForIdentity must reject based on the substituted
-    // column -- what it evals -- else it builds a reducer that ClassCastExceptions at eval. (The
-    // planner's keyPositions normally forces the two columns to share a type; this builds the specs
-    // directly to pin retargetForIdentity's own correctness.)
-    val idCol = AttributeReference("a", ShortType)()   // evaluated column: ShortType
-    val tCol = AttributeReference("b", StringType)()   // transform's column: matches declared type
-    val identity = physical.KeyedPartitioning(Seq(idCol), Seq.empty)
-    val truncated = physical.KeyedPartitioning(
-      Seq(TransformExpression(TruncateFunction, Seq(tCol, Literal(3)))), Seq.empty)
-    val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(idCol)))
-    val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(tCol)))
-    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
-    // so these confs are what make this reach the check it pins.
-    withSQLConf(
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
-        "must validate the substituted identity column (ShortType), not the transform's own column")
-    }
-  }
-
-  test("SPARK-50593: an arity-flexible transform (children > declared inputTypes) is not " +
-      "reducible via the identity-vs-transform eval path") {
-    // ZeroOrOneParamFunction declares inputTypes() of length 1 but admits transforms with 2
-    // children (col + one literal). The eval path (retargetForIdentity) feeds every child through
-    // ApplyFunctionExpression's SpecificInternalRow(inputTypes()) -- sized 1 -- so evaluating a
-    // 2-child transform would ArrayIndexOutOfBoundsException at reduce time. argsMatchInputTypes'
-    // exact-arity check rejects it, so the pair is not reducible (shuffle) instead of crashing.
-    // (The transform-vs-transform path keeps its mixed-arity flexibility -- see the zero-vs-one
-    // test below -- because it passes literals to the connector reducer and never evals.)
+  test("SPARK-50593: an identity side is not reduced onto an arity-flexible transform with more " +
+      "arguments than its function declares") {
+    // ZeroOrOneParamFunction declares one input type but admits a transform with a column and a
+    // literal. Spark calls a function with exactly its declared arguments, so it cannot evaluate
+    // the two-argument transform, and the pair shuffles. (The transform-vs-transform reducer keeps
+    // its mixed-arity flexibility, see the zero-vs-one test below, since it evaluates nothing.)
     val col = AttributeReference("id", IntegerType)()
     val identity = physical.KeyedPartitioning(Seq(col), Seq.empty)
     val arityFlexible = physical.KeyedPartitioning(
       Seq(TransformExpression(ZeroOrOneParamFunction, Seq(col, Literal(2)))), Seq.empty)
     val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(col)))
     val afSpec = physical.KeyedShuffleSpec(arityFlexible, physical.ClusteredDistribution(Seq(col)))
-    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
-    // so these confs are what make this reach the check it pins.
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(idSpec.reducersBothWays(afSpec) == ((None, None)),
-        "a child beyond the declared arity must not reach the eval path (would AIOOBE)")
+      assert(!idSpec.areKeysCompatible(afSpec, allowReduce = true))
     }
   }
 
@@ -8840,98 +8803,44 @@ class KeyGroupedPartitioningSuite
     assert(l.reducers(r).isDefined)
   }
 
-  // Builds (identity spec, truncate(col, <ShortType width>) spec) on the same column. The ShortType
-  // width mismatches truncate's declared IntegerType input, so the pair must be treated as not
-  // reducible. Shared by the reducers and gate tests below, which must agree on that decision.
-  private def mismatchedIdVsTransformSpecs()
+  // Builds (identity spec, truncate(col, <width>) spec) on the same column, for truncate's
+  // declared (StringType, IntegerType).
+  private def idVsTruncateSpecs(width: Literal)
       : (physical.KeyedShuffleSpec, physical.KeyedShuffleSpec) = {
     val data = AttributeReference("data", StringType)()
     val identity = physical.KeyedPartitioning(Seq(data), Seq.empty)
     val truncated = physical.KeyedPartitioning(
-      Seq(TransformExpression(TruncateFunction, Seq(data, Literal(2.toShort, ShortType)))),
-      Seq.empty)
+      Seq(TransformExpression(TruncateFunction, Seq(data, width))), Seq.empty)
     val dist = physical.ClusteredDistribution(Seq(data))
     (physical.KeyedShuffleSpec(identity, dist), physical.KeyedShuffleSpec(truncated, dist))
   }
 
-  test("SPARK-50593: a literal param whose type differs from the declared input type is not " +
-      "reducible (identity-vs-transform)") {
-    // A bound function may declare inputTypes() that differ from the literal's actual type (a legal
-    // implicit cast). truncate declares (StringType, IntegerType); a connector can report a Short
-    // width literal. The identity-vs-transform reducer binds and directly evals the transform,
-    // skipping Analyzer coercion -- a raw Short into an IntegerType slot would throw. Rather than
-    // coerce a value the partitions were not built on, this pair is not reducible (reducers =>
-    // None); the companion gate test asserts areKeysCompatible also rejects it, so it shuffles.
-    val (idSpec, trSpec) = mismatchedIdVsTransformSpecs()
-    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
-    // so these confs are what make this reach the check it pins.
+  test("SPARK-50593: a literal parameter Spark cannot pass to its function keeps a transform " +
+      "from being evaluated") {
+    // Where Spark evaluates a transform, its literal parameters are arguments like the column. A
+    // BIGINT width against truncate's INT slot cannot be narrowed, so an identity side is not
+    // reduced onto it, and no side is shuffled onto it; a SMALLINT width is widened, so both are.
+    val (idSpec, trSpec) = idVsTruncateSpecs(Literal(2L, LongType))
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
-        "a mismatched-type literal param must not be reducible via the identity-vs-transform path")
-    }
-  }
-
-  test("SPARK-50593: identity-vs-transform compatibility gate agrees with reducers on a " +
-      "mismatched-type literal param") {
-    // The compatibility gate (areKeysCompatible -> isExpressionCompatible) and reducers MUST agree:
-    // if the gate says compatible but reducers returns None, EnsureRequirements keeps the identity
-    // side's raw keys (the reducedDataTypes check can't catch it -- both StringType) and SPJ joins
-    // raw-vs-transformed keys -> silent wrong results. So a mismatched-type literal must make the
-    // gate return false (force a shuffle), consistent with reducers returning None above.
-    val (idSpec, trSpec) = mismatchedIdVsTransformSpecs()
-    withSQLConf(
-      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(!idSpec.areKeysCompatible(trSpec, allowReduce = true),
-        "gate must reject a mismatched-type literal so it agrees with reducers (no mis-join)")
+      assert(!idSpec.areKeysCompatible(trSpec, allowReduce = true))
       assert(!trSpec.areKeysCompatible(idSpec, allowReduce = true), "symmetric")
     }
-  }
-
-  test("SPARK-50593: argument types are compared ignoring nullability") {
-    // An equi-join pairs keys whose types differ only in nullability, so the identity side's column
-    // can be `array<int>` without nulls while the function declares `array<int>` with them.
-    // Evaluating the transform on it is fine, so the identity reduce must not refuse it, just as
-    // the one-side shuffle, which checks the template's own column, does not.
-    val withNulls = ArrayType(IntegerType, containsNull = true)
-    val noNulls = ArrayType(IntegerType, containsNull = false)
-    val fn = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(withNulls)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "array_size_bucket"
-      override def canonicalName(): String = name()
-      override def produceResult(input: InternalRow): Int = input.getArray(0).numElements()
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(!trSpec.canEvaluatePartitioning)
     }
-    val idCol = AttributeReference("a", noNulls)()
-    val trCol = AttributeReference("b", withNulls)()
-    def spec(
-        e: org.apache.spark.sql.catalyst.expressions.Expression,
-        col: AttributeReference): physical.KeyedShuffleSpec =
-      physical.KeyedShuffleSpec(physical.KeyedPartitioning(Seq(e), Seq.empty),
-        physical.ClusteredDistribution(Seq(col)))
-    val idSpec = spec(idCol, idCol)
-    val trSpec = spec(TransformExpression(fn, Seq(trCol)), trCol)
+
+    val (idSpecShort, trSpecShort) = idVsTruncateSpecs(Literal(2.toShort, ShortType))
     withSQLConf(
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-      assert(idSpec.reducersBothWays(trSpec)._1.isDefined,
-        "a column differing from the declared type only in containsNull is reducible")
+      assert(idSpecShort.areKeysCompatible(trSpecShort, allowReduce = true))
     }
-  }
-
-  test("SPARK-50593: a template whose arguments do not have the declared types is not a layout " +
-      "to shuffle onto") {
-    // The one-side shuffle rebuilds the template over the other child's key and evaluates it per
-    // row with no cast, so a Short width at truncate's IntegerType slot would throw there.
-    val (_, trSpec) = mismatchedIdVsTransformSpecs()
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-      assert(!trSpec.canCreatePartitioning,
-        "a template whose arguments don't match the declared types must not be shuffled onto")
+      assert(trSpecShort.canEvaluatePartitioning)
     }
   }
 
