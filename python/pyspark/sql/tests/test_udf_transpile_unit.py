@@ -2875,6 +2875,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("typing.List[int]", "array"),
             ('"list"', "array"),
             ('"list[int]"', "array"),
+            ('"the input value"', None),  # unparseable text is untyped, not an error
             ("set", None),
             ("torch.float", None),
         ]:
