@@ -29,8 +29,10 @@ import org.apache.spark.sql.internal.SQLConf
  * When `spark.sql.gapFillRelationOperator.enabled` is off, it fails without waiting for the
  * child, so a missing table also gets this error. When it is on, it waits for the child to
  * resolve, so errors that leave the child unresolved (such as a missing table or column) are
- * reported first. Errors that the final analysis check raises on a resolved child still come
- * after this error.
+ * reported first. If the child resolves in the Resolution batch, errors that the final analysis
+ * check raises on it come after this error. If it resolves only in a later batch, the final
+ * analysis check rejects this node after it checks the child, so the child's own errors come
+ * first.
  */
 object ResolveGapFill extends Rule[LogicalPlan] {
 
