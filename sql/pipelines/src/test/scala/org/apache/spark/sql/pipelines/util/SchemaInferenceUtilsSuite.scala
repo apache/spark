@@ -20,8 +20,9 @@ package org.apache.spark.sql.pipelines.util
 import scala.util.Success
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn}
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
@@ -856,31 +857,143 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
     assert(SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema).isEmpty)
   }
 
-  test("SPARK-59269: diffSchemas - an added column carries its current and existence default") {
-    val currentSchema = new StructType().add("id", IntegerType)
+  test("SPARK-59269: diffSchemas - an added column's default is on the AddColumn with its " +
+    "existence literal, or follows it as an update") {
+    val currentSchema = new StructType()
+      .add("id", IntegerType)
+      .add("s", new StructType().add("x", IntegerType))
     val targetSchema = new StructType()
       .add("id", IntegerType)
-      .add(intWithDefault("withExists", "1 + 1").withExistenceDefaultValue("2"))
+      // An unfolded existence default that differs from the current one, so the literal can only
+      // come from analyzing the existence default.
+      .add(intWithDefault("withExists", "1 + 1").withExistenceDefaultValue("2 + 3"))
       .add(intWithDefault("currentOnly", "3"))
       .add("noDefault", IntegerType)
+      .add("s", new StructType()
+        .add("x", IntegerType)
+        .add(intWithDefault("nestedCurrentOnly", "4")))
 
     val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
-    val defaultsByColumn = changes.collect { case a: TableChange.AddColumn =>
-      a.fieldNames().toSeq -> Option(a.defaultValue())
-    }.toMap
+    val adds = changes.collect { case a: TableChange.AddColumn => a }
+    val defaultsByColumn = adds.map(a => a.fieldNames().toSeq -> Option(a.defaultValue())).toMap
     assert(defaultsByColumn.keySet ===
-      Set(Seq("withExists"), Seq("currentOnly"), Seq("noDefault")))
+      Set(Seq("withExists"), Seq("currentOnly"), Seq("noDefault"), Seq("s", "nestedCurrentOnly")))
+
+    // Connectors are promised a literal on every default handed to alterTable on an AddColumn.
+    adds.foreach { add =>
+      assert(add.defaultValue() == null || add.defaultValue().getValue != null, s"add=$add")
+    }
 
     val withExists = defaultsByColumn(Seq("withExists")).get
     assert(withExists.getSql === "1 + 1")
-    assert(withExists.getValue.value() === 2)
+    assert(withExists.getValue.value() === 5)
     assert(withExists.getValue.dataType() === IntegerType)
 
-    val currentOnly = defaultsByColumn(Seq("currentOnly")).get
-    assert(currentOnly.getSql === "3")
-    assert(currentOnly.getValue === null)
-
     assert(defaultsByColumn(Seq("noDefault")).isEmpty)
+
+    // A current-only default is set by an update that follows its AddColumn in the change list.
+    assert(defaultsByColumn(Seq("currentOnly")).isEmpty)
+    assert(defaultsByColumn(Seq("s", "nestedCurrentOnly")).isEmpty)
+    assert(defaultUpdatesOf(changes) ===
+      Map(Seq("currentOnly") -> Some("3"), Seq("s", "nestedCurrentOnly") -> Some("4")))
+    Seq(Seq("currentOnly"), Seq("s", "nestedCurrentOnly")).foreach { path =>
+      val addIndex = changes.indexWhere {
+        case a: TableChange.AddColumn => a.fieldNames().toSeq == path
+        case _ => false
+      }
+      val updateIndex = changes.indexWhere {
+        case u: TableChange.UpdateColumnDefaultValue => u.fieldNames().toSeq == path
+        case _ => false
+      }
+      assert(addIndex >= 0 && updateIndex > addIndex, s"path=$path changes=$changes")
+    }
+  }
+
+  test("SPARK-59269: diffSchemas - a foldable default is sent as its SQL text") {
+    // The catalog re-evaluates the current default on each write, so the text must be sent as
+    // written rather than its value at diff time.
+    val currentSchema = new StructType().add("d", DateType)
+    val targetSchema = new StructType()
+      .add(StructField("d", DateType).withCurrentDefaultValue("current_date()"))
+
+    val changes = SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+    assert(changes.length === 1, s"changes=$changes")
+    assert(defaultUpdatesOf(changes) === Map(Seq("d") -> Some("current_date()")))
+  }
+
+  test("SPARK-59269: diffSchemas - a default that table creation would reject fails the diff") {
+    val currentSchema = new StructType().add("id", IntegerType).add("b", IntegerType)
+    Seq(
+      // A misspelled function, a non-constant expression, and a reference to another column.
+      ("current_dat()", "UNRESOLVED_EXPRESSION"),
+      ("rand()", "NOT_CONSTANT"),
+      ("id + 1", "UNRESOLVED_EXPRESSION")
+    ).foreach { case (defaultSql, subclass) =>
+      val targetSchema =
+        new StructType().add("id", IntegerType).add(intWithDefault("b", defaultSql))
+      val ex = intercept[AnalysisException] {
+        SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)
+      }
+      checkError(
+        ex,
+        condition = s"INVALID_DEFAULT_VALUE.$subclass",
+        parameters = Map(
+          "statement" -> "COLUMN ANALYSIS",
+          "colName" -> "`b`",
+          "defaultValue" -> defaultSql))
+
+      // Creating a table with the same declared default fails the same way: a SQL column
+      // definition stores a non-literal default's text as the existence default too.
+      val creation = intercept[AnalysisException] {
+        CatalogV2Util.structTypeToV2Columns(new StructType()
+          .add(intWithDefault("b", defaultSql).withExistenceDefaultValue(defaultSql)))
+      }
+      assert(creation.getCondition === ex.getCondition)
+
+      // An added column with that default is rejected the same way.
+      val added = intercept[AnalysisException] {
+        SchemaInferenceUtils.diffSchemas(new StructType().add("id", IntegerType), targetSchema)
+      }
+      assert(added.getCondition === ex.getCondition)
+    }
+  }
+
+  test("SPARK-59269: diffSchemas - a default on a generated or identity column fails the diff") {
+    val generated = StructField("g", IntegerType, metadata = new MetadataBuilder()
+      .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, "id + 1")
+      .build())
+    val identity = StructField("i", LongType, metadata = new MetadataBuilder()
+      .putLong(IdentityColumn.IDENTITY_INFO_START, 1L)
+      .putLong(IdentityColumn.IDENTITY_INFO_STEP, 1L)
+      .putBoolean(IdentityColumn.IDENTITY_INFO_ALLOW_EXPLICIT_INSERT, false)
+      .build())
+    val currentSchema = new StructType().add("id", IntegerType).add(generated).add(identity)
+
+    val generatedWithDefault = intercept[AnalysisException] {
+      SchemaInferenceUtils.diffSchemas(
+        currentSchema,
+        new StructType().add("id", IntegerType).add(intWithDefault("g", "5")).add(identity))
+    }
+    checkError(
+      generatedWithDefault,
+      condition = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+      parameters = Map("colName" -> "g", "defaultValue" -> "5", "genExpr" -> "id + 1"))
+
+    val identityWithDefault = intercept[AnalysisException] {
+      SchemaInferenceUtils.diffSchemas(
+        currentSchema,
+        new StructType()
+          .add("id", IntegerType)
+          .add(generated)
+          .add(StructField("i", LongType).withCurrentDefaultValue("5")))
+    }
+    checkError(
+      identityWithDefault,
+      condition = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+      parameters = Map(
+        "colName" -> "i",
+        "defaultValue" -> "5",
+        "identityColumnSpec" -> IdentityColumn.getIdentityInfo(identity).get.toString))
   }
 
   test("SPARK-59269: diffSchemas - DSv2 catalog applies emitted default value changes") {
@@ -893,6 +1006,7 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
       .add(intWithDefault("changed", "42").withExistenceDefaultValue("0"))
       .add("dropped", IntegerType)
       .add(intWithDefault("added", "5").withExistenceDefaultValue("5"))
+      .add(intWithDefault("addedCurrentOnly", "6"))
 
     val catalog = new InMemoryTableCatalog
     catalog.initialize("test", CaseInsensitiveStringMap.empty())
@@ -910,7 +1024,8 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
       "id" -> ((None, None)),
       "changed" -> ((Some("42"), Some("0"))),
       "dropped" -> ((None, Some("1"))),
-      "added" -> ((Some("5"), Some("5")))))
+      "added" -> ((Some("5"), Some("5"))),
+      "addedCurrentOnly" -> ((Some("6"), None))))
   }
 
   test("inferSchemaFromFlows folds a case-only column to the same spelling regardless of flow " +
