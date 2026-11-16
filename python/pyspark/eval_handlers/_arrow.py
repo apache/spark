@@ -591,13 +591,27 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
             yield ArrowBatchTransformer.enforce_schema(batch, self._return_schema)
 
 
+def _may_be_mutable_python_value(arrow_type: pa.DataType) -> bool:
+    """Whether a Python value of ``arrow_type`` can be a mutable object -- a list, a dict, a
+    tuple holding one, or a bytearray -- rather than an immutable scalar."""
+    import pyarrow as pa
+
+    return (
+        pa.types.is_nested(arrow_type)
+        or pa.types.is_binary(arrow_type)
+        or pa.types.is_large_binary(arrow_type)
+        or pa.types.is_fixed_size_binary(arrow_type)
+    )
+
+
 class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: window aggregation with an incremental
-    ``Aggregator``. The operator sends each frame -- the whole partition for an
-    unbounded frame, or per-row ``[begin, end)`` slices for a bounded one -- and each
-    frame's rows are folded with ``reduce`` (from a fresh ``zero``) and finished with
-    ``finish``, one output value per input row. A window has no shuffle, so the
-    intermediate buffer never leaves the worker; ``merge`` is not used here."""
+    ``Aggregator``. A window partition is evaluated within one task after the exchange, so
+    there is no PARTIAL/FINAL split and ``merge`` is not used. The operator streams each
+    partition; for a bounded frame, each row also carries its frame's ``[begin, end)``
+    bounds. Each row's frame is folded with ``reduce`` from ``zero`` -- or, while the lower
+    bound stays fixed, by extending the previous row's buffer -- and ``finish`` produces
+    the row's value."""
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
     _multi_udf = True
@@ -656,7 +670,14 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                     # ``zero`` -- O(n) overall rather than O(n^2). Otherwise -- the lower bound
                     # advanced (a row left the window, which ``reduce`` cannot subtract) or the
                     # frame shrank -- refold the frame from ``zero``.
-                    results = []
+                    #
+                    # Later rows keep reducing into the running buffer, which ``reduce`` may
+                    # update in place, so a row's ``finish`` result can share state with it,
+                    # e.g. a list that ``reduce`` appends to. Convert such a result to Arrow at
+                    # its own row, before the next ``reduce`` changes it; a result whose Python
+                    # value is immutable is converted with the others after the loop.
+                    convert_per_row = _may_be_mutable_python_value(result_type)
+                    results: list[Any] = []
                     have_running = False
                     running: Any = None
                     prev_begin = -1
@@ -670,8 +691,17 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                             running = fold(agg, agg.zero(), value_cols, begin, end)
                         have_running = True
                         prev_begin, prev_end = begin, end
-                        results.append(agg.finish(running))
-                    result_arrays.append(pa.array(results, type=result_type))
+                        result = agg.finish(running)
+                        if convert_per_row:
+                            results.append(pa.array([result], type=result_type))
+                        else:
+                            results.append(result)
+                    if not convert_per_row:
+                        result_arrays.append(pa.array(results, type=result_type))
+                    elif results:
+                        result_arrays.append(pa.concat_arrays(results))
+                    else:
+                        result_arrays.append(pa.array([], type=result_type))
                 else:
                     raise PySparkRuntimeError(
                         errorClass="INVALID_WINDOW_BOUND_TYPE",

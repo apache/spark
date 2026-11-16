@@ -98,9 +98,11 @@ private[spark] object PythonEvalType {
   val SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF = 255
   val SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF = 256
 
-  // Window aggregation with an incremental Arrow aggregator. A window has no shuffle, so it needs
-  // neither the PARTIAL nor the FINAL eval type above: the operator sends each frame's rows to the
-  // worker, which folds them with `reduce` (from `zero`) and produces the value with `finish`.
+  // Window aggregation with an incremental Arrow aggregator. A window partition is evaluated within
+  // one task after the exchange, so it needs neither the PARTIAL nor the FINAL eval type above and
+  // never calls `merge`: the operator streams each partition with per-row frame bounds, and the
+  // worker folds each row's frame with `reduce` (extending the previous row's buffer while the
+  // lower bound stays fixed) and produces the row's value with `finish`.
   val SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF = 257
 
   // Scalar Arrow UDF evaluated by embedded CPython in the executor JVM.

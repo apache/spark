@@ -45,6 +45,12 @@ class Aggregator(ABC):
     combine partial buffers in any order), and :meth:`zero` must be its identity element -- see
     :meth:`zero` for the identity law that makes the result independent of the partition count.
 
+    Over a window (``udaf(...)(...).over(window)``), :meth:`merge` is not used: each row's frame
+    is folded with :meth:`reduce` from :meth:`zero`, and :meth:`finish` produces the row's value.
+    While the frame's lower bound stays fixed, as in the default frame of an ordered window,
+    consecutive rows extend one buffer instead of refolding it, so :meth:`finish` is called on a
+    buffer that later rows keep reducing into and must not modify it.
+
     .. versionadded:: 4.4.0
 
     Examples
@@ -116,7 +122,11 @@ class Aggregator(ABC):
 
     @abstractmethod
     def reduce(self, buffer: Tuple[Any, ...], value: Tuple[Any, ...]) -> Tuple[Any, ...]:
-        """Fold a single input row ``value`` into ``buffer`` and return the updated buffer."""
+        """Fold a single input row ``value`` into ``buffer`` and return the updated buffer.
+
+        It may update mutable fields of ``buffer`` (e.g. a list) in place and return it, as long
+        as :meth:`zero` returns a new buffer on each call.
+        """
         ...
 
     @abstractmethod
@@ -126,7 +136,11 @@ class Aggregator(ABC):
 
     @abstractmethod
     def finish(self, buffer: Tuple[Any, ...]) -> Any:
-        """Produce the output value from the final merged buffer."""
+        """Produce the output value from the final merged buffer.
+
+        It must not modify ``buffer``: over a window, it is called once per row on a buffer that
+        later rows keep reducing into.
+        """
         ...
 
     # The aggregator instance is shipped to the worker as the UDF "function"; making it callable

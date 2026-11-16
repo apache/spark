@@ -20,6 +20,7 @@ from decimal import Decimal
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PySparkValueError
 from pyspark.sql import functions as sf
 from pyspark.sql.types import (
+    ArrayType,
     CharType,
     DecimalType,
     DoubleType,
@@ -110,6 +111,43 @@ if have_pyarrow:
 
         def finish(self, buffer):
             return buffer[0]
+
+    class CollectList(Aggregator):
+        # Updates its list buffer in place and returns that very list from ``finish``, as the
+        # Aggregator contract allows.
+        @property
+        def bufferSchema(self):
+            return StructType([StructField("values", ArrayType(DoubleType()))])
+
+        @property
+        def outputType(self):
+            return ArrayType(DoubleType())
+
+        def zero(self):
+            return ([],)
+
+        def reduce(self, buffer, value):
+            (v,) = value
+            if v is not None:  # skip nulls, like collect_list
+                buffer[0].append(v)
+            return buffer
+
+        def merge(self, b1, b2):
+            b1[0].extend(b2[0])
+            return b1
+
+        def finish(self, buffer):
+            return buffer[0]
+
+    class CollectListStruct(CollectList):
+        # Like CollectList, but nests the buffer's list in a struct, so a shallow copy of the
+        # ``finish`` result would still share it with the buffer.
+        @property
+        def outputType(self):
+            return StructType([StructField("values", ArrayType(DoubleType()))])
+
+        def finish(self, buffer):
+            return (buffer[0],)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -400,6 +438,34 @@ class ArrowPythonAggregatorTestsMixin:
         self.assertEqual(len(result), len(expected))
         for r, e in zip(result, expected):
             self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def test_window_growing_frame_with_in_place_buffer(self):
+        # ``reduce`` may update its buffer in place, and over a frame whose lower bound stays fixed
+        # later rows keep reducing into the buffer that earlier rows were finished from. Each row
+        # must still get its own frame's value, also when ``finish`` returns the buffer's list
+        # itself or nests it in a struct.
+        df = self._data()
+        ordered = Window.partitionBy("k").orderBy("v")
+        frames = {
+            "default": ordered,
+            "rows": ordered.rowsBetween(Window.unboundedPreceding, Window.currentRow),
+            "range": ordered.rangeBetween(Window.unboundedPreceding, Window.currentRow),
+        }
+        for name, w in frames.items():
+            with self.subTest(frame=name):
+                result = (
+                    df.withColumn("l", udaf(CollectList())(sf.col("v")).over(w))
+                    .withColumn("s", udaf(CollectListStruct())(sf.col("v")).over(w))
+                    .orderBy("k", "v")
+                    .collect()
+                )
+                expected = (
+                    df.withColumn("l", sf.collect_list("v").over(w))
+                    .withColumn("s", sf.struct(sf.collect_list("v").over(w).alias("values")))
+                    .orderBy("k", "v")
+                    .collect()
+                )
+                self.assertEqual(result, expected)
 
     def test_window_decimal_output(self):
         # A non-trivial (Decimal) output type over a window, exercising the explicit
