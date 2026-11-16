@@ -96,12 +96,29 @@ class FrameReindexingMixin:
         with self.assertRaisesRegex(NotImplementedError, "'asof' argument is not supported"):
             psdf.at_time("0:15", asof=True)
 
-        with self.assertRaisesRegex(NotImplementedError, "at_time currently only works for axis=0"):
+        with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.at_time("0:15", axis=1)
 
         psdf = ps.DataFrame({"A": [1, 2, 3, 4]})
         with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.at_time("0:15")
+
+        # axis=1 selects columns by their datetime labels
+        cols = pd.date_range("2018-04-09", periods=4, freq="1D20min")
+        pdf = pd.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=cols)
+        psdf = ps.from_pandas(pdf)
+        for axis in [1, "columns"]:
+            self.assert_eq(pdf.at_time("0:20", axis=axis), psdf.at_time("0:20", axis=axis))
+        # No matching column. Empty column labels lose their DatetimeIndex type in
+        # pandas-on-Spark, so only compare the shape.
+        self.assertEqual(pdf.at_time("0:30", axis=1).shape, psdf.at_time("0:30", axis=1).shape)
+
+        with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
+            ps.DataFrame({"A": [1, 2]}).at_time("0:20", axis=1)
+
+        psser = ps.Series([1, 2, 3, 4], index=cols)
+        with self.assertRaisesRegex(ValueError, "No axis named 1 for object type Series"):
+            psser.at_time("0:20", axis=1)
 
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
@@ -143,9 +160,7 @@ class FrameReindexingMixin:
             psdf.between_time("0:15", "0:45").sort_index(),
         )
 
-        with self.assertRaisesRegex(
-            NotImplementedError, "between_time currently only works for axis=0"
-        ):
+        with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
             psdf.between_time("0:15", "0:45", axis=1)
 
         psdf = ps.DataFrame({"A": [1, 2, 3, 4]})
@@ -179,6 +194,33 @@ class FrameReindexingMixin:
                 "allowed_values": str(["left", "right", "both", "neither"]),
             },
         )
+
+        # axis=1 selects columns by their datetime labels
+        cols = pd.date_range("2018-04-09", periods=4, freq="1D20min")
+        pdf = pd.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=cols)
+        psdf = ps.from_pandas(pdf)
+        for axis in [1, "columns"]:
+            self.assert_eq(
+                pdf.between_time("0:15", "0:45", axis=axis),
+                psdf.between_time("0:15", "0:45", axis=axis),
+            )
+        # start_time later than end_time selects the times outside the range
+        self.assert_eq(
+            pdf.between_time("0:45", "0:15", axis=1),
+            psdf.between_time("0:45", "0:15", axis=1),
+        )
+        for inclusive in ["both", "neither", "left", "right"]:
+            self.assert_eq(
+                pdf.between_time("0:20", "1:00", inclusive=inclusive, axis=1),
+                psdf.between_time("0:20", "1:00", inclusive=inclusive, axis=1),
+            )
+
+        with self.assertRaisesRegex(TypeError, "Index must be DatetimeIndex"):
+            ps.DataFrame({"A": [1, 2]}).between_time("0:15", "0:45", axis=1)
+
+        psser = ps.Series([1, 2, 3, 4], index=cols)
+        with self.assertRaisesRegex(ValueError, "No axis named 1 for object type Series"):
+            psser.between_time("0:15", "0:45", axis=1)
 
     def test_drop(self):
         pdf = pd.DataFrame({"x": [1, 2], "y": [3, 4], "z": [5, 6]}, index=np.random.rand(2))
