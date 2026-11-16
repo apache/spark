@@ -886,20 +886,26 @@ class WholeStageCodegenSuite extends SharedSparkSession
       }
     }
 
-    // Only the generated as-of join: the interpreted one still captures the join node in its
-    // closure, to build its scanner.
-    Seq(false, true).foreach { aqe =>
-      withSQLConf(
-          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
-        val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
-        val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
-          .toDF("ts", "k", "v")
-        checkPlans(
-          trades.joinAsOf(
-            quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
-            tolerance = null, allowExactMatches = true, direction = "backward"),
-          Set("Sort", "SortMergeAsOfJoin"))
+    // The as-of join, generated or not: a nearest join, which has no generated scan, and a join
+    // with the codegen off run the interpreted one.
+    Seq(
+      Seq.empty[(String, String)],
+      Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false")).foreach { codegenConfs =>
+      Seq(false, true).foreach { aqe =>
+        withSQLConf(codegenConfs ++ Seq(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString): _*) {
+          val trades = Seq((5, 1), (11, 1), (12, 2), (3, 3)).toDF("ts", "k")
+          val quotes = Seq((0, 1, "a"), (7, 1, "b"), (10, 1, "c"), (8, 2, "d"), (9, 3, "e"))
+            .toDF("ts", "k", "v")
+          Seq("backward", "nearest").foreach { direction =>
+            checkPlans(
+              trades.joinAsOf(
+                quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
+                tolerance = null, allowExactMatches = true, direction = direction),
+              Set("Sort", "SortMergeAsOfJoin"))
+          }
+        }
       }
     }
   }
