@@ -27,8 +27,9 @@ push, prune and fold, while a generated body is opaque. This target buys reach,
 not speed relative to Catalyst -- speed relative to a Python worker.
 
 A Catalyst option is an expression, so it refuses more than one top-level
-statement. A Java method has statements, so this target lowers locals, several
-statements, early returns, and ``/`` / ``//``.
+statement, bar the two-statement ``if test: return a`` / ``return b`` shape. A Java
+method has statements, so this target lowers locals, other multi-statement bodies,
+early returns, and ``/`` / ``//``.
 
 Each argument is a method parameter, so a body that reads it N times still
 evaluates it once (the thing SPARK-58626 is about for Catalyst). The flip side:
@@ -39,8 +40,9 @@ Arithmetic propagates null (``None + 1`` is NULL, same as Catalyst). Ordering
 raises on null (same as Catalyst). ``NaN`` uses raw IEEE, which is CPython's
 and not Spark's normalised ``NaN == NaN``.
 
-``"numeric"`` is split into ``"integral"`` (Long) and ``"fractional"``
-(Double). Annotate parameters to keep the option count down.
+Numeric parameters are ``"integral"`` (Long) or ``"fractional"`` (Double); Catalyst's
+names for the same two are ``"integer"`` and ``"float"``. Annotate parameters to keep
+the option count down.
 
 Overflow, ``//`` / ``%`` signs, and every other Python/Java/ANSI fight live in
 ``TranspiledJavaUDFHelpers``.
@@ -183,9 +185,9 @@ def _java_string_literal(value: str) -> str:
             try:
                 encoded = ch.encode("utf-16-be")
             except UnicodeEncodeError:
-                # A lone surrogate is legal in a Python str but has no UTF-16 encoding, so it
-                # cannot be written as a Java escape. Decline like every other unsupported
-                # construct rather than surfacing a codec error as the reason.
+                # A lone surrogate is legal in a Python str, and Java accepts the escape, but
+                # `UTF8String.fromString` encodes it as '?', so the literal would compare
+                # against the wrong text. Decline rather than surface a codec error.
                 raise UnsupportedOperationException(
                     "a string literal containing an unpaired surrogate is not lowered by the "
                     "java transpiler"
@@ -246,10 +248,8 @@ class JavaTranspiler(AbstractTranspiler):
     def _param_category_combos(
         self, function_ast: ast.FunctionDef, public_params: List[str]
     ) -> List[dict]:
-        """Like the Catalyst target's, but ``"numeric"`` split into integral/fractional.
-
-        Cap is two untyped parameters, not three: 3**n options, and pruning keeps at
-        most one.
+        """Like the Catalyst target's, but named integral/fractional and capped at two
+        untyped parameters, not three: 3**n options, and pruning keeps at most one.
         """
         n = len(public_params)
         if n == 0:
@@ -320,7 +320,7 @@ class JavaTranspiler(AbstractTranspiler):
     def _lower_body(self, body: List[ast.stmt], return_category: str) -> List[str]:
         """Lower a function body to Java statements, ending with a return on every path."""
         statements = self._lower_statements(body, return_category)
-        # Java rejects an unreachable statement (JLS 14.21), so only emit the
+        # Java rejects an unreachable statement (JLS 14.22), so only emit the
         # fall-off-the-end ``return null`` when a path can actually reach it.
         if not _definitely_returns(body):
             statements.append(f"return (({_java_type(return_category)}) null);")
@@ -449,11 +449,10 @@ class JavaTranspiler(AbstractTranspiler):
                     )
                 lowered = self._lower_expr(operand)
                 if lowered.category != "bool":
-                    # `_is_definitely_boolean` admits `None`; we have no coalesce back
-                    # to Python's `not None is True`, so require a real boolean.
+                    # `_is_definitely_boolean` admits `None`, which is not lowered as a boolean.
                     raise UnsupportedOperationException(
-                        f"`not` on a {lowered.category} operand is not lowered; Python's `not "
-                        "None` is True where SQL's `NOT NULL` is NULL"
+                        f"`not` on a {lowered.category} operand is not lowered; a None operand "
+                        "is not treated as a boolean"
                     )
                 return _JavaValue(f"{_HELPERS}.not({lowered.code})", "bool")
             case ast.UnaryOp(op=(ast.USub() | ast.UAdd()) as op, operand=operand):
@@ -530,17 +529,16 @@ class JavaTranspiler(AbstractTranspiler):
         lowered_left = self._lower_expr(left)
         lowered_right = self._lower_expr(right)
 
-        # `str * int`: refuse a fractional count rather than truncate the way Catalyst does.
+        # `str * int`, in either order. A fractional count is declined by `_unify` below.
         if op_name == "Mult" and {lowered_left.category, lowered_right.category} == {
             "string",
             "integral",
         }:
-            text, count = (
-                (lowered_left, lowered_right)
-                if lowered_left.category == "string"
-                else (lowered_right, lowered_left)
+            # Java evaluates arguments left to right, so keep Python's operand order.
+            helper = "repeat" if lowered_left.category == "string" else "repeatCountFirst"
+            return _JavaValue(
+                f"{_HELPERS}.{helper}({lowered_left.code}, {lowered_right.code})", "string"
             )
-            return _JavaValue(f"{_HELPERS}.repeat({text.code}, {count.code})", "string")
 
         category = self._unify(lowered_left.category, lowered_right.category, op_name)
         if category == "string" and op_name != "Add":
@@ -641,8 +639,8 @@ class JavaTranspiler(AbstractTranspiler):
     def _unify(self, left: str, right: str, what: str) -> str:
         """The category an operation over ``left`` and ``right`` produces.
 
-        ``none`` unifies with anything. Integral promotes to fractional. Anything
-        else mixed is a Python ``TypeError``, so it is not lowered.
+        ``none`` unifies with anything. Integral promotes to fractional. Any other
+        mix is not lowered.
         """
         if left == right:
             return left
@@ -743,7 +741,7 @@ def _indent(lines: List[str]) -> List[str]:
 
 
 def _java_annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
-    """Like ``_annotation_category`` but ``int`` and ``float`` stay split."""
+    """Like ``_annotation_category`` but ``int``/``float`` are integral/fractional."""
     name: Optional[str] = None
     if isinstance(annotation, ast.Name):
         name = annotation.id

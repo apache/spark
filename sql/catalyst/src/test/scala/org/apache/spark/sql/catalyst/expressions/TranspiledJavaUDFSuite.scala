@@ -82,8 +82,8 @@ class TranspiledJavaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("multi-statement body with a local and an early return") {
-    // The capability the Catalyst target cannot reach: it refuses any body with more than one
-    // top-level statement.
+    // The capability the Catalyst target cannot reach: it refuses a body with more than one
+    // top-level statement, bar the `if test: return a` / `return b` early-return shape.
     val body =
       """
         |long doubled = _udf_arg_0 * 2;
@@ -175,6 +175,15 @@ class TranspiledJavaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val matched = udf("return _udf_arg_0 + 1;", Seq(Literal(1L)), Seq(LongType), LongType)
     assert(matched.checkInputDataTypes().isSuccess)
+  }
+
+  test("validate fails for a body that does not compile") {
+    // `TranspiledJavaUDFBuilder` calls this so a lowering bug skips the option at definition,
+    // not the query once the option is in the plan.
+    val bad = udf("return not_a_symbol;", Seq(Literal(1L)), Seq(LongType), LongType)
+    val e = intercept[Exception](bad.validate())
+    assert(e.getMessage.contains("not_a_symbol"))
+    udf("return _udf_arg_0;", Seq(Literal(1L)), Seq(LongType), LongType).validate()
   }
 
   test("parallel-field requirement is enforced") {

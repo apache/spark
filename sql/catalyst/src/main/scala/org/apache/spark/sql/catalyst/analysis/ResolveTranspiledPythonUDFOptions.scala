@@ -89,8 +89,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   "bool"    -> BooleanType
   //   "binary"  -> BinaryType
   //
-  // "integral" / "fractional" split "numeric" for a target that names one Java
-  // type per parameter. Both halves are lossless; "numeric" still matches both.
+  // "integral" / "fractional" are the java target's names for the same types as
+  // "integer" / "float".
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT matched by any numeric category: Python receives

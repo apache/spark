@@ -106,20 +106,19 @@ class TranspiledUnifiedUDFParityTests(UnifiedUDFTestsMixin, ReusedSQLTestCase):
 
 @unittest.skipIf(is_remote_only(), _NON_CONNECT_ONLY)
 class TranspiledJavaUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
-    """The same mixin again with the `java` target enabled behind `catalyst`.
+    """The same mixin again with only the `java` target named.
 
-    Adding a second target must not change any result. Catalyst still wins wherever it can
-    lower, so what this run actually exercises is every UDF in the mixin that Catalyst
-    declines: each one now takes the Java path instead of interpreted Python, and has to
-    produce the same answer it did before. The dedicated tests live in
-    ``test_udf_transpile_java_unit.py``.
+    Behind `catalyst` this run would exercise almost nothing: Catalyst lowers nearly every
+    body in the mixin first. Alone, every UDF the Java target lowers runs as a
+    TranspiledJavaUDF and has to produce the answer interpreted Python gives; the rest fall
+    back to interpreted Python. The dedicated tests live in ``test_udf_transpile_java_unit.py``.
     """
 
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
-        _enable_transpilation(cls, transpilers="catalyst,java")
+        _enable_transpilation(cls, transpilers="java")
 
 
 if __name__ == "__main__":

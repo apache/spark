@@ -37,7 +37,10 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     DoubleType,
+    FloatType,
+    IntegerType,
     LongType,
+    ShortType,
     StringType,
 )
 from pyspark.sql.udf import UserDefinedFunction
@@ -228,12 +231,20 @@ class JavaTranspileLoweringTests(unittest.TestCase):
         repeat = _lower(
             "def f(s, n):\n    return s * n", StringType(), {0: "string", 1: "integral"}
         )
-        self.assertIn("TranspiledJavaUDFHelpers.repeat", repeat)
+        self.assertIn("TranspiledJavaUDFHelpers.repeat(", repeat)
+
+    def test_repeat_keeps_python_operand_order(self):
+        # Java evaluates arguments left to right, so `n * s` needs a helper that takes the
+        # count first; `repeat(s, n)` would run `s` before `n`.
+        categories = {0: "integral", 1: "string"}
+        count_last = _lower("def f(n, s):\n    return s * n", StringType(), categories)
+        self.assertIn("repeat(_udf_arg_1, _udf_arg_0)", count_last)
+        count_first = _lower("def f(n, s):\n    return n * s", StringType(), categories)
+        self.assertIn("repeatCountFirst(_udf_arg_0, _udf_arg_1)", count_first)
 
     def test_repeat_refuses_a_fractional_count(self):
-        # The divergence the Catalyst target documents: there a fractional count from a
-        # column is truncated by the cast it inserts, where Python raises TypeError. Here
-        # the count's category is known before any source is emitted, so it is declined.
+        # Python raises TypeError for a fractional count. Its category is known before any
+        # source is emitted, so it is declined.
         with self.assertRaises(UnsupportedOperationException):
             _lower(
                 "def f(s, n):\n    return s * n",
@@ -294,7 +305,7 @@ class JavaTranspileLoweringTests(unittest.TestCase):
                 BooleanType(),
                 {0: "integral", 1: "integral"},
             ),
-            # Python's `not None` is True; SQL's `NOT NULL` is NULL.
+            # A None operand is not lowered as a boolean.
             "not None": ("def f(x):\n    return not None", BooleanType(), {0: "integral"}),
             # `None == x` is as much a None comparison as `x == None`.
             "None on the left": ("def f(x):\n    return None == x", BooleanType(), {0: "integral"}),
@@ -310,8 +321,52 @@ class JavaTranspileLoweringTests(unittest.TestCase):
                 with self.assertRaises(UnsupportedOperationException):
                     _lower(source, return_type, categories)
 
+    def test_guards_decline_with_their_own_message(self):
+        # The cases above stop at an earlier check; these two only the named guard catches, so
+        # the message is matched too.
+        cases = {
+            # A Java local dies with its block, so an assignment to a parameter inside a branch
+            # would be discarded and the later `return x` would read the argument.
+            "assigning to a parameter": (
+                "def f(x):\n    if x > 0:\n        x = 0\n    return x",
+                LongType(),
+                "assigning to the parameter",
+            ),
+            # Loosened, this would lower to `Boolean.valueOf(null == null)`.
+            "None on the left of is": (
+                "def f(x):\n    return None is x",
+                BooleanType(),
+                "only lowered against None",
+            ),
+        }
+        for label, (source, return_type, message) in cases.items():
+            with self.subTest(case=label):
+                with self.assertRaisesRegex(UnsupportedOperationException, message):
+                    _lower(source, return_type, {0: "integral"})
+
+    def test_string_literals_lower_to_the_same_text(self):
+        from pyspark.sql.transpile_java import _java_string_literal
+
+        # (Python text, the text between the quotes of the Java literal)
+        cases = {
+            "backslash": ("a\\b", "a\\\\b"),
+            "quote": ('a"b', 'a\\"b'),
+            "newline": ("a\nb", "a\\nb"),
+            "carriage return": ("a\rb", "a\\rb"),
+            "tab": ("a\tb", "a\\tb"),
+            "control character": ("a\x01b", "a\\u0001b"),
+            "bmp": ("\u00e9", "\\u00e9"),
+            "supplementary plane": ("\U0001f600", "\\ud83d\\ude00"),
+        }
+        for label, (text, escaped) in cases.items():
+            with self.subTest(case=label):
+                self.assertEqual(f'UTF8String.fromString("{escaped}")', _java_string_literal(text))
+        # `UTF8String.fromString` would turn it into '?', so it is not lowered.
+        with self.assertRaises(UnsupportedOperationException):
+            _java_string_literal("\ud800")
+
     def test_no_statement_is_emitted_after_a_definite_return(self):
-        # Python just never runs these; Java rejects them as unreachable (JLS 14.21), and a body
+        # Python just never runs these; Java rejects them as unreachable (JLS 14.22), and a body
         # that does not compile is a failed query rather than a fallback once the option is in the
         # plan. Both shapes below occur in real code -- a defensive trailing return, and dead code.
         after_if_else = _lower(
@@ -713,7 +768,9 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
         with self.sql_conf(_JAVA_ONLY):
             udf = UserDefinedFunction(remainder, DoubleType())
             self.assertTrue(udf.transpiled)
-            actual = [r[0] for r in df.select(udf(col("a"))).collect()]
+            result = df.select(udf(col("a")))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            actual = [r[0] for r in result.collect()]
         self.assertEqual(expected, actual)
 
     def test_large_int_division_rounds_once(self):
@@ -780,7 +837,9 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
         with self.sql_conf(_JAVA_ONLY):
             udf = UserDefinedFunction(difference, DoubleType())
             self.assertTrue(udf.transpiled)
-            values = [r[0] for r in self.spark.range(20).select(udf(rand(1)).alias("v")).collect()]
+            result = self.spark.range(20).select(udf(rand(1)).alias("v"))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            values = [r[0] for r in result.collect()]
             self.assertTrue(all(v == 0.0 for v in values), values)
 
     def test_two_draws_stay_two_draws(self):
@@ -791,10 +850,9 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
 
         with self.sql_conf(_JAVA_ONLY):
             udf = UserDefinedFunction(difference, DoubleType())
-            values = [
-                r[0]
-                for r in self.spark.range(20).select(udf(rand(1), rand(2)).alias("v")).collect()
-            ]
+            result = self.spark.range(20).select(udf(rand(1), rand(2)).alias("v"))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            values = [r[0] for r in result.collect()]
             self.assertTrue(any(v != 0.0 for v in values), values)
 
     def test_every_argument_is_evaluated_even_when_unread(self):
@@ -860,10 +918,12 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
 
         with self.sql_conf(_JAVA_ONLY):
             udf = UserDefinedFunction(halve, DoubleType())
-            integral = self.spark.createDataFrame([(5,)], "a bigint")
-            self.assertEqual(2.5, integral.select(udf(col("a"))).first()[0])
-            fractional = self.spark.createDataFrame([(5.5,)], "a double")
-            self.assertEqual(2.75, fractional.select(udf(col("a"))).first()[0])
+            integral = self.spark.createDataFrame([(5,)], "a bigint").select(udf(col("a")))
+            self.assertIn("TranspiledJavaUDF", self._plan(integral))
+            self.assertEqual(2.5, integral.first()[0])
+            fractional = self.spark.createDataFrame([(5.5,)], "a double").select(udf(col("a")))
+            self.assertIn("TranspiledJavaUDF", self._plan(fractional))
+            self.assertEqual(2.75, fractional.first()[0])
 
     def test_mixed_int_float_comparison_matches_python_exactly(self):
         # A multi-statement body Catalyst declines, so the java target takes it. Widening the
@@ -883,7 +943,9 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
         with self.sql_conf(_JAVA_ONLY):
             lowered = UserDefinedFunction(eq_after_assign, BooleanType())
             self.assertTrue(lowered.transpiled)
-            self.assertFalse(df.select(lowered(col("a"), col("b"))).first()[0])
+            result = df.select(lowered(col("a"), col("b")))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            self.assertFalse(result.first()[0])
 
     def test_string_comparison_matches_python_codepoint_order(self):
         # Codepoint order, so "Z" < "a". Spark disables UTF8String.compareTo in favour of
@@ -900,7 +962,9 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
         with self.sql_conf(_JAVA_ONLY):
             lowered = UserDefinedFunction(before_lowercase_a, BooleanType())
             self.assertTrue(lowered.transpiled)
-            actual = [r[0] for r in df.select(lowered(col("a"))).collect()]
+            result = df.select(lowered(col("a")))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            actual = [r[0] for r in result.collect()]
         self.assertEqual([True, False], expected)
         self.assertEqual(expected, actual)
 
@@ -978,6 +1042,122 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
             result = int_col.select(udf(col("a")))
             self.assertIn("TranspiledJavaUDF", self._plan(result))
             self.assertEqual(7, result.first()[0])
+
+    def test_a_conditional_expression_takes_the_branch_python_does(self):
+        # Nothing else executes a conditional expression, so swapping its branches passed. The
+        # NULL row is the last case: a NULL condition takes the `else` branch, as `None` does.
+        def pick(flag: bool):
+            return 10 if flag else 20
+
+        df = self.spark.createDataFrame([(True,), (False,), (None,)], "a boolean")
+        with self.sql_conf(_TRANSPILE_OFF):
+            plain = UserDefinedFunction(pick, LongType())
+            expected = [r[0] for r in df.select(plain(col("a"))).collect()]
+        with self.sql_conf(_JAVA_ONLY):
+            udf = UserDefinedFunction(pick, LongType())
+            self.assertTrue(udf.transpiled)
+            result = df.select(udf(col("a")))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            self.assertEqual(expected, [r[0] for r in result.collect()])
+        self.assertEqual([10, 20, 20], expected)
+
+    def test_string_literal_escapes_survive_the_round_trip(self):
+        # Backslash, quote, newline, carriage return, tab, another control character, a BMP
+        # character and one outside the BMP. Dropping any escape changes the text.
+        def decorate(s):
+            return s + '\\ " \n \r \t \x01 \u00e9 \U0001f600'
+
+        df = self.spark.createDataFrame([("x",)], "a string")
+        with self.sql_conf(_TRANSPILE_OFF):
+            plain = UserDefinedFunction(decorate, StringType())
+            expected = df.select(plain(col("a"))).first()[0]
+        with self.sql_conf(_JAVA_ONLY):
+            udf = UserDefinedFunction(decorate, StringType())
+            self.assertTrue(udf.transpiled)
+            result = df.select(udf(col("a")))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            self.assertEqual(expected, result.first()[0])
+        self.assertEqual('x\\ " \n \r \t \x01 \u00e9 \U0001f600', expected)
+
+    def test_int_times_str_keeps_python_evaluation_order(self):
+        # `n * s` used to lower to `repeat(s, n)`, which ran `s * a` before `a // b`: the repeat
+        # overflowed first where Python reports the division.
+        def f(a: int, b: int, s: str):
+            return (a // b) * (s * a)
+
+        df = self.spark.createDataFrame([(2**40, 0, "ab")], "a bigint, b bigint, s string")
+        with self.sql_conf(_JAVA_ONLY):
+            udf = UserDefinedFunction(f, StringType())
+            self.assertTrue(udf.transpiled)
+            result = df.select(udf(col("a"), col("b"), col("s")))
+            self.assertIn("TranspiledJavaUDF", self._plan(result))
+            with self.assertRaises(Exception) as caught:
+                result.collect()
+            self.assertIn("DIVIDE_BY_ZERO", str(caught.exception))
+
+    def test_declared_return_types_convert_the_body_result(self):
+        # The body is lowered as Long or Double; the declared type is applied on the way out.
+        def plus_one(x):
+            return x + 1
+
+        def scaled(x):
+            return x * 1.5
+
+        ints = self.spark.createDataFrame([(1,), (2,)], "a bigint")
+        doubles = self.spark.createDataFrame([(2.0,)], "a double")
+        cases = {
+            "int": (plus_one, IntegerType(), ints, [2, 3]),
+            "smallint": (plus_one, ShortType(), ints, [2, 3]),
+            "float": (scaled, FloatType(), doubles, [3.0]),
+            # An int body under a declared double is promoted.
+            "double from an int body": (plus_one, DoubleType(), ints, [2.0, 3.0]),
+        }
+        for label, (func, return_type, df, expected) in cases.items():
+            with self.subTest(case=label):
+                with self.sql_conf(_JAVA_ONLY):
+                    udf = UserDefinedFunction(func, return_type)
+                    self.assertTrue(udf.transpiled)
+                    result = df.select(udf(col("a")).alias("v"))
+                    self.assertIn("TranspiledJavaUDF", self._plan(result))
+                    self.assertEqual(return_type, result.schema["v"].dataType)
+                    self.assertEqual(expected, [r[0] for r in result.collect()])
+
+    def test_a_result_beyond_the_declared_int_range_fails_under_ansi(self):
+        def plus_one(x):
+            return x + 1
+
+        df = self.spark.createDataFrame([(2**31 - 1,)], "a bigint")
+        with self.sql_conf(_JAVA_ONLY):
+            udf = UserDefinedFunction(plus_one, IntegerType())
+            self.assertTrue(udf.transpiled)
+            with self.assertRaises(Exception) as caught:
+                df.select(udf(col("a"))).collect()
+            self.assertIn("CAST_OVERFLOW", str(caught.exception))
+
+    def test_a_body_that_does_not_compile_is_skipped_at_definition(self):
+        # A lowering bug must cost the option, not the query: once the option is in the plan there
+        # is no fallback. The transpiler only emits compiling bodies, so hand it one that does not.
+        import warnings as _w
+        from unittest import mock
+
+        from pyspark.sql.transpile_java import JavaTranspiler
+
+        def plus_one(x):
+            return x + 1
+
+        df = self.spark.createDataFrame([(1,)], "a bigint")
+        with self.sql_conf(_JAVA_ONLY):
+            with mock.patch.object(
+                JavaTranspiler, "_lower_body", return_value=["return not_a_symbol;"]
+            ):
+                with _w.catch_warnings(record=True) as caught:
+                    _w.simplefilter("always")
+                    udf = UserDefinedFunction(plus_one, LongType())
+            self.assertEqual([], udf.transpiled)
+            self.assertIn("not_a_symbol", " ".join(str(w.message) for w in caught))
+            result = df.select(udf(col("a")))
+            self.assertIn("BatchEvalPython", self._plan(result))
+            self.assertEqual(2, result.first()[0])
 
 
 class GetTranspilersTests(unittest.TestCase):

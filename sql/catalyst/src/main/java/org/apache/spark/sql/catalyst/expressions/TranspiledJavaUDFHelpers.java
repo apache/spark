@@ -110,6 +110,8 @@ public final class TranspiledJavaUDFHelpers {
     if (Math.abs(x) <= EXACT_DOUBLE_BOUND && Math.abs(y) <= EXACT_DOUBLE_BOUND) {
       return ((double) x) / ((double) y);
     }
+    // BigDecimal has no negative zero; CPython's `0 / -9007199254740993` is -0.0.
+    if (x == 0L) return Math.copySign(0.0d, (double) y);
     // Exact first. A tie is dyadic so the exact divide succeeds; whatever
     // reaches the fallback cannot be a tie. But not-tied is not enough: the
     // gap to the nearest tie can be as small as 1/(y*2^53) relative -- under
@@ -223,7 +225,7 @@ public final class TranspiledJavaUDFHelpers {
 
   /**
    * Python's `*` on text. Count is `Long` because a fractional one is refused
-   * rather than truncated (Catalyst's documented divergence).
+   * rather than truncated.
    */
   public static UTF8String repeat(UTF8String a, Long times) {
     if (a == null || times == null) return null;
@@ -248,8 +250,13 @@ public final class TranspiledJavaUDFHelpers {
     return a.repeat(times.intValue());
   }
 
+  /** `n * s`: the count is the left operand, so Java must evaluate it first, as Python does. */
+  public static UTF8String repeatCountFirst(Long times, UTF8String a) {
+    return repeat(a, times);
+  }
+
   // ---------------------------------------------------------------------------------------------
-  // Comparison -- null-propagating, so the result is a nullable Boolean
+  // Comparison -- null-safe equality, NULL-raising ordering
   // ---------------------------------------------------------------------------------------------
 
   /**
@@ -456,7 +463,7 @@ public final class TranspiledJavaUDFHelpers {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Three-valued logic
+  // Python's `not` and branch conditions
   // ---------------------------------------------------------------------------------------------
 
   // No `and` / `or`: a helper cannot short-circuit. Hoist the right operand

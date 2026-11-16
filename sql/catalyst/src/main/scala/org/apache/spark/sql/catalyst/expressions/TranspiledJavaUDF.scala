@@ -113,8 +113,8 @@ case class TranspiledJavaUDF(
 
   /**
    * Not the inherited one: dumping `body` mangles EXPLAIN. Spelled as
-   * `TranspiledJavaUDF` so a plan says which target fired; `prettyName` stays
-   * the UDF name so column names match the interpreted UDF.
+   * `TranspiledJavaUDF` so a plan says which target fired. Column names come from the wrapping
+   * `TranspiledPythonUDF`, not from here; `prettyName` is the UDF name for error messages.
    */
   override def toString: String = s"TranspiledJavaUDF($name, ${children.mkString(", ")})"
 

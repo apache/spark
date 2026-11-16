@@ -104,6 +104,18 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     assert(H.divideLong(2525447105329283886L, 1152921504606846997L) === 2.1904761904761907d)
   }
 
+  test("/ on ints keeps the sign of a zero quotient, as CPython does") {
+    // BigDecimal has no negative zero, so a divisor past 2^53 has to be handled apart. Compared
+    // as bits: `0.0 === -0.0`.
+    def bits(d: java.lang.Double): Long = java.lang.Double.doubleToRawLongBits(d)
+    val negativeZero = bits(-0.0d)
+    assert(bits(H.divideLong(0L, -9007199254740993L)) === negativeZero)
+    assert(bits(H.divideLong(0L, Long.MinValue)) === negativeZero)
+    assert(bits(H.divideLong(0L, -5L)) === negativeZero)
+    assert(bits(H.divideLong(0L, 9007199254740993L)) === 0L)
+    assert(bits(H.divideLong(0L, 5L)) === 0L)
+  }
+
   test("division by zero raises for both categories") {
     // Java gives Infinity for the double case; Python raises for both.
     Seq[() => Any](
@@ -128,6 +140,17 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     // Guarded before MathUtils.floorDiv, which would report a zero divisor as an overflow.
     assert(intercept[SparkArithmeticException](H.floorDivideLong(1L, 0L)).getCondition
       === "DIVIDE_BY_ZERO")
+  }
+
+  test("float % and // return CPython's signed zeros") {
+    // `===` cannot tell 0.0 from -0.0, so compare bits.
+    def bits(d: java.lang.Double): Long = java.lang.Double.doubleToRawLongBits(d)
+    val negativeZero = bits(-0.0d)
+    assert(bits(H.modDouble(1.0d, -1.0d)) === negativeZero)
+    assert(bits(H.modDouble(-1.0d, -1.0d)) === negativeZero)
+    assert(bits(H.floorDivideDouble(-0.0d, 5.0d)) === negativeZero)
+    assert(bits(H.modDouble(1.0d, 1.0d)) === 0L)
+    assert(bits(H.floorDivideDouble(0.0d, 5.0d)) === 0L)
   }
 
   test("float arithmetic overflows to infinity, as Python's does") {
@@ -244,9 +267,30 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     // Python: "ab" * 0 and "ab" * -1 are both "".
     assert(H.repeat(utf8("ab"), 0L) === utf8(""))
     assert(H.repeat(utf8("ab"), -1L) === utf8(""))
+    // `n * s` takes the count first so Java evaluates it first, and otherwise is `repeat`.
+    assert(H.repeatCountFirst(3L, utf8("ab")) === utf8("ababab"))
+    assert(H.repeatCountFirst(0L, utf8("ab")) === utf8(""))
+    assert(H.repeatCountFirst(-1L, utf8("ab")) === utf8(""))
+    assert(H.repeatCountFirst(5L, utf8("")) === utf8(""))
+    assert(H.repeatCountFirst(null, utf8("ab")) === null)
+    assert(H.repeatCountFirst(2L, null) === null)
+    intercept[ArithmeticException](H.repeatCountFirst(Int.MaxValue.toLong + 1L, utf8("ab")))
     // A count no Java array could hold raises rather than silently truncating to an int; the
     // error class it carries is pinned separately.
     intercept[ArithmeticException](H.repeat(utf8("ab"), Int.MaxValue.toLong + 1L))
+  }
+
+  test("double comparison is raw IEEE: NaN is unordered and 0.0 equals -0.0") {
+    // Not Spark's normalised `NaN == NaN`, and not `Objects.equals`, which would also say
+    // 0.0 != -0.0.
+    assert(H.equalsDouble(Double.NaN, Double.NaN) === false)
+    assert(H.equalsDouble(0.0d, -0.0d) === true)
+    assert(H.lessThanDouble(Double.NaN, 1.0d) === false)
+    assert(H.lessThanOrEqualDouble(1.0d, Double.NaN) === false)
+    assert(H.greaterThanDouble(Double.NaN, 1.0d) === false)
+    assert(H.greaterThanOrEqualDouble(Double.NaN, Double.NaN) === false)
+    assert(H.lessThanOrEqualDouble(-0.0d, 0.0d) === true)
+    assert(H.lessThanDouble(-0.0d, 0.0d) === false)
   }
 
   test("comparison helpers order by value and by codepoint") {

@@ -171,8 +171,9 @@ class AbstractTranspiler(object):
     ) -> List[dict]:
         """Input-type variants to offer ``_transpile_from_ast``, one dict per variant.
 
-        Override when the target cannot share Catalyst's coarse ``"numeric"``
-        category. ``ResolveTranspiledPythonUDFOptions`` has to understand
+        Override when the target needs other category names, or a different cap on
+        untyped parameters, than Catalyst's (``"integer"``/``"float"``/``"string"``,
+        capped at three). ``ResolveTranspiledPythonUDFOptions`` has to understand
         whatever is returned here.
         """
         return _param_category_combos(function_ast, public_params)
