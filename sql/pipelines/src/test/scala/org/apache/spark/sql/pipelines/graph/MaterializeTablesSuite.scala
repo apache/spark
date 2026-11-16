@@ -1095,7 +1095,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
   test("SPARK-59269: a default inherited from a source does not back-fill rows a streaming table " +
     "ingested before it selected the column") {
-    val source = s"${TestGraphRegistrationContext.DEFAULT_DATABASE}.src"
+    // Not named src, which the Hive test session reserves for a test table it creates on demand.
+    val source = s"${TestGraphRegistrationContext.DEFAULT_DATABASE}.src_with_default"
     sql(s"CREATE TABLE $source (a INT, b INT DEFAULT 7)")
     sql(s"INSERT INTO $source VALUES (1, 10)")
 
