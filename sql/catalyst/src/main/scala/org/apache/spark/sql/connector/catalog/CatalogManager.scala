@@ -595,7 +595,8 @@ private[sql] object CatalogManager extends Logging {
   /**
    * Entries that participate in one-part name resolution, in declared path order: every
    * schema-role entry, and every catalog-role entry whose catalog is not already the prefix of a
-   * schema-role entry (the uncovered empty-namespace catalog case).
+   * schema-role entry (the uncovered empty-namespace catalog case). A bare `system` catalog entry
+   * is never a one-part candidate: prefixing it would probe a schema named `system`.
    */
   private def onePartPathEntries(pathEntries: Seq[ResolvedPathEntry]): Seq[Seq[String]] = {
     val catalogsWithSchema = pathEntries.iterator.collect {
@@ -604,7 +605,8 @@ private[sql] object CatalogManager extends Logging {
     pathEntries.collect {
       case e if e.isSchema => e.parts
       case e if e.isCatalog &&
-          !catalogsWithSchema.contains(e.parts.head.toLowerCase(java.util.Locale.ROOT)) =>
+          !catalogsWithSchema.contains(e.parts.head.toLowerCase(java.util.Locale.ROOT)) &&
+          !(e.parts.length == 1 && e.parts.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME)) =>
         e.parts
     }
   }
@@ -654,11 +656,16 @@ private[sql] object CatalogManager extends Logging {
       pathEntries: Seq[ResolvedPathEntry],
       nameParts: Seq[String],
       isCatalogRegistered: String => Boolean): Seq[Seq[String]] = {
-    if (identifierUsesPath(nameParts, isCatalogRegistered)) {
-      val entries = identifierPathEntries(pathEntries, nameParts, isCatalogRegistered).to(LazyList)
+    // Each catalog is probed at most once per call: the same name is checked by the PATH
+    // shape test, the entry selection, and the applicability filter.
+    val probed = mutable.HashMap.empty[String, Boolean]
+    val isRegistered: String => Boolean =
+      name => probed.getOrElseUpdate(name, isCatalogRegistered(name))
+    if (identifierUsesPath(nameParts, isRegistered)) {
+      val entries = identifierPathEntries(pathEntries, nameParts, isRegistered).to(LazyList)
       val applicableEntries = entries.filter { entry =>
         entry.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) ||
-          isCatalogRegistered(entry.head)
+          isRegistered(entry.head)
       }
       applicableEntries.map(_ ++ nameParts)
     } else {

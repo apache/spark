@@ -26,7 +26,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
-  AnalysisContext,
   AnalysisErrorAt,
   CleanupAliases,
   FunctionResolution,
@@ -584,18 +583,12 @@ class Resolver(
 
           relationsWithResolvedMetadata
         case None =>
+          // Report the path this analysis resolved against (frozen for views), matching the
+          // fixed-point analyzer, rather than the session's current SET PATH.
           val multipartId = unresolvedRelation.multipartIdentifier
-          val catalogPath = {
-            val ctx = AnalysisContext.get.catalogAndNamespace
-            if (ctx.nonEmpty) ctx
-            else (catalogManager.currentCatalog.name() +: catalogManager.currentNamespace).toSeq
-          }
-          val searchPath = catalogManager
-            .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
-          val relevantSearchPath =
-            CatalogManager.identifierPathEntries(
-              searchPath, multipartId, catalogManager.isCatalogRegistered).map(toSQLId)
-          unresolvedRelation.tableNotFound(multipartId, relevantSearchPath)
+          unresolvedRelation.tableNotFound(
+            multipartId,
+            relationResolution.resolutionSearchPathForError(multipartId))
       }
 
       resolve(resolvedRelation)

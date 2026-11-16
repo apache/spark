@@ -318,8 +318,7 @@ object AnalysisContext {
    *
    * @param invokerCatalogAndNamespace the caller's current catalog and namespace. Version-0
    *                                   frozen PATH reconstruction appends this catalog (not the
-   *                                   creation catalog) for two-part names, matching the base
-   *                                   branch.
+   *                                   creation catalog) for two-part names.
    * @param pathlessEntries when PATH is enabled and the function stores no frozen PATH, the
    *                        entries to pin for its body (DEFAULT_PATH or the built-in default
    *                        around its home). Pinning keeps the invoker's SET PATH out of the
@@ -337,8 +336,8 @@ object AnalysisContext {
       "SQL function",
       function.name.unquotedString)
     val hasFrozenPath = function.functionStoredResolutionPath.isDefined
-    // The body keeps the caller's catalog/namespace context, as on the base branch: it drives
-    // temp-object visibility and view-relative qualification. Path selection is separate: a
+    // The body keeps the caller's catalog/namespace context: it drives temp-object visibility
+    // and view-relative qualification. Path selection is separate: a
     // frozen PATH is used as stored (with version-0 enrichment against the invoker catalog), and
     // a pathless body uses the pinned entries so the invoker's SET PATH does not apply.
     val context = originContext.copy(

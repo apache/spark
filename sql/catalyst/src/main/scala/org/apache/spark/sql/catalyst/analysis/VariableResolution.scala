@@ -184,12 +184,20 @@ class VariableResolution(
   // The temp variables live in `SYSTEM.SESSION`. One- and two-part references use schema and
   // catalog entries from the SQL path; the three-part form is fully qualified.
   private def resolvesToTempVariable(nameParts: Seq[String]): Boolean = {
-    val candidates = CatalogManager.identifierPathCandidates(
-      resolutionPathEntries, nameParts, catalogManager.isCatalogRegistered)
-    candidates.exists { candidate =>
+    def isSessionVariableCandidate(candidate: Seq[String]): Boolean =
       candidate.length == 3 &&
         candidate(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
         candidate(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+    // Only a one-part name or `session.<name>` can expand to `system.session.<name>` through the
+    // path. Other shapes can only match as written, so they skip the path and catalog probes.
+    val mayUsePath = nameParts.length == 1 ||
+      (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE))
+    if (mayUsePath) {
+      CatalogManager.identifierPathCandidates(
+        resolutionPathEntries, nameParts, catalogManager.isCatalogRegistered)
+        .exists(isSessionVariableCandidate)
+    } else {
+      isSessionVariableCandidate(nameParts)
     }
   }
 

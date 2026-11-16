@@ -231,6 +231,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
   private val tempVariableManager = new TempVariableManager
 
+  /**
+   * Mocks [[CatalogManager.isCatalogRegistered]] to match [[CatalogManager.catalog]], so PATH
+   * candidates for registered catalogs are not filtered out as unregistered.
+   */
+  private def stubRegisteredCatalogs(manager: CatalogManager, names: Set[String]): Unit = {
+    when(manager.isCatalogRegistered(any[String])).thenAnswer((invocation: InvocationOnMock) =>
+      names.contains(invocation.getArguments()(0).asInstanceOf[String]))
+  }
+
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -256,6 +265,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.resolutionPathEntriesForAnalysis(
       any[Option[Seq[CatalogManager.ResolvedPathEntry]]], any[Seq[String]]))
       .thenReturn(defaultPath)
+    stubRegisteredCatalogs(manager, Set("testcat", CatalogManager.SESSION_CATALOG_NAME))
     manager
   }
 
@@ -285,6 +295,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.resolutionPathEntriesForAnalysis(
       any[Option[Seq[CatalogManager.ResolvedPathEntry]]], any[Seq[String]]))
       .thenReturn(defaultPath2)
+    stubRegisteredCatalogs(manager, Set("testcat", CatalogManager.SESSION_CATALOG_NAME))
     manager
   }
 
@@ -3671,6 +3682,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       val manager = mock(classOf[CatalogManager])
       when(manager.catalog(any())).thenReturn(catalog)
+      when(manager.isCatalogRegistered(any[String])).thenReturn(true)
       when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
       val ident = Identifier.of(Array.empty[String], "tab")
       val sharedRelationCacheCandidate =

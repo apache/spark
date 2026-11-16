@@ -26,7 +26,8 @@ license: |
 The SQL Path is an ordered list of catalog and catalog-qualified schema names that Spark walks
 when resolving one- and two-part references to functions, tables, views, and session variables
 in queries and DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`). Schema entries qualify
-one-part names, and catalog entries qualify two-part names. The first match wins. DDL
+one-part names. Catalog entries qualify one-part names only when no schema entry in the path
+already names that catalog, and they qualify two-part names. The first match wins. DDL
 (`CREATE TABLE`, `CREATE VIEW`, `CREATE FUNCTION`, `DROP`, `ALTER`, ...) resolves unqualified
 object names against `current_catalog.current_schema`, not the path; so `CREATE TABLE t` always
 creates `t` in the current schema regardless of the path.
@@ -150,8 +151,10 @@ path_element
 
 * Setting the path takes effect immediately.
 * Identifier case is preserved in storage and in `current_path()` output.
-* Catalog entries are ignored for one-part names, and schema entries are ignored for two-part
-  names.
+* Schema entries are ignored for two-part names: a path that lists only schemas has no catalog
+  to resolve two-part names against. Catalog entries are ignored for one-part names when a schema
+  entry in the path already names that catalog. A bare `system` catalog entry never takes part in
+  one-part resolution.
 * Duplicate entries are detected after expansion and raise `DUPLICATE_SQL_PATH_ENTRY`.
   Comparisons honor the session's case sensitivity setting. Because `CURRENT_DATABASE` is an
   alias for `CURRENT_SCHEMA`, listing both is flagged as a duplicate.

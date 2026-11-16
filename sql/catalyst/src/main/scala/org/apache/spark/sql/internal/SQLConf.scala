@@ -10956,6 +10956,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   /**
+   * Schema-only form of the two-argument `defaultPathOrder`, with no catalog entries.
+   */
+  def defaultPathOrder(
+      schemaEntries: Seq[Seq[String]]): Seq[CatalogManager.ResolvedPathEntry] = {
+    defaultPathOrder(schemaEntries, Seq.empty)
+  }
+
+  /**
    * Orders schema entries by [[sessionFunctionResolutionOrder]] with system.session and
    * system.builtin, then orders the system and persistent catalog entries using
    * [[persistentCatalogFirst]]. Used by the legacy single-schema resolution and by SET PATH's
@@ -10968,11 +10976,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * @param schemaEntries persistent schema path entries (may be empty).
    * @param catalogEntries persistent catalog path entries (may be empty).
    */
-  def defaultPathOrder(
-      schemaEntries: Seq[Seq[String]]): Seq[CatalogManager.ResolvedPathEntry] = {
-    defaultPathOrder(schemaEntries, Seq.empty)
-  }
-
   def defaultPathOrder(
       schemaEntries: Seq[Seq[String]],
       catalogEntries: Seq[Seq[String]]): Seq[CatalogManager.ResolvedPathEntry] = {

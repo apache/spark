@@ -272,11 +272,16 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
         catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
         catalog("cat2").createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
 
+        // Row(3) and Row(3L) compare equal, so assert the result type to tell the catalogs apart.
         sql("SET PATH = cat2, cat")
-        checkAnswer(sql("CALL ns.sum(1, 2)"), Row(3L) :: Nil)
+        val fromCat2 = sql("CALL ns.sum(1, 2)")
+        assert(fromCat2.schema.head.dataType == DataTypes.LongType)
+        checkAnswer(fromCat2, Row(3L) :: Nil)
 
         sql("SET PATH = cat, cat2")
-        checkAnswer(sql("CALL ns.sum(1, 2)"), Row(3) :: Nil)
+        val fromCat = sql("CALL ns.sum(1, 2)")
+        assert(fromCat.schema.head.dataType == DataTypes.IntegerType)
+        checkAnswer(fromCat, Row(3) :: Nil)
       } finally {
         sql("SET PATH = DEFAULT_PATH")
       }

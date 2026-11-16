@@ -233,7 +233,7 @@ class RelationResolution(
           try {
             tryResolvePersistent(u, candidate, finalTimeTravelSpec)
           } catch {
-            // PATH-derived `session_catalog.<name>` is not a valid table reference; keep searching.
+            // PATH-derived `spark_catalog.<name>` is not a valid table reference; keep searching.
             case e: AnalysisException
                 if usesPath && e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
               None

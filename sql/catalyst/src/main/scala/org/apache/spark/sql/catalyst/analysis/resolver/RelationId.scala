@@ -24,9 +24,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * The [[RelationId]] is a unique identifier for a relation. It is used to lookup the relations
  * which were processed by the [[MetadataResolver]] to substitute the unresolved relations in single
- * pass during the analysis phase. PATH-resolved identifiers retain their original spelling and any
- * frozen path from the current analysis context so distinct resolution scopes cannot share
- * metadata.
+ * pass during the analysis phase.
+ *
+ * PATH-resolved identifiers carry three discriminators so that distinct resolution scopes never
+ * share metadata: [[pathIdentifier]] (the original spelling), [[resolutionPathEntries]] (the frozen
+ * path of a view or SQL function, if any), and [[pathCatalogAndNamespace]] (the analysis home
+ * catalog and namespace, which decides the path used by a pathless view body).
  */
 case class RelationId(
     multipartIdentifier: Seq[String],
@@ -34,14 +37,15 @@ case class RelationId(
     isStreaming: Boolean = false,
     timeTravelSpec: Option[TimeTravelSpec] = None,
     pathIdentifier: Option[Seq[String]] = None,
-    resolutionPathEntries: Option[Seq[ResolvedPathEntry]] = None
+    resolutionPathEntries: Option[Seq[ResolvedPathEntry]] = None,
+    pathCatalogAndNamespace: Option[Seq[String]] = None
 ) {
   def this(
       multipartIdentifier: Seq[String],
       options: CaseInsensitiveStringMap,
       isStreaming: Boolean,
       timeTravelSpec: Option[TimeTravelSpec]) = {
-    this(multipartIdentifier, options, isStreaming, timeTravelSpec, None, None)
+    this(multipartIdentifier, options, isStreaming, timeTravelSpec, None, None, None)
   }
 }
 
@@ -51,6 +55,6 @@ object RelationId {
       options: CaseInsensitiveStringMap,
       isStreaming: Boolean,
       timeTravelSpec: Option[TimeTravelSpec]): RelationId = {
-    new RelationId(multipartIdentifier, options, isStreaming, timeTravelSpec, None, None)
+    new RelationId(multipartIdentifier, options, isStreaming, timeTravelSpec, None, None, None)
   }
 }

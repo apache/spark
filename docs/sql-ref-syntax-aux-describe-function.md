@@ -44,9 +44,10 @@ extended information.
 
     Specifies a name of an existing function. The function name follows the regular
     [name resolution](sql-ref-name-resolution.html#function-resolution) rules: unqualified
-    names walk the SQL Path; 3-part names target the chosen `catalog.schema` directly
-    (including the system namespaces `system.builtin` and `system.session`); 2-part names use
-    catalog entries in the SQL Path.
+    names walk the schema entries of the SQL Path, and the catalog entries of a catalog that no
+    schema entry names; 3-part names target the chosen `catalog.schema` directly (including the
+    system namespaces `system.builtin` and `system.session`); 2-part names use the catalog entries
+    of the SQL Path only.
 
     **Syntax:** `[ catalog_name. ] [ database_name. ] function_name`
 

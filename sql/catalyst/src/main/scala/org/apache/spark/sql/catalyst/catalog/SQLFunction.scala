@@ -198,9 +198,6 @@ case class SQLFunction(
       objectType = "SQL function",
       objectName = name.unquotedString)
 
-  /** Catalog that was current when the function was created. */
-  def functionCreationCatalog: Option[String] =
-    properties.get(FUNCTION_CATALOG_AND_NAMESPACE_PART_PREFIX + "0")
 }
 
 object SQLFunction {
@@ -223,11 +220,11 @@ object SQLFunction {
 
   /**
    * Current [[FUNCTION_METADATA_VERSION]] written by this Spark build. Bump when a change cannot
-   * read older function property payloads without a version branch. This may diverge from
-   * [[CatalogTable.CURRENT_VIEW_METADATA_VERSION]]; callers must pass the matching ceiling to
-   * `CatalogManager.deserializePathEntriesForAnalysisOrFail`.
+   * read older function property payloads without a version branch. This versions SQL function
+   * properties independently of [[CatalogTable.CURRENT_VIEW_METADATA_VERSION]]; callers must pass
+   * this ceiling to `CatalogManager.deserializePathEntriesForAnalysisOrFail`.
    */
-  val CURRENT_FUNCTION_METADATA_VERSION: Int = CatalogTable.CURRENT_VIEW_METADATA_VERSION
+  val CURRENT_FUNCTION_METADATA_VERSION: Int = 1
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 

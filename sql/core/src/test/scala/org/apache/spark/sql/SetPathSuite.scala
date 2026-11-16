@@ -1262,7 +1262,9 @@ class SetPathSuite extends SharedSparkSession {
             s"Expected BIGINT (builtin count rewrite); got: $tpe")
         }
 
-        // The catalog-only system entry resolves the two-part builtin.count reference below.
+        // Two-part names use catalog entries only, so the bare `system` catalog entry is what
+        // resolves the two-part builtin.count reference below. It never takes part in one-part
+        // resolution.
         sql("SET PATH = system.session, system.builtin, system")
 
         // PATH session-first: the gate reports a shadow, so the star expands against `a` and

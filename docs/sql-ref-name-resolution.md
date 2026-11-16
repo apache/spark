@@ -273,7 +273,9 @@ variable.
 ### Partially qualified (2 parts) &mdash; `schema.object`
 
 Spark walks the catalog entries in the [SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html),
-prepends each catalog to the identifier, and returns the first match. For example,
+prepends each catalog to the identifier, and returns the first match. Schema entries do not
+supply a catalog, so a path that lists only schemas does not resolve two-part names. In DDL, a
+two-part name is qualified with the current catalog and does not use the SQL Path. For example,
 `SET PATH = system, current_catalog` makes `session.x` try `system.session.x` before
 `current_catalog.session.x`; reversing the two entries reverses the preference. In the built-in
 default path, `spark.sql.legacy.persistentCatalogFirst` controls the order of these two entries.
@@ -281,8 +283,9 @@ default path, `spark.sql.legacy.persistentCatalogFirst` controls the order of th
 ### Unqualified (1 part) &mdash; `object`
 
 In queries and DML, Spark walks the schema entries in the
-[SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html) and returns the first match. In DDL, the
-identifier is qualified with `current_catalog.current_schema`.
+[SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html), together with any catalog entry whose
+catalog no schema entry already names (an empty-namespace catalog), and returns the first match.
+In DDL, the identifier is qualified with `current_catalog.current_schema`.
 
 > Note: persistent views and SQL UDFs capture the SQL Path at `CREATE` time. When the view or
 > function is invoked, its body resolves names &mdash; tables, views, and functions &mdash;

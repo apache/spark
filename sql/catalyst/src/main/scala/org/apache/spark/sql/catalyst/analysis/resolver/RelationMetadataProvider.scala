@@ -79,6 +79,10 @@ trait RelationMetadataProvider extends LookupCatalog {
     val nameParts = unresolvedRelation.multipartIdentifier
     val usesPath = CatalogManager.identifierUsesPath(
       nameParts, catalogManager.isCatalogRegistered)
+    // A pathless view body resolves PATH names against its home catalog and namespace, which
+    // top-level names do not have. Keying that home keeps the two from sharing metadata.
+    val catalogAndNamespace = AnalysisContext.get.catalogAndNamespace
+    val pathHome = Option.when(usesPath && catalogAndNamespace.nonEmpty)(catalogAndNamespace)
     relationResolution.expandIdentifier(nameParts) match {
       case CatalogAndIdentifier(catalog, ident) =>
         RelationId(
@@ -87,6 +91,7 @@ trait RelationMetadataProvider extends LookupCatalog {
           pathIdentifier = Option.when(usesPath)(nameParts),
           resolutionPathEntries = Option.when(usesPath)(AnalysisContext.get.resolutionPathEntries)
             .flatten,
+          pathCatalogAndNamespace = pathHome,
           options = unresolvedRelation.options,
           isStreaming = unresolvedRelation.isStreaming,
           timeTravelSpec = None

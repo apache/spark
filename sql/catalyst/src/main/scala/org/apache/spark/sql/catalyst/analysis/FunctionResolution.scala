@@ -159,7 +159,7 @@ class FunctionResolution(
             return ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
           }
         } catch {
-          // PATH-derived `session_catalog.<name>` (empty namespace) is an invalid candidate; keep
+          // PATH-derived `spark_catalog.<name>` (empty namespace) is an invalid candidate; keep
           // searching. The same shape written explicitly by the user still fails below.
           case e: AnalysisException
               if usesPath && e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
@@ -485,7 +485,8 @@ class FunctionResolution(
             return Some(SessionCatalog.Temp)
           }
         case None =>
-          if (persistentFunctionExists(candidate)) {
+          // Unqualified names always resolve through PATH.
+          if (persistentFunctionExists(candidate, usesPath = true)) {
             return None
           }
       }
@@ -509,7 +510,9 @@ class FunctionResolution(
       case 1 =>
         unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(nameParts.head)
       case 2 =>
-        resolutionCandidates(nameParts).iterator.find(candidateOwnsFunction) match {
+        val usesPath = CatalogManager.identifierUsesPath(
+          nameParts, catalogManager.isCatalogRegistered)
+        resolutionCandidates(nameParts).iterator.find(candidateOwnsFunction(_, usesPath)) match {
           case Some(candidate) => isSystemBuiltinCandidate(candidate)
           case None => false
         }
@@ -568,6 +571,7 @@ class FunctionResolution(
   private def routedSqlJsonStarOwnerFromPath(
       nameParts: Seq[String],
       name: String): RoutedSqlJsonStarOwner = {
+    val usesPath = CatalogManager.identifierUsesPath(nameParts, catalogManager.isCatalogRegistered)
     for (candidate <- resolutionCandidates(nameParts)) {
       if (isSystemBuiltinCandidate(candidate)) {
         return if (v1SessionCatalog.isStockBuiltinFunction(name)) {
@@ -575,7 +579,7 @@ class FunctionResolution(
         } else {
           RoutedSqlJsonStarOwner.NoBinding
         }
-      } else if (candidateOwnsFunction(candidate)) {
+      } else if (candidateOwnsFunction(candidate, usesPath)) {
         return RoutedSqlJsonStarOwner.BindShadowOwner(candidate)
       }
     }
@@ -593,16 +597,24 @@ class FunctionResolution(
     isSystemCatalogQualified(candidate) &&
       candidate(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
 
-  /** Whether `candidate` owns a function, branching as [[resolveFunctionCandidate]] does. */
-  private def candidateOwnsFunction(candidate: Seq[String]): Boolean =
+  /**
+   * Whether `candidate` owns a function, branching as [[resolveFunctionCandidate]] does.
+   * `usesPath` is whether the name as written resolves through SQL PATH.
+   */
+  private def candidateOwnsFunction(candidate: Seq[String], usesPath: Boolean): Boolean =
     if (isSystemCatalogQualified(candidate)) {
       lookupBuiltinOrTempFunction(candidate, None).isDefined ||
         lookupBuiltinOrTempTableFunction(candidate).isDefined
     } else {
-      persistentFunctionExists(candidate)
+      persistentFunctionExists(candidate, usesPath)
     }
 
-  private def persistentFunctionExists(nameParts: Seq[String]): Boolean = {
+  /**
+   * Whether a persistent function exists at a PATH candidate or explicit name. `usesPath` marks
+   * the name as written as PATH-resolved: its empty-namespace session-catalog candidate is not a
+   * function, so that probe is a miss; the same shape written explicitly still fails.
+   */
+  private def persistentFunctionExists(nameParts: Seq[String], usesPath: Boolean): Boolean = {
     try {
       // Expand through the view's frozen catalog/namespace exactly as `resolveFunctionCandidate`
       // does, so the shadow probe queries the same catalog the real resolver would inside a view.
@@ -618,6 +630,9 @@ class FunctionResolution(
          | _: CatalogNotFoundException =>
         false
       case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+        false
+      case e: AnalysisException
+          if usesPath && e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
         false
     }
   }
@@ -635,6 +650,7 @@ class FunctionResolution(
   def lookupFunctionType(
       nameParts: Seq[String],
       unresolvedFunc: Option[UnresolvedFunction] = None): FunctionType = {
+    val usesPath = CatalogManager.identifierUsesPath(nameParts, catalogManager.isCatalogRegistered)
     for (candidate <- resolutionCandidates(nameParts)) {
       if (isSystemCatalogQualified(candidate) &&
           lookupBuiltinOrTempFunction(candidate, unresolvedFunc).isDefined) {
@@ -646,7 +662,9 @@ class FunctionResolution(
       }
       if (!isSystemCatalogQualified(candidate)) {
         try {
-          candidate match {
+          // Expand through the view's frozen catalog/namespace, as `resolveFunctionCandidate`
+          // does, so the probe queries the catalog the call itself would resolve in.
+          relationResolution.expandIdentifier(candidate) match {
             case CatalogAndIdentifier(catalog, ident) =>
               if (catalog.asFunctionCatalog.functionExists(ident)) {
                 return FunctionType.Persistent
@@ -660,6 +678,10 @@ class FunctionResolution(
              | _: NoSuchNamespaceException
              | _: CatalogNotFoundException =>
           case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+          // A PATH-derived empty-namespace session catalog candidate is invalid; keep searching.
+          // The same shape written explicitly by the user still fails.
+          case e: AnalysisException
+              if usesPath && e.getCondition == "REQUIRES_SINGLE_PART_NAMESPACE" =>
         }
       }
     }
@@ -870,21 +892,16 @@ class FunctionResolution(
     val usesPath = CatalogManager.identifierUsesPath(
       unresolved.nameParts, catalogManager.isCatalogRegistered)
     val safelyProbeCandidateExistence = usesPath && unresolved.nameParts.length == 2
-    // Two-part PATH candidates include a `system` catalog entry under the built-in default. The
-    // virtual system catalog is not a ProcedureCatalog, and CatalogAndIdentifier remaps
-    // `system.ns.p` onto the current catalog with namespace `[system, ns]`. Skip those candidates
-    // so listProcedures is not called on a namespace the base branch never probed. Relation and
-    // function resolution already divert system candidates; procedures have no system procedures.
+    // Skip the virtual `system` catalog candidates of a PATH-resolved two-part name. That catalog
+    // is not a ProcedureCatalog, and expanding `system.ns.p` would map it onto the current catalog
+    // with namespace `[system, ns]`. Procedures have no system-catalog entries.
     val candidates = resolutionCandidates(unresolved.nameParts).filterNot { multipart =>
       safelyProbeCandidateExistence &&
         multipart.headOption.exists(_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))
     }
-    // Preserve the legacy fallback for unqualified procedures. For newly PATH-resolved two-part
-    // names, listProcedures provides a safe miss check because ProcedureCatalog does not define a
-    // standard not-found exception. Propagate other failures instead of masking authorization or
-    // catalog availability errors and executing a later candidate.
+    // Legacy one-part names treat candidate failures as misses and keep searching the PATH.
     val skipCandidateFailures = unresolved.nameParts.length == 1
-    for (multipart <- candidates) {
+    for ((multipart, index) <- candidates.zipWithIndex) {
       val expandedOpt =
         try {
           Some(relationResolution.expandIdentifier(multipart))
@@ -895,7 +912,13 @@ class FunctionResolution(
         CatalogAndIdentifier.unapply(expanded).foreach { case (catalog, ident) =>
           catalog match {
             case pc: ProcedureCatalog =>
-              if (!safelyProbeCandidateExistence || procedureExists(pc, ident)) {
+              // ProcedureCatalog has no standard "not found" exception, so a two-part PATH
+              // candidate is probed with listProcedures to find a miss. Only a candidate with a
+              // later candidate after it is probed: the last one is loaded directly, so its
+              // failures propagate as they do for explicitly qualified names.
+              val hasLaterCandidate = index < candidates.size - 1
+              if (!safelyProbeCandidateExistence || !hasLaterCandidate ||
+                  procedureExists(pc, ident)) {
                 try {
                   val procedure = pc.loadProcedure(ident)
                   // A null means the catalog has no such procedure. Treat it as a miss, so an
@@ -941,7 +964,7 @@ class FunctionResolution(
 
   private def procedureExists(catalog: ProcedureCatalog, ident: Identifier): Boolean = {
     try {
-      catalog.listProcedures(ident.namespace()).exists(_.name() == ident.name())
+      catalog.listProcedures(ident.namespace()).exists(p => conf.resolver(p.name(), ident.name()))
     } catch {
       case _: NoSuchNamespaceException => false
     }
