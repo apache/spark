@@ -20,7 +20,7 @@ package org.apache.spark.api.python
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, Closeable, DataInputStream, DataOutputStream, EOFException}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChannel, SocketChannel}
+import java.nio.channels.{Channels, ClosedByInterruptException, SelectionKey, ServerSocketChannel, SocketChannel}
 import java.nio.charset.StandardCharsets
 import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
@@ -881,6 +881,234 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       intercept[SparkException] {
         BasePythonRunner.readInitResponse(framedMetricsStream("{}", Some(length)))
       }
+    }
+  }
+
+  /** A worker handle that records how often it was asked to terminate the worker. */
+  private class RecordingWorkerHandle(
+      alive: Boolean = true,
+      destroyIssued: Boolean = true,
+      diagnostics: Option[String] = None) extends PythonWorkerHandle {
+    val destroyCalls = new AtomicInteger(0)
+    override def isAlive(): Boolean = alive
+    override def destroy(): Boolean = {
+      destroyCalls.incrementAndGet()
+      destroyIssued
+    }
+    override def terminationDiagnostics(): Option[String] = diagnostics
+  }
+
+  /**
+   * Runs `f` with a worker whose channel is one end of a loopback connection, and with the
+   * other end. With `blocking`, the worker is set up like in pipelined mode, without a selector.
+   * Otherwise the worker only waits for output, like a worker whose input was sent completely.
+   */
+  private def withIdleWorker(blocking: Boolean)(f: (PythonWorker, SocketChannel) => Unit): Unit = {
+    val server = ServerSocketChannel.open()
+    try {
+      server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+      val worker = PythonWorker(SocketChannel.open(server.getLocalAddress))
+      try {
+        val accepted = server.accept()
+        try {
+          worker.channel.configureBlocking(blocking)
+          worker.refresh()
+          if (!blocking) {
+            worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          }
+          f(worker, accepted)
+        } finally {
+          accepted.close()
+        }
+      } finally {
+        worker.stop()
+      }
+    } finally {
+      server.close()
+    }
+  }
+
+  private val idleTimeoutLoggerName = "org.apache.spark.api.python.IdleTimeoutTestRunner"
+
+  /** Runs `f` and returns the warnings logged under `idleTimeoutLoggerName`. */
+  private def idleTimeoutWarnings(f: => Unit): Seq[String] = {
+    val logAppender = new LogAppender("idle timeout")
+    withLogAppender(logAppender, loggerNames = Seq(idleTimeoutLoggerName)) {
+      f
+    }
+    logAppender.loggingEvents.toSeq.map { event =>
+      assert(event.getLevel === Level.WARN)
+      assert(event.getLoggerName === idleTimeoutLoggerName)
+      event.getMessage.getFormattedMessage
+    }
+  }
+
+  private val nonBlockingWorkerStatus = "handle.map(_.isAlive) = Some(true), " +
+    "channel.isConnected = true, channel.isBlocking = false, selector.isOpen = true, " +
+    "selectionKey.isValid = true, selectionKey.interestOps = 1, "
+
+  test("idle timeout on the selector kills the worker once and fails the read at the end " +
+      "of the stream") {
+    withIdleWorker(blocking = false) { (worker, _) =>
+      val handle = new RecordingWorkerHandle(diagnostics = Some("worker stack"))
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      val task = "task 0.0 in stage 0 (TID 0)"
+
+      val firstTimeout = idleTimeoutWarnings {
+        handler.select(hasInputs = false)
+      }
+      assert(firstTimeout === Seq(
+        "Idle timeout reached for Python worker (timeout: 1 seconds). " +
+          "No data received from the worker process - " + nonBlockingWorkerStatus +
+          s"hasInputs = false - $task",
+        s"Terminating Python worker process due to idle timeout (timeout: 1 seconds) - $task"))
+      assert(handle.destroyCalls.get() === 1)
+
+      // Until the worker closes the connection, later timeouts are only logged.
+      val secondTimeout = idleTimeoutWarnings {
+        handler.onIdleTimeout(hasInputs = true)
+      }
+      assert(secondTimeout === Seq(
+        "Waiting for Python worker process to terminate after idle timeout: " +
+          nonBlockingWorkerStatus + "hasInputs = true"))
+      assert(handle.destroyCalls.get() === 1)
+
+      // Only the end of the stream fails the read.
+      handler.throwIfKilled(0)
+      handler.throwIfKilled(16)
+      val e = intercept[PythonWorkerException] {
+        handler.throwIfKilled(-1)
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 1 seconds): worker stack")
+    }
+  }
+
+  test("idle timeout on the selector is not handled when the worker has output or when " +
+      "there is no idle timeout") {
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle()
+      val warnings = idleTimeoutWarnings {
+        peer.write(ByteBuffer.wrap(new Array[Byte](1)))
+        new BasePythonRunner.IdleTimeoutHandler(
+          worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+          Some(TaskContext.empty()), idleTimeoutLoggerName).select(hasInputs = false)
+        assert(worker.selectionKey.isReadable)
+        // Without an idle timeout the wait has no limit, so the pending output ends it.
+        val noTimeoutHandler = new BasePythonRunner.IdleTimeoutHandler(
+          worker, Some(handle), idleTimeoutSeconds = 0, killOnIdleTimeout = true,
+          Some(TaskContext.empty()), idleTimeoutLoggerName)
+        noTimeoutHandler.select(hasInputs = false)
+        noTimeoutHandler.throwIfKilled(-1)
+      }
+      assert(warnings.isEmpty)
+      assert(handle.destroyCalls.get() === 0)
+    }
+  }
+
+  test("idle timeout without killOnIdleTimeout only logs, without a task and with another " +
+      "worker name") {
+    withIdleWorker(blocking = false) { (worker, _) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = false,
+        None, idleTimeoutLoggerName, workerName = "Python planner worker")
+      val expected = "Idle timeout reached for Python planner worker (timeout: 1 seconds). " +
+        "No data received from the worker process: " + nonBlockingWorkerStatus +
+        "hasInputs = true"
+      // Every timeout is logged the same way, since the worker is never killed.
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
+      assert(handle.destroyCalls.get() === 0)
+      handler.throwIfKilled(-1)
+    }
+
+    withIdleWorker(blocking = false) { (worker, _) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        None, idleTimeoutLoggerName, workerName = "Python planner worker")
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = false)) === Seq(
+        "Idle timeout reached for Python planner worker (timeout: 1 seconds). " +
+          "No data received from the worker process: " + nonBlockingWorkerStatus +
+          "hasInputs = false",
+        "Terminating Python planner worker process due to idle timeout (timeout: 1 seconds)"))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = false)) === Seq(
+        "Waiting for Python planner worker process to terminate after idle timeout: " +
+          nonBlockingWorkerStatus + "hasInputs = false"))
+      assert(handle.destroyCalls.get() === 1)
+      val e = intercept[PythonWorkerException] {
+        handler.throwIfKilled(-1)
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 1 seconds)")
+    }
+  }
+
+  test("idle timeout reported by a blocking read, as in pipelined mode") {
+    val blockingWorkerStatus =
+      "channel.isConnected = true, channel.isBlocking = true, hasInputs = true"
+    val task = "task 0.0 in stage 0 (TID 0)"
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Idle timeout reached for Python worker (timeout: 3 seconds). " +
+          "No data received from the worker process - handle.map(_.isAlive) = Some(true), " +
+          s"$blockingWorkerStatus - $task",
+        s"Terminating Python worker process due to idle timeout (timeout: 3 seconds) - $task"))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Waiting for Python worker process to terminate after idle timeout: " +
+          s"handle.map(_.isAlive) = Some(true), $blockingWorkerStatus"))
+      assert(handle.destroyCalls.get() === 1)
+      val e = intercept[PythonWorkerException] {
+        handler.throwIfKilled(-1)
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 3 seconds)")
+    }
+
+    // The worker does not count as killed if no termination request was issued, so the next
+    // timeout tries again and the end of the stream is not attributed to the idle timeout.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle(destroyIssued = false)
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
+      assert(handle.destroyCalls.get() === 2)
+      handler.throwIfKilled(-1)
+    }
+
+    // A worker that has already exited is not asked to terminate and does not count as killed.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle(alive = false)
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Idle timeout reached for Python worker (timeout: 3 seconds). " +
+          "No data received from the worker process - handle.map(_.isAlive) = Some(false), " +
+          s"$blockingWorkerStatus - $task"))
+      assert(handle.destroyCalls.get() === 0)
+      handler.throwIfKilled(-1)
+    }
+
+    // Without a handle there is nothing to kill.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, None, idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Idle timeout reached for Python worker (timeout: 3 seconds). " +
+          "No data received from the worker process - handle.map(_.isAlive) = None, " +
+          s"$blockingWorkerStatus - $task"))
+      handler.throwIfKilled(-1)
     }
   }
 }

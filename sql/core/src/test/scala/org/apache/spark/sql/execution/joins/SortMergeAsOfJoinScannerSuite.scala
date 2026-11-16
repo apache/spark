@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import com.sun.management.UnixOperatingSystemMXBean
+
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException,
+  SparkFunSuite}
+import org.apache.spark.internal.config.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -36,6 +41,36 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
 
   private val factoryModes =
     Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+
+  test("only backward and forward joins have a scan strategy") {
+    assert(AsOfScanStrategy.of(Backward).contains(AsOfScanStrategy.LastMatch))
+    assert(AsOfScanStrategy.of(Forward).contains(AsOfScanStrategy.FirstMatch))
+    assert(AsOfScanStrategy.of(Nearest).isEmpty)
+    assert(AsOfScanStrategy(Backward) == AsOfScanStrategy.LastMatch)
+    assert(AsOfScanStrategy(Forward) == AsOfScanStrategy.FirstMatch)
+    checkError(
+      exception = intercept[SparkException](AsOfScanStrategy(Nearest)),
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The Nearest AS-OF join has no ordered scan"))
+  }
+
+  test("nearest join has no cursor scan") {
+    val leftKey = AttributeReference("leftKey", IntegerType)()
+    val rightKey = AttributeReference("rightKey", IntegerType)()
+    // A scanner built by hand must fail, not run the cursor of another direction. It fails when
+    // it is built, so also with no rows, where the cursor would not check any right row.
+    Seq((Seq(5), Seq(1, 9)), (Seq(5), Seq.empty[Int]), (Seq.empty[Int], Seq.empty[Int])).foreach {
+      case (leftValues, rightValues) =>
+        val error = intercept[SparkException] {
+          runScan(leftValues, rightValues, leftKey, rightKey, Literal.TrueLiteral, Nearest,
+            useCursorScan = true)
+        }
+        checkError(
+          exception = error.getCause.asInstanceOf[SparkException],
+          condition = "INTERNAL_ERROR",
+          parameters = Map("message" -> "The Nearest AS-OF join has no cursor scan"))
+    }
+  }
 
   test("nearest scan stops at the first eligible row after the left key") {
     sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))
@@ -93,6 +128,27 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     // The guard is FALSE, so the IF compares the left key 10, and the closest right row is 9.
     assert(matchedKeys == List(9))
     assert(evaluations == 0, s"evaluated the repeated part $evaluations times")
+  }
+
+  test("buffered scan closes the spill readers of a group it leaves early") {
+    assume(openFileCount().isDefined, "needs a JVM that counts its open files")
+    // Without read-ahead, each spill reader holds one open file and no extra thread.
+    sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite",
+      new SparkConf(false).set(UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED, false))
+    // One task per direction, since a task keeps each spill reader's buffer until it ends.
+    Seq(Backward, Forward, Nearest).foreach { direction =>
+      withClue(s"$direction: ") {
+        val (matchedKeys, openedFiles) = sc.parallelize(Seq(0), 1)
+          .mapPartitions(_ => Iterator.single(spilledScan(direction)))
+          .collect().head
+        // Each left key k matches the right key k.
+        assert(matchedKeys == spilledScanLeftKeys.toList)
+        // Every left row leaves the scan early, with the later spill files of the group still
+        // unread. Readers left open would keep those files open until the task ended.
+        assert(openedFiles < spilledScanLeftKeys.size / 2,
+          s"the scan left $openedFiles more files open")
+      }
+    }
   }
 
   test("conditions are built only when a scan checks a right row") {
@@ -384,7 +440,9 @@ private object SortMergeAsOfJoinScannerSuite {
       rightKeys: Seq[Int],
       asOfCondition: Expression,
       residualCondition: Option[Expression] = None,
-      direction: AsOfJoinDirection = Backward): SortMergeAsOfJoinScanner = {
+      direction: AsOfJoinDirection = Backward,
+      inMemoryThreshold: Int = 256,
+      spillThreshold: Int = 256): SortMergeAsOfJoinScanner = {
     new SortMergeAsOfJoinScanner(
       leftIter = leftKeys.iterator.map(k => InternalRow(k)),
       rightIter = rightKeys.iterator.map(k => InternalRow(k)),
@@ -400,11 +458,44 @@ private object SortMergeAsOfJoinScannerSuite {
       numOutputRows = new SQLMetric("sum"),
       spillSize = new SQLMetric("sum"),
       direction = direction,
-      inMemoryThreshold = 256,
+      inMemoryThreshold = inMemoryThreshold,
       sizeInBytesSpillThreshold = Long.MaxValue,
-      spillThreshold = 256,
+      spillThreshold = spillThreshold,
       useCursorScan = false,
       numAsOfCursorTasks = new SQLMetric("sum"))
+  }
+
+  /** Left keys of `spilledScan`: each one is near the start of the right keys. */
+  val spilledScanLeftKeys: Seq[Int] = 1 to 16
+
+  /** The number of files this JVM has open, if it can tell. */
+  def openFileCount(): Option[Long] = ManagementFactory.getOperatingSystemMXBean match {
+    case unix: UnixOperatingSystemMXBean => Some(unix.getOpenFileDescriptorCount)
+    case _ => None
+  }
+
+  /**
+   * Runs a buffered scan in `direction` over a right group of 50 rows that spills every 10 rows.
+   * Returns the right key of each output row, and how many more files the JVM has open after the
+   * scan than before it, while the task still runs.
+   */
+  def spilledScan(direction: AsOfJoinDirection): (List[Int], Long) = {
+    val leftKey = AttributeReference("leftKey", IntegerType)()
+    val rightKey = AttributeReference("rightKey", IntegerType)()
+    val asOfCondition = direction match {
+      case Backward => GreaterThanOrEqual(leftKey, rightKey)
+      case Forward => LessThanOrEqual(leftKey, rightKey)
+      case _ => Literal.TrueLiteral
+    }
+    val scanner = newScanner(leftKey, rightKey, spilledScanLeftKeys, 0 until 50, asOfCondition,
+      direction = direction, inMemoryThreshold = 1, spillThreshold = 10)
+    val before = openFileCount().get
+    try {
+      val matchedKeys = scanner.iterator.map(_.getInt(1)).toList
+      (matchedKeys, openFileCount().get - before)
+    } finally {
+      scanner.close()
+    }
   }
 
   /** Runs the scan to the end and returns the right key of each output row. */

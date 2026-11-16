@@ -59,6 +59,10 @@ class InternalFunction:
         )
 
     @staticmethod
+    def mod(left: Column, right: Column) -> Column:
+        return InternalFunction._invoke_internal_function_over_columns("pandas_mod", left, right)
+
+    @staticmethod
     def stddev(col: Column, ddof: int) -> Column:
         return InternalFunction._invoke_internal_function_over_columns(
             "pandas_stddev", col, F.lit(ddof)

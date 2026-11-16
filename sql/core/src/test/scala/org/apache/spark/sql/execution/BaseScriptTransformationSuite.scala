@@ -20,11 +20,15 @@ package org.apache.spark.sql.execution
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.logging.log4j.Level
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkThrowable, TaskContext,
     TestUtils}
@@ -430,6 +434,41 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("TRANSFORM destroys the script when its task completes before reading all its output") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    def writerThreads(): Set[Thread] = Thread.getAllStackTraces.keySet.asScala
+      .filter(thread => thread.getName.endsWith("WriterThread-Feed") && thread.isAlive).toSet
+    val before = writerThreads()
+    // The script echoes much more input than the pipes hold, while the task reads one row of its
+    // output: the script then blocks on writing its output, and the writer thread on writing the
+    // input, until the script is destroyed.
+    val plan = createScriptTransformationExec(
+      script = "cat",
+      output = Seq(AttributeReference("id", StringType)()),
+      child = spark.range(0, 1000000, 1, 1).queryExecution.sparkPlan,
+      ioschema = defaultIOSchema)
+    val logAppender = new LogAppender("the writer thread of a destroyed script")
+    logAppender.setThreshold(Level.ERROR)
+    withLogAppender(logAppender) {
+      assert(plan.execute().mapPartitions(rows => Iterator(rows.take(1).size)).collect() ===
+        Array(1))
+      eventually(timeout(60.seconds)) {
+        assert((writerThreads() -- before).isEmpty)
+      }
+    }
+    // The interrupt of the writer thread does not escape it, and its failure to write to the
+    // destroyed script is not logged as an error. The writer threads of earlier tests, which have
+    // the same name, may still log, so only those of this test are checked.
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+    val earlierThreads = before.map(_.threadId())
+    val errors = logAppender.loggingEvents.filter { event =>
+      event.getThreadName.endsWith("WriterThread-Feed") &&
+        !earlierThreads.contains(event.getThreadId)
+    }
+    assert(errors.isEmpty, errors.map(_.getMessage.getFormattedMessage).mkString("\n"))
   }
 
   def testBasicInputDataTypesWith(serde: ScriptTransformationIOSchema, testName: String): Unit = {

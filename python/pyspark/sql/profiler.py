@@ -103,32 +103,41 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
     AccumulatorParam for profilers.
     """
 
+    # Guards a results dict that the driver's accumulator server thread merges into while other
+    # threads read or clear it. The DAGScheduler blocks until that thread acknowledges, so keep
+    # holds short, and never call into the JVM or wait on a Spark job while holding it.
+    # A class attribute, so it is not pickled with the param.
+    lock = RLock()
+
     @staticmethod
     def zero(value: "ProfileResultsV2") -> "ProfileResultsV2":
         return {}
 
-    @staticmethod
-    def addInPlace(value1: "ProfileResultsV2", value2: "ProfileResultsV2") -> "ProfileResultsV2":
-        for key, result in value2.items():
-            if key not in value1:
-                value1[key] = result
-            else:
-                perf = PStatsParam.addInPlace(
-                    value1[key].get("perf", None), result.get("perf", None)
-                )
-                if perf is not None:
-                    value1[key]["perf"] = perf
-                memory = MemUsageParam.addInPlace(
-                    value1[key].get("memory", None), result.get("memory", None)
-                )
-                if memory is not None:
-                    value1[key]["memory"] = memory
-                sampling = SamplingResultParam.addInPlace(
-                    value1[key].get("sampling", {}), result.get("sampling", {})
-                )
-                if sampling:
-                    value1[key]["sampling"] = sampling
-        return value1
+    @classmethod
+    def addInPlace(
+        cls, value1: "ProfileResultsV2", value2: "ProfileResultsV2"
+    ) -> "ProfileResultsV2":
+        with cls.lock:
+            for key, result in value2.items():
+                if key not in value1:
+                    value1[key] = result
+                else:
+                    perf = PStatsParam.addInPlace(
+                        value1[key].get("perf", None), result.get("perf", None)
+                    )
+                    if perf is not None:
+                        value1[key]["perf"] = perf
+                    memory = MemUsageParam.addInPlace(
+                        value1[key].get("memory", None), result.get("memory", None)
+                    )
+                    if memory is not None:
+                        value1[key]["memory"] = memory
+                    sampling = SamplingResultParam.addInPlace(
+                        value1[key].get("sampling", {}), result.get("sampling", {})
+                    )
+                    if sampling:
+                        value1[key]["sampling"] = sampling
+            return value1
 
 
 ProfileResultsParamV2 = _ProfileResultsParamV2()
@@ -355,9 +364,11 @@ class ProfilerCollector(ABC):
 
     @property
     def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
+        # Return copies, since merges mutate the stats in place while callers sort, print and
+        # dump them outside the lock.
         with self._lock:
             return {
-                result_id: result["perf"]
+                result_id: pstats.Stats().add(result["perf"])
                 for result_id, result in self._profile_results.items()
                 if result.get("perf", None) is not None
             }
@@ -576,6 +587,8 @@ class AccumulatorProfilerCollector(ProfilerCollector):
             self._accumulator = Accumulator(
                 SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
             )
+        # Share the lock with the accumulator merge, which mutates the same dict.
+        self._lock = ProfileResultsParamV2.lock
 
     @property
     def _profile_results(self) -> "ProfileResultsV2":
