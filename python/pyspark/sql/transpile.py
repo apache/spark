@@ -495,6 +495,15 @@ def _describe_unsupported_series_node(node: ast.AST) -> str:
                 "than raising or yielding NULL, and NaN compares False where Spark orders it "
                 "above every value)"
             )
+        case (
+            ast.BoolOp(values=[tested, *_])
+            | ast.UnaryOp(op=ast.Not(), operand=tested)
+            | ast.If(test=tested)
+            | ast.IfExp(test=tested)
+        ) if isinstance(tested, ast.Compare) and isinstance(tested.ops[0], (ast.Is, ast.IsNot)):
+            # What is tested is a plain bool, not a Series, so ValueError would be the wrong
+            # reason; the `is` test is what the user has to rewrite.
+            return _describe_unsupported_series_node(tested)
         case ast.BoolOp() | ast.UnaryOp(op=ast.Not()):
             return "`and` / `or` / `not` (these raise ValueError on a Series)"
         case ast.If() | ast.IfExp():
@@ -528,8 +537,8 @@ def _check_series_semantics(function_ast: ast.FunctionDef, params: List[str]) ->
       where pandas would raise or answer differently;
     * the body references at least one parameter. With only the allowlisted operators, an
       expression containing a parameter is a Series and one without is a Python scalar --
-      and returning a scalar makes the interpreted UDF fail with ``UDF_RETURN_TYPE``, so a
-      rewrite that returned a value per row would not be a faithful reproduction.
+      and returning a scalar makes the interpreted UDF fail, so a rewrite that returned a
+      value per row would not be a faithful reproduction.
     """
     function_body = _fold_early_return(function_ast.body)
     if len(function_body) != 1:
@@ -576,8 +585,8 @@ def _check_series_semantics(function_ast: ast.FunctionDef, params: List[str]) ->
     if not references_param:
         raise UnsupportedOperationException(
             "the body of this scalar pandas UDF never references a parameter, so it "
-            "produces a Python scalar rather than a pandas.Series; the interpreted path "
-            "fails with UDF_RETURN_TYPE, so the transpiler falls back to interpreted Python"
+            "produces a Python scalar rather than a pandas.Series, which the interpreted "
+            "path rejects; the transpiler falls back to interpreted Python"
         )
 
 
