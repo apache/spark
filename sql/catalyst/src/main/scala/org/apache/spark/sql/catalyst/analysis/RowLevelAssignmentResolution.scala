@@ -67,13 +67,8 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
   }
 
   /**
-   * Fills omitted generated-column assignments for UPDATE and MERGE actions, including INSERT
-   * actions within MERGE. Regular INSERT uses WriteOutputResolution instead.
-   *
-   * For g GENERATED ALWAYS AS (a * 2), UPDATE t SET a = b + 1, b = 100 must assign
-   * g = (old.b + 1) * 2. Resolve the generation expression against attributes for the new values,
-   * then substitute the aligned assignments while preserving their references to the original row.
-   * Explicitly supplied generated values pass through for validation against the final row.
+   * Fills omitted generated values for UPDATE/MERGE. Regular INSERT uses WriteOutputResolution.
+   * Example: g = a * 2 with SET a = b + 1, b = 100 becomes (old.b + 1) * 2.
    */
   def resolveGeneratedColumnAssignments(
       table: LogicalPlan,
@@ -85,24 +80,23 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
 
     val relation = table.collectFirst { case r: DataSourceV2Relation => r }.get
     val generationExpressions = GeneratedColumn.expressionReaders(relation)
-    // Fresh attributes distinguish the new assigned values from the original input attributes.
-    // In the example, the new a attribute represents old.b + 1, and the new b represents 100.
+    // assigned aliases old.b + 1 as a and 100 as b, each with a fresh attribute ID.
     val assigned = assignments.collect {
       case Assignment(attr: Attribute, value)
           if !value.isInstanceOf[GeneratedColumnAssignmentValue] =>
         Alias(value, attr.name)()
     }
+    // input exposes the new a and b; valuesByAttribute maps them back to old.b + 1 and 100.
     val input = assigned.map(_.toAttribute)
     val valuesByAttribute = AttributeMap(assigned.map(a => a.toAttribute -> a.child))
 
     assignments.map {
       case Assignment(attr: Attribute, _: GeneratedColumnAssignmentValue) =>
-        // Resolve a * 2 against the new a attribute using the shared stored-expression settings.
+        // resolved binds a * 2 to input's new a, before substituting assigned values.
         val resolved = generationExpressions(attr.name).resolve(input, analyze) { expr =>
           Cast(expr, attr.dataType, Some(conf.sessionLocalTimeZone), ansiEnabled = true)
         }
-        // Replace the new a with old.b + 1 to get (old.b + 1) * 2. Substitute once: replacing
-        // old.b with its new assignment (100) would change the simultaneous SET semantics.
+        // generated uses valuesByAttribute once: (old.b + 1) * 2, keeping the original b.
         val generated = resolved.transform {
           case a: AttributeReference if valuesByAttribute.contains(a) => valuesByAttribute(a)
         }

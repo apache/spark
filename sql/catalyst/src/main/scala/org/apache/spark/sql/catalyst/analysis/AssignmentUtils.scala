@@ -420,9 +420,6 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
   }
 }
 
-/**
- * Marks an omitted generated-column assignment in UPDATE or MERGE until assignments are aligned.
- * Assignment resolution replaces it with the generation expression over the assigned values.
- */
+/** Placeholder for an omitted generated value in an UPDATE or MERGE assignment. */
 private[sql] case class GeneratedColumnAssignmentValue(dataType: DataType, nullable: Boolean)
   extends LeafExpression with Unevaluable
