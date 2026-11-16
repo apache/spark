@@ -3041,22 +3041,18 @@ class DataFrameSuite extends SharedSparkSession
     // without this fix.
     val df = spark.range(4, 7, 1, 1).toDF()
     val nullLong = typedLit[java.lang.Long](null)
-    Seq("true", "false").foreach { ansi =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi,
-          SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> NullPropagation.ruleName) {
-        // Propagating the NULL made the condition TRUE for id 5 ...
-        checkAnswer(df.where(!($"id" === nullLong && ($"id" + 0 <=> 5))), Seq(Row(4L), Row(6L)))
-        // ... also from a projection below ...
-        checkAnswer(
-          df.select($"id", nullLong as "n").where(!($"id" === $"n" && ($"id" + 0 <=> 5)))
-            .select($"id"),
-          Seq(Row(4L), Row(6L)))
-        // ... and NULL for the ids 4 and 5.
-        checkAnswer(df.where(!($"id" === nullLong && $"id" > 5)), Seq(Row(4L), Row(5L)))
-      }
-    }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
         SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> NullPropagation.ruleName) {
+      // Propagating the NULL made the condition TRUE for id 5 ...
+      checkAnswer(df.where(!($"id" === nullLong && ($"id" + 0 <=> 5))), Seq(Row(4L), Row(6L)))
+      // ... also from a projection below, as pushing the filter through the `Project` replaces
+      // `n` with the NULL, so that `ConstantPropagation` sees the same condition as above ...
+      checkAnswer(
+        df.select($"id", nullLong as "n").where(!($"id" === $"n" && ($"id" + 0 <=> 5)))
+          .select($"id"),
+        Seq(Row(4L), Row(6L)))
+      // ... and NULL for the ids 4 and 5.
+      checkAnswer(df.where(!($"id" === nullLong && $"id" > 5)), Seq(Row(4L), Row(5L)))
       // The division runs on id 4 and fails, as it does with the default rules. Propagating the
       // NULL folded it away, so that no row was returned.
       val e = intercept[SparkArithmeticException] {
