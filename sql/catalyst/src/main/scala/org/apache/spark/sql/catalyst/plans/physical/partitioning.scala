@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.physical
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.annotation.tailrec
 import scala.collection.immutable.BitSet
 import scala.collection.mutable
 
@@ -1298,13 +1299,20 @@ object KeyedPartitioning {
     // Exactly one column argument, and it must be a plain column reference.
     def isSupportedTransform(transform: TransformExpression): Boolean =
       transform.columnSlots match {
-        case Seq(col) => TransformExpression.isColumnRef(col)
+        case Seq(col) => isReference(col)
         case _ => false
       }
 
+    @tailrec
+    def isReference(e: Expression): Boolean = e match {
+      case _: Attribute => true
+      case g: GetStructField => isReference(g.child)
+      case _ => false
+    }
+
     expressions.forall {
       case t: TransformExpression if isSupportedTransform(t) => true
-      case e: Expression if TransformExpression.isColumnRef(e) => true
+      case e: Expression if isReference(e) => true
       case _ => false
     }
   }
@@ -2675,7 +2683,7 @@ case class KeyedShuffleSpec(
             val functionClass = t.function.getClass.getName
             val name = TransformExpression.orElse(t.function.name(), functionClass)
             throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
-              t.children.collect { case l: Literal => l.value } match {
+              t.literalChildren.map(_.value) match {
                 case Seq() => name
                 case params => s"$name(${params.mkString(", ")})"
               },

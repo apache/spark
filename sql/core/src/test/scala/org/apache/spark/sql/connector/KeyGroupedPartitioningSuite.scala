@@ -20,6 +20,7 @@ import java.sql.Timestamp
 import java.util.Collections
 
 import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.LogEvent
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
@@ -899,6 +900,20 @@ class KeyGroupedPartitioningSuite
       numBuckets: Int,
       argument: org.apache.spark.sql.catalyst.expressions.Expression): TransformExpression =
     TransformExpression(fn, Seq(Literal(numBuckets), argument), fromBucketTransform = true)
+
+  /**
+   * The events `TransformExpression` logs while `body` runs, DEBUG included: a WARN is logged once
+   * per function, so an earlier test may already have taken it.
+   */
+  private def transformExpressionLogs(body: => Unit): Seq[LogEvent] = {
+    val appender = new LogAppender("TransformExpression")
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+        level = Some(Level.DEBUG)) {
+      body
+    }
+    appender.loggingEvents.toSeq
+  }
 
   private def selectWithMergeJoinHint(t1: String, t2: String): String = {
     s"SELECT /*+ MERGE($t1, $t2) */ "
@@ -8273,8 +8288,8 @@ class KeyGroupedPartitioningSuite
 
   test("SPARK-50593: bucket(4) vs bucket(3) - no common divisor, must shuffle") {
     // GCD(4, 3) = 1 -- BucketFunction.reducer returns null. Spark must NOT enable SPJ.
-    // Regression guard: a buggy null-handling in TransformExpression.reducer (e.g.,
-    // Try(...).toOption instead of Try(Option(...))) would treat null as Some(null),
+    // Regression guard: a buggy null-handling in TransformExpression's reducer dispatch (e.g.,
+    // Some(...) instead of Option(...)) would treat null as Some(null),
     // enable SPJ, and produce wrong join results for incompatible bucket layouts.
     val table1 = "bucket_gcd1_a"
     val table2 = "bucket_gcd1_b"
@@ -8499,16 +8514,13 @@ class KeyGroupedPartitioningSuite
     }
     val t6 = TransformExpression(truncateLike, Seq(Literal(6), attr("id")))
     val t3 = TransformExpression(truncateLike, Seq(Literal(3), attr("id")))
-    val appender = new LogAppender("literal types differ")
-    appender.setThreshold(Level.DEBUG)
-    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
-        level = Some(Level.DEBUG)) {
+    val logs = transformExpressionLogs {
       assert(t6.pairReducers(t3) == ((None, None)))
       assert(!t6.isCompatible(t3))
     }
     // The connector implements the generalized overload, so it is told why Spark did not ask it,
     // not to override it.
-    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    val messages = logs.map(_.getMessage.getFormattedMessage)
     assert(messages.exists(_.contains("declares other input types")), messages)
     assert(!messages.exists(_.contains("implements no reducer")), messages)
   }
@@ -8678,7 +8690,7 @@ class KeyGroupedPartitioningSuite
   }
 
   test("SPARK-50593: a UDT-typed literal param is not reducible (complex-type guard)") {
-    // noComplexLiteralParams rejects a UDT-typed literal param by its DataType. UdtParamFunction
+    // literalParamsPassable rejects a UDT-typed literal param by its DataType. UdtParamFunction
     // declares the UDT as its literal input type, so literalParamsMatchInputTypes passes (UDT ==
     // UDT) and only the complex-type guard can reject it. UdtParamFunction reduces unconditionally,
     // so reaching its reducer is the leak (here a StructBackedUDT, whose value is an InternalRow).
@@ -8697,7 +8709,7 @@ class KeyGroupedPartitioningSuite
     // truncate(col, w), whose column slots align) reaches the connector reducer with
     // mismatched-length param arrays. The bundled reducers model the documented contract by
     // length-checking before indexing -- returning null rather than throwing ArrayIndexOutOfBounds
-    // (which probe's Try would swallow into a silent missed SPJ + a misleading warning).
+    // (which probe's guard would swallow into a silent missed SPJ + a misleading warning).
     val empty = Array.empty[org.apache.spark.sql.connector.expressions.Literal[_]]
     val one = Array[org.apache.spark.sql.connector.expressions.Literal[_]](literal(3))
     assert(BucketFunction.reducer(empty, BucketFunction, one) == null)
@@ -8713,14 +8725,9 @@ class KeyGroupedPartitioningSuite
     val id = attr("id")
     val l = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(2)))
     val r = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(4)))
-    val appender = new LogAppender("non-UOE reducer exception")
-    appender.setThreshold(Level.DEBUG)
-    // DEBUG: the WARN is logged once per function, so an earlier test may already have taken it.
-    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
-        level = Some(Level.DEBUG)) {
+    val messages = transformExpressionLogs {
       assert(l.reducers(r).isEmpty, "a throwing reducer must be treated as not reducible")
-    }
-    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    }.map(_.getMessage.getFormattedMessage)
     assert(messages.exists(_.contains("reducer threw an exception")),
       "the non-UOE exception must be logged")
     assert(!messages.exists(_.contains("implements no reducer")),
@@ -8788,12 +8795,9 @@ class KeyGroupedPartitioningSuite
 
     val data = AttributeReference("id", IntegerType)()
     def spec(t: TransformExpression): physical.KeyedShuffleSpec = physical.KeyedShuffleSpec(
-      physical.KeyedPartitioning(Seq(t.copy(children = Seq(t.children.head, data))), Seq.empty),
+      physical.KeyedPartitioning(Seq(t.rewriteColumnSlots(_ => data)), Seq.empty),
       physical.ClusteredDistribution(Seq(data)))
-    withSQLConf(
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+    withReducingJoinConfs {
       assert(spec(b16).reducersBothWays(spec(b12)) == ((None, None)))
     }
 
@@ -8803,10 +8807,7 @@ class KeyGroupedPartitioningSuite
       sql(s"INSERT INTO testcat.ns.dir16 VALUES ${ids.mkString(", ")}")
       createTable("dir12", columns, Array(bucket(12, "id")))
       sql(s"INSERT INTO testcat.ns.dir12 VALUES ${ids.mkString(", ")}")
-      withSQLConf(
-          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      withReducingJoinConfs {
         val df = sql(
           s"""
              |${selectWithMergeJoinHint("dir16", "dir12")}
@@ -8821,15 +8822,8 @@ class KeyGroupedPartitioningSuite
     // LiteralFirstIntFunction implements no reducer. Two scans of the same transform need none,
     // so telling the connector to override one "to enable SPJ" would be wrong; a pair of two
     // different transforms of it, which does need one, is reported.
-    def messages(l: TransformExpression, r: TransformExpression): Seq[String] = {
-      val appender = new LogAppender("missing reducer")
-      appender.setThreshold(Level.DEBUG)
-      withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
-          level = Some(Level.DEBUG)) {
-        l.pairReducers(r)
-      }
-      appender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
-    }
+    def messages(l: TransformExpression, r: TransformExpression): Seq[String] =
+      transformExpressionLogs(l.pairReducers(r)).map(_.getMessage.getFormattedMessage)
     def transform(width: Int, column: String): TransformExpression =
       TransformExpression(LiteralFirstIntFunction, Seq(Literal(width), attr(column)))
     assert(transform(4, "id").isSameFunction(transform(4, "store_id")), "test setup")
@@ -8845,13 +8839,9 @@ class KeyGroupedPartitioningSuite
     val days = TransformExpression(DaysFunction, Seq(attr("ts")))
     val truncate = TransformExpression(TruncateFunction,
       Seq(attr("ts"), Literal(3.toShort, ShortType)))
-    val appender = new LogAppender("literal types differ, per side")
-    appender.setThreshold(Level.DEBUG)
-    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
-        level = Some(Level.DEBUG)) {
+    val differ = transformExpressionLogs {
       assert(days.pairReducers(truncate) == ((None, None)))
-    }
-    val differ = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    }.map(_.getMessage.getFormattedMessage)
       .filter(_.contains("declares other input types"))
     assert(differ.nonEmpty)
     assert(differ.forall(_.contains("truncate(string)")), differ)
@@ -8869,15 +8859,11 @@ class KeyGroupedPartitioningSuite
       override def canonicalName(): String = name()
       override def produceResult(input: InternalRow): Int = 0
     }
-    val appender = new LogAppender("failure attributed to its own function")
-    appender.setThreshold(Level.DEBUG)
-    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
-        level = Some(Level.DEBUG)) {
+    val threw = transformExpressionLogs {
       val bucket = bucketTransform(BucketFunction, 8, attr("id"))
       val other = TransformExpression(failing, Seq(Literal(4), attr("id")))
       assert(bucket.pairReducers(other) == ((None, None)))
-    }
-    val threw = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    }.map(_.getMessage.getFormattedMessage)
       .filter(_.contains("reducer threw an exception"))
     assert(threw.nonEmpty && threw.forall(_.contains("failing_input_types")), threw)
   }
@@ -8899,13 +8885,10 @@ class KeyGroupedPartitioningSuite
     }
     val b8 = TransformExpression(throwing, Seq(Literal(8), attr("id")))
     val b4 = TransformExpression(throwing, Seq(Literal(4), attr("id")))
-    val appender = new LogAppender("reducer warning once per function")
-    appender.setThreshold(Level.DEBUG)
-    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
-        level = Some(Level.DEBUG)) {
+    val logs = transformExpressionLogs {
       (1 to 3).foreach(_ => assert(!b8.isCompatible(b4)))
     }
-    def threw(level: Level): Int = appender.loggingEvents.count { e =>
+    def threw(level: Level): Int = logs.count { e =>
       e.getLevel == level && e.getMessage.getFormattedMessage.contains("reducer threw an exception")
     }
     assert(threw(Level.WARN) == 1)
@@ -8916,14 +8899,14 @@ class KeyGroupedPartitioningSuite
     // Generalized-first dispatch: the generalized reducer is tried first, and the deprecated int
     // overload must not be probed once it reduced. Here the generalized reducer succeeds and the
     // deprecated one throws; SPJ must succeed via the generalized path with NO "reducer threw"
-    // warning (which an eager probe of the deprecated overload would spuriously log).
+    // warning (which an eager probe of the deprecated overload would spuriously log). Captured at
+    // DEBUG: the WARN is logged once per function, so an earlier test may already have taken it.
     val l = bucketTransform(GeneralizedOkDeprecatedThrowsFunction, 4, attr("id"))
     val r = bucketTransform(GeneralizedOkDeprecatedThrowsFunction, 2, attr("store_id"))
-    val appender = new LogAppender("deprecated overload probed eagerly")
-    withLogAppender(appender) {
+    val logs = transformExpressionLogs {
       assert(l.reducers(r).isDefined, "the generalized reducer must produce a reducer")
     }
-    assert(!appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(!logs.map(_.getMessage.getFormattedMessage)
       .exists(_.contains("reducer threw an exception")),
       "the deprecated overload must not be probed (and throw) once the generalized one reduced")
   }
@@ -8937,14 +8920,10 @@ class KeyGroupedPartitioningSuite
     // masking the new-API bug.)
     val l = bucketTransform(DeprecatedOkGeneralizedThrowsFunction, 4, attr("id"))
     val r = bucketTransform(DeprecatedOkGeneralizedThrowsFunction, 2, attr("store_id"))
-    val appender = new LogAppender("generalized bug masked")
-    appender.setThreshold(Level.DEBUG)
-    // DEBUG: the WARN is logged once per function, so an earlier test may already have taken it.
-    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
-        level = Some(Level.DEBUG)) {
+    val logs = transformExpressionLogs {
       assert(l.reducers(r).isEmpty, "a throwing generalized overload must not fall back and reduce")
     }
-    assert(appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(logs.map(_.getMessage.getFormattedMessage)
       .exists(_.contains("reducer threw an exception")), "the generalized bug must be surfaced")
   }
 
@@ -8984,10 +8963,7 @@ class KeyGroupedPartitioningSuite
       Seq(TransformExpression(IntegerTruncateFunction, Seq(b, Literal(4)))), Seq.empty)
     val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(a)))
     val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(b)))
-    withSQLConf(
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+    withReducingJoinConfs {
       assert(!idSpec.areKeysCompatible(trSpec, allowReduce = true))
       assert(!trSpec.areKeysCompatible(idSpec, allowReduce = true), "symmetric")
     }
@@ -9005,10 +8981,7 @@ class KeyGroupedPartitioningSuite
       Seq(TransformExpression(ZeroOrOneParamFunction, Seq(col, Literal(2)))), Seq.empty)
     val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(col)))
     val afSpec = physical.KeyedShuffleSpec(arityFlexible, physical.ClusteredDistribution(Seq(col)))
-    withSQLConf(
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+    withReducingJoinConfs {
       assert(!idSpec.areKeysCompatible(afSpec, allowReduce = true))
     }
   }
@@ -9051,6 +9024,13 @@ class KeyGroupedPartitioningSuite
     assert(l.reducers(r).isDefined)
   }
 
+  // Runs `f` with partition values pushed down, no partially clustered distribution, and
+  // compatible transforms allowed, so that a join may reduce its two sides' keys.
+  private def withReducingJoinConfs(f: => Unit): Unit = withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true")(f)
+
   // Builds (identity spec, truncate(col, <width>) spec) on the same column, for truncate's
   // declared (StringType, IntegerType).
   private def idVsTruncateSpecs(width: Literal)
@@ -9069,10 +9049,7 @@ class KeyGroupedPartitioningSuite
     // BIGINT width against truncate's INT slot cannot be narrowed, so an identity side is not
     // reduced onto it, and no side is shuffled onto it; a SMALLINT width is widened, so both are.
     val (idSpec, trSpec) = idVsTruncateSpecs(Literal(2L, LongType))
-    withSQLConf(
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+    withReducingJoinConfs {
       assert(!idSpec.areKeysCompatible(trSpec, allowReduce = true))
       assert(!trSpec.areKeysCompatible(idSpec, allowReduce = true), "symmetric")
     }
@@ -9081,10 +9058,7 @@ class KeyGroupedPartitioningSuite
     }
 
     val (idSpecShort, trSpecShort) = idVsTruncateSpecs(Literal(2.toShort, ShortType))
-    withSQLConf(
-        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+    withReducingJoinConfs {
       assert(idSpecShort.areKeysCompatible(trSpecShort, allowReduce = true))
     }
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {

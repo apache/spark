@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
@@ -123,10 +122,11 @@ case class TransformExpression(
   /**
    * Extract literal children (constant parameters) from this transform. These are constant
    * arguments like the bucket count in `bucket(n, col)` or the width in `truncate(col, width)`.
-   * Positions are dropped, so this is for handing parameters to a connector reducer, NOT for
-   * identity -- see [[functionId]] and [[TransformFunctionId.argumentShapes]].
+   * Positions are dropped, so this is for handing parameters to a connector reducer or naming
+   * them in a message, NOT for identity -- see [[functionId]] and
+   * [[TransformFunctionId.argumentShapes]].
    */
-  private lazy val literalChildren: Seq[Literal] =
+  private[sql] lazy val literalChildren: Seq[Literal] =
     children.collect { case l: Literal => l }
 
   /**
@@ -197,7 +197,7 @@ case class TransformExpression(
    * The comparison is of [[functionId]], which is per position rather than a set of literal
    * values. Comparing only the values would make `truncate(id, 2)` and `truncate(2, store_id)` the
    * same function; `isCompatible` short-circuits on this method, so `sameArgumentLayout` -- which
-   * guards exactly that, but only inside `reducers` -- would never run, and the pair would be
+   * guards exactly that, but only inside `reducerOutcome` -- would never run, and the pair would be
    * paired as-is with no reduce. `hasSameReducedKeys` compares the same identity, so the two never
    * disagree about which transforms are the same.
    *
@@ -268,20 +268,19 @@ case class TransformExpression(
     children.zip(other.children).forall {
       case (_: Literal, _: Literal) => true
       case (_: Attribute, _: Attribute) => true
-      case (t1: TransformExpression, t2: TransformExpression) =>
-        t1.functionId.isDefined && t1.functionId == t2.functionId
+      case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
       case (c1, c2) => TransformExpression.sameShape(c1, c2)
     }
 
   /**
-   * Whether no literal parameter has an array, map, struct or UDT type; those are not passed to a
-   * connector reducer. Other scalars, such as intervals, are.
+   * Whether no literal parameter is null or has an array, map, struct or UDT type; those are not
+   * passed to a connector reducer. Other scalars, such as intervals, are.
    */
-  private def noComplexLiteralParams: Boolean =
-    literalChildren.forall(_.dataType match {
+  private def literalParamsPassable: Boolean =
+    literalChildren.forall(l => l.value != null && (l.dataType match {
       case _: ArrayType | _: MapType | _: StructType | _: UserDefinedType[_] => false
       case _ => true
-    })
+    }))
 
   /**
    * Return a [[Reducer]] that maps this transform's partition keys onto `other`'s, or None if there
@@ -328,9 +327,7 @@ case class TransformExpression(
       case o: ReducibleFunction[_, _] => o
       case _ => return NotReducible
     }
-    if (!sameArgumentLayout(other) ||
-        !noComplexLiteralParams || !other.noComplexLiteralParams ||
-        literalChildren.exists(_.value == null) || other.literalChildren.exists(_.value == null)) {
+    if (!sameArgumentLayout(other) || !literalParamsPassable || !other.literalParamsPassable) {
       return NotReducible
     }
 
@@ -346,10 +343,11 @@ case class TransformExpression(
 
     // Connector code that throws, a `LinkageError` included, e.g. a `NoClassDefFoundError` for a
     // missing dependency, makes the outcome `Threw`, so the pair is not reducible rather than
-    // failing the query. `Try` alone would let a `LinkageError` through.
-    def guarded(outcome: => Outcome): Outcome =
+    // failing the query. `Try` alone would let a `LinkageError` through. `ownCode` says whose code
+    // it is, see `Threw`.
+    def guarded(outcome: => Outcome, ownCode: Boolean = true): Outcome =
       try outcome catch {
-        case e @ (NonFatal(_) | _: LinkageError) => Threw(e)
+        case e @ (NonFatal(_) | _: LinkageError) => Threw(e, ownCode)
       }
 
     // Probe one reducer overload into an Outcome. Pure -- logging is decided once, below.
@@ -370,18 +368,14 @@ case class TransformExpression(
         } else {
           // The other side's check runs the other connector's code. A failure there is that
           // side's to report, which the other direction does when it asks; here it only vetoes
-          // the pair.
-          val otherMatches: Try[Boolean] =
-            try Success(other.literalParamsMatchInputTypes) catch {
-              case e @ (NonFatal(_) | _: LinkageError) => Failure(e)
-            }
-          otherMatches match {
-            case Failure(e) => Threw(e, ownCode = false)
-            case Success(false) => LiteralTypesDiffer
-            case Success(true) =>
+          // the pair. `probe` guards the reducer call itself, as this side's code.
+          guarded(ownCode = false, outcome =
+            if (!other.literalParamsMatchInputTypes) {
+              LiteralTypesDiffer
+            } else {
               // A copy of the memoized arrays per call, so a connector cannot change them.
               probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
-          }
+            })
         }
       } match {
         // A parameterless pair falls back to the parameterless overload.
@@ -392,7 +386,7 @@ case class TransformExpression(
         case Unimplemented | LiteralTypesDiffer
             if fromBucketTransform && other.fromBucketTransform &&
               isSingleInt(thisParams) && isSingleInt(otherParams) &&
-              function.canonicalName() == other.function.canonicalName() =>
+              thisName == other.function.canonicalName() =>
           probe(thisFunction.reducer(
             thisParams(0).value().asInstanceOf[Int], otherFunction,
             otherParams(0).value().asInstanceOf[Int]))
@@ -747,18 +741,6 @@ object TransformExpression extends Logging {
   /** Whether `a` and `b` are the same expression of one column each, see [[expressionShape]]. */
   private[sql] def sameShape(a: Expression, b: Expression): Boolean =
     expressionShape(a).exists(expressionShape(b).contains)
-
-  /**
-   * Whether `e` is a column reference: an [[Attribute]] or a [[GetStructField]] chain
-   * (struct-field access on a column). Used by `KeyedPartitioning.supportsExpressions`, which
-   * decides whether a scan may report a transform over this argument.
-   */
-  @tailrec
-  private[sql] def isColumnRef(e: Expression): Boolean = e match {
-    case _: Attribute => true
-    case g: GetStructField => isColumnRef(g.child)
-    case _ => false
-  }
 
   /**
    * Whether `e` is a partition expression whose keys a join reduced onto a key space that no

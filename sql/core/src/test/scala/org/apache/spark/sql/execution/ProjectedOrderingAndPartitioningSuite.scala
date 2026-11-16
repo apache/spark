@@ -644,7 +644,7 @@ class ProjectedOrderingAndPartitioningSuite
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr),
               "bucket function and numBuckets must be preserved after alias substitution")
-            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "pk",
+            assert(te.columnSlots.head.asInstanceOf[Attribute].name === "pk",
               "bucket's column argument must be rewritten to the aliased attribute")
           case other => fail(s"Expected TransformExpression, got $other")
         }
@@ -676,7 +676,7 @@ class ProjectedOrderingAndPartitioningSuite
         kp.expressions.head match {
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr), "bucket must be the surviving expression")
-            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "id")
+            assert(te.columnSlots.head.asInstanceOf[Attribute].name === "id")
           case other => fail(s"Expected TransformExpression, got $other")
         }
         assert(kp.isCollapsed, "dropping years(ts) maps (0,2020) and (0,2021) onto bucket 0")
@@ -706,14 +706,14 @@ class ProjectedOrderingAndPartitioningSuite
         kp.expressions(0) match {
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr))
-            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "id",
+            assert(te.columnSlots.head.asInstanceOf[Attribute].name === "id",
               "bucket's argument must remain id (no alias for id in this projection)")
           case other => fail(s"Expected TransformExpression at pos 0, got $other")
         }
         kp.expressions(1) match {
           case te: TransformExpression =>
             assert(te.isSameFunction(yearsExpr))
-            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "ts_alias",
+            assert(te.columnSlots.head.asInstanceOf[Attribute].name === "ts_alias",
               "years() argument must be rewritten to ts_alias")
           case other => fail(s"Expected TransformExpression at pos 1, got $other")
         }
@@ -1002,7 +1002,7 @@ class ProjectedOrderingAndPartitioningSuite
               "one reference only -- KeyedShuffleSpec.keyPositions asserts this")
             assert(te.isSameFunction(bucketExpr),
               "identity must be preserved, so SPJ is not silently lost")
-            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "pk",
+            assert(te.columnSlots.head.asInstanceOf[Attribute].name === "pk",
               "the column slot is still retargeted at the aliased attribute")
           case other => fail(s"Expected TransformExpression, got $other")
         }
@@ -1018,7 +1018,7 @@ class ProjectedOrderingAndPartitioningSuite
     // through `32 AS w`, both must keep the literal, or the two stop matching.
     val id = AttributeReference("id", IntegerType)()
     val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
-    val child = DummyLeafExecWithOrdering(
+    val child = DummyLeafExecWithPartitioning(
       output = Seq(id),
       partitioning = KeyedPartitioning(Seq(bucketExpr), Seq(InternalRow(0), InternalRow(1))),
       ordering = Seq(SortOrder(bucketExpr, Ascending)))
@@ -1041,7 +1041,7 @@ class ProjectedOrderingAndPartitioningSuite
     val id = AttributeReference("id", IntegerType)()
     val nested = TransformExpression(BucketFunction,
       Seq(Literal(4), TransformExpression(BucketFunction, Seq(Literal(32), id))))
-    val child = DummyLeafExecWithOrdering(Seq(id), UnknownPartitioning(2),
+    val child = DummyLeafExecWithPartitioning(Seq(id), UnknownPartitioning(2),
       Seq(SortOrder(nested, Ascending)))
     val project = ProjectExec(Seq(Alias(id, "pk")(), Alias(Literal(32), "w")()), child)
     val orderExpr = project.outputOrdering.head.child
@@ -1053,10 +1053,12 @@ class ProjectedOrderingAndPartitioningSuite
 
 private case class DummyLeafExecWithPartitioning(
     output: Seq[Attribute],
-    partitioning: Partitioning
+    partitioning: Partitioning,
+    ordering: Seq[SortOrder] = Nil
   ) extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = null
   override def outputPartitioning: Partitioning = partitioning
+  override def outputOrdering: Seq[SortOrder] = ordering
 }
 
 private case class DummyLeafPlanExec(output: Seq[Attribute]) extends LeafExecNode {
@@ -1064,13 +1066,4 @@ private case class DummyLeafPlanExec(output: Seq[Attribute]) extends LeafExecNod
   override def outputPartitioning: Partitioning = {
     PartitioningCollection(output.map(attr => HashPartitioning(Seq(attr), 4)))
   }
-}
-
-private case class DummyLeafExecWithOrdering(
-    output: Seq[Attribute],
-    partitioning: Partitioning,
-    ordering: Seq[SortOrder]) extends LeafExecNode {
-  override protected def doExecute(): RDD[InternalRow] = null
-  override def outputPartitioning: Partitioning = partitioning
-  override def outputOrdering: Seq[SortOrder] = ordering
 }

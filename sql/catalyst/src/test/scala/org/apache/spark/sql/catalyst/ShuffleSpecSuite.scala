@@ -52,16 +52,6 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
    * coarser/finer bucket counts is compatible (a reducer exists) but not the same function. Local
    * to the suite because catalyst has no BucketFunction.
    */
-  /**
-   * `fn(numBuckets, argument)` as a scan resolves a V2 `bucket` transform, marked as one, see
-   * `TransformExpression.fromBucketTransform`.
-   */
-  private def bucketTransform(
-      fn: BoundFunction,
-      numBuckets: Int,
-      argument: Expression): TransformExpression =
-    TransformExpression(fn, Seq(Literal(numBuckets), argument), fromBucketTransform = true)
-
   private class FakeBucket extends ScalarFunction[java.lang.Long]
       with ReducibleFunction[java.lang.Long, java.lang.Long] {
     override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
@@ -83,6 +73,16 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         null
       }
   }
+
+  /**
+   * `fn(numBuckets, argument)` as a scan resolves a V2 `bucket` transform, marked as one, see
+   * `TransformExpression.fromBucketTransform`.
+   */
+  private def bucketTransform(
+      fn: BoundFunction,
+      numBuckets: Int,
+      argument: Expression): TransformExpression =
+    TransformExpression(fn, Seq(Literal(numBuckets), argument), fromBucketTransform = true)
 
   test("SPARK-59289: createShuffleSpec keeps a member that only satisfies after a projection") {
     val a = AttributeReference("a", IntegerType)()

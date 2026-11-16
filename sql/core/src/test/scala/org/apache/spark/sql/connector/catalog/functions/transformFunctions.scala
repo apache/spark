@@ -243,8 +243,7 @@ object DirectionalBucketFunction extends ScalarFunction[Int] with ReducibleFunct
     val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
     val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
     require(thisNumBuckets >= otherNumBuckets, "asked from the coarser side")
-    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+    BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
   }
 }
 
@@ -273,16 +272,20 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
     if (otherFunc == BucketFunction && thisParams.length == 1 && otherParams.length == 1) {
       val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
       val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
-
-      val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
-      if (gcd > 1 && gcd != thisNumBuckets) {
-        return BucketReducer(gcd)
-      }
+      gcdReducer(thisNumBuckets, otherNumBuckets)
+    } else {
+      null
     }
-    null
   }
 
-  private def gcd(a: Int, b: Int): Int = BigInt(a).gcd(BigInt(b)).toInt
+  /**
+   * The reducer from `thisNumBuckets` buckets onto the gcd of the two bucket counts, or null when
+   * that gcd is 1 or `thisNumBuckets` itself. The bucket fixtures below share it.
+   */
+  def gcdReducer(thisNumBuckets: Int, otherNumBuckets: Int): Reducer[Int, Int] = {
+    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+  }
 }
 
 case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
@@ -313,12 +316,10 @@ object LegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[I
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
     if (otherFunc == LegacyBucketFunction) {
-      val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-      if (gcd > 1 && gcd != thisNumBuckets) {
-        return BucketReducer(gcd)
-      }
+      BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
+    } else {
+      null
     }
-    null
   }
 }
 
@@ -340,8 +341,7 @@ object CarelessLegacyBucketFunction extends ScalarFunction[Int] with ReducibleFu
       thisNumBuckets: Int,
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
-    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+    BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
   }
 }
 
@@ -388,8 +388,7 @@ class LegacyBucketDeclaring(declared: Array[DataType])
       thisNumBuckets: Int,
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
-    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-    if (otherFunc == this && gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+    if (otherFunc == this) BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets) else null
   }
 }
 
@@ -408,8 +407,7 @@ object BucketLogicTruncateFunction extends ScalarFunction[Int] with ReducibleFun
       thisNumBuckets: Int,
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
-    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+    BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
   }
 }
 
@@ -432,8 +430,7 @@ object ArrayMutatingBucketFunction extends ScalarFunction[Int] with ReducibleFun
     val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
     thisParams(0) = LiteralValue(1, IntegerType)
     otherParams(0) = LiteralValue(1, IntegerType)
-    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+    BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
   }
 }
 
@@ -467,12 +464,10 @@ object DualApiBucketFunction extends ScalarFunction[Int] with ReducibleFunction[
     if (otherFunc == DualApiBucketFunction) {
       val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
       val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
-      val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-      if (gcd > 1 && gcd != thisNumBuckets) {
-        return BucketReducer(gcd)
-      }
+      BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
+    } else {
+      null
     }
-    null
   }
 }
 
@@ -755,11 +750,10 @@ object IntegerTruncateFunction
   override def name(): String = "truncate"
   override def canonicalName(): String = "truncate(int)"
   override def toString: String = name()
-  override def produceResult(input: InternalRow): Int = {
-    val value = input.getInt(0)
-    val width = input.getInt(1)
-    value - (((value % width) + width) % width)
-  }
+  override def produceResult(input: InternalRow): Int = truncate(input.getInt(0), input.getInt(1))
+
+  /** `value` snapped down to a multiple of `width`, as the Iceberg spec truncates an integer. */
+  def truncate(value: Int, width: Int): Int = value - (((value % width) + width) % width)
 
   override def reducer(
       thisParams: Array[Literal[_]],
@@ -785,7 +779,7 @@ object IntegerTruncateFunction
 }
 
 case class IntTruncateReducer(width: Int) extends Reducer[Int, Int] {
-  override def reduce(value: Int): Int = value - (((value % width) + width) % width)
+  override def reduce(value: Int): Int = IntegerTruncateFunction.truncate(value, width)
   override def resultType(): DataType = IntegerType
   override def displayName(): String = s"truncate($width)"
 }
@@ -842,7 +836,7 @@ class StructBacked(val n: Int) extends Serializable
 /**
  * A UDT whose `sqlType` is a [[StructType]]: a literal of this type carries an [[InternalRow]]
  * value, yet its `dataType` is the UDT, not `StructType`. A check for container types alone would
- * miss it, which is why `noComplexLiteralParams` also refuses [[UserDefinedType]]s.
+ * miss it, which is why `literalParamsPassable` also refuses [[UserDefinedType]]s.
  */
 class StructBackedUDT extends UserDefinedType[StructBacked] {
   override def sqlType: DataType = StructType(Seq(StructField("n", IntegerType, nullable = false)))
@@ -855,7 +849,7 @@ class StructBackedUDT extends UserDefinedType[StructBacked] {
 
 /**
  * A transform whose declared input type at the literal position is a UDT ([[StructBackedUDT]]).
- * Used to make `noComplexLiteralParams`' UDT clause load-bearing: a UDT-over-struct literal matches
+ * Used to make `literalParamsPassable`' UDT clause load-bearing: a UDT-over-struct literal matches
  * the declared input type (so `literalParamsMatchInputTypes` passes), yet its value is an
  * [[InternalRow]], so only that clause rejects it. The reducer returns unconditionally, so reaching
  * it at all is the leak.
@@ -1032,11 +1026,9 @@ object DualApiGeneralizedNullFunction extends ScalarFunction[Int] with Reducible
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
     if (otherFunc == DualApiGeneralizedNullFunction) {
-      val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
-      if (gcd > 1 && gcd != thisNumBuckets) {
-        return BucketReducer(gcd)
-      }
+      BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
+    } else {
+      null
     }
-    null
   }
 }

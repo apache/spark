@@ -144,8 +144,8 @@ class TransformExpressionSuite extends SparkFunSuite {
     // values and dropped their positions, `truncate(col, 2)` and `truncate(2, col)` would share a
     // TransformFunctionId: `isSameFunction` would answer true, `isCompatible` would short-circuit
     // on it, and `sameArgumentLayout` -- the guard that exists for exactly this -- would never run,
-    // because it only executes inside `reducer`. The pair would then be treated as lined up as it
-    // stands and joined with no reduce, pairing partitions that do not hold the same rows.
+    // because it only executes inside `reducerOutcome`. The pair would then be treated as lined up
+    // as it stands and joined with no reduce, pairing partitions that do not hold the same rows.
     val fn = new NamedFunction("test.truncate")
     val colThenLit = TransformExpression(fn, Seq(a, Literal(2)))
     val litThenCol = TransformExpression(fn, Seq(Literal(2), b))
@@ -171,20 +171,17 @@ class TransformExpressionSuite extends SparkFunSuite {
     // different inner transform is not the same function, although both literal lists are [4].
     val years = new NamedFunction("test.years")
     val outer = new NamedFunction("test.bucket")
-    val overYears = TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(a))))
-    val overDays = TransformExpression(outer, Seq(Literal(4), TransformExpression(days, Seq(a))))
+    val overYears = bucket(outer, TransformExpression(years, Seq(a)))
+    val overDays = bucket(outer, TransformExpression(days, Seq(a)))
     assert(!overYears.isSameFunction(overDays), "nested transforms must be compared recursively")
-    assert(overYears.isSameFunction(
-      TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(b))))),
+    assert(overYears.isSameFunction(bucket(outer, TransformExpression(years, Seq(b)))),
       "the same nested function over a different column is still the same function")
 
     // An expression argument is compared by its shape: `a + 1` and `b + 1` are the same function of
     // their columns, while `a + 1` and `a + 2`, or `a + 1` and a bare column, are not.
-    def over(arg: Expression): TransformExpression =
-      TransformExpression(outer, Seq(Literal(4), arg))
-    assert(over(Add(a, Literal(1))).isSameFunction(over(Add(b, Literal(1)))))
-    assert(!over(Add(a, Literal(1))).isSameFunction(over(Add(a, Literal(2)))))
-    assert(!over(Add(a, Literal(1))).isSameFunction(over(a)))
+    assert(bucket(outer, Add(a, Literal(1))).isSameFunction(bucket(outer, Add(b, Literal(1)))))
+    assert(!bucket(outer, Add(a, Literal(1))).isSameFunction(bucket(outer, Add(a, Literal(2)))))
+    assert(!bucket(outer, Add(a, Literal(1))).isSameFunction(bucket(outer, a)))
   }
 
   test("SPARK-50593: hasSameReducedKeys tells nested transforms apart, like isSameFunction") {
@@ -194,29 +191,29 @@ class TransformExpressionSuite extends SparkFunSuite {
     val years = new NamedFunction("test.years")
     val days = new NamedFunction("test.days")
     val partner = bucket(outer, a, 8)
-    val overYears = TransformExpression(outer, Seq(Literal(4), TransformExpression(years, Seq(a))))
-    val overDays = TransformExpression(outer, Seq(Literal(4), TransformExpression(days, Seq(a))))
+    val overYears = bucket(outer, TransformExpression(years, Seq(a)))
+    val overDays = bucket(outer, TransformExpression(days, Seq(a)))
 
     assert(!overYears.isSameFunction(overDays))
     assert(!overYears.reducedTogetherWith(partner)
       .hasSameReducedKeys(overDays.reducedTogetherWith(partner)),
       "a different nested transform is a different reduced key space")
     assert(overYears.reducedTogetherWith(partner)
-      .hasSameReducedKeys(TransformExpression(outer,
-        Seq(Literal(4), TransformExpression(years, Seq(b)))).reducedTogetherWith(partner)),
+      .hasSameReducedKeys(
+        bucket(outer, TransformExpression(years, Seq(b))).reducedTogetherWith(partner)),
       "the same nested transform over another column is the same key space")
   }
 
   test("SPARK-50593: a transform with an argument over two columns has no identity") {
     val fn = new NamedFunction("test.bucket")
-    val plusOne = TransformExpression(fn, Seq(Literal(4), Add(a, b)))
+    val plusOne = bucket(fn, Add(a, b))
     assert(plusOne.functionId.isEmpty)
     assert(!plusOne.isSameFunction(plusOne), "never the same, not even as itself")
     // Nesting one inside a transform takes the identity away from the outer one too.
-    val nested = TransformExpression(fn, Seq(Literal(4), TransformExpression(fn, Seq(Add(a, b)))))
+    val nested = bucket(fn, TransformExpression(fn, Seq(Add(a, b))))
     assert(nested.functionId.isEmpty)
     // One column, however wrapped, has an identity.
-    assert(TransformExpression(fn, Seq(Literal(4), Add(a, a))).functionId.isDefined)
+    assert(bucket(fn, Add(a, a)).functionId.isDefined)
 
     // Recording a reduce needs an identity on both sides: reducedWith stores the partner's, and
     // silently skipping the mark would report reduced keys as raw. So it fails loudly.
@@ -241,9 +238,9 @@ class TransformExpressionSuite extends SparkFunSuite {
       TransformExpression(truncFn, Seq(a, Literal(2))),
       TransformExpression(truncFn, Seq(Literal(2), b)),
       TransformExpression(truncFn, Seq(a, Literal(3))),
-      TransformExpression(bucketFn, Seq(Literal(4), GetStructField(s, 0))),
-      TransformExpression(bucketFn, Seq(Literal(4), TransformExpression(years, Seq(a)))),
-      TransformExpression(bucketFn, Seq(Literal(4), TransformExpression(days, Seq(b)))),
+      bucket(bucketFn, GetStructField(s, 0)),
+      bucket(bucketFn, TransformExpression(years, Seq(a))),
+      bucket(bucketFn, TransformExpression(days, Seq(b))),
       TransformExpression(years, Seq(a)), TransformExpression(days, Seq(a)))
     assert(shapes.forall(_.functionId.isDefined), "the fixture needs identities throughout")
     val partner = bucket(bucketFn, a, 16)
@@ -411,7 +408,7 @@ class TransformExpressionSuite extends SparkFunSuite {
         struct("a", IntegerType).add("b", IntegerType), InternalRow(5), structField, false)
     ).foreach { case (what, argumentType, declared, value, read, taken) =>
       val argument = BoundReference(0, argumentType, nullable = true)
-      val transform = TransformExpression(function(declared)(read), Seq(Literal(4), argument))
+      val transform = bucket(function(declared)(read), argument)
       assert(transform.evaluableFunction.isDefined == taken, what)
       if (taken) {
         val unsafe = UnsafeProjection.create(Seq(argument)).apply(InternalRow(value))
