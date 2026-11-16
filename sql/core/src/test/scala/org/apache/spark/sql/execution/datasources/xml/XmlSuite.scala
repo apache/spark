@@ -3680,13 +3680,18 @@ class XmlSuite
 
   test("SPARK-59546: unusable timeFormat does not break XML inference") {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
-      for (multiLine <- Seq(false, true)) {
-        val xml = "<ROW><time>plain</time></ROW>"
-        val df = readData(xml, None,
-          baseOptions ++ Map("multiLine" -> multiLine.toString, "timeFormat" -> "EEE HH:mm"))
-        assert(df.schema("time").dataType === StringType)
-        assert(!df.schema.fieldNames.contains("_corrupt_record"))
-        checkAnswer(df, Seq(Row("plain")))
+      val xml = "<ROW><time>plain</time></ROW>"
+      val options = baseOptions + ("timeFormat" -> "EEE HH:mm")
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq(xml).toDF("value").coalesce(1).write.text(path)
+        // The Dataset[String] input, and the multi-line file read, where an escaping error fails
+        // the query instead of producing a corrupt record.
+        Seq(readData(xml, None, options), spark.read.options(options).xml(path)).foreach { df =>
+          assert(df.schema("time").dataType === StringType)
+          assert(!df.schema.fieldNames.contains("_corrupt_record"))
+          checkAnswer(df, Seq(Row("plain")))
+        }
       }
     }
   }

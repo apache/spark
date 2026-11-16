@@ -223,6 +223,8 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
       withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> enabled) {
         val inferSchema = newInferSchema(Map("timeFormat" -> "EEE HH:mm"))
         assert(inferSchema.inferFrom("plain", NullType) == StringType)
+        // An unusable format skips TIME rather than falling back to the default formatter.
+        assert(inferSchema.inferFrom("12:13:14", NullType) == TimestampType)
       }
     }
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
