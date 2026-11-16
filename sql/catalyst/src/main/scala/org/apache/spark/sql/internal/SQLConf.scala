@@ -7875,6 +7875,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET =
+    buildConf("spark.sql.legacy.variant.allowCastToNonNullableTarget")
+      .internal()
+      .doc("When true, a cast from VARIANT to a type with a non-nullable nested struct field, " +
+        "array element or map value is accepted, and a JSON null or a missing key then puts " +
+        "NULL in that non-nullable slot. When false, such a cast fails analysis.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val VARIANT_ALLOW_READING_SHREDDED =
     buildConf("spark.sql.variant.allowReadingShredded")
       .internal()

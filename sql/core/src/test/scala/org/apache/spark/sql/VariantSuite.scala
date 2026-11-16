@@ -1751,4 +1751,75 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       checkAnswer(sql(q), Row("""OBJECT<STRUCT: OBJECT<`!special!`: BOOLEAN>>"""))
     }
   }
+
+  private def withVariantEvents(f: => Unit): Unit = withTempView("events") {
+    sql("""SELECT event_id, parse_json(j) AS payload FROM VALUES
+          |  (1, '{"user_id": 42, "country": "US"}'),
+          |  (2, '{"user_id": null, "country": "DE"}'),
+          |  (3, '{"country": "FR"}'),
+          |  (4, '{"user_id": 0, "country": "JP"}') AS t(event_id, j)""".stripMargin)
+      .createOrReplaceTempView("events")
+    f
+  }
+
+  private val notNullUserIdQuery =
+    """SELECT event_id, p.user_id, p.user_id IS NULL FROM (
+      |  SELECT DISTINCT event_id, payload::STRUCT<user_id: BIGINT NOT NULL, country: STRING> AS p
+      |  FROM events)""".stripMargin
+
+  test("SPARK-61831: cast from variant to a type with a non-nullable nested slot fails analysis") {
+    withVariantEvents {
+      def assertRejected(df: => DataFrame): Unit = {
+        val e = intercept[AnalysisException](df.collect())
+        assert(e.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION", e.getMessage)
+      }
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          // The JSON null (row 2) and the missing key (row 3) would put NULL in user_id.
+          assertRejected(sql(notNullUserIdQuery))
+          Seq("CAST", "TRY_CAST").foreach { castFn =>
+            Seq(
+              "STRUCT<user_id: BIGINT NOT NULL, country: STRING>",
+              "STRUCT<user_id: BIGINT, c: STRUCT<x: INT NOT NULL>>",
+              "ARRAY<STRUCT<user_id: BIGINT NOT NULL>>",
+              "MAP<STRING, STRUCT<user_id: BIGINT NOT NULL>>").foreach { t =>
+              assertRejected(sql(s"SELECT $castFn(payload AS $t) FROM events"))
+            }
+            // A VARIANT nested in a struct goes through the same check.
+            assertRejected(sql(s"SELECT $castFn(named_struct('v', payload) AS " +
+              "STRUCT<v: STRUCT<user_id: BIGINT NOT NULL>>) FROM events"))
+          }
+          // Non-nullable array elements and map values: [1, null] and {"a": null}.
+          assertRejected(sql("SELECT parse_json('[1, null]') AS v")
+            .select(col("v").cast(ArrayType(LongType, containsNull = false))))
+          assertRejected(sql("""SELECT parse_json('{"a": null}') AS v""")
+            .select(col("v").cast(MapType(StringType, LongType, valueContainsNull = false))))
+
+          // Nullable targets are still accepted, keep the NULLs and keep the genuine 0 (row 4).
+          val expected =
+            Seq(Row(1, 42L, false), Row(2, null, true), Row(3, null, true), Row(4, 0L, false))
+          checkAnswer(sql(notNullUserIdQuery.replace("BIGINT NOT NULL", "BIGINT")), expected)
+          checkAnswer(sql(
+            """SELECT event_id, p.user_id, p.user_id IS NULL FROM (
+              |  SELECT DISTINCT event_id, variant_get(payload, '$',
+              |    'STRUCT<user_id: BIGINT NOT NULL, country: STRING>') AS p
+              |  FROM events)""".stripMargin), expected)
+          checkAnswer(sql("SELECT parse_json('[1, null]')::ARRAY<BIGINT>"), Row(Seq(1L, null)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-61831: with the legacy conf, a cast from variant to a non-nullable nested slot " +
+      "reads a missing value as 0") {
+    withVariantEvents {
+      withSQLConf(SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET.key -> "true",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        // The NULL user_id of rows 2 and 3 is read as 0 and IS NULL is false, the same as the
+        // genuine 0 of row 4.
+        checkAnswer(sql(notNullUserIdQuery),
+          Seq(Row(1, 42L, false), Row(2, 0L, false), Row(3, 0L, false), Row(4, 0L, false)))
+      }
+    }
+  }
 }

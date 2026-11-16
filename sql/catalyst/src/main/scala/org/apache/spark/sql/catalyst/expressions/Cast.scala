@@ -149,7 +149,8 @@ object Cast extends QueryErrorsBase {
     case (BooleanType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) =>
+      variant.VariantGet.checkDataType(to) && !variantCastTargetRejected(to)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
@@ -319,7 +320,8 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
     case (_: NumericType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) =>
+      variant.VariantGet.checkDataType(to) && !variantCastTargetRejected(to)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
@@ -713,6 +715,24 @@ object Cast extends QueryErrorsBase {
   }
 
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
+
+  // A cast from VARIANT puts NULL in any nested slot whose JSON value is null or missing, so, as
+  // `resolvableNullability` does for a nullable source slot, reject a target with a non-nullable
+  // nested slot: the cast would otherwise hold NULLs its type says cannot occur.
+  private def variantCastTargetRejected(to: DataType): Boolean =
+    hasNonNullableNestedSlot(to) &&
+      !SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET)
+
+  // Whether the type has a non-nullable struct field, array element or map value at any depth.
+  private def hasNonNullableNestedSlot(dt: DataType): Boolean = dt match {
+    case StructType(fields) =>
+      fields.exists(f => !f.nullable || hasNonNullableNestedSlot(f.dataType))
+    case ArrayType(elementType, containsNull) =>
+      !containsNull || hasNonNullableNestedSlot(elementType)
+    case MapType(_, valueType, valueContainsNull) =>
+      !valueContainsNull || hasNonNullableNestedSlot(valueType)
+    case _ => false
+  }
 
   /**
    * We process literals such as 'Infinity', 'Inf', '-Infinity' and 'NaN' etc in case
