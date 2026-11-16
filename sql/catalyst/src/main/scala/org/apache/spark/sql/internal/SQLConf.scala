@@ -2665,7 +2665,7 @@ object SQLConf {
         "row-level operations or an overwrite by condition (DataFrameWriterV2.overwrite, " +
         "INSERT INTO ... REPLACE WHERE), fails to plan with the cannot-translate-expression " +
         "error when the session time zone keeps such an expression from being pushed.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
