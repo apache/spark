@@ -28,7 +28,7 @@ import org.scalatest.GivenWhenThen
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{BroadcastValueProjection,
-  DynamicPruningExpression, DynamicPruningSubquery, Expression}
+  DynamicPruningExpression, DynamicPruningSubquery, Expression, ExternalUserDefinedFunction}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
@@ -46,9 +46,11 @@ import org.apache.spark.sql.execution.metric.SQLLastAttemptMetrics
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.tags.DataSourceV2Test
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
@@ -2498,6 +2500,64 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         checkAnswer(df, Row(0))
         checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
       }
+    }
+  }
+
+  test("SPARK-61824: no standalone DPP subquery for a filtering side with a Python UDF") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    withUserDefinedFunction("pyudf" -> true, "dpp_udtf" -> true) {
+      registerTestUDF(TestPythonUDF("pyudf"), spark)
+      // DPP drops a non-deterministic filtering side, so the UDTF is deterministic.
+      spark.udtf.registerPython("dpp_udtf", createUserDefinedPythonTableFunction(
+        "DppUDTF",
+        """
+          |class DppUDTF:
+          |    def eval(self):
+          |        yield 1, 'NL'
+          |        yield 2, 'NL'
+          |        yield 3, 'DE'
+          |""".stripMargin,
+        Some(StructType.fromDDL("store_id int, country string")),
+        deterministic = true))
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+        Seq(
+          "dim_store s ON f.store_id = s.store_id AND pyudf(s.country) = 'NL'",
+          "dim_store s ON f.store_id = pyudf(s.store_id) AND s.country = 'NL'",
+          "dpp_udtf() s ON f.store_id = s.store_id AND s.country = 'NL'").foreach { join =>
+          val df = sql(s"SELECT f.date_id, f.store_id FROM fact_sk f JOIN $join")
+          checkPartitionPruningPredicate(df, false, false)
+          checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-61824: no standalone DPP subquery for a filtering side with an external UDF") {
+    // No public API builds a scalar external UDF yet, so the test registers one as a function.
+    // Planning it needs a static conf, which the test sets only for itself.
+    val unifiedUDFExecution = conf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED)
+    conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, true)
+    try {
+      spark.sessionState.functionRegistry.createOrReplaceTempFunction("ext",
+        children => ExternalUserDefinedFunction(Some("ext"),
+          UDFWorkerSpecification.getDefaultInstance, Array.emptyByteArray, IntegerType, children,
+          udfDeterministic = true, udfNullable = true),
+        "scala_udf")
+      withUserDefinedFunction("ext" -> true) {
+        withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+          val df = sql(
+            """
+              |SELECT f.date_id, f.store_id FROM fact_sk f
+              |JOIN dim_store s ON f.store_id = s.store_id AND ext(s.store_id) = 1
+            """.stripMargin)
+          val onlyInBroadcast = df.queryExecution.optimizedPlan.flatMap(_.expressions).flatMap(
+            _.collect { case d: DynamicPruningSubquery => d.onlyInBroadcast })
+          assert(onlyInBroadcast === Seq(true))
+        }
+      }
+    } finally {
+      conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
     }
   }
 
