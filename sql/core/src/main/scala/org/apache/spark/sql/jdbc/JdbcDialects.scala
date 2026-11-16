@@ -400,9 +400,7 @@ abstract class JdbcDialect extends Serializable with Logging {
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       s"'${timestampFormatter.format(timestampValue)}'"
     case timestampValue: Instant =>
-      val timestampFormatter = TimestampFormatter.getFractionFormatter(
-        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"'${timestampFormatter.format(timestampValue)}'"
+      s"'${Timestamp.from(timestampValue)}'"
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
