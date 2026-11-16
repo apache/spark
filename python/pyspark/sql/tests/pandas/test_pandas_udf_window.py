@@ -617,6 +617,30 @@ class WindowPandasUDFTestsMixin:
                 result = df.select(mean_udf(df["v"]).over(w)).first()[0]
                 assert result == 123
 
+    def test_collation_aware_partition_by(self):
+        # 'foo' and 'FOO' belong to the same window partition under a case-insensitive
+        # collation; grouping the buffered partition by raw row bytes would split it and
+        # hand the pandas UDF disjoint frames, changing its output (SPARK-58928).
+        df = self.spark.createDataFrame(
+            [("foo", 1.0), ("FOO", 2.0), ("foo", 3.0), ("bar", 4.0)],
+            "s STRING COLLATE UTF8_LCASE, v DOUBLE",
+        )
+        w = (
+            Window.partitionBy("s")
+            .orderBy("v")
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        )
+
+        assertDataFrameEqual(
+            df.select("s", "v", self.pandas_agg_count_udf("v").over(w).alias("c")).sort("v"),
+            [
+                Row(s="foo", v=1.0, c=3),
+                Row(s="FOO", v=2.0, c=3),
+                Row(s="foo", v=3.0, c=3),
+                Row(s="bar", v=4.0, c=1),
+            ],
+        )
+
     def test_arrow_batch_slicing(self):
         df = self.spark.range(1000).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
 
