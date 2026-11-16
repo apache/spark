@@ -106,6 +106,12 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
         self.assertIsInstance(
             _CoGrouped([], RunnerConf({}), None).serializer, ArrowStreamCoGroupSerializer
         )
+        # Pipelined mode flushes each output batch.
+        for handler_cls in (_Batch, _Grouped, _CoGrouped):
+            handler = handler_cls([], RunnerConf({}), None)
+            for value, flush in (("0", False), ("1", True)):
+                with patch.dict(os.environ, {"SPARK_PIPELINED_UDF": value}):
+                    self.assertEqual(handler.serializer._flush_per_batch, flush)
 
     def test_run_produces_output(self):
         class _Doubler(BatchEvalTypeHandler["pa.RecordBatch"]):

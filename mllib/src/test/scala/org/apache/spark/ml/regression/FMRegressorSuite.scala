@@ -44,7 +44,11 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new FMRegressor)
+    val regressor = new FMRegressor
+    ParamsSuite.checkParams(regressor)
+    assert(regressor.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    regressor.setIntermediateStorageLevel("DISK_ONLY")
+    assert(regressor.getIntermediateStorageLevel === "DISK_ONLY")
     val model = new FMRegressionModel("fmr_test", 0.0, Vectors.dense(0.0),
       new DenseMatrix(1, 8, new Array[Double](8)))
     ParamsSuite.checkParams(model)

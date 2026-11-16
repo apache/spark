@@ -37,7 +37,11 @@ import org.apache.spark.sql.types.{BinaryType, DataType, StringType, StructField
 /**
  * A physical plan that evaluates a [[PythonUDF]]
  */
-case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
+case class BatchEvalPythonExec(
+    udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
+    resultAttrs: Seq[Attribute],
+    child: SparkPlan)
   extends EvalPythonExec with PythonPickleBatchMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
@@ -55,7 +59,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
     new BatchEvalPythonEvaluatorFactory(
       child.output,
       udfs,
-      output,
+      requiredChildOutput,
+      resultAttrs,
       batchSize,
       maxBytesPerBatch,
       pythonMetrics,
@@ -67,6 +72,10 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
         conf.getConf(SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION))
   }
 
+  override def withRequiredChildOutput(
+      requiredChildOutput: Seq[Attribute]): BatchEvalPythonExec =
+    copy(requiredChildOutput = requiredChildOutput)
+
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonExec =
     copy(child = newChild)
 }
@@ -74,7 +83,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 class BatchEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
     udfs: Seq[PythonUDF],
-    output: Seq[Attribute],
+    passThroughOutput: Seq[Attribute],
+    resultOutput: Seq[Attribute],
     batchSize: Int,
     maxBytesPerBatch: Long,
     pythonMetrics: Map[String, SQLMetric],
@@ -83,7 +93,7 @@ class BatchEvalPythonEvaluatorFactory(
     binaryAsBytes: Boolean,
     rowSizeGuardEnabled: Boolean = false,
     rowSizeGuardMaxRowHeapFraction: Double = -1.0)
-  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, passThroughOutput, resultOutput) {
 
   // This lazy val is first used in a task, even when the factory is built on the driver.
   private lazy val rowSizeGuardMaxRowBytes = if (rowSizeGuardMaxRowHeapFraction > 0) {

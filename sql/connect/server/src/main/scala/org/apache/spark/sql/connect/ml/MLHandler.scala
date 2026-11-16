@@ -185,7 +185,7 @@ private[connect] object MLHandler extends Logging {
             val execTime = System.currentTimeMillis() - startTime
             if (execTime > handlerInterruptionTimeoutMillis) {
               for (t <- Thread.getAllStackTraces().keySet().asScala) {
-                if (t.getId() == threadId) {
+                if (t.threadId() == threadId) {
                   t.interrupt()
                 }
               }
@@ -450,7 +450,7 @@ private[connect] object MLHandler extends Logging {
   def wrapHandler(
       originHandler: () => Any,
       reqProto: com.google.protobuf.GeneratedMessage): Any = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     val startTime = System.currentTimeMillis()
     handlerExecutionStartTimeMap.put(threadId, startTime)
     try {

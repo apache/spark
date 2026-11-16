@@ -3417,6 +3417,17 @@ private[spark] class DAGScheduler(
 
         // Abort execution
         return
+      case e: OutOfMemoryError if Utils.isJavaArraySizeLimitExceeded(e) =>
+        // The task binary is too large for a Java array. Report it with a user-facing error and
+        // without the OutOfMemoryError as cause, so it is not mistaken for heap exhaustion.
+        val failure = JavaArraySizeLimitExceeded.forTaskBinary(e, stage.id)
+        logError(log"Failed to serialize the task binary of ${MDC(STAGE, stage)} because it " +
+          log"exceeded Java's maximum array size: ${MDC(ERROR, failure.jvmMessage)}")
+        abortStage(stage, failure.getMessage, Some(failure))
+        runningStages -= stage
+
+        // Abort execution
+        return
       case e: Throwable =>
         abortStage(stage, s"Task serialization failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage

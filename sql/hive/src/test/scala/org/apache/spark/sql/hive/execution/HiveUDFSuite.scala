@@ -44,7 +44,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, AttributeReference, BindReferences, CodegenObjectFactoryMode, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData, RandomUUIDGenerator}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, SimpleFunction}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
@@ -73,6 +73,29 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
   import spark.implicits._
 
   import spark.udf
+
+  for (seed <- Seq(0L, 42L, Long.MinValue); codegen <- Seq(true, false)) {
+    test(s"SPARK-60634: Hive UDTFs initialize UUID arguments ($seed, $codegen)") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        withUserDefinedFunction("hive_uuid_explode" -> true) {
+          sql(s"CREATE TEMPORARY FUNCTION hive_uuid_explode AS " +
+            s"'${classOf[GenericUDTFExplode].getName}'")
+          val expected = (0 until 2).flatMap { partition =>
+            val generator = RandomUUIDGenerator(seed + partition)
+            (0 until 3).flatMap { offset =>
+              val id = partition * 3L + offset
+              Seq(Row(id, generator.getNextUUID().toString), Row(id, null), Row(id, id.toString))
+            }
+          }
+          val argument = s"array(uuid($seed), CAST(NULL AS STRING), CAST(id AS STRING))"
+          checkAnswer(sql(s"SELECT id, hive_uuid_explode($argument) AS value " +
+            "FROM range(0, 6, 1, 2)"), expected)
+          checkAnswer(sql(s"SELECT id, value FROM range(0, 6, 1, 2) " +
+            s"LATERAL VIEW hive_uuid_explode($argument) v AS value"), expected)
+        }
+      }
+    }
+  }
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
@@ -1222,31 +1245,35 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     // Filter on the driver per-conjunct, which does not interleave the two copies.
     // With a shared GenericUDF instance, the second row threw ClassCastException:
     // TimestampWritable cannot be cast to java.sql.Timestamp.
-    withUserDefinedFunction("hive_gt" -> true) {
-      sql(s"CREATE TEMPORARY FUNCTION hive_gt AS '${classOf[GenericUDFOPGreaterThan].getName}'")
-      withTable("gt_table") {
-        sql("CREATE TABLE gt_table (id INT, pt DATE, created_at TIMESTAMP) STORED AS PARQUET")
-        sql("""
-          |INSERT INTO gt_table VALUES
-          |  (1, DATE '2024-09-10', TIMESTAMP '2024-09-01 00:00:00'),
-          |  (2, DATE '2024-09-10', TIMESTAMP '2024-09-05 00:00:00'),
-          |  (3, DATE '2024-09-10', TIMESTAMP '2024-09-15 00:00:00'),
-          |  (4, DATE '2024-09-11', TIMESTAMP '2024-09-01 00:00:00')
-          |""".stripMargin)
-        val df = sql("""
-          |SELECT id FROM gt_table
-          |WHERE pt = DATE '2024-09-10'
-          |  AND hive_gt(CAST(pt AS TIMESTAMP), created_at)
-          |ORDER BY id
-          |""".stripMargin)
-        // Guard against the test going silently vacuous: the optimized Filter must
-        // hold both copies, exactly one of them with a literal first argument.
-        val udfs = df.queryExecution.optimizedPlan.collect {
-          case f: Filter => f.condition.collect { case u: HiveGenericUDF => u }
-        }.flatten
-        assert(udfs.size == 2)
-        assert(udfs.count(_.children.head.isInstanceOf[Literal]) == 1)
-        checkAnswer(df, Row(1) :: Row(2) :: Nil)
+    // A Hive UDF can fail, so InferFiltersFromConstraints only copies it with the legacy
+    // configuration.
+    withSQLConf(SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true") {
+      withUserDefinedFunction("hive_gt" -> true) {
+        sql(s"CREATE TEMPORARY FUNCTION hive_gt AS '${classOf[GenericUDFOPGreaterThan].getName}'")
+        withTable("gt_table") {
+          sql("CREATE TABLE gt_table (id INT, pt DATE, created_at TIMESTAMP) STORED AS PARQUET")
+          sql("""
+            |INSERT INTO gt_table VALUES
+            |  (1, DATE '2024-09-10', TIMESTAMP '2024-09-01 00:00:00'),
+            |  (2, DATE '2024-09-10', TIMESTAMP '2024-09-05 00:00:00'),
+            |  (3, DATE '2024-09-10', TIMESTAMP '2024-09-15 00:00:00'),
+            |  (4, DATE '2024-09-11', TIMESTAMP '2024-09-01 00:00:00')
+            |""".stripMargin)
+          val df = sql("""
+            |SELECT id FROM gt_table
+            |WHERE pt = DATE '2024-09-10'
+            |  AND hive_gt(CAST(pt AS TIMESTAMP), created_at)
+            |ORDER BY id
+            |""".stripMargin)
+          // Guard against the test going silently vacuous: the optimized Filter must
+          // hold both copies, exactly one of them with a literal first argument.
+          val udfs = df.queryExecution.optimizedPlan.collect {
+            case f: Filter => f.condition.collect { case u: HiveGenericUDF => u }
+          }.flatten
+          assert(udfs.size == 2)
+          assert(udfs.count(_.children.head.isInstanceOf[Literal]) == 1)
+          checkAnswer(df, Row(1) :: Row(2) :: Nil)
+        }
       }
     }
     hiveContext.reset()

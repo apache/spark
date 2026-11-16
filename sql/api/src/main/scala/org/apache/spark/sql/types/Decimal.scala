@@ -558,17 +558,56 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def %(that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
+    else {
+      val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
+      val r =
+        try a.remainder(b, MATH_CONTEXT)
+        catch {
+          case e: ArithmeticException =>
+            a.remainder(b, integralQuotientContext(a, b, e))
+        }
+      Decimal(r)
+    }
 
   def quot(that: Decimal): Decimal =
     if (that.isZero) null
-    else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
+    else {
+      val (a, b) = (toJavaBigDecimal, that.toJavaBigDecimal)
+      val q =
+        try a.divideToIntegralValue(b, MATH_CONTEXT)
+        catch {
+          case e: ArithmeticException =>
+            a.divideToIntegralValue(b, integralQuotientContext(a, b, e))
+        }
+      Decimal(q)
+    }
 
   def remainder(that: Decimal): Decimal = this % that
 
+  // With `MATH_CONTEXT`, `BigDecimal.remainder` and `divideToIntegralValue` raise "Division
+  // impossible" when the integral part of the quotient has more than 39 digits, e.g. 41 digits
+  // for DECIMAL(38, 0) and DECIMAL(3, 3). `%` and `quot` then retry with the context returned
+  // here, which holds the integral part of `a / b`: |a| < 10^(a.precision - a.scale) and
+  // |b| >= 10^(b.precision - b.scale - 1). They try `MATH_CONTEXT` first, because a wider
+  // context computes more digits, which can be very many with negative scales. `e` is rethrown
+  // when the bound is within `MATH_CONTEXT` or beyond the Int range.
+  // This is a private method of the class, not of `object Decimal`: the class calling a private
+  // member of the object makes it public in `Decimal$` and changes the computed
+  // serialVersionUID of `Decimal$`, which `UdfSerialization.auditedTransitions` pins.
+  private def integralQuotientContext(
+      a: JavaBigDecimal,
+      b: JavaBigDecimal,
+      e: ArithmeticException): MathContext = {
+    val digits = (a.precision.toLong - a.scale) - (b.precision.toLong - b.scale) + 1
+    if (digits <= MATH_CONTEXT.getPrecision || digits > Int.MaxValue) throw e
+    new MathContext(digits.toInt, RoundingMode.DOWN)
+  }
+
   def unary_- : Decimal = {
     if (decimalVal.ne(null)) {
-      Decimal(-decimalVal, precision, scale)
+      // Negate the Java value: Scala 2.13's `BigDecimal.unary_-` rounds to its math context,
+      // 34 digits by default, which loses digits of a value of 35 to 38 digits (SPARK-45438).
+      Decimal(decimalVal.bigDecimal.negate(), precision, scale)
     } else {
       Decimal(-longVal, precision, scale)
     }

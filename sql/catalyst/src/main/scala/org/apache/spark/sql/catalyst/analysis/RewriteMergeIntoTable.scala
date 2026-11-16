@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, ExposesMetadataColumns, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, ExposesMetadataColumns, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.trees.TreePattern.MERGE_INTO_TABLE
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
@@ -58,7 +58,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           validateMergeIntoConditions(m)
 
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
-          val insertAction = notMatchedActions.head.asInstanceOf[InsertAction]
+          val insertAction = removeMetadataAssignments(notMatchedActions).head
+            .asInstanceOf[InsertAction]
           val filteredSource = insertAction.condition match {
             case Some(insertCond) => Filter(insertCond, source)
             case None => source
@@ -96,7 +97,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           // only unmatched source rows that match action conditions are appended to the table
           val joinPlan = Join(source, r, LeftAnti, Some(cond), JoinHint.NONE)
 
-          val notMatchedInstructions = notMatchedActions.map {
+          val notMatchedInstructions = removeMetadataAssignments(notMatchedActions).map {
             case InsertAction(cond, assignments) =>
               Keep(Insert, cond.getOrElse(TrueLiteral), assignments.map(_.value))
             case other =>
@@ -115,7 +116,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             notMatchedInstructions = notMatchedInstructions,
             notMatchedBySourceInstructions = Nil,
             checkCardinality = false,
-            output = generateExpandOutput(r.output, outputs),
+            output = generateExpandOutput(dataAttrs(r), outputs),
             joinPlan)
 
           InsertOnlyMerge(r, mergeRows)
@@ -130,21 +131,44 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
+          val dataMatchedActions = removeMetadataAssignments(matchedActions)
+          val dataNotMatchedActions = removeMetadataAssignments(notMatchedActions)
+          val dataNotMatchedBySourceActions = removeMetadataAssignments(notMatchedBySourceActions)
           val table = buildOperationTable(tbl, MERGE, r.options)
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(
-                r, table, source, cond, matchedActions,
-                notMatchedActions, notMatchedBySourceActions)
+                r, table, source, cond, dataMatchedActions,
+                dataNotMatchedActions, dataNotMatchedBySourceActions)
             case _ =>
               buildReplaceDataPlan(
-                r, table, source, cond, matchedActions,
-                notMatchedActions, notMatchedBySourceActions)
+                r, table, source, cond, dataMatchedActions,
+                dataNotMatchedActions, dataNotMatchedBySourceActions)
           }
 
         case _ =>
           m
       }
+  }
+
+  // the aligned assignments of UPDATE and INSERT actions may include the metadata columns that
+  // AddMetadataColumns adds to the target table (see RewriteRowLevelCommand)
+  private def removeMetadataAssignments(actions: Seq[MergeAction]): Seq[MergeAction] = {
+    actions.map {
+      case update @ UpdateAction(_, assignments, _) =>
+        update.copy(assignments = removeMetadataAssignments(assignments, isSelfAssignment))
+      case insert @ InsertAction(_, assignments) =>
+        insert.copy(assignments = removeMetadataAssignments(assignments, isNullAssignment))
+      case other =>
+        other
+    }
+  }
+
+  // aligning INSERT assignments assigns null to each nullable column that has no value or default
+  // inserted rows are passed to the writer without metadata, so such an assignment changes nothing
+  private def isNullAssignment(assignment: Assignment): Boolean = assignment.value match {
+    case Literal(null, _) | Alias(Literal(null, _), _) => true
+    case _ => false
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
@@ -164,9 +188,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // construct a read relation and include all required metadata columns
     // as well as metadata columns referenced in the condition or actions
     // carried over rows contain all read metadata columns, so every instruction must produce them
+    // in the same order, where the metadata columns of the target table come first (see dataAttrs)
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
     val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: actions)
-    val readMetadataAttrs = dedupAttrs(metadataAttrs ++ referencedMetadataAttrs)
+    val targetMetadataAttrs = relation.output.filter { attr =>
+      MetadataAttribute.isValid(attr.metadata)
+    }
+    val readMetadataAttrs = dedupAttrs(
+      targetMetadataAttrs ++ metadataAttrs ++ referencedMetadataAttrs)
     val readRelation = buildRelationWithAttrs(relation, operationTable, readMetadataAttrs)
 
     val checkCardinality = shouldCheckCardinality(matchedActions)
@@ -194,7 +223,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildReplaceDataProjections(mergeRowsPlan, relation.output, metadataAttrs)
+    val projections = buildReplaceDataProjections(mergeRowsPlan, dataAttrs(relation), metadataAttrs)
     ReplaceData(writeRelation, pushableCond, mergeRowsPlan, relation, projections, groupFilterCond)
   }
 
@@ -305,7 +334,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val operation = operationTable.operation.asInstanceOf[SupportsDelta]
 
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
-    val rowAttrs = relation.output
+    val rowAttrs = dataAttrs(relation)
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
 

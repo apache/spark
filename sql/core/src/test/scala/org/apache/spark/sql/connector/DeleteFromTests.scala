@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_CHAR_VARCHAR_AS_STRING, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
 
 /**
@@ -95,6 +95,35 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
       }
 
       assert(spark.table(t).count() === 3)
+      assert(exc.getMessage.contains(s"Cannot delete from table $t"))
+    }
+  }
+
+  test("SPARK-61461: DeleteFrom with v2 filtering: table with a CHAR column") {
+    val t = s"${catalogAndNamespace}tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data char(3), p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t WHERE id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c  ", 3)))
+    }
+  }
+
+  test("SPARK-61461: DeleteFrom with v2 filtering: condition on a CHAR column") {
+    val t = s"${catalogAndNamespace}tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, p char(3)) USING foo PARTITIONED BY (id, p)")
+      // a read pads the values stored without padding, so the source must not delete them by
+      // comparing the stored values with the padded literal, which would not match
+      withSQLConf(LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        sql(s"INSERT INTO $t VALUES (2L, 'a'), (3L, 'b')")
+      }
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE p = 'a'")
+      }
+
+      assert(spark.table(t).count() === 2)
       assert(exc.getMessage.contains(s"Cannot delete from table $t"))
     }
   }

@@ -43,7 +43,7 @@ sc://host:port/;param1=value;param2=value
       address as well.
     </td>
     <td>
-      <pre>myexample.com</pre>
+      <pre>example.com</pre>
       <pre>127.0.0.1</pre>
     </td>
   </tr>
@@ -153,30 +153,30 @@ sc://host:port/;param1=value;param2=value
 Below we capture valid configuration examples, explaining how the connection string
 will be used when configuring the Spark Connect client.
 
-The below example connects to port **`15002`** on **myhost.com**.
+The below example connects to port **`15002`** on **example.com**.
 ```python
-server_url = "sc://myhost.com/"
+server_url = "sc://example.com/"
 ```
 
 The next example configures the connection to use a different port with SSL.
 
 ```python
-server_url = "sc://myhost.com:443/;use_ssl=true"
+server_url = "sc://example.com:443/;use_ssl=true"
 ```
 
 ```python
-server_url = "sc://myhost.com:443/;use_ssl=true;token=ABCDEFG"
+server_url = "sc://example.com:443/;use_ssl=true;token=ABCDEFG"
 ```
 
 The next example tunes the gRPC keepalive settings, e.g. to detect a dead connection faster
 than the 60s/20s default, or to disable it entirely.
 
 ```python
-server_url = "sc://myhost.com:443/;grpc_keepalive_time_ms=30000;grpc_keepalive_timeout_ms=10000"
+server_url = "sc://example.com:443/;grpc_keepalive_time_ms=30000;grpc_keepalive_timeout_ms=10000"
 ```
 
 ```python
-server_url = "sc://myhost.com:443/;grpc_keepalive_enabled=false"
+server_url = "sc://example.com:443/;grpc_keepalive_enabled=false"
 ```
 
 ### Invalid Examples
@@ -186,6 +186,6 @@ cannot be configured to remain compatible with the GRPC standard and HTTP. For
 example the following examples are invalid.
 
 ```python
-server_url = "sc://myhost.com:443/mypathprefix/;token=AAAAAAA"
+server_url = "sc://example.com:443/mypathprefix/;token=AAAAAAA"
 ```
 

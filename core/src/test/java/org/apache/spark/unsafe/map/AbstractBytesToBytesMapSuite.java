@@ -51,6 +51,7 @@ import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.util.Utils;
 import org.apache.spark.internal.config.package$;
@@ -772,6 +773,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     assertThrows(IllegalArgumentException.class,
       () -> new BytesToBytesMap(taskMemoryManager, 1,
               TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1));
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager, 1, PAGE_SIZE_BYTES, 0));
   }
 
   @Test
@@ -814,6 +817,84 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     } finally {
       map.free();
+    }
+  }
+
+  @Test
+  public void dataPagesGrowFromInitialPageSize() {
+    final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 6144, 1024);
+    try {
+      // The pages double from 1 KiB, and the last growing page is cut to the 3 KiB left, so the
+      // growing pages add up to exactly one page size before the pages of 6 KiB begin.
+      assertEquals(1024, appendUntilNewDataPage(map, 1));
+      assertEquals(2048, appendUntilNewDataPage(map, 1));
+      assertEquals(3072, appendUntilNewDataPage(map, 1));
+      assertEquals(6144, appendUntilNewDataPage(map, 1));
+      assertEquals(6144, appendUntilNewDataPage(map, 1));
+
+      // reset() starts again from the initial page size.
+      map.reset();
+      assertEquals(1024, appendUntilNewDataPage(map, 1));
+      // A record larger than the next page size, 2 KiB, gets a page of its own size: the record
+      // count of the page, the two lengths, the key, the value and the pointer to the next value.
+      final int largeValueWords = 300;
+      assertEquals(3L * UnsafeAlignedOffset.getUaoSize() + 8 + largeValueWords * 8L + 8,
+        appendUntilNewDataPage(map, largeValueWords));
+    } finally {
+      map.free();
+    }
+
+    // An initial page size larger than the page size is capped at the page size.
+    final BytesToBytesMap cappedMap = new BytesToBytesMap(taskMemoryManager, 1, 1024, 4096);
+    try {
+      assertEquals(1024, appendUntilNewDataPage(cappedMap, 1));
+    } finally {
+      cappedMap.free();
+    }
+  }
+
+  @Test
+  public void growingDataPagesLeaveRoomForArrayHeader() {
+    // SPARK-61257: Like the default on-heap page size under G1 (SPARK-37593), this page size
+    // leaves room for the header of a long[], and so does each growing page. With the header, the
+    // pages double from 1 KiB, and the last growing page is cut to the 1 KiB left.
+    final long header = Platform.LONG_ARRAY_OFFSET;
+    final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, 8192 - header, 1024);
+    try {
+      assertEquals(1024 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(2048 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(4096 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(1024 - header, appendUntilNewDataPage(map, 1));
+      assertEquals(8192 - header, appendUntilNewDataPage(map, 1));
+    } finally {
+      map.free();
+    }
+
+    // A map whose pages do not grow keeps pages of the page size.
+    final BytesToBytesMap fullPageMap = new BytesToBytesMap(taskMemoryManager, 1, 8192 - header);
+    try {
+      assertEquals(8192 - header, appendUntilNewDataPage(fullPageMap, 1));
+    } finally {
+      fullPageMap.free();
+    }
+  }
+
+  /**
+   * Appends records with a value of `valueWords` longs until the map allocates a new data page, and
+   * returns the size of that page. All records share one key, so the pointer array does not grow
+   * and every increase of the memory consumption is a new data page.
+   */
+  private static long appendUntilNewDataPage(BytesToBytesMap map, int valueWords) {
+    final long[] key = new long[]{0};
+    final long[] value = new long[valueWords];
+    final long previousMemory = map.getTotalMemoryConsumption();
+    while (true) {
+      assertTrue(map.lookup(key, Platform.LONG_ARRAY_OFFSET, 8).append(
+        key, Platform.LONG_ARRAY_OFFSET, 8, value, Platform.LONG_ARRAY_OFFSET, valueWords * 8));
+      final long memory = map.getTotalMemoryConsumption();
+      if (memory > previousMemory) {
+        return memory - previousMemory;
+      }
     }
   }
 

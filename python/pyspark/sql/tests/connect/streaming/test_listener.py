@@ -16,6 +16,7 @@
 #
 
 import unittest
+import warnings
 from unittest import mock
 
 from pyspark.errors import PySparkValueError
@@ -72,6 +73,57 @@ class StreamingQueryListenerBusResponseTests(unittest.TestCase):
                     list(StreamingQueryListenerBus._iter_listener_events(iter([response])))
 
                 self.assertEqual(error.exception.getCondition(), "UNKNOWN_RESPONSE")
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class StreamingQueryListenerBusCloseTests(unittest.TestCase):
+    def test_close_removes_every_listener_and_server_listener_once(self):
+        listener_added = pb2.StreamingQueryListenerEventsResult(listener_bus_listener_added=True)
+        manager = mock.Mock()
+        manager._session.client.is_closed = False
+        manager._session.client.execute_command_as_iterator.return_value = iter(
+            [{"streaming_query_listener_events_result": listener_added}]
+        )
+        listener_bus = StreamingQueryListenerBus(manager)
+        listeners = [object(), object(), object()]
+        for listener in listeners:
+            listener_bus.append(listener)
+
+        listener_bus.close()
+
+        self.assertEqual(listener_bus._listener_bus, [])
+        self.assertIsNone(listener_bus._execution_thread)
+        manager._session.client.execute_command_as_iterator.assert_called_once()
+        manager._session.client.execute_command.assert_called_once()
+        remove_cmd = manager._session.client.execute_command.call_args[0][0]
+        bus_cmd = remove_cmd.streaming_query_listener_bus_command
+        self.assertTrue(bus_cmd.remove_listener_bus_listener)
+
+    def test_close_with_a_closed_client_clears_the_listeners_without_a_removal(self):
+        # After SparkSession.stop(), the release of the session has removed the server side
+        # listener and the client is closed, so close() sends no removal and warns nothing.
+        listener_added = pb2.StreamingQueryListenerEventsResult(listener_bus_listener_added=True)
+        manager = mock.Mock()
+        manager._session.client.is_closed = False
+        manager._session.client.execute_command_as_iterator.return_value = iter(
+            [{"streaming_query_listener_events_result": listener_added}]
+        )
+        manager._session.client.execute_command.side_effect = RuntimeError("closed client")
+        listener_bus = StreamingQueryListenerBus(manager)
+        for listener in [object(), object()]:
+            listener_bus.append(listener)
+        # SparkSession.__del__ runs only after the handler thread has ended.
+        listener_bus._execution_thread.join(timeout=10)
+        manager._session.client.is_closed = True
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            listener_bus.close()
+
+        self.assertEqual([str(w.message) for w in caught], [])
+        self.assertEqual(listener_bus._listener_bus, [])
+        self.assertIsNone(listener_bus._execution_thread)
+        manager._session.client.execute_command.assert_not_called()
 
 
 if __name__ == "__main__":

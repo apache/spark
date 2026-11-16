@@ -148,7 +148,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("SPARK-45909: Remove the cast if it can safely up-cast in IsNotNull") {
-    val input = LocalRelation($"a".int, $"b".decimal(18, 0))
+    val input = LocalRelation($"a".int, $"b".decimal(18, 0), $"d".decimal(19, 0))
     // Remove cast
     comparePlans(
       Optimize.execute(
@@ -166,5 +166,9 @@ class SimplifyCastsSuite extends PlanTest {
       Optimize.execute(
         input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze),
       input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze)
+    // SPARK-60943: DECIMAL(19, 0) values can be out of the range of BIGINT
+    comparePlans(
+      Optimize.execute(input.select($"d".cast(LongType).isNotNull.as("v")).analyze),
+      input.select($"d".cast(LongType).isNotNull.as("v")).analyze)
   }
 }

@@ -32,6 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
+import org.apache.spark.tags.DataSourceV2Test
 
 class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
@@ -80,6 +81,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     java.util.EnumSet.of(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA)
 }
 
+@DataSourceV2Test
 class FileDataSourceV2FallBackSuite extends SharedSparkSession {
 
   private val dummyReadOnlyFileSourceV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
