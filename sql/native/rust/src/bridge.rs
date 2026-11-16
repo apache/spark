@@ -951,10 +951,6 @@ mod tests {
             fn new(_: CreateInfo) -> Result<Self> {
                 unreachable!("registered directly")
             }
-
-            fn capabilities(&self) -> Capabilities {
-                Capabilities::all()
-            }
         }
 
         let bridge = Bridge::<Appending>::default();
