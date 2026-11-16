@@ -27,18 +27,30 @@ from pathlib import Path
 
 from pyspark import pipelines as dp
 from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
 # SDP also injects the session as `spark`; assigning it explicitly keeps linters happy.
 spark = SparkSession.active()
 
-ORDERS_DIR = (Path(__file__).parent.parent / "data" / "orders").resolve().as_uri()
+# Build the URI from the plain path rather than with `Path.as_uri()`, which percent-encodes
+# spaces and non-ASCII characters that the file source does not decode.
+ORDERS_DIR = f"file://{(Path(__file__).parent.parent / 'data' / 'orders').resolve()}"
+
+# A StructType rather than a DDL string: with Spark Connect, a string schema is parsed with a
+# separate analysis request, which is not allowed inside a query function.
+CUSTOMERS_SCHEMA = StructType(
+    [
+        StructField("customer_id", IntegerType()),
+        StructField("name", StringType()),
+        StructField("country", StringType()),
+    ]
+)
 
 
 @dp.materialized_view
 def customers() -> DataFrame:
     return spark.createDataFrame(
-        [(1, "Alice", "US"), (2, "Bob", "DE"), (3, "Carol", "US")],
-        "customer_id INT, name STRING, country STRING",
+        [(1, "Alice", "US"), (2, "Bob", "DE"), (3, "Carol", "US")], CUSTOMERS_SCHEMA
     )
 
 

@@ -37,11 +37,13 @@ hello_world/
 
 ## Run the example
 
-1. Copy the project out of the Spark source tree, so the run's output stays out of it:
+1. Copy the project out of the Spark source tree, so the run's output stays out of it, and
+   add the `storage` field, which must be an absolute URI, to the spec:
 
    ```bash
    cp -r examples/src/main/python/pipelines/hello_world /tmp/hello_world
    cd /tmp/hello_world
+   echo "storage: \"file://$PWD/pipeline-storage\"" >> spark-pipeline.yml
    ```
 
 2. Run the pipeline:

@@ -152,7 +152,7 @@ from pathlib import Path
 from pyspark import pipelines as dp
 from pyspark.sql import DataFrame
 
-ORDERS_DIR = (Path(__file__).parent.parent / "data" / "orders").resolve().as_uri()
+ORDERS_DIR = f"file://{(Path(__file__).parent.parent / 'data' / 'orders').resolve()}"
 
 
 @dp.table
@@ -165,7 +165,7 @@ def orders() -> DataFrame:
 EOF
 ```
 
-`@dp.table` defines a streaming table because the function returns a streaming DataFrame
+`@dp.table` defines a streaming table, so its function must return a streaming DataFrame
 (`spark.readStream`). Streaming file sources need an explicit schema.
 
 Define a materialized view that aggregates the streaming table, in

@@ -16,8 +16,8 @@
 #
 
 name: hello_world
-# Relative paths are resolved against the directory that contains this file.
-storage: pipeline-storage
+# `storage` must be an absolute URI. README step 1 appends it once the project is copied into
+# place, as `storage: "file://<project directory>/pipeline-storage"`.
 libraries:
   - glob:
       include: transformations/**
