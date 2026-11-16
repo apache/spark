@@ -24,6 +24,8 @@ license: |
 
 ## Upgrading from Core 4.3 to 4.4
 
+- Since Spark 4.4, `RangePartitioner`, which `sortByKey` and `sortBy` use, seeds the samples that pick its range bounds from the partition index instead of the RDD id, so the same input gets the same bounds on every execution. The bounds, and so which partition or output file a record lands in, can differ from earlier versions. To restore the previous seeds, set `spark.rdd.rangePartitioner.legacySeedWithRddId` to `true` when the application starts.
+
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
 
 - Since Spark 4.4, an executor pod template that names a service account in `serviceAccountName` keeps it: Spark applies `spark.kubernetes.authenticate.executor.serviceAccountName`, or `spark.kubernetes.authenticate.driver.serviceAccountName` as a fallback, only when the template names no account in either `serviceAccount` or `serviceAccountName`. Earlier versions decided by reading the deprecated `serviceAccount` field alone, so with either configuration set, a template that named the account in `serviceAccountName` had it overwritten; with neither set, the template's account was kept already. Spark logs a warning when `spark.kubernetes.authenticate.executor.serviceAccountName` named an account the template displaced.

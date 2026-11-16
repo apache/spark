@@ -170,6 +170,20 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     }
   }
 
+  test("SPARK-61561: RangePartitioners with different orderings are not equal") {
+    // Both partitioners sample the same rows, so they can pick the same bound; they still route
+    // keys differently and must not let a join skip its shuffle.
+    val n = 1001
+    val rdd = sc.parallelize(0 until n, 11).map(x => (x, x)).cache()
+    val asc = new RangePartitioner(2, rdd)
+    val desc = new RangePartitioner(2, rdd)(Ordering[Int].reverse, implicitly)
+    // hashCode covers only the bounds and the direction, so equal hashes mean the same bounds.
+    assert(asc.hashCode === desc.hashCode)
+    assert(asc !== desc)
+    assert(desc !== asc)
+    assert(rdd.partitionBy(asc).join(rdd.partitionBy(desc)).count() === n)
+  }
+
   test("RangePartitioner should return a single partition for empty RDDs") {
     val empty1 = sc.emptyRDD[(Int, Double)]
     val partitioner1 = new RangePartitioner(0, empty1)

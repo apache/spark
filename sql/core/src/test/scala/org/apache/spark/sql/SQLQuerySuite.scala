@@ -5431,18 +5431,12 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     assert(first === second && leftover === 0L)
   }
 
-  test("SPARK-61561: TABLESAMPLE REPEATABLE over ORDER BY returns the same rows on every " +
-      "execution (gate off reproduces the bug)") {
-    val conf = spark.sparkContext.conf
-    val key = LEGACY_RANGE_PARTITIONER_RDD_ID_SEED.key
-    val prior = conf.getOption(key)
-    conf.set(key, "true")
-    try {
+  test("SPARK-61561: with the legacy RDD-id seed on, TABLESAMPLE REPEATABLE over ORDER BY " +
+      "can return different rows across executions") {
+    withSparkContextConf(LEGACY_RANGE_PARTITIONER_RDD_ID_SEED.key -> "true") {
       val (first, second, leftover) = repeatableSampleOverOrderBy()
       assert(first !== second)
       assert(leftover > 0L)
-    } finally {
-      prior.fold(conf.remove(key))(conf.set(key, _))
     }
   }
 }

@@ -2935,11 +2935,11 @@ package object config {
       .createWithDefault(0)
 
   private[spark] val LEGACY_RANGE_PARTITIONER_RDD_ID_SEED =
-    ConfigBuilder("spark.rdd.rangePartitioner.legacyRddIdSeed")
+    ConfigBuilder("spark.rdd.rangePartitioner.legacySeedWithRddId")
       .internal()
       .doc("When true, RangePartitioner seeds the samples that pick its range bounds with the " +
         "RDD id, so the bounds of the same data can change on every execution. When false, the " +
-        "seeds depend only on the partition index.")
+        "seeds do not depend on the RDD id, so the same input gets the same bounds every time.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
