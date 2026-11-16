@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Test suite to handle metadata cache related.
@@ -130,7 +130,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
   }
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class MetadataCacheV2Suite extends MetadataCacheSuite {
   override protected def sparkConf: SparkConf =
     super

@@ -3333,4 +3333,72 @@ class SubquerySuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-60969: correlated equality on a cast from a scale-0 decimal under an aggregate") {
+    withTable("o", "i", "j", "s") {
+      sql("CREATE TABLE o USING parquet AS SELECT * FROM VALUES " +
+        "(-8446744073709551617), (1), (CAST(NULL AS BIGINT)) AS t(k)")
+      // 9999999999999999999 and -8446744073709551617 are the same BIGINT when wrapped around.
+      // 9999999999999999999 and -9999999999999999999 are out of the BIGINT range.
+      sql("CREATE TABLE i USING parquet AS SELECT * FROM VALUES " +
+        "(9999999999999999999BD), (-8446744073709551617BD), (-9999999999999999999BD), (1BD) " +
+        "AS t(d)")
+      sql("CREATE TABLE j USING parquet AS SELECT * FROM VALUES (1BD), (2BD), (2BD) AS t(d)")
+      sql("CREATE TABLE s USING parquet AS SELECT * FROM VALUES (1.0BD), (2.5BD) AS t(d)")
+
+      def check(
+          ansi: Boolean,
+          table: String,
+          cond: String,
+          domainJoin: Boolean,
+          expected: Seq[Row]): Unit = {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val df = sql(s"SELECT k, (SELECT count(*) FROM $table WHERE $cond) FROM o")
+          // The domain join scans the outer table once more.
+          assert(df.queryExecution.optimizedPlan.collectLeaves().size ==
+            (if (domainJoin) 3 else 2), cond)
+          checkAnswer(df, expected)
+        }
+      }
+      val min = new java.math.BigDecimal("-8446744073709551617")
+
+      // LEGACY wraps around, so two inner values are the same key.
+      check(ansi = false, "i", "CAST(d AS BIGINT) = o.k", domainJoin = true,
+        Seq(Row(min, 2), Row(1, 1), Row(null, 0)))
+      // ANSI is one-to-one under both equalities, unless the scale is not zero.
+      check(ansi = true, "j", "CAST(d AS BIGINT) = o.k", domainJoin = false,
+        Seq(Row(min, 0), Row(1, 1), Row(null, 0)))
+      check(ansi = true, "j", "CAST(d AS BIGINT) <=> o.k", domainJoin = false,
+        Seq(Row(min, 0), Row(1, 1), Row(null, 0)))
+      check(ansi = true, "s", "CAST(d AS BIGINT) = o.k", domainJoin = true,
+        Seq(Row(min, 0), Row(1, 1), Row(null, 0)))
+      // TRY is one-to-one under `=` which never matches NULL, but not under `<=>`.
+      check(ansi = false, "i", "try_cast(d AS BIGINT) = o.k", domainJoin = false,
+        Seq(Row(min, 1), Row(1, 1), Row(null, 0)))
+      check(ansi = false, "i", "try_cast(d AS BIGINT) <=> o.k", domainJoin = true,
+        Seq(Row(min, 1), Row(1, 1), Row(null, 2)))
+
+      // The correlated predicates are validated without the decorrelation framework.
+      withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+        Seq("CAST(d AS BIGINT) = o.k" -> "j", "try_cast(d AS BIGINT) = o.k" -> "i").foreach {
+          case (cond, table) =>
+            withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+              sql(s"SELECT k, (SELECT count(*) FROM $table WHERE $cond) FROM o").collect()
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60983: Propagate a constant into a comparison with a correlated scalar subquery") {
+    withTempView("t1", "t2") {
+      Seq((1, 2), (2, 3)).toDF("a", "b").createOrReplaceTempView("t1")
+      Seq((1, 2), (1, 1), (2, 3)).toDF("a", "b").createOrReplaceTempView("t2")
+      // The constant of `t1.a` is not looked up for `t2.a` in the condition of the subquery.
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE t1.a = 1 AND " +
+          "t1.b = (SELECT max(t2.b) FROM t2 WHERE t2.a = t1.a)"),
+        Row(1, 2))
+    }
+  }
 }

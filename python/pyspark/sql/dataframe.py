@@ -78,6 +78,48 @@ if TYPE_CHECKING:
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
+def _validate_approx_quantile_probabilities(probabilities: Any) -> List[float]:
+    """
+    Validate the ``probabilities`` argument of ``DataFrame.approxQuantile``, shared by the
+    classic and Connect implementations so both stay in sync. Returns it as a ``list`` of
+    ``float``, since classic passes it to a JVM method that expects ``Double`` elements.
+    """
+    from pyspark.errors import PySparkTypeError, PySparkValueError
+
+    if not isinstance(probabilities, (list, tuple)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list or tuple",
+                "arg_type": type(probabilities).__name__,
+            },
+        )
+    probabilities = list(probabilities)
+    for p in probabilities:
+        if isinstance(p, bool) or not isinstance(p, (float, int)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "probabilities",
+                    "expected_type": "list[float, int]",
+                    "arg_type": type(p).__name__,
+                },
+            )
+    for p in probabilities:
+        if not (0 <= p <= 1):
+            raise PySparkValueError(
+                errorClass="VALUE_OUT_OF_BOUNDS",
+                messageParameters={
+                    "arg_name": "probabilities",
+                    "lower_bound": "0",
+                    "upper_bound": "1",
+                    "actual": str(p),
+                },
+            )
+    return [float(p) for p in probabilities]
+
+
 class DataFrame:
     """A distributed collection of data grouped into named columns.
 

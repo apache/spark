@@ -52,6 +52,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -232,6 +233,61 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-61512: REPLACE WHERE with a condition on a CHAR column") {
+    val t = s"${catalogAndNamespace}tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+      }
+      // a read pads the values stored without padding, so the source must not delete them by
+      // comparing the stored values with the padded literal, which would not match
+      checkError(
+        exception = intercept[SparkException] {
+          sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (2L, 'hr')")
+        },
+        condition = "_LEGACY_ERROR_TEMP_2245",
+        parameters = Map("table" -> ".*"),
+        matchPVals = true)
+      checkAnswer(spark.table(t), Row(1L, "hr      "))
+    }
+  }
+
+  test("SPARK-61512: REPLACE WHERE with a CHAR condition under the legacy config") {
+    val t = s"${catalogAndNamespace}tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
+      sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+      // the source accepts neither the padding nor, with V1 filters, the IN that replaces it,
+      // even if the values are stored with padding
+      checkError(
+        exception = intercept[SparkException] {
+          sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (2L, 'hr')")
+        },
+        condition = "_LEGACY_ERROR_TEMP_2245",
+        parameters = Map("table" -> ".*"),
+        matchPVals = true)
+      // the source compares the stored values with the padded literal, as before
+      withSQLConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_OVERWRITE_CONDITION.key -> "true") {
+        sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (2L, 'hr')")
+      }
+      checkAnswer(spark.table(t), Row(2L, "hr      "))
+    }
+  }
+
+  test("SPARK-61512: static partition overwrite on a CHAR column under standard semantics") {
+    val t = s"${catalogAndNamespace}tbl"
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep)")
+        sql(s"INSERT INTO $t VALUES (1L, 'hr')")
+        // the read-side check of the column has no source filter, so it is not applied
+        sql(s"INSERT OVERWRITE $t PARTITION (dep = 'hr') VALUES (2L)")
+        checkAnswer(spark.table(t), Row(2L, "hr      "))
+      }
+    }
+  }
+
   private def checkExplain(query: String, relationPattern: Regex): Unit = {
     val explain = spark.sql(s"EXPLAIN EXTENDED $query").head().getString(0)
     val relations = explain.split("\n").filter(_.contains("RelationV2"))
@@ -239,6 +295,7 @@ abstract class DataSourceV2SQLSuite
   }
 }
 
+@DataSourceV2Test
 class DataSourceV2SQLSuiteV1Filter
   extends DataSourceV2SQLSuite
   with AlterTableTests
@@ -2708,6 +2765,21 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-61684: DeleteFrom: a condition on a CHAR column reaches the source as an IN") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, p char(3)) USING foo PARTITIONED BY (id, p) " +
+        s"TBLPROPERTIES ('${InMemoryTable.ACCEPT_IN_FILTER}' = 'true')")
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        sql(s"INSERT INTO $t VALUES (1L, 'a'), (2L, 'b')")
+      }
+      sql(s"INSERT INTO $t VALUES (3L, 'a')")
+      // deletes 'a' stored with and without padding, as a read pads both to 'a  '
+      sql(s"DELETE FROM $t WHERE p = 'a'")
+      checkAnswer(spark.table(t), Row(2, "b  "))
+    }
+  }
+
   test("UPDATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -4646,6 +4718,23 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-61512: REPLACE WHERE with a CHAR condition in an OR with a partition condition") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (id, dep)")
+      sql(s"INSERT INTO $t VALUES (1L, 'hr'), (2L, 'it')")
+      // the source does not accept an OR of V1 filters, so nothing is replaced
+      checkError(
+        exception = intercept[SparkException] {
+          sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' OR id = 2 VALUES (3L, 'hr')")
+        },
+        condition = "_LEGACY_ERROR_TEMP_2245",
+        parameters = Map("table" -> ".*"),
+        matchPVals = true)
+      checkAnswer(spark.table(t), Seq(Row(1L, "hr      "), Row(2L, "it      ")))
+    }
+  }
+
   test("Session variable in INSERT REPLACE WHERE") {
     val t = "testcat.tbl"
     withTable(t) {
@@ -5565,8 +5654,26 @@ class DataSourceV2SQLSuiteV1Filter
   }
 }
 
+@DataSourceV2Test
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
+
+  test("SPARK-61512: overwrite by a condition on a CHAR column stored without padding") {
+    val t = s"${catalogAndNamespace}tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, dep char(8)) USING foo PARTITIONED BY (dep) " +
+        s"TBLPROPERTIES ('${InMemoryTableWithV2Filter.AcceptCharReadSidePaddingKey}' = 'true')")
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        sql(s"INSERT INTO $t VALUES (1L, 'hr'), (2L, 'it')")
+      }
+      sql(s"INSERT INTO $t VALUES (3L, 'hr'), (4L, 'it')")
+
+      // the source pads the stored values, so it deletes them whether stored with padding or not
+      sql(s"INSERT INTO $t REPLACE WHERE dep = 'hr' VALUES (5L, 'hr')")
+      sql(s"INSERT OVERWRITE $t PARTITION (dep = 'it') VALUES (6L)")
+      checkAnswer(spark.table(t), Seq(Row(5L, "hr      "), Row(6L, "it      ")))
+    }
+  }
 
   test("SPARK-56467: scalar subquery filters on partition columns are pushed into runtimeFilters") {
     val tbl = s"${catalogAndNamespace}tbl"

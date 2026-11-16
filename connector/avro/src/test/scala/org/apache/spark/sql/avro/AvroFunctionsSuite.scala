@@ -18,7 +18,11 @@
 package org.apache.spark.sql.avro
 
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaBuilder}
@@ -27,15 +31,38 @@ import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericR
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
 import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateMap, ElementAt, Expression, ExprId, FromAvro, LeafExpression, Literal, RuntimeReplaceable, SchemaOfAvro => SchemaOfAvroExpression, ToAvro}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
-  BinaryType, CharType, IntegerType, MapType, StringType, StructField, StructType, VarcharType
+  BinaryType, CharType, DataType, IntegerType, MapType, StringType, StructField, StructType,
+  VarcharType
+}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
+
+/** A test string literal that runs onEval before returning, to pause or fail evaluation. */
+private case class StringLiteralWithEvalHook(
+    value: String,
+    onEval: () => Unit)
+  extends LeafExpression with CodegenFallback {
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+
+  override def eval(input: InternalRow): Any = {
+    onEval()
+    UTF8String.fromString(value)
+  }
 }
 
 class AvroFunctionsSuite extends SharedSparkSession {
@@ -1021,5 +1048,307 @@ class AvroFunctionsSuite extends SharedSparkSession {
     }
     assert(!ex.isInstanceOf[NullPointerException],
       s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
+  }
+
+  private val avroIntSchema = """{"type": "int"}"""
+
+  private def avroExpression(
+      functionName: String,
+      argument: String,
+      onEval: () => Unit,
+      duplicateKey: Boolean = false): (Expression, AttributeReference) = {
+    val secondKey = StringLiteralWithEvalHook(if (duplicateKey) "key1" else "key2", onEval)
+    val value1 = if (argument == "schema") avroIntSchema else "value1"
+    val value2 = if (argument == "schema") avroIntSchema else "value2"
+    val mapExpression = CreateMap(Seq(
+      Literal("key1"), Literal(value1), secondKey, Literal(value2)))
+    val schema = if (argument == "schema") {
+      ElementAt(mapExpression, Literal("key1"))
+    } else {
+      Literal(avroIntSchema)
+    }
+    val options = if (argument == "options") mapExpression else Literal(null)
+    avroExpressionOf(functionName, schema, options)
+  }
+
+  // A lookup in a map whose keys are 0.0 and -0.0, which are one key unless
+  // spark.sql.legacy.disableMapKeyNormalization is true.
+  private def signedZeroKeyLookup(value: String): Expression = ElementAt(
+    CreateMap(Seq(Literal(0.0D), Literal(value), Literal(-0.0D), Literal(value))),
+    Literal(0.0D))
+
+  private def avroExpressionWithSignedZeroKeys(
+      functionName: String,
+      argument: String): (Expression, AttributeReference) = {
+    val schema =
+      if (argument == "schema") signedZeroKeyLookup(avroIntSchema) else Literal(avroIntSchema)
+    val options = if (argument == "options") {
+      CreateMap(Seq(Literal("key1"), signedZeroKeyLookup("value1")))
+    } else {
+      Literal(null)
+    }
+    avroExpressionOf(functionName, schema, options)
+  }
+
+  private def avroExpressionOf(
+      functionName: String,
+      schema: Expression,
+      options: Expression): (Expression, AttributeReference) = {
+    val dataType = if (functionName == "TO_AVRO") IntegerType else BinaryType
+    val data = AttributeReference("data", dataType)(exprId = ExprId(1))
+    val expression = functionName match {
+      case "FROM_AVRO" => new FromAvro(data, schema, options)
+      case "TO_AVRO" => new ToAvro(data, schema)
+      case "SCHEMA_OF_AVRO" => new SchemaOfAvroExpression(schema, options)
+    }
+    (expression, data)
+  }
+
+  private def avroOptions(expression: Expression): Map[String, String] = expression match {
+    case from: AvroDataToCatalyst =>
+      assert(from.jsonFormatSchema == avroIntSchema)
+      from.options
+    case to: CatalystDataToAvro =>
+      assert(to.jsonFormatSchema.contains(avroIntSchema))
+      Map.empty
+    case schema: SchemaOfAvro =>
+      assert(schema.jsonFormatSchema == avroIntSchema)
+      schema.options
+    case other => fail(s"Unexpected Avro expression: ${other.getClass.getName}")
+  }
+
+  private def canonicalizedOptions(
+      expression: Expression,
+      data: AttributeReference): Map[String, String] = {
+    avroOptions(QueryPlan.normalizeExpressions(expression, Seq(data)))
+  }
+
+  private def replacementOptions(expression: Expression): Map[String, String] = {
+    avroOptions(expression.asInstanceOf[RuntimeReplaceable].replacement)
+  }
+
+  // SCHEMA_OF_AVRO has no column input, so canonicalization keeps it; clone it to get a copy.
+  private def copyOptions(
+      functionName: String,
+      expression: Expression,
+      data: AttributeReference): Map[String, String] = {
+    if (functionName == "SCHEMA_OF_AVRO") {
+      replacementOptions(expression.clone())
+    } else {
+      canonicalizedOptions(expression, data)
+    }
+  }
+
+  private def avroDataFrame(
+      functionName: String,
+      argument: String,
+      signedZeroKeys: Boolean = false): DataFrame = {
+    val schema = (argument, signedZeroKeys) match {
+      case ("schema", false) =>
+        s"element_at(map('schema', '$avroIntSchema', 'schema', '$avroIntSchema'), 'schema')"
+      case ("schema", true) =>
+        s"element_at(map(0.0D, '$avroIntSchema', -0.0D, '$avroIntSchema'), 0.0D)"
+      case _ => s"'$avroIntSchema'"
+    }
+    val options = (argument, signedZeroKeys) match {
+      case ("options", false) => "map('mode', 'PERMISSIVE', 'mode', 'FAILFAST')"
+      case ("options", true) =>
+        "map('mode', element_at(map(0.0D, 'PERMISSIVE', -0.0D, 'PERMISSIVE'), 0.0D))"
+      case _ => "map()"
+    }
+    functionName match {
+      case "FROM_AVRO" =>
+        spark.range(1).select(lit(Array[Byte](2)).as("data"))
+          .selectExpr(s"FROM_AVRO(data, $schema, $options)")
+      case "TO_AVRO" =>
+        spark.range(1).select(lit(1).as("data")).selectExpr(s"TO_AVRO(data, $schema)")
+      case "SCHEMA_OF_AVRO" =>
+        spark.range(1).selectExpr(s"SCHEMA_OF_AVRO($schema, $options)")
+    }
+  }
+
+  private def avroDataFrameResult(functionName: String): Row = functionName match {
+    case "FROM_AVRO" => Row(1)
+    case "TO_AVRO" => Row(Array[Byte](2))
+    case "SCHEMA_OF_AVRO" => Row("INT")
+  }
+
+  Seq("FROM_AVRO", "TO_AVRO", "SCHEMA_OF_AVRO").foreach { functionName =>
+    val arguments = if (functionName == "TO_AVRO") Seq("schema") else Seq("schema", "options")
+    arguments.foreach { argument =>
+      val expectedOptions = if (argument == "options") {
+        Map("key1" -> "value1", "key2" -> "value2")
+      } else {
+        Map.empty[String, String]
+      }
+
+      // Skip SCHEMA_OF_AVRO: it has no column input, so canonicalization reuses the same instance,
+      // whose lazy replacement runs once, instead of copying it.
+      if (functionName != "SCHEMA_OF_AVRO") {
+        gridTest(s"SPARK-61419: $functionName $argument survives overlapping canonicalization")(
+          Seq("EXCEPTION", "LAST_WIN")) { policy =>
+          withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy) {
+            val firstEvaluationPaused = new CountDownLatch(1)
+            val resumeFirstEvaluation = new CountDownLatch(1)
+            val pauseOnNextEval = new AtomicBoolean(true)
+            val (expression, data) = avroExpression(functionName, argument, () => {
+              if (pauseOnNextEval.compareAndSet(true, false)) {
+                firstEvaluationPaused.countDown()
+                assert(resumeFirstEvaluation.await(1, TimeUnit.MINUTES),
+                  "first evaluation was never resumed")
+              }
+            })
+            val sqlConf = SQLConf.get
+            val executor = ThreadUtils.newDaemonSingleThreadExecutor("avro-argument-race-test")
+            val executionContext = ExecutionContext.fromExecutorService(executor)
+            try {
+              val firstEvaluation = Future {
+                SQLConf.withExistingConf(sqlConf) {
+                  canonicalizedOptions(expression, data)
+                }
+              }(executionContext)
+              assert(firstEvaluationPaused.await(1, TimeUnit.MINUTES),
+                "first canonicalization never paused")
+              // The first evaluation has inserted key1 and is paused while evaluating key2.
+              assert(canonicalizedOptions(expression, data) == expectedOptions)
+              resumeFirstEvaluation.countDown()
+              assert(ThreadUtils.awaitResult(firstEvaluation, 1.minute) == expectedOptions)
+            } finally {
+              resumeFirstEvaluation.countDown()
+              executor.shutdownNow()
+              assert(executor.awaitTermination(10, TimeUnit.SECONDS))
+            }
+          }
+        }
+      }
+
+      test(s"SPARK-61419: $functionName $argument survives a failed evaluation") {
+        withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
+          val failOnNextEval = new AtomicBoolean(true)
+          val expectedFailure = new RuntimeException(s"first $argument evaluation failed")
+          val (expression, _) = avroExpression(functionName, argument, () => {
+            if (failOnNextEval.compareAndSet(true, false)) {
+              throw expectedFailure
+            }
+          })
+          val failure = intercept[RuntimeException] {
+            replacementOptions(expression)
+          }
+          assert(failure eq expectedFailure)
+
+          // Retrying must not reuse the partial map left by the failed evaluation.
+          assert(replacementOptions(expression) == expectedOptions)
+        }
+      }
+
+      gridTest(s"SPARK-61419: a copy of $functionName uses the analysis-time map key policy " +
+        s"for $argument")(
+        Seq("LAST_WIN", "EXCEPTION")) { capturedPolicy =>
+        val expectedDuplicateOptions = if (argument == "options") {
+          Map("key1" -> "value2")
+        } else {
+          Map.empty[String, String]
+        }
+        val (expression, data) = withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> capturedPolicy) {
+          val result = avroExpression(functionName, argument, () => (), duplicateKey = true)
+          if (capturedPolicy == "LAST_WIN") {
+            // Like analysis, evaluate the expression once before the conf changes. Under EXCEPTION
+            // this would already fail on the duplicate key, so only the LAST_WIN run does it.
+            assert(replacementOptions(result._1) == expectedDuplicateOptions)
+          }
+          result
+        }
+        val currentPolicy = if (capturedPolicy == "LAST_WIN") "EXCEPTION" else "LAST_WIN"
+        withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> currentPolicy) {
+          if (capturedPolicy == "LAST_WIN") {
+            assert(copyOptions(functionName, expression, data) == expectedDuplicateOptions)
+          } else {
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                copyOptions(functionName, expression, data)
+              },
+              condition = "DUPLICATED_MAP_KEY",
+              parameters = Map(
+                "key" -> "key1",
+                "mapKeyDedupPolicy" -> s"\"${SQLConf.MAP_KEY_DEDUP_POLICY.key}\""))
+          }
+          assert(SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY).toString == currentPolicy)
+        }
+      }
+
+      test(s"SPARK-61419: $functionName $argument executes after the map key policy changes") {
+        val df = withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "LAST_WIN") {
+          avroDataFrame(functionName, argument)
+        }
+        withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION") {
+          checkAnswer(df, Seq(avroDataFrameResult(functionName)))
+        }
+      }
+
+      gridTest(s"SPARK-61419: a copy of $functionName uses the analysis-time map key " +
+        s"normalization for $argument")(Seq(true, false)) { capturedDisabled =>
+        val policy = SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION"
+        val normalization = SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key
+        val expectedOptions = if (argument == "options") {
+          Map("key1" -> "value1")
+        } else {
+          Map.empty[String, String]
+        }
+        val (expression, data) = withSQLConf(policy, normalization -> capturedDisabled.toString) {
+          val result = avroExpressionWithSignedZeroKeys(functionName, argument)
+          if (capturedDisabled) {
+            // Like analysis, evaluate the expression once before the conf changes. With
+            // normalization, 0.0 and -0.0 are one key, so only the disabled run does it.
+            assert(replacementOptions(result._1) == expectedOptions)
+          }
+          result
+        }
+        withSQLConf(policy, normalization -> (!capturedDisabled).toString) {
+          if (capturedDisabled) {
+            assert(copyOptions(functionName, expression, data) == expectedOptions)
+          } else {
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                copyOptions(functionName, expression, data)
+              },
+              condition = "DUPLICATED_MAP_KEY",
+              parameters = Map(
+                "key" -> "-0.0",
+                "mapKeyDedupPolicy" -> s"\"${SQLConf.MAP_KEY_DEDUP_POLICY.key}\""))
+          }
+        }
+      }
+
+      test(s"SPARK-61419: $functionName $argument executes after the map key normalization " +
+        "changes") {
+        val policy = SQLConf.MAP_KEY_DEDUP_POLICY.key -> "EXCEPTION"
+        val normalization = SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key
+        val df = withSQLConf(policy, normalization -> "true") {
+          avroDataFrame(functionName, argument, signedZeroKeys = true)
+        }
+        withSQLConf(policy, normalization -> "false") {
+          checkAnswer(df, Seq(avroDataFrameResult(functionName)))
+        }
+      }
+
+      // Skip SCHEMA_OF_AVRO for the same reason: a cache lookup does not copy it.
+      if (functionName != "SCHEMA_OF_AVRO") {
+        test(s"SPARK-61419: $functionName $argument cached plan retains its map key policy " +
+          "across sessions") {
+          val cached = withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "LAST_WIN") {
+            avroDataFrame(functionName, argument).cache()
+          }
+          try {
+            val otherSession = spark.newSession()
+            otherSession.conf.set(SQLConf.MAP_KEY_DEDUP_POLICY.key, "EXCEPTION")
+            checkAnswer(otherSession.range(1).toDF(), Seq(Row(0L)))
+          } finally {
+            withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> "LAST_WIN") {
+              cached.unpersist(blocking = true)
+            }
+          }
+        }
+      }
+    }
   }
 }

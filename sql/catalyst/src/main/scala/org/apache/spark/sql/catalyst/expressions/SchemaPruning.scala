@@ -44,12 +44,24 @@ object SchemaPruning extends SQLConfHelper {
     val mergedSchema = requestedRootFields
       .map { root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
-    val mergedDataSchema =
-      StructType(schema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
+    // Match by the exact name first. Fall back to the resolver only for a requested field that
+    // no field of the schema has the exact name of, as the schema may have fields whose names
+    // differ only by case.
+    val mergedByName = firstByName(mergedSchema)
+    val schemaNames = schema.fieldNames.toSet
+    val mergedDataSchema = StructType(schema.map { d =>
+      mergedByName.get(d.name).orElse {
+        mergedSchema.find(m => resolver(m.name, d.name) && !schemaNames.contains(m.name))
+      }.getOrElse(d)
+    })
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
     sortLeftFieldsByRight(mergedDataSchema, schema).asInstanceOf[StructType]
   }
+
+  // Maps each exact field name to the first field with that name.
+  private def firstByName(struct: StructType): Map[String, StructField] =
+    struct.fields.reverseIterator.map(f => f.name -> f).toMap
 
   /**
    * Sorts the fields and descendant fields of structs in left according to their order in
@@ -76,10 +88,17 @@ object SchemaPruning extends SQLConfHelper {
 
         val leftStructHashMap =
           HashMap(leftStruct.map(f => formatFieldName(f.name)).zip(leftStruct): _*)
+        val leftStructByName = firstByName(leftStruct)
+        val rightFieldNames = rightStruct.fieldNames.toSet
         val sortedLeftFields = rightStruct.fieldNames.flatMap { fieldName =>
-          val formattedFieldName = formatFieldName(fieldName)
-          if (leftStructHashMap.contains(formattedFieldName)) {
-            val resolvedLeftStruct = leftStructHashMap(formattedFieldName)
+          // Prefer the exact name. A field of left whose name is the exact name of another field
+          // of right is not a match for this one.
+          val leftFieldOpt = leftStructByName.get(fieldName).orElse {
+            leftStructHashMap.get(formatFieldName(fieldName))
+              .filterNot(f => rightFieldNames.contains(f.name))
+          }
+          if (leftFieldOpt.isDefined) {
+            val resolvedLeftStruct = leftFieldOpt.get
             val leftFieldType = resolvedLeftStruct.dataType
             val rightFieldType = rightStruct(fieldName).dataType
             val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)

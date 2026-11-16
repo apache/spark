@@ -21,9 +21,17 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
+
+private class StructBackedUDT extends UserDefinedType[InternalRow] {
+  override def sqlType: DataType = new StructType().add("x", IntegerType).add("y", IntegerType)
+  override def serialize(obj: InternalRow): Any = obj
+  override def deserialize(datum: Any): InternalRow = datum.asInstanceOf[InternalRow]
+  override def userClass: Class[InternalRow] = classOf[InternalRow]
+}
 
 class RowToColumnConverterSuite extends SparkFunSuite {
   def convertRows(rows: Seq[InternalRow], schema: StructType): Seq[WritableColumnVector] = {
@@ -226,6 +234,56 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     assert(vectors.head.getLong(0) === 0L)
     assert(vectors.head.isNullAt(1))
     assert(vectors.head.getLong(2) === 86399999999999L)
+  }
+
+  test("SPARK-60325: null type column") {
+    Seq(
+      StructType(Seq(StructField("n", NullType))),
+      StructType(Seq(StructField("n", NullType, nullable = false)))).foreach { schema =>
+      val vectors = convertRows(Seq.fill(10)(InternalRow(null)), schema)
+      (0 until 10).foreach(i => assert(vectors.head.isNullAt(i)))
+    }
+  }
+
+  test("SPARK-60325: reused null type vectors do not grow across batches") {
+    val batchSize = 10
+    val schema = StructType(Seq(
+      StructField("n", NullType),
+      StructField("s", new StructType().add("n", NullType))))
+    val converter = new RowToColumnConverter(schema)
+    val vectors =
+      schema.map(f => new OnHeapColumnVector(5, f.dataType)).toArray[WritableColumnVector]
+    (0 until 5).foreach { _ =>
+      vectors.foreach(_.reset())
+      (0 until batchSize).foreach { i =>
+        converter.convert(InternalRow(null, if (i % 2 == 0) null else InternalRow(null)), vectors)
+      }
+      // Nulls of a top-level NullType column are not appended at all.
+      assert(vectors(0).getElementsAppended === 0)
+      // A null struct appends a null to its NullType child, which reset() must clear.
+      assert(vectors(1).getChild(0).getElementsAppended <= batchSize)
+      (0 until batchSize).foreach { i =>
+        assert(vectors(0).isNullAt(i))
+        assert(vectors(1).isNullAt(i) === (i % 2 == 0))
+        if (i % 2 == 1) assert(vectors(1).getStruct(i).isNullAt(0))
+      }
+    }
+  }
+
+  test("SPARK-60325: user-defined type columns hold their SQL type") {
+    // A null of a struct-backed type must be appended as a struct.
+    val arrayBacked = new ExamplePointUDT
+    val arrayRows = Seq(InternalRow(new GenericArrayData(Array(1.0, 2.0))), InternalRow(null))
+    val arrayVectors = convertRows(arrayRows, StructType(Seq(StructField("p", arrayBacked))))
+    assert(arrayVectors.head.getArray(0).toDoubleArray() === Array(1.0, 2.0))
+    assert(arrayVectors.head.isNullAt(1))
+
+    val structBacked = new StructBackedUDT
+    val structRows = Seq(InternalRow(InternalRow(1, 2)), InternalRow(null))
+    val structVectors = convertRows(structRows, StructType(Seq(StructField("s", structBacked))))
+    assert(structVectors.head.getStruct(0).getInt(0) === 1)
+    assert(structVectors.head.getStruct(0).getInt(1) === 2)
+    assert(structVectors.head.isNullAt(1))
   }
 
   test("multiple columns") {

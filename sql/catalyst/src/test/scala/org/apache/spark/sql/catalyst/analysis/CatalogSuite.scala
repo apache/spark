@@ -20,8 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreeNodeTag}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{CharType, MetadataBuilder, StringType, StructType, VarcharType}
 
 
 class CatalogSuite extends AnalysisTest {
@@ -57,6 +59,33 @@ class CatalogSuite extends AnalysisTest {
       assert(resolved.identifier.name() == "TaBlE")
       assert(resolved.output.isEmpty)
     }
+  }
+
+  test("column output preserves metadata, nullability and CHAR/VARCHAR configuration") {
+    val resolution = new CatalogIdentifierResolution(getAnalyzer.catalogManager)
+    val metadata = new MetadataBuilder().putString("source", "column").build()
+    val columns = Seq(
+      ColumnDefinition("char_col", CharType(4), nullable = false, metadata = metadata),
+      ColumnDefinition("nested", new StructType().add("varchar_col", VarcharType(8))))
+
+    for (preserve <- Seq(false, true); standard <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve.toString,
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standard.toString) {
+        val output = resolution.columnsToOutput(columns)
+        val expectedTypes = if (preserve || standard) {
+          columns.map(_.dataType)
+        } else {
+          Seq(StringType, new StructType().add("varchar_col", StringType))
+        }
+        assert(output.map(_.name) == columns.map(_.name))
+        assert(output.map(_.dataType) == expectedTypes)
+        assert(output.map(_.nullable) == columns.map(_.nullable))
+        assert(output.map(_.metadata) == columns.map(_.metadata))
+        assert(output.map(_.exprId).distinct.size == columns.size)
+      }
+    }
+    assert(resolution.columnsToOutput(Nil).isEmpty)
   }
 
   test("desc table when owner is set to null") {

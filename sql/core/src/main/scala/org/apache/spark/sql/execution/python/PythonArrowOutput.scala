@@ -278,13 +278,14 @@ object BaseSliceArrowOutputProcessor {
    * Returns whether `VectorSchemaRoot.slice` can slice `vector` and its children. Arrow computes
    * some byte positions of a slice in int, so it throws, and leaks the vectors sliced so far, for
    * a fixed-width vector of 2 GiB or more, a view vector with 2^27 rows or more, or a list vector
-   * with 2^29 - 1 rows or more. A batch that holds one is output whole instead.
+   * with 2^29 - 1 rows or more. A batch that holds one is output whole instead, and the writers of
+   * columnar data sources convert such a column instead of slicing it.
    *
    * The offset positions of a list vector overflow only from 2^29 rows, but a slice of `length`
    * rows also allocates `(length + 1) * 4` bytes of offsets in int, and a list vector nested in
    * another one is sliced over all its rows when the slice of its parent covers them.
    */
-  private[python] def canSlice(vector: FieldVector): Boolean = {
+  private[execution] def canSlice(vector: FieldVector): Boolean = {
     val fits = vector match {
       case v: BaseFixedWidthVector => v.getValueCount.toLong * v.getTypeWidth <= Int.MaxValue
       case v: BaseVariableWidthViewVector =>

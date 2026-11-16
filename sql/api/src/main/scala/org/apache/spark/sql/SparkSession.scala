@@ -562,11 +562,10 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add a single artifact to the current session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
-   * URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
-   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that
-   * do not support server-side Maven resolution, are resolved by the client without the server's
-   * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
-   * Ivy repositories local to the client.
+   * URIs use `spark.jars.ivySettings` when configured. Spark Connect resolves them on the client
+   * by default, using the session's settings file if its path is exposed and readable locally.
+   * Enable `spark.connect.session.serverSideMavenResolution.enabled` to resolve URIs without
+   * `repos` on a supporting server.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session. It
@@ -584,11 +583,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add a single artifact to the current session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
-   * URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
-   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that
-   * do not support server-side Maven resolution, are resolved by the client without the server's
-   * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
-   * Ivy repositories local to the client.
+   * resolution follows the same settings as `addArtifact(String)`.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session. It
@@ -657,11 +652,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add one or more artifacts to the session.
    *
    * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
-   * URIs are resolved using `spark.jars.ivySettings` when it is configured. When using Spark
-   * Connect, Ivy URIs with repositories in the `repos` query parameter, or sent to servers that
-   * do not support server-side Maven resolution, are resolved by the client without the server's
-   * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
-   * Ivy repositories local to the client.
+   * resolution follows the same settings as `addArtifact(String)`.
    *
    * Since 4.4.0, it also supports native data source packages: local files with the extension
    * .sparkpkg, which make the native data sources that they contain available to the session. A

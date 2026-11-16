@@ -66,8 +66,21 @@ select interval 2147483647 month / 0.5
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "interval 2147483647 month / 0.5"
+  } ]
+}
 
 
 -- !query
@@ -2401,8 +2414,21 @@ select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "a / 0.5"
+  } ]
+}
 
 
 -- !query
@@ -2733,8 +2759,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0"
+  } ]
+}
 
 
 -- !query
@@ -2742,8 +2781,21 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-rounded value is out of range for input 2.147483648E9 and rounding mode HALF_UP
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "(INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D"
+  } ]
+}
 
 
 -- !query
@@ -2811,8 +2863,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 67,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0"
+  } ]
+}
 
 
 -- !query
@@ -2820,8 +2885,21 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-rounded value is out of range for input 9.223372036854776E18 and rounding mode HALF_UP
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_divide`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 68,
+    "fragment" : "(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D"
+  } ]
+}
 
 
 -- !query

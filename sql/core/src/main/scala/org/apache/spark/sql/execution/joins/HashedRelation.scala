@@ -222,6 +222,9 @@ private[joins] class UnsafeHashedRelation(
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
 
+  // Visible for testing: the page size that the map grows its data pages up to.
+  private[joins] def mapPageSizeBytes: Long = binaryMap.getPageSizeBytes
+
   // re-used in get()/getValue()/getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
   var resultRow = new UnsafeRow(numFields)
 
@@ -417,7 +420,8 @@ private[joins] class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
-      pageSizeBytes)
+      pageSizeBytes,
+      UnsafeHashedRelation.INITIAL_PAGE_SIZE_BYTES)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -452,6 +456,20 @@ private[joins] class UnsafeHashedRelation(
 
 private[joins] object UnsafeHashedRelation {
 
+  /**
+   * The size of the first data page of the map. Later pages double in size until they add up to
+   * the page size, and then all pages have the page size. If the page size leaves room for the
+   * header of an on-heap page, so does each growing page, and these sizes include that header (see
+   * `TaskMemoryManager.growingPageHeaderBytes`).
+   *
+   * Otherwise `BytesToBytesMap` rounds its first page up to the page size (`spark.buffer.pageSize`
+   * or a default of up to 64 MiB), so even a few rows reserve a full page. A task that keeps many
+   * relations alive at once, e.g. a stage with a chain of shuffled hash joins, then runs out of
+   * execution memory long before the relations hold that much data. Each broadcast relation would
+   * also allocate a full page on the heap of the driver and of every executor.
+   */
+  val INITIAL_PAGE_SIZE_BYTES: Long = 1L << 20
+
   def apply(
       input: Iterator[InternalRow],
       key: Seq[Expression],
@@ -469,7 +487,8 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
       (sizeEstimate * 1.5 + 1).toInt,
-      pageSizeBytes)
+      pageSizeBytes,
+      INITIAL_PAGE_SIZE_BYTES)
 
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
@@ -533,11 +552,13 @@ private[joins] object UnsafeHashedRelation {
  *
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
-private[execution] final class LongToUnsafeRowMap(
+private[execution] final class LongToUnsafeRowMap private (
     val mm: TaskMemoryManager,
     capacity: Int,
-    ignoresDuplicatedKey: Boolean = false)
-  extends MemoryConsumer(mm, mm.getTungstenMemoryMode) with Externalizable with KryoSerializable {
+    ignoresDuplicatedKey: Boolean,
+    allocateOnInit: Boolean)
+  extends MemoryConsumer(mm, LongToUnsafeRowMap.MIN_PAGE_SIZE_BYTES, mm.getTungstenMemoryMode)
+  with Externalizable with KryoSerializable {
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
@@ -562,6 +583,10 @@ private[execution] final class LongToUnsafeRowMap(
   // Current write cursor in the page.
   private var cursor: Long = -1
 
+  // The bytes that the page leaves for the header of an on-heap page while it grows, see
+  // `TaskMemoryManager.growingPageHeaderBytes`.
+  private val pageHeaderBytes = TaskMemoryManager.growingPageHeaderBytes(mm.pageSizeBytes())
+
   // The number of bits for size in address
   private val SIZE_BITS = 28
   private val SIZE_MASK = 0xfffffff
@@ -572,7 +597,11 @@ private[execution] final class LongToUnsafeRowMap(
   // The number of unique keys.
   private var numKeys = 0L
 
-  // needed by serializer
+  def this(mm: TaskMemoryManager, capacity: Int, ignoresDuplicatedKey: Boolean = false) =
+    this(mm, capacity, ignoresDuplicatedKey, allocateOnInit = true)
+
+  // needed by serializer. `read()` allocates `array` and `page` with the serialized sizes,
+  // so skip the allocations in `init()`.
   def this() = {
     this(
       new TaskMemoryManager(
@@ -582,7 +611,9 @@ private[execution] final class LongToUnsafeRowMap(
           Runtime.getRuntime.maxMemory / 2,
           1),
         0),
-      0)
+      0,
+      ignoresDuplicatedKey = false,
+      allocateOnInit = false)
   }
 
   private def init(): Unit = {
@@ -593,12 +624,12 @@ private[execution] final class LongToUnsafeRowMap(
       array = allocateArray(n * 2)
       array.zeroOut()
       mask = n * 2 - 2
-      page = allocatePage(1 << 20) // 1M bytes
+      page = allocatePage(LongToUnsafeRowMap.INITIAL_PAGE_SIZE_BYTES - pageHeaderBytes)
       cursor = page.getBaseOffset
     }
   }
 
-  init()
+  if (allocateOnInit) init()
 
   def spill(size: Long, trigger: MemoryConsumer): Long = 0L
 
@@ -824,13 +855,15 @@ private[execution] final class LongToUnsafeRowMap(
       if (neededNumWords > (1 << 30)) {
         throw QueryExecutionErrors.cannotBuildHashedRelationLargerThan8GError()
       }
-      val newNumWords = math.max(neededNumWords, math.min(page.size() / 8 * 2, 1 << 30))
+      // The page doubles together with its header.
+      val doubledNumWords = ((page.size() + pageHeaderBytes) * 2 - pageHeaderBytes) / 8
+      val newNumWords = math.max(neededNumWords, math.min(doubledNumWords, 1 << 30))
       // newNumWords is a Long up to 1 << 30. Multiplying by 8 must stay in Long
       // arithmetic; `newNumWords.toInt * 8` (Int * Int) overflows to 0 at the
-      // upper bound, causing `allocatePage(0)` to fall back to the default page
-      // size while subsequent writes still advance `cursor` past the new page's
-      // end (heap corruption observed as a `forward_copy_longs` SEGV during
-      // BHJ build on aarch64).
+      // upper bound, causing `allocatePage(0)` to return a page of only
+      // `MIN_PAGE_SIZE_BYTES` while subsequent writes still advance `cursor`
+      // past the new page's end (heap corruption observed as a
+      // `forward_copy_longs` SEGV during BHJ build on aarch64).
       val newPage = allocatePage(newNumWords * 8L)
       Platform.copyMemory(page.getBaseObject, page.getBaseOffset, newPage.getBaseObject,
         newPage.getBaseOffset, usedBytes)
@@ -867,7 +900,15 @@ private[execution] final class LongToUnsafeRowMap(
     // Convert to dense mode if it does not require more memory or could fit within L1 cache
     // SPARK-16740: Make sure range doesn't overflow if minKey has a large negative value
     if (range >= 0 && (range < array.size() || range < 1024)) {
-      val denseArray = allocateArray((range + 1).toInt)
+      val denseArray = try {
+        allocateArray((range + 1).toInt)
+      } catch {
+        case e: SparkOutOfMemoryError if e.getCondition == "UNABLE_TO_ACQUIRE_MEMORY" =>
+          // There is not enough memory to convert, so keep the map sparse. `allocateArray`
+          // releases any memory it acquired before throwing. Other errors, such as a failed
+          // spill of another consumer, still fail the task.
+          return
+      }
       denseArray.zeroOut()
       var i = 0
       while (i < array.size()) {
@@ -967,11 +1008,11 @@ private[execution] final class LongToUnsafeRowMap(
 
     val length = readLong().toInt
     mask = length - 2
-    freeArray(array)
+    if (array != null) freeArray(array)
     array = allocateArray(length)
     readData(readBuffer, array.memoryBlock.getBaseObject, array.memoryBlock.getBaseOffset, length)
     val pageLength = readLong().toInt
-    freePage(page)
+    if (page != null) freePage(page)
     // Use Long multiplication: pageLength can be up to 1 << 30 (8 GiB page / 8),
     // and `Int * Int` overflows at that bound, leading to a 0-byte allocatePage
     // and a subsequent cursor that runs past the page's end.
@@ -988,6 +1029,28 @@ private[execution] final class LongToUnsafeRowMap(
   override def read(kryo: Kryo, in: Input): Unit = {
     read(() => in.readBoolean(), () => in.readLong(), in.readBytes)
   }
+}
+
+private[execution] object LongToUnsafeRowMap {
+  /**
+   * The size of the page that a new map starts with. The page grows by doubling from here. If the
+   * page size of the `TaskMemoryManager` leaves room for the header of an on-heap page, so does the
+   * page, and these sizes include that header (see `TaskMemoryManager.growingPageHeaderBytes`).
+   */
+  val INITIAL_PAGE_SIZE_BYTES: Long = 1L << 20
+
+  /**
+   * The page size passed to `MemoryConsumer`, which rounds every `allocatePage` request up to it.
+   *
+   * With the default page size (`spark.buffer.pageSize`, up to 64 MiB), even an empty map would
+   * reserve 64 MiB of execution memory. A task that keeps many maps alive at once, e.g. a stage
+   * with a chain of shuffled hash joins, then runs out of execution memory long before the maps
+   * hold that much data. With a floor of one word, a new map reserves `INITIAL_PAGE_SIZE_BYTES`,
+   * the page grows by doubling, and a deserialized map allocates exactly what it reads. The floor
+   * is not 0 because `TaskMemoryManager` does not allocate a page of 0 bytes, which an empty
+   * deserialized map would ask for.
+   */
+  val MIN_PAGE_SIZE_BYTES: Long = 8L
 }
 
 class LongHashedRelation(
