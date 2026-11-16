@@ -167,14 +167,8 @@ private class PushBasedFetchHelper(
           s" $reduceId) from ${req.address.host}:${req.address.port}")
         val mergedBlock = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
         try {
-          val chunkBitmaps = meta.readChunkBitmaps()
-          if (checkStaleMapIdInMergedBlock(mergedBlock, address, chunkBitmaps)) {
-            iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
-              reduceId, sizeMap((shuffleId, reduceId)), chunkBitmaps, address))
-          } else {
-            iterator.addToResultsQueue(PushMergedRemoteMetaFailedFetchResult(shuffleId,
-              shuffleMergeId, reduceId, address))
-          }
+          iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
+            reduceId, sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
         } catch {
           case exception: Exception =>
             logError(log"Failed to parse the meta of push-merged block for (" +
@@ -279,15 +273,9 @@ private class PushBasedFetchHelper(
     try {
       val shuffleBlockId = blockId.asInstanceOf[ShuffleMergedBlockId]
       val chunksMeta = blockManager.getLocalMergedBlockMeta(shuffleBlockId, localDirs)
-      val chunkBitmaps = chunksMeta.readChunkBitmaps()
-      if (checkStaleMapIdInMergedBlock(shuffleBlockId, blockManagerId, chunkBitmaps)) {
-        iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
-          shuffleBlockId.shuffleId, shuffleBlockId.shuffleMergeId,
-          shuffleBlockId.reduceId, chunkBitmaps, localDirs))
-      } else {
-        iterator.addToResultsQueue(FallbackOnPushMergedFailureResult(
-          blockId, blockManagerId, 0, isNetworkReqDone = false))
-      }
+      iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
+        shuffleBlockId.shuffleId, shuffleBlockId.shuffleMergeId,
+        shuffleBlockId.reduceId, chunksMeta.readChunkBitmaps(), localDirs))
     } catch {
       case e: Exception =>
         // If we see an exception with reading a push-merged-local meta, we fallback to
@@ -301,33 +289,20 @@ private class PushBasedFetchHelper(
   }
 
   /**
-   * Check whether a push-merged block contains data from stale (duplicate) task attempts.
-   * When speculation is enabled, multiple attempts for the same map output may both push data
-   * to the merger. The merger may include data from both attempts in the same merged block,
-   * but the driver only tracks one as the canonical MapStatus. We detect this by checking
-   * if any stale pushed map index appears in the server-side chunkBitmaps.
+   * Check whether a shuffle chunk contains any stale pushed map index, enabling
+   * chunk-granularity fallback: only chunks that actually contain stale data fall back to their
+   * original blocks, while the remaining chunks of the same merged block are read normally.
    *
-   * @param shuffleBlockId ShuffleMergedBlockId to be checked
-   * @param address BlockManagerId of push-based shuffle service
-   * @param chunkBitmaps Chunks bitmap from push-based shuffle service side
-   * @return false if any stale-marked mapIndex is present in this block (forcing fallback),
-   *         true otherwise
+   * @param blockId ShuffleBlockChunkId to be checked
+   * @return true if this chunk contains any stale-marked mapIndex (forcing a fallback for this
+   *         chunk only), false otherwise
    */
-  private[this] def checkStaleMapIdInMergedBlock(
-      shuffleBlockId: ShuffleMergedBlockId,
-      address: BlockManagerId,
-      chunkBitmaps: Array[RoaringBitmap]): Boolean = {
-    val staleMapIndexes =
-      mapOutputTracker.getStaleMapIndexes(shuffleBlockId.shuffleId)
-    if (staleMapIndexes.isEmpty) return true
-    val mergedBlockBitmap = new RoaringBitmap()
-    chunkBitmaps.foreach(mergedBlockBitmap.or)
-    val hasStale = staleMapIndexes.exists(id => mergedBlockBitmap.contains(id))
-    if (hasStale) {
-      logWarning(s"Found stale pushed map indexes in merged block $shuffleBlockId from" +
-        s" ${address.host}:${address.port}, falling back to fetch the original blocks")
+  private[spark] def isStaleChunk(blockId: ShuffleBlockChunkId): Boolean = {
+    // Delegate the stale/chunk intersection to the tracker so it inspects the published stale
+    // snapshot without returning a defensive copy per chunk on the reducer fetch path.
+    chunksMetaMap.get(blockId).exists { bitmap =>
+      mapOutputTracker.intersectsStaleMapIndexes(blockId.shuffleId, bitmap)
     }
-    !hasStale
   }
 
   /**
@@ -353,10 +328,15 @@ private class PushBasedFetchHelper(
    *    (local or remote).
    * 4. There is a zero-size buffer when processing SuccessFetchResult for a shuffle chunk
    *    (local or remote).
+   *
+   * @param fallbackPendingChunks when true (the default, for fetch-failure cases), also fall back
+   *                               the same host's pending shuffle chunks; when false (stale-push
+   *                               fallback), only the given chunk falls back.
    */
   def initiateFallbackFetchForPushMergedBlock(
       blockId: BlockId,
-      address: BlockManagerId): Unit = {
+      address: BlockManagerId,
+      fallbackPendingChunks: Boolean = true): Unit = {
     assert(blockId.isInstanceOf[ShuffleMergedBlockId] || blockId.isInstanceOf[ShuffleBlockChunkId])
     logWarning(log"Falling back to fetch the original blocks for push-merged block " +
       log"${MDC(BLOCK_ID, blockId)}")
@@ -380,7 +360,8 @@ private class PushBasedFetchHelper(
           // fail as well. Since, push-based shuffle is best effort and we try not to increase the
           // delay of the fetches, we immediately fallback for all the pending shuffle chunks in the
           // fetchRequests queue.
-          if (isRemotePushMergedBlockAddress(address)) {
+          // Stale-push fallback passes false: a stale chunk doesn't mean the host is unhealthy.
+          if (fallbackPendingChunks && isRemotePushMergedBlockAddress(address)) {
             // Fallback for all the pending fetch requests
             val pendingShuffleChunks = iterator.removePendingChunks(shuffleChunkId, address)
             pendingShuffleChunks.foreach { pendingBlockId =>
