@@ -58,6 +58,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSide: FilterCreationSide): LogicalPlan = {
+    bloomFilterAggregate(filterCreationSide).map { aggregate =>
+      val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
+      val filter = BloomFilterMightContain(bloomFilterSubquery,
+        new XxHash64(Seq(filterApplicationSideKey)))
+      Filter(filter, filterApplicationSidePlan)
+    }.getOrElse(filterApplicationSidePlan)
+  }
+
+  // The aggregate that builds the bloom filter from `filterCreationSide`, unless one of the checks
+  // below rejects the creation side.
+  private def bloomFilterAggregate(filterCreationSide: FilterCreationSide): Option[LogicalPlan] = {
     val filterCreationSideKey = filterCreationSide.key
     val filterCreationSidePlan = filterCreationSide.plan
     val creationSideThreshold = if (filterCreationSide.useMaterializedThreshold) {
@@ -68,7 +79,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     // Skip if the filter creation side is too big
     if (filterCreationSide.materializedSizeInBytes
         .getOrElse(filterCreationSidePlan.stats.sizeInBytes) > creationSideThreshold) {
-      return filterApplicationSidePlan
+      return None
     }
     val rowCount = filterCreationSide.materializedRowCount
       .orElse(filterCreationSidePlan.stats.rowCount)
@@ -85,18 +96,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
     // creation-side subquery cannot be extracted into a Python evaluation operator.
     if (aggregate.containsPattern(PYTHON_UDF)) {
-      return filterApplicationSidePlan
+      return None
     }
     // The subquery evaluates the creation side again, apart from the join. A non-deterministic
     // filter or key can give it different keys than the join sees. This check does not see into
     // a leaf that returns other rows when read again, like a cache whose plan is not repeatable.
     if (!aggregate.deterministic) {
-      return filterApplicationSidePlan
+      return None
     }
-    val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
-    val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new XxHash64(Seq(filterApplicationSideKey)))
-    Filter(filter, filterApplicationSidePlan)
+    Some(aggregate)
   }
 
   /**
@@ -104,13 +112,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * filter over a scan, or in a DSv2 scan that took it in fully. Filter conditions and the
    * expressions they reference must remain simple, so the runtime-filter subquery does not
    * introduce expensive computation. The extracted plan must produce a superset of the creation
-   * side's join keys.
+   * side's join keys. A side found only through the filters that a DSv2 scan took in is returned
+   * only if `injectBloomFilter` and `takes` take it, so that a join above can still take its other
+   * side.
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideKey: Expression,
       allowMaterializedCache: Boolean,
       applicationDistinctCount: => Option[BigInt],
+      takes: FilterCreationSide => Boolean,
       onMaterializedLeaf: => Unit = ()): Option[FilterCreationSide] = {
     def extract(
         p: LogicalPlan,
@@ -248,15 +259,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           if !scan.repeatableRead || !scan.pushedFilters.forall(isSimpleExpression) => None
       // A filter that a DSv2 scan took in fully leaves no `Filter` for it, as a built-in file scan
       // does with its partition filters, so a selective one counts as a selective `Filter` does.
-      // The size check still uses the scan's estimate, which for a V2 file scan covers all its
-      // partitions. Such a side is taken only if it fits the size check of `injectBloomFilter`,
-      // so that a join above can still take its other side.
-      case leaf: LeafNode if hasHitSelectiveFilter || (hasSelectivePushedFilters(leaf) &&
-          currentPlan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) =>
+      // The size check of `bloomFilterAggregate` uses the scan's estimate, which for a V2 file
+      // scan covers all its partitions.
+      case leaf: LeafNode if hasHitSelectiveFilter || hasSelectivePushedFilters(leaf) =>
         Some(FilterCreationSide(
           targetKey,
           currentPlan,
-          useMaterializedThreshold = false))
+          useMaterializedThreshold = false)).filter { side =>
+          hasHitSelectiveFilter || (bloomFilterAggregate(side).isDefined && takes(side))
+        }
       case _ => None
     }
 
@@ -333,12 +344,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * - The filter creation side has a selective predicate, or its exact materialized row count
    *   is smaller than the application side's distinct join-key count
    * - The max filterApplicationSide scan size is greater than a configurable threshold
+   *
+   * `takes` is the caller's check on the creation side, see `extractSelectiveFilterOverScan`.
    */
   private def extractBeneficialFilterCreatePlan(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideKey: Expression,
-      filterCreationSideKey: Expression): Option[FilterCreationSide] = {
+      filterCreationSideKey: Expression,
+      takes: FilterCreationSide => Boolean): Option[FilterCreationSide] = {
     if (UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
       UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType) &&
       findExpressionAndTrackLineageDown(
@@ -383,6 +397,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         filterCreationSideKey,
         allowMaterializedCache = false,
         applicationDistinctCount = None,
+        takes = takes,
         onMaterializedLeaf = { sawMaterializedLeaf = true })
       selectiveCreationSide
         .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
@@ -392,7 +407,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               filterCreationSide,
               filterCreationSideKey,
               allowMaterializedCache = true,
-              applicationDistinctCount = applicationDistinctCount)
+              applicationDistinctCount = applicationDistinctCount,
+              takes = takes)
           } else {
             selectiveCreationSide
           }
@@ -581,12 +597,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                 side: LogicalPlan,
                 key: Expression,
                 other: LogicalPlan,
-                otherKey: Expression): Option[FilterCreationSide] =
+                otherKey: Expression): Option[FilterCreationSide] = {
+              // The search can call `takes` for more than one creation side, so the part that does
+              // not depend on `c` is computed once.
+              lazy val keyCanTake =
+                UnsafeRowUtils.isBinaryStable(key.dataType) && canPushDown(key, side)
+              def takes(c: FilterCreationSide): Boolean =
+                keyDpps.isEmpty || (keyCanTake && canEvaluateAgain(c))
               extractBeneficialFilterCreatePlan(
-                side, withoutDppFilters(other, keyDpps.contains), key, otherKey).filter { c =>
-                keyDpps.isEmpty || (UnsafeRowUtils.isBinaryStable(key.dataType) &&
-                  canPushDown(key, side) && canEvaluateAgain(c))
-              }
+                side, withoutDppFilters(other, keyDpps.contains), key, otherKey, takes)
+                .filter(takes)
+            }
             // Check if:
             // 1. The current join type supports prune the left side with runtime filter
             // 2. The current join is a shuffle join or a broadcast join that

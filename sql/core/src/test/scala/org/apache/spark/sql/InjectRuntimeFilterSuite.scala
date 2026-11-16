@@ -2207,7 +2207,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
             assert(optimized.exists(_.expressions.exists(
               _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, clue)
             assert(keyNames(optimized) == (if (dpp) withDroppedDpp else withoutDpp), clue)
-            if (v1Sources.isEmpty) checkPlan(optimized)
+            if (v1Sources.isEmpty) {
+              // The dimension's scan takes its selective filter on partition columns in fully.
+              assert(optimized.exists {
+                case r: DataSourceV2ScanRelation =>
+                  r.output.exists(_.name == "k") && r.hasSelectivePushedFilters
+                case _ => false
+              }, clue)
+              checkPlan(optimized)
+            }
             checkAnswer(df, expected)
           }
         }
@@ -2247,6 +2255,35 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
                   r.output.exists(_.name == "j") && r.output.intersect(r.relation.output).isEmpty
                 case _ => false
               }, s"expected a scan with a pushed variant extraction:\n$plan"))
+          }
+
+          // A side found through pushed filters that a later check rejects does not stop the
+          // search: the join that side is in gives the bloom filter from its other side, which the
+          // selective `b2 = 23` filters. For a key whose DPP filter is dropped, `canEvaluateAgain`
+          // rejects the dimension side. Without DPP, the bloom filter's subquery is not
+          // deterministic.
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+            createViews()
+            Seq(
+              ("rf_dim d", "d.ds RLIKE '^b' AND", true),
+              ("(SELECT CAST(k + rand() * 0 AS INT) AS k FROM rf_dim WHERE dp = 1) d", "", false)
+            ).foreach { case (dim, condition, dpp) =>
+              withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dpp.toString) {
+                val df = sql(s"SELECT f.id FROM rf_fact f JOIN (SELECT d.k FROM $dim JOIN bf2 " +
+                  s"ON d.k = bf2.a2 WHERE $condition bf2.b2 = 23) x ON f.part = x.k")
+                val optimized = df.queryExecution.optimizedPlan
+                val clue = s"`$dim`:\n$optimized"
+                assert(optimized.exists {
+                  case r: DataSourceV2ScanRelation =>
+                    r.output.exists(_.name == "k") && r.hasSelectivePushedFilters
+                  case _ => false
+                }, clue)
+                assert(optimized.exists(_.expressions.exists(
+                  _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, clue)
+                assert(keyNames(optimized).contains("part"), clue)
+                checkAnswer(df, factRows(_ == 5))
+              }
+            }
           }
         }
       }
@@ -2290,23 +2327,30 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
           // A scan that reads the same rows again but is not row-wise, as with a pushed aggregate
           // or join or as the target read of a copy-on-write UPDATE, still counts under a selective
-          // `Filter`. The source keeps `i > 3` in a `Filter` above its scan here.
+          // `Filter`, but not for a key whose DPP filter is dropped: such a scan records no pushed
+          // filters for `cannotFail` to check. The source keeps `i > 3` in a `Filter` above its
+          // scan here.
           spark.read.format(classOf[CatalystFilterLimitDataSourceV2].getName)
             .option(CatalystFilterScanBuilder.REPORTED_ROW_COUNT, "10")
             .option(CatalystFilterScanBuilder.KEEP_RESIDUAL_FILTERS, "true").load()
             .createOrReplaceTempView("rf_lim")
-          val plan = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
-            sql("SELECT f.id FROM rf_fact f JOIN rf_lim d ON f.part = d.i WHERE d.i > 3")
-              .queryExecution.optimizedPlan
-          }
-          Seq(true, false).foreach { repeatable =>
-            val rewritten = plan.transform {
-              case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
-                r.copy(onlyRowWisePushdowns = false, repeatableRead = repeatable)
+          Seq(false, true).foreach { dpp =>
+            val plan = withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false",
+                SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dpp.toString) {
+              sql("SELECT f.id FROM rf_fact f JOIN rf_lim d ON f.part = d.i WHERE d.i > 3")
+                .queryExecution.optimizedPlan
             }
-            val expected = if (repeatable) Seq("part") else Seq("i")
-            assert(keyNames(InjectRuntimeFilter(rewritten)) == expected,
-              s"repeatableRead = $repeatable:\n$rewritten")
+            assert(plan.exists(_.expressions.exists(
+              _.exists(_.isInstanceOf[DynamicPruningSubquery]))) === dpp, s"dpp = $dpp:\n$plan")
+            Seq(true, false).foreach { repeatable =>
+              val rewritten = plan.transform {
+                case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") =>
+                  r.copy(onlyRowWisePushdowns = false, repeatableRead = repeatable)
+              }
+              val expected = if (repeatable && !dpp) Seq("part") else Seq("i")
+              assert(keyNames(InjectRuntimeFilter(rewritten)) == expected,
+                s"dpp = $dpp, repeatableRead = $repeatable:\n$rewritten")
+            }
           }
 
           // A scan whose pushed filters are selective but which is too large for the creation side
@@ -2318,6 +2362,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           val nested = sql("SELECT f.id FROM rf_fact f JOIN (SELECT l.i FROM rf_lim l " +
             "JOIN bf2 ON l.i = bf2.a2 WHERE l.j < -3 AND bf2.b2 = 23) x ON f.part = x.i")
           val nestedPlan = nested.queryExecution.optimizedPlan
+          val large = nestedPlan.collectFirst {
+            case r: DataSourceV2ScanRelation if r.output.exists(_.name == "i") => r
+          }.getOrElse(fail(s"no scan of rf_lim in\n$nestedPlan"))
+          assert(large.hasSelectivePushedFilters && large.stats.sizeInBytes >
+            spark.sessionState.conf.runtimeFilterCreationSideThreshold, nestedPlan)
           assert(keyNames(nestedPlan).contains("part"), s"expected a bloom filter on part:\n" +
             nestedPlan)
           checkAnswer(nested, factRows(_ == 5))

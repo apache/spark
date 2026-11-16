@@ -905,6 +905,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *   - `pushedOffset`           -- pushed OFFSET
    *   - `pushedSample`           -- pushed table sample
    *   - `sortOrders`             -- pushed sort order (top-N / ordering)
+   *   - `joinedRelationsPushedDownOperators` -- table sample pushed into a side of a pushed join
    *
    * It decides the `onlyRowWisePushdowns` flag of the plain and the variant-extraction scans, see
    * [[DataSourceV2ScanRelation.onlyRowWisePushdowns]], and blocks merging, see
