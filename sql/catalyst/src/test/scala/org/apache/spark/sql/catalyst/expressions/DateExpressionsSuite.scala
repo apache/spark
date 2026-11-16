@@ -601,6 +601,34 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map("operation" -> "subtract 2147483647 days from DATE '1900-01-01'"))
   }
 
+  test("SPARK-59859: DATETIME_OVERFLOW of date_add and date_sub formats the date the same way " +
+      "under every parser policy") {
+    // The legacy formatter rebases a date to the Julian calendar, which overflows for the dates
+    // within about 44,500 days of the minimum DATE. The dates come from the input row: the legacy
+    // formatter would also fail on the `toString` of a DATE literal of them.
+    val start = BoundReference(0, DateType, nullable = false)
+    val days = BoundReference(1, IntegerType, nullable = false)
+    Seq("legacy", "corrected", "exception").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+        checkErrorInExpression[SparkArithmeticException](
+          DateAdd(start, days),
+          InternalRow(Int.MinValue, -1),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "add -1 days to DATE '-5877641-06-23'"))
+        checkErrorInExpression[SparkArithmeticException](
+          DateAdd(start, days),
+          InternalRow(Int.MaxValue, 1),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "add 1 days to DATE '+5881580-07-11'"))
+        checkErrorInExpression[SparkArithmeticException](
+          DateSub(start, days),
+          InternalRow(Int.MinValue, 1),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "subtract 1 days from DATE '-5877641-06-23'"))
+      }
+    }
+  }
+
   test("time_add") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     Seq(TimestampType, TimestampNTZType).foreach { dt =>

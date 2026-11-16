@@ -46,7 +46,8 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.plans.physical.KeyReducer
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{
-  sideBySide, CharsetProvider, CharVarcharUtils, DateTimeUtils, FailFastMode, IntervalUtils, MapData
+  sideBySide, CharsetProvider, CharVarcharUtils, DateFormatter, DateTimeUtils, DefaultDateFormatter,
+  FailFastMode, IntervalUtils, LegacyDateFormats, MapData
 }
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, CatalogPlugin, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -2925,12 +2926,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  // A DATE as a SQL literal in the proleptic Gregorian calendar of DATE values, whatever
+  // `spark.sql.legacy.timeParserPolicy` is. Under LEGACY, `toSQLValue(_, DateType)` formats with
+  // the legacy formatter, whose rebasing to the Julian calendar overflows for the dates within
+  // about 44,500 days of the minimum DATE, so building the error would throw instead.
+  private def toSQLDate(days: Int): String = {
+    val formatter = new DefaultDateFormatter(
+      DateFormatter.defaultLocale, LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT, isParsing = false)
+    s"DATE '${formatter.format(days)}'"
+  }
+
   def dateAddDaysOverflowError(days: Int, numDays: Int): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"add ${toSQLValue(numDays, IntegerType)} days to " +
-          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+        "operation" -> s"add ${toSQLValue(numDays, IntegerType)} days to ${toSQLDate(days)}"),
       context = Array.empty,
       summary = "")
   }
@@ -2939,8 +2949,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"subtract ${toSQLValue(numDays, IntegerType)} days from " +
-          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+        "operation" ->
+          s"subtract ${toSQLValue(numDays, IntegerType)} days from ${toSQLDate(days)}"),
       context = Array.empty,
       summary = "")
   }
