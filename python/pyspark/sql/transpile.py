@@ -472,10 +472,15 @@ class CatalystTranspiler(AbstractTranspiler):
         (bool vs bigint) -- which would break a working UDF since the option
         is type-checked before ConvertToCatalyst can drop it -- or coerces
         where Python's ``==`` is simply False. Refuse those so the UDF falls
-        back to interpreted Python. A ``None`` literal operand stays allowed
-        (the four-branch NULL handling above reproduces Python exactly).
-        Numeric sub-categories (``"integer"`` vs ``"float"``) are treated as
-        compatible; Spark widens to double in the comparison.
+        back to interpreted Python. Outside ``map`` / ``array``, a ``None``
+        literal operand stays allowed (the four-branch NULL handling above
+        reproduces Python exactly). Numeric sub-categories (``"integer"`` vs
+        ``"float"``) are treated as compatible; Spark widens to double in the
+        comparison.
+
+        A ``map`` or ``array`` operand is always refused, ``None`` comparisons
+        included: a map ``=`` fails analysis even against ``None``, and the
+        ``array`` category records neither the element type nor its collation.
 
         A NaN guard is added unless both operands are provably ``"integer"``:
         ``NaN == NaN`` is ``False`` in Python (IEEE 754), but Spark's
