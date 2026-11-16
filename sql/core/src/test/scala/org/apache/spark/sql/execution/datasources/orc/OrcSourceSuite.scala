@@ -671,6 +671,19 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
        """.stripMargin)
   }
 
+  for (vectorized <- Seq(true, false)) {
+    test(s"SPARK-61763: ORC preserves distinct DATE map keys, vectorized=$vectorized") {
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val input = sql(
+          "SELECT map(DATE '2003-01-13', 6, DATE '2011-07-19', -4) AS dates")
+        withTempPath { path =>
+          input.coalesce(1).write.orc(path.getCanonicalPath)
+          checkAnswer(spark.read.orc(path.getCanonicalPath), input)
+        }
+      }
+    }
+  }
+
   test("SPARK-58814: positional ORC evolution preserves standard CHAR semantics") {
     withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
       withTempPath { dir =>

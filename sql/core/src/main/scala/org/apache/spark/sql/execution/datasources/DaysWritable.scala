@@ -40,6 +40,8 @@ class DaysWritable(
     var julianDays: Int)
   extends DateWritable {
 
+  super.set(julianDays)
+
   def this() = this(0, 0)
   def this(gregorianDays: Int) =
     this(gregorianDays, rebaseGregorianToJulianDays(gregorianDays))
@@ -64,6 +66,7 @@ class DaysWritable(
   override def set(d: Int): Unit = {
     gregorianDays = d
     julianDays = rebaseGregorianToJulianDays(d)
+    super.set(julianDays)
   }
 
   @throws[IOException]
@@ -75,5 +78,6 @@ class DaysWritable(
   override def readFields(in: DataInput): Unit = {
     julianDays = WritableUtils.readVInt(in)
     gregorianDays = rebaseJulianToGregorianDays(julianDays)
+    super.set(julianDays)
   }
 }
