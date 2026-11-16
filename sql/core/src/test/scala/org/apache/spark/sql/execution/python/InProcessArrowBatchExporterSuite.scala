@@ -30,7 +30,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.unsafe.types.UTF8String
 
-/** Batches of [[InProcessArrowBatchExporter]] and their release, which need no Python. */
+/**
+ * Batches of [[InProcessArrowBatchExporter]] and their release, which need no Python. Without
+ * Python no result is imported, so the release of the results, also those of earlier UDFs when
+ * a later UDF fails, is covered by `test_arrow_memory_is_released_on_success_limit_and_failure`
+ * in `pyspark.sql.tests.test_inprocess_udf`.
+ */
 class InProcessArrowBatchExporterSuite extends SparkFunSuite {
   import InProcessEvaluatorTestUtils._
 
@@ -76,8 +81,6 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
       hideTraceback = false, simplifiedTraceback = false, tracebackWithLocals = false,
       fullValidation = true, metrics = metrics, context = context)
   }
-
-  private def function(): PythonFunction = emptyFunction()
 
   private def fill(exporter: InProcessArrowBatchExporter, ids: Range, value: String): Unit = {
     exporter.startBatch()
@@ -139,10 +142,14 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
     val calls = new Calls(metrics)
     val exporter = this.exporter(metrics)
     // There is no batch before the first one is started.
+    val row = InternalRow(0L, UTF8String.fromString("a"))
     intercept[AssertionError](exporter.evaluate(calls.run))
+    intercept[AssertionError](exporter.write(row))
     fill(exporter, 0 until 5, "a")
     exporter.evaluate(calls.run)
     intercept[AssertionError](exporter.evaluate(calls.run))
+    intercept[AssertionError](exporter.write(row))
+    assert(exporter.rowCount == 5)
     assert(metrics("pythonNumRowsReceived").value == 5)
     // The next batch can be evaluated again.
     fill(exporter, 0 until 3, "a")
@@ -150,6 +157,7 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
     assert(metrics("pythonNumRowsReceived").value == 8)
     exporter.close()
     intercept[AssertionError](exporter.startBatch())
+    intercept[AssertionError](exporter.write(row))
     intercept[AssertionError](exporter.evaluate(calls.run))
     assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocatedBefore)
   }
@@ -157,21 +165,23 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
   test("a failed registration is released by close") {
     val metrics = allMetrics()
     val calls = new Calls(metrics)
-    val exporter = this.exporter(metrics, Seq(function(), function()))
+    val exporter = this.exporter(metrics, Seq(emptyFunction(), emptyFunction()))
     fill(exporter, 0 until 5, "a")
     // The session has no interpreter, so the first registration fails once it is recorded.
     intercept[NullPointerException](exporter.evaluate(calls.run))
     assert(calls.charged == Seq("pythonInitTime"))
     assert(metrics("pythonDataSent").value == 0 && metrics("pythonNumRowsReceived").value == 0)
+    // The failed registration keeps the session from terminating until close releases it.
+    session.shutdown(0)
+    assert(!session.isTerminated)
     exporter.close()
-    // The session terminates only once every registration is released.
     session.shutdown()
     assert(session.isTerminated)
   }
 
   test("a call into Python that is refused stops the batch before anything is exported") {
     val metrics = allMetrics()
-    val exporter = this.exporter(metrics, Seq(function()))
+    val exporter = this.exporter(metrics, Seq(emptyFunction()))
     fill(exporter, 0 until 5, "a")
     val e = intercept[NoSuchElementException] {
       exporter.evaluate((_, _) => throw new NoSuchElementException("closed"))
@@ -182,7 +192,7 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
 
   test("a failed invocation releases the exported inputs") {
     val metrics = allMetrics()
-    val exporter = this.exporter(metrics, Seq(function(), function()))
+    val exporter = this.exporter(metrics, Seq(emptyFunction(), emptyFunction()))
     fill(exporter, 0 until 5, "a")
     // Registration succeeds without Python, and the first invocation fails once its inputs
     // are exported.
@@ -198,11 +208,11 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
     assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocatedBefore)
   }
 
-  test("cancellation is checked before each UDF is invoked") {
+  test("cancellation is checked before a UDF is invoked") {
     val metrics = allMetrics()
     val context = TaskContext.empty()
     val calls = new Calls(metrics)
-    val exporter = this.exporter(metrics, Seq(function()), context = context)
+    val exporter = this.exporter(metrics, Seq(emptyFunction()), context = context)
     fill(exporter, 0 until 5, "a")
     // Registration succeeds without Python, and the task is killed before the invocation.
     val run: InProcessArrowBatchExporter.PythonCall = (metric, _) => {

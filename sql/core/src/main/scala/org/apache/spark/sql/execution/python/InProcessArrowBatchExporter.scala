@@ -135,8 +135,9 @@ private[python] class InProcessArrowBatchExporter(
     }
   }
 
-  /** Adds a row of UDF arguments to the current batch. */
+  /** Adds a row of UDF arguments to the current batch, which was not evaluated yet. */
   def write(row: InternalRow): Unit = {
+    assert(writer != null && !evaluated, "The exporter has no batch to write to")
     writer.write(row)
     numRows += 1
   }

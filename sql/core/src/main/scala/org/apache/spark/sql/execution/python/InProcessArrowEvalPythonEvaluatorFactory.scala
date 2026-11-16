@@ -52,9 +52,10 @@ import org.apache.spark.util.Utils
  * the rest to three collaborators:
  *  - [[InProcessArrowBatchExporter]] writes the UDF arguments to Arrow batches, exports them
  *    to Python and imports the results.
- *  - a row queue buffers the input rows that are joined with the results.
+ *  - a row queue buffers the input rows to be joined with the results, unless they are read
+ *    back from Arrow.
  *  - [[InProcessArrowEvalPythonEvaluatorFactory.IteratorResources]] coordinates the release
- *    of both at task completion.
+ *    of the exporter and the queue, if any, at task completion.
  */
 class InProcessArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
