@@ -171,6 +171,11 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
           Map("inferTimestamp" -> "true", "timeFormat" -> "EEE HH:mm"),
           """{"a": "plain"}""",
           StringType)
+        // An unusable format skips TIME rather than falling back to the default formatter.
+        checkType(
+          Map("inferTimestamp" -> "true", "timeFormat" -> "EEE HH:mm"),
+          """{"a": "12:13:14"}""",
+          TimestampType)
       }
     }
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {

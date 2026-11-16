@@ -330,7 +330,10 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
       withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> enabled) {
         val options = new CSVOptions(Map("timeFormat" -> "EEE HH:mm"),
           columnPruning = false, defaultTimeZoneId = "UTC")
-        assert(new CSVInferSchema(options).inferField(NullType, "plain") == StringType)
+        val inferSchema = new CSVInferSchema(options)
+        assert(inferSchema.inferField(NullType, "plain") == StringType)
+        // An unusable format skips TIME rather than falling back to the default formatter.
+        assert(inferSchema.inferField(NullType, "12:13:14") == TimestampType)
       }
     }
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
