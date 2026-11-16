@@ -606,6 +606,24 @@ private[spark] object BasePythonRunner extends Logging {
   }
 
   /**
+   * Converts the idle timeout of a Python worker, in seconds, to the value to pass to
+   * `Socket.setSoTimeout`, which takes an `Int` of milliseconds and treats 0 as no timeout.
+   *
+   * A timeout that is zero or negative means no timeout and gives 0. A positive timeout is
+   * converted without overflow, and one that exceeds `Int.MaxValue` milliseconds (about 24.8
+   * days) is capped at `Int.MaxValue`, the longest read timeout a socket can have, so that a
+   * positive timeout never turns into a negative value, a shorter timeout or no timeout.
+   */
+  private[spark] def idleTimeoutToSoTimeoutMillis(idleTimeoutSeconds: Long): Int = {
+    if (idleTimeoutSeconds <= 0) {
+      0
+    } else {
+      // TimeUnit.toMillis saturates at Long.MaxValue instead of overflowing.
+      math.min(TimeUnit.SECONDS.toMillis(idleTimeoutSeconds), Int.MaxValue.toLong).toInt
+    }
+  }
+
+  /**
    * Handles the idle timeout of a Python worker on behalf of one stream that reads from it:
    * logs every timeout, kills the worker if `killOnIdleTimeout` is set, trying again on later
    * timeouts until a termination request has been issued, and fails the read once the killed
@@ -968,8 +986,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // Set socket read timeout for idle timeout detection in pipelined mode.
     // Always set explicitly (including 0 = no timeout) because reused workers may
     // retain a stale SO_TIMEOUT from a previous task that had a different setting.
-    worker.channel.socket().setSoTimeout(
-      if (idleTimeoutSeconds > 0) idleTimeoutSeconds.toInt * 1000 else 0)
+    worker.channel.socket().setSoTimeout(idleTimeoutToSoTimeoutMillis(idleTimeoutSeconds))
 
     // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
     // - Log warning on each timeout

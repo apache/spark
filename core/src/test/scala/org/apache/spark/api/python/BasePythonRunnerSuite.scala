@@ -928,6 +928,31 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("idle timeout in seconds to socket read timeout in milliseconds") {
+    import BasePythonRunner.idleTimeoutToSoTimeoutMillis
+
+    // No timeout.
+    assert(idleTimeoutToSoTimeoutMillis(0L) === 0)
+    assert(idleTimeoutToSoTimeoutMillis(-1L) === 0)
+    assert(idleTimeoutToSoTimeoutMillis(Long.MinValue) === 0)
+
+    assert(idleTimeoutToSoTimeoutMillis(1L) === 1000)
+    assert(idleTimeoutToSoTimeoutMillis(120L) === 120000)
+
+    // The largest timeout that fits in an Int of milliseconds.
+    val maxExactSeconds = Int.MaxValue / 1000L
+    assert(maxExactSeconds === 2147483L)
+    assert(idleTimeoutToSoTimeoutMillis(maxExactSeconds) === 2147483000)
+
+    // Timeouts beyond that are capped. With Int arithmetic these gave, in order: a negative
+    // value, which Socket.setSoTimeout rejects; 0, which means no timeout; 704 milliseconds;
+    // 0; 0; and a negative value.
+    Seq(maxExactSeconds + 1, 536870912L, 4294968L, 1L << 32, Int.MaxValue.toLong + 1,
+        Long.MaxValue).foreach { seconds =>
+      assert(idleTimeoutToSoTimeoutMillis(seconds) === Int.MaxValue, s"for $seconds seconds")
+    }
+  }
+
   private val idleTimeoutLoggerName = "org.apache.spark.api.python.IdleTimeoutTestRunner"
 
   /** Runs `f` and returns the warnings logged under `idleTimeoutLoggerName`. */
