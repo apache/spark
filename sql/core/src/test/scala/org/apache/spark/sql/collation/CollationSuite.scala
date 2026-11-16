@@ -3333,7 +3333,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("RANK/DENSE_RANK/ROW_NUMBER with collated PARTITION BY via WindowGroupLimitExec") {
-    // threshold=1 forces InferWindowGroupLimit -> WindowGroupLimitExec for WHERE r <= 1
+    // Pins the threshold at 1; the default of 1000 already yields WindowGroupLimitExec
+    // for WHERE r <= 1.
     withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "1") {
       withTable("t") {
         sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, i INT) USING PARQUET")
@@ -3427,9 +3428,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // into separate groups so the Final node forwards all 5 rows, while a comparator over s
     // alone would collapse the d = 1.0 and d = 2.0 groups into one and forward a single row
     // (dropping the d = 2.0 survivor). Only collation-aware grouping over all fields forwards
-    // exactly one survivor per (d, collated s) group. We assert on the Final node's
-    // numOutputRows (deterministic with one shuffle partition, see the test above) because
-    // the final query answer alone cannot distinguish these cases.
+    // exactly one survivor per (d, collated s) group. checkAnswer catches the s-only case,
+    // but not byte grouping, whose answer WindowExec recomputes correctly, so we also assert
+    // on the Final node's numOutputRows (deterministic with one shuffle partition, see the
+    // test above).
     withSQLConf(
         SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
@@ -3454,6 +3456,41 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // forwards all 5 rows; a comparator over s alone would forward only 1.
         assert(finalForwarded == 2,
           s"WindowGroupLimitExec(Final) should forward 2 rows, got $finalForwarded")
+      }
+    }
+  }
+
+  test("WindowGroupLimitExec collation grouping with groups under and over the limit") {
+    // Exercises the cached group-equality check at every kind of group boundary: group 'a'
+    // ends under the limit (r <= 2 but only one row, so the limit is never reached), group
+    // 'b' exceeds it (one row is skipped via skipRemainingRows), and group 'c' ends exactly
+    // at the limit. Mixed spellings keep the boundary checks on the collation comparison
+    // path. The default window group limit threshold (1000) already admits r <= 2.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTable("t") {
+        sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, i INT) USING PARQUET")
+        sql("""INSERT INTO t VALUES
+              |  ('a', 1),
+              |  ('b', 3), ('B', 4), ('b', 5),
+              |  ('c', 6), ('C', 7)""".stripMargin)
+        val df = sql("""SELECT s, i, r FROM (
+                       |  SELECT s, i, ROW_NUMBER() OVER (PARTITION BY s ORDER BY i) AS r
+                       |  FROM t) WHERE r <= 2""".stripMargin)
+        checkAnswer(df,
+          Row("a", 1, 1) ::
+          Row("b", 3, 1) :: Row("B", 4, 2) ::
+          Row("c", 6, 1) :: Row("C", 7, 2) :: Nil)
+        val finalForwarded = collect(df.queryExecution.executedPlan) {
+          case w: WindowGroupLimitExec if w.mode == Final =>
+            w.metrics("numOutputRows").value
+        }.sum
+        // Post-fix: 1 row from 'a', 2 from 'b' (its third row is skipped), 2 from 'c' = 5
+        // rows. Pre-fix byte grouping: every row is its own byte-group and fits within the
+        // limit, so all 6 rows are forwarded.
+        assert(finalForwarded == 5,
+          s"WindowGroupLimitExec(Final) should forward 5 rows, got $finalForwarded")
       }
     }
   }

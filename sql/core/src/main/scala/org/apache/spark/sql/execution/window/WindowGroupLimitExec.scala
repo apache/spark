@@ -217,8 +217,20 @@ class GroupedLimitIterator(
   var nextRow: UnsafeRow = null
   var nextGroup: UnsafeRow = null
   var nextRowAvailable: Boolean = false
+
+  // Result of the group-equality check for the row currently held in nextRow/nextGroup,
+  // remembered so that the limit iterators' repeated hasNext calls evaluate the check at
+  // most once per fetched row; for collated keys each evaluation pays a comparison over
+  // all key fields. Whether the remembered answer is current is tracked with an explicit
+  // flag rather than row identity, because the input iterator and the grouping projection
+  // reuse their row objects. It is cleared whenever the input advances or the current
+  // group changes; an answer that outlives either would merge two groups and drop rows.
+  private var groupEqualityKnown = false
+  private var groupEqualityResult = false
+
   protected[this] def fetchNextRow(): Unit = {
     nextRowAvailable = input.hasNext
+    groupEqualityKnown = false
     if (nextRowAvailable) {
       nextRow = input.next().asInstanceOf[UnsafeRow]
       nextGroup = grouping(nextRow)
@@ -251,7 +263,13 @@ class GroupedLimitIterator(
     // Before we start to fetch new input rows, make a copy of nextGroup.
     var currentGroup = nextGroup.copy()
 
-    def hasNext: Boolean = nextRowAvailable && groupEqualityCheck(nextGroup, currentGroup)
+    def hasNext: Boolean = nextRowAvailable && {
+      if (!groupEqualityKnown) {
+        groupEqualityKnown = true
+        groupEqualityResult = groupEqualityCheck(nextGroup, currentGroup)
+      }
+      groupEqualityResult
+    }
 
     def next(): InternalRow = {
       if (!hasNext) throw new NoSuchElementException
@@ -267,7 +285,11 @@ class GroupedLimitIterator(
       }
 
       // Switch to next group
-      if (nextRowAvailable) currentGroup = nextGroup.copy()
+      if (nextRowAvailable) {
+        currentGroup = nextGroup.copy()
+        // The remembered answer was computed against the previous group.
+        groupEqualityKnown = false
+      }
     }
   }
 }

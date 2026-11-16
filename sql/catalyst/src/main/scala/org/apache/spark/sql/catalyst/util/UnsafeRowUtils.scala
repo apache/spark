@@ -251,7 +251,7 @@ object UnsafeRowUtils {
     if (dataTypes.forall(isBinaryStable)) {
       (key1, key2) => key1.equals(key2)
     } else {
-      val ordering = InterpretedOrdering.forSchema(dataTypes)
+      val ordering = InterpretedOrdering.forSchema(dataTypes.toIndexedSeq)
       (key1, key2) => key1.equals(key2) || ordering.compare(key1, key2) == 0
     }
   }
