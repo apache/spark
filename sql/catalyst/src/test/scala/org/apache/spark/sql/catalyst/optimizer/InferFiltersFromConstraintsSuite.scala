@@ -729,18 +729,41 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
           asOfLeft.where(IsNotNull(leftKey)),
           asOfRight.where(IsNotNull(rightKey) && fails(rightKey)),
           Inner).analyze)
-      // The Filter case would infer fails(lk) from the left filter and the added lk = la.
+      // The as-of case adds only IS NOT NULL, not lk = la, from which a later run of the rule
+      // would infer fails(lk) from the left filter.
       val condition = leftKey === rightKey && rightKey === leftOther
       val originalQuery =
         asOfJoin(asOfLeft.where(fails(leftOther)), asOfRight, Inner, condition).analyze
       val correctAnswer = asOfJoin(
-        asOfLeft.where(IsNotNull(leftOther) && fails(leftOther) && leftKey === leftOther &&
-          IsNotNull(leftKey)),
+        asOfLeft.where(IsNotNull(leftOther) && fails(leftOther) && IsNotNull(leftKey)),
         asOfRight.where(IsNotNull(rightKey)),
         Inner,
         condition).analyze
       comparePlans(Optimize.execute(originalQuery), correctAnswer)
+      // Nor a literal, such as rk = 1.
+      comparePlans(
+        Optimize.execute(asOfJoin(asOfLeft.where(leftKey === 1), asOfRight, LeftOuter).analyze),
+        asOfJoin(
+          asOfLeft.where(IsNotNull(leftKey) && leftKey === 1),
+          asOfRight.where(IsNotNull(rightKey)),
+          LeftOuter).analyze)
     }
+  }
+
+  test("as-of joins: no filter is inferred across them in the body of a correlated subquery") {
+    // The main plan inlines such a body and runs this rule on it there, once.
+    val join = asOfJoin(asOfLeft.where(leftKey === 1), asOfRight, LeftOuter).analyze
+    val leftFiltered = asOfLeft.where(IsNotNull(leftKey) && leftKey === 1)
+    comparePlans(
+      Optimize.execute(Subquery(join, correlated = true)),
+      Subquery(asOfJoin(leftFiltered, asOfRight, LeftOuter).analyze, correlated = true))
+    // The body of an uncorrelated subquery runs on its own, so it gets its filters here.
+    comparePlans(
+      Optimize.execute(Subquery(join, correlated = false)),
+      Subquery(
+        asOfJoin(leftFiltered, asOfRight.where(IsNotNull(rightKey) && rightKey === 1), LeftOuter)
+          .analyze,
+        correlated = false))
   }
 
   test("as-of joins: an input subquery filter is not inferred again from an added key filter") {

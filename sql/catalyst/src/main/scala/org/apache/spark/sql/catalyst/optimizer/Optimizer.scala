@@ -2278,13 +2278,24 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.constraintPropagationEnabled) {
-      inferFilters(plan)
+      inferFilters(plan, inferAcrossAsOfJoins(plan))
     } else {
       plan
     }
   }
 
-  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+  // The main plan inlines the body of a correlated scalar or lateral subquery and runs this rule
+  // on it again, after later rules can have moved the Filters the AsOfJoin case added out of
+  // their tag. So only that run infers filters across as-of joins.
+  // TODO: An uncorrelated LATERAL subquery is inlined too, so its body still goes through the
+  //  AsOfJoin case twice.
+  private def inferAcrossAsOfJoins(plan: LogicalPlan): Boolean = plan match {
+    case s: Subquery if s.correlated => false
+    case _ => conf.inferFiltersAcrossAsOfJoinEnabled
+  }
+
+  private def inferFilters(
+      plan: LogicalPlan, acrossAsOfJoins: Boolean): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
     case filter @ Filter(condition, child) =>
       val canAdd: Expression => Boolean =
@@ -2325,8 +2336,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     // A right row that fails the ON condition is never the match of any left row, so a filter
     // that follows from the left constraints and the ON condition can drop it before the join.
     // An inner join also drops the left rows without a match, so its left side gets one too.
-    case j: AsOfJoin if conf.inferFiltersAcrossAsOfJoinEnabled =>
-      val allConstraints = getAllConstraints(j.left, j.right, j.condition)
+    case j: AsOfJoin if acrossAsOfJoins =>
+      lazy val allConstraints = getAllConstraints(j.left, j.right, j.condition)
       val newLeft = j.joinType match {
         case Inner => inferAsOfInputFilter(j.left, allConstraints)
         case LeftOuter => j.left
@@ -2343,9 +2354,10 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       } else {
         j.right
       }
-      // With LeftOuter only the right input gets a filter, so a self join loses its shared
-      // exchange. Leaving the right input unfiltered when both inputs are the same plan would
-      // keep it, but the filter drops right rows before the shuffle.
+      // A self join loses its shared exchange when only one input gets a filter: the right input
+      // with LeftOuter, or the left input with Inner when the right one stays unfiltered above.
+      // Leaving the other input unfiltered too when both inputs are the same plan would keep it,
+      // but the filter drops rows before the shuffle.
       j.copy(left = newLeft, right = newRight)
   }
 
@@ -2386,7 +2398,15 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   }
 
   private def inferAsOfInputFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
-    val newPlan = inferNewFilter(plan, constraints, canBeAsOfFilter)
+    // Under the legacy flag, a later run of this rule infers with canBeFilter from a Filter that
+    // lost its tag, so an equality or literal added here could lead to a filter that can fail.
+    // IS NOT NULL takes no part in that inference.
+    val canAdd: Expression => Boolean = if (conf.legacyInferFailableFiltersFromConstraints) {
+      c => c.isInstanceOf[IsNotNull] && canBeAsOfFilter(c)
+    } else {
+      canBeAsOfFilter
+    }
+    val newPlan = inferNewFilter(plan, constraints, canAdd)
     if (newPlan ne plan) newPlan.setTagValue(asOfInputFilterTag, ())
     newPlan
   }

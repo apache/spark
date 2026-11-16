@@ -1527,6 +1527,108 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  /** Runs `f` with tables for as-of joins inside correlated subqueries and LATERAL joins. */
+  private def withSubqueryAsOfTables(f: => Unit): Unit = {
+    withTable("asof_o", "asof_l", "asof_r", "asof_l3", "asof_s") {
+      sql("CREATE TABLE asof_o USING parquet AS SELECT * FROM VALUES (1), (2) AS o(id)")
+      sql(
+        """
+          |CREATE TABLE asof_l USING parquet AS
+          |SELECT * FROM VALUES (1, 0, 5, 10, 'x'), (2, 3, 3, 10, 'y') AS l(id, k, a, ts, extra)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_r USING parquet AS
+          |SELECT * FROM VALUES (0, 1, 100), (3, 1, 30), (7, 1, 70) AS r(k, ts, v)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TABLE asof_l3 USING parquet AS
+          |SELECT * FROM VALUES (1, 'text', 'abc', 7, 10), (2, 'num', '7', 7, 10)
+          |  AS l(id, kind, s, y, ts)
+          |""".stripMargin)
+      sql("CREATE TABLE asof_s USING parquet AS SELECT * FROM VALUES (7) AS s(x)")
+      f
+    }
+  }
+
+  test("an as-of join in a correlated subquery gets no filter that can fail") {
+    // The body goes through filter inference on its own and again after the main plan inlines
+    // it. A filter the as-of case added must not lead the second run to one that can fail, such
+    // as 10 / k > 0 from k = a and 10 / a > 0 on the row with k = 0 and a = 5.
+    withSubqueryAsOfTables {
+      val cases = Seq(
+        """
+          |SELECT o.id, (SELECT max(r.v)
+          |  FROM (SELECT id, k, a, ts FROM asof_l WHERE 10 / a > 0) l
+          |  ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a
+          |  WHERE l.id = o.id) AS v
+          |FROM asof_o o
+          |""".stripMargin -> Seq(Row(1, null), Row(2, 30)),
+        """
+          |SELECT o.id, lat.v
+          |FROM asof_o o, LATERAL (
+          |  SELECT l.k, l.a, r.v
+          |  FROM asof_l l ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a
+          |  WHERE l.id = o.id) lat
+          |WHERE 10 / lat.a > 0
+          |""".stripMargin -> Seq(Row(2, 30)),
+        // r.k > 5 and l.y = r.k must not lead to CAST(s AS INT) > 5, which casts 'abc'.
+        """
+          |SELECT o.id, (SELECT max(r.v)
+          |  FROM (SELECT * FROM asof_l3 WHERE kind = 'num' AND CAST(s AS INT) = y) l
+          |  ASOF JOIN (SELECT * FROM asof_r WHERE k > 5) r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.y = r.k
+          |  WHERE l.id = o.id) AS v
+          |FROM asof_o o
+          |""".stripMargin -> Seq(Row(1, null), Row(2, 70)))
+      // Parquet would skip the file of the 'text' row by its statistics.
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+        for ((query, expected) <- cases) {
+          withClue(query) {
+            withSQLConf(
+                SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+              checkSortMergeAsOf(sql(query), expected)
+            }
+            checkSortMergeAsOf(sql(query), expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("an outer NOT IN pushed into a lateral as-of join runs once") {
+    // The main plan's run adds l.k = l.a to the inlined lateral body. It must not also rewrite
+    // the pushed-in l.a NOT IN with it into a second anti join.
+    withSubqueryAsOfTables {
+      val df = checkOneSubqueryJoin(
+        """
+          |SELECT o.id, lat.v
+          |FROM asof_o o, LATERAL (
+          |  SELECT l.k, l.a, r.v
+          |  FROM asof_l l ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a
+          |  WHERE l.id = o.id) lat
+          |WHERE lat.a NOT IN (SELECT x FROM asof_s)
+          |""".stripMargin,
+        onLeftInput = true,
+        Row(2, 30) :: Nil)
+      assert(scanDataFilters(df, "asof_l").exists {
+        case EqualTo(x: Attribute, y: Attribute) => Set(x.name, y.name) == Set("k", "a")
+        case _ => false
+      }, s"Expected l.k = l.a on the scan of asof_l in plan:\n${df.queryExecution.executedPlan}")
+    }
+  }
+
   test("a filter inferred from the ON condition is not added if it can fail") {
     withTable("guarded_t") {
       sql(
