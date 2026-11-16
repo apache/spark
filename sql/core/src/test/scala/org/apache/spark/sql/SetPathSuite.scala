@@ -388,6 +388,37 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("PATH enabled: built-in DEFAULT_PATH tracks USE for current schema and current catalog") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      "spark.sql.catalog.path_other" -> classOf[InMemoryCatalog].getName) {
+      sql("CREATE SCHEMA IF NOT EXISTS path_default_schema")
+      try {
+        // Both markers in the built-in default are dynamic: they follow USE, not a snapshot.
+        sql("SET PATH = DEFAULT_PATH")
+        sql("USE spark_catalog.path_default_schema")
+        assert(pathEntries(currentPath()).contains("spark_catalog.path_default_schema"),
+          s"Current schema should follow USE; got: ${pathEntries(currentPath())}")
+
+        sql("USE spark_catalog.default")
+        assert(!pathEntries(currentPath()).contains("spark_catalog.path_default_schema"))
+
+        sql("SET CATALOG path_other")
+        assert(pathEntries(currentPath()).contains("path_other"),
+          s"Current catalog should follow SET CATALOG; got: ${pathEntries(currentPath())}")
+        assert(!pathEntries(currentPath()).contains("spark_catalog"))
+
+        sql("SET CATALOG spark_catalog")
+        assert(pathEntries(currentPath()).contains("spark_catalog"))
+      } finally {
+        sql("SET CATALOG spark_catalog")
+        sql("USE spark_catalog.default")
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP SCHEMA IF EXISTS path_default_schema")
+      }
+    }
+  }
+
   test("PATH enabled: duplicate CURRENT_CATALOG raises error") {
     withPathEnabled {
       checkError(

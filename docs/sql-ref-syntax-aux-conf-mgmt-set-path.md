@@ -47,7 +47,9 @@ The initial value of `PATH` in a session is `DEFAULT_PATH`. `DEFAULT_PATH` is ei
 `spark.sql.defaultPath`, or, when that configuration is empty, a built-in value composed of
 `system.builtin`, `system.session`, the current schema, `system`, and the current catalog. Setting
 `spark.sql.legacy.persistentCatalogFirst` to `true` places the current catalog before `system` in
-this built-in value. To override the complete path, set
+this built-in value. The current schema and the current catalog in this value are dynamic, like
+`CURRENT_SCHEMA` and `CURRENT_CATALOG`: they follow `USE SCHEMA` and `USE CATALOG`. To override the
+complete path, set
 `spark.sql.defaultPath`. See the [`DEFAULT_PATH` parameter](#parameters) for the exact derivation
 rules.
 
@@ -98,7 +100,9 @@ path_element
 
   2. If `spark.sql.defaultPath` is empty (the factory setting), the spark-built-in default
      applies: `system.builtin`, `system.session`, the current schema
-     (`current_catalog.current_schema`), `system`, and the current catalog. Setting
+     (`current_catalog.current_schema`), `system`, and the current catalog. The current schema
+     and the current catalog are dynamic markers, so they follow `USE SCHEMA` and `USE CATALOG`
+     rather than being fixed at the time `SET PATH` runs. Setting
      `spark.sql.legacy.persistentCatalogFirst` to `true` reverses the final two catalog entries,
      placing the current catalog before `system`.
 
