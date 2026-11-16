@@ -768,6 +768,16 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Round(Literal(1L), Literal(scale)), 1L)
       checkEvaluation(Round(Literal(1L), Literal(scale), ansiEnabled = true), 1L)
     }
+    // An integral value is returned unchanged for every scale >= 0, by both the interpreted and
+    // the generated code, including the extremes of each type.
+    Seq(0, 1, 10000000, Int.MaxValue).foreach { scale =>
+      checkEvaluation(Round(Literal(Byte.MinValue), Literal(scale)), Byte.MinValue)
+      checkEvaluation(BRound(Literal(Short.MaxValue), Literal(scale)), Short.MaxValue)
+      checkEvaluation(Round(Literal(Int.MaxValue), Literal(scale)), Int.MaxValue)
+      checkEvaluation(Round(Literal(Long.MinValue), Literal(scale), ansiEnabled = true),
+        Long.MinValue)
+      checkEvaluation(Truncate(Literal(Long.MaxValue), Literal(scale)), Long.MaxValue)
+    }
     // The smallest subnormal has the longest exact decimal expansion, so it is the value most
     // at risk from clamping the scale.
     checkEvaluation(Round(Literal(Double.MinPositiveValue), Literal(Int.MaxValue)),

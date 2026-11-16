@@ -1791,6 +1791,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
         } else {
           Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
+      // Rounding an integral value to a scale >= 0 leaves it unchanged, which is also what the
+      // generated code does (see `codegenForIntegralType`).
+      case ByteType | ShortType | IntegerType | LongType if _scale >= 0 =>
+        input1
       case ByteType if ansiEnabled =>
         MathUtils.withOverflow(
           f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
