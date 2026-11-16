@@ -33,6 +33,27 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.collection.BitSet
 
+object SortMergeJoinExec {
+  // Bytecode of an inner SMJ's processNext() measured on master per output column.
+  private val NULLABLE_COLUMN_BYTES = 58
+  private val NON_NULLABLE_FIXED_WIDTH_COLUMN_BYTES = 28
+  private val NON_NULLABLE_VARIABLE_WIDTH_COLUMN_BYTES = 50
+  private val BASE_BYTES = 160
+
+  /** Estimated bytecode size of processNext() when the join outputs `columns`. */
+  private[joins] def estimatedProcessNextBytes(columns: Seq[Attribute]): Int = {
+    BASE_BYTES + columns.map { a =>
+      if (a.nullable) {
+        NULLABLE_COLUMN_BYTES
+      } else if (UnsafeRow.isFixedLength(a.dataType)) {
+        NON_NULLABLE_FIXED_WIDTH_COLUMN_BYTES
+      } else {
+        NON_NULLABLE_VARIABLE_WIDTH_COLUMN_BYTES
+      }
+    }.sum
+  }
+}
+
 /**
  * Performs a sort merge join of two child relations.
  */
@@ -544,17 +565,17 @@ case class SortMergeJoinExec(
     val bufferedRow = ctx.freshName("bufferedRow")
     val setDefaultValue = joinType == LeftOuter || joinType == RightOuter
 
-    // Decide whether to use field-based extraction based on estimated extraction code size.
-    // Each column generates ~80 source chars of extraction code (nullable check + getValue).
-    // The streamed side extracts once per row, the buffered side once per matched pair.
-    // When the total extraction code would push processNext() toward the JVM's 8K JIT limit
-    // (DEFAULT_JVM_HUGE_METHOD_LIMIT), we use field-based extraction so splitExpressions
-    // can move it into helper methods. The 8K limit is in bytecode bytes; source chars are
-    // a conservative proxy (bytecode is typically 1.0-1.3x source length for generated code).
-    val estimatedExtractionChars =
-      (streamedPlan.output.length + bufferedPlan.output.length) * 80
+    // Use field-based extraction only when the join's output would push processNext() past the
+    // JVM's 8K JIT limit. Only output columns count: semi/anti/existence don't emit buffered ones.
+    // The estimate is linear, but local variable slots past 255 need wider instructions, so keep
+    // 20% headroom.
+    val outputColumns = joinType match {
+      case LeftExistence(_) => streamedPlan.output
+      case _ => streamedPlan.output ++ bufferedPlan.output
+    }
     val useFieldBasedExtraction =
-      estimatedExtractionChars > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
+      SortMergeJoinExec.estimatedProcessNextBytes(outputColumns) * 6 / 5 >
+        CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
 
     // Create variables for both sides.
     val (streamedVars, streamedSnippets, bufferedVars, bufferedSnippets, streamedDecls) =
@@ -684,8 +705,7 @@ case class SortMergeJoinExec(
              |$loadStreamedAfterCond
              |$loadBufferedAfterCond
            """.stripMargin
-        (before, checking.trim,
-          if (joinType == LeftAnti) "" else sRestExtract.trim)
+        (before, checking.trim, sRestExtract.trim)
       } else {
         // Local variable path: use splitVarsByCondition (original approach).
         val (streamedBefore, streamedAfter) =
@@ -751,8 +771,8 @@ case class SortMergeJoinExec(
       } else {
         val streamedVarDecl = streamedDecls.mkString("\n")
         val streamedEval = evaluateVariables(streamedVars)
-        val bufferedEval = evaluateVariables(bufferedVars)
-        (s"$streamedVarDecl\n$streamedEval", bufferedEval, "")
+        // Leave buffered columns to consume() so they are read lazily, as before.
+        (s"$streamedVarDecl\n$streamedEval", "", "")
       }
     }
 
