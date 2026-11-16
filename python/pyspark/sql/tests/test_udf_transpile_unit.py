@@ -2883,7 +2883,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(_annotation_category(fn.args.args[0].annotation), expected)
 
     def test_param_category_combos_pins_map_and_array(self):
-        # A pinned map/array param does not double the combos like an untyped one.
+        # A pinned map/array param contributes one candidate; an untyped one contributes three.
         import ast as _ast
 
         from pyspark.sql.transpile import _param_category_combos
@@ -2951,6 +2951,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def map_ne_none(a: dict):
             return a != None  # noqa: E711
 
+        def map_lt_unreached(a: dict, b: dict, c: bool):
+            # Python never orders the maps (c is False); a lowered map `<` fails analysis.
+            return (a < b) if c else False
+
         def array_eq_none(a: list):
             return a == None  # noqa: E711
 
@@ -2981,6 +2985,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     [(["x"], ["y"]), (["y"], ["x"])],
                     [True, False],
                     "operands are both",
+                ),
+                (
+                    map_lt_unreached,
+                    maps + ", c boolean",
+                    [({"k": "v"}, {"k": "x"}, False), (None, {"k": "x"}, False)],
+                    [False, False],
+                    "operands are both `map`",
                 ),
                 (
                     map_eq_none,
