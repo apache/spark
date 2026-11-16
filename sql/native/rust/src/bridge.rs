@@ -900,6 +900,105 @@ mod tests {
     }
 
     #[test]
+    fn writes_truncate_only_when_they_declare_it() {
+        use crate::{AbortInfo, CommitInfo, StreamingAbortInfo, StreamingCommitInfo};
+
+        // Writes that keep the default SUPPORTS_TRUNCATE, which these tests never create.
+        struct AppendOnly;
+
+        impl BatchWrite for AppendOnly {
+            type Factory = Unsupported;
+            type Message = Unsupported;
+
+            fn new_writer_factory(&self) -> Result<Unsupported> {
+                unreachable!("not created")
+            }
+
+            fn commit(&mut self, _: CommitInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+
+            fn abort(&mut self, _: AbortInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+        }
+
+        impl StreamingWrite for AppendOnly {
+            type Factory = Unsupported;
+            type Message = Unsupported;
+
+            fn new_writer_factory(&self) -> Result<Unsupported> {
+                unreachable!("not created")
+            }
+
+            fn commit(&mut self, _: StreamingCommitInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+
+            fn abort(&mut self, _: StreamingAbortInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+        }
+
+        struct Appending;
+
+        impl DataSource for Appending {
+            type ScanBuilder = Unsupported;
+            type MicroBatchStream = Unsupported;
+            type BatchWrite = AppendOnly;
+            type StreamingWrite = AppendOnly;
+
+            fn new(_: CreateInfo) -> Result<Self> {
+                unreachable!("registered directly")
+            }
+
+            fn capabilities(&self) -> Capabilities {
+                Capabilities::all()
+            }
+        }
+
+        let bridge = Bridge::<Appending>::default();
+        let (handle, mask) = bridge.register_source(Appending).unwrap();
+        assert_eq!(mask, abi::BATCH_WRITE | abi::STREAMING_WRITE);
+        for (query_id, mode) in [
+            (None, "the save mode overwrite"),
+            (Some("query".to_owned()), "the output mode complete"),
+        ] {
+            let created = bridge.create_writer(handle, id_schema(), WriteMode::Truncate, query_id);
+            let error = error_message(created);
+            assert!(error.contains(mode), "{error}");
+        }
+        bridge.close_source(handle).unwrap();
+    }
+
+    #[test]
+    fn non_string_panic_payloads_do_not_escape() {
+        struct PanicsOnDrop;
+
+        impl Drop for PanicsOnDrop {
+            fn drop(&mut self) {
+                panic!("the payload panicked when dropped");
+            }
+        }
+
+        struct DropsWithPanic;
+
+        impl Drop for DropsWithPanic {
+            fn drop(&mut self) {
+                std::panic::panic_any(PanicsOnDrop);
+            }
+        }
+
+        let expected = "native provider panicked with a non-string payload";
+        let error = provider_call::<()>(|| std::panic::panic_any(42));
+        assert_eq!(error.unwrap_err(), expected);
+        let error = provider_call::<()>(|| std::panic::panic_any(PanicsOnDrop));
+        assert_eq!(error.unwrap_err(), expected);
+        // Neither the drop nor its payload unwinds out of drop_provider.
+        drop_provider(DropsWithPanic);
+    }
+
+    #[test]
     fn error_messages_include_their_sources_once() {
         #[derive(Debug)]
         struct Context(std::io::Error);

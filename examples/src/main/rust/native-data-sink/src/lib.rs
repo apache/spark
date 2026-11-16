@@ -948,6 +948,23 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_manifest_rename_keeps_the_sealed_files_that_it_may_have_published() {
+        let directory = TempDirectory::new();
+        let source = directory.source();
+        let (mut write, factory) = new_write(&source, WriteMode::Append).unwrap();
+        let message = stage(&factory, 0, vec![Some(1)]);
+        // Make the final rename fail after the seal: a file cannot replace a directory.
+        fs::create_dir(directory.0.join("manifest.json")).unwrap();
+        assert!(write.commit(CommitInfo::new(vec![message])).is_err());
+        let objects = write.objects.clone();
+        assert!(objects.exists());
+        write.abort(AbortInfo::new(vec![None])).unwrap();
+        assert!(objects.exists());
+        drop(write);
+        assert!(objects.exists());
+    }
+
+    #[test]
     fn concurrent_write_is_rejected_and_drop_releases_staging_and_lock() {
         let directory = TempDirectory::new();
         let source = directory.source();

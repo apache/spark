@@ -371,8 +371,8 @@ when the checkpoint does not have it yet. For each micro-batch, it asks for the 
 offset and plans the data between the previous and latest progress boundaries.
 The executors read the partitions of a micro-batch exactly as those of a batch scan: the
 two share `read`, which gets the kind of the read. `MicroBatchStreamInfo::schema` has the
-columns to read, which are all the columns of the schema until Spark prunes the columns of
-streaming scans.
+columns to read: all the columns of the schema by default, or only the top-level columns that
+the query needs when `spark.sql.streaming.v2ColumnPruning.enabled` is true.
 
 Offsets are progress boundaries defined by the connector, which decides how they map to
 records. The Range example stores the next row to read: `{"next":10}` to `{"next":13}`

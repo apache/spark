@@ -306,10 +306,8 @@ fn check_values(
         )
         .into());
     }
-    if !needs_check(field.data_type()) {
-        return Ok(());
-    }
     let valid = |index: usize| data.is_valid(index) && is_referenced(index);
+    // The mask of a container is built only when a child has values to check.
     match field.data_type() {
         DataType::Decimal128(precision, scale) => {
             let values = data.buffer::<i128>(0);
@@ -330,44 +328,80 @@ fn check_values(
             }
         }
         DataType::Struct(fields) => {
-            let mask: Vec<bool> = (0..data.len()).map(valid).collect();
-            for (child, field) in data.child_data().iter().zip(fields) {
-                let name = format!("{column}.{}", field.name());
-                check_values(child, field, &name, Some(&mask))?;
+            let children: Vec<_> = data
+                .child_data()
+                .iter()
+                .zip(fields)
+                .filter(|(child, field)| has_checks(child, field))
+                .collect();
+            if !children.is_empty() {
+                let mask: Vec<bool> = (0..data.len()).map(valid).collect();
+                for (child, field) in children {
+                    let name = format!("{column}.{}", field.name());
+                    check_values(child, field, &name, Some(&mask))?;
+                }
             }
         }
         DataType::List(element) => {
-            let mask = elements(data, valid)?;
-            let name = format!("{column}.element");
-            check_values(&data.child_data()[0], element, &name, Some(&mask))?;
+            let child = &data.child_data()[0];
+            if has_checks(child, element) {
+                let mask = elements(data, valid)?;
+                let name = format!("{column}.element");
+                check_values(child, element, &name, Some(&mask))?;
+            }
         }
         DataType::Map(entries, _) => {
             let DataType::Struct(fields) = entries.data_type() else {
                 return Err("Arrow map entries must be a struct".into());
             };
-            let mask = elements(data, valid)?;
             let entries = &data.child_data()[0];
             // Spark does not allow null keys.
             let key = fields[0].as_ref().clone().with_nullable(false);
-            let name = format!("{column}.key");
-            check_values(&entries.child_data()[0], &key, &name, Some(&mask))?;
-            let name = format!("{column}.value");
-            check_values(&entries.child_data()[1], &fields[1], &name, Some(&mask))?;
+            let children: Vec<_> = [
+                (&entries.child_data()[0], &key, "key"),
+                (&entries.child_data()[1], fields[1].as_ref(), "value"),
+            ]
+            .into_iter()
+            .filter(|(child, field, _)| has_checks(child, field))
+            .collect();
+            if !children.is_empty() {
+                let mask = elements(data, valid)?;
+                for (child, field, part) in children {
+                    let name = format!("{column}.{part}");
+                    check_values(child, field, &name, Some(&mask))?;
+                }
+            }
         }
         _ => {}
     }
     Ok(())
 }
 
-/// Whether a type has values to check under it: a decimal, a field, an element, or a map value
-/// that is not nullable, or a map, whose keys are never null.
-fn needs_check(data_type: &DataType) -> bool {
-    let required = |field: &Field| !field.is_nullable() || needs_check(field.data_type());
-    match data_type {
+/// Whether `data` has values that `check_values` must check, whatever their parents: a null
+/// where `field` or a field, an element, a map key, or a map value under it is not nullable,
+/// or a decimal. Null counts are cached, so this reads no values.
+fn has_checks(data: &ArrayData, field: &Field) -> bool {
+    if !field.is_nullable() && data.null_count() > 0 {
+        return true;
+    }
+    match field.data_type() {
         DataType::Decimal128(..) => true,
-        DataType::Struct(fields) => fields.iter().any(|field| required(field.as_ref())),
-        DataType::List(element) => required(element.as_ref()),
-        DataType::Map(..) => true,
+        DataType::Struct(fields) => data
+            .child_data()
+            .iter()
+            .zip(fields)
+            .any(|(child, field)| has_checks(child, field)),
+        DataType::List(element) => has_checks(&data.child_data()[0], element),
+        DataType::Map(entries, _) => {
+            let DataType::Struct(fields) = entries.data_type() else {
+                return true;
+            };
+            let entries = data.child_data()[0].child_data();
+            // Keys are never null, whatever their field declares.
+            entries[0].null_count() > 0
+                || has_checks(&entries[0], &fields[0])
+                || has_checks(&entries[1], &fields[1])
+        }
         _ => false,
     }
 }
@@ -415,7 +449,7 @@ mod tests {
     use arrow_array::ffi_stream::ArrowArrayStreamReader;
     use arrow_array::{
         ArrayRef, BooleanArray, Decimal128Array, Int32Array, Int64Array, LargeStringArray,
-        MapArray, RecordBatch, RecordBatchReader, StringArray,
+        ListArray, MapArray, RecordBatch, RecordBatchReader, StringArray,
     };
     use arrow_schema::{ArrowError, DataType, Field, Schema};
 
@@ -865,9 +899,69 @@ mod tests {
     }
 
     #[test]
+    fn nested_nulls_are_allowed_under_any_null_ancestor() {
+        let flag = |nullable| Fields::from(vec![Field::new("flag", DataType::Boolean, nullable)]);
+        let nulls = |slots: &[bool]| {
+            let mut builder = NullBufferBuilder::new(slots.len());
+            builder.append_slice(slots);
+            builder.finish()
+        };
+        // A valid struct with a null flag, under a parent that is null or not.
+        let structs = || {
+            let flags: ArrayRef = Arc::new(BooleanArray::from(vec![None::<bool>]));
+            let structs = StructArray::try_new(flag(true), vec![flags], None).unwrap();
+            Arc::new(structs) as ArrayRef
+        };
+
+        // struct<inner: struct<flag>>.
+        let inner = |nullable| Field::new("inner", DataType::Struct(flag(nullable)), true);
+        let schema = |nullable| {
+            let nested = DataType::Struct(Fields::from(vec![inner(nullable)]));
+            Arc::new(Schema::new(vec![Field::new("nested", nested, true)]))
+        };
+        for (outer_is_valid, rejected) in [(false, false), (true, true)] {
+            let fields = Fields::from(vec![inner(true)]);
+            let outer = StructArray::try_new(fields, vec![structs()], nulls(&[outer_is_valid]));
+            let batch = RecordBatch::try_new(schema(true), vec![Arc::new(outer.unwrap())]);
+            let error = batch_error(batch.unwrap(), &schema(false));
+            assert_eq!(error.is_some(), rejected, "{error:?}");
+            if let Some(error) = error {
+                let expected = "The column nested.inner.flag has a null";
+                assert!(error.contains(expected), "{error}");
+            }
+        }
+
+        // array<struct<flag>>.
+        let element = |nullable| Field::new("element", DataType::Struct(flag(nullable)), true);
+        let schema = |nullable| {
+            let list = DataType::List(Arc::new(element(nullable)));
+            Arc::new(Schema::new(vec![Field::new("values", list, true)]))
+        };
+        for (list_is_valid, rejected) in [(false, false), (true, true)] {
+            let mut offsets = OffsetBufferBuilder::<i32>::new(1);
+            offsets.push_length(1);
+            let lists = ListArray::try_new(
+                Arc::new(element(true)),
+                offsets.finish(),
+                structs(),
+                nulls(&[list_is_valid]),
+            );
+            let batch = RecordBatch::try_new(schema(true), vec![Arc::new(lists.unwrap())]);
+            let error = batch_error(batch.unwrap(), &schema(false));
+            assert_eq!(error.is_some(), rejected, "{error:?}");
+            if let Some(error) = error {
+                let expected = "The column values.element.flag has a null";
+                assert!(error.contains(expected), "{error}");
+            }
+        }
+    }
+
+    #[test]
     fn list_elements_and_map_values_respect_their_nullability() {
-        let list_schema = |nullable| {
-            let element = Arc::new(Field::new("item", DataType::Int32, nullable));
+        // ListBuilder names the element "item", and Spark names it "element" in the schema to
+        // read, which the SDK accepts.
+        let list_schema = |name: &str, nullable| {
+            let element = Arc::new(Field::new(name, DataType::Int32, nullable));
             Arc::new(Schema::new(vec![Field::new(
                 "values",
                 DataType::List(element),
@@ -882,8 +976,8 @@ mod tests {
             builder.values().append_null();
             builder.append(false);
             let lists = Arc::new(builder.finish());
-            let batch = RecordBatch::try_new(list_schema(true), vec![lists]).unwrap();
-            let error = batch_error(batch, &list_schema(false));
+            let batch = RecordBatch::try_new(list_schema("item", true), vec![lists]).unwrap();
+            let error = batch_error(batch, &list_schema("element", false));
             assert_eq!(error.is_some(), rejected, "{error:?}");
             if let Some(error) = error {
                 assert!(
@@ -1026,5 +1120,28 @@ mod tests {
         assert_eq!(stream.next().unwrap().unwrap_err().to_string(), error);
         drop(stream);
         assert_eq!(drops.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn a_batch_cannot_change_the_arrow_encoding_of_a_spark_type() {
+        // Utf8 and LargeUtf8 are the same Spark type, but every array of the stream is exported
+        // with the schema of the first batch, so a later batch must have exactly that schema.
+        let label = |data_type| Arc::new(Schema::new(vec![Field::new("label", data_type, true)]));
+        let first = RecordBatch::try_new(
+            label(DataType::Utf8),
+            vec![Arc::new(StringArray::from(vec!["a"]))],
+        )
+        .unwrap();
+        let second = RecordBatch::try_new(
+            label(DataType::LargeUtf8),
+            vec![Arc::new(LargeStringArray::from(vec!["b"]))],
+        )
+        .unwrap();
+        let exported = export_with(reader_of(vec![first, second]), &label(DataType::Utf8));
+        let mut stream = ArrowArrayStreamReader::try_new(exported).unwrap();
+        assert_eq!(stream.next().unwrap().unwrap().num_rows(), 1);
+        let error = stream.next().unwrap().unwrap_err().to_string();
+        assert!(error.contains("different schema"), "{error}");
+        assert_eq!(stream.next().unwrap().unwrap_err().to_string(), error);
     }
 }

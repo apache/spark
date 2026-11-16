@@ -115,7 +115,7 @@ their epochs apart.
 
 ## Build, package, and run
 
-The example builds only in the Spark source tree, not from the copy in a binary distribution,
+The example builds only in the Spark source tree, which binary distributions do not include,
 since it depends on the SDK under `sql/native/rust`. From the repository root:
 
 ```sh

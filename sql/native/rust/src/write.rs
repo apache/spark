@@ -252,9 +252,9 @@ pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result
 }
 
 /// Imports a batch to write. Arrow does not validate the C data that it imports, which the safe
-/// accessors of the connector rely on, so this validates its layout and values, but not its
-/// nullability: a Spark string may hold bytes that are not UTF-8, such as those of a cast from
-/// binary, which a Rust `&str` must not.
+/// accessors of the connector rely on, so this validates its layout and values: a Spark string
+/// may hold bytes that are not UTF-8, such as those of a cast from binary, which a Rust `&str`
+/// must not. It leaves nullability to Spark, for the reason that `validate` gives.
 ///
 /// # Safety
 /// As for write_batch: the array must be Arrow C data of `data_type`.

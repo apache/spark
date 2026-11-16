@@ -818,7 +818,30 @@ mod tests {
         )));
         fs::create_dir(&directory.0)?;
         let source = directory.0.join("abi_layout.c");
-        fs::write(&source, c_layout_assertions())?;
+        let mut assertions = c_layout_assertions();
+        // The constants of the bindings too, such as the capability bits that Spark checks.
+        for (name, value) in [
+            ("ABI_VERSION", i128::from(ABI_VERSION)),
+            ("BATCH_READ", i128::from(BATCH_READ)),
+            ("MICRO_BATCH_READ", i128::from(MICRO_BATCH_READ)),
+            ("BATCH_WRITE", i128::from(BATCH_WRITE)),
+            ("STREAMING_WRITE", i128::from(STREAMING_WRITE)),
+            ("BATCH_TRUNCATE", i128::from(BATCH_TRUNCATE)),
+            ("STREAMING_TRUNCATE", i128::from(STREAMING_TRUNCATE)),
+            ("ADMISSION_CONTROL", i128::from(ADMISSION_CONTROL)),
+            ("READ_BATCH", i128::from(READ_BATCH)),
+            ("READ_MICRO_BATCH", i128::from(READ_MICRO_BATCH)),
+            ("READ_ALL_AVAILABLE", i128::from(READ_ALL_AVAILABLE)),
+            ("READ_MAX_ROWS", i128::from(READ_MAX_ROWS)),
+            ("WRITE_APPEND", i128::from(WRITE_APPEND)),
+            ("WRITE_TRUNCATE", i128::from(WRITE_TRUNCATE)),
+            ("LOG_ERROR", i128::from(LOG_ERROR)),
+        ] {
+            assertions.push_str(&format!(
+                "_Static_assert(SPARK_DS_{name} == {value}, \"SPARK_DS_{name}: value\");\n"
+            ));
+        }
+        fs::write(&source, assertions)?;
         let header = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../core/src/main/resources/org/apache/spark/sql/datasource");
 
@@ -834,7 +857,7 @@ mod tests {
             .output()?;
         assert!(
             compiled.status.success(),
-            "Rust ABI layouts do not match spark_datasource.h:\n{}\n{}",
+            "Rust ABI layouts or constants do not match spark_datasource.h:\n{}\n{}",
             String::from_utf8_lossy(&compiled.stdout),
             String::from_utf8_lossy(&compiled.stderr),
         );

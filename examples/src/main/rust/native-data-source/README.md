@@ -63,7 +63,8 @@ options. A source created just for capability discovery is closed without creati
 Spark normalizes option names to lower case. Unknown options are rejected.
 
 Spark pushes a limit only to a scan whose rows it does not filter, and evaluates filters after
-reading, since version 1 of the ABI does not push them down. The connector applies a global
+reading: the SDK does not expose the `push_domains` of version 1 of the ABI yet, so Spark pushes
+no filter down. The connector applies a global
 limit by shortening the range before splitting it into partitions. The readers return the
 columns of the schema to read, in its order, including zero-column batches for operations such
 as `COUNT(*)`.
@@ -107,7 +108,7 @@ offsets of its checkpoint.
 
 ## Build and test
 
-The example builds only in the Spark source tree, not from the copy in a binary distribution:
+The example builds only in the Spark source tree, which binary distributions do not include:
 it depends on the SDK under `sql/native/rust`, and its C test on the header under `sql/core`.
 Run from the repository root with Rust and a C compiler:
 

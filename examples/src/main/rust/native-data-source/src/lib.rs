@@ -569,6 +569,14 @@ mod tests {
         assert!(stream
             .latest_offset(LatestOffsetInfo::new(outside))
             .is_err());
+        // As if the checkpoint came from a query whose range started before 10.
+        let below = RangeOffset { next: 5 };
+        let error = stream.latest_offset(LatestOffsetInfo::new(below)).err();
+        let error = error.unwrap().to_string();
+        assert!(error.contains("not in the range [10, 25]"), "{error}");
+        let error = stream.plan(MicroBatchInfo::new(below, RangeOffset { next: 12 }));
+        let error = error.err().unwrap().to_string();
+        assert!(error.contains("rows of the range [10, 25)"), "{error}");
     }
 
     #[test]
