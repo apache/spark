@@ -1242,6 +1242,18 @@
     },
     "sqlState" : "54000"
   },
+  "COLUMNAR_UDF_NOT_EXECUTABLE" : {
+    "message" : [
+      "The columnar function <name> has no implementation that Spark can run. Its implementations are of the kinds <kinds>, which need an engine that supports one of them."
+    ],
+    "sqlState" : "0A000"
+  },
+  "COLUMNAR_UDF_RESULT_TYPE_MISMATCH" : {
+    "message" : [
+      "The columnar function <name> returned a vector of the type <actualType>, but its return type is <expectedType>."
+    ],
+    "sqlState" : "39000"
+  },
   "COLUMN_ALIASES_NOT_ALLOWED" : {
     "message" : [
       "Column aliases are not allowed in <op>."

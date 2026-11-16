@@ -2873,6 +2873,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: ExecuteExternalUDF => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
+    case _: EvalColumnarUDFs => true
     case _: Expand => true
     case _: BinBy => true
     case _ => false

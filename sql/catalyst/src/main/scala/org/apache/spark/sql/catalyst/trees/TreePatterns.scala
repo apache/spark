@@ -38,6 +38,7 @@ object TreePattern extends Enumeration  {
   val CAST: Value = Value
   val CAST_TO_TIMESTAMP: Value = Value
   val COALESCE: Value = Value
+  val COLUMNAR_UDF: Value = Value
   val COMMON_EXPR_REF: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
@@ -157,6 +158,7 @@ object TreePattern extends Enumeration  {
   val DESERIALIZE_TO_OBJECT: Value = Value
   val DF_DROP_COLUMNS: Value = Value
   val DISTINCT_LIKE: Value = Value
+  val EVAL_COLUMNAR_UDF: Value = Value
   val EVAL_PYTHON_UDF: Value = Value
   val EVAL_PYTHON_UDTF: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value
