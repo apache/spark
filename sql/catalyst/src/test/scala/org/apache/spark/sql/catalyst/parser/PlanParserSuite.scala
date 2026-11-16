@@ -3778,9 +3778,12 @@ class PlanParserSuite extends AnalysisTest {
 
   test("GAP FILL: works after the single-character pipe") {
     val clause = "GAP FILL (ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)"
+    val partitioned = "GAP FILL (PARTITION BY k ORDER BY ts BIN WIDTH INTERVAL '5' MINUTE)"
     withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "true") {
       assert(parsePlan(s"FROM t | $clause | WHERE a > 0") ==
         parsePlan(s"FROM t |> $clause |> WHERE a > 0"))
+      assert(parsePlan(s"FROM t | $partitioned | WHERE a > 0") ==
+        parsePlan(s"FROM t |> $partitioned |> WHERE a > 0"))
       // A column named gap after `|` is still a bitwise OR.
       assert(gapFillNodes(parsePlan("SELECT 1 | gap FROM t")).isEmpty)
       assert(gapFillNodes(parsePlan("SELECT a | gap fill FROM t")).isEmpty)
@@ -3788,6 +3791,28 @@ class PlanParserSuite extends AnalysisTest {
     withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "false") {
       assert(parseException(s"FROM t | $clause").getCondition == "PARSE_SYNTAX_ERROR")
       assert(gapFillNodes(parsePlan("SELECT 1 | gap FROM t")).isEmpty)
+    }
+  }
+
+  test("GAP FILL: an inline-table row ending in `| gap` keeps a table alias named fill") {
+    withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "true") {
+      Seq("true", "false").foreach { enforceReserved =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
+          // ORDER is reserved when reserved keywords are enforced.
+          val aliases = Seq("fill(a)", "fill(a, b)", "fill(partition)") ++
+            (if (enforceReserved == "false") Seq("fill(order, b)") else Nil)
+          for {
+            statement <- Seq("SELECT * FROM VALUES", "VALUES", "INSERT INTO t VALUES")
+            rows <- Seq("1", "1, 2")
+            alias <- aliases
+          } {
+            val sql = s"$statement $rows | gap $alias"
+            assert(parsePlan(sql) == parsePlan(s"$statement $rows | gap AS $alias"), sql)
+          }
+        }
+      }
     }
   }
 

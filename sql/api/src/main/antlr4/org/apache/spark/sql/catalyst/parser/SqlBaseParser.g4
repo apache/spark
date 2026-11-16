@@ -84,8 +84,8 @@ options { tokenVocab = SqlBaseLexer; }
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
-           // GAP starts a pipe step only before FILL (, so `a | gap` stays a bitwise OR.
-           (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN);
+           (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN &&
+            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY);
   }
 
   /**
