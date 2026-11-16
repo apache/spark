@@ -255,7 +255,6 @@ class TransformExpressionSuite extends SparkFunSuite {
     }
   }
 
-
   test("SPARK-60027: eval casts only a narrower numeric argument to the function's input type") {
     // Reads the value at the declared `BIGINT`, so it fails on an `INT` that is not cast.
     val longBucket = new ScalarFunction[Int] {

@@ -2481,12 +2481,12 @@ case class KeyedShuffleSpec(
    * `expression` is not a transform. Two transforms with the same function and shape are the same
    * function of their columns, so a join that pairs the columns up pairs the keys up too.
    */
-   private def argumentShape(expression: Expression): Option[Seq[Expression]] = expression match {
-     case t: TransformExpression if t.references.size == 1 =>
-       val shapes = t.columnSlots.map(TransformExpression.expressionShape)
-       if (shapes.forall(_.isDefined)) Some(shapes.flatten) else None
-     case _ => None
-   }
+  private def argumentShape(expression: Expression): Option[Seq[Expression]] = expression match {
+    case t: TransformExpression if t.references.size == 1 =>
+      val shapes = t.columnSlots.map(TransformExpression.expressionShape)
+      if (shapes.forall(_.isDefined)) Some(shapes.flatten) else None
+    case _ => None
+  }
 
   /**
    * Whether a join may reduce one or both sides' partition keys onto a common key space, which is
@@ -2498,7 +2498,6 @@ case class KeyedShuffleSpec(
       !conf.v2BucketingPartiallyClusteredDistributionEnabled &&
       conf.v2BucketingAllowCompatibleTransforms
   }
-
 
   /**
    * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a

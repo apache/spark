@@ -93,4 +93,14 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       condition = "AMBIGUOUS_REFERENCE",
       parameters = Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))
   }
+
+  test("SPARK-50593: a bucket over a nested transform is not taken for a sorted bucket") {
+    // Only a `sorted_bucket` with no sort columns is rewritten to `bucket`. Reading a `bucket`
+    // through the bucket extractor would cast its nested argument to a column reference.
+    val query = LocalRelation(AttributeReference("ts", IntegerType)())
+    val nested = LogicalExpressions.apply("bucket", LogicalExpressions.literal(4),
+      LogicalExpressions.identity(FieldReference("ts")))
+    // No function catalog, so nothing resolves `bucket`; the point is that this does not throw.
+    assert(V2ExpressionUtils.toCatalystTransformOpt(nested, query).isEmpty)
+  }
 }

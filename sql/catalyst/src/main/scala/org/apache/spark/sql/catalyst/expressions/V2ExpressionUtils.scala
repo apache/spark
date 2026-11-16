@@ -156,15 +156,32 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       Some(resolveRef[NamedExpression](ref, query))
     // A sorted bucket with no sort columns is a bucket: resolve it as `bucket(numBuckets, col)`, as
     // before literal parameters became children. With sort columns it stays `sorted_bucket`.
-    case t @ BucketTransform(numBuckets, Seq(ref), Seq()) if t.name == "sorted_bucket" =>
-      toCatalystTransformOpt(
-        LogicalExpressions.bucket(numBuckets, Array(ref)), query, funCatalogOpt)
+    case SortFreeBucket(bucket) =>
+      toCatalystTransformOpt(bucket, query, funCatalogOpt)
     // Bucket resolves here too, so its count is a Literal child like any other parameter.
     case NamedTransform(name, args) =>
       val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
       funCatalogOpt.flatMap { catalog =>
         loadV2FunctionOpt(catalog, name, catalystArgs).map { bound =>
           TransformExpression(bound, catalystArgs)
+        }
+      }
+  }
+
+  /**
+   * A `sorted_bucket` with no sort columns, as the `bucket(numBuckets, col)` it is. The name is
+   * checked first: `BucketTransform` casts the arguments of any `bucket` to column references, so
+   * reading a `bucket` over a nested transform through it would throw.
+   */
+  private object SortFreeBucket {
+    def unapply(trans: Transform): Option[Transform] =
+      if (trans.name != "sorted_bucket") {
+        None
+      } else {
+        trans match {
+          case BucketTransform(numBuckets, Seq(ref), Seq()) =>
+            Some(LogicalExpressions.bucket(numBuckets, Array(ref)))
+          case _ => None
         }
       }
   }

@@ -100,7 +100,7 @@ object TransformFunctionId {
 case class TransformExpression(
     function: BoundFunction,
     children: Seq[Expression],
-    reducedWith: Option[TransformFunctionId] = None) extends Expression with Logging {
+    reducedWith: Option[TransformFunctionId] = None) extends Expression {
 
   override def nullable: Boolean = true
 
@@ -278,7 +278,7 @@ case class TransformExpression(
    * look merely not reducible, and the other direction like a one-side reduce. Use
    * [[pairReducers]].
    */
-   private[sql] def reducers(other: TransformExpression): Option[Reducer[_, _]] =
+  private[sql] def reducers(other: TransformExpression): Option[Reducer[_, _]] =
     TransformExpression.reducerOf(reducerOutcome(other))
 
   /**
@@ -324,25 +324,34 @@ case class TransformExpression(
       p.length == 1 && p(0).dataType == IntegerType
     }
 
+    // Connector code that throws, a `LinkageError` included, e.g. a `NoClassDefFoundError` for a
+    // missing dependency, makes the outcome `Threw`, so the pair is not reducible rather than
+    // failing the query. `Try` alone would let a `LinkageError` through.
+    def guarded(outcome: => Outcome): Outcome =
+      try outcome catch {
+        case e @ (NonFatal(_) | _: LinkageError) => Threw(e)
+      }
+
     // Probe one reducer overload into an Outcome. Pure -- logging is decided once, below.
-    def probe(call: => Reducer[_, _]): Outcome = Try(Option(call)) match {
-      case Success(Some(r)) => Reducible(r)
-      case Success(None) => NotReducible
-      case Failure(_: UnsupportedOperationException) => Unimplemented
-      case Failure(e) => Threw(e)
+    def probe(call: => Reducer[_, _]): Outcome = guarded {
+      try Option(call).fold[Outcome](NotReducible)(Reducible(_)) catch {
+        case _: UnsupportedOperationException => Unimplemented
+      }
     }
 
     // Prefer the generalized overload. It reads its literal parameters by type, so it is asked only
     // when they have their declared types; otherwise it counts as not implemented. Use another
-    // overload only if the generalized one is not implemented; any other outcome is final.
-    val typesMatch = literalParamsMatchInputTypes && other.literalParamsMatchInputTypes
+    // overload only if the generalized one is not implemented; any other outcome is final. The type
+    // check reads the connector's `inputTypes()`, so it is guarded too.
     val outcome =
-      // Each call gets its own copies of the memoized arrays, so a connector cannot change them.
-      (if (typesMatch) {
-        probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
-      } else {
-        Unimplemented
-      }) match {
+      guarded {
+        if (literalParamsMatchInputTypes && other.literalParamsMatchInputTypes) {
+          // A copy of the memoized arrays per call, so a connector cannot change them.
+          probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
+        } else {
+          Unimplemented
+        }
+      } match {
         // A parameterless pair falls back to the parameterless overload.
         case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
           probe(thisFunction.reducer(otherFunction))
@@ -359,13 +368,8 @@ case class TransformExpression(
       }
 
     outcome match {
-      case Threw(e) =>
-        this.logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} reducer threw an " +
-          log"exception; treating as not reducible.", e)
-      case Unimplemented =>
-        this.logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} implements no reducer; " +
-          log"treating as not reducible. Override " +
-          log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ.")
+      case Threw(e) => logReducerThrew(function, thisName, e)
+      case Unimplemented => logNoReducer(function, thisName)
       case _ =>
     }
     outcome
@@ -624,6 +628,28 @@ object TransformExpression extends Logging {
         log"${MDC(ERROR, orElse(e.toString, e.getClass.getName))}")
     }
     logDebug(log"Cannot resolve a call of the " + transformLabel(function), e)
+  }
+
+  /**
+   * Logs that `function`'s reducer threw: at WARN once per function, since every planning pass and
+   * AQE re-plan asks the pair again, and at DEBUG, with the stack trace, every time.
+   */
+  private def logReducerThrew(function: BoundFunction, name: String, e: Throwable): Unit = {
+    logOnce(s"reducerThrew:${function.getClass.getName}:$name", log.isWarnEnabled) {
+      logWarning(log"V2 function ${MDC(FUNCTION_NAME, name)} reducer threw an exception; " +
+        log"treating as not reducible: ${MDC(ERROR, orElse(e.toString, e.getClass.getName))}. " +
+        log"Further failures of this function are logged at DEBUG.")
+    }
+    logDebug(log"V2 function ${MDC(FUNCTION_NAME, name)} reducer threw an exception.", e)
+  }
+
+  /** Logs that `function` implements no reducer: at WARN once per function, and at DEBUG. */
+  private def logNoReducer(function: BoundFunction, name: String): Unit = {
+    def line: MessageWithContext = log"V2 function ${MDC(FUNCTION_NAME, name)} implements no " +
+      log"reducer; treating as not reducible. Override " +
+      log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ."
+    logOnce(s"noReducer:${function.getClass.getName}:$name", log.isWarnEnabled)(logWarning(line))
+    logDebug(line)
   }
 
   /**

@@ -8601,7 +8601,10 @@ class KeyGroupedPartitioningSuite
     val l = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(2)))
     val r = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(4)))
     val appender = new LogAppender("non-UOE reducer exception")
-    withLogAppender(appender) {
+    appender.setThreshold(Level.DEBUG)
+    // DEBUG: the WARN is logged once per function, so an earlier test may already have taken it.
+    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+        level = Some(Level.DEBUG)) {
       assert(l.reducers(r).isEmpty, "a throwing reducer must be treated as not reducible")
     }
     val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
@@ -8623,6 +8626,39 @@ class KeyGroupedPartitioningSuite
     val days = TransformExpression(DaysFunction, Seq(a))
     val years = TransformExpression(YearsFunction, Seq(a))
     assert(days.reducers(years).isDefined)
+  }
+
+  test("SPARK-50593: connector code that fails while deciding a pair makes it not reducible") {
+    // The dispatch reads the connector's inputTypes() for the literal-type check and calls its
+    // reducer. Either may throw, a LinkageError included, e.g. a NoClassDefFoundError for a
+    // missing connector dependency. The pair is then not reducible, as for a reducer that throws,
+    // rather than failing the query.
+    def bucketLike(
+        types: => Array[DataType],
+        reduce: => Reducer[Int, Int]): ScalarFunction[Int] with ReducibleFunction[Int, Int] =
+      new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+        override def inputTypes(): Array[DataType] = types
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "failing_bucket"
+        override def canonicalName(): String = name()
+        override def produceResult(input: InternalRow): Int = 0
+        override def reducer(
+            thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+            otherFunc: ReducibleFunction[_, _],
+            otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+            : Reducer[Int, Int] = reduce
+      }
+    val inputTypesThrows = bucketLike(throw new IllegalStateException("inputTypes"), null)
+    // scalastyle:off throwerror
+    val reducerLinkageError = bucketLike(Array(IntegerType, LongType),
+      throw new NoClassDefFoundError("org/example/MissingDependency"))
+    // scalastyle:on throwerror
+    Seq(inputTypesThrows, reducerLinkageError).foreach { fn =>
+      val b8 = TransformExpression(fn, Seq(Literal(8), attr("id")))
+      val b4 = TransformExpression(fn, Seq(Literal(4), attr("id")))
+      assert(b8.pairReducers(b4) == ((None, None)))
+      assert(!b8.isCompatible(b4))
+    }
   }
 
   test("SPARK-50593: a reducer that throws in one direction makes the pair not reducible") {
@@ -8668,6 +8704,36 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-50593: a reducer warning is logged once per function") {
+    // Every planning pass, and every AQE re-plan, asks a pair again. The WARN is logged once per
+    // function; each failure is still logged at DEBUG, with its stack trace.
+    val throwing = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "warn_once_bucket"
+      override def canonicalName(): String = name()
+      override def produceResult(input: InternalRow): Int = 0
+      override def reducer(
+          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+          otherFunc: ReducibleFunction[_, _],
+          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+          : Reducer[Int, Int] = throw new IllegalStateException("reducer bug")
+    }
+    val b8 = TransformExpression(throwing, Seq(Literal(8), attr("id")))
+    val b4 = TransformExpression(throwing, Seq(Literal(4), attr("id")))
+    val appender = new LogAppender("reducer warning once per function")
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+        level = Some(Level.DEBUG)) {
+      (1 to 3).foreach(_ => assert(!b8.isCompatible(b4)))
+    }
+    def threw(level: Level): Int = appender.loggingEvents.count { e =>
+      e.getLevel == level && e.getMessage.getFormattedMessage.contains("reducer threw an exception")
+    }
+    assert(threw(Level.WARN) == 1)
+    assert(threw(Level.DEBUG) == 6, "both directions, three times")
+  }
+
   test("SPARK-50593: deprecated overload is not probed once the generalized one reduces") {
     // Generalized-first dispatch: the generalized reducer is tried first, and the deprecated int
     // overload must not be probed once it reduced. Here the generalized reducer succeeds and the
@@ -8696,7 +8762,10 @@ class KeyGroupedPartitioningSuite
     val r = TransformExpression(
       DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(2), attr("store_id")))
     val appender = new LogAppender("generalized bug masked")
-    withLogAppender(appender) {
+    appender.setThreshold(Level.DEBUG)
+    // DEBUG: the WARN is logged once per function, so an earlier test may already have taken it.
+    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+        level = Some(Level.DEBUG)) {
       assert(l.reducers(r).isEmpty, "a throwing generalized overload must not fall back and reduce")
     }
     assert(appender.loggingEvents.map(_.getMessage.getFormattedMessage)
