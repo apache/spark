@@ -60,6 +60,7 @@ from pyspark.sql.types import (
     IntegerType,
     LongType,
     StringType,
+    _parse_datatype_json_string,
 )
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
@@ -346,6 +347,12 @@ def _eval_python_nodes(df):
         for i in range(children.size()):
             stack.append(children.apply(i))
     return counts
+
+
+def _optimized_type(df):
+    """Type of ``df``'s only output column in the optimized plan, where the UDF is replaced."""
+    schema = df._jdf.queryExecution().optimizedPlan().schema().json()
+    return _parse_datatype_json_string(schema).fields[0].dataType
 
 
 def _python_udf_expr_count(df):
@@ -727,13 +734,19 @@ class ArrowUDFTranspilePlanShapeTests(ArrowUDFTranspileTestsMixin, ReusedSQLTest
 
     def test_output_schema_is_identical_with_and_without_transpilation(self):
         # ConvertToCatalyst substitutes the option with no cast back to the declared return
-        # type, relying on the transpiler having cast already.
+        # type, relying on the transpiler having cast already. The analyzed schema (what
+        # `.schema` reads) still reports the Python UDF's type, so read the optimized plan.
+        # Only the type is compared: the option may be non-nullable where the UDF never is.
         for return_type in (ByteType(), IntegerType(), LongType(), DoubleType()):
             with self.subTest(returnType=return_type):
                 with self.sql_conf(_TRANSPILE_ON):
-                    on = self.spark.range(1).select(_arrow_udf(add_one, return_type)("id")).schema
+                    df = self.spark.range(1).select(_arrow_udf(add_one, return_type)("id"))
+                    self.assertEqual(0, sum(_eval_python_nodes(df).values()))
+                    on = _optimized_type(df)
                 with self.sql_conf(_TRANSPILE_OFF):
-                    off = self.spark.range(1).select(_arrow_udf(add_one, return_type)("id")).schema
+                    off = _optimized_type(
+                        self.spark.range(1).select(_arrow_udf(add_one, return_type)("id"))
+                    )
                 self.assertEqual(off, on)
 
     def test_config_toggled_after_construction_leaves_no_stale_nodes(self):

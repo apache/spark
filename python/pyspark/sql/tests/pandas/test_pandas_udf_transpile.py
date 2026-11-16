@@ -160,6 +160,10 @@ def combine(a, b):
     return a * b - 1
 
 
+def ten_a_plus_b(a, b):
+    return a * 10 + b
+
+
 def concat_bang(s):
     return s + "!"
 
@@ -235,6 +239,20 @@ def ternary_none_guard(s):
     return 0 if s is None else s
 
 
+def early_none_guard(s):
+    if s is None:
+        return 0
+    return s
+
+
+def not_is_none(s):
+    return not (s is None)  # noqa: E714
+
+
+def is_not_none_and(s):
+    return s is not None and s
+
+
 def branching(s):
     if s > 0:
         return 1
@@ -270,6 +288,11 @@ def isnull_of_expression(s):
 def constant_body(s):
     # Returns a Python int, not a Series: the interpreted path fails with UDF_RETURN_TYPE.
     return 1
+
+
+def string_constant(s):
+    # A str has a length, so the interpreted path fails the row count check instead.
+    return "ab"
 
 
 def bare_return(s):
@@ -637,19 +660,23 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
         # UserDefinedFunction.__call__ resolves kwargs to positional order using the parameter
         # names captured at transpilation time; without that the JVM would splice
         # NamedArgumentExpression nodes into the rewritten tree. Shared with the other eval
-        # types but not otherwise covered for any of them, which is why it lives here.
+        # types but not otherwise covered for any of them, which is why it lives here. The body
+        # is not symmetric in its arguments, so a swapped binding changes the rows, and the plan
+        # check catches a call that was never rewritten.
         df = self.spark.createDataFrame(
             self.spark.sparkContext.parallelize([(2, 3), (None, 4)], 1), "a bigint, b bigint"
         )
         with self.sql_conf(_TRANSPILE_ON):
-            pudf = self._pandas_udf(combine, LongType())
-            self._assert_transpiled(pudf, "combine")
-            on = [r[0] for r in df.select(pudf(b=df["b"], a=df["a"])).collect()]
+            pudf = self._pandas_udf(ten_a_plus_b, LongType())
+            self._assert_transpiled(pudf, "ten_a_plus_b")
+            called = df.select(pudf(b=df["b"], a=df["a"]))
+            self.assertEqual(0, sum(_eval_python_nodes(called).values()))
+            on = [r[0] for r in called.collect()]
         with self.sql_conf(_TRANSPILE_OFF):
-            pudf = self._pandas_udf(combine, LongType())
+            pudf = self._pandas_udf(ten_a_plus_b, LongType())
             off = [r[0] for r in df.select(pudf(b=df["b"], a=df["a"])).collect()]
         self.assertEqual(off, on)
-        self.assertEqual([5, None], on)
+        self.assertEqual([23, None], on)
 
 
 class PandasUDFTranspileRefusalTests(PandasUDFTranspileTestsMixin, ReusedSQLTestCase):
@@ -687,15 +714,29 @@ class PandasUDFTranspileRefusalTests(PandasUDFTranspileTestsMixin, ReusedSQLTest
         # Interpreted this returns `s` unchanged and never raises: the Series object is not
         # None. A rewrite to CASE WHEN isnull(a) THEN 0 would turn NULLs into 0.
         self._assert_falls_back(
-            ternary_none_guard, LongType(), self._longs(1, None), "a", expect_reason="an `if`"
+            ternary_none_guard, LongType(), self._longs(1, None), "a", expect_reason="an `is` test"
         )
+
+    def test_none_test_inside_control_flow_reports_the_is_test(self):
+        # What `if`, `not` and `and` test here is a plain bool, so the ValueError reason is wrong.
+        for func, reason in (
+            (early_none_guard, "an `is` test"),
+            (not_is_none, "an `is` test"),
+            (is_not_none_and, "an `is not` test"),
+        ):
+            with self.subTest(func=func.__name__):
+                self._assert_falls_back(
+                    func, LongType(), self._longs(1, None), "a", expect_reason=reason
+                )
 
     def test_control_flow_falls_back_and_still_raises(self):
         # `if <series>:` raises ValueError interpreted. The rewrite must not turn that into a
         # working query -- _assert_falls_back checks the failure survives.
         for func in (branching, logical_not, logical_and):
             with self.subTest(func=func.__name__):
-                self._assert_falls_back(func, LongType(), self._longs(1, None), "a")
+                self._assert_falls_back(
+                    func, LongType(), self._longs(1, None), "a", expect_reason="ValueError"
+                )
 
     def test_unlowered_operator_falls_back(self):
         # `**`, `/` and `//` all fail the same `isinstance(op, _SERIES_SAFE_BINOPS)` check, so
@@ -724,6 +765,11 @@ class PandasUDFTranspileRefusalTests(PandasUDFTranspileTestsMixin, ReusedSQLTest
         for func in (constant_body, bare_return, bool_constant):
             with self.subTest(func=func.__name__):
                 self._assert_falls_back(func, LongType(), self._longs(1), "a")
+
+    def test_string_constant_body_reports_a_python_scalar(self):
+        self._assert_falls_back(
+            string_constant, LongType(), self._longs(1), "a", expect_reason="a Python scalar"
+        )
 
     def test_free_variable_falls_back(self):
         self._assert_falls_back(
