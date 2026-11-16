@@ -650,10 +650,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
       ParquetVectorUpdater updater) {
 
     defLevels.reserveAdditional(total);
-    values.reserveAdditional(total);
+    // Reserve from 'state.valueOffset' rather than 'elementsAppended': the dictionary ids vector
+    // doesn't count values written by a PLAIN page earlier in the batch.
+    values.reserve(state.valueOffset + total);
     if (!valuesReused) {
       // 'nulls' is a separate column vector so we'll have to reserve it separately
-      nulls.reserveAdditional(total);
+      nulls.reserve(state.valueOffset + total);
     }
 
     int n = total;

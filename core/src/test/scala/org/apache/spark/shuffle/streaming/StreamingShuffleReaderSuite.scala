@@ -30,6 +30,7 @@ import org.apache.spark.internal.config.SHUFFLE_MANAGER_INCREMENTAL
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.shuffle.streaming.{DataMessage, StreamingShuffleMessage, TerminationControlMessage}
+import org.apache.spark.shuffle.ShuffleHandle
 import org.apache.spark.shuffle.streaming.StreamingShuffleManager.QUERY_ID_PROPERTY_KEY
 
 /**
@@ -140,30 +141,48 @@ class StreamingShuffleReaderSuite
     dataHandled should be(false)
   }
 
-  test("getReader routes to a StreamingShuffleReader wired with the given context") {
+  test("getReader routes to a StreamingShuffleReader wired with the given context and reduce " +
+      "partition") {
     // A construction/routing smoke test: the manager must dispatch to the streaming reader (not a
     // fallback shuffle reader), the reader must construct successfully (its constructor asserts the
     // output tracker, starts the task-discovery and client-creation executors, and registers the
-    // task-completion listener), and it must be wired with the context we passed in.
+    // task-completion listener), and it must be wired with the context we passed in. The task runs
+    // at partition 2 but reads reduce partition 1, as in a Union stage whose shuffled child is not
+    // its first child, so the reader must take its reduce partition from getReader.
     withSpark(new SparkContext("local", "StreamingShuffleReaderSuite", newConf())) { sc =>
       SparkEnv.get.streamingShuffleOutputTracker.get
         .asInstanceOf[StreamingShuffleOutputTrackerMaster]
-        .registerShuffle(shuffleId = 0, numMaps = 1, numReduces = 1, jobId = 0)
+        .registerShuffle(shuffleId = 0, numMaps = 1, numReduces = 2, jobId = 0)
       val rdd = sc.parallelize(1 to 4).map(x => (x, x))
-      val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(1))
+      val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(2))
       val handle = new StreamingShuffleHandle(0, dep)
-      val context = createTaskContext(sc.conf, 0)
+      val context = createTaskContext(sc.conf, 2)
       try {
         val reader = new StreamingShuffleManager()
-          .getReader[Int, Int](handle, 0, 1, 0, 1, context, null)
+          .getReader[Int, Int](handle, 0, 1, 1, 2, context, null)
         reader shouldBe a[StreamingShuffleReader[_, _]]
         val streamingReader = reader.asInstanceOf[StreamingShuffleReader[_, _]]
         streamingReader.context should be theSameInstanceAs context
+        streamingReader.reducePartitionId should be(1)
       } finally {
         // Constructing the reader starts a background task-discovery thread; the task-completion
         // listener (cleanupResources) shuts it down.
         context.markTaskCompleted(None)
       }
     }
+  }
+
+  test("getReader rejects a range of more than one reduce partition") {
+    // A reader connects to the writers as a single reduce partition, so it cannot serve a range.
+    // The check runs before the reader is constructed, so no SparkEnv is needed.
+    val handle = new ShuffleHandle(0) {}
+    val e = intercept[SparkException] {
+      new StreamingShuffleManager().getReader[Int, Int](handle, 0, 1, 0, 2, null, null)
+    }
+    checkError(
+      e,
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> ("Streaming shuffle 0 must be read one reduce partition at a " +
+        "time, but got reduce partitions [0, 2)")))
   }
 }

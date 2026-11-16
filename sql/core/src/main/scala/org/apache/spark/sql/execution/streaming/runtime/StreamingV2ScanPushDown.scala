@@ -28,7 +28,7 @@ import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{ExternalLookupJoinEligibility, MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, EqualNullSafe, EqualTo, Expression, ExpressionSet, ExprUtils, Generator, LeafExpression, Literal, NamedExpression, Or, OrderUtils, OuterReference, PredicateHelper, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -431,10 +431,11 @@ private[sql] object StreamingV2ScanPushDown
   }
 
   // A predicate that is false for the nodes of the lookup sides of the external lookup joins of
-  // `plan`, which `forStartup` keeps whole.
+  // `plan` and the definitions of the common table expressions that they read, which `forStartup`
+  // keeps whole.
   private def isNotLookupSideOf(plan: LogicalPlan): TreePatternBits => Boolean = {
     val lookupSides = Collections.newSetFromMap(new IdentityHashMap[LogicalPlan, java.lang.Boolean])
-    ExternalLookupJoinStartupCheck.lookupSidePlans(plan).foreach(_.foreach(lookupSides.add))
+    ExternalLookupJoinEligibility.lookupSidePlans(plan).foreach(_.foreach(lookupSides.add))
     node => !lookupSides.contains(node)
   }
 

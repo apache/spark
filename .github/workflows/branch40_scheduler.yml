@@ -49,6 +49,7 @@ jobs:
   schedule:
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_CRON: *maven_cron

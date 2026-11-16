@@ -4422,6 +4422,24 @@ class FunctionsTestsMixin:
         # Value from DataFrameFunctionsSuite.scala
         self.assertEqual(result_128[0][0], "9e947f00ecd6acb2244da40f405c870e")
 
+    def test_farm_fingerprint(self):
+        """Test farm_fingerprint function"""
+        df = self.spark.createDataFrame([("Spark",), ("",), (None,)], ["data"])
+        result = df.select(F.farm_fingerprint("data")).collect()
+
+        # Values from HashExpressionsSuite.scala
+        self.assertEqual(result[0][0], -2743780590904673122)  # "Spark"
+        self.assertEqual(result[1][0], -7286425919675154353)  # empty string
+        self.assertIsNone(result[2][0])  # null
+
+        df_binary = self.spark.createDataFrame([(bytearray([1, 2, 3, 4, 5, 6]),)], ["data"])
+        result_binary = df_binary.select(F.farm_fingerprint("data")).collect()
+        self.assertEqual(result_binary[0][0], 8673355959317488908)
+
+        # Matches BigQuery FARM_FINGERPRINT('1footrue').
+        df_bq = self.spark.createDataFrame([("1footrue",)], ["data"])
+        self.assertEqual(df_bq.select(F.farm_fingerprint("data")).first()[0], -1541654101129638711)
+
 
 class FunctionsTests(FunctionsTestsMixin, ReusedSQLTestCase):
     pass
