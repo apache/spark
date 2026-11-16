@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
 
 import org.apache.spark.SparkException
@@ -101,9 +103,9 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
-    val initEvaluator = path.foldable match {
-      case true if path.eval() != null =>
-        val cachedPath = path.eval().asInstanceOf[UTF8String]
+    val foldablePath = ExprUtils.tryEvalFoldable(path)
+    val initEvaluator = foldablePath match {
+      case Some(cachedPath) if cachedPath != null =>
         val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
         s"new $evaluatorClass($refCachedPath)"
       case _ => s"new $evaluatorClass()"
@@ -122,7 +124,7 @@ case class GetJsonObject(json: Expression, path: Expression)
          |  $evaluator.setJson(${jsonEval.value});
          |}
          |""".stripMargin
-    val setPath = if (!path.foldable) {
+    val setPath = if (foldablePath.isEmpty) {
       s"""
          |if (${pathEval.isNull}) {
          |  $evaluator.setPath(null);
@@ -2023,9 +2025,15 @@ abstract class JsonPathExpressionBuilder extends ExpressionBuilder {
     val pathExpr = expressions(1)
     pathExpr.dataType match {
       case _: StringType if pathExpr.foldable =>
-        // TODO(SPARK-59244): wrap eval() so a foldable-but-throwing path re-throws as a clean
-        // invalid-argument analysis error naming `path`.
-        val pathValue = pathExpr.eval()
+        // A foldable path can still fail to evaluate (e.g. `element_at(array('$.a'), 0)`); report
+        // it as an invalid `path` argument, keeping the runtime error as the cause.
+        val pathValue =
+          try pathExpr.eval()
+          catch {
+            case NonFatal(e) =>
+              throw QueryCompilationErrors.cannotEvaluateParameterError(
+                funcName, "path", pathExpr, e)
+          }
         if (pathValue == null) {
           throw QueryCompilationErrors.unexpectedNullError("path", pathExpr)
         }

@@ -23,7 +23,10 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
 
 /**
  * A mix-in for a {@link ScanBuilder} that can serve parameterized lookups. The builder may also
- * implement the column-pruning and filter-pushdown mix-ins.
+ * implement the column-pruning and filter-pushdown mix-ins. For a lookup scan, Spark evaluates
+ * every lookup-side filter again on the returned rows, including the filters that the source
+ * reports as pushed, so the source may return rows that fail them. It may omit only rows that
+ * fail a filter that it reports as pushed, as {@link ExternalLookupReader#lookupBatch} says.
  * <p>
  * Spark may also plan a lookup when a streaming query starts, up to
  * {@link ExternalLookup#createReaderFactory()}, and discard the result.
@@ -41,15 +44,37 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. Spark offers
    * {@code =} and {@code <=>} only on a lookup column of an integral type, BOOLEAN, DECIMAL, DATE,
    * TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR whose collation compares bytes, such
-   * as UTF8_BINARY. It offers no comparison on VARCHAR under
-   * {@code spark.sql.charVarchar.standardSemantics.enabled}, and never one on FLOAT, DOUBLE, CHAR,
-   * a string with another collation, a complex type or any other type. For example:
+   * as UTF8_BINARY. It offers {@code <}, {@code <=}, {@code >} and {@code >=} only on a lookup
+   * column of an integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the
+   * parameter cannot fail to evaluate. When a selected predicate is a range comparison whose
+   * parameter reads a stream column, each request holds exactly one parameter row. It offers no
+   * comparison on VARCHAR under {@code spark.sql.charVarchar.standardSemantics.enabled}, and never
+   * one on FLOAT, DOUBLE, CHAR, a string with another collation, a complex type or any other type.
+   * For example:
    * <pre>{@code
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
    *   returned:   [event_time >= ?, tenant = ?]
    *   => each parameter row is (event_time lower bound, tenant);
    *      event_time < ? and region = ? stay in Spark's join condition
    * }</pre>
+   * Selecting a range comparison ({@code <}, {@code <=}, {@code >} or {@code >=}) whose parameter
+   * reads a stream column sends one parameter row per request and, currently, disables Spark's
+   * cache for that join. A source should leave a range comparison unselected when serving the
+   * lookup without it costs less, for example when the equality keys repeat often enough that
+   * batching and the cache would absorb most requests. An unselected comparison still applies:
+   * Spark evaluates it on the returned rows, as it does {@code event_time < ?} above.
+   * <p>
+   * A comparison of a lookup column with a constant, such as {@code t.tier >= 2}, from the join
+   * condition or from a filter above an inner join, goes onto the lookup side as for an ordinary
+   * join. A source that supports filter pushdown receives it as a pushed filter before this method
+   * is called when Spark can translate it into a source filter, as it can a comparison with a
+   * literal. Spark keeps one that it cannot translate, such as a comparison with a constant that a
+   * Scala UDF computes. Spark also offers an equality with a constant here, whatever form the
+   * constant takes, with a constant parameter, so that a source that needs it in its access path,
+   * as the constant tenant of a composite key, can select it whether or not it accepts the pushed
+   * filter. It offers a range only when its constant cannot fail to evaluate, as above, so a range
+   * with a constant that a Scala UDF computes is neither offered nor pushed. In every case, Spark
+   * evaluates the comparison again on every returned row.
    * <ul>
    *   <li>The result must be non-null and hold offered instances, unchanged, without nulls or
    *   duplicates. Spark matches them by identity, not {@code equals}.</li>
@@ -58,9 +83,10 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   appear in several predicates, as range bounds do.</li>
    *   <li>Spark evaluates every selected predicate again on each returned row and drops a row
    *   that fails it, so extra rows do no harm. Spark cannot recover a missing row: for each
-   *   parameter row, the source must return every row that satisfies all selected predicates under
-   *   Spark semantics. Do not select a predicate that the source cannot evaluate that way, and do
-   *   not select unsupported names or shapes.</li>
+   *   parameter row, the source must return every row that passes the filters this source reports
+   *   as pushed and satisfies all selected predicates under Spark semantics, as
+   *   {@link ExternalLookupReader#lookupBatch} defines. Do not select a predicate that the source
+   *   cannot evaluate that way, and do not select unsupported names or shapes.</li>
    *   <li>An empty result means no access path fits; the query then fails.</li>
    *   <li>The input array and its elements are read-only.</li>
    * </ul>
@@ -68,12 +94,14 @@ public interface SupportsExternalLookup extends ScanBuilder {
    * pushdown and before column pruning. Besides filter pushdown and column pruning, Spark calls
    * no pushdown method on a lookup builder (aggregate, limit, top-N, offset, sample, join or
    * variant). Spark passes only whole top-level columns to {@code pruneColumns}, never nested
-   * fields. The selection must survive {@code pruneColumns} and {@link #build()}. For example,
-   * with a streaming {@code s}:
+   * fields. Spark always keeps the columns that the selected predicates read in the pruned schema,
+   * because it evaluates the predicates on them. So returned rows must carry the stored values of
+   * those columns. The selection must survive {@code pruneColumns} and {@link #build()}. For
+   * example, with a streaming {@code s}:
    * <pre>{@code
    *   SELECT s.*, t.name FROM s JOIN t ON t.id = s.id
-   *   => selected [id = ?], then pruneColumns(<name>), so readSchema() includes name;
-   *      the connector must still look up by id
+   *   => selected [id = ?], then pruneColumns(<id, name>);
+   *      Spark keeps id because it evaluates id = ? on every returned row
    * }</pre>
    */
   Predicate[] selectLookupPredicates(Predicate[] candidates);

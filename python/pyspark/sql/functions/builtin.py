@@ -15252,6 +15252,41 @@ def xxh3_128(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def farm_fingerprint(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit fingerprint of the argument, computed with the FarmHash Fingerprint64
+    algorithm.
+
+    The result matches ``FARM_FINGERPRINT`` in BigQuery / GoogleSQL and does not change across
+    Spark versions, so it is safe to persist. String input is hashed as its UTF-8 bytes.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to fingerprint, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.farm_fingerprint('a').alias('h')).collect()
+    [Row(h=-2743780590904673122)]
+    """
+    return _invoke_function_over_columns("farm_fingerprint", col)
+
+
+@_try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 
