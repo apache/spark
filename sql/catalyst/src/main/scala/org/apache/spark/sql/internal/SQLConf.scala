@@ -4265,7 +4265,9 @@ object SQLConf {
         "finalize. Before Spark 4.4, a weaker check that ignored the direction of each " +
         "watermark admitted some of these joins. The conf also controls the start-time check " +
         "that rejects an append-mode aggregation after a stream-stream join whose event time " +
-        "comes from an input the join cannot bound.")
+        "comes from an input the join cannot bound. The check judges the nearest stream-stream " +
+        "join that the event time reaches; an aggregation behind a later join is not rejected " +
+        "yet and keeps running without emitting results.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
