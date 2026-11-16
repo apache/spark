@@ -15,8 +15,8 @@ either one is sufficient.
 New instructions go in `AGENTS.md` or the `.agents/` directory beside it. When adding instructions
 to a directory that has neither file, create `AGENTS.md` as the real file and add a `CLAUDE.md`
 symlink beside it (`ln -s AGENTS.md CLAUDE.md`). After editing agent docs, run
-`dev/agent_docs_lint.py`: it checks the pairing, the pointers, and Codex's 32 KiB budget for each
-root-to-directory chain.
+`dev/agent_docs_lint.py --strict`, which CI also runs: it checks the pairing, the pointers, and
+Codex's 32 KiB budget for each root-to-directory chain.
 
 ## Pre-flight Checks
 

@@ -24,18 +24,28 @@ depend on:
 
   pairing   Each directory with agent instructions has both names, one a symlink to the
             other, as the root AGENTS.md asks. Codex reads AGENTS.md and ignores CLAUDE.md
-            by default; Claude Code reads CLAUDE.md. Two real files let the two tools follow
-            different instructions, and a missing name can leave one tool without them.
+            by default. Claude Code reads AGENTS.md only when no CLAUDE.md exists in the
+            working directory or above it, so once the root has a CLAUDE.md, a nested
+            directory with only an AGENTS.md is skipped. Two real files let the two tools
+            follow different instructions.
   codex-cap Codex concatenates AGENTS.md from the repo root down to its working directory
             into one budget of project_doc_max_bytes (32768 by default), filled root first,
             and silently truncates past it. Every root-to-directory chain must fit.
   budget    Soft size targets that keep always-loaded instructions small: the root file
             and nested files. Detail belongs in a sibling .agents/ directory behind a
-            pointer.
+            pointer. Warnings only.
   pointers  Every `.agents/...`, `AGENTS.md` or `CLAUDE.md` path quoted in an instruction
             file, including the files under .agents/, resolves to an existing file.
 
+Known failures that cannot be fixed yet (e.g. vendored third-party docs) can be exempted in
+an optional exceptions file, dev/agent_docs_lint_exceptions.txt by default. Each line is
+`<check> <subject>`, where the subject is what the error names: the directory for pairing,
+the file where truncation starts for codex-cap, and `<file> <target>` for pointers. `#`
+starts a comment. Exempted errors are still reported but do not fail --strict. An entry that
+no longer matches any error is itself an error, so the list only shrinks as files are fixed.
+
 Report-only by default; pass --strict to exit non-zero on errors (not on budget warnings).
+CI runs it with --strict.
 
     $ dev/agent_docs_lint.py
     $ dev/agent_docs_lint.py --strict --only codex-cap
@@ -52,6 +62,8 @@ CODEX_CAP = 32768
 ROOT_BUDGET = 8 * 1024
 NESTED_BUDGET = 4 * 1024
 CHECKS = ("pairing", "codex-cap", "budget", "pointers")
+EXEMPTIBLE = ("pairing", "codex-cap", "pointers")
+EXCEPTIONS_FILE = "dev/agent_docs_lint_exceptions.txt"
 NAMES = ("AGENTS.md", "CLAUDE.md", "AGENTS.override.md")
 POINTER_RE = re.compile(r"`((?:[\w.-]+/)*(?:\.agents/[\w./-]+\.md|AGENTS\.md|CLAUDE\.md))`")
 
@@ -88,6 +100,10 @@ def size(path):
         return len(f.read())
 
 
+# Each check returns (errors, warnings). An error is a (subject, message) pair; the subject is
+# what an exceptions-file entry names to exempt it.
+
+
 def check_pairing(dirs):
     errors = []
     for d, names in sorted(dirs.items()):
@@ -95,26 +111,27 @@ def check_pairing(dirs):
         agents = os.path.join(d, "AGENTS.md")
         claude = os.path.join(d, "CLAUDE.md")
         if "AGENTS.md" not in names:
-            errors.append(
-                f"{shown}: no AGENTS.md (found {', '.join(sorted(names))}). Make AGENTS.md the "
-                "real file and CLAUDE.md a symlink to it"
+            msg = (
+                f"no AGENTS.md (found {', '.join(sorted(names))}). Make AGENTS.md the real "
+                "file and CLAUDE.md a symlink to it"
             )
-            continue
-        if not os.path.isfile(agents):
-            errors.append(f"{shown}: AGENTS.md is a dangling symlink")
-            continue
-        if "CLAUDE.md" not in names:
-            errors.append(
-                f"{shown}: only AGENTS.md; add a CLAUDE.md symlink to it "
-                "(ln -s AGENTS.md CLAUDE.md)"
+        elif not os.path.isfile(agents):
+            msg = "AGENTS.md is a dangling symlink"
+        elif "CLAUDE.md" not in names:
+            msg = (
+                "only AGENTS.md; add a CLAUDE.md symlink to it (ln -s AGENTS.md CLAUDE.md). "
+                "By default Claude Code skips it when a CLAUDE.md exists in or above its "
+                "working directory"
             )
-            continue
-        if os.path.realpath(claude) != os.path.realpath(agents):
-            errors.append(
-                f"{shown}: AGENTS.md and CLAUDE.md are different files; Claude Code reads "
-                "CLAUDE.md and Codex reads AGENTS.md. Keep one real file and make the other a "
+        elif os.path.realpath(claude) != os.path.realpath(agents):
+            msg = (
+                "AGENTS.md and CLAUDE.md are different files, so Claude Code and Codex can "
+                "follow different instructions. Keep one real file and make the other a "
                 "symlink to it"
             )
+        else:
+            continue
+        errors.append((shown, f"{shown}: {msg}"))
     return errors, []
 
 
@@ -141,10 +158,11 @@ def check_codex_cap(dirs):
     errors = []
     for cut_in, chains in sorted(cuts.items()):
         worst = max(chains, key=lambda c: c[1])
-        errors.append(
+        msg = (
             f"{cut_in}: Codex truncates here in {len(chains)} chain(s); worst is "
             f"{worst[0]} at {worst[1]} bytes, {worst[1] - CODEX_CAP} bytes never seen"
         )
+        errors.append((cut_in, msg))
     return errors, []
 
 
@@ -176,10 +194,36 @@ def check_pointers(files):
         with open(f, encoding="utf-8", errors="replace") as fh:
             for lineno, line in enumerate(fh, 1):
                 for target in POINTER_RE.findall(line):
+                    if "..." in target.split("/"):
+                        continue  # An elided path such as `a/.../AGENTS.md`, not a pointer.
                     candidates = [os.path.normpath(os.path.join(b, target)) for b in bases]
                     if not any(os.path.exists(c) for c in candidates):
-                        errors.append(f"{f}:{lineno}: pointer to missing file `{target}`")
+                        msg = f"{f}:{lineno}: pointer to missing file `{target}`"
+                        errors.append((f"{f} {target}", msg))
     return errors, []
+
+
+def load_exceptions(path):
+    """Returns ({check: {subject: lineno}}, errors) for the exceptions file, if it exists."""
+    exceptions = defaultdict(dict)
+    errors = []
+    if not os.path.isfile(path):
+        return exceptions, errors
+    with open(path, encoding="utf-8") as f:
+        for lineno, raw in enumerate(f, 1):
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            check, _, subject = line.partition(" ")
+            subject = " ".join(subject.split())
+            if check not in EXEMPTIBLE or not subject:
+                errors.append(
+                    f"{path}:{lineno}: expected `<check> <subject>` with <check> one of "
+                    f"{', '.join(EXEMPTIBLE)}"
+                )
+                continue
+            exceptions[check][subject] = lineno
+    return exceptions, errors
 
 
 def main():
@@ -189,6 +233,11 @@ def main():
     ap.add_argument("--strict", action="store_true", help="exit 1 if any check reports an error")
     ap.add_argument(
         "--only", choices=CHECKS, action="append", help="run only this check (repeatable)"
+    )
+    ap.add_argument(
+        "--exceptions",
+        default=EXCEPTIONS_FILE,
+        help=f"exceptions file, relative to the repo root (default: {EXCEPTIONS_FILE})",
     )
     args = ap.parse_args()
     os.chdir(repo_root())
@@ -206,13 +255,36 @@ def main():
         "budget": lambda: check_budget(files),
         "pointers": lambda: check_pointers(files + details),
     }
-    total_errors = 0
+    exceptions, malformed = load_exceptions(args.exceptions)
+    total_errors = len(malformed)
+    if malformed:
+        print(f"== exceptions: {len(malformed)} error(s)")
+        for e in malformed:
+            print(f"  ERROR {e}")
     for name in args.only or CHECKS:
         errors, warnings = runners[name]()
-        total_errors += len(errors)
-        print(f"== {name}: {len(errors)} error(s), {len(warnings)} warning(s)")
-        for e in errors:
-            print(f"  ERROR {e}")
+        exempt = exceptions.get(name, {})
+        failing = [(s, m) for s, m in errors if s not in exempt]
+        exempted = [m for s, m in errors if s in exempt]
+        matched = {s for s, _ in errors}
+        stale = [
+            f"{args.exceptions}:{lineno}: stale exception `{name} {s}`; it matches no error, "
+            "so remove it"
+            for s, lineno in sorted(exempt.items(), key=lambda e: e[1])
+            if s not in matched
+        ]
+        total_errors += len(failing) + len(stale)
+        print(
+            f"== {name}: {len(failing) + len(stale)} error(s), {len(exempted)} exempted, "
+            f"{len(warnings)} warning(s)"
+        )
+        for s, m in failing:
+            print(f"  ERROR {m}")
+            print(f"        (to exempt a known failure, add `{name} {s}` to {args.exceptions})")
+        for m in stale:
+            print(f"  ERROR {m}")
+        for m in exempted:
+            print(f"  EXEMPT {m}")
         for w in warnings:
             print(f"  WARN  {w}")
     print(f"{len(dirs)} directories, {len(files) + len(details)} files checked")

@@ -93,6 +93,7 @@ ignored_file_patterns = (
     ".pre-commit-config.yaml",
     "/dev/.rat-excludes",
     "/dev/.scalafmt.conf",
+    "/dev/agent_docs_lint.py",
     "/dev/check_pyspark_custom_errors.py",
     "/dev/check-license",
     "/dev/check-protos.py",
@@ -118,7 +119,6 @@ ignored_file_patterns = (
     "/scalastyle-config.xml",
     # Maintainer tools.
     "/dev/*gen-protos.sh",
-    "/dev/agent_docs_lint.py",
     "/dev/change-scala-version.sh",
     "/dev/create_jira_and_branch.py",
     "/dev/create_spark_jira.py",
