@@ -19,18 +19,13 @@ package org.apache.spark.sql.execution.python
 
 import java.io.File
 import java.nio.file.Files
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import com.google.common.util.concurrent.Uninterruptibles
-import org.apache.arrow.c.{ArrowArray, ArrowSchema, BaseStruct}
-import org.apache.arrow.util.AutoCloseables
-import org.apache.arrow.vector.{BaseFixedWidthVector, BaseLargeVariableWidthVector, BaseVariableWidthVector, ValueVector, VectorSchemaRoot}
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
@@ -38,13 +33,10 @@ import org.apache.spark.memory.MemoryConsumer
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, PythonUDF, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 /**
@@ -55,6 +47,14 @@ import org.apache.spark.util.Utils
  *
  * The evaluator owns its queue, so that cleanup at task completion is coordinated with a
  * consumer on another thread, such as a pipelined Python writer or a TRANSFORM feed thread.
+ *
+ * The iterator of the evaluator pulls the input rows and returns the output rows. It leaves
+ * the rest to three collaborators:
+ *  - [[InProcessArrowBatchExporter]] writes the UDF arguments to Arrow batches, exports them
+ *    to Python and imports the results.
+ *  - a row queue buffers the input rows that are joined with the results.
+ *  - [[InProcessArrowEvalPythonEvaluatorFactory.IteratorResources]] coordinates the release
+ *    of both at task completion.
  */
 class InProcessArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
@@ -120,7 +120,7 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       inputSchema: StructType,
       context: TaskContext,
       joinInput: InProcessArrowEvalPythonEvaluatorFactory.JoinInput): Iterator[InternalRow] = {
-    import InProcessArrowEvalPythonEvaluatorFactory.{Buffered, ReadBack, dataBytes, roundedDensity}
+    import InProcessArrowEvalPythonEvaluatorFactory.{Buffered, ReadBack}
     ArrowUtils.failDuplicatedFieldNames(inputSchema)
     val functions = funcs.map { case (chain, _) =>
       if (chain.funcs.size != 1) {
@@ -129,7 +129,6 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       }
       chain.funcs.head
     }
-    val inputOrdinals = argMetas.map(_.map(_.offset))
     def checkCancellation(): Unit = context.killTaskIfInterrupted()
 
     val expectedFields = udfs.map { udf =>
@@ -195,33 +194,15 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       case ReadBack => (null, null)
     }
     val joined = new JoinedRow
-    val handles = functions.map(_ => UUID.randomUUID().toString)
-    var registered = false
-    var writer: ArrowWriter = null
-    val results = ArrayBuffer.empty[ArrowColumnVector]
-
-    def closeBatch(): Unit = {
-      val resources = ArrayBuffer.empty[AutoCloseable]
-      resources ++= results
-      results.clear()
-      if (writer != null) {
-        resources += writer.root
-        writer = null
-      }
-      AutoCloseables.close(resources.asJava)
-    }
+    val exporter = new InProcessArrowBatchExporter(runtime, functions, argMetas, expectedFields,
+      arrowSchema, joinInput == ReadBack, hideTraceback, simplifiedTraceback,
+      tracebackWithLocals, fullValidation, metrics, context)
 
     val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
       releaseTaskMemory = () => if (queue != null) queue.close(),
       abandonTaskMemory = () => if (queue != null) queue.abandon(),
       recordTime = nanos => metrics("pythonTotalTime") += nanos,
-      releaseOthers = () => {
-        Utils.tryWithSafeFinally {
-          closeBatch()
-        } {
-          if (registered) runtime.release(handles)
-        }
-      })
+      releaseOthers = () => exporter.close())
 
     context.addTaskCompletionListener[Unit](_ => resources.close())
 
@@ -285,9 +266,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
       // Runs Python without the lock unless task completion already happened, adds the
       // nanoseconds it took to `metric`, and ends the input if task completion happened
       // meanwhile.
-      private def python(metric: SQLMetric)(body: => Long): Unit = {
+      private val python: InProcessArrowBatchExporter.PythonCall = (metric, call) => {
         if (resources.isClosed) endOfInput
-        metric += resources.withoutLock(body)
+        metric += resources.withoutLock(call())
         if (resources.isClosed) endOfInput
       }
 
@@ -310,104 +291,21 @@ class InProcessArrowEvalPythonEvaluatorFactory(
         if (!open) endOfInput
         if (row == null) return false
         if (queue != null) queue.add(row.asInstanceOf[UnsafeRow])
-        writer.write(if (projection != null) projection(row) else row)
+        exporter.write(if (projection != null) projection(row) else row)
         true
       }
 
       // Called with the lock held.
       private def nextBatch(): Unit = {
-        // Each batch needs buffers of its own, which Python may retain, but sizing flat vectors
-        // like the previous batch's avoids growing them from Arrow's defaults row by row.
-        // Nested vectors keep the defaults, since Arrow sizes their children per record.
-        val capacities = if (writer == null) Seq.empty else {
-          writer.root.getFieldVectors.asScala.map(v => (v.getValueCount, dataBytes(v))).toSeq
-        }
-        closeBatch()
-        val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
-        capacities.zip(root.getFieldVectors.asScala).foreach { case ((count, bytes), v) =>
-          if (count > 0) v match {
-            case v: BaseFixedWidthVector => v.setInitialCapacity(count)
-            case v: BaseVariableWidthVector if bytes > 0 =>
-              v.setInitialCapacity(count, roundedDensity(count, bytes, Int.MaxValue))
-            case v: BaseLargeVariableWidthVector if bytes > 0 =>
-              v.setInitialCapacity(count, roundedDensity(count, bytes, Long.MaxValue))
-            case _ =>
-          }
-        }
-        writer = try {
-          ArrowWriter.create(root)
-        } catch {
-          case t: Throwable => Utils.tryWithSafeFinally { throw t } { root.close() }
-        }
+        exporter.startBatch()
         // Task completion stops the fill within a row, and Python never sees a partial batch.
-        var count = 0
-        while ((batchSize <= 0 || count < batchSize) &&
-            (count == 0 || writer.sizeInBytes() < maxBytes) && {
+        while ((batchSize <= 0 || exporter.rowCount < batchSize) &&
+            (exporter.rowCount == 0 || exporter.sizeInBytes < maxBytes) && {
               checkCancellation()
               pullRow()
-            }) {
-          count += 1
-        }
+            }) {}
         if (resources.isClosed) endOfInput
-        if (!registered) {
-          // Mark before registering so failure after any registration still cleans up.
-          registered = true
-          functions.indices.foreach { i =>
-            val func = functions(i)
-            python(metrics("pythonInitTime"))(runtime.register(handles(i), func.command.toArray,
-              expectedFields(i), func.pythonVer, hideTraceback, simplifiedTraceback,
-              tracebackWithLocals, fullValidation))
-          }
-        }
-        writer.finish()
-        metrics("pythonDataSent") += writer.sizeInBytes()
-
-        handles.indices.foreach { udfIndex =>
-          val handle = handles(udfIndex)
-          val ordinals = inputOrdinals(udfIndex)
-          checkCancellation()
-          // Register each acquired resource immediately, including partially exported
-          // inputs and results of earlier UDFs if a later UDF throws.
-          val structs = ArrayBuffer.empty[AutoCloseable]
-          def track[S <: BaseStruct](struct: S): S = {
-            val closer: AutoCloseable = () => InProcessArrowBridge.closeStruct(struct)
-            structs += closer
-            struct
-          }
-          def array(): ArrowArray = track(ArrowArray.allocateNew(ArrowUtils.rootAllocator))
-          def schema(): ArrowSchema = track(ArrowSchema.allocateNew(ArrowUtils.rootAllocator))
-          Utils.tryWithSafeFinally {
-            val inArrays = ordinals.map(_ => array())
-            val inSchemas = ordinals.map(_ => schema())
-            val outArray = array()
-            val outSchema = schema()
-            ordinals.indices.foreach { i =>
-              InProcessArrowBridge.exportColumn(
-                writer.root.getVector(ordinals(i)), inArrays(i), inSchemas(i))
-            }
-            python(metrics("pythonProcessingTime"))(runtime.invoke(
-              handle,
-              inArrays.map(_.memoryAddress()).toArray,
-              inSchemas.map(_.memoryAddress()).toArray,
-              outArray.memoryAddress(), outSchema.memoryAddress(),
-              count, argMetas(udfIndex).map(_.name.getOrElse(""))))
-            results += InProcessArrowBridge.cdiToColumn(
-              outArray, outSchema, Some(expectedFields(udfIndex)))
-            metrics("pythonDataReceived") += results.last.getValueVector.getBufferSize
-          } {
-            AutoCloseables.close(structs.asJava)
-          }
-        }
-
-        metrics("pythonNumRowsReceived") += count
-        // Input vectors are closed with the writer's root, not with the results.
-        val inputs = if (joinInput == ReadBack) {
-          writer.root.getFieldVectors.asScala.map(new ArrowColumnVector(_))
-        } else {
-          Nil
-        }
-        val columns = (inputs ++ results).toArray[ColumnVector]
-        batchIter = new ColumnarBatch(columns, count).rowIterator().asScala
+        batchIter = exporter.evaluate(python)
       }
     }
   }
@@ -429,21 +327,6 @@ private[python] object InProcessArrowEvalPythonEvaluatorFactory {
    * copies element by element out of Arrow, but with a single copy out of an unsafe row, and
    * decimals, which Arrow reads back through a `BigDecimal` per value.
    */
-  /** The bytes of values in a variable-width vector, or 0 for any other vector. */
-  private[python] def dataBytes(vector: ValueVector): Long = vector match {
-    case v: BaseVariableWidthVector => math.round(v.getDensity * v.getValueCount)
-    case v: BaseLargeVariableWidthVector => math.round(v.getDensity * v.getValueCount)
-    case _ => 0L
-  }
-
-  /**
-   * The density for `setInitialCapacity` that allocates `bytes` rounded up to a power of two,
-   * as Arrow rounds smaller requests, so that a slightly larger batch does not reallocate and
-   * copy its data on its last rows. Arrow truncates `count * density`, hence the half byte.
-   */
-  private[python] def roundedDensity(count: Int, bytes: Long, maxBytes: Long): Double =
-    (math.min(ByteArrayMethods.nextPowerOf2(bytes), maxBytes) + 0.5) / count
-
   def readsBack(dataType: DataType): Boolean = dataType match {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
         FloatType | DoubleType | BinaryType | DateType | TimestampType | TimestampNTZType => true
