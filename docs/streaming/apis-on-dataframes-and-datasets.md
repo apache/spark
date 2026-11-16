@@ -1457,9 +1457,11 @@ Additional details on supported joins:
 
 - For stream-stream outer and semi joins, an equality key counts as the time constraint in the
   table above when it is the other input's event time, or that event time shifted by constant
-  intervals, such as `leftTime = rightTime + INTERVAL 10 MINUTES`. A key shifted backward by
-  months, years, or a day-time interval of 24 hours or more, such as
-  `leftTime = rightTime - INTERVAL 1 DAY` or `leftTime = rightTime - INTERVAL 36 HOURS`, or
+  intervals, such as `leftTime = rightTime + INTERVAL 10 MINUTES`. A shift with months, years,
+  or a day-time interval of 24 hours or more counts only when it can never move a time backward,
+  counting each such day as at least 12 hours and each month as at least 28 such days, as in
+  `leftTime = rightTime + INTERVAL 1 DAY - INTERVAL 1 HOUR`. A key such as
+  `leftTime = rightTime - INTERVAL 1 DAY` or `leftTime = rightTime - INTERVAL 36 HOURS`, or one
   truncated from the other input's event time, such as
   `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`, does not count, while
   `timestampadd` in hours, minutes or seconds does, whatever the amount. When both inputs

@@ -29,10 +29,14 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   right input and a time condition that limits how late a matching right row can arrive.
   Right outer joins require the corresponding settings on the left; full outer joins require
   them on both sides. An equality key counts as such a time condition when it is the other
-  input's event time, or that event time shifted by constant intervals, except a shift backward
-  by months, years, or a day-time interval of 24 hours or more. A key such as
-  `leftTime = rightTime - INTERVAL 1 DAY` or `leftTime = rightTime - INTERVAL 36 HOURS`, or one
-  truncated from the other input's event time, such as
+  input's event time, or that event time shifted by constant intervals, except a shift with
+  months, years, or a day-time interval of 24 hours or more that can move a time backward. To
+  decide this without the session time zone, Spark counts each such day as at least 12 hours and
+  each month as at least 28 such days, so `leftTime = rightTime + INTERVAL 1 DAY - INTERVAL 1 HOUR`
+  counts. A key such as `leftTime = rightTime - INTERVAL 1 DAY`,
+  `leftTime = rightTime - INTERVAL 36 HOURS` or
+  `leftTime = rightTime + INTERVAL 1 DAY - INTERVAL 13 HOURS`, or one truncated from the other
+  input's event time, such as
   `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`, does not count, while
   `timestampadd` in hours, minutes or seconds does, whatever the amount. When both inputs
   have watermarks, a time range condition between the two event times can bound such a join
@@ -45,8 +49,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   how late a matching left row can arrive: an equality with an exact shift (an interval under
   one day, or `timestampadd` in hours, minutes or seconds), or a range condition in place of a
   shifted equality. Without them, the join holds back its output
-  watermark, and the query fails at start (see below) because the aggregation would never emit
-  results.
+  watermark, and an append-mode aggregation right after the join, with no later stream-stream
+  join in between, fails at start (see below) because it would never emit results.
 
 - Since Spark 4.4, a time condition can finalize an input that has no watermark of its own, such
   as impressions without a watermark joined on
@@ -73,30 +77,40 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   matches arrived or output unmatched rows too early. Such joins with a watermark on only one
   input now keep the watermarked input's rows for the life of the query, because the other input
   has no watermark that bounds them, and hold back the join's output watermark for that input.
-  An append-mode aggregation over that input's event time then fails at start. Other stateful
-  operators after the join that use it keep its rows in state and do not emit results that wait
-  for the watermark, such as event-time timeouts, while update-mode aggregations and
-  deduplication still emit rows. Add a watermark on the other input to bound those rows.
+  An append-mode aggregation right after the join, with no later stream-stream join in between,
+  over that input's event time then fails at start. Other stateful operators after the join that
+  use it keep its rows in state and do not emit results that wait for the watermark, such as
+  event-time timeouts and an aggregation behind a later stream-stream join, while update-mode
+  aggregations and deduplication still emit rows. Add a watermark on the other input to bound
+  those rows.
 
 - With `spark.sql.streaming.statefulOperator.allowMultiple` set to `false`, an input of a
   stream-stream join can keep several watermarked columns, such as its event time together with a
   copy of it or a time window over it, and late rows are filtered by whichever of them comes
-  first. As in earlier versions, an equality key on any watermarked column of an input bounds the
-  other input's state, so an input built with `withColumn("window", window($"ts", ...))` is still
-  bounded by its window. Since Spark 4.4, such a key no longer bounds state when Spark can see
-  that some rows of the input hold the key below a watermarked column before it: when the key is
-  built from a time shifted backward, when it copies a column that an earlier watermarked window
-  is built over, or when an input of a union builds it from another column. Earlier versions
-  removed rows that could still match in these cases. A copy placed after a window needs this
-  because the query filters late rows by the first watermarked column of the planned input, and
-  whether the copied column survives column pruning, which analysis cannot see, decides whether
-  that is the copy's source or the window. If the optimizer prunes the column, rows are filtered
-  by the window, and evicting by the copy drops rows that can still match. Outer and left semi
-  joins on such a key now fail, and inner joins keep the other input's rows for the life of the
-  query. To bound state, join on the first watermarked column itself or on a time window over it,
-  or select the key before the other watermarked columns of its input. Checkpoints from earlier
-  versions of joins on a watermarked column after the first one are rejected at restart, as
-  described below.
+  first in the planned input. As in earlier versions, an equality key on any watermarked column
+  of an input bounds the other input's state, so a join on the window of an input built with
+  `withColumn("window", window($"ts", ...))` still bounds the other input's state by that
+  window. Since Spark 4.4,
+  when Spark can see that some rows of the input hold the key below a watermarked column before
+  it, the key bounds the other input's state at the watermark less that amount: the shift for a
+  key built from a time shifted backward by a fixed interval, and the window's length for a copy
+  of, or a window over, a column that an earlier watermarked window is built over. Earlier
+  versions removed rows that could still match in these cases. Which column filters late rows
+  depends on column pruning: a copy placed after a window is filtered by its source when the
+  query reads the source after the join, and by the window otherwise. Analysis takes the largest
+  amount over the watermarked columns that can come first, and execution the amount for the one
+  that does, so the other input keeps its rows, and an outer join outputs its unmatched rows, up
+  to that amount later. A key that rows can hold below by an amount that Spark cannot bound no
+  longer bounds state: one built from a time shifted backward by whole days, months or years,
+  one that copies a column that an earlier session window with a gap that is not constant is
+  built over, and one that an input of a union builds from a column without a watermark. Outer
+  and left semi joins on such a key now fail, and inner joins keep the other input's rows for the
+  life of the query. To bound state, join on the first watermarked column itself or on a time
+  window over it, or select the key before the other watermarked columns of its input. A range
+  condition on a watermarked column after the first one bounds state at that column's watermark
+  less the same amount, but only when Spark can see how the column is built from the ones before
+  it. Checkpoints from earlier versions of joins on a watermarked column after the first one are
+  rejected at restart, as described below.
 
 - Spark 4.4 holds back the output watermark of a stream-stream join when retained state can
   still emit old event times. Downstream stateful operators may retain more state, take longer
@@ -114,8 +128,12 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   Since Spark 4.4, a query fails at start with `STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME`
   when an append-mode aggregation after a stream-stream join uses the event time of a join input
   whose state the join cannot bound, because that aggregation would never emit results. The
-  error names the input and the missing watermark or time constraint. An aggregation in update
-  output mode, or one whose event time Spark cannot trace to a join input, is not rejected.
+  error names the input and the missing watermark or time constraint. Spark judges the
+  aggregation against the nearest stream-stream join that its event time reaches. An aggregation
+  behind a later stream-stream join is not rejected yet (SPARK-61509): it starts and does not
+  emit results while an earlier join holds back its output watermark, as do event-time timeouts
+  and a later outer join. An aggregation in update output mode, or one whose event time Spark
+  cannot trace to a join input, is not rejected either.
 
 - When restarting a stream-stream join from an older Spark version, Spark may reject the
   existing checkpoint with `STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE`. Spark reuses the checkpoint
