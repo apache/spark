@@ -67,8 +67,13 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
   }
 
   /**
-   * Fills omitted generated values for UPDATE/MERGE. Regular INSERT uses WriteOutputResolution.
-   * Example: g = a * 2 with SET a = b + 1, b = 100 becomes (old.b + 1) * 2.
+   * Fills omitted generated-column assignments for UPDATE and MERGE actions, including INSERT
+   * actions within MERGE. Regular INSERT uses WriteOutputResolution instead.
+   *
+   * For g GENERATED ALWAYS AS (a * 2), UPDATE t SET a = b + 1, b = 100 must assign
+   * g = (old.b + 1) * 2. Resolve the generation expression against attributes for the new values,
+   * then substitute the aligned assignments while preserving their references to the original row.
+   * Explicitly supplied generated values pass through for validation against the final row.
    */
   def resolveGeneratedColumnAssignments(
       table: LogicalPlan,
