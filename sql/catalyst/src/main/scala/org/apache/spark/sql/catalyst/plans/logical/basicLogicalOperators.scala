@@ -848,9 +848,10 @@ case class Join(
     patterns
   }
 
-  // Ignore hint for canonicalization
+  // Ignore hint for canonicalization, and normalize the join type, see `JoinType.canonicalized`.
   protected override def doCanonicalize(): LogicalPlan =
-    super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+    super.doCanonicalize().asInstanceOf[Join].copy(
+      joinType = joinType.canonicalized, hint = JoinHint.NONE)
 
   // Do not include an empty join hint in string description
   protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
