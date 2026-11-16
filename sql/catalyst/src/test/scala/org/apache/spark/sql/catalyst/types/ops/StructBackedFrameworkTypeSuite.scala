@@ -21,20 +21,21 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateOrdering, GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, GenerateMutableProjection, GenerateOrdering, GeneratePredicate, GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.objects.{CatalystToExternalMap, MapObjects, UnresolvedCatalystToExternalMap}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStructType}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Test-only DataType used to validate that framework types work end-to-end through all
- * dispatch points (interpreted and codegen) by returning a raw PhysicalStructType.
+ * Test-only DataType backed by a struct: its physical type is a PhysicalStructType and its row
+ * representation is the matching StructType.
  *
  * This type has 2 fields: name (String, nullable) and value (Long, non-null).
  * The internal representation is InternalRow (same as StructType).
  */
-case class TestStructBackedType() extends DataType with TestableFrameworkType {
+case class TestStructBackedType() extends TestableFrameworkType {
   override def defaultSize: Int = 20
   override def asNullable: TestStructBackedType = this
   override def typeName: String = "test_struct_backed"
@@ -51,10 +52,11 @@ object TestStructBackedType {
 /**
  * Test-only TypeOps for TestStructBackedType.
  *
- * Returns PhysicalStructType(fields) as its physical type - this causes all row
- * infrastructure dispatchers (SpecializedGettersReader, InterpretedUnsafeProjection,
- * CodeGenerator, GenerateUnsafeProjection) to handle it as a struct automatically.
- * No PhysicalFrameworkDelegatedType or custom getValue/unsafeWrite needed.
+ * The sites that dispatch on the physical type (SpecializedGettersReader,
+ * InternalRow.getAccessor, InterpretedUnsafeProjection's field writers) handle the type through
+ * PhysicalStructType(fields). The sites that dispatch on the logical type (the code generation
+ * helpers, InternalRow.getWriter and InterpretedSafeProjection) handle it through its row
+ * representation, StructType(fields).
  */
 case class TestStructBackedTypeOps(override val dataType: TestStructBackedType)
     extends TypeOps {
@@ -99,12 +101,23 @@ case class TestStructBackedTypeOps(override val dataType: TestStructBackedType)
 }
 
 /**
- * Suite validating that framework types with struct-backed physical representation work
- * end-to-end through all dispatch points - both interpreted and codegen paths.
+ * A user-defined type stored as TestStructBackedType, to check that the dispatch sites look a
+ * framework type up again after unwrapping a UDT.
+ */
+class TestStructBackedUDT extends UserDefinedType[InternalRow] {
+  override def sqlType: DataType = TestStructBackedType()
+  override def serialize(obj: InternalRow): Any = obj
+  override def deserialize(datum: Any): InternalRow = datum.asInstanceOf[InternalRow]
+  override def userClass: Class[InternalRow] = classOf[InternalRow]
+}
+
+/**
+ * Suite for a framework type with a struct-backed physical representation, on the interpreted
+ * and the code generation paths.
  *
- * The key design principle: TypeOps.getPhysicalType returns the raw physical type
- * (PhysicalStructType). All dispatchers handle it automatically via PhysicalDataType
- * dispatch. No special PhysicalFrameworkDelegatedType or ops delegation needed.
+ * The readers and the interpreted unsafe writer reach the type through its physical type
+ * (PhysicalStructType). The code generation helpers, InternalRow.getWriter and
+ * InterpretedSafeProjection reach it through its row representation (StructType).
  */
 class StructBackedFrameworkTypeSuite extends SparkFunSuite {
 
@@ -173,7 +186,6 @@ class StructBackedFrameworkTypeSuite extends SparkFunSuite {
     val projection = new InterpretedUnsafeProjection(exprs)
     val unsafeRow = projection.apply(inputRow).copy()
 
-    // Read back - UnsafeRow.get dispatches through PhysicalStructType
     val result = unsafeRow.getStruct(0, 2)
     assert(result.getUTF8String(0).toString === "test")
     assert(result.getLong(1) === 123L)
@@ -390,5 +402,153 @@ class StructBackedFrameworkTypeSuite extends SparkFunSuite {
     val result = target.getStruct(0, 2)
     assert(result.getUTF8String(0).toString === "mutable")
     assert(result.getLong(1) === 7L)
+  }
+  // ==================== Layout Declarations ====================
+
+  test("registered framework types declare a consistent layout") {
+    val types = Seq(TimeType(6), TimestampNTZNanosType(9), TimestampLTZNanosType(9), testType)
+    types.foreach { dt =>
+      val ops = TypeOps(dt).get
+      ops.rowRepresentationType.foreach { rt =>
+        assert(TypeOps(rt).isEmpty, s"$dt: the row representation $rt must be a built-in type")
+        (PhysicalDataType(rt), ops.getPhysicalType) match {
+          case (PhysicalStructType(a), PhysicalStructType(b)) => assert(a.toSeq === b.toSeq)
+          case (a, b) => assert(a === b, s"$dt: the row representation $rt has another layout")
+        }
+      }
+      // The slot size GenerateUnsafeProjection uses for an array element of this type.
+      val slotSize = if (CodeGenerator.isPrimitiveType(dt)) dt.defaultSize else 8
+      assert(ops.getElementSize === slotSize, s"$dt")
+    }
+  }
+
+  // ==================== Reused UnsafeRow Input ====================
+
+  /**
+   * Runs `f` on an UnsafeRow holding `first`, then writes `second` into the same buffer, so
+   * that a result of `f` still pointing into the buffer reads `second` afterwards.
+   */
+  private def withReusedUnsafeInput[T](dt: DataType, first: Any, second: Any)(
+      f: UnsafeRow => T): T = {
+    val producer = UnsafeProjection.create(Array(dt))
+    val result = f(producer(new GenericInternalRow(Array[Any](first))))
+    producer(new GenericInternalRow(Array[Any](second)))
+    result
+  }
+
+  private def assertStruct(row: InternalRow, name: String, value: Long): Unit = {
+    assert(row.getUTF8String(0).toString === name)
+    assert(row.getLong(1) === value)
+  }
+
+  Seq(
+    "a struct-backed framework type" -> TestStructBackedType(),
+    "a UDT over a struct-backed framework type" -> new TestStructBackedUDT).foreach {
+    case (desc, dt) => Seq(true, false).foreach { codegen =>
+      test(s"safe projection copies $desc out of a reused UnsafeRow (codegen=$codegen)") {
+        val exprs = Seq(BoundReference(0, dt, nullable = true))
+        val projection = if (codegen) {
+          GenerateSafeProjection.generate(exprs)
+        } else {
+          InterpretedSafeProjection.createProjection(exprs)
+        }
+        val result =
+          withReusedUnsafeInput(dt, makeStructRow("one", 1L), makeStructRow("two", 2L)) {
+            input => projection(input).getStruct(0, 2)
+          }
+        assert(!result.isInstanceOf[UnsafeRow])
+        assertStruct(result, "one", 1L)
+      }
+
+      test(s"mutable projection copies $desc out of a reused UnsafeRow (codegen=$codegen)") {
+        val exprs = Seq(BoundReference(0, dt, nullable = true))
+        val projection = if (codegen) {
+          GenerateMutableProjection.generate(exprs)
+        } else {
+          InterpretedMutableProjection.createProjection(exprs)
+        }
+        val target = new GenericInternalRow(1)
+        projection.target(target)
+        withReusedUnsafeInput(dt, makeStructRow("one", 1L), makeStructRow("two", 2L)) {
+          input => projection(input)
+        }
+        assertStruct(target.getStruct(0, 2), "one", 1L)
+      }
+
+      test(s"unsafe projection round-trips an array of $desc (codegen=$codegen)") {
+        val arrayType = ArrayType(dt, containsNull = false)
+        val exprs = Seq(BoundReference(0, arrayType, nullable = false))
+        val projection = if (codegen) {
+          GenerateUnsafeProjection.generate(exprs)
+        } else {
+          InterpretedUnsafeProjection.createProjection(exprs)
+        }
+        val input = new GenericInternalRow(Array[Any](
+          new GenericArrayData(Array[Any](makeStructRow("a", 1L), makeStructRow("b", 2L)))))
+        val array = projection(input).getArray(0)
+        assert(array.numElements() === 2)
+        assertStruct(array.getStruct(0, 2), "a", 1L)
+        assertStruct(array.getStruct(1, 2), "b", 2L)
+      }
+    }
+  }
+
+  test("codegen: MapObjects copies framework type elements out of a reused UnsafeRow") {
+    val arrayType = ArrayType(testType, containsNull = false)
+    val mapObjects = MapObjects(
+      e => e, BoundReference(0, arrayType, nullable = false), testType,
+      elementNullable = false, customCollectionCls = Some(classOf[java.util.ArrayList[_]]))
+    val projection = GenerateSafeProjection.generate(Seq(mapObjects))
+    def array(name: String, value: Long): GenericArrayData =
+      new GenericArrayData(Array[Any](makeStructRow(name, value)))
+    val result = withReusedUnsafeInput(arrayType, array("one", 1L), array("two", 2L)) { input =>
+      projection(input).get(0, mapObjects.dataType).asInstanceOf[java.util.List[InternalRow]]
+    }
+    assertStruct(result.get(0), "one", 1L)
+  }
+
+  test("codegen: CatalystToExternalMap copies framework type values out of a reused UnsafeRow") {
+    val mapType = MapType(IntegerType, testType, valueContainsNull = false)
+    val toMap = CatalystToExternalMap(UnresolvedCatalystToExternalMap(
+      BoundReference(0, mapType, nullable = false), k => k, v => v,
+      classOf[scala.collection.immutable.Map[_, _]]))
+    val projection = GenerateSafeProjection.generate(Seq(toMap))
+    def map(name: String, value: Long): ArrayBasedMapData = new ArrayBasedMapData(
+      new GenericArrayData(Array[Any](1)),
+      new GenericArrayData(Array[Any](makeStructRow(name, value))))
+    val result = withReusedUnsafeInput(mapType, map("one", 1L), map("two", 2L)) { input =>
+      projection(input).get(0, toMap.dataType).asInstanceOf[Map[Int, InternalRow]]
+    }
+    assertStruct(result(1), "one", 1L)
+  }
+
+  // ==================== Other Code Generation Helpers ====================
+
+  test("codegen: equality compares framework type values like structs") {
+    val predicate = GeneratePredicate.generate(
+      EqualTo(BoundReference(0, testType, nullable = true),
+        BoundReference(1, testType, nullable = true)))
+    def row(a: InternalRow, b: InternalRow): InternalRow = new GenericInternalRow(Array[Any](a, b))
+    assert(predicate.eval(row(makeStructRow("a", 1L), makeStructRow("a", 1L))))
+    assert(!predicate.eval(row(makeStructRow("a", 1L), makeStructRow("b", 1L))))
+    assert(!predicate.eval(row(makeStructRow("a", 1L), makeStructRow("a", 2L))))
+  }
+
+  test("codegen: addBufferedState copies framework type values") {
+    Seq(testType, new TestStructBackedUDT).foreach { dt =>
+      val state = new CodegenContext().addBufferedState(dt, "buffered", "input")
+      assert(state.code.toString.contains("input.copy()"), s"$dt")
+    }
+  }
+
+  test("GenerateUnsafeProjection.canSupport accepts framework types and types holding them") {
+    Seq[DataType](
+      testType,
+      new TestStructBackedUDT,
+      ArrayType(testType),
+      MapType(testType, testType),
+      new StructType().add("f", testType)).foreach { dt =>
+      assert(GenerateUnsafeProjection.canSupport(dt), s"$dt")
+    }
   }
 }

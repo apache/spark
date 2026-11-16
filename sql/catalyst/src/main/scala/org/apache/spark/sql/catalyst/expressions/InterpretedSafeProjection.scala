@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -56,7 +57,12 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
     (exprs(i), f)
   }
 
-  private def generateSafeValueConverter(dt: DataType): Any => Any = dt match {
+  // A framework type with a row representation is converted as that representation.
+  private def generateSafeValueConverter(dt: DataType): Any => Any =
+    TypeOps(dt).flatMap(_.rowRepresentationType).map(generateSafeValueConverter)
+      .getOrElse(generateSafeValueConverterDefault(dt))
+
+  private def generateSafeValueConverterDefault(dt: DataType): Any => Any = dt match {
     case ArrayType(elemType, _) =>
       val elementConverter = generateSafeValueConverter(elemType)
       v => {

@@ -309,13 +309,12 @@ object InterpretedUnsafeProjection {
   private def getElementSize(dataType: DataType): Int =
     TypeOps(dataType).map(_.getElementSize).getOrElse(getElementSizeDefault(dataType))
 
-  @scala.annotation.tailrec
   private def getElementSizeDefault(dataType: DataType): Int = dataType match {
     case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
          _: AnyTimestampNanoType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case udt: UserDefinedType[_] =>
-      getElementSizeDefault(udt.sqlType)
+      getElementSize(udt.sqlType)
     case _ => dataType.defaultSize
   }
 

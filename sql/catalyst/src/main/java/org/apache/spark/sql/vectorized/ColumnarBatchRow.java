@@ -229,11 +229,11 @@ public final class ColumnarBatchRow extends InternalRow {
     } else if (dataType instanceof UserDefinedType<?> udt) {
       return get(ordinal, udt.sqlType());
     } else {
-      // Framework types: dispatch through PhysicalDataType which resolves the raw
-      // physical type (e.g., PhysicalStructType for struct-backed framework types).
-      // Gate on resolved type to preserve original error for truly unrecognized types.
+      // Read any other type that has a physical type through it: framework types (e.g. a
+      // struct-backed type as PhysicalStructType), and types not matched above, such as TIME
+      // and CalendarIntervalType. Types without a physical type, and NullType, keep the error.
       PhysicalDataType pdt = PhysicalDataType.apply(dataType);
-      if (pdt != UninitializedPhysicalType$.MODULE$) {
+      if (pdt != UninitializedPhysicalType$.MODULE$ && pdt != PhysicalNullType$.MODULE$) {
         return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
       }
       throw new SparkUnsupportedOperationException(

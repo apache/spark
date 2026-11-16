@@ -741,8 +741,8 @@ class CodegenContext extends Logging {
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
-    val resolved = TypeOps(dataType).flatMap(_.rowRepresentationType)
-      .getOrElse(UserDefinedType.sqlType(dataType))
+    val sqlType = UserDefinedType.sqlType(dataType)
+    val resolved = TypeOps(sqlType).flatMap(_.rowRepresentationType).getOrElse(sqlType)
     val code = resolved match {
       case _: StringType => code"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
@@ -2892,7 +2892,6 @@ object CodeGenerator extends Logging {
     TypeOps(dataType).flatMap(_.rowRepresentationType).map(setColumn(row, _, ordinal, value))
       .getOrElse(setColumnDefault(row, dataType, ordinal, value))
 
-  @tailrec
   private def setColumnDefault(
       row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
@@ -2902,7 +2901,7 @@ object CodeGenerator extends Logging {
       case _: TimestampNTZNanosType => s"$row.setTimestampNTZNanos($ordinal, $value)"
       case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      case udt: UserDefinedType[_] => setColumnDefault(row, udt.sqlType, ordinal, value)
+      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       // The UTF8String, BinaryView, InternalRow, ArrayData and MapData may came from UnsafeRow, we
       // should copy it to avoid keeping a "pointer" to a memory region which may get updated
       // afterwards.

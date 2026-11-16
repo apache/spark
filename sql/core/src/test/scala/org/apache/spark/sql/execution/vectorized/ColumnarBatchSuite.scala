@@ -2232,8 +2232,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   // TimeType is physically a long (nanoseconds since midnight); precision affects display only.
-  // The generic `get(int, DataType)` accessor is intentionally not extended for TimeType in this
-  // change (tracked separately), so values are read back via the typed `getLong` accessor.
+  // The generic `get(int, DataType)` accessor reads it through its physical type.
   Seq(0, 6, 7, 9).foreach { p =>
     val dt = TimeType(p)
     testVector(s"TIME(precision=$p)", 10, dt) {
@@ -2246,9 +2245,61 @@ class ColumnarBatchSuite extends SparkFunSuite {
         (0 until 10).foreach { i =>
           batchRow.rowId = i
           assert(batchRow.getLong(0) == values(i))
+          assert(batchRow.get(0, dt) == values(i))
           val batchRowCopy = batchRow.copy()
           assert(batchRowCopy.getLong(0) == values(i))
         }
+    }
+  }
+
+  test("SPARK-56076: generic get reads types that are not matched by name through their " +
+      "physical type") {
+    val interval = new CalendarInterval(1, 2, 3L)
+    val schema = new StructType().add("t", TimeType(6)).add("i", CalendarIntervalType)
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
+      val time = allocate(1, TimeType(6), mode)
+      val cal = allocate(1, CalendarIntervalType, mode)
+      val struct = allocate(1, schema, mode)
+      try {
+        time.putLong(0, 42L)
+        cal.putInterval(0, interval)
+        struct.getChild(0).putLong(0, 42L)
+        struct.getChild(1).asInstanceOf[WritableColumnVector].putInterval(0, interval)
+
+        val batchRow = new ColumnarBatchRow(Array(time, cal))
+        batchRow.rowId = 0
+        assert(batchRow.get(0, TimeType(6)) === 42L)
+        assert(batchRow.get(1, CalendarIntervalType) === interval)
+
+        val columnarRow = struct.getStruct(0)
+        assert(columnarRow.get(0, TimeType(6)) === 42L)
+        assert(columnarRow.get(1, CalendarIntervalType) === interval)
+
+        // Types without a physical type, and NullType, keep the original error.
+        val objectType = ObjectType(classOf[String])
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            batchRow.get(0, objectType)
+          },
+          condition = "_LEGACY_ERROR_TEMP_3152",
+          parameters = Map("dataType" -> objectType.toString))
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            batchRow.get(0, NullType)
+          },
+          condition = "_LEGACY_ERROR_TEMP_3152",
+          parameters = Map("dataType" -> NullType.toString))
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            columnarRow.get(0, objectType)
+          },
+          condition = "_LEGACY_ERROR_TEMP_3155",
+          parameters = Map("dataType" -> objectType.toString))
+      } finally {
+        time.close()
+        cal.close()
+        struct.close()
+      }
     }
   }
 

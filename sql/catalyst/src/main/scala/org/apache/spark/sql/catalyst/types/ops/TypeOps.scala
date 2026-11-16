@@ -54,16 +54,29 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  * }}}
  *
  * PHYSICAL TYPE CONTRACT: getPhysicalType must return the raw physical storage type (e.g.,
- * PhysicalLongType for Long-backed types, PhysicalStructType for struct-backed types). All
- * row infrastructure dispatchers (SpecializedGettersReader, InterpretedUnsafeProjection,
- * CodeGenerator, etc.) use PhysicalDataType dispatch and handle the raw type automatically.
+ * PhysicalLongType for Long-backed types, PhysicalStructType for struct-backed types). The
+ * row infrastructure reaches a framework type through one of two routes:
+ *   - Sites that dispatch on the physical type (SpecializedGettersReader,
+ *     InternalRow.getAccessor, CodeGenerator.getValue and javaType, the field writers of
+ *     InterpretedUnsafeProjection, ColumnarRow and ColumnarBatchRow) handle the raw type
+ *     through getPhysicalType.
+ *   - Sites that dispatch on the logical type (code generation for equality, comparison,
+ *     copies, safe and unsafe projections, InternalRow.getWriter and InterpretedSafeProjection)
+ *     handle a struct-, array- or map-backed type only through rowRepresentationType.
  * Logical conversion (raw value <-> external type) happens at boundaries via toScala/toCatalyst.
  *
  * IMPLEMENTATION - to add a new type to the framework:
  *   1. Create a case class extending the matching `*TypeApiOps` and mixing in `TypeOps`
  *      (e.g., `case class FooTypeOps(...) extends FooTypeApiOps(...) with TypeOps`)
- *   2. Register it in TypeOps.apply() below - single registration point
- *   3. No other file modifications needed - all integration points automatically work
+ *   2. Implement getPhysicalType and getElementSize. A struct-, array- or map-backed type
+ *      also overrides rowRepresentationType with the built-in type matching its physical
+ *      type. Without it, the logical-type sites treat its values as opaque objects: they are
+ *      not copied out of reused UnsafeRow buffers, and equality and unsafe projection code
+ *      generation fail.
+ *   3. Register it in TypeOps.apply() below - single registration point
+ *
+ * Column vectors (WritableColumnVector, ConstantColumnVector) do not yet build child vectors
+ * for a struct-, array- or map-backed framework type.
  *
  * @see
  *   TimeTypeOps for a reference implementation
@@ -77,12 +90,14 @@ trait TypeOps extends TypeApiOps {
    * Returns the physical data type representation.
    *
    * Determines how values are stored in memory and accessed from InternalRow. Must return the
-   * raw physical type (e.g., PhysicalLongType, PhysicalStructType) - not a wrapper. All row
-   * infrastructure dispatchers match on PhysicalDataType and handle these types automatically,
-   * including both interpreted and whole-stage codegen paths.
+   * raw physical type (e.g., PhysicalLongType, PhysicalStructType) - not a wrapper. Sites that
+   * dispatch on PhysicalDataType handle these types through it, on both the interpreted and
+   * the code generation paths; see the trait documentation for the sites that use
+   * [[rowRepresentationType]] instead.
    *
    * For struct-backed types, return PhysicalStructType(fields) where fields describes the
-   * physical struct layout. The internal representation will be InternalRow.
+   * physical struct layout. The internal representation will be InternalRow, and
+   * [[rowRepresentationType]] must return StructType(fields).
    *
    * @return
    *   PhysicalDataType (e.g., PhysicalLongType for TimeType, PhysicalStructType for a
@@ -120,6 +135,9 @@ trait TypeOps extends TypeApiOps {
 
   /**
    * Returns a writer function for setting values in an InternalRow.
+   *
+   * Not used by InternalRow.getWriter for a type with a [[rowRepresentationType]], which is
+   * written as that representation.
    *
    * @param ordinal
    *   the column index to write to
@@ -161,10 +179,11 @@ trait TypeOps extends TypeApiOps {
    * hint for row infrastructure internals.
    *
    * IMPORTANT: Must return a built-in DataType (StructType, ArrayType, MapType) - never
-   * another framework type. Infrastructure sites recurse through this method, and returning
-   * a framework type would cause infinite recursion. Must also be consistent with
-   * [[getPhysicalType]] - e.g., if getPhysicalType returns PhysicalStructType(fields),
-   * rowRepresentationType should return StructType(fields).
+   * another framework type. Some sites look the representation up only once, so they would
+   * treat a framework type returned here as an opaque object and skip its copy. Must also be
+   * consistent with [[getPhysicalType]] - e.g., if getPhysicalType returns
+   * PhysicalStructType(fields), rowRepresentationType must return StructType(fields), whose
+   * physical type is the same.
    *
    * @return Some(DataType) for complex-backed types, None for primitive-backed types
    */
@@ -307,15 +326,19 @@ object TypeOps {
 }
 
 /**
- * Marker trait for test-only DataTypes that participate in the Types Framework.
+ * Base class for test-only DataTypes that participate in the Types Framework.
  *
- * Test DataTypes implement this trait to register themselves with TypeOps.apply()
+ * Test DataTypes extend this class to register themselves with TypeOps.apply()
  * without requiring mutable global state. Each test type carries its own TypeOps
  * factory, making this safe for concurrent test execution (SBT parallel tests).
  *
- * Production types (TimeType, the nanosecond timestamp types, etc.) do NOT use this trait -
+ * This is a class rather than a trait so that its arm in TypeOps.apply() is a class check
+ * like the others: TypeOps.apply() runs per value on some interpreted paths, and a failing
+ * interface check can cost more than a failing class check.
+ *
+ * Production types (TimeType, the nanosecond timestamp types, etc.) do NOT use this class -
  * they are registered directly in the TypeOps.apply() match.
  */
-private[ops] trait TestableFrameworkType {
+private[ops] abstract class TestableFrameworkType extends DataType {
   def createTypeOps(): TypeOps
 }

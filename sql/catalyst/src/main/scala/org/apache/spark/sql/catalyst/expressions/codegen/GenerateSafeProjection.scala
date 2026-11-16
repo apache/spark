@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
@@ -144,7 +142,6 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     TypeOps(dataType).flatMap(_.rowRepresentationType).map(convertToSafe(ctx, input, _))
       .getOrElse(convertToSafeDefault(ctx, input, dataType))
 
-  @tailrec
   private def convertToSafeDefault(
       ctx: CodegenContext,
       input: ExprValue,
@@ -152,7 +149,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case s: StructType => createCodeForStruct(ctx, input, s)
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
-    case udt: UserDefinedType[_] => convertToSafeDefault(ctx, input, udt.sqlType)
+    case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
     case _ => ExprCode(FalseLiteral, input)
   }
 

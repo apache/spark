@@ -37,12 +37,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   case class Schema(dataType: DataType, nullable: Boolean)
 
   /** Returns true iff we support this data type. */
-  def canSupport(dataType: DataType): Boolean =
-    TypeOps(dataType).flatMap(_.rowRepresentationType).map(canSupport)
-      .getOrElse(canSupportDefault(dataType))
+  def canSupport(dataType: DataType): Boolean = {
+    val sqlType = UserDefinedType.sqlType(dataType)
+    TypeOps(sqlType).flatMap(_.rowRepresentationType).map(canSupport)
+      .getOrElse(canSupportDefault(sqlType))
+  }
 
-  private def canSupportDefault(
-      dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
+  private def canSupportDefault(dataType: DataType): Boolean = dataType match {
     case NullType => true
     case _: AnyTimestampNanoType => true
     case _: AtomicType => true
