@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.connector.catalog.ValidatingInMemoryTableCatalog
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `CREATE NAMESPACE` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
 

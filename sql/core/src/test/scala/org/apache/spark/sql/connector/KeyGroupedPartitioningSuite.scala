@@ -54,7 +54,7 @@ import org.apache.spark.sql.execution.{
   WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec, PlannedScan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
@@ -66,7 +66,7 @@ import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSuiteBase {
@@ -662,7 +662,7 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
   }
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningSuite
   extends KeyGroupedPartitioningSuiteBase with ExplainSuiteHelper with SQLMetricsTestUtils {
   private val functions = Seq(
@@ -2631,12 +2631,11 @@ class KeyGroupedPartitioningSuite
           }
         }
         try {
-          // A new `PlannedScan` makes the copy plan the connector's replacement partitions, and a
-          // rewritten runtime filter makes it distinct for tree replacement, while the true literal
-          // leaves those partitions unchanged.
+          // A case-class copy plans the connector's replacement partitions, and a rewritten runtime
+          // filter makes it distinct for tree replacement, while the true literal leaves those
+          // partitions unchanged.
           inMemoryScan.data = newData
-          val rebuilt = leftScan.copy(plannedScan = new PlannedScan(leftScan.scan),
-            runtimeFilters = Seq(Literal.TrueLiteral))
+          val rebuilt = leftScan.copy(runtimeFilters = Seq(Literal.TrueLiteral))
           assert(rebuilt.outputPartitioning.numPartitions == replacementKeys.size)
           assert(rebuilt.outputPartitioning != leftScan.outputPartitioning ||
             replacementKeys == Seq(1, 2))
@@ -12788,7 +12787,7 @@ class KeyGroupedPartitioningSuite
  * Runs the runtime filtering tests against a catalog whose scans take runtime filters as connector
  * predicates, via [[org.apache.spark.sql.connector.read.SupportsRuntimeFiltering]].
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningRuntimeFilterSuite
   extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
 
@@ -12803,7 +12802,7 @@ class KeyGroupedPartitioningRuntimeFilterSuite
  * single identity partition column they filter themselves in place on `=` and `IN`, so one node's
  * runtime filter prunes a scan it shares with another node (SPARK-60752).
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningV2FilterRuntimeFilterSuite
   extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
 
@@ -12820,7 +12819,7 @@ class KeyGroupedPartitioningV2FilterRuntimeFilterSuite
  * expressions, via
  * [[org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering]].
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class KeyGroupedPartitioningCatalystRuntimeFilterSuite
   extends KeyGroupedPartitioningSuiteBase with KeyGroupedPartitioningRuntimeFilterTests {
 

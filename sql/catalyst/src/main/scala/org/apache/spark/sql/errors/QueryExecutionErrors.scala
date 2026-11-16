@@ -3879,6 +3879,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters: Map[String, String] = Map.empty): Throwable = {
     new SparkRuntimeException(
       errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
-      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
+      messageParameters = Map("table" -> toSQLFreeFormId(table)) ++ messageParameters)
   }
 }
