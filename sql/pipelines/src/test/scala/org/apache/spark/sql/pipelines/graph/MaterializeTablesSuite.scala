@@ -22,6 +22,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
@@ -1117,13 +1119,17 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   /**
-   * Materializes a single streaming table under the recording catalog/namespace with the given
-   * schema and properties.
+   * Materializes a single streaming table with the given schema, properties and comment. By
+   * default the table lives under the recording catalog/namespace; pass `catalog = None` and
+   * `database = None` to materialize it in the session catalog's default test database instead.
    */
   private def materializeStreamingTable(
       name: String,
       schema: StructType,
-      properties: Map[String, String]): Unit = {
+      properties: Map[String, String],
+      comment: Option[String] = None,
+      catalog: Option[String] = Option(recordingCatalogName),
+      database: Option[String] = Option(recordingNamespace)): Unit = {
     // All nulls dummy row, compatible with any schema type
     val row = Row.fromSeq(Seq.fill(schema.length)(null))
     val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(row)), schema)
@@ -1133,13 +1139,20 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           name,
           query = Option(dfFlowFunc(df)),
           specifiedSchema = Option(schema),
+          comment = comment,
           properties = properties,
-          catalog = Option(recordingCatalogName),
-          database = Option(recordingNamespace)
+          catalog = catalog,
+          database = database
         )
       }.resolveToDataflowGraph(),
       storageRoot = storageRoot
     )
+  }
+
+  /** The session catalog's metadata for a table in the default test database. */
+  private def sessionCatalogTable(name: String): CatalogTable = {
+    spark.sessionState.catalog.getTableMetadata(
+      TableIdentifier(name, Option(TestGraphRegistrationContext.DEFAULT_DATABASE)))
   }
 
   private def recordingCatalog: RecordingInMemoryTableCatalog =
@@ -1638,21 +1651,56 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
-  test("SPARK-57670: re-materializing with all properties dropped removes them") {
+  test("SPARK-57670: re-materializing with all properties dropped removes them and the record " +
+    "in one alterTable") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)
       materializeStreamingTable("t", schema, Map("p.a" -> "1", "p.b" -> "2"))
+      recordingCatalog.recordedAlters.clear()
+
       materializeStreamingTable("t", schema, Map.empty)
+      assert(recordingCatalog.recordedAlters.size == 1)
+      val changes = recordingCatalog.recordedAlters.head
+      assert(changes.forall(_.isInstanceOf[TableChange.RemoveProperty]))
+      assert(changes.collect { case r: TableChange.RemoveProperty => r.property() }.toSet ==
+        Set("p.a", "p.b", PipelinesTableProperties.declaredPropertyKeys))
 
       val props = loadTableFromRecordingCatalog("t").properties()
       assert(!props.containsKey("p.a"))
       assert(!props.containsKey("p.b"))
-      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == "[]")
+      assert(!props.containsKey(PipelinesTableProperties.declaredPropertyKeys))
 
       // The table is now in sync with its definition, so re-materializing is a no-op.
       recordingCatalog.recordedAlters.clear()
       materializeStreamingTable("t", schema, Map.empty)
       assert(recordingCatalog.recordedAlters.isEmpty)
+    }
+  }
+
+  test("SPARK-57670: a definition without table properties writes no declared-keys record") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable("t", schema, Map.empty)
+      assert(!loadTableFromRecordingCatalog("t").properties()
+        .containsKey(PipelinesTableProperties.declaredPropertyKeys))
+    }
+  }
+
+  test("SPARK-57670: a table without properties and without a record is re-materialized " +
+    "without an alterTable") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable("t", schema, Map.empty)
+      // Stand in for a table materialized before the record was introduced.
+      spark.sql(
+        s"ALTER TABLE $recordingCatalogName.$recordingNamespace.t UNSET TBLPROPERTIES IF EXISTS " +
+        s"('${PipelinesTableProperties.declaredPropertyKeys}')")
+      recordingCatalog.recordedAlters.clear()
+
+      materializeStreamingTable("t", schema, Map.empty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
+      assert(!loadTableFromRecordingCatalog("t").properties()
+        .containsKey(PipelinesTableProperties.declaredPropertyKeys))
     }
   }
 
@@ -1704,6 +1752,172 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       .properties()
     assert(!props.containsKey("p.stale"))
     assert(props.get("p.keep") == "v")
+  }
+
+  test("SPARK-57670: a dropped comment declared as a table property is removed") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable(
+        "t", schema, Map("p.a" -> "1", TableCatalog.PROP_COMMENT -> "old"))
+      assert(
+        loadTableFromRecordingCatalog("t").properties().get(TableCatalog.PROP_COMMENT) == "old")
+
+      materializeStreamingTable("t", schema, Map("p.a" -> "1"))
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(!props.containsKey(TableCatalog.PROP_COMMENT))
+      assert(props.get("p.a") == "1")
+      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""")
+    }
+  }
+
+  test("SPARK-57670: a comment moved from the table properties to the comment field stays") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable("t", schema, Map(TableCatalog.PROP_COMMENT -> "kept"))
+      recordingCatalog.recordedAlters.clear()
+
+      materializeStreamingTable("t", schema, Map.empty, comment = Option("kept"))
+      // The definition still supplies the comment, so only the record goes away.
+      assert(recordingCatalog.recordedAlters.flatten.map {
+        case r: TableChange.RemoveProperty => r.property()
+        case other => other.toString
+      } == Seq(PipelinesTableProperties.declaredPropertyKeys))
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(props.get(TableCatalog.PROP_COMMENT) == "kept")
+      assert(!props.containsKey(PipelinesTableProperties.declaredPropertyKeys))
+    }
+  }
+
+  test("SPARK-57670: a dropped reserved key other than comment declared as a table property " +
+    "stays on the table") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable(
+        "t", schema, Map("p.a" -> "1", TableCatalog.PROP_OWNER -> "someone"))
+      assert(loadTableFromRecordingCatalog("t").properties()
+        .get(PipelinesTableProperties.declaredPropertyKeys) == """["owner","p.a"]""")
+
+      materializeStreamingTable("t", schema, Map("p.a" -> "1"))
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(props.get(TableCatalog.PROP_OWNER) == "someone")
+      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""")
+    }
+  }
+
+  test("SPARK-57670: a dropped comment declared as a table property is removed on the session " +
+    "catalog") {
+    val schema = new StructType().add("id", IntegerType)
+    materializeStreamingTable(
+      "t", schema, Map(TableCatalog.PROP_COMMENT -> "old"), catalog = None, database = None)
+    assert(sessionCatalogTable("t").comment.contains("old"))
+
+    materializeStreamingTable("t", schema, Map.empty, catalog = None, database = None)
+    assert(sessionCatalogTable("t").comment.isEmpty)
+    assert(!sessionCatalogTable("t").properties.contains(TableCatalog.PROP_COMMENT))
+
+    // A comment the definition keeps supplying through its comment field stays.
+    materializeStreamingTable(
+      "t", schema, Map(TableCatalog.PROP_COMMENT -> "again"), catalog = None, database = None)
+    assert(sessionCatalogTable("t").comment.contains("again"))
+    materializeStreamingTable(
+      "t", schema, Map.empty, comment = Option("again"), catalog = None, database = None)
+    assert(sessionCatalogTable("t").comment.contains("again"))
+  }
+
+  test("SPARK-57670: table comments survive the declared-keys bootstrap and removal alters") {
+    val schema = new StructType().add("id", IntegerType)
+    def materialize(properties: Map[String, String]): Unit = {
+      materializeStreamingTable(
+        "declared", schema, properties, comment = Option("declared comment"),
+        catalog = None, database = None)
+      materializeStreamingTable("external", schema, properties, catalog = None, database = None)
+    }
+    def checkComments(): Unit = {
+      assert(sessionCatalogTable("declared").comment.contains("declared comment"))
+      assert(sessionCatalogTable("external").comment.contains("external comment"))
+    }
+    val db = s"${TestGraphRegistrationContext.DEFAULT_CATALOG}." +
+      TestGraphRegistrationContext.DEFAULT_DATABASE
+
+    materialize(Map("p.keep" -> "v", "p.stale" -> "old"))
+    // A comment set outside the pipeline.
+    spark.sql(s"COMMENT ON TABLE $db.external IS 'external comment'")
+    // Stand in for tables materialized before the record was introduced.
+    Seq("declared", "external").foreach { name =>
+      spark.sql(
+        s"ALTER TABLE $db.$name UNSET TBLPROPERTIES " +
+        s"('${PipelinesTableProperties.declaredPropertyKeys}')")
+    }
+    checkComments()
+
+    // The run whose only change is writing the record on the otherwise unchanged tables.
+    materialize(Map("p.keep" -> "v", "p.stale" -> "old"))
+    checkComments()
+    assert(sessionCatalogTable("declared").properties
+      .get(PipelinesTableProperties.declaredPropertyKeys).contains("""["p.keep","p.stale"]"""))
+
+    // The run whose only change is dropping a recorded key.
+    materialize(Map("p.keep" -> "v"))
+    checkComments()
+    assert(!sessionCatalogTable("declared").properties.contains("p.stale"))
+    assert(!sessionCatalogTable("external").properties.contains("p.stale"))
+    assert(sessionCatalogTable("external").properties.get("p.keep").contains("v"))
+  }
+
+  test("SPARK-57670: a malformed declared-keys record removes nothing and is rewritten") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      Seq("t1" -> "not-json", "t2" -> """["p.stale", 1]""").foreach { case (name, malformed) =>
+        materializeStreamingTable(name, schema, Map("p.a" -> "1", "p.stale" -> "old"))
+        spark.sql(
+          s"ALTER TABLE $recordingCatalogName.$recordingNamespace.$name SET TBLPROPERTIES " +
+          s"('${PipelinesTableProperties.declaredPropertyKeys}' = '$malformed')")
+
+        materializeStreamingTable(name, schema, Map("p.a" -> "1"))
+        val props = loadTableFromRecordingCatalog(name).properties()
+        assert(props.get("p.stale") == "old", s"record: $malformed")
+        assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""",
+          s"record: $malformed")
+      }
+    }
+  }
+
+  test("SPARK-57670: declaring the same keys in a different order issues no alterTable") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      materializeStreamingTable("t", schema, Map("p.b" -> "2", "p.a" -> "1"))
+      assert(loadTableFromRecordingCatalog("t").properties()
+        .get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a","p.b"]""")
+      recordingCatalog.recordedAlters.clear()
+
+      materializeStreamingTable("t", schema, Map("p.a" -> "1", "p.b" -> "2"))
+      assert(recordingCatalog.recordedAlters.isEmpty)
+      assert(loadTableFromRecordingCatalog("t").properties()
+        .get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a","p.b"]""")
+    }
+  }
+
+  test("SPARK-57670: declared keys that need JSON escaping round-trip through the record") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      val quoted = "p.\"quoted\""
+      val backslash = "p.back\\slash"
+      val separators = "p,comma[bracket]"
+      materializeStreamingTable(
+        "t", schema, Map(quoted -> "1", backslash -> "2", separators -> "3"))
+      val record = loadTableFromRecordingCatalog("t").properties()
+        .get(PipelinesTableProperties.declaredPropertyKeys)
+      assert(record == """["p,comma[bracket]","p.\"quoted\"","p.back\\slash"]""")
+      assert(JsonStringArrayCodec.parse(record).contains(Seq(separators, quoted, backslash)))
+
+      materializeStreamingTable("t", schema, Map(separators -> "3"))
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(!props.containsKey(quoted))
+      assert(!props.containsKey(backslash))
+      assert(props.get(separators) == "3")
+      assert(JsonStringArrayCodec.parse(props.get(PipelinesTableProperties.declaredPropertyKeys))
+        .contains(Seq(separators)))
+    }
   }
 }
 

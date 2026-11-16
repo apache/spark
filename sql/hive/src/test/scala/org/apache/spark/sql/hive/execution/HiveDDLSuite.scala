@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
@@ -3640,6 +3640,37 @@ class HiveDDLSuite
       verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
       verify(spyCatalog, times(1)).alterTableSchema(
         any[String], any[String], any[StructType])
+    }
+  }
+
+  test("SPARK-57670: V2SessionCatalog alterTable keeps the table comment on a Hive catalog") {
+    val v2SessionCatalog = new V2SessionCatalog(spark.sessionState.catalog)
+    withTable("t1") {
+      val identifier = Identifier.of(Array("default"), "t1")
+      v2SessionCatalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(Map(TableCatalog.PROP_COMMENT -> "table comment").asJava)
+          .withColumns(CatalogV2Util.structTypeToV2Columns(new StructType().add("a", IntegerType)))
+          .withPartitions(Array.empty)
+          .build()
+      )
+      // The Hive metastore stores the comment as a table parameter, and Spark moves it into the
+      // dedicated comment field when it reads the table, so the raw properties do not carry it.
+      // A property-only alter must not drop it.
+      v2SessionCatalog.alterTable(identifier, TableChange.setProperty("foo", "bar"))
+      val afterSet = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(afterSet.comment.contains("table comment"))
+      assert(afterSet.properties.get("foo").contains("bar"))
+
+      v2SessionCatalog.alterTable(identifier, TableChange.removeProperty("foo"))
+      val afterRemove = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(afterRemove.comment.contains("table comment"))
+      assert(!afterRemove.properties.contains("foo"))
+
+      // A change that names the comment still applies.
+      v2SessionCatalog.alterTable(identifier, TableChange.removeProperty(TableCatalog.PROP_COMMENT))
+      assert(spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1")).comment.isEmpty)
     }
   }
 

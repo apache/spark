@@ -22,9 +22,6 @@ import java.util.Locale
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.json4s.JsonAST.{JArray, JString}
-import org.json4s.jackson.JsonMethods.{compact, parse}
-
 /**
  * Interface for validating and accessing Pipeline-specific table properties.
  */
@@ -41,34 +38,25 @@ object PipelinesTableProperties {
     buildProp("pipelines.reset.allowed", default = true)
 
   /**
-   * Internal table property recording, as a JSON string array, the keys of the table properties
-   * declared in the dataset definition as of the latest materialization. On the next
-   * materialization, keys recorded here but no longer declared are removed from the table, while
-   * properties the pipeline never set (e.g. catalog-managed ones) are left untouched.
+   * Internal table property recording, as a sorted JSON string array (see
+   * [[JsonStringArrayCodec]]), the keys of the table properties declared in the dataset definition
+   * (SQL `TBLPROPERTIES`, Python `table_properties`) as of the latest materialization.
+   *
+   * `DatasetManager` writes it, through `resolveTableProperties`, only when the definition declares
+   * at least one table property. It covers those declared keys, not the `comment` and `provider`
+   * entries derived from the dataset's comment and format. On the next materialization,
+   * `evolveTable` removes a recorded key when the definition no longer declares it, it is still on
+   * the table, and it is not a reserved catalog property other than `comment` (the keys the SQL
+   * parser rejects in `TBLPROPERTIES`). Ownership follows declaration: a key is removable once a
+   * definition declared it, even if the catalog had already set it to the same value. Properties
+   * the definition never declared, e.g. catalog-managed ones, are never removed. A table without
+   * the record, or with one that is not a JSON string array, has nothing removed. The record is
+   * removed together with the last declared property. Auxiliary tables never carry it.
    *
    * This key is not registered as a user-settable property, so [[validateAndCanonicalize]] drops
    * it if a user declares it.
    */
   val declaredPropertyKeys: String = s"${pipelinesPrefix}declaredPropertyKeys"
-
-  /** Serializes property keys for [[declaredPropertyKeys]]. */
-  def serializePropertyKeys(keys: Seq[String]): String = {
-    compact(JArray(keys.map(JString(_)).toList))
-  }
-
-  /**
-   * Parses a value written by [[serializePropertyKeys]]. `None` if it is not a JSON array of
-   * strings.
-   */
-  def parsePropertyKeys(raw: String): Option[Seq[String]] = {
-    val parsed = try Some(parse(raw)) catch { case NonFatal(_) => None }
-    parsed.flatMap {
-      case JArray(elems) =>
-        val keys = elems.collect { case JString(s) => s }
-        if (keys.size == elems.size) Some(keys) else None
-      case _ => None
-    }
-  }
 
   /**
    * Validates that all known pipeline properties are valid and can be parsed.

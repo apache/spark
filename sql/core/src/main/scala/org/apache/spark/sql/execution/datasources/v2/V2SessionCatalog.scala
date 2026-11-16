@@ -294,8 +294,16 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
-    val comment = properties.get(TableCatalog.PROP_COMMENT)
-    val collation = properties.get(TableCatalog.PROP_COLLATION)
+    // The comment and collation live in dedicated fields of the catalog table and are not mirrored
+    // in its properties: the in-memory catalog drops the `comment` key from the stored properties,
+    // the Hive catalog moves `comment` and `collation` out of the table parameters when it reads a
+    // table, and a table created by DDL never had them there. Keep the existing values unless the
+    // changes set or remove the corresponding property, as the v1 SET/UNSET TBLPROPERTIES commands
+    // do.
+    val comment = properties.get(TableCatalog.PROP_COMMENT).orElse(
+      if (removesProperty(changes, TableCatalog.PROP_COMMENT)) None else catalogTable.comment)
+    val collation = properties.get(TableCatalog.PROP_COLLATION).orElse(
+      if (removesProperty(changes, TableCatalog.PROP_COLLATION)) None else catalogTable.collation)
     val owner = properties.getOrElse(TableCatalog.PROP_OWNER, catalogTable.owner)
     val location = properties.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI)
     val storage = if (location.isDefined) {
@@ -321,6 +329,13 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     null // Return null to save the `loadTable` call for ALTER TABLE.
+  }
+
+  private def removesProperty(changes: Seq[TableChange], property: String): Boolean = {
+    changes.exists {
+      case remove: TableChange.RemoveProperty => remove.property == property
+      case _ => false
+    }
   }
 
   override def purgeTable(ident: Identifier): Boolean = {

@@ -379,6 +379,54 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(filterV2TableProperties(table.properties) == Map())
   }
 
+  test("SPARK-57670: alterTable keeps the comment and collation when no change names them") {
+    val catalog = newCatalog()
+    // A table created by DDL keeps its comment and default collation only in the dedicated fields
+    // of the catalog table, not in its properties.
+    spark.sql(s"CREATE TABLE $testIdentQuoted (id INT, data STRING) USING parquet " +
+      "COMMENT 'table comment' DEFAULT COLLATION UTF8_LCASE")
+    val created = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(created.comment.contains("table comment"))
+    assert(created.collation.contains("UTF8_LCASE"))
+    assert(!created.properties.contains(TableCatalog.PROP_COMMENT))
+    assert(!created.properties.contains(TableCatalog.PROP_COLLATION))
+
+    catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
+    val afterSet = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(afterSet.properties.get("prop-1").contains("1"))
+    assert(afterSet.comment.contains("table comment"))
+    assert(afterSet.collation.contains("UTF8_LCASE"))
+
+    catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
+    val afterRemove = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(!afterRemove.properties.contains("prop-1"))
+    assert(afterRemove.comment.contains("table comment"))
+    assert(afterRemove.collation.contains("UTF8_LCASE"))
+  }
+
+  test("SPARK-57670: alterTable sets or removes the comment and collation a change names") {
+    val catalog = newCatalog()
+    spark.sql(s"CREATE TABLE $testIdentQuoted (id INT, data STRING) USING parquet " +
+      "COMMENT 'table comment' DEFAULT COLLATION UTF8_LCASE")
+
+    catalog.alterTable(testIdent, TableChange.setProperty(TableCatalog.PROP_COMMENT, "new comment"))
+    val afterComment = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(afterComment.comment.contains("new comment"))
+    assert(afterComment.collation.contains("UTF8_LCASE"))
+
+    catalog.alterTable(testIdent, TableChange.setProperty(TableCatalog.PROP_COLLATION, "UNICODE"))
+    val afterCollation = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(afterCollation.comment.contains("new comment"))
+    assert(afterCollation.collation.contains("UNICODE"))
+
+    catalog.alterTable(testIdent,
+      TableChange.removeProperty(TableCatalog.PROP_COMMENT),
+      TableChange.removeProperty(TableCatalog.PROP_COLLATION))
+    val afterRemove = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(afterRemove.comment.isEmpty)
+    assert(afterRemove.collation.isEmpty)
+  }
+
   test("alterTable: add top-level column") {
     val catalog = newCatalog()
 

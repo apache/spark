@@ -656,11 +656,16 @@ object DatasetManager extends Logging {
    *                                schema; for auxiliary tables, the derived schema). This is the
    *                                "incoming" side and may differ from `existingTable`'s recorded
    *                                schema due to schema evolution across runs.
-   * @param properties              the declared table properties to (re)set on the table. A
-   *                                property absent here is removed from the table only if the
-   *                                table's [[PipelinesTableProperties.declaredPropertyKeys]]
-   *                                records that a previous materialization declared it; any other
-   *                                existing property (e.g. a catalog-managed one) is left in place.
+   * @param properties              the table properties to (re)set on the table. For graph
+   *                                datasets this is the result of [[resolveTableProperties]],
+   *                                which carries the
+   *                                [[PipelinesTableProperties.declaredPropertyKeys]] record when
+   *                                the definition declares a property; for auxiliary tables it is
+   *                                the spec's properties, which never carry the record. A property
+   *                                absent here is removed only under the conditions listed in the
+   *                                body (recorded as declared, still on the table, not a reserved
+   *                                key other than `comment`); any other existing property (e.g. a
+   *                                catalog-managed one) is left in place.
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
@@ -696,18 +701,29 @@ object DatasetManager extends Logging {
 
     val existingProperties = existingTable.properties()
 
-    // Only remove properties that a previous materialization recorded as declared in the table
-    // definition. Every other existing property may be catalog/engine-managed (e.g. the
-    // non-reserved `clusteringColumns`, or arbitrary catalog-internal keys) and must never be
-    // removed. A table without the record (e.g. one materialized before it was introduced) has
-    // nothing removed; the record is written by this alter and used from the next run on.
-    val previouslyDeclaredKeys =
-      Option(existingProperties.get(PipelinesTableProperties.declaredPropertyKeys))
-        .flatMap(PipelinesTableProperties.parsePropertyKeys)
-        .getOrElse(Seq.empty)
-    val propertiesToRemove = previouslyDeclaredKeys.distinct.collect {
-      case k if !properties.contains(k) && existingProperties.containsKey(k) &&
-          !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) =>
+    // Property removal is driven by the declared-keys record a previous materialization left on
+    // the table (see PipelinesTableProperties.declaredPropertyKeys). A recorded key is removed when
+    // all of these hold:
+    //   - `properties` no longer contains it, i.e. the definition dropped it;
+    //   - it is still present on the table;
+    //   - it is not a reserved catalog property other than `comment` (see
+    //     `nonRemovableReservedProperties`).
+    // Ownership follows declaration, not who first set the property: a key a definition declared is
+    // removable once dropped, even if the catalog had already set it to the same value and no
+    // SetProperty was ever issued for it. Every property outside the record may be catalog-managed
+    // (e.g. the non-reserved `clusteringColumns`, or arbitrary catalog-internal keys) or set
+    // outside the pipeline, and is left alone. A table without a record (e.g. one materialized
+    // before the record was introduced), or whose record is not a JSON string array, has nothing
+    // removed. The record itself is removed once `properties` no longer carries one, i.e. the
+    // definition no longer declares any table property. Only graph datasets pass the record in
+    // `properties`; auxiliary tables never carry it (see `materializeAuxiliaryTable`).
+    val recordKey = PipelinesTableProperties.declaredPropertyKeys
+    val previouslyDeclaredKeys = Option(existingProperties.get(recordKey))
+      .flatMap(JsonStringArrayCodec.parse)
+      .getOrElse(Seq.empty)
+      .filterNot(nonRemovableReservedProperties.contains)
+    val propertiesToRemove = (previouslyDeclaredKeys :+ recordKey).distinct.collect {
+      case k if !properties.contains(k) && existingProperties.containsKey(k) =>
         TableChange.removeProperty(k)
     }
 
@@ -725,10 +741,23 @@ object DatasetManager extends Logging {
   }
 
   /**
+   * Reserved catalog properties that [[evolveTable]] never removes, even when a definition declared
+   * and later dropped them: the SQL parser rejects them in TBLPROPERTIES, and they describe the
+   * table itself (provider, location, owner, ...). `comment` is deliberately not among them: it is
+   * accepted in TBLPROPERTIES, and passed through from Python `table_properties`, so a declaration
+   * owns it like any other key.
+   */
+  private val nonRemovableReservedProperties: Set[String] =
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.toSet - TableCatalog.PROP_COMMENT
+
+  /**
    * Some fields on the [[Table]] object are represented as reserved table properties by the catalog
    * APIs. This method creates a table properties map that merges the user-provided table properties
-   * with these reserved properties, plus [[PipelinesTableProperties.declaredPropertyKeys]]
-   * recording the keys of the user-provided table properties.
+   * with these reserved properties. When the definition declares at least one table property, the
+   * map also carries [[PipelinesTableProperties.declaredPropertyKeys]], recording the sorted keys
+   * of the user-provided properties (not of the reserved ones derived here) so that
+   * [[evolveTable]] can later remove the ones the definition drops. A definition without table
+   * properties carries no record, and [[evolveTable]] removes an existing one.
    */
   private def resolveTableProperties(table: Table, identifier: Identifier): Map[String, String] = {
     val validatedAndCanonicalizedProps =
@@ -754,11 +783,14 @@ object DatasetManager extends Logging {
       }
       .collect { case (key, Some(value)) => key -> value }
 
-    val declaredPropertyKeys = PipelinesTableProperties.declaredPropertyKeys ->
-      PipelinesTableProperties.serializePropertyKeys(
-        validatedAndCanonicalizedProps.keys.toSeq.sorted)
+    val declaredPropertyKeys = if (validatedAndCanonicalizedProps.nonEmpty) {
+      Map(PipelinesTableProperties.declaredPropertyKeys ->
+        JsonStringArrayCodec.serialize(validatedAndCanonicalizedProps.keys.toSeq.sorted))
+    } else {
+      Map.empty[String, String]
+    }
 
-    validatedAndCanonicalizedProps ++ specialProps + declaredPropertyKeys
+    validatedAndCanonicalizedProps ++ specialProps ++ declaredPropertyKeys
   }
 
   /**
