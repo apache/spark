@@ -345,6 +345,70 @@ struct<id:int>
 
 
 -- !query
+SELECT id FROM (SELECT id FROM people) s ORDER BY addr?, id
+-- !query schema
+struct<id:int>
+-- !query output
+1
+2
+
+
+-- !query
+SELECT id FROM (SELECT id FROM people) s ORDER BY addr, id
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`",
+    "proposal" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 54,
+    "fragment" : "addr"
+  } ]
+}
+
+
+-- !query
+FROM people |> SELECT id |> WHERE addr? IS NULL
+-- !query schema
+struct<id:int>
+-- !query output
+1
+2
+
+
+-- !query
+FROM people |> SELECT id |> WHERE addr IS NULL
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`",
+    "proposal" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 38,
+    "fragment" : "addr"
+  } ]
+}
+
+
+-- !query
 WITH cte AS (SELECT id, missing? AS m FROM people) SELECT id, m, other? FROM cte ORDER BY id
 -- !query schema
 struct<id:int,m:void,other:void>
@@ -504,6 +568,63 @@ struct<people:void,p:void>
 -- !query output
 NULL	NULL
 NULL	NULL
+
+
+-- !query
+CREATE TABLE qualified_t (id INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO qualified_t VALUES (1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT qualified_t.missing? AS a, default.qualified_t.missing? AS b,
+  spark_catalog.default.qualified_t.missing? AS c
+FROM qualified_t
+-- !query schema
+struct<a:void,b:void,c:void>
+-- !query output
+NULL	NULL	NULL
+
+
+-- !query
+SELECT other.qualified_t.missing? FROM qualified_t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`other`.`qualified_t`.`missing`",
+    "proposal" : "`spark_catalog`.`default`.`qualified_t`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "other.qualified_t.missing?"
+  } ]
+}
+
+
+-- !query
+DROP TABLE qualified_t
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
@@ -1319,6 +1440,23 @@ NULL	NULL	NULL	NULL
 -- !query
 BEGIN
   lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+      SELECT lbl.x?, lbl.missing?;
+    END;
+    SELECT raise_error('failure');
+  END;
+END
+-- !query schema
+struct<x:int,missing:void>
+-- !query output
+1	NULL
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
     DECLARE y INT DEFAULT 1;
     CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y, missing? AS m;
     SELECT * FROM lbl_v;
@@ -1479,6 +1617,33 @@ DROP VIEW lbl_v
 struct<>
 -- !query output
 
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CACHE TABLE lbl_c AS SELECT lbl.missing? AS m;
+  END;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 81,
+    "stopIndex" : 92,
+    "fragment" : "lbl.missing?"
+  } ]
+}
 
 
 -- !query
@@ -2748,6 +2913,23 @@ struct<id:int,addr:struct<city:string,zip:string>>
 -- !query output
 1	{"city":"SF","zip":"94105"}
 2	{"city":"NYC","zip":"10001"}
+
+
+-- !query
+INSERT OVERWRITE target SELECT id, addr FROM people
+WHERE id IN (SELECT id FROM people WHERE id = 1 AND missing? IS NULL)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM target ORDER BY id
+-- !query schema
+struct<id:int,addr:struct<city:string,zip:string>>
+-- !query output
+1	{"city":"SF","zip":"94105"}
 
 
 -- !query

@@ -314,6 +314,21 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
   }
 
+  test("Overwrite: the source can have an optional reference") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("source").writeTo("testcat.table_name").append()
+
+    // Like the query of INSERT ... REPLACE, the source produces the rows to write.
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+      spark.table("source").selectExpr("id", "CAST(missing? AS STRING) AS data")
+        .writeTo("testcat.table_name").overwrite(lit(true))
+    }
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, null), Row(2L, null), Row(3L, null)))
+  }
+
   test("Overwrite: write to a temp view of v2 relation") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
     spark.table("source").writeTo("testcat.table_name").append()

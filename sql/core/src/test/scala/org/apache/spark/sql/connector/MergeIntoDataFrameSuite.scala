@@ -373,6 +373,74 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("merge into fails if an analyzed operation of the source has an optional reference") {
+    withTempView("source", "source_v") {
+      withUserDefinedFunction("archived_flag" -> true, "source_rows" -> true) {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |""".stripMargin)
+        Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+        val target = tableNameAsString
+
+        def merge(source: DataFrame): Unit = {
+          source
+            .mergeInto(target, $"s.pk" === col(target + ".pk"))
+            .whenMatched(expr("s.archived = true"))
+            .delete()
+            .merge()
+        }
+
+        withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+          // A Dataset operation builds on the analyzed plan of the one before it, so the optional
+          // reference of the `selectExpr` is already the NULL that it resolved to.
+          val selected = spark.table("source").selectExpr("pk", "archived? AS archived")
+          Seq(selected.as("s"), selected.filter("pk > 0").as("s")).foreach { source =>
+            checkError(
+              exception = intercept[AnalysisException](merge(source)),
+              condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+              sqlState = "0A000",
+              parameters = Map("context" -> "MERGE"),
+              context = ExpectedContext(fragment = "archived?", start = 0, stop = 8))
+          }
+          // Also a path of a missing VARIANT column.
+          checkError(
+            exception = intercept[AnalysisException] {
+              merge(spark.table("source")
+                .selectExpr("pk", "CAST(missing?:a AS BOOLEAN) AS archived").as("s"))
+            },
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(fragment = "missing?:a", start = 5, stop = 14))
+          // The common table expressions of an unanalyzed source are not children of its plan.
+          val withCte = "WITH s AS (SELECT pk, archived? AS archived FROM source) SELECT * FROM s"
+          checkError(
+            exception = intercept[AnalysisException](merge(spark.sql(withCte))),
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(
+              fragment = "archived?",
+              start = withCte.indexOf("archived?"),
+              stop = withCte.indexOf("archived?") + 8))
+
+          // Views and SQL functions resolve their own optional references, also when an
+          // operation follows the one that reads them.
+          sql("CREATE TEMPORARY VIEW source_v AS SELECT pk, archived? AS archived FROM source")
+          sql("CREATE TEMPORARY FUNCTION archived_flag() RETURNS BOOLEAN " +
+            "RETURN coalesce(archived?, false)")
+          sql("CREATE TEMPORARY FUNCTION source_rows() RETURNS TABLE (pk INT, archived BOOLEAN) " +
+            "RETURN SELECT pk, archived? FROM source")
+          merge(spark.table("source_v").as("s"))
+          merge(spark.table("source").selectExpr("pk", "archived_flag() AS archived").as("s"))
+          merge(spark.sql("SELECT * FROM source_rows()").as("s"))
+        }
+
+        checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
+      }
+    }
+  }
+
   test("merge into with conditional WHEN MATCHED clause (delete)") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

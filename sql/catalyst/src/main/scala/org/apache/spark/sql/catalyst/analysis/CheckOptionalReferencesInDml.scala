@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{
   DeleteFromTable,
   LogicalPlan,
   MergeIntoTable,
   OverwriteByExpression,
-  UpdateTable
+  UpdateTable,
+  View
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -33,13 +34,18 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * Rejects optional references in the expressions of a statement that modifies table data and
  * that was built without the SQL parser, which rejects them in SQL text (see
  * `OptionalReferenceValidation`). A missing column must not silently change which rows a
- * statement deletes or updates. The source of a MERGE is checked too, like the source query of
- * the SQL statement: `Dataset.mergeInto` and the Spark Connect MERGE command put the unanalyzed
- * plan of the source DataFrame there, so its references are resolved as part of the MERGE.
+ * statement deletes or updates.
+ *
+ * The source of a MERGE is checked too, like the source query of the SQL statement.
+ * `Dataset.mergeInto` and the Spark Connect MERGE command put the plan of the source DataFrame
+ * there, in which only the last operation is sure to be unanalyzed: a Dataset operation builds on
+ * the analyzed plan of the one before, and Spark Connect analyzes some relations, such as
+ * `withColumns`, when it plans them. In an analyzed operation, an optional reference that matched
+ * nothing is the NULL that it resolved to, which is rejected as well.
  *
  * {{{
  *   df.writeTo("t").overwrite(expr("deleted_at? IS NULL"))
- *   spark.sql("SELECT pk, is_deleted? FROM s").mergeInto("t", $"s.pk" === $"t.pk")...
+ *   spark.table("s").selectExpr("pk", "archived? AS archived").as("s").mergeInto("t", ...)
  * }}}
  */
 object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
@@ -52,7 +58,15 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
         }
         operator match {
           case merge: MergeIntoTable =>
-            merge.sourceTable.foreach(_.expressions.foreach(checkExpression(_, "MERGE")))
+            OptionalReferences
+              .unresolvedOptionalReference(merge.sourceTable)
+              .orElse(firstNullReference(merge.sourceTable))
+              .foreach { reference =>
+                throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(
+                  "MERGE",
+                  reference.origin
+                )
+              }
           case _ =>
         }
       }
@@ -67,6 +81,34 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
     // The plan of INSERT ... REPLACE WHERE and of `DataFrameWriterV2.overwrite(condition)`.
     case _: OverwriteByExpression => Some("INSERT ... REPLACE")
     case _ => None
+  }
+
+  /**
+   * Returns the first NULL that an optional reference of `plan` resolved to in an analysis of an
+   * operation of `plan`, see [[OptionalReferences.isNullReference]], or None. Views and SQL
+   * functions resolve their own optional references, so the search does not enter a view, a SQL
+   * table function, or the body of a SQL scalar function.
+   */
+  private def firstNullReference(plan: LogicalPlan): Option[Expression] = plan match {
+    case _: View | _: SQLFunctionNode =>
+      None
+    case _ =>
+      plan.expressions.iterator
+        .flatMap(expression => firstNullReference(expression))
+        .nextOption()
+        .orElse(plan.children.iterator.flatMap(child => firstNullReference(child)).nextOption())
+  }
+
+  private def firstNullReference(expression: Expression): Option[Expression] = expression match {
+    case _ if OptionalReferences.isNullReference(expression) =>
+      Some(expression)
+    case _: SQLScalarFunction =>
+      None
+    case subquery: SubqueryExpression =>
+      firstNullReference(subquery.plan).orElse(
+        subquery.children.iterator.flatMap(child => firstNullReference(child)).nextOption())
+    case _ =>
+      expression.children.iterator.flatMap(child => firstNullReference(child)).nextOption()
   }
 
   private def checkExpression(expression: Expression, statement: String): Unit = {

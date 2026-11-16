@@ -151,17 +151,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // When strict DataFrame column resolution is disabled, we also allow name-based
           // resolution as a fallback for tagged attributes.
           val result = withPosition(u) {
-            // A parameterless built-in function takes precedence over a SQL UDF parameter
-            // that happens to share its name (per the documented SQL name resolution rules).
-            // Real columns from relations -- which don't carry the
-            // SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY -- continue to win as before.
-            // Gated by a legacy kill-switch conf so the pre-fix behavior can be restored.
             // A missing optional field is only NULL here if the error of the same name without
             // `?` is final. Otherwise another resolution step can still resolve the name, e.g. as
             // a column from below the SELECT list in ORDER BY, and `ResolveOptionalReferences`
             // decides if none does.
             val optionalNamePartIndices =
               if (throws) OptionalReferences.optionalNamePartIndices(u) else Set.empty[Int]
+            // A parameterless built-in function takes precedence over a SQL UDF parameter
+            // that happens to share its name (per the documented SQL name resolution rules).
+            // Real columns from relations -- which don't carry the
+            // SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY -- continue to win as before.
+            // Gated by a legacy kill-switch conf so the pre-fix behavior can be restored.
             val column = resolveColumnByName(nameParts, optionalNamePartIndices)
             val resolved = column match {
               case Some(c) if isSQLFunctionParameterAlias(c) && !conf.getConf(

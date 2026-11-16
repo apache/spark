@@ -507,6 +507,77 @@ Sort [null ASC NULLS FIRST, id#x DESC NULLS LAST], true
 
 
 -- !query
+SELECT id FROM (SELECT id FROM people) s ORDER BY addr?, id
+-- !query analysis
+Sort [null ASC NULLS FIRST, id#x ASC NULLS FIRST], true
++- Project [id#x]
+   +- SubqueryAlias s
+      +- Project [id#x]
+         +- SubqueryAlias people
+            +- View (`people`, [id#x, addr#x])
+               +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+                  +- Project [id#x, addr#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT id FROM (SELECT id FROM people) s ORDER BY addr, id
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`",
+    "proposal" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 54,
+    "fragment" : "addr"
+  } ]
+}
+
+
+-- !query
+FROM people |> SELECT id |> WHERE addr? IS NULL
+-- !query analysis
+Filter isnull(null)
++- PipeOperator
+   +- Project [id#x]
+      +- SubqueryAlias people
+         +- View (`people`, [id#x, addr#x])
+            +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+               +- Project [id#x, addr#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+FROM people |> SELECT id |> WHERE addr IS NULL
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`addr`",
+    "proposal" : "`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 38,
+    "fragment" : "addr"
+  } ]
+}
+
+
+-- !query
 WITH cte AS (SELECT id, missing? AS m FROM people) SELECT id, m, other? FROM cte ORDER BY id
 -- !query analysis
 WithCTE
@@ -708,6 +779,58 @@ Project [null AS people#x, null AS p#x]
             +- Project [id#x, addr#x]
                +- SubqueryAlias t
                   +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+CREATE TABLE qualified_t (id INT) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`qualified_t`, false
+
+
+-- !query
+INSERT INTO qualified_t VALUES (1)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/qualified_t, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/qualified_t], Append, `spark_catalog`.`default`.`qualified_t`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/qualified_t), [id]
++- Project [col1#x AS id#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT qualified_t.missing? AS a, default.qualified_t.missing? AS b,
+  spark_catalog.default.qualified_t.missing? AS c
+FROM qualified_t
+-- !query analysis
+Project [null AS a#x, null AS b#x, null AS c#x]
++- SubqueryAlias spark_catalog.default.qualified_t
+   +- Relation spark_catalog.default.qualified_t[id#x] parquet
+
+
+-- !query
+SELECT other.qualified_t.missing? FROM qualified_t
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`other`.`qualified_t`.`missing`",
+    "proposal" : "`spark_catalog`.`default`.`qualified_t`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "other.qualified_t.missing?"
+  } ]
+}
+
+
+-- !query
+DROP TABLE qualified_t
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.qualified_t
 
 
 -- !query
@@ -1561,6 +1684,21 @@ LocalRelation [f#x, y#x, city#x, code#x]
 -- !query
 BEGIN
   lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+      SELECT lbl.x?, lbl.missing?;
+    END;
+    SELECT raise_error('failure');
+  END;
+END
+-- !query analysis
+LocalRelation [x#x, missing#x]
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
     DECLARE y INT DEFAULT 1;
     CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y, missing? AS m;
     SELECT * FROM lbl_v;
@@ -1705,6 +1843,31 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 DROP VIEW lbl_v
 -- !query analysis
 DropTempViewCommand lbl_v, false
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CACHE TABLE lbl_c AS SELECT lbl.missing? AS m;
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 81,
+    "stopIndex" : 92,
+    "fragment" : "lbl.missing?"
+  } ]
+}
 
 
 -- !query
@@ -3265,6 +3428,39 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 +- Project [id#x AS id#x, named_struct(city, addr#x.city, zip, addr#x.zip) AS addr#x]
    +- Project [id#x, addr#x]
       +- Filter isnull(null)
+         +- SubqueryAlias people
+            +- View (`people`, [id#x, addr#x])
+               +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+                  +- Project [id#x, addr#x]
+                     +- SubqueryAlias t
+                        +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT * FROM target ORDER BY id
+-- !query analysis
+Sort [id#x ASC NULLS FIRST], true
++- Project [id#x, addr#x]
+   +- SubqueryAlias spark_catalog.default.target
+      +- Relation spark_catalog.default.target[id#x,addr#x] parquet
+
+
+-- !query
+INSERT OVERWRITE target SELECT id, addr FROM people
+WHERE id IN (SELECT id FROM people WHERE id = 1 AND missing? IS NULL)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/target, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/target], Overwrite, `spark_catalog`.`default`.`target`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/target), [id, addr]
++- Project [id#x AS id#x, named_struct(city, addr#x.city, zip, addr#x.zip) AS addr#x]
+   +- Project [id#x, addr#x]
+      +- Filter id#x IN (list#x [])
+         :  +- Project [id#x]
+         :     +- Filter ((id#x = 1) AND isnull(null))
+         :        +- SubqueryAlias people
+         :           +- View (`people`, [id#x, addr#x])
+         :              +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]
+         :                 +- Project [id#x, addr#x]
+         :                    +- SubqueryAlias t
+         :                       +- LocalRelation [id#x, addr#x]
          +- SubqueryAlias people
             +- View (`people`, [id#x, addr#x])
                +- Project [cast(id#x as int) AS id#x, cast(addr#x as struct<city:string,zip:string>) AS addr#x]

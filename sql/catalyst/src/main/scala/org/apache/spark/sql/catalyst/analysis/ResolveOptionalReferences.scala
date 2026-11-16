@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   UnaryNode
 }
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETERIZED_QUERY, PLAN_EXPRESSION}
 import org.apache.spark.sql.types.DataType
 
@@ -168,14 +169,17 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
           isViewQuery = AnalysisContext.get.catalogAndNamespace.nonEmpty ||
             AnalysisContext.get.isViewDefinition
         ) =>
-      val nullReference = OptionalReferences.nullReference()
-      if (isTopLevel) {
-        OptionalReferences.implicitAlias(nullReference, unresolvedAttribute.nameParts.last)
-      } else {
-        nullReference
+      // The NULL keeps the position of the reference, e.g. for `CheckOptionalReferencesInDml`.
+      CurrentOrigin.withOrigin(unresolvedAttribute.origin) {
+        val nullReference = OptionalReferences.nullReference()
+        if (isTopLevel) {
+          OptionalReferences.implicitAlias(nullReference, unresolvedAttribute.nameParts.last)
+        } else {
+          nullReference
+        }
       }
     case namedParameter: NamedParameter if OptionalReferences.isOptional(namedParameter) =>
-      OptionalReferences.nullReference()
+      CurrentOrigin.withOrigin(namedParameter.origin)(OptionalReferences.nullReference())
     case lambdaFunction: LambdaFunction if !lambdaFunction.bound =>
       lambdaFunction
     case lateralColumnAliasReference: LateralColumnAliasReference =>
@@ -289,16 +293,28 @@ object ResolveOptionalReferences {
    * reference that is not resolved and that the rule can still replace or wrap: an attribute, a
    * named parameter marker, or a field extraction. Other unresolved nodes with an optional marker,
    * such as a [[TempResolvedColumn]] that HAVING or ORDER BY tried, hold a reference that was
-   * found, and the rule leaves them to the rules that report their errors.
+   * found, and the rule leaves them to the rules that report their errors. A resolved operator,
+   * expression, or subquery plan has no unresolved reference, so the search does not enter it.
    */
-  private def hasUnresolvedOptionalReferences(plan: LogicalPlan): Boolean = plan.exists {
-    _.expressions.exists(_.exists {
-      case subquery: SubqueryExpression => hasUnresolvedOptionalReferences(subquery.plan)
+  private def hasUnresolvedOptionalReferences(plan: LogicalPlan): Boolean = {
+    !plan.resolved &&
+    (plan.expressions.exists(isOrHasUnresolvedOptionalReference) ||
+    plan.children.exists(hasUnresolvedOptionalReferences))
+  }
+
+  private def isOrHasUnresolvedOptionalReference(expression: Expression): Boolean = {
+    !expression.resolved && (expression match {
       case attribute: UnresolvedAttribute =>
         OptionalReferences.optionalNamePartIndices(attribute).nonEmpty
-      case namedParameter: NamedParameter => OptionalReferences.isOptional(namedParameter)
-      case extractValue: UnresolvedExtractValue => OptionalReferences.isOptional(extractValue)
-      case _ => false
+      case namedParameter: NamedParameter =>
+        OptionalReferences.isOptional(namedParameter)
+      case extractValue: UnresolvedExtractValue if OptionalReferences.isOptional(extractValue) =>
+        true
+      case subquery: SubqueryExpression =>
+        hasUnresolvedOptionalReferences(subquery.plan) ||
+        subquery.children.exists(isOrHasUnresolvedOptionalReference)
+      case other =>
+        other.children.exists(isOrHasUnresolvedOptionalReference)
     })
   }
 

@@ -54,7 +54,7 @@ case object ExtractSemiStructuredFields extends Rule[LogicalPlan] {
       if (OptionalReferences.isNullReference(column)) {
         // The column is an optional reference that is not found, so the field is NULL, like a
         // field of a missing struct column.
-        Literal(null, VariantType)
+        OptionalReferences.nullReference(VariantType)
       } else if (column.dataType.isInstanceOf[VariantType]) {
         VariantGet(column, Literal(UTF8String.fromString(field)), VariantType, failOnError = true)
       } else {

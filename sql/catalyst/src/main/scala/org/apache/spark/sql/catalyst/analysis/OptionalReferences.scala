@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{NullType, StringType}
+import org.apache.spark.sql.types.{DataType, NullType, StringType}
 
 /**
  * Optional references: a `?` after an identifier of a column, field, or variable reference, or
@@ -74,13 +74,15 @@ object OptionalReferences {
    * The two tags that the parser sets, [[OPTIONAL_NAME_PART_INDICES]] and [[OPTIONAL_REFERENCE]],
    * describe the statement: they are facts about the reference as written, which stay true in
    * every analysis of the plan. The generic transforms of a tree copy them to the nodes that
-   * replace a tagged node; a rule that rebuilds a reference in another way forwards them with
-   * [[withOptionalNamePartsOf]]. This tag records a decision of one analysis, that a reference
-   * matched nothing, on the NULL and the alias that this analysis creates. Only the analyzer sets
-   * it, and only on these nodes: the plan that the analyzer receives can be analyzed again later,
-   * e.g. from a plan cache, against a relation that has the column by then. The other decision of
-   * an analysis, that no resolution step of an operator can resolve a field extraction, is a node
-   * of the plan that the analysis builds, see [[LastResortExtractValue]].
+   * replace a tagged node. A rule that rebuilds a reference in another way forwards them itself:
+   * the optional name parts of a multipart name with [[withOptionalNamePartsOf]], and the marker
+   * of a field extraction, a named parameter marker, or an IDENTIFIER clause with `copyTagsFrom`.
+   * This tag records a decision of one analysis, that a reference matched nothing, on the NULL
+   * and the alias that this analysis creates. Only the analyzer sets it, and only on these nodes:
+   * the plan that the analyzer receives can be analyzed again later, e.g. from a plan cache,
+   * against a relation that has the column by then. The other decision of an analysis, that no
+   * resolution step of an operator can resolve a field extraction, is a node of the plan that the
+   * analysis builds, see [[LastResortExtractValue]].
    */
   val NULL_REFERENCE: TreeNodeTag[Unit] = TreeNodeTag[Unit]("optionalReferenceNull")
 
@@ -134,7 +136,7 @@ object OptionalReferences {
       expression
         .collect { case subquery: SubqueryExpression => subquery.plan }
         .iterator
-        .flatMap(firstUnresolvedOptionalReference)
+        .flatMap(plan => unresolvedOptionalReference(plan))
         .nextOption()
     }
   }
@@ -146,36 +148,49 @@ object OptionalReferences {
    * statement is analyzed against.
    */
   def hasOptionalReferences(plan: LogicalPlan): Boolean =
-    firstUnresolvedOptionalReference(plan).isDefined
+    unresolvedOptionalReference(plan).isDefined
 
   /**
    * Returns the first unresolved optional reference of the operators of `plan`, including in the
    * plans of their subquery expressions and in the plans that an operator keeps outside of its
-   * children, such as the common table expressions of `UnresolvedWith`.
+   * children, such as the common table expressions of `UnresolvedWith`, or None.
    */
-  private def firstUnresolvedOptionalReference(plan: LogicalPlan): Option[Expression] = {
+  def unresolvedOptionalReference(plan: LogicalPlan): Option[Expression] = {
     plan.expressions.iterator
-      .flatMap(unresolvedOptionalReference)
+      .flatMap(expression => unresolvedOptionalReference(expression))
       .nextOption()
       .orElse {
+        // The subquery plans of the operator are inner children as well, and the search of its
+        // expressions has covered them, so that every plan is searched once.
+        val subqueryPlans = plan.expressions.flatMap(_.collect {
+          case subquery: SubqueryExpression => subquery.plan
+        })
         plan.innerChildren.iterator
-          .collect { case innerPlan: LogicalPlan => innerPlan }
-          .flatMap(firstUnresolvedOptionalReference)
+          .collect {
+            case innerPlan: LogicalPlan if !subqueryPlans.exists(_ eq innerPlan) => innerPlan
+          }
+          .flatMap(innerPlan => unresolvedOptionalReference(innerPlan))
           .nextOption()
       }
-      .orElse(plan.children.iterator.flatMap(firstUnresolvedOptionalReference).nextOption())
+      .orElse {
+        plan.children.iterator.flatMap(child => unresolvedOptionalReference(child)).nextOption()
+      }
   }
 
-  /** The static NULL of type VOID that an unresolvable optional reference resolves to. */
-  def nullReference(): Literal = {
-    val nullReference = Literal(null, NullType)
+  /**
+   * The static NULL that an unresolvable optional reference resolves to: of type VOID, or of type
+   * VARIANT for a path extracted from such a NULL (`missing?:a`).
+   */
+  def nullReference(dataType: DataType = NullType): Literal = {
+    val nullReference = Literal(null, dataType)
     nullReference.setTagValue(NULL_REFERENCE, ())
     nullReference
   }
 
   /**
    * Returns true if `expression` is a [[nullReference]], i.e. the result of an optional reference
-   * that did not resolve to a column, field, or variable.
+   * that did not resolve to a column, field, or variable, or the [[implicitAlias]] that names
+   * one. [[isNullReferenceAlias]] tells the alias apart.
    */
   def isNullReference(expression: Expression): Boolean =
     expression.getTagValue(NULL_REFERENCE).isDefined

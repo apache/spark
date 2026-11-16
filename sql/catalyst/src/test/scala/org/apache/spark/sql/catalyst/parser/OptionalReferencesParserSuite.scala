@@ -602,6 +602,17 @@ class OptionalReferencesParserSuite extends PlanTest {
     }
   }
 
+  test("optional references are allowed in the arguments of CALL") {
+    // The arguments of a procedure are values, like the arguments of a function in a query.
+    val plan = parsePlan("CALL cat.ns.p(a?, x => :b?)", optionalReferences = true)
+    val optionalReferences = plan.expressions.flatMap(_.collect {
+      case reference if OptionalReferences.hasOptionalMarker(reference) => reference
+    })
+    assert(optionalReferences.length == 2, plan)
+    assert(optionalReferences.head.isInstanceOf[UnresolvedAttribute], plan)
+    assert(optionalReferences(1).isInstanceOf[NamedParameter], plan)
+  }
+
   test("optional references are allowed in queries that read data") {
     withOptionalReferences(enabled = true) {
       Seq(

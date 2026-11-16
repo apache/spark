@@ -70,6 +70,11 @@ HAVING addr.country? IS NULL;
 SELECT named_struct('state', 'CA') AS addr FROM people GROUP BY id HAVING addr.city? IS NULL;
 -- A column that is out of scope is not found.
 SELECT DISTINCT id FROM people ORDER BY addr?, id DESC;
+-- ORDER BY and WHERE do not reach below an aliased subquery or a pipe operator, like without `?`.
+SELECT id FROM (SELECT id FROM people) s ORDER BY addr?, id;
+SELECT id FROM (SELECT id FROM people) s ORDER BY addr, id;
+FROM people |> SELECT id |> WHERE addr? IS NULL;
+FROM people |> SELECT id |> WHERE addr IS NULL;
 
 -- Common table expressions and set operations.
 WITH cte AS (SELECT id, missing? AS m FROM people) SELECT id, m, other? FROM cte ORDER BY id;
@@ -90,6 +95,14 @@ SELECT ghost.city? FROM people;
 SELECT ghost?.city? FROM people;
 SELECT t.name? FROM people;
 SELECT people?, p? FROM people AS p;
+-- The qualifier of a table can include its namespace and catalog, like without `?`.
+CREATE TABLE qualified_t (id INT) USING parquet;
+INSERT INTO qualified_t VALUES (1);
+SELECT qualified_t.missing? AS a, default.qualified_t.missing? AS b,
+  spark_catalog.default.qualified_t.missing? AS c
+FROM qualified_t;
+SELECT other.qualified_t.missing? FROM qualified_t;
+DROP TABLE qualified_t;
 
 -- Three-part names: `?` binds to the immediately preceding identifier only.
 SELECT info.addr.zip? FROM orgs;
@@ -208,11 +221,24 @@ BEGIN
   END;
 END;
 --QUERY-DELIMITER-END
+-- An exception handler sees the labels of the blocks around it.
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE x INT DEFAULT 1;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+      SELECT lbl.x?, lbl.missing?;
+    END;
+    SELECT raise_error('failure');
+  END;
+END;
+--QUERY-DELIMITER-END
 -- A view resolves the label-qualified variables of the script that it referenced when it was
 -- created, and no others, so a label does not qualify an optional reference in the query of a
 -- view. A definition that depends on the label fails when the view is created, instead of when it
--- is read: also in a subquery, in a persistent view, for the variable of a FOR statement, and in
--- ALTER VIEW ... AS.
+-- is read: also in a subquery, in a persistent view, for the variable of a FOR statement, in
+-- ALTER VIEW ... AS, and in CACHE TABLE ... AS SELECT.
 --QUERY-DELIMITER-START
 BEGIN
   lbl: BEGIN
@@ -264,6 +290,14 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 DROP VIEW lbl_v;
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CACHE TABLE lbl_c AS SELECT lbl.missing? AS m;
+  END;
+END;
+--QUERY-DELIMITER-END
 
 -- Correlated subqueries resolve against the same scopes as without `?`.
 SELECT id, (SELECT max(o.missing?) FROM people i WHERE i.id = o.id) AS m FROM people o ORDER BY id;
@@ -475,6 +509,10 @@ SELECT * FROM VALUES (missing?, 1) AS t(a, b);
 CREATE TABLE ctas USING parquet AS SELECT id, CAST(missing? AS STRING) AS m FROM people;
 SELECT * FROM ctas ORDER BY id;
 INSERT OVERWRITE target SELECT id?, addr FROM people WHERE missing? IS NULL;
+SELECT * FROM target ORDER BY id;
+-- Also a missing column in a subquery of the query.
+INSERT OVERWRITE target SELECT id, addr FROM people
+WHERE id IN (SELECT id FROM people WHERE id = 1 AND missing? IS NULL);
 SELECT * FROM target ORDER BY id;
 DROP TABLE ctas;
 
