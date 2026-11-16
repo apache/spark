@@ -58,8 +58,8 @@ case class TransformFunctionId(canonicalName: String, numBucketsOpt: Option[Int]
  *                    exactly that, and names the other half of the pairing that produced the space,
  *                    which is the only thing that tells two such key spaces apart. See
  *                    `KeyedShuffleSpec.reducersBothWays`, which is the only producer.
- * @param storedKey whether this transform was rebuilt over a cogroup's key that is stored as the
- *                  layout's column is (`TransformExpression.keysStoredAlike`), by
+ * @param storedKey whether this transform was rebuilt over a cogroup's key of another type than
+ *                  the layout's column, stored as it is (`TransformExpression.keysStoredAlike`), by
  *                  `KeyedShuffleSpec.createPartitioning`. The cogroup pairs its groups by those
  *                  bytes, so such a key goes to the function by storage, as the keyed side's
  *                  column of the same bytes does, even where a datetime value of its type would
@@ -76,11 +76,13 @@ case class TransformExpression(
   override def nullable: Boolean = true
 
   /**
-   * Prints `reducedWith` only when it is set, so the ordinary form is unchanged, and never
-   * `storedKey`, so a transform rebuilt over a cogroup's key prints as the layout's does.
+   * Prints `reducedWith` and `storedKey` only when they are set, so the ordinary form is
+   * unchanged, while two transforms that resolve their call or compare differently print
+   * differently.
    */
   override protected def stringArgs: Iterator[Any] =
-    Iterator(function, children, numBucketsOpt) ++ Iterator(reducedWith).filter(_.isDefined)
+    Iterator(function, children, numBucketsOpt) ++ Iterator(reducedWith).filter(_.isDefined) ++
+      Iterator("storedKey").filter(_ => storedKey)
 
   /** The identity of this expression's transform function. */
   lazy val functionId: TransformFunctionId =
@@ -421,14 +423,16 @@ object TransformExpression extends Logging {
    * [[TransformExpression.evaluableFunction]].
    *
    * An argument goes as it is when it is stored the way the declared type is (`storedAlike`),
-   * which is how a function read it before this check. A numeric argument narrower than declared
-   * (`UpCastRule.legalNumericPrecedence`), e.g. a `SMALLINT` against an `INT` or an `INT` against a
-   * `DOUBLE`, is held as another JVM type, so it is cast. That gives the value a magic `invoke` got
-   * from Java's widening before this check, which can lose digits for a `BIGINT` against a
-   * `DOUBLE` as it did there, and needs no time zone. Anything else is refused,
-   * a `DATE` against a `TIMESTAMP` in particular, whose cast takes the session time zone. A call
-   * whose arguments all suit is still refused when the method it invokes cannot take them, see
-   * `methodLookupFailure`.
+   * which is how a function read it before this check, apart from two datetime or interval types,
+   * which go as they are only as `datetimeCastKeepsValue` says, or by their physical type alone
+   * with `datetimeByStorage`, for a transform rebuilt over a cogroup's key (`storedKey`). A
+   * numeric argument narrower than declared (`UpCastRule.legalNumericPrecedence`), e.g. a
+   * `SMALLINT` against an `INT` or an `INT` against a `DOUBLE`, is held as another JVM type, so it
+   * is cast. That gives the value a magic `invoke` got from Java's widening before this check,
+   * which can lose digits for a `BIGINT` against a `DOUBLE` as it did there, and needs no time
+   * zone. Anything else is refused, a `DATE` against a `TIMESTAMP` in particular, whose cast takes
+   * the session time zone. A call whose arguments all suit is still refused when the method it
+   * invokes cannot take them, see `methodLookupFailure`.
    */
   private def atDeclaredType(
       argument: Expression,

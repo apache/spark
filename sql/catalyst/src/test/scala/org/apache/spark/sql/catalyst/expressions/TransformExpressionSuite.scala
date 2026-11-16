@@ -412,9 +412,10 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(transform.eval(InternalRow(5)) == 1)
   }
 
-  test("SPARK-60813: a transform's plan string names neither its reduction nor its key marker") {
-    // `storedKey` and an unset `reducedWith` stay out of the plan string, so a transform rebuilt
-    // over a cogroup's key prints as the layout's does.
+  test("SPARK-60813: a transform's plan string names its reduction and its key marker when set") {
+    // An unset `reducedWith` or `storedKey` stays out of the plan string, so the ordinary form is
+    // unchanged, and a set one prints, since it changes how the call resolves or what the
+    // transform equals.
     val function = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
       override def resultType(): DataType = IntegerType
@@ -425,7 +426,8 @@ class TransformExpressionSuite extends SparkFunSuite {
     val column = AttributeReference("c", IntegerType)()
     val transform = TransformExpression(function, Seq(column), Some(4))
     val marked = transform.copy(storedKey = true)
-    assert(marked.toString == transform.toString, marked.toString)
+    assert(marked.toString == transform.toString.stripSuffix(")") + ", storedKey)",
+      marked.toString)
     assert(!transform.toString.contains("None") && !transform.toString.contains("false"),
       transform.toString)
     // A set `reducedWith` prints as master printed it.

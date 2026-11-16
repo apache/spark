@@ -2641,10 +2641,13 @@ case class KeyedShuffleSpec(
       "Required distributions of join legs should be the same size.")
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        // `canCreatePartitioning` admits only a template over bare columns, see there. Every key
-        // at the position is stored as the column is, or the check below fails, so it goes to the
-        // function by storage, see `storedKey`.
-        rebuiltOver(te, clustering(positionSet.head)).copy(storedKey = true)
+        // `canCreatePartitioning` admits only a template over bare columns, see there. A key of
+        // another type than the column, which the check below requires to be stored as it is,
+        // goes to the function by storage, see `storedKey`. A join's key has the column's type,
+        // so its transform stays equal to the layout's, which e.g. `UnionExec` compares.
+        val key = clustering(positionSet.head)
+        rebuiltOver(te, key).copy(storedKey = !DataType.equalsStructurally(
+          key.dataType, te.references.head.dataType, ignoreNullability = true))
       case (_, positionSet) => clustering(positionSet.head)
     }
     // The child shuffled onto this layout is placed by evaluating what is built here, which would

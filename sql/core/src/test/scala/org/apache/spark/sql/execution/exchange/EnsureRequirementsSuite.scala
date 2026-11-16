@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.exchange
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
@@ -1841,7 +1842,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // A cogroup pairs its groups by comparing key rows, so a key stored as the layout's column is
     // goes to the function by storage (`TransformExpression.storedKey`), even where a datetime
     // value of its type would be read differently, and lands where the keyed side put the same
-    // bytes, as the hash shuffle pairs them.
+    // bytes, as the hash shuffle pairs them, with the keyed side on either side, and on an
+    // executor too, which resolves the call of a deserialized copy again.
     def readAs(declared: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
       override def resultType(): DataType = IntegerType
@@ -1878,26 +1880,55 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       (TimestampNTZNanosType(7), readAs(TimestampNTZNanosType(7)), TimestampNTZNanosType(9)),
       (DateType, readAs(DateType), YearMonthIntervalType())
     ).foreach { case (columnType, function, keyType) =>
-      val name = s"a $keyType key onto a $columnType column"
-      val cL = AttributeReference("cL", columnType)()
-      val cR = AttributeReference("cR", keyType)()
-      val layout = TransformExpression(function, Seq(cL), Some(4))
-      val left = DummySparkPlan(outputPartitioning =
-        KeyedPartitioning(Seq(layout), (0 until 4).map(InternalRow(_))))
-      val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
-      val cogroup = FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf,
-        AttributeReference("value", IntegerType)() :: Nil, left, right)
-      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-        val keyed = EnsureRequirements.apply(cogroup).collect {
-          case s: ShuffleExchangeExec => s.outputPartitioning
-        }.collect { case k: KeyedPartitioning => k }
-        assert(keyed.size == 1, s"$name: the right side is shuffled onto the bucket layout")
-        val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
-        val stored = BindReferences.bindReference(layout: Expression, Seq(cL))
-        values(keyType).foreach { v =>
-          assert(placed.eval(InternalRow(v)) == stored.eval(InternalRow(v)), s"$name: $v")
+      Seq(true, false).foreach { keyedLeft =>
+        val name = s"a $keyType key onto a $columnType column, keyed on the " +
+          (if (keyedLeft) "left" else "right")
+        val cL = AttributeReference("cL", columnType)()
+        val cR = AttributeReference("cR", keyType)()
+        val layout = TransformExpression(function, Seq(cL), Some(4))
+        val keyedPlan = DummySparkPlan(outputPartitioning =
+          KeyedPartitioning(Seq(layout), (0 until 4).map(InternalRow(_))))
+        val plainPlan = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+        val output = AttributeReference("value", IntegerType)() :: Nil
+        val cogroup = if (keyedLeft) {
+          FlatMapCoGroupsInPandasExec(Seq(cL), Seq(cR), pythonUdf, output, keyedPlan, plainPlan)
+        } else {
+          FlatMapCoGroupsInPandasExec(Seq(cR), Seq(cL), pythonUdf, output, plainPlan, keyedPlan)
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          val keyed = EnsureRequirements.apply(cogroup).collect {
+            case s: ShuffleExchangeExec => s.outputPartitioning
+          }.collect { case k: KeyedPartitioning => k }
+          assert(keyed.size == 1, s"$name: the other side is shuffled onto the bucket layout")
+          val placed = BindReferences.bindReference(keyed.head.expressions.head, Seq(cR))
+          val serializer = new JavaSerializer(new SparkConf()).newInstance()
+          val onExecutor = serializer.deserialize[Expression](serializer.serialize(placed))
+          val stored = BindReferences.bindReference(layout: Expression, Seq(cL))
+          values(keyType).foreach { v =>
+            assert(placed.eval(InternalRow(v)) == stored.eval(InternalRow(v)), s"$name: $v")
+            assert(onExecutor.eval(InternalRow(v)) == stored.eval(InternalRow(v)),
+              s"$name, on an executor: $v")
+          }
         }
       }
+    }
+  }
+
+  test("SPARK-60813: a join side shuffled onto a transform equals the layout over its key") {
+    // A join's key has the column's type, so the transform rebuilt over it is not marked and
+    // equals the layout's over that key, which e.g. `UnionExec` compares to keep a layout.
+    val l = AttributeReference("l", LongType)()
+    val r = AttributeReference("r", LongType)()
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val left = new DummySparkPlanWithBatchScanChild(outputPartitioning =
+        KeyedPartitioning(Seq(bucket(4, l)), (0 until 4).map(InternalRow(_))))
+      val right = DummySparkPlan(outputPartitioning = SinglePartition)
+      val join = SortMergeJoinExec(l :: Nil, r :: Nil, Inner, None, left, right)
+      val shuffled = EnsureRequirements.apply(join).collect {
+        case s: ShuffleExchangeExec => s.outputPartitioning
+      }.collect { case k: KeyedPartitioning => k }
+      assert(shuffled.size == 1, shuffled)
+      assert(shuffled.head.expressions.head.semanticEquals(bucket(4, r)), shuffled.head)
     }
   }
 
