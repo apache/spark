@@ -25,6 +25,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, PersistedView, Resolver}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
@@ -45,7 +46,7 @@ import org.apache.spark.sql.pipelines.util.{
   SchemaMergingUtils
 }
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 /**
  * `DatasetManager` is responsible for materializing tables in the catalog based on the given
@@ -410,7 +411,7 @@ object DatasetManager extends Logging {
           catalog = catalog,
           tableIdentifier = identifier,
           existingTable = existingTable,
-          desiredSchema = outputSchema,
+          desiredSchema = schemaToEvolveTowards(table, outputSchema),
           properties = mergedProperties,
           mergeWithExistingSchema = isTableIncrementallyUpdated,
           caseSensitive = effectiveCaseSensitive
@@ -433,6 +434,31 @@ object DatasetManager extends Logging {
       )
 
     (tableWithMaterializationMetadata, catalogTableEntity)
+  }
+
+  /**
+   * The schema an existing `table` is evolved towards. A declared schema is used as-is. An inferred
+   * schema has the existence default removed from its fields first.
+   *
+   * An inferred schema's fields inherit their default-value metadata from the flows' sources. On a
+   * new table such a default governs only later writes, because no rows exist yet. Keeping the
+   * existence default on an existing table would instead back-fill the rows that earlier runs wrote
+   * without the column with a value no flow wrote. Only declared defaults back-fill, so the
+   * inherited default is kept as the current default alone, which applies to later writes just as
+   * on a new table. An existing column is unaffected, as [[SchemaInferenceUtils.diffSchemas]] never
+   * updates its existence default.
+   */
+  private def schemaToEvolveTowards(table: Table, outputSchema: StructType): StructType = {
+    if (table.specifiedSchema.isDefined) {
+      outputSchema
+    } else {
+      StructType(outputSchema.fields.map { field =>
+        field.copy(metadata = new MetadataBuilder()
+          .withMetadata(field.metadata)
+          .remove(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+          .build())
+      })
+    }
   }
 
   /**

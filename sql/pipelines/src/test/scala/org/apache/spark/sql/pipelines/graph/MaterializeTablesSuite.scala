@@ -1093,6 +1093,43 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     assert(ex.cause.isInstanceOf[AnalysisException])
   }
 
+  test("SPARK-59269: a default inherited from a source does not back-fill rows a streaming table " +
+    "ingested before it selected the column") {
+    val source = s"${TestGraphRegistrationContext.DEFAULT_DATABASE}.src"
+    sql(s"CREATE TABLE $source (a INT, b INT DEFAULT 7)")
+    sql(s"INSERT INTO $source VALUES (1, 10)")
+
+    def runStreamingTable(query: String): Unit = {
+      val graph = new TestGraphRegistrationContext(spark) {
+        registerTable("st", query = Option(sqlFlowFunc(spark, query)))
+      }.toDataflowGraph
+      // Keep the checkpoint between runs, so the second run ingests only the rows added after
+      // the first one.
+      val updateContext = TestPipelineUpdateContext(
+        spark = spark,
+        unresolvedGraph = graph,
+        storageRoot = storageRoot,
+        resetCheckpointFlows = NoFlows)
+      updateContext.pipelineExecution.runPipeline()
+      updateContext.pipelineExecution.awaitCompletion()
+    }
+
+    runStreamingTable(s"SELECT a FROM STREAM($source)")
+    sql(s"INSERT INTO $source VALUES (2, 20)")
+    runStreamingTable(s"SELECT a, b FROM STREAM($source)")
+
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "st")
+    val b = CatalogV2Util.v2ColumnsToStructType(catalog.loadTable(identifier).columns())("b")
+    // The inherited default applies to later writes, as it would on a new table ...
+    assert(b.getCurrentDefaultValue() === Some("7"))
+    // ... but it does not back-fill the rows ingested before the column existed.
+    assert(b.getExistenceDefaultValue().isEmpty)
+    checkAnswer(
+      spark.table(s"${TestGraphRegistrationContext.DEFAULT_DATABASE}.st"),
+      Seq(Row(1, null), Row(2, 20)))
+  }
+
   // =============== Table evolution in catalog tests ===============
 
   private val recordingCatalogName = "recording_cat"
