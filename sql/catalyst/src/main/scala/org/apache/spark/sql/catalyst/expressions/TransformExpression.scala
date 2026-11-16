@@ -211,8 +211,10 @@ case class TransformExpression(
    * Whether this [[TransformExpression]]'s function is compatible with the `other`
    * [[TransformExpression]]'s function.
    *
-   * This is true if both are instances of [[ReducibleFunction]] and there exists a [[Reducer]] r(x)
-   * such that r(t1(x)) = t2(x), or r(t2(x)) = t1(x), for all input x.
+   * This is true if both are the same function, or if [[pairReducers]] finds a reducer in either
+   * direction: both are instances of [[ReducibleFunction]], their arguments line up, both sides
+   * have an identity, neither direction threw, and a reducer in one direction comes with an answer
+   * from the other. So it is false for a pair the connector could reduce but Spark does not trust.
    *
    * @param other the transform expression to compare to
    * @return true if compatible, false if not
@@ -246,9 +248,10 @@ case class TransformExpression(
    * by type, may still be asked. A literal past the declared arity has no declared type to compare
    * against, e.g. for an arity-flexible function. Column arguments are not checked, since they are
    * not passed to the connector; where Spark evaluates a transform, [[evaluableFunction]] checks
-   * every argument.
+   * every argument. A transform with no literal parameter has nothing to check, so the connector's
+   * `inputTypes()` is not called for it, as master never called it on this path.
    */
-  lazy val literalParamsMatchInputTypes: Boolean = {
+  lazy val literalParamsMatchInputTypes: Boolean = literalChildren.isEmpty || {
     val declaredTypes = function.inputTypes()
     children.zipWithIndex.forall {
       case (l: Literal, i) => i >= declaredTypes.length || l.dataType == declaredTypes(i)

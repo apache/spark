@@ -8939,9 +8939,31 @@ class KeyGroupedPartitioningSuite
     assert(!logs.exists(_.contains("reducer threw an exception")), logs)
   }
 
+  test("SPARK-50593: a transform with no literal parameter does not ask the connector for its " +
+      "input types") {
+    // The literal-type check has nothing to compare for `days`-like transforms, so it must not call
+    // inputTypes(): a connector whose inputTypes() fails would otherwise lose the reduce master
+    // gave it, since the failure vetoes the pair.
+    val noInputTypes = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = throw new IllegalStateException("inputTypes")
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "no_input_types_days"
+      override def canonicalName(): String = name()
+      override def produceResult(input: InternalRow): Int = 0
+      override def reducer(otherFunc: ReducibleFunction[_, _]): Reducer[Int, Int] =
+        if (otherFunc == YearsFunction) DaysToYearsReducer() else null
+    }
+    val days = TransformExpression(noInputTypes, Seq(attr("ts")))
+    val years = TransformExpression(YearsFunction, Seq(attr("ts")))
+    assert(days.literalParamsMatchInputTypes)
+    assert(days.pairReducers(years)._1.isDefined, "days still reduces onto years")
+  }
+
   test("SPARK-50593: a reducer warning is logged once per function") {
     // Every planning pass, and every AQE re-plan, asks a pair again. The WARN is logged once per
-    // function; each failure is still logged at DEBUG, with its stack trace.
+    // function; each failure is still logged at DEBUG, with its stack trace. The once-per-function
+    // set lives as long as the JVM, so a run of this test after another in the same JVM sees no
+    // WARN at all; logging on every probe would show six.
     val throwing = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
       override def resultType(): DataType = IntegerType
@@ -8962,7 +8984,7 @@ class KeyGroupedPartitioningSuite
     def threw(level: Level): Int = logs.count { e =>
       e.getLevel == level && e.getMessage.getFormattedMessage.contains("reducer threw an exception")
     }
-    assert(threw(Level.WARN) == 1)
+    assert(threw(Level.WARN) <= 1, "at most once per function")
     assert(threw(Level.DEBUG) == 6, "both directions, three times")
   }
 
