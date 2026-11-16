@@ -229,14 +229,12 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   // expression. E.g. `SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)` where attribute `c` can be
   // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
   // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
-  // null result of the enclosed expression means. So under a NOT, an equality is propagated only
-  // if it is never NULL: not one over a nullable attribute, nor an `EqualTo` with a NULL literal,
-  // which is NULL on every row even if 'c' isn't nullable. Replacing 'c' with NULL there could
-  // change another conjunct, e.g. from TRUE to FALSE or from FALSE to NULL, and so the NOT from
-  // NULL to TRUE or from TRUE to NULL. Where a NULL counts as FALSE, an AND with such an `EqualTo`
-  // is never TRUE whatever 'c' is replaced with, so it is still propagated there. An
-  // `EqualNullSafe` is never NULL, so with a NULL literal too, it is propagated under a NOT if
-  // 'c' isn't nullable.
+  // null result of the enclosed expression means. So under a NOT, an `EqualTo` is propagated only
+  // if it is never NULL: not over a nullable attribute, nor with a NULL literal, which is NULL on
+  // every row even if 'c' isn't nullable. Where a NULL counts as FALSE, an AND with such an
+  // `EqualTo` is never TRUE whatever the attribute is replaced with, so propagating it there is
+  // safe. An `EqualNullSafe` is never NULL, but, as before, under a NOT it is propagated only over
+  // an attribute that is not nullable.
   private def safeToReplace(e: BinaryComparison, ar: AttributeReference, nullIsFalse: Boolean) =
     nullIsFalse || !(ar.nullable || e.nullable)
 

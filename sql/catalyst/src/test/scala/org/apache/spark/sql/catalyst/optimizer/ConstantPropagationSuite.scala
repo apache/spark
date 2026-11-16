@@ -329,7 +329,7 @@ class ConstantPropagationSuite extends PlanTest {
     val nullInt = Literal(null, IntegerType)
     // `d = NULL` is NULL on every row, so the condition under the `NOT` is NULL or FALSE.
     // Replacing `d` with NULL would make `d + 0 <=> 5` FALSE, and the condition FALSE where it is
-    // NULL, or `d > b` NULL, and the condition NULL where it is FALSE. Also below an `OR`.
+    // NULL, or, below an `OR`, `d > b` NULL, and the `AND` NULL where it is FALSE.
     Seq(
       Not(columnD === nullInt && (columnD + 0 <=> 5)),
       Not(nullInt === columnD && (columnD + 0 <=> 5)),
@@ -338,8 +338,8 @@ class ConstantPropagationSuite extends PlanTest {
       val withNull = testRelation.where(condition).analyze
       comparePlans(ConstantPropagation(withNull), withNull)
     }
-    // An `EqualTo` with another literal on the left still is, as one on the right is in the
-    // SPARK-30447 test.
+    // An `EqualTo` with another literal on the left is still propagated, as one on the right is in
+    // the SPARK-30447 test.
     comparePlans(
       ConstantPropagation(testRelation.where(Not(Literal(1) === columnD && columnD > columnB))
         .analyze),
