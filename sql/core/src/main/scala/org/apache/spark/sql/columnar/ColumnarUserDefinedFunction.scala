@@ -74,7 +74,7 @@ case class ColumnarUserDefinedFunction(
       nullable)
   }
 
-  /** Returns a [[Column]] that evaluates this function with the given arguments. */
+  /** Returns a `Column` that evaluates this function with the given arguments. */
   @scala.annotation.varargs
   def apply(cols: Column*): Column = Column(builder(cols.map(expression)))
 }
