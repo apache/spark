@@ -84,9 +84,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   private def fullSearchPathForError(
       catalogPath: Seq[String],
       multipartIdentifier: Seq[String]): Seq[String] = {
+    // With PATH enabled, a top-level query has no view or function context, so the session's
+    // SET PATH (or DEFAULT_PATH) is reported. Passing [[catalogPath]] there would select the
+    // pathless-view ordering instead. With PATH off, or inside a body, the home catalog is used.
+    val viewContext =
+      if (SQLConf.get.pathEnabled) AnalysisContext.get.catalogAndNamespace else catalogPath
     CatalogManager.identifierPathEntries(
       catalogManager.resolutionPathEntriesForAnalysis(
-        AnalysisContext.get.resolutionPathEntries, catalogPath),
+        AnalysisContext.get.resolutionPathEntries, viewContext),
       multipartIdentifier,
       catalogManager.isCatalogRegistered).map(toSQLId)
   }

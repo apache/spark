@@ -840,6 +840,30 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("pathless SQL function body sees the caller's temporary view and temporary function") {
+    sql("CREATE TABLE path_tmp_v (a INT) USING parquet")
+    sql("INSERT INTO path_tmp_v VALUES (5)")
+    // The temporary view shadows the persistent table of the same name.
+    sql("CREATE TEMPORARY VIEW path_tmp_v AS VALUES (0) AS t(a)")
+    sql(
+      """
+        |CREATE TEMPORARY FUNCTION path_tmp_fn() RETURNS INT
+        |RETURN (SELECT SUM(a) FROM path_tmp_v)
+        |""".stripMargin)
+    try {
+      Seq("false", "true").foreach { pathEnabled =>
+        withSQLConf(SQLConf.PATH_ENABLED.key -> pathEnabled) {
+          checkAnswer(sql("SELECT path_tmp_fn()"), Row(0))
+        }
+      }
+    } finally {
+      spark.sessionState.catalogManager.clearSessionPath()
+      sql("DROP TEMPORARY FUNCTION IF EXISTS path_tmp_fn")
+      sql("DROP VIEW IF EXISTS path_tmp_v")
+      sql("DROP TABLE IF EXISTS path_tmp_v")
+    }
+  }
+
   test("pathless view body ignores the invoker's SET PATH and uses DEFAULT_PATH") {
     sql("CREATE SCHEMA IF NOT EXISTS path_view_home")
     sql("CREATE SCHEMA IF NOT EXISTS path_view_other")

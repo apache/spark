@@ -309,7 +309,7 @@ object AnalysisContext {
 
   /** Test helper: analyze a SQL function body with an empty invoker catalog/namespace. */
   def withAnalysisContext[A](function: SQLFunction)(f: => A): A =
-    withAnalysisContext(function, Nil)(f)
+    withAnalysisContext(function, Nil, None)(f)
 
   /**
    * Analyze a SQL function body.
@@ -317,12 +317,16 @@ object AnalysisContext {
    * @param invokerCatalogAndNamespace the caller's current catalog and namespace. Version-0
    *                                   frozen PATH reconstruction appends this catalog (not the
    *                                   creation catalog) for two-part names, matching the base
-   *                                   branch. Pathless bodies also use it as their home so they
-   *                                   never inherit the caller's SET PATH.
+   *                                   branch.
+   * @param pathlessEntries when PATH is enabled and the function stores no frozen PATH, the
+   *                        entries to pin for its body (DEFAULT_PATH or the built-in default
+   *                        around its home). Pinning keeps the invoker's SET PATH out of the
+   *                        body without changing the caller's catalog/namespace context.
    */
   def withAnalysisContext[A](
       function: SQLFunction,
-      invokerCatalogAndNamespace: Seq[String])(f: => A): A = {
+      invokerCatalogAndNamespace: Seq[String],
+      pathlessEntries: Option[Seq[Seq[String]]])(f: => A): A = {
     val originContext = value.get()
     // Validate even when PATH is absent so future metadata versions still fail closed.
     CatalogTable.requireSupportedMetadataVersion(
@@ -331,13 +335,12 @@ object AnalysisContext {
       "SQL function",
       function.name.unquotedString)
     val hasFrozenPath = function.functionStoredResolutionPath.isDefined
-    // Function body analysis should not inherit any caller-pinned path. A frozen PATH is used
-    // as stored (with version-0 enrichment against the invoker catalog). A pathless body pins
-    // the invoker's home catalog/namespace so DEFAULT_PATH / the built-in default apply, and
-    // the invoker's SET PATH does not.
+    // The body keeps the caller's catalog/namespace context, as on the base branch: it drives
+    // temp-object visibility and view-relative qualification. Path selection is separate: a
+    // frozen PATH is used as stored (with version-0 enrichment against the invoker catalog), and
+    // a pathless body uses the pinned entries so the invoker's SET PATH does not apply.
     val context = originContext.copy(
-      catalogAndNamespace =
-        if (hasFrozenPath) Nil else invokerCatalogAndNamespace,
+      catalogAndNamespace = originContext.catalogAndNamespace,
       resolutionPathEntries = function.functionStoredResolutionPath
         .map(CatalogManager.deserializePathEntriesForAnalysisOrFail(
           _,
@@ -346,7 +349,8 @@ object AnalysisContext {
           SQLConf.get.persistentCatalogFirst,
           "SQL function",
           function.name.unquotedString,
-          SQLFunction.CURRENT_FUNCTION_METADATA_VERSION)),
+          SQLFunction.CURRENT_FUNCTION_METADATA_VERSION))
+        .orElse(if (hasFrozenPath) None else pathlessEntries),
       // Unlike `withAnalysisContext(viewDesc)`, do NOT reset this accumulator by default. A SQL
       // function has no IDENTIFIER-variable metadata of its own that is consulted on resolution, so
       // a variable its body reads through an IDENTIFIER clause is part of the enclosing object's
@@ -2275,6 +2279,24 @@ class Analyzer(
   }
 
   /**
+   * Path entries to pin for a pathless SQL function body (one without a frozen PATH), or None
+   * when the body keeps the session's resolution. Only PATH-enabled sessions pin: the body uses
+   * DEFAULT_PATH or the built-in default around its home catalog/namespace, so the invoker's
+   * SET PATH does not apply. The home is the caller's catalog/namespace when a view or function
+   * body is already in progress, and the invoker's current catalog/namespace otherwise.
+   */
+  private def pathlessSQLFunctionPathEntries(
+      invokerCatalogAndNamespace: Seq[String]): Option[Seq[Seq[String]]] = {
+    val inherited = AnalysisContext.get.catalogAndNamespace
+    val home = if (inherited.nonEmpty) inherited else invokerCatalogAndNamespace
+    if (SQLConf.get.pathEnabled && home.nonEmpty) {
+      Some(catalogManager.resolutionPathEntriesForAnalysis(None, home))
+    } else {
+      None
+    }
+  }
+
+  /**
    * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
    * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
    * select list. This support is introduced in Spark 2.0.
@@ -2900,10 +2922,12 @@ class Analyzer(
           applySessionOverrides = true,
           alwaysSetAnsiValue = false)
         SQLConf.withExistingConf(newConf) {
+          val invoker = catalogManager.currentCatalog.name +:
+            catalogManager.currentNamespace.toImmutableArraySeq
           AnalysisContext.withAnalysisContext(
             f.function,
-            catalogManager.currentCatalog.name +:
-              catalogManager.currentNamespace.toImmutableArraySeq) {
+            invoker,
+            pathlessSQLFunctionPathEntries(invoker)) {
             executeSameContext(plan)
           }
         }
@@ -3214,10 +3238,12 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
+            val invoker = catalogManager.currentCatalog.name +:
+              catalogManager.currentNamespace.toImmutableArraySeq
             AnalysisContext.withAnalysisContext(
               function,
-              catalogManager.currentCatalog.name +:
-                catalogManager.currentNamespace.toImmutableArraySeq) {
+              invoker,
+              pathlessSQLFunctionPathEntries(invoker)) {
               executeSameContext(plan)
             }
           }
