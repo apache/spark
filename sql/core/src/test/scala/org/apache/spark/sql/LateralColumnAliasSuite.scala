@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
+import org.apache.spark.sql.functions.{array_contains, col, map_filter, map_keys, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -86,6 +87,47 @@ class LateralColumnAliasSuiteBase extends SharedSparkSession {
   protected def withLCAOn(f: => Unit): Unit = {
     withSQLConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED.key -> "true") {
       f
+    }
+  }
+
+  for (operation <- Seq("select", "withColumns")) {
+    test(s"SPARK-61768: lambda input references precede aliases in $operation") {
+      val input = sql("SELECT 1 AS a, 100 AS b, array(1, 2) AS arr")
+      checkAnswer(input.selectExpr("b AS a", "transform(arr, x -> x + a) AS c"),
+        Row(100, Seq(2, 3)))
+      val values = transform(col("arr"), x => x + col("a"))
+      val result = if (operation == "select") {
+        input.select(col("b").as("a"), values.as("c"))
+      } else {
+        input.withColumns(Map("a" -> col("b"), "c" -> values)).select("a", "c")
+      }
+      checkAnswer(result, Row(100, Seq(2, 3)))
+    }
+  }
+
+  test("SPARK-61768: nested lambda input references precede aliases") {
+    val input = sql("SELECT 1 AS a, 100 AS b, array(1, 2) AS arr")
+    checkAnswer(
+      input.select(col("b").as("a"),
+        transform(col("arr"), x =>
+          transform(col("arr"), y => x + y + col("a"))).as("c")),
+      Row(100, Seq(Seq(3, 4), Seq(4, 5))))
+  }
+
+  test("SPARK-61768: lambda map references keep the input type") {
+    val input = sql("SELECT map(1, 10) AS m, 7 AS b")
+    val filtered = map_filter(col("m"), (key, _) => array_contains(map_keys(col("m")), key))
+    checkAnswer(
+      input.withColumns(Map("m" -> col("b"), "c" -> filtered)).select("m", "c"),
+      Row(7, Map(1 -> 10)))
+  }
+
+  test("SPARK-61768: lambdas can still reference preceding aliases") {
+    withLCAOn {
+      val input = sql("SELECT 100 AS b, array(1, 2) AS arr")
+      checkAnswer(
+        input.select(col("b").as("a"), transform(col("arr"), x => x + col("a")).as("c")),
+        Row(100, Seq(101, 102)))
     }
   }
 
