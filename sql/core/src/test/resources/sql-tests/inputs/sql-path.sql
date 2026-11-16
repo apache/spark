@@ -99,8 +99,9 @@ SELECT current_path();
 -- 2.3 SYSTEM_PATH shortcut ----------------------------------------------------
 --
 -- SYSTEM_PATH expands to the system-managed namespaces under the `system`
--- catalog. Today that is just `system.builtin`; the shortcut is reserved for
--- future system-managed schemas.
+-- catalog: `system.builtin` and the `system` catalog entry, which lets two-part
+-- names such as `builtin.f` resolve. The shortcut is reserved for future
+-- system-managed schemas.
 
 SET PATH = SYSTEM_PATH;
 SELECT current_path();

@@ -113,9 +113,10 @@ path_element
 
 * **`SYSTEM_PATH`**
 
-  Expands to the system-managed namespaces under the `system` catalog. Today this is just
-  `system.builtin`, but it is reserved for future system-managed schemas (for example, hosting
-  built-in AI, geospatial, or ML functions).
+  Expands to the system-managed namespaces under the `system` catalog: the `system.builtin`
+  schema and the `system` catalog entry, so two-part names such as `builtin.f` resolve. It does
+  not include `system.session`, which holds the session's own objects. It is reserved for future
+  system-managed schemas (for example, hosting built-in AI, geospatial, or ML functions).
 
 * **`PATH`**
 
@@ -201,12 +202,12 @@ path_element
  system.builtin,system.session,spark_catalog.default,system,spark_catalog
 > SET PATH = SYSTEM_PATH;
 > SELECT current_path();
- system.builtin
+ system.builtin,system
 
 -- SYSTEM_PATH composes naturally with the working schema.
 > SET PATH = SYSTEM_PATH, CURRENT_SCHEMA;
 > SELECT current_path();
- system.builtin,spark_catalog.default
+ system.builtin,system,spark_catalog.default
 
 -- Append an entry by referring to the current path.
 > SET PATH = spark_catalog.default, system.builtin;

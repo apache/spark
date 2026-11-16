@@ -11004,11 +11004,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   /**
    * System-only path used by `SET PATH = SYSTEM_PATH`. Contains the system-managed namespaces
-   * under the `system` catalog whose contents are wholly defined by Spark itself; today that
-   * is only `system.builtin`, but the shortcut is reserved for future system-managed schemas
-   * (e.g. AI, geospatial, ML).
+   * under the `system` catalog whose contents are wholly defined by Spark itself: the
+   * `system.builtin` schema, plus the bare `system` catalog entry so two-part names such as
+   * `builtin.f` resolve through it. The shortcut is reserved for future system-managed schemas
+   * (e.g. AI, geospatial, ML), which the catalog entry also covers. `system.session` is not
+   * included because it holds user session objects.
    */
-  def systemPathOrder: Seq[Seq[String]] = Seq(Seq("system", "builtin"))
+  def systemPathOrder: Seq[Seq[String]] = Seq(Seq("system", "builtin"), Seq("system"))
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

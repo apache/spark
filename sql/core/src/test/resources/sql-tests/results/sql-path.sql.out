@@ -92,7 +92,7 @@ SELECT current_path()
 -- !query schema
 struct<current_path():string>
 -- !query output
-system.builtin
+system.builtin,system
 
 
 -- !query
@@ -116,7 +116,7 @@ SELECT current_path()
 -- !query schema
 struct<current_path():string>
 -- !query output
-system.builtin,spark_catalog.default
+system.builtin,system,spark_catalog.default
 
 
 -- !query

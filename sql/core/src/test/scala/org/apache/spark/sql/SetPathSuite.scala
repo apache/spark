@@ -278,14 +278,14 @@ class SetPathSuite extends SharedSparkSession {
   }
 
   test("PATH enabled: SET PATH = SYSTEM_PATH expands to system-managed namespaces") {
-    // SPARK-57109: SYSTEM_PATH expands to the system-managed namespaces under the `system`
-    // catalog. Today that is just `system.builtin`; the shortcut is reserved for future
-    // system-managed schemas.
+    // SYSTEM_PATH expands to the system-managed namespaces under the `system` catalog: the
+    // `system.builtin` schema plus the bare `system` catalog entry, which lets `builtin.f`
+    // resolve. The shortcut is reserved for future system-managed schemas.
     withPathEnabled {
       sql("SET PATH = SYSTEM_PATH")
       val entries = pathEntries(currentPath())
-      assert(entries === Seq("system.builtin"),
-        s"SYSTEM_PATH should expand to exactly [system.builtin]; got: $entries")
+      assert(entries === Seq("system.builtin", "system"),
+        s"SYSTEM_PATH should expand to [system.builtin, system]; got: $entries")
     }
   }
 
@@ -311,30 +311,30 @@ class SetPathSuite extends SharedSparkSession {
 
   test("PATH enabled: SET PATH = SYSTEM_PATH, CURRENT_SCHEMA composes cleanly") {
     // SPARK-57109: SYSTEM_PATH plus CURRENT_SCHEMA is the canonical "system functions plus my
-    // working schema" path; verify the expansion is exactly those two entries in order.
+    // working schema" path; verify the expansion is exactly those entries in order.
     withPathEnabled {
       sql("USE spark_catalog.default")
       sql("SET PATH = SYSTEM_PATH, CURRENT_SCHEMA")
       val entries = pathEntries(currentPath())
-      assert(entries === Seq("system.builtin", "spark_catalog.default"),
-        s"SYSTEM_PATH, CURRENT_SCHEMA should expand to [system.builtin, " +
+      assert(entries === Seq("system.builtin", "system", "spark_catalog.default"),
+        s"SYSTEM_PATH, CURRENT_SCHEMA should expand to [system.builtin, system, " +
           s"current schema]; got: $entries")
     }
   }
 
   test("PATH enabled: SET PATH = SYSTEM_PATH, system.session is the documented migration form") {
     // SPARK-57109: callers who relied on the old SYSTEM_PATH expansion (system.builtin +
-    // system.session) can name system.session explicitly. Because SYSTEM_PATH now expands to
-    // only system.builtin, listing system.session alongside it is legal and yields
-    // [system.builtin, system.session]. If SYSTEM_PATH ever re-expanded to carry system.session
-    // again, this entry would collide and raise DUPLICATE_SQL_PATH_ENTRY -- which is the
-    // regression this test guards against.
+    // system.session) can name system.session explicitly. SYSTEM_PATH expands to
+    // [system.builtin, system] and never carries system.session, so listing it alongside
+    // yields [system.builtin, system, system.session]. If SYSTEM_PATH ever re-expanded to
+    // carry system.session again, this entry would collide and raise DUPLICATE_SQL_PATH_ENTRY,
+    // which is the regression this test guards against.
     withPathEnabled {
       sql("SET PATH = SYSTEM_PATH, system.session")
       val entries = pathEntries(currentPath())
-      assert(entries === Seq("system.builtin", "system.session"),
-        s"SYSTEM_PATH, system.session should expand to [system.builtin, system.session]; " +
-          s"got: $entries")
+      assert(entries === Seq("system.builtin", "system", "system.session"),
+        s"SYSTEM_PATH, system.session should expand to [system.builtin, system, " +
+          s"system.session]; got: $entries")
     }
   }
 
