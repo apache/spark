@@ -604,18 +604,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_chain_survives_optimizer(self):
         # A chain folds to a sequential CASE WHEN, which is atomic to
         # `splitConjunctivePredicates` and `BooleanSimplification`. An `&` fold
-        # would let those rules split or reorder it, moving a later link's NULL
-        # guard ahead of the links that gate it -- as they still do for the
-        # equivalent user-written `and` (see the module docstring). Each repro
-        # below is such a shape; all must return Python's answer (or raise like
-        # Python) with the chain fully lowered (no EvalPython in the plan).
+        # would let BooleanSimplification split or reorder it, moving a later
+        # link's NULL guard ahead of the links that gate it -- as it still does
+        # for the equivalent user-written `and` (see the module docstring). Each
+        # repro below must return Python's answer (or raise like Python) with the
+        # chain fully lowered (no EvalPython in the plan); only the two
+        # BooleanSimplification ones fail under an `&` fold.
 
-        # PushDownPredicates / Aggregate: an `&` fold's later link over only
-        # grouping keys would be pushed below the Aggregate, where it runs on
-        # groups Python short-circuits past. `sa < b < c` over
-        # groupBy(b,c).agg(sum(a)): the group (b=1, c=NULL, sa=6) has `sa < b`
-        # false, so Python returns False without touching `b < c` (which would
-        # raise on the NULL c).
+        # PushDownPredicates / Aggregate: `b < c` reads only grouping keys, so an
+        # `&` fold could push it below the Aggregate, onto groups Python
+        # short-circuits past. Since SPARK-60633 it stays above whenever `sa < b`
+        # does, so this does not tell the folds apart; it pins the chain over an
+        # aggregate. `sa < b < c` over groupBy(b,c).agg(sum(a)): the group
+        # (b=1, c=NULL, sa=6) has `sa < b` false, so Python returns False without
+        # touching `b < c` (which would raise on the NULL c).
         from pyspark.sql.functions import sum as sum_
 
         def chain_over_agg(sa, b, c):
@@ -682,8 +684,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # the `And` and `PushPredicateThroughJoin` pushed the guard to one side of
         # the join, where it fired on rows Python short-circuits past and raised
         # USER_RAISED_EXCEPTION instead of returning False. Keep it: the override
-        # keeps the guard above the join. The other optimizer divergences listed
-        # in the module docstring remain open.
+        # keeps the guard above the join. BooleanSimplification and subexpression
+        # elimination, listed in the module docstring, remain open.
         #
         # The join case disables AQE and broadcast on purpose: otherwise whether
         # the pushed-down guard fires races AQE eliminating the empty join, and the
@@ -1594,9 +1596,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def nullable_ternary_and(x):
             return (True if x > 0 else None) and (x > 0)
 
+        def nullable_ternary_body_and(x):
+            return (None if x > 0 else True) and (x < 0)
+
         long_schema = StructType([StructField("a", LongType(), nullable=True)])
         with self.sql_conf(_TRANSPILE_ON):
-            for func in (none_and, nullable_ternary_and):
+            for func in (none_and, nullable_ternary_and, nullable_ternary_body_and):
                 with self.subTest(func=func.__name__):
                     with _warnings.catch_warnings(record=True):
                         _warnings.simplefilter("always")
@@ -1608,6 +1613,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     )
             pudf = UserDefinedFunction(none_and, BooleanType())
             df = self.spark.createDataFrame([Row(a=-5)], schema=long_schema)
+            [result] = df.select(pudf("a")).collect()
+            self.assertIsNone(result[0])
+            # Python returns None for x = 5 where an `&` fold would say False.
+            pudf = UserDefinedFunction(nullable_ternary_body_and, BooleanType())
+            df = self.spark.createDataFrame([Row(a=5)], schema=long_schema)
             [result] = df.select(pudf("a")).collect()
             self.assertIsNone(result[0])
 

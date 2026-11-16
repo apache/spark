@@ -50,15 +50,17 @@ because every comparison lowering is total, so ``NOT link`` is never NULL.
 
 That short-circuit is an EVALUATION-time property only, and it does not by
 itself survive the optimizer. The ``&`` / ``|`` fold that ``and`` / ``or`` use
-is splittable, and four optimizer rules diverge on it, all measured rather than
-reasoned about (the last bullet adds the NaN value-level difference). A chain's
-CASE WHEN is atomic -- ``splitConjunctivePredicates`` matches only ``And``,
-``BooleanSimplification``'s patterns match ``And`` / ``Or``, and subexpression
-elimination recurses only into a CASE WHEN's first condition -- so no rule can
-move a later guard ahead of the links that gate it, and a chain predicate moves
-only as a whole when pushdown applies. The divergences below are therefore the
-``and`` / ``or`` fold's; the ``and`` form of each repro (``a < b and b < c`` for
-``a < b < c``) predates this lowering and diverges identically.
+is splittable, and four optimizer rules diverge on it (two now closed), all
+measured rather than reasoned about (the last bullet adds the NaN value-level
+difference). A chain's CASE WHEN is atomic -- ``splitConjunctivePredicates``
+matches only ``And``, ``BooleanSimplification``'s patterns match ``And`` /
+``Or``, and subexpression elimination takes a CASE WHEN's first condition plus
+what every condition (or every value) shares, which for a chain is already in the
+first condition -- so no rule can move a later guard ahead of the links that gate
+it, and a chain predicate moves only as a whole when pushdown applies. The
+divergences below are therefore the ``and`` / ``or`` fold's; the ``and`` form of
+each repro (``a < b and b < c`` for ``a < b < c``) predates this lowering and
+diverges identically.
 
 * Predicate pushdown through a JOIN -- CLOSED by SPARK-58627. ``Optimizer``
   partitions on ``cond.deterministic && !cond.throwable``, and the ``&`` fold is
@@ -69,19 +71,14 @@ only as a whole when pushdown applies. The divergences below are therefore the
   regression test. (A pure chain ``lambda a, b, c: a < b < c`` over a join was
   the original repro; it no longer reaches this path, since the chain now folds
   to an atomic CASE WHEN that cannot be split.)
-* Predicate pushdown through an AGGREGATE or WINDOW -- OPEN, and the reason the
-  bullet above says "through a JOIN". CombineFilters and the Filter-through-Project
-  arm also preserve throwable conditions. The Aggregate arm explicitly does not
-  ("We can push down deterministic predicate through Aggregate, including
-  throwable predicate"), and the Window / Union / EventTimeWatermark arms
-  partition on ``_.deterministic`` alone. Measured:
-  ``groupBy("b", "c").agg(sum("a").alias("sa")).filter(lambda: sa < b and b < c)``
-  splits the fold, pushing the ``b < c`` guard BELOW the ``Aggregate`` while
-  ``sa < b`` stays above, and raises. The Aggregate arm's own reasoning is about
-  ROWS -- grouping keys cannot gain distinct values -- and says nothing about
-  conjunct ORDER, which is the only thing a guard in a fold relies on.
+* Predicate pushdown through an AGGREGATE, WINDOW, UNION or watermark -- CLOSED by
+  SPARK-60633. Those arms used to push a throwable conjunct below the operator
+  while a conjunct written before it stayed above, so the ``&`` fold's later guard
+  ran on groups Python short-circuits past. They now keep a throwable conjunct
+  written after one that stays up above the operator, so the fold's order holds.
 * BooleanSimplification -- OPEN, and it breaks the ``&`` / ``|`` fold two
-  different ways. It consults neither ``deterministic`` nor ``throwable``.
+  different ways. It matches conjuncts with ``semanticEquals``, which needs
+  ``deterministic`` and ignores ``throwable``; ``RaiseError`` is deterministic.
   Common-factor elimination for disjunction (``(a && b) || (a && c) => a && (b
   || c)``) hoists a shared guard to the FRONT of a conjunction, where it
   evaluates unconditionally: ``(a < b and b < c) or (d < b and b < c)`` on
@@ -1029,7 +1026,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 # `not` and boolean ops produce a boolean column. Labeling them
                 # "numeric" (the old catch-all) let booleans into
                 # arithmetic/equality lowerings where ANSI analysis fails (e.g.
-                # `(x > 0) + 1`, valid Python) instead of falling back.
+                # `(not x) + 1`, valid Python) instead of falling back.
                 return "bool"
             case _:
                 # Remaining nodes (unsupported calls, subscripts, ...) don't
