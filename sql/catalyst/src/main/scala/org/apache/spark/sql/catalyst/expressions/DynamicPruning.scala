@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, HintInfo, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 
@@ -119,6 +119,28 @@ case class DynamicPruningSubquery(
 
   override protected def withNewChildInternal(newChild: Expression): DynamicPruningSubquery =
     copy(pruningKey = newChild)(broadcastValueProjection)
+}
+
+object DynamicPruningSubquery {
+  /**
+   * Builds the plan that collects the distinct build-side keys a DPP filter prunes on.
+   *
+   * The keys are aliased in a `Project` below the aggregate, which then groups on plain
+   * attributes. A partial aggregate outputs only its grouping attributes, so an `Alias` among the
+   * grouping expressions never reaches the `outputExpressions` that
+   * `PartitioningPreservingUnaryExecNode` reads its alias map from. The build side's partitioning
+   * (e.g. `KeyedPartitioning`) would then be hidden, and `EnsureRequirements` would add a shuffle.
+   * A plain grouping attribute keeps it, and `GroupPartitionsExec` coalesces duplicate keys. This
+   * is the shape `PullOutGroupingExpressions` gives complex grouping expressions.
+   */
+  private[sql] def planDistinctBuildKeys(
+      buildPlan: LogicalPlan,
+      buildKeys: Seq[Expression],
+      keyIndices: Seq[Int]): LogicalPlan = {
+    val aliases = keyIndices.map(idx => Alias(buildKeys(idx), buildKeys(idx).toString)())
+    val groupingAttrs = aliases.map(_.toAttribute)
+    Aggregate(groupingAttrs, groupingAttrs, Project(aliases, buildPlan))
+  }
 }
 
 /**

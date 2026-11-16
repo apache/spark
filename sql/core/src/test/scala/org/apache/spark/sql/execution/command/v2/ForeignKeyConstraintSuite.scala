@@ -18,7 +18,9 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
   override protected def command: String = "FOREIGN KEY CONSTRAINT"
 

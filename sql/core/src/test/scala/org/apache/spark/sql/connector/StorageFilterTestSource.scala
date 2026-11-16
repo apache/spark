@@ -126,7 +126,7 @@ object StorageFilterTestSource {
   val filterReferences = mutable.Set.empty[Seq[String]]
   val filterIdentities = mutable.Set.empty[Int]
 
-  /** How many times a runtime-filtering scan was handed filters. */
+  /** How many times a runtime-filtering scan was handed a filter on a column. */
   val runtimeFilterCalls = new AtomicInteger(0)
 
   def reset(): Unit = {
@@ -234,15 +234,22 @@ class StorageFilterTestScanBuilder(tableSchema: StructType, options: CaseInsensi
         override def filterAttributes(): Array[NamedReference] =
           readSchema().fieldNames.map(FieldReference.column).toArray[NamedReference]
         override def filter(predicates: Array[Predicate]): Unit =
-          StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
+          if (predicates.exists(_.references().nonEmpty)) {
+            StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
+          }
         override def supportsIterativePushdown(): Boolean = true
       }
       case "catalyst" => new StorageFilterTestScan(schema, factory, declared, numPartitions)
           with SupportsRuntimeCatalystFiltering {
         override def filterAttributes(): Array[NamedReference] = Array(FieldReference.column("k"))
         override def fullyPushedFilterAttributes(): Array[NamedReference] = filterAttributes()
-        override def filter(expressions: Array[Expression]): Unit =
-          StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
+        override def planInputPartitionsWithRuntimeFilters(
+            expressions: Array[Expression]): Array[InputPartition] = {
+          if (expressions.exists(_.references.nonEmpty)) {
+            StorageFilterTestSource.runtimeFilterCalls.incrementAndGet()
+          }
+          planInputPartitions()
+        }
       }
       case _ => new StorageFilterTestScan(schema, factory, declared, numPartitions)
     }

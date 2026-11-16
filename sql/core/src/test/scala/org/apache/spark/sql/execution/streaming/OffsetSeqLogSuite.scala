@@ -93,6 +93,15 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(sessionConf.getConfString(key.key) === "true")
   }
 
+  test("SPARK-60905: Python UDFs are expensive only for checkpoints that record it") {
+    val entry = SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF
+    val (_, offsetSeq) = readFromResource(
+      "checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+    assert(OffsetSeqMetadata.readValue(offsetSeq.metadataOpt.get, entry) == "false")
+    val metadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(entry.key).contains("true"))
+  }
+
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",
@@ -102,6 +111,32 @@ class OffsetSeqLogSuite extends SharedSparkSession {
 
       assert(v1.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).contains("3"))
       assert(v2.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).contains("3"))
+    }
+  }
+
+  test("setConfWithoutLogging sets the values that setSessionConf sets") {
+    // The metadata of a checkpoint without the confs that have defaults for old checkpoints, of a
+    // checkpoint of Spark 4.2, and of a new query, with a rebound conf.
+    val metadatas = withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
+      Seq(
+        readFromResource("offset-log-version-2.1.0")._2.metadataOpt.get,
+        readFromResource("checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+          ._2.metadataOpt.get,
+        OffsetSeqMetadata(0, 0, spark.conf))
+    }
+    metadatas.foreach { metadata =>
+      val logged = spark.sessionState.conf.clone()
+      val unlogged = spark.sessionState.conf.clone()
+      // Values that the metadata replaces, and one that only a conf missing from it keeps.
+      Seq(logged, unlogged).foreach { conf =>
+        conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 7)
+        conf.setConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL, true)
+      }
+      OffsetSeqMetadata.setSessionConf(metadata, logged)
+      OffsetSeqMetadata.setConfWithoutLogging(metadata, unlogged)
+      assert(unlogged.getAllConfs === logged.getAllConfs, metadata)
     }
   }
 

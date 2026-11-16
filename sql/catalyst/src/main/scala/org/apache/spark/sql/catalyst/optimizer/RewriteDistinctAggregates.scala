@@ -204,6 +204,13 @@ import org.apache.spark.util.collection.Utils
  * techniques.
  */
 object RewriteDistinctAggregates extends Rule[LogicalPlan] {
+  private def evalChildren(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.flatMap {
+      case so: SortOrder => so.children
+      case other => Seq(other)
+    }
+  }
+
   private def mustRewrite(
       distinctAggs: Seq[AggregateExpression],
       groupingExpressions: Seq[Expression]): Boolean = {
@@ -212,8 +219,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // foldable, we need to rewrite the query, e.g. SELECT COUNT(DISTINCT 1). Without this case,
     // non-grouping aggregation queries with distinct aggregate expressions will be incorrectly
     // handled by the aggregation strategy, causing wrong results when working with empty tables.
+    // An ordered distinct aggregate whose arguments and WITHIN GROUP keys are all constants
+    // (e.g. listagg(DISTINCT 'x', ',') WITHIN GROUP (ORDER BY 'x')) counts as all-foldable here
+    // because evalChildren unwraps SortOrder before checking foldability. The rule must not rely
+    // on the planner keeping a SortOrder-wrapped constant as the single-distinct key, and the
+    // extra Expand cost for such queries is accepted to guarantee correct empty-table results.
     distinctAggs.exists(_.filter.isDefined) || (groupingExpressions.isEmpty &&
-      distinctAggs.exists(_.aggregateFunction.children.forall(_.foldable)))
+      distinctAggs.exists(e => evalChildren(e.aggregateFunction.children).forall(_.foldable)))
   }
 
   private def mayNeedtoRewrite(a: Aggregate): Boolean = {
@@ -237,7 +249,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   private def groupDistinctAggs(
       aggExpressions: Seq[AggregateExpression]): Map[ExpressionSet, Seq[AggregateExpression]] = {
     aggExpressions.filter(_.isDistinct).groupBy { e =>
-      val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
+      val unfoldableChildren = ExpressionSet(
+        evalChildren(e.aggregateFunction.children).filter(!_.foldable))
       if (unfoldableChildren.nonEmpty) {
         // Only expand the unfoldable children
         unfoldableChildren
@@ -248,7 +261,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         // count(distinct 1) will be explained to count(1) after the rewrite function.
         // Generally, the distinct aggregateFunction should not run
         // foldable TypeCheck for the first child.
-        ExpressionSet(e.aggregateFunction.children.take(1))
+        ExpressionSet(evalChildren(e.aggregateFunction.children).take(1))
       }
     }
   }
@@ -285,7 +298,12 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Option[Expression]): AggregateFunction = {
-        val newChildren = af.children.map(c => attrs(c).getOrElse(c))
+        val newChildren = af.children.map {
+          case so: SortOrder =>
+            so.withNewChildren(so.children.map(c => attrs(c).getOrElse(c)))
+          case c =>
+            attrs(c).getOrElse(c)
+        }
         af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
       }
 
@@ -333,8 +351,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // occurrence, with no dedup, so copying the filter into the key would
           // join the input twice. The guard also evaluates the child only when the
           // union is true, so every child must pass canEvaluateUnconditionally. A
-          // child that fails, such as a division, stays raw and keeps today's
-          // evaluation count and error behavior. The guard shares the
+          // child that fails, such as a division in ANSI mode, stays raw and keeps
+          // today's evaluation count and error behavior. The guard shares the
           // rewriteCountDistinctConditional kill switch so conf=false restores the
           // pre-feature Expand key (raw child) for user-written FILTER distincts too.
           val canGuard = SQLConf.get.rewriteCountDistinctConditionalEnabled &&
@@ -362,7 +380,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
             val condition = e.filter.flatMap(distinctAggFilterAttrLookup.get)
-            val naf = if (af.children.forall(_.foldable)) {
+            val naf = if (evalChildren(af.children).forall(_.foldable)) {
               af
             } else {
               patchAggregateFunctionChildren(af) { x =>
@@ -386,7 +404,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val regularAggExprs = aggExpressions
         .filter(e => !e.isDistinct && e.children.exists(!_.foldable))
       val regularAggFunChildren = regularAggExprs
-        .flatMap(_.aggregateFunction.children.filter(!_.foldable))
+        .flatMap(e => evalChildren(e.aggregateFunction.children).filter(!_.foldable))
       val regularAggFilterAttrs = regularAggExprs.flatMap(_.filterAttributes)
       val regularAggChildren = (regularAggFunChildren ++ regularAggFilterAttrs).distinct
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
@@ -494,10 +512,10 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * holds, which is a row whose original `IF(cond_i, base, NULL)` already evaluated
    * `base`. The guard does not apply when any filter is non-deterministic, contains
    * a subquery, or when a child fails that check (a user-written FILTER on a
-   * division, for example). Expand then projects the raw child on every row. A group
-   * that also has an unfiltered aggregate on the same base projects the raw base
-   * for every row too, matching the uncollapsed plan, which already evaluated it
-   * for that unfiltered member.
+   * division in ANSI mode, for example). Expand then projects the raw child on
+   * every row. A group that also has an unfiltered aggregate on the same base
+   * projects the raw base for every row too, matching the uncollapsed plan, which
+   * already evaluated it for that unfiltered member.
    *
    * A condition that itself contains a subquery is not normalized. Guarding that
    * group would duplicate the predicate into a second existence join, and collapsing
