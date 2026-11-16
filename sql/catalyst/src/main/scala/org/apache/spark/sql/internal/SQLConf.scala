@@ -3476,7 +3476,7 @@ object SQLConf {
       .doc("When true, restores the old behavior where 'spark.sql.files.ignoreCorruptFiles' also " +
         "skips the rest of a file whose read raises a SparkUpgradeException. When false, the " +
         "upgrade error is raised, since it is not file corruption.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
