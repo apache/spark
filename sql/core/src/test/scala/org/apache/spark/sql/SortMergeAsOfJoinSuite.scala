@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import com.sun.management.UnixOperatingSystemMXBean
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
@@ -217,6 +217,31 @@ class SortMergeAsOfJoinSuite extends QueryTest
           joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = "nearest").select(right.col("value")),
         Seq(Row(expected)))
+    }
+  }
+
+  test("SPARK-61756: the interpreted join releases the sorters of its children early") {
+    // The right side has keys above every left key, so the join stops reading it before its end.
+    // It must release the right sorter once it has produced its last row, instead of holding its
+    // memory until the task completes. Read the join to its end in a task, and check that the
+    // task holds no execution memory afterwards.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val trades = spark.range(0, 100).selectExpr("id % 5 AS k", "id AS ts")
+      val quotes = spark.range(0, 1000).selectExpr("id % 10 AS k", "id AS ts")
+      // A nearest join has no generated scan, so it runs the interpreted one.
+      val df = trades.joinAsOf(
+        quotes, trades.col("ts"), quotes.col("ts"), usingColumns = Seq("k"),
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "nearest")
+      val memory = df.queryExecution.toRdd.mapPartitions { iter =>
+        iter.foreach(_ => ())
+        Iterator(TaskContext.get().taskMemoryManager().getMemoryConsumptionForThisTask)
+      }.collect().toSeq
+      // Checked after the run: with AQE, the plan is final only then.
+      val plan = df.queryExecution.executedPlan
+      val join = collectFirst(plan) { case j: SortMergeAsOfJoinExec => j }.get
+      assert(!isGenerated(plan, join), plan)
+      assert(memory.forall(_ == 0L), s"$memory, $plan")
     }
   }
 
