@@ -710,7 +710,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   // With allowMultiple=false, late rows are filtered by an input's first watermarked column. A
   // later watermarked key bounds the opposite state as in Spark 4.3, as a relation that outputs
-  // both shows nothing against it, unless the input shows that some rows hold it below.
+  // both shows nothing against it, lowered by how far the input shows that some rows hold it
+  // below, and not at all when the input shows no bound on that.
   {
     val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
     val windowMetadata = new MetadataBuilder()
@@ -732,14 +733,15 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       left.join(right, joinType = joinType,
         condition = Some(leftKey === rightKey && leftWindow === rightWindow))
     }
-    // Each input copies its event time less 20 seconds into a column with the same watermark.
-    def shiftedJoin(joinType: JoinType): LogicalPlan = {
+    // Each input copies its event time shifted back by `micros` into a column with the same
+    // watermark.
+    def shiftedJoin(joinType: JoinType, micros: Long): LogicalPlan = {
       def input(side: String): (LogicalPlan, Attribute, Attribute) = {
         val key = AttributeReference(s"${side}Key", IntegerType)()
         val time = AttributeReference(s"${side}Time", TimestampType)()
           .withMetadata(watermarkMetadata)
         val shifted = Alias(TimestampAddInterval(time,
-          Literal(-20000000L, DayTimeIntervalType()), Some("UTC")), s"${side}Shifted")(
+          Literal(-micros, DayTimeIntervalType()), Some("UTC")), s"${side}Shifted")(
           explicitMetadata = Some(watermarkMetadata))
         (Project(Seq(key, time, shifted), TestStreamingRelation(Seq(key, time))), key,
           shifted.toAttribute)
@@ -758,18 +760,24 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       assertSupportedInStreamingPlan(s"$joinType on a window after its event time in legacy mode",
         windowJoin(joinType, windowFirst = false), OutputMode.Append(), legacyMode)
 
-      test(s"$joinType on a key shifted back from its event time in legacy mode names the key") {
+      // The key bounds the opposite state at the watermark less 20 seconds.
+      assertSupportedInStreamingPlan(
+        s"$joinType on a key shifted back by seconds from its event time in legacy mode",
+        shiftedJoin(joinType, 20000000L), OutputMode.Append(), legacyMode)
+
+      test(s"$joinType on a key shifted back by a day from its event time in legacy mode names " +
+          "the key") {
         val error = intercept[AnalysisException] {
           withSQLConf(legacyMode) {
             UnsupportedOperationChecker.checkForStreaming(
-              wrapInStreaming(shiftedJoin(joinType)), OutputMode.Append())
+              wrapInStreaming(shiftedJoin(joinType, 86400000000L)), OutputMode.Append())
           }
         }
         sides.foreach { side =>
           assert(error.getMessage.contains(s"the $side input filters late rows by its first " +
             s"watermarked column, ${side}Time, and some of its rows can hold the key " +
-            s"${side}Shifted below a watermarked column before it, so ${side}Shifted does not " +
-            "bound state"))
+            s"${side}Shifted below a watermarked column before it by an amount that analysis " +
+            s"cannot bound, so ${side}Shifted does not bound state"))
         }
         Seq("left", "right").diff(sides).foreach { side =>
           assert(!error.getMessage.contains(s"the $side input filters late rows"))
@@ -778,14 +786,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         assert(!error.getMessage.contains("stateful operator after the join"))
       }
 
-      test(s"$joinType on a window after its event time in the default mode has no window hint") {
-        val error = intercept[AnalysisException] {
-          UnsupportedOperationChecker.checkForStreaming(
-            wrapInStreaming(windowJoin(joinType, windowFirst = false)), OutputMode.Append())
-        }
-        assert(error.getMessage.contains("allow unmatched state to be finalized"))
-        assert(!error.getMessage.contains(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
-      }
+      // Each planned input keeps one distinct watermarked column, or execution fails at start,
+      // so any of them filters late rows itself.
+      assertSupportedInStreamingPlan(s"$joinType on a window after its event time in the " +
+        "default mode", windowJoin(joinType, windowFirst = false), OutputMode.Append())
 
       assertSupportedInStreamingPlan(s"$joinType on a window before its event time in legacy mode",
         windowJoin(joinType, windowFirst = true), OutputMode.Append(), legacyMode)
@@ -797,7 +801,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       withLogAppender(appender, level = Some(Level.WARN)) {
         withSQLConf(legacyMode, checkConf -> "false") {
           UnsupportedOperationChecker.checkForStreaming(
-            wrapInStreaming(shiftedJoin(LeftOuter)), OutputMode.Append())
+            wrapInStreaming(shiftedJoin(LeftOuter, 86400000000L)), OutputMode.Append())
         }
       }
       val warnings = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
@@ -835,6 +839,17 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           assert(e.getMessage.contains("requires a watermark on the right input"))
           assert(!e.getMessage.contains(checkConf))
         }
+      }
+    }
+
+    if (joinType == LeftOuter) {
+      test("LeftOuter without a right watermark limits the aggregation claim to the nearest " +
+          "join in the error") {
+        val e = intercept[AnalysisException] {
+          UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), OutputMode.Append())
+        }
+        assert(e.getMessage.contains("an append-mode aggregation over that event time fails at " +
+          "start when no later stream-stream join is in between"))
       }
     }
 
