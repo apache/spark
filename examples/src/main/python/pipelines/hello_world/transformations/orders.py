@@ -36,8 +36,10 @@ spark = SparkSession.active()
 # spaces and non-ASCII characters that the file source does not decode.
 ORDERS_DIR = f"file://{(Path(__file__).parent.parent / 'data' / 'orders').resolve()}"
 
-# A StructType rather than a DDL string: with Spark Connect, a string schema is parsed with a
-# separate analysis request, which is not allowed inside a query function.
+# A StructType rather than a DDL string: with Spark Connect, createDataFrame parses a string
+# schema with a separate analysis request, which the pipeline server rejects inside a query
+# function (ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION). readStream.schema() below is fine:
+# it sends the string inside the plan.
 CUSTOMERS_SCHEMA = StructType(
     [
         StructField("customer_id", IntegerType()),
