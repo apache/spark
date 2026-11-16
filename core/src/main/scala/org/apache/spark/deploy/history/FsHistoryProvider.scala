@@ -158,8 +158,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             s"${duplicates.mkString(", ")}")
         mapping.toMap
       case Some(n) =>
-        logWarning(s"${HISTORY_LOG_DIR_NAMES.key} has ${n.length} names but " +
-          s"${logDirs.length} directories were specified. Falling back to full paths.")
+        logWarning(log"${MDC(CONFIG, HISTORY_LOG_DIR_NAMES.key)} has ${MDC(COUNT, n.length)} " +
+          log"names but ${MDC(NUM_PATHS, logDirs.length)} directories were specified. " +
+          log"Falling back to full paths.")
         logDirs.map(d => d -> d).toMap
       case None =>
         logDirs.map(d => d -> d).toMap
