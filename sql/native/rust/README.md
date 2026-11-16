@@ -407,10 +407,10 @@ one adds with `#[serde(default)]`, the same position encodes to different JSON, 
 runs one micro-batch without rows. A failed call, including a panic or an offset that does
 not decode, stops the query: Spark makes no other call on the stream before it closes it.
 JSON has no NaN or infinite numbers: serde writes such a float as `null`. The SDK decodes the
-JSON of each offset that the stream returns before Spark stores it in the checkpoint, so the
-call fails when a NaN or an infinity is in an `f64` field, which does not decode from `null`,
-instead of failing every restart of the query. An `Option<f64>` field that holds one decodes
-as `None`, without an error.
+JSON of each offset that the stream returns before Spark uses it or stores it in the
+checkpoint, so the call fails when a NaN or an infinity is in an `f32` or `f64` field, which
+does not decode from `null`, instead of failing every restart of the query. An `Option<f64>`
+field that holds one decodes as `None`, without an error.
 
 Streaming writes reuse the task writers of batch writes. Spark creates a `StreamingWrite`
 for each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the

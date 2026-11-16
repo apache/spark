@@ -529,6 +529,10 @@ mod tests {
         ] {
             assert!(RangeSource::new(info(&[(key, value)])).is_err());
         }
+        // The largest limit of a micro-batch is accepted.
+        let largest = source(&[("maxrowspertrigger", "9223372036854775807")]);
+        let limit = stream(&largest).default_read_limit().unwrap();
+        assert_eq!(limit, ReadLimit::MaxRows(i64::MAX as u64));
         let source = source(&[]);
         let invalid = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         assert!(source.new_scan(ScanInfo::new(invalid.clone())).is_err());

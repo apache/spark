@@ -387,12 +387,15 @@ struct SourceState<S> {
 /// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they
 /// are, so they have no envelope: the library owns their format. JSON writes a NaN or an
 /// infinite float as `null`, which does not decode as a float, so this decodes the JSON before
-/// Spark stores it: a restarted query would otherwise fail on that offset every time.
+/// Spark uses or stores it: a restarted query would otherwise fail on that offset every time.
 fn encode_offset<T: Serialize + DeserializeOwned>(offset: &T) -> Result<String> {
     let json = serde_json::to_string(offset)?;
     match serde_json::from_str::<T>(&json) {
         Ok(_) => Ok(json),
-        Err(error) => Err(format!("the returned offset {json} does not decode: {error}").into()),
+        Err(error) => {
+            let cause = "JSON writes NaN and infinite floats as null";
+            Err(format!("the returned offset {json} does not decode ({cause}): {error}").into())
+        }
     }
 }
 
@@ -1052,6 +1055,46 @@ mod tests {
             rate: f64,
         }
 
+        // Returns an offset with its rate from both calls that return an offset to Spark.
+        struct Rates(f64);
+
+        impl MicroBatchStream for Rates {
+            type Offset = Offset;
+            type Factory = Factory;
+
+            fn initial_offset(&mut self) -> Result<Offset> {
+                Ok(Offset {
+                    next: 10,
+                    rate: self.0,
+                })
+            }
+
+            fn latest_offset(&mut self, _: LatestOffsetInfo<Offset>) -> Result<Offset> {
+                self.initial_offset()
+            }
+
+            fn plan(&mut self, _: MicroBatchInfo<Offset>) -> Result<ScanPlan<Factory>> {
+                unreachable!("not planned")
+            }
+        }
+
+        struct Streaming(f64);
+
+        impl DataSource for Streaming {
+            type ScanBuilder = Unsupported;
+            type MicroBatchStream = Rates;
+            type BatchWrite = Unsupported;
+            type StreamingWrite = Unsupported;
+
+            fn new(_: CreateInfo) -> Result<Self> {
+                unreachable!("registered directly")
+            }
+
+            fn new_micro_batch_stream(&self, _: MicroBatchStreamInfo) -> Result<Rates> {
+                Ok(Rates(self.0))
+            }
+        }
+
         let offset = Offset {
             next: 10,
             rate: 0.5,
@@ -1060,10 +1103,19 @@ mod tests {
         assert_eq!(json, r#"{"next":10,"rate":0.5}"#);
         assert_eq!(decode_offset::<Offset>(&json).unwrap(), offset);
         // JSON writes a NaN or an infinite float as null, which does not decode as an f64.
+        let expected = r#"offset {"next":10,"rate":null} does not decode"#;
         for rate in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            let error = encode_offset(&Offset { next: 10, rate }).unwrap_err();
-            let expected = r#"offset {"next":10,"rate":null} does not decode"#;
-            assert!(error.to_string().contains(expected), "{error}");
+            let bridge = Bridge::<Streaming>::default();
+            let (handle, _) = bridge.register_source(Streaming(rate)).unwrap();
+            let info = MicroBatchStreamInfo::new(id_schema(), "file:/tmp/checkpoint/sources/0");
+            let stream = bridge.create_stream_reader(handle, info).unwrap();
+            bridge.close_source(handle).unwrap();
+            let initial = error_message(bridge.initial_offset(stream));
+            assert!(initial.contains(expected), "{initial}");
+            let latest = bridge.latest_offset(stream, LatestOffsetInfo::new(json.clone()));
+            let latest = error_message(latest);
+            assert!(latest.contains(expected), "{latest}");
+            bridge.close_stream_reader(stream).unwrap();
         }
     }
 
