@@ -41,8 +41,9 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   // Get the stderr (which is console for spark-shell) before installing RedirectConsolePlugin
   private val console = System.err
 
-  // The width of terminal
-  private val TerminalWidth = sys.env.getOrElse("COLUMNS", "80").toInt
+  // The width of terminal. Fall back to 80 if COLUMNS is unset or not a positive integer.
+  private val TerminalWidth =
+    sys.env.get("COLUMNS").flatMap(_.toIntOption).filter(_ > 0).getOrElse(80)
 
   private var lastFinishTime = 0L
   private var lastUpdateTime = 0L
