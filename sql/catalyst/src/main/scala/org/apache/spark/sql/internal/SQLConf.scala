@@ -8398,7 +8398,7 @@ object SQLConf {
         "back as null, except with quoting disabled (`quote` set to an empty string), where no " +
         "token can represent the null and the record is still dropped; `to_csv` returns an empty " +
         "string for any other record the writer drops as an empty line.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
