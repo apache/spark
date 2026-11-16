@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ObjectOutputStream, OutputStream}
+import java.io.{File, ObjectOutputStream, OutputStream}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
@@ -46,7 +46,6 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregat
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -907,174 +906,197 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-61761: Whole-stage codegen stages do not serialize plan nodes into tasks") {
-    // The RDD that a codegen stage adds on top of its input RDDs is serialized into every task
-    // binary, so it must not hold a plan node (see `serializedPlanNodes`). This checks every
-    // codegen stage of queries that cover the operators that generate code, through adaptive query
-    // stages and subqueries.
+  /**
+   * A MergeRows node, built as in `MergeRowsExecBenchmark`, that matches and updates every row of
+   * `source`.
+   */
+  private def mergeRows(source: DataFrame): DataFrame = {
+    val attrs = source.queryExecution.analyzed.output
+    classic.Dataset.ofRows(spark, MergeRows(
+      isSourceRowPresent = Literal.TrueLiteral,
+      isTargetRowPresent = Literal.TrueLiteral,
+      matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, attrs)),
+      notMatchedInstructions = Nil,
+      notMatchedBySourceInstructions = Nil,
+      checkCardinality = false,
+      output = attrs.map(_.newInstance()),
+      child = source.queryExecution.analyzed))
+  }
+
+  /**
+   * A query checked by the SPARK-61761 tests: the configs to run it with, the query (given an empty
+   * temporary directory), and the names of the plan nodes that must be generated.
+   */
+  private case class PlanRefCase(
+      name: String,
+      confs: Seq[(String, String)],
+      query: File => DataFrame,
+      expectedNodes: Set[String]) {
+    override def toString: String = name
+  }
+
+  private lazy val planRefCases: Seq[PlanRefCase] = {
     val noBroadcast = Seq(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1")
     val forceShj = noBroadcast :+ ("spark.sql.join.forceApplyShuffledHashJoin" -> "true")
     val sortAgg =
       Seq(SQLConf.USE_HASH_AGG.key -> "false", SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
-    // (name, configs, the query, the names of nodes that must be generated, by prefix)
-    def cases: Seq[(String, Seq[(String, String)], () => DataFrame, Set[String])] = {
-      def l = spark.table("l")
-      def r = spark.table("r")
-      def join(strategy: String, joinType: String, buildLeft: Boolean = false): () => DataFrame =
-        () => {
-          val cond = $"k1" === $"k2" && $"v1" =!= $"v2"
-          if (buildLeft) l.hint(strategy).join(r, cond, joinType)
-          else l.join(r.hint(strategy), cond, joinType)
-        }
-      val existenceJoin = "SELECT * FROM l WHERE EXISTS (SELECT 1 FROM r WHERE k2 = k1) OR v1 < 3"
-      val aggs = Seq(
-        ("hash aggregate", Nil, () => l.groupBy("k1").agg(sum("v1"), avg("v1")),
-          Set("HashAggregate")),
-        ("hash aggregate, row-based fast hash map",
-          Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-            SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false"),
-          () => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
-        ("hash aggregate, vectorized fast hash map",
-          Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-            SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true"),
-          () => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
-        ("hash aggregate, adaptive partial aggregation",
-          Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true"),
-          () => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
-        ("hash aggregate without grouping keys", Nil, () => l.agg(sum("v1"), max("k1")),
-          Set("HashAggregate")),
-        ("distinct aggregate", Nil, () => l.groupBy("k1").agg(countDistinct("v1"), sum("v1")),
-          Set("HashAggregate")),
-        ("aggregate with a filter", Nil,
-          () => sql("SELECT k1, sum(v1) FILTER (WHERE v1 > 10) FROM l GROUP BY k1"),
-          Set("HashAggregate")),
-        ("sort aggregate", sortAgg, () => l.groupBy("k1").agg(sum("v1"), max("v1")),
-          Set("SortAggregate")),
-        ("sort aggregate without grouping keys", sortAgg, () => l.agg(sum("v1"), max("v1")),
-          Set("SortAggregate")))
-      val joinTypes =
-        Seq("inner", "left_outer", "right_outer", "full_outer", "left_semi", "left_anti")
-      val smj = joinTypes.map { joinType =>
-        (s"sort merge join, $joinType", noBroadcast, join("SHUFFLE_MERGE", joinType),
-          Set("Sort", "SortMergeJoin"))
-      } :+ ("sort merge join, existence", noBroadcast, () => sql(existenceJoin),
-        Set("SortMergeJoin"))
-      val shj = joinTypes.flatMap { joinType =>
-        Seq(false, true).filter(buildLeft => joinType match {
-          case "left_semi" | "left_anti" => !buildLeft
-          case _ => true
-        }).map { buildLeft =>
-          (s"shuffled hash join, $joinType, build ${if (buildLeft) "left" else "right"}",
-            noBroadcast, join("SHUFFLE_HASH", joinType, buildLeft), Set("ShuffledHashJoin"))
-        }
-      } :+ ("shuffled hash join, existence", forceShj, () => sql(existenceJoin),
-        Set("ShuffledHashJoin"))
-      val bhj = Seq(("inner", false), ("inner", true), ("left_outer", false),
-          ("right_outer", true), ("left_semi", false), ("left_anti", false)).map {
-        case (joinType, buildLeft) =>
-          (s"broadcast hash join, $joinType, build ${if (buildLeft) "left" else "right"}",
-            noBroadcast, join("BROADCAST", joinType, buildLeft), Set("BroadcastHashJoin"))
-      } :+ ("broadcast hash join, existence", Nil, () => sql(existenceJoin),
-        Set("BroadcastHashJoin"))
-      val bnlj = Seq("inner", "left_outer", "left_semi", "left_anti").map { joinType =>
-        (s"broadcast nested loop join, $joinType", noBroadcast,
-          () => l.join(broadcast(r), $"k1" < $"k2" || $"v1" === $"v2", joinType),
-          Set("BroadcastNestedLoopJoin"))
+    def l = spark.table("l")
+    def r = spark.table("r")
+    def join(strategy: String, joinType: String, buildLeft: Boolean = false): File => DataFrame =
+      _ => {
+        val cond = $"k1" === $"k2" && $"v1" =!= $"v2"
+        if (buildLeft) l.hint(strategy).join(r, cond, joinType)
+        else l.join(r.hint(strategy), cond, joinType)
       }
-      val rangeJoin = Seq("inner", "left_outer", "left_semi").map { joinType =>
-        (s"broadcast range join, $joinType",
-          noBroadcast :+ (SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true"),
-          () => l.join(broadcast(r), $"v1" >= $"k2" && $"v1" <= $"v2", joinType),
-          Set("BroadcastRangeJoin"))
+    val existenceJoin = "SELECT * FROM l WHERE EXISTS (SELECT 1 FROM r WHERE k2 = k1) OR v1 < 3"
+    val aggs = Seq(
+      PlanRefCase("hash aggregate without a fast hash map",
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false"),
+        _ => l.groupBy("k1").agg(sum("v1"), avg("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate, row-based fast hash map",
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false"),
+        _ => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate, vectorized fast hash map",
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true"),
+        _ => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate, adaptive partial aggregation",
+        Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true"),
+        _ => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate without grouping keys", Nil,
+        _ => l.agg(sum("v1"), max("k1")), Set("HashAggregate")),
+      PlanRefCase("distinct aggregate", Nil,
+        _ => l.groupBy("k1").agg(countDistinct("v1"), sum("v1")), Set("HashAggregate")),
+      PlanRefCase("aggregate with a filter", Nil,
+        _ => sql("SELECT k1, sum(v1) FILTER (WHERE v1 > 10) FROM l GROUP BY k1"),
+        Set("HashAggregate")),
+      PlanRefCase("sort aggregate", sortAgg,
+        _ => l.groupBy("k1").agg(sum("v1"), max("v1")), Set("SortAggregate")),
+      PlanRefCase("sort aggregate without grouping keys", sortAgg,
+        _ => l.agg(sum("v1"), max("v1")), Set("SortAggregate")))
+    val joinTypes =
+      Seq("inner", "left_outer", "right_outer", "full_outer", "left_semi", "left_anti")
+    val smj = joinTypes.map { joinType =>
+      PlanRefCase(s"sort merge join, $joinType", noBroadcast, join("SHUFFLE_MERGE", joinType),
+        Set("Sort", "SortMergeJoin"))
+    } :+ PlanRefCase("sort merge join, existence", noBroadcast, _ => sql(existenceJoin),
+      Set("Sort", "SortMergeJoin"))
+    val shj = joinTypes.flatMap { joinType =>
+      Seq(false, true).filter(buildLeft => joinType match {
+        case "left_semi" | "left_anti" => !buildLeft
+        case _ => true
+      }).map { buildLeft =>
+        PlanRefCase(
+          s"shuffled hash join, $joinType, build ${if (buildLeft) "left" else "right"}",
+          noBroadcast, join("SHUFFLE_HASH", joinType, buildLeft), Set("ShuffledHashJoin"))
       }
-      val asOfJoin = Seq(("as-of join", noBroadcast :+
-          (SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true"),
-        () => {
-          val right = r.withColumnRenamed("k2", "k1")
-          l.joinAsOf(right, l("v1"), right("v2"), usingColumns = Seq("k1"), joinType = "inner",
-            tolerance = null, allowExactMatches = true, direction = "backward")
-        },
-        Set("SortMergeAsOfJoin")))
-      val others = Seq(
-        ("sort", Nil, () => l.orderBy($"v1".desc), Set("Sort")),
-        ("expand", Nil, () => l.rollup("k1").agg(sum("v1")), Set("Expand")),
-        ("generate", Nil, () => l.select($"k1", explode(array($"v1", $"v1" + 1))),
-          Set("Generate")),
-        ("window", Nil,
-          () => l.select($"k1", rank().over(Window.partitionBy("k1").orderBy("v1"))),
-          Set("Sort")),
-        ("limit", Nil, () => l.limit(5).groupBy("k1").count(), Set("GlobalLimit")),
-        ("sample", Nil, () => l.sample(0.5, 1L), Set("Sample")),
-        ("union", Nil, () => l.select("k1").union(r.select("k2")).groupBy("k1").count(),
-          Set("Union")),
-        ("objects", Nil, () => spark.range(10).as[Long].map(_ * 2).filter(_ > 3).toDF(),
-          Set("MapElements")),
-        ("scalar and IN subqueries", noBroadcast, () => sql(
-          "SELECT k1, (SELECT max(v2) FROM r WHERE v2 < 5) FROM l " +
-            "WHERE k1 IN (SELECT k2 FROM r WHERE v2 > 3)"),
-          Set("Project")),
-        ("vectorized parquet scan", Nil, () => spark.table("p").where($"v1" > 3)
-          .groupBy("k1").count(), Set("ColumnarToRow")),
-        ("row-based parquet scan", Seq(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false"),
-          () => spark.table("p").where($"v1" > 3).groupBy("k1").count(), Set("Filter")),
-        ("cached table scan", Nil, () => spark.table("c").groupBy("k1").count(),
-          Set("HashAggregate", "Range")),
-        ("merge rows", Nil, () => {
-          val source = l.selectExpr("CAST(v1 AS INT) AS t", "CAST(k1 AS INT) AS s")
-          val attrs = source.queryExecution.analyzed.output
-          classic.Dataset.ofRows(spark, MergeRows(
-            isSourceRowPresent = Literal.TrueLiteral,
-            isTargetRowPresent = Literal.TrueLiteral,
-            matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, attrs)),
-            notMatchedInstructions = Nil,
-            notMatchedBySourceInstructions = Nil,
-            checkCardinality = false,
-            output = attrs.map(_.newInstance()),
-            child = source.queryExecution.analyzed))
-        }, Set("MergeRows")))
-      aggs ++ smj ++ shj ++ bhj ++ bnlj ++ rangeJoin ++ asOfJoin ++ others
+    } :+ PlanRefCase("shuffled hash join, existence", forceShj, _ => sql(existenceJoin),
+      Set("ShuffledHashJoin"))
+    val bhj = Seq(("inner", false), ("inner", true), ("left_outer", false),
+        ("right_outer", true), ("left_semi", false), ("left_anti", false)).map {
+      case (joinType, buildLeft) =>
+        PlanRefCase(
+          s"broadcast hash join, $joinType, build ${if (buildLeft) "left" else "right"}",
+          noBroadcast, join("BROADCAST", joinType, buildLeft), Set("BroadcastHashJoin"))
+    } :+ PlanRefCase("broadcast hash join, existence", Nil, _ => sql(existenceJoin),
+      Set("BroadcastHashJoin"))
+    val bnlj = Seq("inner", "left_outer", "left_semi", "left_anti").map { joinType =>
+      PlanRefCase(s"broadcast nested loop join, $joinType", noBroadcast,
+        _ => l.join(broadcast(r), $"k1" < $"k2" || $"v1" === $"v2", joinType),
+        Set("BroadcastNestedLoopJoin"))
     }
+    val rangeJoin = Seq("inner", "left_outer", "left_semi").map { joinType =>
+      PlanRefCase(s"broadcast range join, $joinType",
+        noBroadcast :+ (SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true"),
+        _ => l.join(broadcast(r), $"v1" >= $"k2" && $"v1" <= $"v2", joinType),
+        Set("BroadcastRangeJoin"))
+    }
+    val asOfJoin = PlanRefCase("as-of join",
+      noBroadcast :+ (SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true"),
+      _ => {
+        val right = r.withColumnRenamed("k2", "k1")
+        l.joinAsOf(right, l("v1"), right("v2"), usingColumns = Seq("k1"), joinType = "inner",
+          tolerance = null, allowExactMatches = true, direction = "backward")
+      },
+      Set("SortMergeAsOfJoin"))
+    val others = Seq(
+      PlanRefCase("sort", Nil, _ => l.orderBy($"v1".desc), Set("Sort")),
+      PlanRefCase("expand", Nil, _ => l.rollup("k1").agg(sum("v1")), Set("Expand")),
+      PlanRefCase("generate", Nil, _ => l.select($"k1", explode(array($"v1", $"v1" + 1))),
+        Set("Generate")),
+      PlanRefCase("limit", Nil, _ => l.limit(5).groupBy("k1").count(), Set("GlobalLimit")),
+      PlanRefCase("sample", Nil, _ => l.sample(0.5, 1L), Set("Sample")),
+      PlanRefCase("union", Nil,
+        _ => l.select("k1").union(r.select("k2")).groupBy("k1").count(), Set("Union")),
+      PlanRefCase("objects", Nil,
+        _ => spark.range(10).as[Long].map(_ * 2).filter(_ > 3).toDF(), Set("MapElements")),
+      // The aggregate is only in the subquery.
+      PlanRefCase("scalar subquery", Nil,
+        _ => sql("SELECT k1, (SELECT max(v2) FROM r WHERE v2 < 5) FROM l"),
+        Set("HashAggregate")),
+      PlanRefCase("vectorized parquet scan", Nil, tempDir => {
+        val path = tempDir.getCanonicalPath
+        l.write.mode(SaveMode.Overwrite).parquet(path)
+        spark.read.parquet(path).where($"v1" > 3).groupBy("k1").count()
+      }, Set("ColumnarToRow")),
+      // `Range` is only in the cached plan, which is cached in the configs of the run, and
+      // uncached after it.
+      PlanRefCase("cached table scan", Nil, _ => {
+        val cached = spark.range(0, 50, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
+        cached.cache().groupBy("k1").count()
+      }, Set("HashAggregate", "Range")),
+      PlanRefCase("merge rows", Nil,
+        _ => mergeRows(l.selectExpr("CAST(v1 AS INT) AS t", "CAST(k1 AS INT) AS s")),
+        Set("MergeRows")))
+    aggs ++ smj ++ shj ++ bhj ++ bnlj ++ rangeJoin ++ (asOfJoin +: others)
+  }
 
-    withTempPath { dir =>
-      withTempView("l", "r", "p", "c") {
-        spark.range(0, 100, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
-          .createOrReplaceTempView("l")
-        spark.range(0, 30, 1, 2).select(($"id" % 7).as("k2"), $"id".as("v2"))
-          .createOrReplaceTempView("r")
-        spark.table("l").write.parquet(dir.getCanonicalPath)
-        spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("p")
-        // Not the plan of `l`, which the other queries would then read from the cache.
-        val cached =
-          spark.range(0, 50, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1")).cache()
-        cached.createOrReplaceTempView("c")
-        try {
-          for {
-            (name, confs, query, expectedNodes) <- cases
-            aqe <- Seq(false, true)
-            usePartitionEvaluator <- Seq(false, true)
-          } {
-            withSQLConf(confs ++ Seq(
-                SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
-                SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString): _*) {
-              val clue = s"$name, aqe=$aqe, usePartitionEvaluator=$usePartitionEvaluator"
-              val df = query()
+  gridTest("SPARK-61761: Whole-stage codegen stages do not serialize plan nodes into tasks")(
+      planRefCases) { case PlanRefCase(name, confs, query, expectedNodes) =>
+    // The RDD that a codegen stage adds on top of its input RDDs is serialized into every task
+    // binary, so it must not hold a plan node (see `serializedPlanNodes`). This checks every
+    // codegen stage of the query, through adaptive query stages, cached plans and subqueries.
+    withTempView("l", "r") {
+      spark.range(0, 100, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
+        .createOrReplaceTempView("l")
+      spark.range(0, 30, 1, 2).select(($"id" % 7).as("k2"), $"id".as("v2"))
+        .createOrReplaceTempView("r")
+      for {
+        aqe <- Seq(false, true)
+        usePartitionEvaluator <- Seq(false, true)
+      } {
+        // Forced, so that AQE also applies to the plans without an exchange or a subquery.
+        withSQLConf(confs ++ Seq(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+            SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> aqe.toString,
+            SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString): _*) {
+          val clue = s"$name, aqe=$aqe, usePartitionEvaluator=$usePartitionEvaluator"
+          withTempDir { tempDir =>
+            try {
+              val df = query(tempDir)
               df.collect()
               // The RDDs are cached by the plans, so these are the ones the query ran.
               val plan = df.queryExecution.executedPlan
+              if (aqe) {
+                assert(plan.isInstanceOf[AdaptiveSparkPlanExec], s"$clue: ${plan.treeString}")
+              }
               val stages = allPlanNodes(plan).collect { case s: WholeStageCodegenExec => s }
-              val generated = stages.flatMap(s => generatedNodes(s.child)).map(_.nodeName)
+              val generated = stages.flatMap(s => generatedNodes(s.child))
+                .map(_.nodeName.stripSuffix("(skew=true)"))
               expectedNodes.foreach { expected =>
-                assert(generated.exists(_.startsWith(expected)),
+                assert(generated.contains(expected),
                   s"$clue: $expected is not generated in\n${plan.treeString}")
               }
               stages.foreach { stage =>
                 val planNodes = serializedPlanNodes(stage)
-                assert(planNodes.isEmpty, s"$clue: $planNodes referenced by\n${stage.treeString}")
+                assert(planNodes.isEmpty,
+                  s"$clue: $planNodes referenced by\n${stage.treeString}")
               }
+            } finally {
+              spark.catalog.clearCache()
             }
           }
-        } finally {
-          cached.unpersist()
         }
       }
     }
@@ -4047,19 +4069,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // call is in a consume function added right after it, into the same nested class unless that
     // class fills up in between. The MergeRows node is built as in `MergeRowsExecBenchmark`,
     // matching every row.
-    val source = spark.range(10).selectExpr("CAST(id AS INT) AS t", "CAST(id AS INT) AS s")
-    val attrs = source.queryExecution.analyzed.output
-    val mergeRows = MergeRows(
-      isSourceRowPresent = Literal.TrueLiteral,
-      isTargetRowPresent = Literal.TrueLiteral,
-      matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, attrs)),
-      notMatchedInstructions = Nil,
-      notMatchedBySourceInstructions = Nil,
-      checkCardinality = false,
-      output = attrs.map(_.newInstance()),
-      child = source.queryExecution.analyzed)
-    def df: DataFrame =
-      classic.Dataset.ofRows(spark, mergeRows).selectExpr(s"${largeCaseWhen("s", 2000)} AS v")
+    val merged =
+      mergeRows(spark.range(10).selectExpr("CAST(id AS INT) AS t", "CAST(id AS INT) AS s"))
+    def df: DataFrame = merged.selectExpr(s"${largeCaseWhen("s", 2000)} AS v")
     withSplitAlways {
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         val code = genCode(df)
