@@ -535,9 +535,9 @@ class JavaTranspiler(AbstractTranspiler):
             "integral",
         }:
             # Java evaluates arguments left to right, so keep Python's operand order.
-            helper = "repeat" if lowered_left.category == "string" else "repeatCountFirst"
+            repeat_helper = "repeat" if lowered_left.category == "string" else "repeatCountFirst"
             return _JavaValue(
-                f"{_HELPERS}.{helper}({lowered_left.code}, {lowered_right.code})", "string"
+                f"{_HELPERS}.{repeat_helper}({lowered_left.code}, {lowered_right.code})", "string"
             )
 
         category = self._unify(lowered_left.category, lowered_right.category, op_name)
