@@ -35,9 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.Changelog
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor}
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
@@ -69,12 +67,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *     advances past the last `_commit_timestamp` seen for that key. Row identities only
  *     touched in the latest observed commit are held back until a later commit advances
  *     the watermark or the source terminates. Streams that don't require any
- *     post-processing pass through unchanged.
+ *     post-processing keep the connector's declared output.
  */
 object ResolveChangelogTable extends Rule[LogicalPlan] {
-
-  private val internalChangelogSubtree =
-    TreeNodeTag[Unit]("internal_changelog_subtree")
 
   /**
    * Reserved (`__spark_cdc_*`) column names used internally by post-processing;
@@ -144,7 +139,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         updatedRel = injectNetChangeComputation(
           updatedRel, rowIdExprs, table.changelogContext.computeUpdates())
       }
-      markInternalChangelogSubtree(updatedRel, rel)
+      changelogOutput(updatedRel, rel, table.name())
 
     case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _)
         if !table.resolved =>
@@ -155,8 +150,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         table.requiresCarryoverRemoval || table.requiresUpdateDetection
       if (requiresRowLevelPostProcessing) {
         updatedRel = addStreamingRowLevelPostProcessing(
-          resolvedRel, changelog, table.requiresCarryoverRemoval, table.requiresUpdateDetection,
-          retainRowIds = table.requiresNetChangeCollapse)
+          resolvedRel, changelog, table.requiresCarryoverRemoval, table.requiresUpdateDetection)
       }
       if (table.requiresNetChangeCollapse) {
         // The row-level aggregate preserves row identity as scalar helper columns. Hidden
@@ -171,43 +165,22 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         updatedRel = addStreamingNetChangeComputation(
           updatedRel, rowIdExprs, table.changelogContext.computeUpdates())
       }
-      markInternalChangelogSubtree(updatedRel, rel)
+      changelogOutput(updatedRel, rel, table.name())
   }
 
-  /** Rejects user access to metadata columns exposed only for changelog post-processing. */
-  private[analysis] def checkNoUserMetadataColumnAccess(plan: LogicalPlan): Unit = {
-    val metadataColumnsByExprId = plan.collect {
-      case relation: DataSourceV2Relation
-          if relation.table.isInstanceOf[ChangelogTable] =>
-        relation.metadataOutput.map(attribute => attribute.exprId -> attribute.name)
-      case relation: StreamingRelationV2
-          if relation.table.isInstanceOf[ChangelogTable] =>
-        relation.metadataOutput.map(attribute => attribute.exprId -> attribute.name)
-    }.flatten.toMap
-
-    def check(node: LogicalPlan): Unit = {
-      if (!node.containsTag(internalChangelogSubtree)) {
-        node.expressions.foreach(_.foreach {
-          case attribute: Attribute if metadataColumnsByExprId.contains(attribute.exprId) =>
-            throw QueryCompilationErrors.changelogMetadataColumnNotSupportedError(
-              metadataColumnsByExprId(attribute.exprId))
-          case _ =>
-        })
-        node.children.foreach(check)
-      }
-    }
-
-    if (metadataColumnsByExprId.nonEmpty) {
-      check(plan)
-    }
-  }
-
-  private def markInternalChangelogSubtree(
+  /** Keeps internal metadata and helper columns behind the changelog's visible schema. */
+  private def changelogOutput(
       plan: LogicalPlan,
-      source: LogicalPlan): LogicalPlan = {
-    plan.mergeTagsFrom(source)
-    plan.setTagValue(internalChangelogSubtree, ())
-    plan
+      source: LogicalPlan,
+      name: String): LogicalPlan = {
+    val columnNames = source.output.map(_.name).toSet
+    val project = Project(plan.output.filter(a => columnNames.contains(a.name)), plan)
+    // Metadata availability must not depend on which post-processing passes were required.
+    project.setTagValue(Project.hiddenOutputTag, Seq.empty[Attribute])
+    // A Project alone can be traversed when resolving missing attributes in filters or sorts.
+    val boundary = SubqueryAlias(name, project)
+    boundary.mergeTagsFrom(source)
+    boundary
   }
 
   // ---------------------------------------------------------------------------
@@ -323,14 +296,13 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *     the batch path -- groups with `_del_cnt = 1 AND _ins_cnt = 1 AND _rv_cnt = 2 AND
    *     _min_rv = _max_rv` are dropped wholesale.
    *  4. [[Generate]] using `Inline(events)` to re-emit one output row per buffered input
-   *     row. `unrequiredChildIndex` drops the duplicate grouping columns and the events
-   *     buffer. Scalar rowId helpers flow through when netChanges follows.
+   *     row. A Project selects the generated columns and preserves scalar rowId helpers
+   *     for subsequent post-processing.
    *  5. [[Project]] (only when update detection is requested) applying the same
    *     `CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION`
    *     guard and `_change_type` relabel as the batch path.
-   *  6. [[Project]] (via [[removeHelperColumns]]) drops `__spark_cdc_*` helpers so
-   *     the output schema matches the connector's declared schema, with rowId helpers
-   *     retained only for a following netChanges rewrite.
+   *  6. [[Project]] (via [[removeHelperColumns]]) drops count and row-version helpers.
+   *     RowId helpers remain available until the final changelog output projection.
    *  7. Final [[Project]] (via [[stripCommitTimestampWatermarkMetadata]]) clears the
    *     `EventTimeWatermark.delayKey` from the user-visible `_commit_timestamp`
    *     attribute so a downstream user-supplied `withWatermark` on a different column
@@ -341,8 +313,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       cl: Changelog,
       requiresCarryOverRemoval: Boolean,
-      requiresUpdateDetection: Boolean,
-      retainRowIds: Boolean): LogicalPlan = {
+      requiresUpdateDetection: Boolean): LogicalPlan = {
     // Fail fast on a NULL `_commit_timestamp`. The downstream Aggregate uses it as
     // both an event-time watermark column and a grouping key; a NULL group-key value
     // would never satisfy the `eventTime <= watermark` eviction predicate, so the
@@ -364,11 +335,9 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
     val groupingExprs: Seq[Expression] =
       rowIdExprs ++ Seq(commitVersionAttr, commitTimestampAttr)
-    val rowIdOutputs = if (retainRowIds) {
-      rowIdExprs.zipWithIndex.map { case (expr, idx) =>
-        Alias(expr, NetChangesHelperColumns.rowIdColumn(idx))()
-      }
-    } else rowIdExprs
+    val rowIdOutputs = rowIdExprs.zipWithIndex.map { case (expr, idx) =>
+      Alias(expr, NetChangesHelperColumns.rowIdColumn(idx))()
+    }
     val groupingNamedExprs: Seq[NamedExpression] =
       rowIdOutputs ++ Seq(commitVersionAttr, commitTimestampAttr)
 
@@ -392,7 +361,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
     // Buffer visible input columns so Inline can re-emit them after the aggregate.
     // Visible grouping keys also appear in the struct, so their duplicate outputs are
-    // dropped below. Hidden rowIds stay in scalar grouping outputs when netChanges follows.
+    // dropped below. RowIds also remain in scalar grouping outputs for subsequent post-processing.
     val structOfAllCols = CreateStruct(watermarked.output)
     // Attach a metadata marker to the `__spark_cdc_events` alias so downstream rules
     // can detect the streaming row-level rewrite by metadata rather than by helper
@@ -412,32 +381,28 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       Filter(Not(buildCarryOverPairPredicate(aggregated)), aggregated)
     } else aggregated
 
-    // Inline the struct array back into rows. Drop the events column (consumed by Inline)
-    // and duplicate grouping columns. Keep scalar rowId helpers for a following netChanges
-    // rewrite, which removes them before exposing the final schema.
+    // Keep the aggregate's rowIds through Generate. A Project selects the generated data
+    // columns instead of their duplicate grouping outputs, while retaining scalar rowIds.
     val eventsAttr = getAttribute(filtered, HelperColumn.Events)
-    val droppedGroupingAttrs = if (retainRowIds) {
-      Seq(commitVersionAttr, commitTimestampAttr)
-    } else groupingNamedExprs.map(_.toAttribute)
-    val groupingAttrSet = AttributeSet(droppedGroupingAttrs)
-    val unrequiredChildIndex: Seq[Int] = filtered.output.zipWithIndex.collect {
-      case (a, i) if a.exprId == eventsAttr.exprId => i
-      case (a, i) if groupingAttrSet.contains(a) => i
-    }
     val generatorOutput: Seq[Attribute] = watermarked.output.map { col =>
       AttributeReference(col.name, col.dataType, col.nullable, col.metadata)()
     }
     val generated = Generate(
       Inline(eventsAttr),
-      unrequiredChildIndex = unrequiredChildIndex,
+      unrequiredChildIndex = Nil,
       outer = false,
       qualifier = None,
       generatorOutput = generatorOutput,
       child = filtered)
 
+    val aggregateHelpers = filtered.output.filter { a =>
+      HelperColumn.all.contains(a.name) && a.exprId != eventsAttr.exprId
+    }
+    val expanded = Project(
+      rowIdOutputs.map(_.toAttribute) ++ aggregateHelpers ++ generatorOutput, generated)
     val withRelabel: LogicalPlan = if (requiresUpdateDetection) {
-      addUpdateRelabelProjection(generated)
-    } else generated
+      addUpdateRelabelProjection(expanded)
+    } else expanded
 
     // Strip the auto-injected EventTimeWatermark metadata from the user-visible
     // `_commit_timestamp` so it does not interact with downstream user-supplied

@@ -199,13 +199,15 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       assert(netChanges.schema == starSchema)
     }
 
-    checkError(
-      intercept[AnalysisException] {
-        sql(s"SELECT _metadata.row_id FROM $changes").schema
-      },
-      condition = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
-      parameters = Map("columnName" -> "`_metadata`"))
+    def assertMetadataUnavailable(query: => Unit): Unit = {
+      val error = intercept[AnalysisException](query)
+      assert(error.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      assert(error.getMessageParameters.get("objectName").contains("_metadata"))
+    }
 
+    assertMetadataUnavailable {
+      sql(s"SELECT _metadata.row_id FROM $changes").schema
+    }
     val changesDf = spark.read
       .option("startingVersion", "1")
       .option("endingVersion", "5")
@@ -214,19 +216,57 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       intercept[AnalysisException] {
         changesDf.select(changesDf.metadataColumn("_metadata").getField("row_id")).schema
       },
-      condition = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
-      parameters = Map("columnName" -> "`_metadata`"))
-
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> "`_metadata`"))
     Seq(
+      s"SELECT * FROM $changes WHERE _metadata.row_id = 1",
+      s"SELECT * FROM $changes ORDER BY _metadata.row_id",
       s"SELECT (SELECT max(_metadata.row_id) FROM $changes)",
       s"SELECT 1 WHERE EXISTS (SELECT _metadata.row_id FROM $changes)",
       s"SELECT 1L WHERE 1L IN (SELECT _metadata.row_id FROM $changes)").foreach { query =>
+      assertMetadataUnavailable { sql(query).schema }
+    }
+  }
+
+  for {
+    streaming <- Seq(false, true)
+    mode <- Seq("none", "dropCarryovers", "netChanges")
+  } {
+    test(s"changelog output boundary: streaming=$streaming, mode=$mode") {
+      val metadataColumn = new MetadataColumn {
+        override def name(): String = "_metadata"
+        override def dataType(): StructType = new StructType()
+          .add("row_id", LongType, nullable = false)
+        override def isNullable(): Boolean = false
+      }
+      cdcCatalog.setChangelogProperties(ident, ChangelogProperties(
+        containsCarryoverRows = true,
+        containsIntermediateChanges = true,
+        rowIdPaths = Seq(Seq("_metadata", "row_id")),
+        rowVersionName = Some("_commit_version"),
+        metadataColumns = Seq(metadataColumn)))
+      val changes = if (streaming) {
+        spark.readStream.option("deduplicationMode", mode)
+          .changes(s"$cdcCatalogName.test_table")
+      } else {
+        spark.read.option("startingVersion", "1").option("endingVersion", "5")
+          .option("deduplicationMode", mode).changes(s"$cdcCatalogName.test_table")
+      }
+      assert(changes.schema.fieldNames.toSeq ==
+        Seq("id", "data", "_change_type", "_commit_version", "_commit_timestamp"))
+      assert(changes.queryExecution.analyzed.metadataOutput.isEmpty)
+      assert(changes.alias("c").select("c.id").schema.fieldNames.toSeq == Seq("id"))
+      if (!streaming) {
+        val joined = changes.alias("left").join(changes.alias("right"), Seq("id"))
+        assert(!joined.schema.fieldNames.exists(_.startsWith("_metadata")))
+      }
+      val error = intercept[AnalysisException] {
+        changes.select(changes.metadataColumn("_metadata")).schema
+      }
       checkError(
-        intercept[AnalysisException] {
-          sql(query).schema
-        },
-        condition = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
-        parameters = Map("columnName" -> "`_metadata`"))
+        error,
+        condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+        parameters = Map("objectName" -> "`_metadata`"))
     }
   }
 

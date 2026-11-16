@@ -220,12 +220,7 @@ public interface Changelog {
   }
 
   /**
-   * Returns metadata columns required by Spark's changelog post-processing, separate from the
-   * user-visible data columns in {@link #columns()}.
-   * <p>
-   * Row identity and row version may be backed by connector metadata rather than user-visible
-   * columns. Spark makes these columns available to internal plan rules without including them in
-   * the changelog schema or {@code SELECT *}. Users cannot query these columns directly.
+   * Returns metadata columns exposed when scanning this Changelog.
    * <p>
    * The default implementation returns an empty array.
    *
