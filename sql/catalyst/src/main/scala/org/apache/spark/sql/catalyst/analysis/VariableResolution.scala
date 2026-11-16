@@ -50,6 +50,10 @@ class VariableResolution(
    * and report `[system.session]` directly at their throw site.
    */
   def searchPathEntriesForError: Seq[Seq[String]] = {
+    resolutionPathEntries.map(_.parts)
+  }
+
+  private def resolutionPathEntries: Seq[CatalogManager.ResolvedPathEntry] = {
     catalogManager.resolutionPathEntriesForAnalysis(
       AnalysisContext.get.resolutionPathEntries,
       AnalysisContext.get.catalogAndNamespace)
@@ -181,7 +185,7 @@ class VariableResolution(
   // catalog entries from the SQL path; the three-part form is fully qualified.
   private def resolvesToTempVariable(nameParts: Seq[String]): Boolean = {
     val candidates = CatalogManager.identifierPathCandidates(
-      searchPathEntriesForError, nameParts, catalogManager.isCatalogRegistered)
+      resolutionPathEntries, nameParts, catalogManager.isCatalogRegistered)
     candidates.exists { candidate =>
       candidate.length == 3 &&
         candidate(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&

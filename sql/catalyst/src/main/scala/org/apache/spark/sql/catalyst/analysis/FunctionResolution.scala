@@ -88,7 +88,8 @@ class FunctionResolution(
    * directly, matching [[RelationResolution.relationResolutionEntries]] so routine order stays
    * aligned with relation order.
    */
-  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
+  private[analysis] def sqlResolutionPathEntriesForAnalysis
+      : Seq[CatalogManager.ResolvedPathEntry] = {
     // Per-analysis-pass memo (SPARK-57758): computing the path (reading the live [[CatalogManager]]
     // and several confs, then allocating `Seq`s) used to run once per [[UnresolvedFunction]], and
     // under Spark Connect once per node on every re-analysis of the growing plan. The path is

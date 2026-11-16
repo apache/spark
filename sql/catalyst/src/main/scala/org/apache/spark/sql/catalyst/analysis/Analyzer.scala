@@ -152,7 +152,7 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
 case class AnalysisContext(
     isDefault: Boolean = false,
     catalogAndNamespace: Seq[String] = Nil,
-    resolutionPathEntries: Option[Seq[Seq[String]]] = None,
+    resolutionPathEntries: Option[Seq[CatalogManager.ResolvedPathEntry]] = None,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[RelationCacheKey, LogicalPlan] = mutable.Map.empty,
@@ -231,9 +231,11 @@ case class AnalysisContext(
      * it to a parameter would copy a stale path across that boundary and silently mis-resolve
      * (SECTION 17f of `FunctionQualificationSuite` is the regression guard).
      */
-    private var resolutionPathMemo: Seq[Seq[String]] = _
+    private var resolutionPathMemo: Seq[CatalogManager.ResolvedPathEntry] = _
 
-    def memoizedResolutionPath(compute: => Seq[Seq[String]]): Seq[Seq[String]] = {
+    def memoizedResolutionPath(
+        compute: => Seq[CatalogManager.ResolvedPathEntry]
+    ): Seq[CatalogManager.ResolvedPathEntry] = {
       if (resolutionPathMemo == null) {
         resolutionPathMemo = compute
       }
@@ -326,7 +328,7 @@ object AnalysisContext {
   def withAnalysisContext[A](
       function: SQLFunction,
       invokerCatalogAndNamespace: Seq[String],
-      pathlessEntries: Option[Seq[Seq[String]]])(f: => A): A = {
+      pathlessEntries: Option[Seq[CatalogManager.ResolvedPathEntry]])(f: => A): A = {
     val originContext = value.get()
     // Validate even when PATH is absent so future metadata versions still fail closed.
     CatalogTable.requireSupportedMetadataVersion(
@@ -2286,7 +2288,8 @@ class Analyzer(
    * body is already in progress, and the invoker's current catalog/namespace otherwise.
    */
   private def pathlessSQLFunctionPathEntries(
-      invokerCatalogAndNamespace: Seq[String]): Option[Seq[Seq[String]]] = {
+      invokerCatalogAndNamespace: Seq[String]
+  ): Option[Seq[CatalogManager.ResolvedPathEntry]] = {
     val inherited = AnalysisContext.get.catalogAndNamespace
     val home = if (inherited.nonEmpty) inherited else invokerCatalogAndNamespace
     if (SQLConf.get.pathEnabled && home.nonEmpty) {

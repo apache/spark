@@ -46,7 +46,7 @@ class AlterViewSchemaBindingSuite
         val catalogAfterCreate = metaAfterCreate.viewCatalogAndNamespace
         val parsedCreate = CatalogManager.deserializePathEntries(pathAfterCreate)
           .getOrElse(fail(s"Expected a valid serialized path, got: $pathAfterCreate"))
-        assert(parsedCreate.contains(Seq(catalog, "alter_view_path_a")),
+        assert(parsedCreate.exists(_.parts == Seq(catalog, "alter_view_path_a")),
           s"Frozen path should include alter_view_path_a; got: $parsedCreate")
 
         // Switch the live PATH to something else and run ALTER VIEW WITH SCHEMA.

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
+import org.apache.spark.sql.connector.catalog.CatalogManager.ResolvedPathEntry
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -33,7 +34,7 @@ case class RelationId(
     isStreaming: Boolean = false,
     timeTravelSpec: Option[TimeTravelSpec] = None,
     pathIdentifier: Option[Seq[String]] = None,
-    resolutionPathEntries: Option[Seq[Seq[String]]] = None
+    resolutionPathEntries: Option[Seq[ResolvedPathEntry]] = None
 ) {
   def this(
       multipartIdentifier: Seq[String],

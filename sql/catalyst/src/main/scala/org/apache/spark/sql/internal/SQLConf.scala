@@ -49,6 +49,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.PathElement.PathRef
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -10947,7 +10948,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * "last" (session last). When catalogPath is empty, current schema and catalog entries are
    * omitted.
    */
-  def resolutionSearchPath(catalogPath: Seq[String]): Seq[Seq[String]] = {
+  def resolutionSearchPath(
+      catalogPath: Seq[String]): Seq[CatalogManager.ResolvedPathEntry] = {
     val schemaEntries = if (catalogPath.isEmpty) Seq.empty else Seq(catalogPath)
     val catalogEntries = catalogPath.headOption.toSeq.map(Seq(_))
     defaultPathOrder(schemaEntries, catalogEntries)
@@ -10960,19 +10962,24 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
    * DEFAULT_PATH expansion (when `spark.sql.defaultPath` is empty) to keep ordering in sync.
    * SYSTEM_PATH no longer flows through here -- see [[systemPathOrder]].
    *
+   * Each returned entry carries its role so a collapsed current schema (single catalog name)
+   * stays distinct from an explicit catalog entry of the same name.
+   *
    * @param schemaEntries persistent schema path entries (may be empty).
    * @param catalogEntries persistent catalog path entries (may be empty).
    */
-  def defaultPathOrder(schemaEntries: Seq[Seq[String]]): Seq[Seq[String]] = {
+  def defaultPathOrder(
+      schemaEntries: Seq[Seq[String]]): Seq[CatalogManager.ResolvedPathEntry] = {
     defaultPathOrder(schemaEntries, Seq.empty)
   }
 
   def defaultPathOrder(
       schemaEntries: Seq[Seq[String]],
-      catalogEntries: Seq[Seq[String]]): Seq[Seq[String]] = {
+      catalogEntries: Seq[Seq[String]]): Seq[CatalogManager.ResolvedPathEntry] = {
+    import CatalogManager.{ResolvedPathEntry, SYSTEM_CATALOG_NAME}
     val order = sessionFunctionResolutionOrder
-    val session = Seq("system", "session")
-    val builtin = Seq("system", "builtin")
+    val session = Seq(SYSTEM_CATALOG_NAME, "session")
+    val builtin = Seq(SYSTEM_CATALOG_NAME, "builtin")
     val schemaPath = order match {
       case "first" =>
         if (schemaEntries.isEmpty) Seq(session, builtin)
@@ -10985,11 +10992,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
         else Seq(builtin, session) ++ schemaEntries
     }
     val catalogPath = if (persistentCatalogFirst) {
-      catalogEntries ++ Seq(Seq("system"))
+      catalogEntries ++ Seq(Seq(SYSTEM_CATALOG_NAME))
     } else {
-      Seq(Seq("system")) ++ catalogEntries
+      Seq(Seq(SYSTEM_CATALOG_NAME)) ++ catalogEntries
     }
-    schemaPath ++ catalogPath
+    schemaPath.map(ResolvedPathEntry.schema) ++ catalogPath.map(ResolvedPathEntry.catalog)
   }
 
   /**

@@ -127,7 +127,7 @@ class RelationResolution(
    * persisted frozen path from metadata when available.
    * When PATH is disabled, legacy resolution rules apply.
    */
-  private def relationResolutionEntries: Seq[Seq[String]] = {
+  private def relationResolutionEntries: Seq[CatalogManager.ResolvedPathEntry] = {
     catalogManager.resolutionPathEntriesForAnalysis(
       AnalysisContext.get.resolutionPathEntries,
       AnalysisContext.get.catalogAndNamespace)
@@ -156,7 +156,7 @@ class RelationResolution(
    * Same order as [[relationResolutionSteps]]; each entry is quoted (e.g. "`system`.`session`").
    */
   def resolutionSearchPathForError: Seq[String] = {
-    relationResolutionEntries.map(toSQLId)
+    relationResolutionEntries.map(e => toSQLId(e.parts))
   }
 
   def resolutionSearchPathForError(nameParts: Seq[String]): Seq[String] = {

@@ -517,12 +517,12 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
           }
 
           val legacyPath = CatalogManager.deserializePathEntries(
-            view.viewStoredResolutionPath.get).get.filter(_.length > 1)
+            view.viewStoredResolutionPath.get).get.collect { case e if e.isSchema => e.parts }
           val legacyView = view.copy(properties =
             view.properties
               .updated(
                 CatalogTable.VIEW_RESOLUTION_PATH,
-                CatalogManager.serializePathEntries(legacyPath))
+                CatalogManager.serializeLegacyPathEntries(legacyPath))
               .removed(CatalogTable.VIEW_METADATA_VERSION))
           AnalysisContext.withAnalysisContext(legacyView) {
             checkResolverGuard("SELECT builtin.abs(-1)")

@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.connector.catalog.CatalogManager.ResolvedPathEntry
 
 /**
  * The [[BridgedRelationId]] is a unique identifier for an unresolved relation in the whole logical
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 case class BridgedRelationId(
     unresolvedRelation: UnresolvedRelation,
     catalogAndNamespace: Seq[String],
-    resolutionPathEntries: Option[Seq[Seq[String]]] = None
+    resolutionPathEntries: Option[Seq[ResolvedPathEntry]] = None
 ) {
   def this(
       unresolvedRelation: UnresolvedRelation,

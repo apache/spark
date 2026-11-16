@@ -89,20 +89,19 @@ private[sql] class TransactionAwareCatalogManager(
       pathDefaultCatalog: String,
       pathDefaultNamespace: Seq[String],
       expandCatalog: String,
-      expandNamespace: Seq[String]): Seq[Seq[String]] =
+      expandNamespace: Seq[String]): Seq[CatalogManager.ResolvedPathEntry] =
     delegate.sqlResolutionPathEntries(
       pathDefaultCatalog, pathDefaultNamespace, expandCatalog, expandNamespace)
 
   override def sqlResolutionPathEntries(
       currentCatalog: String,
-      currentNamespace: Seq[String]): Seq[Seq[String]] =
+      currentNamespace: Seq[String]): Seq[CatalogManager.ResolvedPathEntry] =
     delegate.sqlResolutionPathEntries(currentCatalog, currentNamespace)
 
   override def resolutionPathEntriesForAnalysis(
-      pinnedEntries: Option[Seq[Seq[String]]],
-      viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]] =
+      pinnedEntries: Option[Seq[CatalogManager.ResolvedPathEntry]],
+      viewCatalogAndNamespace: Seq[String]): Seq[CatalogManager.ResolvedPathEntry] =
     delegate.resolutionPathEntriesForAnalysis(pinnedEntries, viewCatalogAndNamespace)
-
   override def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionFunctionKind] =
     delegate.sessionFunctionKindsForUnqualifiedResolution()
 

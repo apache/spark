@@ -207,7 +207,7 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
             CatalogTable.CURRENT_VIEW_METADATA_VERSION)
           val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
             fail(s"Expected a valid serialized path, got: $storedPath"))
-          assert(parsed.head == Seq("spark_catalog", "path_materialized_view"))
+          assert(parsed.head.parts == Seq("spark_catalog", "path_materialized_view"))
           assert(!storedPath.toLowerCase(Locale.ROOT).contains("current_schema"))
         } finally {
           sql("SET PATH = DEFAULT_PATH")
@@ -239,7 +239,7 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
             SQLFunction.CURRENT_FUNCTION_METADATA_VERSION)
           val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
             fail(s"Expected a valid serialized path, got: $storedPath"))
-          assert(parsed.head == Seq("spark_catalog", "path_materialized_fn"))
+          assert(parsed.head.parts == Seq("spark_catalog", "path_materialized_fn"))
           assert(!storedPath.toLowerCase(Locale.ROOT).contains("current_schema"))
         } finally {
           sql("SET PATH = DEFAULT_PATH")
@@ -365,12 +365,12 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
         val catalog = spark.sessionState.catalog
         val metadata = catalog.getTableMetadata(TableIdentifier(testViewName))
         val legacyPath = CatalogManager.deserializePathEntries(
-          metadata.viewStoredResolutionPath.get).get.filter(_.length > 1)
+          metadata.viewStoredResolutionPath.get).get.collect { case e if e.isSchema => e.parts }
         catalog.alterTable(metadata.copy(properties =
           metadata.properties
             .updated(
               CatalogTable.VIEW_RESOLUTION_PATH,
-              CatalogManager.serializePathEntries(legacyPath))
+              CatalogManager.serializeLegacyPathEntries(legacyPath))
             .removed(CatalogTable.VIEW_METADATA_VERSION)))
 
         checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(1, 100))
@@ -402,12 +402,12 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
           spark.sessionState.catalog.getFunctionMetadata(FunctionIdentifier(testFunctionName)),
           spark.sessionState.sqlParser)
         val legacyPath = CatalogManager.deserializePathEntries(
-          function.functionStoredResolutionPath.get).get.filter(_.length > 1)
+          function.functionStoredResolutionPath.get).get.collect { case e if e.isSchema => e.parts }
         val legacyFunction = function.copy(properties =
           function.properties
             .updated(
               SQLFunction.FUNCTION_RESOLUTION_PATH,
-              CatalogManager.serializePathEntries(legacyPath))
+              CatalogManager.serializeLegacyPathEntries(legacyPath))
             .removed(SQLFunction.FUNCTION_METADATA_VERSION))
         spark.sessionState.catalog.alterFunction(legacyFunction.toCatalogFunction)
 
@@ -446,14 +446,14 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
           spark.sessionState.catalog.getFunctionMetadata(FunctionIdentifier(testFunctionName)),
           spark.sessionState.sqlParser)
         val legacyPath = CatalogManager.deserializePathEntries(
-          function.functionStoredResolutionPath.get).get.filter(_.length > 1)
+          function.functionStoredResolutionPath.get).get.collect { case e if e.isSchema => e.parts }
         // Keep the creation catalog property pointing at spark_catalog while stripping the
         // version so reconstruction is version 0. The invoker then switches catalogs.
         val legacyFunction = function.copy(properties =
           function.properties
             .updated(
               SQLFunction.FUNCTION_RESOLUTION_PATH,
-              CatalogManager.serializePathEntries(legacyPath))
+              CatalogManager.serializeLegacyPathEntries(legacyPath))
             .removed(SQLFunction.FUNCTION_METADATA_VERSION))
         spark.sessionState.catalog.alterFunction(legacyFunction.toCatalogFunction)
 

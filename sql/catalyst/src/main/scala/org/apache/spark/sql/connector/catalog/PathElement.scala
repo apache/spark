@@ -84,10 +84,13 @@ private[sql] object PathElement {
       case p => LiteralPathEntry(p)
     }
 
-    def builtinDefaultWithCurrentSchema: Seq[SessionPathEntry] =
-      toEntries(conf.defaultPathOrder(
-        Seq(currentSchemaSentinel), Seq(currentCatalogSentinel)))
+    def toEntriesFromResolved(
+        entries: Seq[CatalogManager.ResolvedPathEntry]): Seq[SessionPathEntry] =
+      toEntries(entries.map(_.parts))
 
+    def builtinDefaultWithCurrentSchema: Seq[SessionPathEntry] =
+      toEntriesFromResolved(conf.defaultPathOrder(
+        Seq(currentSchemaSentinel), Seq(currentCatalogSentinel)))
     def defaultPathExpansion: Seq[SessionPathEntry] = {
       if (isConfDefaultExpansion) {
         // Cycle break: inner DEFAULT_PATH inside the conf default value falls back to the

@@ -449,7 +449,7 @@ class SetPathSuite extends SharedSparkSession {
       SQLConf.CASE_SENSITIVE.key -> "true") {
       sql("SET PATH = spark_catalog.DEFAULT, spark_catalog.default")
       val stored = spark.sessionState.catalogManager.sessionPathEntries.get
-      val rendered = stored.map(_.resolve("ignored", Nil).mkString("."))
+      val rendered = stored.map(_.resolve("ignored", Nil).parts.mkString("."))
       assert(rendered === Seq("spark_catalog.DEFAULT", "spark_catalog.default"))
     }
   }
@@ -783,18 +783,28 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("PATH enabled: schema-only SET PATH still resolves partially qualified table names") {
+  test("PATH enabled: schema-only SET PATH does not invent catalogs for two-part names") {
     withPathEnabled {
+      sql("SET PATH = DEFAULT_PATH")
       sql("CREATE SCHEMA IF NOT EXISTS path_schema_only_a")
       sql("CREATE SCHEMA IF NOT EXISTS path_schema_only_b")
       sql("CREATE TABLE path_schema_only_b.tbl (x INT) USING parquet")
       sql("INSERT INTO path_schema_only_b.tbl VALUES (7)")
       try {
-        // The path lists only schemas, so the two-part name must resolve through the catalog
-        // prefix of the path rather than requiring an explicit catalog-only entry.
+        // Schema entries do not invent catalog entries. Without an explicit catalog on the
+        // PATH, a two-part name has nothing to resolve against.
         sql("SET PATH = spark_catalog.path_schema_only_a, system.builtin")
+        val e = intercept[AnalysisException] {
+          sql("SELECT x FROM path_schema_only_b.tbl")
+        }
+        assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" ||
+            e.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND"),
+          s"Expected TABLE_OR_VIEW_NOT_FOUND; got: ${e.getCondition}: ${e.getMessage}")
+        // An explicit catalog entry restores two-part resolution.
+        sql("SET PATH = spark_catalog, spark_catalog.path_schema_only_a, system.builtin")
         checkAnswer(sql("SELECT x FROM path_schema_only_b.tbl"), Row(7))
       } finally {
+        sql("SET PATH = DEFAULT_PATH")
         sql("DROP TABLE IF EXISTS path_schema_only_b.tbl")
         sql("DROP SCHEMA IF EXISTS path_schema_only_a")
         sql("DROP SCHEMA IF EXISTS path_schema_only_b")

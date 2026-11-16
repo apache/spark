@@ -1015,8 +1015,11 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   test("SPARK-59243: the nested temp-reference check reads the path the body resolves under") {
     // A CREATE FUNCTION that a procedure issues runs inside the CALL's analysis pass. Memoize a
     // path on an enclosing context, as that pass would, before the SET PATH that precedes it.
-    val builtin = Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.BUILTIN_NAMESPACE)
-    val session = Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)
+    import CatalogManager.ResolvedPathEntry
+    val builtin = ResolvedPathEntry.schema(
+      Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.BUILTIN_NAMESPACE))
+    val session = ResolvedPathEntry.schema(
+      Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",
       SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {

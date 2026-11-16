@@ -136,12 +136,17 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("deserializePathEntries parses valid payloads") {
-    val stored =
-      """[["spark_catalog","default"],["system","builtin"],["spark_catalog","db1","ns1"]]"""
+    import CatalogManager.ResolvedPathEntry
+    val stored = CatalogManager.serializePathEntries(Seq(
+      ResolvedPathEntry.schema(Seq("spark_catalog", "default")),
+      ResolvedPathEntry.schema(Seq("system", "builtin")),
+      ResolvedPathEntry.schema(Seq("spark_catalog", "db1", "ns1")),
+      ResolvedPathEntry.catalog(Seq("system"))))
     assert(CatalogManager.deserializePathEntries(stored).contains(Seq(
-      Seq("spark_catalog", "default"),
-      Seq("system", "builtin"),
-      Seq("spark_catalog", "db1", "ns1"))))
+      ResolvedPathEntry.schema(Seq("spark_catalog", "default")),
+      ResolvedPathEntry.schema(Seq("system", "builtin")),
+      ResolvedPathEntry.schema(Seq("spark_catalog", "db1", "ns1")),
+      ResolvedPathEntry.catalog(Seq("system")))))
     assert(CatalogManager.deserializePathEntries("[]").contains(Seq.empty))
   }
 
@@ -151,18 +156,28 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       "not_json",
       "{}",
       """["spark_catalog"]""",
-      """[["spark_catalog"], 1]""",
-      """[[1]]""")
+      """[["spark_catalog","default"]]""",
+      """[{"parts":["spark_catalog"],"role":"other"}]""",
+      """[{"parts":[1],"role":"schema"}]""")
     malformedPayloads.foreach { payload =>
       assert(CatalogManager.deserializePathEntries(payload).isEmpty, s"payload=$payload")
     }
   }
 
   test("serializePathEntries round-trips through deserialize for typical inputs") {
+    import CatalogManager.ResolvedPathEntry
     val cases = Seq(
-      Seq(Seq("spark_catalog", "default"), Seq("system", "builtin")),
-      Seq(Seq("system", "session")),
-      Seq.empty[Seq[String]])
+      Seq(
+        ResolvedPathEntry.schema(Seq("spark_catalog", "default")),
+        ResolvedPathEntry.schema(Seq("system", "builtin")),
+        ResolvedPathEntry.catalog(Seq("system")),
+        ResolvedPathEntry.catalog(Seq("spark_catalog"))),
+      Seq(ResolvedPathEntry.schema(Seq("system", "session"))),
+      // Collapsed current schema and explicit catalog stay distinct after reload.
+      Seq(
+        ResolvedPathEntry.schema(Seq("testcat")),
+        ResolvedPathEntry.catalog(Seq("testcat"))),
+      Seq.empty[ResolvedPathEntry])
     cases.foreach { entries =>
       val payload = CatalogManager.serializePathEntries(entries)
       val parsed = CatalogManager.deserializePathEntries(payload)
@@ -172,24 +187,25 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("serializePathEntries round-trips multi-level and quoted identifiers") {
+    import CatalogManager.ResolvedPathEntry
     val entries = Seq(
-      Seq("cat", "ns1", "ns2"),
-      Seq("spark_catalog", "sch.with.dots"),
-      Seq("spark_catalog", "schema with spaces"))
+      ResolvedPathEntry.schema(Seq("cat", "ns1", "ns2")),
+      ResolvedPathEntry.schema(Seq("spark_catalog", "sch.with.dots")),
+      ResolvedPathEntry.schema(Seq("spark_catalog", "schema with spaces")))
     val payload = CatalogManager.serializePathEntries(entries)
     val parsed = CatalogManager.deserializePathEntries(payload)
       .getOrElse(fail(s"Expected payload to round-trip: $payload"))
     assert(parsed === entries)
   }
 
-  test("legacy persisted path is enriched with catalog entries in configured order") {
-    val schemaEntries = Seq(
-      Seq("system", "builtin"),
-      Seq("spark_catalog", "default"))
-    val stored = CatalogManager.serializePathEntries(
-      schemaEntries ++ Seq(Seq("other_catalog"), Seq("system")))
+  test("legacy persisted path keeps collapsed schemas and appends catalog roles") {
+    import CatalogManager.ResolvedPathEntry
+    // Version-0 payloads are a JSON array of string arrays. Collapsed CURRENT_SCHEMA names
+    // (single catalog part) are schema-role entries and must not be dropped.
+    val stored =
+      """[["system","builtin"],["testcat"],["spark_catalog","default"]]"""
 
-    def read(persistentCatalogFirst: Boolean): Seq[Seq[String]] =
+    def read(persistentCatalogFirst: Boolean): Seq[ResolvedPathEntry] =
       CatalogManager.deserializePathEntriesForAnalysisOrFail(
         stored,
         metadataVersion = 0,
@@ -199,14 +215,23 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
         objectName = "v",
         currentMetadataVersion = CatalogTable.CURRENT_VIEW_METADATA_VERSION)
 
+    val schemaEntries = Seq(
+      ResolvedPathEntry.schema(Seq("system", "builtin")),
+      ResolvedPathEntry.schema(Seq("testcat")),
+      ResolvedPathEntry.schema(Seq("spark_catalog", "default")))
     assert(read(persistentCatalogFirst = false) ===
-      schemaEntries ++ Seq(Seq("system"), Seq("spark_catalog")))
+      schemaEntries ++ Seq(
+        ResolvedPathEntry.catalog(Seq("system")),
+        ResolvedPathEntry.catalog(Seq("spark_catalog"))))
     assert(read(persistentCatalogFirst = true) ===
-      schemaEntries ++ Seq(Seq("spark_catalog"), Seq("system")))
+      schemaEntries ++ Seq(
+        ResolvedPathEntry.catalog(Seq("spark_catalog")),
+        ResolvedPathEntry.catalog(Seq("system"))))
   }
 
   test("current metadata version preserves an intentionally schema-only path") {
-    val entries = Seq(Seq("pathcat", "ns"))
+    import CatalogManager.ResolvedPathEntry
+    val entries = Seq(ResolvedPathEntry.schema(Seq("pathcat", "ns")))
     val stored = CatalogManager.serializePathEntries(entries)
     assert(CatalogManager.deserializePathEntriesForAnalysisOrFail(
       stored,
@@ -235,9 +260,11 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("negative metadata version is rejected") {
+    import CatalogManager.ResolvedPathEntry
     val e = intercept[AnalysisException] {
       CatalogManager.deserializePathEntriesForAnalysisOrFail(
-        storedPathStr = CatalogManager.serializePathEntries(Seq(Seq("spark_catalog", "default"))),
+        storedPathStr = CatalogManager.serializePathEntries(
+          Seq(ResolvedPathEntry.schema(Seq("spark_catalog", "default")))),
         metadataVersion = -1,
         creationCatalog = Some("spark_catalog"),
         persistentCatalogFirst = false,
@@ -261,60 +288,75 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
 
   test("isBuiltinFirstOnPath: SPARK-57758 gate for the built-in function fast-path") {
     // The function-resolution built-in fast-path is safe (cannot be shadowed) only when
-    // `system.builtin` is the FIRST path entry. The fast-path has no behavioral signature -- the
-    // slow candidate loop yields identical results -- so this pure-predicate test guards the gate
-    // directly: a regression that silently stopped the fast-path from firing (re-introducing the
-    // SPARK-57758 perf regression) or fired it when a catalog precedes `system.builtin`
-    // (re-introducing the precedence bug) would leave the behavioral SQL tests green.
-    val builtin = Seq("system", "builtin")
-    val session = Seq("system", "session")
-    val catalog = Seq("spark_catalog", "some_schema")
+    // `system.builtin` is the FIRST schema-role entry. Catalog-role entries do not participate.
+    import CatalogManager.ResolvedPathEntry
+    val builtin = ResolvedPathEntry.schema(Seq("system", "builtin"))
+    val session = ResolvedPathEntry.schema(Seq("system", "session"))
+    val schema = ResolvedPathEntry.schema(Seq("spark_catalog", "some_schema"))
+    val catalogOnly = ResolvedPathEntry.catalog(Seq("spark_catalog"))
+    val collapsed = ResolvedPathEntry.schema(Seq("testcat"))
     // Default `sessionOrder` modes `second` / `last` keep `system.builtin` first -> safe.
     assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, session)))
     assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin)))
-    assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, catalog, session)))
-    // Catalog-only entries do not participate in one-part function resolution.
-    assert(CatalogManager.isBuiltinFirstOnPath(Seq(Seq("spark_catalog"), builtin)))
+    assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, schema, session)))
+    // An uncovered catalog-role entry before builtin disables the fast-path. A covered
+    // catalog-role duplicate is skipped for one-part, but an earlier schema still disables
+    // the fast-path when it precedes builtin.
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(catalogOnly, builtin)))
+    assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, catalogOnly)))
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(
+      ResolvedPathEntry.schema(Seq("spark_catalog", "default")), catalogOnly, builtin)))
     // Case-insensitive match on the well-known entry.
-    assert(CatalogManager.isBuiltinFirstOnPath(Seq(Seq("System", "Builtin"), session)))
-    // `first` mode (session before builtin) and custom `SET PATH` shapes that place any entry
-    // before `system.builtin` -> not safe.
+    assert(CatalogManager.isBuiltinFirstOnPath(
+      Seq(ResolvedPathEntry.schema(Seq("System", "Builtin")), session)))
+    // A collapsed current schema before builtin disables the fast-path.
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(collapsed, builtin)))
+    // `first` mode (session before builtin) and custom shapes that place a schema before
+    // `system.builtin` -> not safe.
     assert(!CatalogManager.isBuiltinFirstOnPath(Seq(session, builtin)))
-    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(catalog, builtin)))
-    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(catalog)))
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(schema, builtin)))
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(schema)))
     assert(!CatalogManager.isBuiltinFirstOnPath(Seq.empty))
   }
 
-  test("identifierPathCandidates selects PATH entries by identifier arity") {
+  test("identifierPathCandidates selects PATH entries by identifier role") {
+    import CatalogManager.ResolvedPathEntry
     val path = Seq(
-      Seq("system", "builtin"),
-      Seq("spark_catalog", "default"),
-      Seq("system"),
-      Seq("spark_catalog"))
-    // Schema-only PATH: no explicit catalog-only entries (e.g. SET PATH = cat.db, system.builtin).
+      ResolvedPathEntry.schema(Seq("system", "builtin")),
+      ResolvedPathEntry.schema(Seq("spark_catalog", "default")),
+      ResolvedPathEntry.catalog(Seq("system")),
+      ResolvedPathEntry.catalog(Seq("spark_catalog")))
+    // Schema-only PATH: no catalog-role entries. Two-part names have nothing to resolve against.
     val schemaOnlyPath = Seq(
-      Seq("spark_catalog", "path_db_a"),
-      Seq("system", "builtin"))
+      ResolvedPathEntry.schema(Seq("spark_catalog", "path_db_a")),
+      ResolvedPathEntry.schema(Seq("system", "builtin")))
     val noCatalogs = (_: String) => false
     val sparkCatalogRegistered = Set("spark_catalog").contains _
     val catRegistered = Set("cat").contains _
 
-    // One-part: schema entries, plus catalog-only entries not already covered by a schema prefix.
-    assert(CatalogManager.identifierPathEntries(path, Seq("f"), noCatalogs) === path.take(2))
-    // Empty-namespace catalog (no schema entry) still participates for one-part names.
-    val emptyNsPath = Seq(Seq("system", "builtin"), Seq("testcat"), Seq("system"))
+    // One-part: schema-role entries plus uncovered catalog-role entries, in declared order.
+    assert(CatalogManager.identifierPathEntries(path, Seq("f"), noCatalogs) ===
+      Seq(Seq("system", "builtin"), Seq("spark_catalog", "default")))
+    // Collapsed current schema (schema role) participates; a covered catalog-role duplicate
+    // of the same catalog does not. An uncovered catalog-role entry does.
+    val emptyNsPath = Seq(
+      ResolvedPathEntry.schema(Seq("system", "builtin")),
+      ResolvedPathEntry.schema(Seq("testcat")),
+      ResolvedPathEntry.catalog(Seq("system")),
+      ResolvedPathEntry.catalog(Seq("pathcat")))
     assert(CatalogManager.identifierPathEntries(emptyNsPath, Seq("t"), noCatalogs) ===
-      Seq(Seq("system", "builtin"), Seq("testcat")))
-    // Two-part partially qualified names use distinct catalog prefixes of the path.
+      Seq(Seq("system", "builtin"), Seq("testcat"), Seq("pathcat")))
+    // Two-part names use catalog-role entries only; schema prefixes do not invent catalogs.
     assert(CatalogManager.identifierPathEntries(
       path, Seq("session", "f"), noCatalogs) === Seq(Seq("system"), Seq("spark_catalog")))
     assert(CatalogManager.identifierPathEntries(
-      schemaOnlyPath, Seq("default", "t"), sparkCatalogRegistered) ===
-      Seq(Seq("spark_catalog"), Seq("system")))
+      schemaOnlyPath, Seq("default", "t"), sparkCatalogRegistered) === Seq.empty)
     assert(CatalogManager.identifierPathEntries(
-      path, Seq("cat", "f"), catRegistered) === path.take(2))
+      path, Seq("cat", "f"), catRegistered) ===
+      Seq(Seq("system", "builtin"), Seq("spark_catalog", "default")))
     assert(CatalogManager.identifierPathEntries(
-      path, Seq("cat", "ns", "f"), noCatalogs) === path.take(2))
+      path, Seq("cat", "ns", "f"), noCatalogs) ===
+      Seq(Seq("system", "builtin"), Seq("spark_catalog", "default")))
     assert(CatalogManager.identifierPathCandidates(path, Seq("f"), noCatalogs) === Seq(
       Seq("system", "builtin", "f")))
     assert(CatalogManager.identifierPathCandidates(
@@ -333,9 +375,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       path, Seq("session", "f"), noCatalogs) === Seq(
       Seq("system", "session", "f")))
     assert(CatalogManager.identifierPathCandidates(
-      schemaOnlyPath, Seq("default", "t"), sparkCatalogRegistered) === Seq(
-      Seq("spark_catalog", "default", "t"),
-      Seq("system", "default", "t")))
+      schemaOnlyPath, Seq("default", "t"), sparkCatalogRegistered) === Seq.empty)
     assert(CatalogManager.identifierPathCandidates(
       path, Seq("cat", "f"), catRegistered) === Seq(Seq("cat", "f")))
     assert(CatalogManager.identifierPathCandidates(
