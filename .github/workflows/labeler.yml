@@ -1,0 +1,95 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Scheduled to avoid pull_request_target; never check out or run PR code here.
+# Labels in .github/labeler.yml are authoritative and must already exist.
+# Manually added configured labels are removed on the next scan if they do not
+# match the PR's changed files.
+#
+# To label all open PRs once, regardless of their last update:
+#   gh workflow run labeler.yml --repo apache/spark --ref master -f backfill=true
+
+name: Label pull requests
+
+on:
+  schedule:
+  - cron: "7-59/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: Label all open PRs regardless of their last update
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  label:
+    name: Label pull requests
+    if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout labeler configuration
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: List PRs
+        id: prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BACKFILL: ${{ inputs.backfill }}
+        run: |
+          if [[ "$BACKFILL" == "true" ]]; then
+            filters=(-f state=open)
+            echo "Listing all open PRs"
+          else
+            last_success=$(gh run list --workflow labeler.yml --branch master \
+              --event schedule --status success --limit 1 --json startedAt \
+              --jq '.[0].startedAt // empty')
+            if [ -n "$last_success" ]; then
+              # Keep a short overlap to catch PR updates missed near the previous run's start.
+              since=$(date -u -d "$last_success - 10 minutes" +%Y-%m-%dT%H:%M:%SZ)
+            else
+              since=$(date -u -d "12 hours ago" +%Y-%m-%dT%H:%M:%SZ)
+            fi
+            filters=(-f state=all -f since="$since")
+            echo "Listing PRs updated since $since"
+          fi
+          numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/issues" \
+            "${filters[@]}" -f sort=updated -f direction=desc \
+            -f per_page=100 --jq '.[] | select(.pull_request != null) | .number')
+          echo "PRs to label: $(tr '\n' ' ' <<< "$numbers")"
+          if [ -n "$numbers" ]; then
+            printf 'numbers<<EOF\n%s\nEOF\n' "$numbers" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Label PRs
+        if: steps.prs.outputs.numbers != ''
+        uses: actions/labeler@v7
+        with:
+          pr-number: ${{ steps.prs.outputs.numbers }}
+          sync-labels: true

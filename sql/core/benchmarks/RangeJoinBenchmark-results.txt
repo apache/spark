@@ -1,0 +1,523 @@
+================================================================================================
+Range Join Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, build ranges (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               4708           4791         118          0.1       11768.8       1.0X
+Broadcast range join                                                      118            137          23          3.4         295.0      39.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, build points (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               6528           6570          59          0.0     1631985.6       1.0X
+Broadcast range join                                                      343            384          25          0.0       85666.4      19.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                      5527           5712         262          0.1       13816.6       1.0X
+Broadcast range join                                             107            122          13          3.7         268.5      51.5X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range right outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       5712           5752          57          0.1       14279.7       1.0X
+Broadcast range join                                              103            122          27          3.9         257.2      55.5X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left semi (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                     2251           2252           1          0.2        5628.7       1.0X
+Broadcast range join                                             68             77           7          5.9         169.5      33.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left anti (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                     4518           4523           7          0.1       11294.8       1.0X
+Broadcast range join                                             43             49           5          9.4         106.4     106.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny probe (probe=1, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          23             31           7          0.2        5763.4       1.0X
+Broadcast range join                                                22             29           6          0.2        5579.8       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny probe (probe=10, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                           21             28           6          0.2        5195.1       1.0X
+Broadcast range join                                                 21             26           6          0.2        5140.7       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny probe (probe=100, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                            20             27           6          0.2        5002.2       1.0X
+Broadcast range join                                                  19             25           6          0.2        4819.4       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny probe (probe=1000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             30             35           5          0.1        7566.6       1.0X
+Broadcast range join                                                   18             23           5          0.2        4511.8       1.7X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny probe (probe=5000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             80             85           4          0.0       20082.3       1.0X
+Broadcast range join                                                   19             23           5          0.2        4734.2       4.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny probe (probe=10000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             134            139           4          0.0       33479.1       1.0X
+Broadcast range join                                                    20             23           5          0.2        4910.3       6.8X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, full overlap (probe=2000, ranges=1000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               80             84           3          0.0       40094.0       1.0X
+Broadcast range join                                                     77             84          10          0.0       38301.0       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, large build (probe=10000, ranges=1000000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               48821          48867          65          0.0     4882070.9       1.0X
+Broadcast range join                                                       808            821          12          0.0       80834.2      60.4X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, large build tiny probe (probe=1, ranges=1000000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                        519            603         105          1.9         519.3       1.0X
+Broadcast range join                                                              675            765          95          1.5         675.0       0.8X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, large build tiny probe (probe=10, ranges=1000000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                         615            685          61          1.6         614.6       1.0X
+Broadcast range join                                                               735            763          50          1.4         734.6       0.8X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, large build tiny probe (probe=100, ranges=1000000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          978           1037          84          1.0         978.0       1.0X
+Broadcast range join                                                                758            789          27          1.3         758.0       1.3X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, build right (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                4259           4469         298          0.1       10647.3       1.0X
+Broadcast range join                                                        36             47          12         11.1          90.4     117.8X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, build left (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                               7570           7610          56          0.0     1892602.4       1.0X
+Broadcast range join                                                      236            292          43          0.0       58928.5      32.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap left outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                        5056           5062           8          0.1       12638.9       1.0X
+Broadcast range join                                                50             70          11          7.9         126.2     100.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap right outer (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         4934           4959          36          0.1       12335.1       1.0X
+Broadcast range join                                                 50             63          13          7.9         126.1      97.8X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap left semi (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       4275           4535         367          0.1       10687.8       1.0X
+Broadcast range join                                               34             47          12         11.8          84.5     126.4X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap left anti (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       4570           4666         135          0.1       11425.8       1.0X
+Broadcast range join                                               37             49          13         10.7          93.1     122.7X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, wide (probe=100000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          604            611           6          0.2        6044.9       1.0X
+Broadcast range join                                                 24             29           7          4.2         239.9      25.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, build upper (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         3182           3219          53          0.1        7954.0       1.0X
+Broadcast range join                                                 89            109          19          4.5         223.2      35.6X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, build lower (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         6023           6108         120          0.0     1505867.8       1.0X
+Broadcast range join                                                352            373          20          0.0       88119.5      17.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < left outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                 3726           3729           5          0.1        9314.0       1.0X
+Broadcast range join                                         91            110          20          4.4         227.9      40.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < right outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                  3896           3956          85          0.1        9740.6       1.0X
+Broadcast range join                                          91            101          13          4.4         226.7      43.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < left semi (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                2996           3035          56          0.1        7490.5       1.0X
+Broadcast range join                                        33             38           9         12.3          81.5      91.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < left anti (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                2968           3039         101          0.1        7420.5       1.0X
+Broadcast range join                                        31             36           7         12.9          77.3      95.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, median bound (probe=10000, bounds=1000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          174            177           4          0.1       17375.2       1.0X
+Broadcast range join                                                161            168          12          0.1       16147.1       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, tiny probe (probe=1, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                     12             14           3          0.3        3036.8       1.0X
+Broadcast range join                                           12             16           5          0.3        3094.5       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, tiny probe (probe=10, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                      12             15           4          0.3        3093.4       1.0X
+Broadcast range join                                            13             15           4          0.3        3154.6       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, tiny probe (probe=100, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       18             20           3          0.2        4558.9       1.0X
+Broadcast range join                                             18             21           4          0.2        4583.4       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, tiny probe (probe=1000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                        80             83           2          0.0       20075.4       1.0X
+Broadcast range join                                              76             79           3          0.1       19116.0       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, tiny probe (probe=5000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       359            365           6          0.0       89845.5       1.0X
+Broadcast range join                                             333            337           4          0.0       83357.9       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial < inner, tiny probe (probe=10000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                        700            709          13          0.0      175109.6       1.0X
+Broadcast range join                                              650            654           3          0.0      162566.8       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial > inner, build lower (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         3223           3445         314          0.1        8058.1       1.0X
+Broadcast range join                                                 83             87           3          4.8         208.7      38.6X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial > inner, build upper (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         5510           6272        1077          0.0     1377506.7       1.0X
+Broadcast range join                                                257            341          88          0.0       64293.6      21.4X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial > left outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                 3642           3660          26          0.1        9103.9       1.0X
+Broadcast range join                                         87             96           6          4.6         217.4      41.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial > right outer (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                  4049           4101          73          0.1       10122.7       1.0X
+Broadcast range join                                          86             89           4          4.7         214.5      47.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial > left semi (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                 327            339          23          1.2         817.4       1.0X
+Broadcast range join                                        27             32           6         14.8          67.6      12.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial > left anti (probe=400000, bounds=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                2981           2998          24          0.1        7453.5       1.0X
+Broadcast range join                                        26             29           4         15.2          65.7     113.4X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+partial > inner, median bound (probe=10000, bounds=1000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                          175            182           6          0.1       17533.0       1.0X
+Broadcast range join                                                160            165           4          0.1       16023.5       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, date (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                       4729           5134         573          0.1       11822.8       1.0X
+Broadcast range join                                               86             93           6          4.6         215.5      54.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, timestamp (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                            4655           4667          18          0.1       11637.1       1.0X
+Broadcast range join                                                    85             87           2          4.7         211.7      55.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, decimal (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                         12632          12634           3          0.0       31580.9       1.0X
+Broadcast range join                                                 100            113          26          4.0         250.5     126.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, collated string (probe=400000, ranges=4000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                287995         288122         179          0.0      719988.6       1.0X
+Broadcast range join                                                        2090           2122          45          0.2        5223.8     137.8X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny build (probe=10000000, ranges=8):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             718            779          91         13.9          71.8       1.0X
+Broadcast range join                                                   752            759           6         13.3          75.2       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny build (probe=10000000, ranges=8):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                  745            747           3         13.4          74.5       1.0X
+Broadcast range join                                                        744            750           6         13.4          74.4       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny double build (probe=10000000, ranges=8):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                    754            763          11         13.3          75.4       1.0X
+Broadcast range join                                                          810            815           5         12.3          81.0       0.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny double build (probe=10000000, ranges=8):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                         850            854           6         11.8          85.0       1.0X
+Broadcast range join                                                               767            769           2         13.0          76.7       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny build (probe=10000000, ranges=16):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                              926            937          13         10.8          92.6       1.0X
+Broadcast range join                                                    902            907           4         11.1          90.2       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny build (probe=10000000, ranges=16):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                   991            994           4         10.1          99.1       1.0X
+Broadcast range join                                                         864            868           3         11.6          86.4       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny double build (probe=10000000, ranges=16):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                    1015           1019           6          9.9         101.5       1.0X
+Broadcast range join                                                           945            961          22         10.6          94.5       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny double build (probe=10000000, ranges=16):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                         1164           1174          14          8.6         116.4       1.0X
+Broadcast range join                                                                887            888           1         11.3          88.7       1.3X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny build (probe=10000000, ranges=32):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             1465           1481          23          6.8         146.5       1.0X
+Broadcast range join                                                   1275           1283          11          7.8         127.5       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny build (probe=10000000, ranges=32):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                  1681           1782         143          5.9         168.1       1.0X
+Broadcast range join                                                        1612           1621          11          6.2         161.2       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny double build (probe=10000000, ranges=32):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                    1699           1700           1          5.9         169.9       1.0X
+Broadcast range join                                                          1552           1556           5          6.4         155.2       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny double build (probe=10000000, ranges=32):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                         1897           1905          11          5.3         189.7       1.0X
+Broadcast range join                                                               1639           1642           4          6.1         163.9       1.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny build (probe=10000000, ranges=64):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                             2441           2449          12          4.1         244.1       1.0X
+Broadcast range join                                                   1542           1551          13          6.5         154.2       1.6X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny build (probe=10000000, ranges=64):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                  2640           2641           1          3.8         264.0       1.0X
+Broadcast range join                                                        1946           1957          16          5.1         194.6       1.4X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range inner, tiny double build (probe=10000000, ranges=64):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                    2755           2760           7          3.6         275.5       1.0X
+Broadcast range join                                                          1908           1952          63          5.2         190.8       1.4X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+point-in-range left outer, tiny double build (probe=10000000, ranges=64):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                         2962           2967           7          3.4         296.2       1.0X
+Broadcast range join                                                               2006           2018          18          5.0         200.6       1.5X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 5% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                         147            154          15          0.1       14725.5       1.0X
+Broadcast range join                                                                90             97           8          0.1        8989.6       1.6X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 10% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          132            139           8          0.1       13182.6       1.0X
+Broadcast range join                                                                147            153           6          0.1       14673.4       0.9X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 25% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          218            224           3          0.0       21840.0       1.0X
+Broadcast range join                                                                298            301           2          0.0       29843.5       0.7X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 50% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          369            373           9          0.0       36874.9       1.0X
+Broadcast range join                                                                511            513           3          0.0       51121.4       0.7X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 90% overlap (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                          648            654           5          0.0       64764.9       1.0X
+Broadcast range join                                                                880            885           6          0.0       88030.4       0.7X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 5% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    99            106           6          0.1        9885.3       1.0X
+Broadcast range join                                                                          79             87           5          0.1        7939.2       1.2X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 10% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    127            135           8          0.1       12702.2       1.0X
+Broadcast range join                                                                          133            141           5          0.1       13331.4       1.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 25% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    216            221           4          0.0       21626.1       1.0X
+Broadcast range join                                                                          279            284           5          0.0       27940.5       0.8X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 50% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    359            364           3          0.0       35875.7       1.0X
+Broadcast range join                                                                          498            499           2          0.0       49781.8       0.7X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+interval overlap inner, staggered 90% overlap on double (probe=10000, ranges=2000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Broadcast nested loop join                                                                    643            648           4          0.0       64341.9       1.0X
+Broadcast range join                                                                          886            888           1          0.0       88617.0       0.7X
+
+

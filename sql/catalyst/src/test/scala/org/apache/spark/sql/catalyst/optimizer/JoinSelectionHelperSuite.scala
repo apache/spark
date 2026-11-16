@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, EqualTo, IsNull, Or}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, LeftSingle, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LeafNode, LogicalPlan, NO_BROADCAST_AND_REPLICATION, NO_BROADCAST_HASH, SHUFFLE_HASH, SHUFFLE_REPLICATE_NL, Statistics}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -251,6 +251,85 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
       // The hint rules out both broadcasting the right side and a Cartesian product.
       val hinted = join.copy(hint = JoinHint(None, hintNoBroadcastAndReplication))
       assert(getNonEquiJoinBuildSide(hinted, SQLConf.get) === Some(BuildLeft))
+    }
+  }
+
+  // Runs `f` with a 1MB static and a 10MB adaptive broadcast threshold, so that `right` (1000
+  // bytes) is small, `left` (20MB) is not, and a side whose runtime size is 5MB is small too.
+  private def withNonEquiJoinThresholds(f: => Unit): Unit = withSQLConf(
+    SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1MB",
+    SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB")(f)
+
+  // Returns a line for each join without equi-join keys, given as (scenario, left side, right
+  // side, hint), and each of `joinTypes` whose build side is not `expected(joinType)`.
+  private def nonEquiBuildSideMismatches(
+      scenarios: Seq[(String, LogicalPlan, LogicalPlan, JoinHint)],
+      joinTypes: Seq[JoinType])(
+      expected: JoinType => Option[BuildSide]): Seq[String] = {
+    for {
+      (scenario, leftPlan, rightPlan, hint) <- scenarios
+      joinType <- joinTypes
+      actual = getNonEquiJoinBuildSide(Join(leftPlan, rightPlan, joinType, None, hint), SQLConf.get)
+      if actual != expected(joinType)
+    } yield s"$scenario, $joinType: $actual, expected ${expected(joinType)}"
+  }
+
+  test("SPARK-61505: getNonEquiJoinBuildSide never builds the left side of a LeftSingle join") {
+    case class RuntimeStatsPlan(size: BigInt) extends LeafNode {
+      override def output: Seq[Attribute] = right.output
+      override def computeStats(): Statistics = Statistics(sizeInBytes = size, isRuntime = true)
+    }
+    val otherLeft = left.copy(outputList = Seq($"e".int))
+    val hintNoBroadcastAndReplication = Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION)))
+    // Joins in which only the left side qualifies for broadcast: it alone has a broadcast hint
+    // or, with no broadcast hint, it alone is small.
+    val scenarios = Seq(
+      ("only the left side is small", right, left, JoinHint.NONE),
+      ("only the left side is small, by its runtime size",
+        RuntimeStatsPlan(5 * 1024 * 1024), left, JoinHint.NONE),
+      ("only the left side is hinted and neither side is small",
+        left, otherLeft, JoinHint(hintBroadcast, None)),
+      ("only the left side is hinted and only the right side is small",
+        left, right, JoinHint(hintBroadcast, None)),
+      ("only the left side is small and the right side has a shuffle hash hint",
+        right, left, JoinHint(None, hintShuffleHash)),
+      ("only the left side is small and the right side is hinted NO_BROADCAST_AND_REPLICATION",
+        right, left, JoinHint(None, hintNoBroadcastAndReplication)))
+    val joinTypes = Seq(Inner, LeftOuter, RightOuter, FullOuter, LeftSemi, LeftAnti,
+      ExistenceJoin($"exists".boolean), LeftSingle)
+    withNonEquiJoinThresholds {
+      // BroadcastNestedLoopJoinExec can't build the left side of a LeftSingle join, so a
+      // LeftSingle join builds its right side even here. The other join types build their left.
+      val mismatches = nonEquiBuildSideMismatches(scenarios, joinTypes) { joinType =>
+        if (joinType == LeftSingle) Some(BuildRight) else Some(BuildLeft)
+      }
+      assert(mismatches.isEmpty, mismatches.mkString("\n"))
+    }
+  }
+
+  test("getNonEquiJoinBuildSide builds the right side of a LeftSingle join that can broadcast " +
+      "it or neither side") {
+    val otherLeft = left.copy(outputList = Seq($"e".int))
+    val otherRight = right.copy(outputList = Seq($"f".int))
+    val hintNoBroadcastAndReplication = Some(HintInfo(Some(NO_BROADCAST_AND_REPLICATION)))
+    val scenarios = Seq(
+      ("only the right side is small", left, right, JoinHint.NONE),
+      ("both sides are small", right, otherRight, JoinHint.NONE),
+      ("neither side is small", left, otherLeft, JoinHint.NONE),
+      ("only the right side is hinted and only the left side is small",
+        right, left, JoinHint(None, hintBroadcast)),
+      ("both sides are hinted and neither side is small",
+        left, otherLeft, JoinHint(hintBroadcast, hintBroadcast)),
+      // A LeftSingle join can't be a Cartesian product, so the hint doesn't apply.
+      ("neither side is small and the left side has a shuffle-replicate hint",
+        left, otherLeft, JoinHint(Some(HintInfo(Some(SHUFFLE_REPLICATE_NL))), None)),
+      ("only the left side is small and it is hinted NO_BROADCAST_AND_REPLICATION",
+        right, left, JoinHint(hintNoBroadcastAndReplication, None)))
+    withNonEquiJoinThresholds {
+      val mismatches = nonEquiBuildSideMismatches(scenarios, Seq(LeftSingle)) { _ =>
+        Some(BuildRight)
+      }
+      assert(mismatches.isEmpty, mismatches.mkString("\n"))
     }
   }
 

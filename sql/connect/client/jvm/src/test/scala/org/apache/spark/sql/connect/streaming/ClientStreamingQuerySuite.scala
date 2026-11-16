@@ -583,6 +583,43 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         assert(!q.isActive)
         assert(listener.terminate.nonEmpty)
       }
+      spark.streams.removeListener(listener)
+      // Wait for the executionThread to complete. See SPARK-58000.
+      Thread.sleep(5000)
+    }
+  }
+
+  test("SPARK-60131: removing an unregistered listener keeps the other listeners") {
+    // The bug needs exactly one registered listener.
+    assert(spark.streams.listListeners().isEmpty)
+    val listener = new MyListener()
+    spark.streams.addListener(listener)
+
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    try {
+      eventually(timeout(30.seconds)) {
+        assert(listener.progress.nonEmpty)
+      }
+
+      spark.streams.removeListener(new MyListener())
+      assert(spark.streams.listListeners().toSeq == Seq(listener))
+
+      // The registered listener still receives events.
+      val numProgress = listener.progress.length
+      eventually(timeout(30.seconds)) {
+        assert(listener.progress.length > numProgress)
+      }
+    } finally {
+      q.stop()
+      spark.streams.removeListener(listener)
+      // Wait for the executionThread to complete. See SPARK-58000.
+      Thread.sleep(5000)
     }
   }
 

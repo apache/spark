@@ -30,6 +30,10 @@ case class InProcessArrowEvalPythonExec(
     resultAttrs: Seq[Attribute],
     child: SparkPlan) extends EvalPythonExec with PythonSQLMetrics {
 
+  // The in-process evaluator joins the results with the whole input row, or reads the input
+  // back from Arrow, so it passes through the whole child; the planner drops what is unused.
+  override def requiredChildOutput: Seq[Attribute] = child.output
+
   // The keys of `PythonSQLMetrics` without `pythonBootTime`, since there are no workers to
   // start, and with descriptions of in-process execution. Times are summed in nanoseconds
   // across tasks, since a registration or a batch can take less than a millisecond.
@@ -54,10 +58,18 @@ case class InProcessArrowEvalPythonExec(
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
     new InProcessArrowEvalPythonEvaluatorFactory(
-      child.output, udfs, output, conf.arrowMaxRecordsPerBatch, conf.arrowMaxBytesPerBatch,
+      child.output, udfs, requiredChildOutput, resultAttrs, conf.arrowMaxRecordsPerBatch,
+      conf.arrowMaxBytesPerBatch,
       conf.sessionLocalTimeZone, conf.arrowUseLargeVarTypes, conf.pysparkHideTraceback,
       conf.pysparkSimplifiedTraceback, conf.pysparkTracebackWithLocals,
       conf.getConf(SQLConf.PYTHON_UDF_IN_PROCESS_FULL_VALIDATION), pythonMetrics)
+  }
+
+  // It passes through the whole child, which includes any required columns.
+  override def withRequiredChildOutput(
+      requiredChildOutput: Seq[Attribute]): InProcessArrowEvalPythonExec = {
+    assert(requiredChildOutput.forall(child.outputSet.contains))
+    this
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

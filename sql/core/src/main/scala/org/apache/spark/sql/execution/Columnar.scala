@@ -321,6 +321,8 @@ private object RowToColumnConverter {
       dataType match {
         // The converter of its SQL type handles the nulls.
         case _: UserDefinedType[_] => core
+        // A NullType vector is all null by its type, so appending nulls to it is not needed.
+        case NullType => core
         case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
         case _: AnyTimestampNanoType =>
           new StructNullableTypeConverter(core)

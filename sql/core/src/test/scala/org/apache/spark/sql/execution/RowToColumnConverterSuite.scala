@@ -245,6 +245,31 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-60325: reused null type vectors do not grow across batches") {
+    val batchSize = 10
+    val schema = StructType(Seq(
+      StructField("n", NullType),
+      StructField("s", new StructType().add("n", NullType))))
+    val converter = new RowToColumnConverter(schema)
+    val vectors =
+      schema.map(f => new OnHeapColumnVector(5, f.dataType)).toArray[WritableColumnVector]
+    (0 until 5).foreach { _ =>
+      vectors.foreach(_.reset())
+      (0 until batchSize).foreach { i =>
+        converter.convert(InternalRow(null, if (i % 2 == 0) null else InternalRow(null)), vectors)
+      }
+      // Nulls of a top-level NullType column are not appended at all.
+      assert(vectors(0).getElementsAppended === 0)
+      // A null struct appends a null to its NullType child, which reset() must clear.
+      assert(vectors(1).getChild(0).getElementsAppended <= batchSize)
+      (0 until batchSize).foreach { i =>
+        assert(vectors(0).isNullAt(i))
+        assert(vectors(1).isNullAt(i) === (i % 2 == 0))
+        if (i % 2 == 1) assert(vectors(1).getStruct(i).isNullAt(0))
+      }
+    }
+  }
+
   test("SPARK-60325: user-defined type columns hold their SQL type") {
     // A null of a struct-backed type must be appended as a struct.
     val arrayBacked = new ExamplePointUDT

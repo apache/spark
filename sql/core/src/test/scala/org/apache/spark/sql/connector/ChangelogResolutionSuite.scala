@@ -34,12 +34,14 @@ import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Tests for the CDC (Change Data Capture) analyzer resolution path:
  * RelationChanges -> resolveChangelog -> DataSourceV2Relation(ChangelogTable).
  */
+@DataSourceV2Test
 class ChangelogResolutionSuite extends SharedSparkSession {
 
   private val cdcCatalogName = "cdc_catalog"

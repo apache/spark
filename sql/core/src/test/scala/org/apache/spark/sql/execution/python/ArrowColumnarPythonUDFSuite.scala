@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.SparkConf
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
-import org.apache.spark.sql.{DataFrame, IntegratedUDFTestUtils}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.{ColumnarToRowExec, SparkPlan, SQLExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.{DataFrame, IntegratedUDFTestUtils, Row}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeRow}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ReusedSubqueryExec, SparkPlan, SQLExecution,
+  WholeStageCodegenExec}
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -51,7 +53,8 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       reuseVectors: Boolean = false,
       batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE,
       arrowIdColumn: Boolean = true,
-      emptyBatches: Boolean = false) = {
+      emptyBatches: Boolean = false,
+      pruneColumns: Boolean = false) = {
     spark.read
       .format(arrowSource)
       .option("numRows", numRows.toString)
@@ -60,6 +63,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       .option("batchSize", batchSize.toString)
       .option("arrowIdColumn", arrowIdColumn.toString)
       .option("emptyBatches", emptyBatches.toString)
+      .option("pruneColumns", pruneColumns.toString)
       .load()
   }
 
@@ -77,6 +81,11 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       exec.executeColumnar().mapPartitionsInternal(_.map(_.numRows())).collect().toSeq
     }
   }
+
+  /** Whether a ColumnarToRowExec converts the output of an ArrowEvalPythonExec. */
+  private def hasColumnarToRowAbove(plan: SparkPlan): Boolean =
+    collectNodes[ColumnarToRowExec](plan).exists(
+      _.find(_.isInstanceOf[ArrowEvalPythonExec]).isDefined)
 
   private def collectNodes[T <: SparkPlan](
       plan: SparkPlan)(implicit tag: reflect.ClassTag[T]): Seq[T] = {
@@ -259,14 +268,14 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
 
       val numRows = 2000
       val numBatches = 20
-      // Returns the data sent to Python for the batches of the reader, with and without the three
+      // Returns the data sent to Python for the batches of the reader, with and without the
       // batches without rows that it can also return, first, in the middle and last.
       def dataSent(input: String, emptyBatches: Boolean): Long = {
         val result = readArrowSource(numRows = numRows, batchSize = numRows / numBatches,
             emptyBatches = emptyBatches)
           .selectExpr("id", "name", "value", "data", s"arrow_empty_udf($input) as udf_name")
         val arrowExec = singleArrowEvalPythonExec(result.queryExecution.executedPlan)
-        val numEmpty = if (emptyBatches) 3 else 0
+        val numEmpty = if (emptyBatches) ArrowBackedDataSourceV2.NUM_EMPTY_BATCHES else 0
 
         ArrowBackedDataSourceV2.resetBatchCounters()
         val rows = result.collect()
@@ -339,7 +348,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60306: Arrow Python UDF over many batches releases each input batch") {
+  test("SPARK-60306, SPARK-61657: Arrow Python UDF over many batches releases each input batch") {
     assume(shouldTestPandasUDFs)
     val pandasUDF = TestScalarPandasUDF(
       name = "arrow_release_udf", returnType = Some(StringType))
@@ -366,8 +375,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         assert(arrowExec.nonEmpty && arrowExec.head.supportsColumnar)
         assert(arrowExec.head.udfs.forall(_.children.forall(_.isInstanceOf[AttributeReference]))
           == suffix.isEmpty, s"Unexpected UDF inputs:\n$plan")
-        assert(collectNodes[ColumnarToRowExec](plan).exists(
-          _.find(_.isInstanceOf[ArrowEvalPythonExec]).isDefined), s"No ColumnarToRowExec:\n$plan")
+        assert(!hasColumnarToRowAbove(plan), s"Unexpected ColumnarToRowExec:\n$plan")
         ArrowBackedDataSourceV2.resetBatchCounters()
         val rows = result.collect()
         assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
@@ -386,10 +394,11 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         // A limit stops consuming the output batches early, possibly before the input batches
         // that have been read are all released: the source closes them when the task completes,
         // and closing its allocator then fails the task if any of their buffers is referenced.
-        val limited = result.limit(10)
-        assert(collectNodes[ArrowEvalPythonExec](limited.queryExecution.executedPlan).nonEmpty)
-        assert(limited.collect().map(_.getString(4)).toSeq ==
-          (0 until 10).map(id => s"row_$id$suffix"))
+        // A limit in the query would be pushed below the evaluation (LimitPushDown), which would
+        // then read rows through a ColumnarToRowExec, so the rows are taken from this plan as
+        // CollectLimitExec takes them.
+        val limited = SQLExecution.withSQLConfPropagated(spark)(plan.executeTake(10))
+        assert(limited.map(_.getString(4)).toSeq == (0 until 10).map(id => s"row_$id$suffix"))
       }
   }
 
@@ -401,17 +410,269 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
         name = "arrow_replan_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
 
-      // The physical plan is built with columnar input enabled, over the columnar-only scan, and
-      // first executed after columnar input is disabled.
+      // The physical plan is built with columnar input over the columnar-only scan, and first
+      // executed after columnar input is disabled. The row-based parent calls `doExecute` of the
+      // evaluation, which must still read the batches of the scan.
       val numRows = 100
       val result = readArrowSource(numRows = numRows)
         .selectExpr("id", "name", "value", "data", "arrow_replan_udf(name) as udf_name")
       val plan = result.queryExecution.executedPlan
-      assert(collectNodes[ArrowEvalPythonExec](plan).exists(_.child.supportsColumnar))
+      val arrowExec = singleArrowEvalPythonExec(plan)
+      assert(arrowExec.supportsColumnar && arrowExec.supportsRowBased)
+      assert(!hasColumnarToRowAbove(plan), s"Unexpected ColumnarToRowExec:\n$plan")
       withSQLConf(SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "false") {
+        assert(singleArrowEvalPythonExec(result.queryExecution.executedPlan).supportsColumnar)
         val rows = result.collect()
         assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
         assert(rows.forall(row => row.getString(4) == s"row_${row.getInt(0)}"))
+      }
+    }
+  }
+
+  test("SPARK-61516: An evaluation rebuilt after the transitions runs as built after the " +
+      "configuration changes") {
+    assume(shouldTestPandasUDFs)
+    val pandasUDF = TestScalarPandasUDF(name = "arrow_rebuilt_udf", returnType = Some(StringType))
+    registerTestUDF(pandasUDF, spark)
+
+    withTempView("t_max") {
+      spark.range(1).selectExpr("cast(id as string) as s").createOrReplaceTempView("t_max")
+      // Without adaptive execution, the reuse of subqueries runs after the transitions are
+      // inserted, and rebuilds the evaluation, whose UDF arguments have the same scalar subquery
+      // twice, to reuse it. The rebuilt evaluation is executed after columnar input is disabled,
+      // and must still read the batches of the columnar-only scan.
+      withSQLConf(
+          SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val numRows = 100
+        val subquery = "(SELECT max(s) FROM t_max)"
+        val result = readArrowSource(numRows = numRows).selectExpr("id", "name", "value", "data",
+          s"arrow_rebuilt_udf(concat(name, $subquery)) as a",
+          s"arrow_rebuilt_udf(concat(data, $subquery)) as b")
+        val plan = result.queryExecution.executedPlan
+        val arrowExec = singleArrowEvalPythonExec(plan)
+        assert(arrowExec.subqueries.exists(_.isInstanceOf[ReusedSubqueryExec]),
+          s"Expected a reused subquery in the evaluation:\n$plan")
+        // Checked through the plan only, so that the executed evaluation is not asked anything
+        // before the configuration changes.
+        assert(!arrowExec.child.exists(_.isInstanceOf[ColumnarToRowExec]))
+        assert(!hasColumnarToRowAbove(plan), s"Unexpected ColumnarToRowExec:\n$plan")
+        withSQLConf(SQLConf.ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED.key -> "false") {
+          val rows = result.collect()
+          assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
+          rows.foreach { row =>
+            val id = row.getInt(0)
+            assert(row.getString(4) == s"row_${id}0", s"UDF result mismatch for id $id")
+            assert(row.getString(5).length == 101, s"UDF result mismatch for id $id")
+          }
+        }
+      }
+    }
+  }
+
+  test("A row-based parent gets the joined rows of an evaluation with columnar input directly") {
+    assume(shouldTestPythonUDFs && shouldTestPandasUDFs)
+    val pandasUDF = TestScalarPandasUDF(name = "arrow_rows_udf", returnType = Some(StringType))
+    val innerUDF = TestPythonUDF(name = "arrow_rows_inner_udf", returnType = Some(StringType),
+      pythonEvalType = PythonEvalType.SQL_ARROW_BATCHED_UDF)
+    registerTestUDF(pandasUDF, spark)
+    registerTestUDF(innerUDF, spark)
+
+    val numRows = 2000
+    val numBatches = 20
+    val expected = (0 until numRows).map(id => s"row_$id")
+    def query(passThrough: Boolean, udf: String): DataFrame = {
+      val columns = if (passThrough) Seq("id", s"$udf as u") else Seq(s"$udf as u")
+      readArrowSource(numRows = numRows, batchSize = numRows / numBatches, pruneColumns = true)
+        .selectExpr(columns: _*)
+    }
+    def checkRows(passThrough: Boolean, rows: Array[Row], expected: Seq[String]): Unit = {
+      if (passThrough) {
+        assert(rows.map(_.getString(1)).toSeq == expected)
+      } else {
+        assert(rows.map(_.getString(0)).toSeq == expected)
+      }
+    }
+
+    // UDFs of different eval types are evaluated by two stacked evaluations, the inner one with
+    // a columnar parent. Without pass-through columns, the topmost evaluation outputs the result
+    // batches of Python, which a ColumnarToRowExec reads in the stage of the parent.
+    for {
+      passThrough <- Seq(true, false)
+      (udf, numEvals) <- Seq(
+        ("arrow_rows_udf(name)", 1), ("arrow_rows_udf(arrow_rows_inner_udf(name))", 2))
+    } withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
+      withClue(s"passThrough=$passThrough, udf=$udf: ") {
+        val result = query(passThrough, udf)
+        val plan = result.queryExecution.executedPlan
+        val execs = collectNodes[ArrowEvalPythonExec](plan)
+        assert(execs.length == numEvals, s"Unexpected evaluations:\n$plan")
+        assert(execs.forall(_.supportsColumnar))
+        assert(execs.forall(_.requiredChildOutput.nonEmpty == passThrough))
+        // The topmost evaluation, with the row-based parent.
+        val topExec = execs.head
+        assert(topExec.supportsRowBased == passThrough)
+        assert(hasColumnarToRowAbove(plan) == !passThrough, s"Unexpected plan:\n$plan")
+        if (passThrough) {
+          assert(collectNodes[ColumnarToRowExec](plan).isEmpty, s"Unexpected plan:\n$plan")
+          // The evaluation returns unsafe rows, which a parent may expect.
+          val unsafe = SQLExecution.withSQLConfPropagated(spark) {
+            topExec.execute().mapPartitionsInternal(_.map(_.isInstanceOf[UnsafeRow])).collect()
+          }
+          assert(unsafe.length == numRows && unsafe.forall(identity))
+        }
+
+        ArrowBackedDataSourceV2.resetBatchCounters()
+        val rows = result.collect()
+        if (passThrough) assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
+        checkRows(passThrough, rows, expected)
+        // A batch is released before the next one is read.
+        assert(ArrowBackedDataSourceV2.returnedBatches.get == numBatches)
+        assert(ArrowBackedDataSourceV2.releasedBatches.get == numBatches)
+        assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
+
+        // A filter and a limit above, which stop reading the output early. A limit alone would
+        // be pushed below the evaluation. The filter stays above the evaluations, so they are
+        // the same as without it: the filter reads the joined rows directly with pass-through
+        // columns, and the result batches through a ColumnarToRowExec without them.
+        val limited = result.where("u like 'row_1%'").limit(10)
+        val limitedPlan = limited.queryExecution.executedPlan
+        val limitedExecs = collectNodes[ArrowEvalPythonExec](limitedPlan)
+        assert(limitedExecs.length == numEvals, s"Unexpected evaluations:\n$limitedPlan")
+        assert(limitedExecs.forall(e =>
+          e.supportsColumnar && e.requiredChildOutput.nonEmpty == passThrough))
+        assert(limitedExecs.head.supportsRowBased == passThrough)
+        assert(hasColumnarToRowAbove(limitedPlan) == !passThrough,
+          s"Unexpected plan:\n$limitedPlan")
+        checkRows(passThrough, limited.collect(), expected.filter(_.startsWith("row_1")).take(10))
+      }
+    }
+
+    // The evaluators are also run through `mapPartitionsWithEvaluator`.
+    withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.USE_PARTITION_EVALUATOR.key -> "true") {
+      Seq(true, false).foreach { passThrough =>
+        checkRows(passThrough, query(passThrough, "arrow_rows_udf(name)").collect(), expected)
+      }
+    }
+  }
+
+  test("Without pass-through columns, the results of Python are the output batches") {
+    assume(shouldTestPandasUDFs)
+    val pandasUDF = TestScalarPandasUDF(name = "arrow_direct_udf", returnType = Some(StringType))
+    registerTestUDF(pandasUDF, spark)
+
+    val numRows = 2000
+    val numBatches = 20
+    // On a string column, the cast of the test UDF is removed, so the UDF inputs are column
+    // references; on an expression, the row fallback path is taken.
+    for {
+      codegen <- Seq(true, false)
+      reuseVectors <- Seq(true, false)
+      (input, suffix) <- Seq(("name", ""), ("concat(name, '_')", "_"))
+    } withSQLConf(
+        SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        // The joined rows would be sliced to this, but the results of Python are not.
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "30") {
+      withClue(s"codegen=$codegen, reuseVectors=$reuseVectors, input=$input: ") {
+        // The scan reads only the arguments, so that it stays columnar under the evaluation.
+        val result = readArrowSource(numRows = numRows, batchSize = numRows / numBatches,
+            reuseVectors = reuseVectors, pruneColumns = true)
+          .selectExpr(s"arrow_direct_udf($input) as u")
+        val arrowExec = singleArrowEvalPythonExec(result.queryExecution.executedPlan)
+        assert(arrowExec.requiredChildOutput.isEmpty)
+        assert(arrowExec.output == arrowExec.resultAttrs)
+        assert(arrowExec.child.output.map(_.name) == Seq("name"))
+        // A row-based parent reads the result batches through a ColumnarToRowExec.
+        assert(arrowExec.supportsColumnar && !arrowExec.supportsRowBased)
+        assert(hasColumnarToRowAbove(result.queryExecution.executedPlan))
+
+        // Each input batch has one result batch from Python, over the vectors of its reader.
+        val batches = SQLExecution.withSQLConfPropagated(spark) {
+          arrowExec.executeColumnar().mapPartitionsInternal(_.map { batch =>
+            (batch.numRows(), batch.column(0).isInstanceOf[ReusedArrowColumnVector])
+          }).collect().toSeq
+        }
+        assert(batches == Seq.fill(numBatches)((numRows / numBatches, true)))
+
+        ArrowBackedDataSourceV2.resetBatchCounters()
+        assert(result.collect().map(_.getString(0)).toSeq ==
+          (0 until numRows).map(id => s"row_$id$suffix"))
+        if (!reuseVectors) {
+          // A batch is released before the next one is read.
+          assert(ArrowBackedDataSourceV2.returnedBatches.get == numBatches)
+          assert(ArrowBackedDataSourceV2.releasedBatches.get == numBatches)
+          assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
+        }
+
+        // A filter and a projection above.
+        assert(result.where("u like 'row_1%'").selectExpr("concat(u, '!')").collect()
+          .map(_.getString(0)).toSet ==
+          (0 until numRows).map(id => s"row_$id$suffix").filter(_.startsWith("row_1"))
+            .map(_ + "!").toSet)
+        // A limit in the query would be pushed below the evaluation (LimitPushDown), which would
+        // then read rows through a ColumnarToRowExec, so the rows are taken from this plan as
+        // CollectLimitExec takes them.
+        val limited = SQLExecution.withSQLConfPropagated(spark) {
+          result.queryExecution.executedPlan.executeTake(10)
+        }
+        assert(limited.map(_.getString(0)).toSeq == (0 until 10).map(id => s"row_$id$suffix"))
+      }
+    }
+  }
+
+  test("Only the pass-through columns used above are copied with columnar input") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
+      val pandasUDF = TestScalarPandasUDF(name = "arrow_some_udf", returnType = Some(StringType))
+      registerTestUDF(pandasUDF, spark)
+
+      val numRows = 2000
+      Seq(true, false).foreach { reuseVectors =>
+        val result = readArrowSource(numRows = numRows, batchSize = 100,
+            reuseVectors = reuseVectors, pruneColumns = true)
+          .selectExpr("id", "arrow_some_udf(name) as u")
+        val arrowExec = singleArrowEvalPythonExec(result.queryExecution.executedPlan)
+        assert(arrowExec.supportsColumnar)
+        assert(arrowExec.requiredChildOutput.map(_.name) == Seq("id"))
+        assert(arrowExec.child.output.map(_.name).toSet == Set("id", "name"))
+
+        val rows = result.collect()
+        assert(rows.map(_.getInt(0)).toSeq == (0 until numRows))
+        assert(rows.forall(row => row.getString(1) == s"row_${row.getInt(0)}"))
+      }
+    }
+  }
+
+  test("Stacked Python UDFs without pass-through columns over an Arrow-backed source") {
+    assume(shouldTestPythonUDFs && shouldTestPandasUDFs)
+    withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
+      val innerUDF = TestPythonUDF(name = "arrow_inner_direct_udf",
+        returnType = Some(StringType), pythonEvalType = PythonEvalType.SQL_ARROW_BATCHED_UDF)
+      val outerUDF = TestScalarPandasUDF(
+        name = "arrow_outer_direct_udf", returnType = Some(StringType))
+      registerTestUDF(innerUDF, spark)
+      registerTestUDF(outerUDF, spark)
+
+      val numRows = 2000
+      Seq(true, false).foreach { reuseVectors =>
+        val result = readArrowSource(numRows = numRows, batchSize = 100,
+            reuseVectors = reuseVectors, pruneColumns = true)
+          .selectExpr("arrow_outer_direct_udf(arrow_inner_direct_udf(name)) as u")
+        val plan = result.queryExecution.executedPlan
+        val execs = collectNodes[ArrowEvalPythonExec](plan)
+        assert(execs.length == 2, s"Expected two ArrowEvalPythonExecs in plan:\n$plan")
+        assert(execs.forall(e => e.supportsColumnar && e.requiredChildOutput.isEmpty))
+        // The outer one sends the result batches of the inner one to Python as they are.
+        val outerExec = execs.find(_.child.isInstanceOf[ArrowEvalPythonExec]).getOrElse(
+          fail(s"Expected stacked ArrowEvalPythonExecs in plan:\n$plan"))
+        assert(outerExec.udfs.head.children.forall(_.isInstanceOf[AttributeReference]))
+        assert(hasColumnarToRowAbove(plan), s"Expected a ColumnarToRowExec above:\n$plan")
+
+        assert(result.collect().map(_.getString(0)).toSeq ==
+          (0 until numRows).map(id => s"row_$id"))
       }
     }
   }

@@ -31,12 +31,14 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, LongType, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * End-to-end tests for Change Data Capture (CDC) queries using
  * [[InMemoryChangelogCatalog]].
  */
+@DataSourceV2Test
 class ChangelogEndToEndSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_e2e"
