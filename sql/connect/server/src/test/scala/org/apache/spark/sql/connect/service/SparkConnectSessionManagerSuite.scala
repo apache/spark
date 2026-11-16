@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import java.util.UUID
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
+import org.apache.spark.sql.connector.catalog.CloseableCatalog
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineExecution, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -177,6 +180,78 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
       "pipeline execution was not removed")
   }
 
+  test("Catalogs loaded by the session are closed when the session holder is closed") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    sessionHolder.session.conf
+      .set("spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
+    // Catalogs are loaded with the active session's conf.
+    val catalog = sessionHolder.withSession {
+      _.sessionState.catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
+    }
+    assert(!catalog.closed)
+
+    SparkConnectService.sessionManager.closeSession(sessionHolder.key)
+    assert(catalog.closed)
+  }
+
+  test("Catalogs are closed before the session artifacts are released") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    val artifact = Files.createTempFile("test-artifact", ".jar")
+    Files.write(artifact, "test content".getBytes(StandardCharsets.UTF_8))
+    sessionHolder.artifactManager.addArtifact(Paths.get("jars/test.jar"), artifact, None)
+    sessionHolder.session.conf
+      .set("spark.sql.catalog.checking", classOf[ArtifactCheckingCatalog].getName)
+    val catalog = sessionHolder.withSession {
+      _.sessionState.catalogManager.catalog("checking").asInstanceOf[ArtifactCheckingCatalog]
+    }
+
+    @volatile var artifactPresentWhenClosing = false
+    ArtifactCheckingCatalog.onClose = () => {
+      artifactPresentWhenClosing = sessionHolder.artifactManager.getAddedJars.nonEmpty
+    }
+    try {
+      SparkConnectService.sessionManager.closeSession(sessionHolder.key)
+      assert(catalog.closed)
+      assert(artifactPresentWhenClosing)
+      assert(sessionHolder.artifactManager.getAddedJars.isEmpty)
+    } finally {
+      ArtifactCheckingCatalog.onClose = () => ()
+    }
+  }
+
+  test("Catalogs and artifacts are released when an earlier teardown step fails") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    val artifact = Files.createTempFile("test-artifact", ".jar")
+    Files.write(artifact, "test content".getBytes(StandardCharsets.UTF_8))
+    sessionHolder.artifactManager.addArtifact(Paths.get("jars/test.jar"), artifact, None)
+    sessionHolder.session.conf
+      .set("spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
+    val catalog = sessionHolder.withSession {
+      _.sessionState.catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
+    }
+    // A pipeline execution that fails to stop makes the session teardown fail.
+    val failingPipeline = new PipelineUpdateContextImpl(
+      new DataflowGraph(Seq(), Seq(), Seq(), Seq()),
+      (_: PipelineEvent) => None,
+      storageRoot = "file:///test_storage_root") {
+      override val pipelineExecution: PipelineExecution = new PipelineExecution(this) {
+        override def executionStarted: Boolean = true
+        override def stopPipeline(): Unit = throw new IllegalStateException("failed to stop")
+      }
+    }
+    sessionHolder.cachePipelineExecution("failing_graph", failingPipeline)
+
+    val e = intercept[IllegalStateException] {
+      SparkConnectService.sessionManager.closeSession(sessionHolder.key)
+    }
+    assert(e.getMessage == "failed to stop")
+    assert(catalog.closed)
+    assert(sessionHolder.artifactManager.getAddedJars.isEmpty)
+  }
+
   test("baseSession allows creating sessions after default session is cleared") {
     // Create a new session manager to test initialization
     val sessionManager = new SparkConnectSessionManager()
@@ -224,3 +299,15 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     sessionManager.closeSession(key2)
   }
 }
+
+class ArtifactCheckingCatalog extends CloseableCatalog {
+  override def close(): Unit = {
+    ArtifactCheckingCatalog.onClose()
+    super.close()
+  }
+}
+
+object ArtifactCheckingCatalog {
+  @volatile var onClose: () => Unit = () => ()
+}
+
