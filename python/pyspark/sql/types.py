@@ -1503,9 +1503,20 @@ class StructField(DataType):
         string_metadata: Dict[str, str],
         char_varchar_metadata: Dict[str, str],
     ) -> Union[str, Dict[str, Any]]:
-        has_file = _has_type(self.dataType, FileType)
-        if not string_metadata and not char_varchar_metadata and not has_file:
-            return self.dataType.jsonValue()
+        # An external file in a field is the plain "file", the form of a schema written without a
+        # mode. Only the field's own type and its array and map types are visited, as in
+        # `removeCollations`, since a nested struct writes its own fields.
+        def hasExternalFile(dt: DataType) -> bool:
+            if isinstance(dt, ArrayType):
+                return hasExternalFile(dt.elementType)
+            elif isinstance(dt, MapType):
+                return hasExternalFile(dt.keyType) or hasExternalFile(dt.valueType)
+            else:
+                return isinstance(dt, FileType) and dt.mode == FileTypeMode.EXTERNAL
+
+        if not string_metadata and not char_varchar_metadata:
+            if not hasExternalFile(self.dataType):
+                return self.dataType.jsonValue()
 
         def removeCollations(dt: DataType) -> DataType:
             # Only recurse into map and array types as any child struct type
@@ -1527,8 +1538,6 @@ class StructField(DataType):
             else:
                 return dt
 
-        # An external file in a field is the plain "file", the form of a schema written without a
-        # mode. Only array and map types are visited, as in `removeCollations`.
         def fileTypeJson(dt: DataType) -> Union[str, Dict[str, Any]]:
             if isinstance(dt, ArrayType):
                 return {
@@ -1555,6 +1564,8 @@ class StructField(DataType):
             if string_metadata or char_varchar_metadata
             else self.dataType
         )
+        if not hasExternalFile(dataType):
+            return dataType.jsonValue()
         return fileTypeJson(dataType)
 
     @classmethod
@@ -2186,6 +2197,12 @@ class FileType(DataType):
     ----------
     mode : :class:`FileTypeMode`, optional
         The mode of the file. Defaults to ``FileTypeMode.UNKNOWN``.
+
+    Notes
+    -----
+    FILE is behind the ``spark.sql.fileType.enabled`` preview flag (disabled by default); while it
+    is off, DDL, casts and tables holding FILE raise an error. FILE values are not supported in
+    PySpark yet: they cannot be created, collected or converted to Arrow.
 
     Examples
     --------

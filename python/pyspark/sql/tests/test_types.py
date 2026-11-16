@@ -3851,6 +3851,7 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
                 StructField("c", ArrayType(FileType.external())),
                 StructField("d", MapType(StringType(), FileType.external())),
                 StructField("e", StructType([StructField("x", FileType.external())])),
+                StructField("k", MapType(FileType.external(), IntegerType())),
             ]
         )
         fields = schema.jsonValue()["fields"]
@@ -3859,6 +3860,7 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual("file", fields[2]["type"]["elementType"])
         self.assertEqual("file", fields[3]["type"]["valueType"])
         self.assertEqual("file", fields[4]["type"]["fields"][0]["type"])
+        self.assertEqual("file", fields[5]["type"]["keyType"])
         self.assertEqual(schema, _parse_datatype_json_string(schema.json()))
         self.assertEqual(
             StructField("f", FileType.external()),
@@ -4361,6 +4363,7 @@ class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
                     StructField("b", FileType()),
                     StructField("c", ArrayType(FileType.external())),
                     StructField("d", MapType(StringType(), FileType.external())),
+                    StructField("k", MapType(FileType.external(), IntegerType())),
                 ]
             ),
         ]:
