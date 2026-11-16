@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, IntegerType, StringType, StructField, StructType, VarcharType}
 
 
 trait StatsEstimationTestBase extends SparkFunSuite {
@@ -58,6 +58,18 @@ trait StatsEstimationTestBase extends SparkFunSuite {
   def charAttr(colName: String, n: Int): AttributeReference =
     DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
       StructType(Seq(StructField(colName, CharType(n))))).head)
+
+  /** A VARCHAR(n) column as a table scan outputs it, before the read-side check. */
+  def varcharAttr(colName: String, n: Int): AttributeReference =
+    DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(Seq(StructField(colName, VarcharType(n))))).head)
+
+  /** A CHAR or VARCHAR scan column wrapped as standard CHAR/VARCHAR semantics read it. */
+  def readSideCheck(attr: Attribute): Expression = {
+    val conf = SQLConf.get.clone()
+    conf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, true)
+    SQLConf.withExistingConf(conf)(CharVarcharUtils.addPaddingForScan(attr))
+  }
 
   /** Convert (column name, column stat) pairs to an AttributeMap based on plan output. */
   def toAttributeMap(colStats: Seq[(String, ColumnStat)], plan: LogicalPlan)

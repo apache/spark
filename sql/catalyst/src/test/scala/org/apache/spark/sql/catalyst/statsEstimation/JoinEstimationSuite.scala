@@ -679,6 +679,28 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     }
   }
 
+  test("SPARK-60830: CHAR and VARCHAR join keys under read-side checks use their stats") {
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0), avgLen = Some(1),
+      maxLen = Some(1))
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(10), avgLen = Some(5),
+      maxLen = Some(5))
+    def checkedSide(key: AttributeReference, keyStat: ColumnStat): LogicalPlan = Project(
+      Seq(Alias(readSideCheck(key), key.name)()),
+      StatsTestPlan(Seq(key), 10, AttributeMap(Seq(key -> keyStat))))
+    Seq(charAttr _, varcharAttr _).foreach { column =>
+      def joinRows(keyStat: ColumnStat): Option[BigInt] = {
+        val (left, right) = (checkedSide(column("l", 5), keyStat),
+          checkedSide(column("r", 5), keyStat))
+        Join(left, right, Inner, Some(EqualTo(left.output.head, right.output.head)),
+          JoinHint.NONE).stats.rowCount
+      }
+      // 10 x 10 rows with 10 distinct values on each side.
+      assert(joinRows(stat).contains(BigInt(10)))
+      // Keys without non-null values match no rows.
+      assert(joinRows(nullStat).contains(BigInt(0)))
+    }
+  }
+
   test("SPARK-61002: a join key without min/max is not taken as holding only nulls") {
     // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
     // A data source can report the distinct and null counts of a column but not its min/max.

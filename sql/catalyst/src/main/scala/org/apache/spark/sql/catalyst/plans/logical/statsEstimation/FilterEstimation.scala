@@ -162,10 +162,10 @@ case class FilterEstimation(
   /**
    * Returns a percentage of rows meeting a single condition in Filter node.
    * Currently we only support binary predicates where one side is a column,
-   * and the other is a literal. A side may also be the read-side CHAR padding of a column, which
-   * is what a predicate pushed below the padding Project compares. It is estimated as the column
-   * itself, as `EstimationUtils.getAliasStats` does above the padding Project. The read-side
-   * checks of standard CHAR/VARCHAR semantics are not handled yet, see the SPARK-60830 TODO there.
+   * and the other is a literal. A side may also be a column wrapped the way a scan reads a CHAR
+   * or VARCHAR column (see `unwrapCharVarcharRead`), which is what a predicate pushed below the
+   * read-side Project compares. It is estimated as the column itself, as
+   * `EstimationUtils.getAliasStats` does above that Project.
    *
    * @param condition a single logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
@@ -174,10 +174,7 @@ case class FilterEstimation(
    *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
-    val unpadded = condition.mapChildren {
-      case CharVarcharUtils.ReadSidePadding(attr: Attribute, _) => attr
-      case other => other
-    }
+    val unpadded = condition.mapChildren(unwrapCharVarcharRead)
     unpadded match {
       case l: Literal =>
         evaluateLiteral(l)
@@ -255,6 +252,26 @@ case class FilterEstimation(
         // | EndsWith(_, _) are not supported yet
         logDebug("[CBO] Unsupported filter condition: " + condition)
         None
+    }
+  }
+
+  /**
+   * Returns the column under the read-side padding or check that a scan wraps a CHAR or VARCHAR
+   * column in, and under the cast to STRING that a comparison adds when CHAR and VARCHAR are
+   * first-class types. Only a cast to a STRING of the same collation is stripped: it returns the
+   * value unchanged.
+   */
+  private def unwrapCharVarcharRead(e: Expression): Expression = {
+    val uncast = e match {
+      case Cast(child, to: StringType, _, _)
+          if StringHelper.plainStringType(child.dataType) == to => child
+      case _ => e
+    }
+    uncast match {
+      case CharVarcharUtils.ReadSidePadding(attr: Attribute, _) => attr
+      case CharVarcharUtils.ReadSideCheck(attr: Attribute, _, _) => attr
+      case attr: Attribute => attr
+      case _ => e
     }
   }
 

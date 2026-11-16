@@ -21,6 +21,7 @@ import java.sql.Date
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
@@ -997,6 +998,46 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(Not(EqualTo(padded, Literal("A0"))), child),
       Seq(attrString -> colStatString.copy(distinctCount = Some(9))),
       expectedRowCount = 9)
+  }
+
+  test("SPARK-60830: predicates on a CHAR/VARCHAR column under a read-side check") {
+    // colStatString has 10 distinct values and no nulls over 10 rows.
+    val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L)
+    val childWithNulls = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+      attributeMap = AttributeMap(Seq(attrString -> colStatString.copy(nullCount = Some(4)))))
+    Seq(charAttr("cstring", 2), varcharAttr("cstring", 2)).foreach { column =>
+      val checked = readSideCheck(column.withExprId(attrString.exprId))
+      assert(checked match {
+        case CharVarcharUtils.ReadSideCheck(a: Attribute, 2, _) => a.exprId == attrString.exprId
+        case _ => false
+      }, s"expected a read-side check over cstring, got $checked")
+      // Under first-class CHAR/VARCHAR types a comparison with a STRING casts the column to it.
+      val cast = Cast(checked, StringType)
+      Seq(
+        EqualTo(cast, Literal("A0")) -> 1,
+        EqualTo(Literal("A0"), cast) -> 1,
+        EqualNullSafe(cast, Literal("A0")) -> 1,
+        In(cast, Seq(Literal("A0"), Literal("A1"))) -> 2,
+        InSet(cast, Set(UTF8String.fromString("A0"), UTF8String.fromString("A1"))) -> 2,
+        IsNull(checked) -> 0,
+        Not(EqualTo(cast, Literal("A0"))) -> 9,
+        // Casts to another collation or to a length-checked type can change what matches.
+        EqualTo(Cast(checked, StringType("UTF8_LCASE")), Literal("A0")) -> 10,
+        EqualTo(Cast(checked, VarcharType(1)), Literal("A")) -> 10).foreach {
+        case (condition, expectedRows) =>
+          assert(Filter(condition, child).stats.rowCount.contains(BigInt(expectedRows)), condition)
+      }
+      // The update lands on the column's own stat, as for the read-side padding.
+      validateEstimatedStats(
+        Filter(IsNotNull(checked), childWithNulls),
+        Seq(attrString -> colStatString.copy(distinctCount = Some(6), nullCount = Some(0))),
+        expectedRowCount = 6)
+    }
+    // A method of the same name on another class is not a read-side check.
+    val otherClass = StaticInvoke(classOf[String], StringType,
+      CharVarcharUtils.CHAR_TYPE_READ_SIDE_CHECK, attrString :: Literal(2) :: Nil)
+    assert(Filter(EqualTo(otherClass, Literal("A0")), child).stats.rowCount
+      .contains(BigInt(10)))
   }
 
   test("SPARK-60810: equality on a string or binary column with a reported histogram") {

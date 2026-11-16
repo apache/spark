@@ -223,6 +223,33 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       .contains(scaledStat.copy(avgLen = Some(5), maxLen = Some(5))))
   }
 
+  test("SPARK-60830: column stats survive the read-side checks of standard CHAR/VARCHAR") {
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(3), maxLen = Some(4))
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(1000),
+      avgLen = Some(20), maxLen = Some(20))
+    def checkedStat(column: AttributeReference, columnStat: ColumnStat): Option[ColumnStat] = {
+      val child = StatsTestPlan(
+        outputList = Seq(column),
+        rowCount = 1000,
+        attributeStats = AttributeMap(Seq(column -> columnStat)))
+      val checked = readSideCheck(column)
+      assert(checked != column, s"expected a read-side check for $column")
+      val proj = Project(Seq(Alias(checked, column.name)()), child)
+      proj.stats.attributeStats.get(proj.output.head)
+    }
+
+    // The CHAR check pads shorter values to N characters, as the read-side padding does. An
+    // all-null column has no values to pad, so its default lengths of 20 stay under CHAR(30).
+    val c = charAttr("c", 5)
+    assert(checkedStat(c, stat).contains(stat.copy(avgLen = Some(5), maxLen = Some(5))))
+    assert(checkedStat(charAttr("w", 30), nullStat).contains(nullStat))
+    // The VARCHAR check never makes a value longer, so its lengths are kept.
+    val v = varcharAttr("v", 5)
+    assert(checkedStat(v, stat).contains(stat))
+    assert(checkedStat(varcharAttr("w", 30), nullStat).contains(nullStat))
+  }
+
   private def checkProjectStats(
       child: LogicalPlan,
       projectAttrMap: AttributeMap[ColumnStat],

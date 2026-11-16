@@ -203,6 +203,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  private def estimatedRows(query: String)(
+      pick: PartialFunction[LogicalPlan, LogicalPlan]): Option[BigInt] = {
+    val plan = sql(query).queryExecution.optimizedPlan
+    plan.collectFirst(pick).getOrElse(fail(s"no matching node in\n${plan.treeString}"))
+      .stats.rowCount
+  }
+
   test("SPARK-60810: CBO keeps CHAR column statistics through read-side padding") {
     withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
@@ -213,12 +220,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING) FROM range(1000)")
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
 
-        def estimatedRows(query: String)(
-            pick: PartialFunction[LogicalPlan, LogicalPlan]): Option[BigInt] = {
-          val plan = sql(query).queryExecution.optimizedPlan
-          plan.collectFirst(pick).getOrElse(fail(s"no matching node in\n${plan.treeString}"))
-            .stats.rowCount
-        }
         // Above the padding Project, which carries the column's statistics.
         assert(estimatedRows(s"SELECT c, count(*) FROM $tableName GROUP BY c") {
           case a: Aggregate => a
@@ -283,6 +284,54 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
         }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
         assert(prunedStats.rowCount.contains(BigInt(100)), plan.treeString)
+      }
+    }
+  }
+
+  // Both make CHAR and VARCHAR first-class types, which a comparison with a STRING casts.
+  private val firstClassCharVarcharConfs = Seq(
+    SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
+
+  test("SPARK-60830: CBO keeps CHAR/VARCHAR column statistics as first-class types") {
+    for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {
+        val tableName = "char_varchar_first_class_stats"
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
+          sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING) FROM range(1000)")
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+
+          val clue = s"${mode.key}, $colType"
+          assert(estimatedRows(s"SELECT c, count(*) FROM $tableName GROUP BY c") {
+            case a: Aggregate => a
+          }.contains(BigInt(10)), clue)
+          Seq("c = '3'" -> 100, "c IN ('3', '4')" -> 200, "c IS NULL" -> 0).foreach {
+            case (condition, expectedRows) =>
+              assert(estimatedRows(s"SELECT * FROM $tableName WHERE $condition") {
+                case f: Filter => f
+              }.contains(BigInt(expectedRows)), s"$clue, $condition")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60830: partition pruning estimates a filter on a first-class CHAR/VARCHAR column") {
+    for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {
+        val tableName = "char_varchar_partition_pruning_stats"
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName(v INT, p $colType) USING parquet PARTITIONED BY (p)")
+          sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), CAST(id % 10 AS STRING) " +
+            "FROM range(1000)")
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS v, p")
+
+          val plan = sql(s"SELECT * FROM $tableName WHERE p = '3'").queryExecution.optimizedPlan
+          val prunedStats = plan.collectFirst {
+            case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
+          }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
+          assert(prunedStats.rowCount.contains(BigInt(100)), s"${mode.key}, $colType")
+        }
       }
     }
   }

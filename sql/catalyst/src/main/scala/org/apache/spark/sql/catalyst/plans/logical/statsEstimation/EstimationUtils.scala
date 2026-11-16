@@ -96,21 +96,17 @@ object EstimationUtils {
       // then stores the type's default size as the lengths). The distinct count is left as is.
       // It is too high only when stored values differ just in trailing spaces, which the
       // padding makes equal.
-      // TODO(SPARK-60830): under spark.sql.charVarchar.standardSemantics.enabled the scan wraps
-      // CHAR and VARCHAR columns in charTypeReadSideCheck and varcharTypeReadSideCheck instead,
-      // so they still lose their statistics here and in FilterEstimation.calculateSingleCondition.
-      // They need an extractor of their own, because V2ExpressionBuilder relies on
-      // ReadSidePadding never matching the checks. Under first-class CHAR types the filter unwrap
-      // also has to see through the cast to STRING.
       case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, n), _)
           if attributeStats.contains(attr) =>
+        alias.toAttribute -> padToCharLength(attributeStats(attr), n)
+      // Under standard CHAR/VARCHAR semantics the scan wraps CHAR and VARCHAR columns in
+      // read-side checks instead, and ANALYZE TABLE reads through those as well. The CHAR check
+      // pads like the padding above. The VARCHAR check never makes a value longer, so its
+      // lengths are kept.
+      case alias @ Alias(CharVarcharUtils.ReadSideCheck(attr: Attribute, n, isChar), _)
+          if attributeStats.contains(attr) =>
         val stat = attributeStats(attr)
-        val padded = if (stat.distinctCount.contains(BigInt(0))) {
-          stat
-        } else {
-          stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
-        }
-        alias.toAttribute -> padded
+        alias.toAttribute -> (if (isChar) padToCharLength(stat, n) else stat)
       case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
         val value = expr.eval(EmptyRow)
         val size = expr.dataType.defaultSize
@@ -120,6 +116,15 @@ object EstimationUtils {
           ColumnStat(Some(1), Some(value), Some(value), Some(0), Some(size), Some(size), None, 2)
         }
         alias.toAttribute -> columnStat
+    }
+  }
+
+  /** Raises the lengths of a column with values to the length N of the CHAR it is padded to. */
+  private def padToCharLength(stat: ColumnStat, n: Int): ColumnStat = {
+    if (stat.distinctCount.contains(BigInt(0))) {
+      stat
+    } else {
+      stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
     }
   }
 
