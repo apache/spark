@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.UUID
+
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -28,7 +31,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.analysis.{RelationCacheIneligible, Resolver}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentCatalog, CurrentDatabase, CurrentTimeZone, CurrentUser, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentBatchTimestamp, CurrentCatalog, CurrentDatabase, CurrentDate, CurrentPath, CurrentTime, CurrentTimestampLike, CurrentTimeZone, CurrentUser, LeafExpression, LocalTimestamp, LocalTimestampNanos, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, PLAN_EXPRESSION}
@@ -61,12 +64,13 @@ case class CachedData(
     cachedRepresentation: InMemoryRelation,
     // Session values read by the session-context functions in `plan`, which the plan leaves
     // unbound until after the cache lookup. See `CacheManager.sessionContextOf`.
-    sessionContext: Map[String, String] = Map.empty) {
+    sessionContext: Map[String, String]) {
   override def toString: String =
     s"""
        |CachedData(
        |logicalPlan=$plan
-       |InMemoryRelation=$cachedRepresentation)
+       |InMemoryRelation=$cachedRepresentation
+       |sessionContext=$sessionContext)
        |""".stripMargin
 }
 
@@ -155,7 +159,22 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         log"Asked to cache a plan that is inapplicable for caching: " +
         log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
       )
-    } else if (lookupCachedDataInternal(normalizedPlan, session = Some(spark)).nonEmpty) {
+    } else {
+      // Read the session context before taking the lock: it can call into catalogs.
+      val sessionContext = CacheManager.sessionContextOf(spark, normalizedPlan)
+      cacheQueryWithContext(
+        spark, unnormalizedPlan, normalizedPlan, tableName, storageLevel, sessionContext)
+    }
+  }
+
+  private def cacheQueryWithContext(
+      spark: SparkSession,
+      unnormalizedPlan: LogicalPlan,
+      normalizedPlan: LogicalPlan,
+      tableName: Option[String],
+      storageLevel: StorageLevel,
+      sessionContext: Map[String, String]): Unit = {
+    if (lookupCachedDataInternal(normalizedPlan, spark, sessionContext).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
@@ -169,12 +188,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
 
       this.synchronized {
-        if (lookupCachedDataInternal(normalizedPlan, session = Some(spark)).nonEmpty) {
+        if (lookupCachedDataInternal(normalizedPlan, spark, sessionContext).nonEmpty) {
           logWarning("Data has already been cached.")
         } else {
           // the cache key is the normalized plan
-          val cd = CachedData(normalizedPlan, inMemoryRelation,
-            CacheManager.sessionContextOf(spark, normalizedPlan))
+          val cd = CachedData(normalizedPlan, inMemoryRelation, sessionContext)
           cachedData = cd +: cachedData
           CacheManager.logCacheOperation(log"Added Dataframe cache entry:" +
             log"${MDC(DATAFRAME_CACHE_ENTRY, cd)}")
@@ -394,7 +412,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       tryRebuildCacheEntry(spark, cd).foreach { entry =>
         this.synchronized {
-          if (lookupCachedDataInternal(entry.plan, session = Some(spark)).nonEmpty) {
+          if (lookupCachedDataInternal(entry.plan, spark, entry.sessionContext).nonEmpty) {
             logWarning("While recaching, data was already added to cache.")
           } else {
             cachedData = entry +: cachedData
@@ -416,9 +434,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
             refreshedPlan,
             refreshPhaseEnabled = false)
           val newKey = qe.normalized
-          val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-          Some(cd.copy(plan = newKey, cachedRepresentation = newCache,
-            sessionContext = CacheManager.sessionContextOf(sessionWithConfigsOff, newKey)))
+          val newContext = CacheManager.sessionContextOf(sessionWithConfigsOff, newKey)
+          if (newContext != cd.sessionContext && !CacheManager.ignoreSessionContext(spark)) {
+            // The entry is re-planned in the session of the command that invalidated it. Under
+            // another session context that would compute values for that session and key the
+            // entry with them, so the session that cached it would lose it; drop it instead.
+            logInfo(log"Removed cache entry ${MDC(DATAFRAME_CACHE_ENTRY, cd)} because the " +
+              log"session that invalidated it has a different session context")
+            None
+          } else {
+            val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+            Some(cd.copy(plan = newKey, cachedRepresentation = newCache,
+              sessionContext = newContext))
+          }
         } catch {
           // Re-caching follows the command that invalidated the entry, e.g. a committed write,
           // and plans the entry in that command's session. In-process Python UDFs check that
@@ -504,8 +532,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * Optionally returns cached data for the given [[Dataset]]
    */
   def lookupCachedData(query: Dataset[_]): Option[CachedData] = {
-    lookupCachedDataInternal(query.queryExecution.normalized,
-      session = Some(query.sparkSession))
+    val normalized = query.queryExecution.normalized
+    lookupCachedDataInternal(normalized, query.sparkSession,
+      CacheManager.sessionContextOf(query.sparkSession, normalized))
   }
 
   /**
@@ -514,16 +543,26 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def lookupCachedData(session: SparkSession, plan: LogicalPlan): Option[CachedData] = {
     val normalized = QueryExecution.normalize(session, plan)
-    lookupCachedDataInternal(normalized, session = Some(session))
+    lookupCachedDataInternal(normalized, session,
+      CacheManager.sessionContextOf(session, normalized))
   }
 
+  /**
+   * Returns the first entry whose plan has the same result as `plan` and whose session context
+   * equals `sessionContext`, the one `plan` reads in `session`. Plans with the same result call the
+   * same session-context functions, so the two contexts have the same keys. `sessionContext` is
+   * evaluated only if some plan matches; callers holding the lock pass a precomputed value.
+   */
   private def lookupCachedDataInternal(
       plan: LogicalPlan,
-      canUse: CachedData => Boolean = _ => true,
-      // The session whose context a matching entry must share; the active one by default.
-      session: Option[SparkSession] = SparkSession.getActiveSession): Option[CachedData] = {
+      session: SparkSession,
+      sessionContext: => Map[String, String],
+      canUse: CachedData => Boolean = _ => true): Option[CachedData] = {
+    lazy val context = sessionContext
+    lazy val ignoreContext = CacheManager.ignoreSessionContext(session)
+    // `canUse` can have side effects, so call it only for an entry whose context matches.
     val result = cachedData.find { cd =>
-      plan.sameResult(cd.plan) && isSameSessionContext(cd, session) && canUse(cd)
+      plan.sameResult(cd.plan) && (ignoreContext || cd.sessionContext == context) && canUse(cd)
     }
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
@@ -531,18 +570,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         log"${MDC(DATAFRAME_CACHE_ENTRY, result.get)}")
     }
     result
-  }
-
-  // Plan matching ignores the session context that the session-context functions in a matching
-  // plan read, so an entry cached under a different context must not be reused -- unless the
-  // legacy gate restores the previous context-insensitive matching.
-  private def isSameSessionContext(cd: CachedData, session: Option[SparkSession]): Boolean = {
-    cd.sessionContext.forall { case (key, value) =>
-      session.exists(CacheManager.sessionContextValue(_, key) == value)
-    } || {
-      val conf = session.map(_.sessionState.conf).getOrElse(SQLConf.get)
-      conf.getConf(SQLConf.CACHE_IGNORE_SESSION_CONTEXT_IN_PLAN_MATCHING)
-    }
   }
 
   // Decides whether the cached entry can be substituted into a plan being executed inside
@@ -573,12 +600,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   private[sql] def useCachedData(
       plan: LogicalPlan,
+      session: SparkSession,
       canUse: CachedData => Boolean = _ => true): LogicalPlan = {
+    useCachedData(plan, session, canUse, mutable.Map.empty[String, String])
+  }
+
+  // `sessionValues` memoizes the session values read during one call: they do not change during
+  // it, and reading one can call into a catalog.
+  private def useCachedData(
+      plan: LogicalPlan,
+      session: SparkSession,
+      canUse: CachedData => Boolean,
+      sessionValues: mutable.Map[String, String]): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment, canUse).map { cached =>
+        lookupCachedDataInternal(currentFragment, session,
+          CacheManager.sessionContextOf(session, currentFragment, sessionValues),
+          canUse).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -591,14 +631,22 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, canUse))
+      case s: SubqueryExpression =>
+        s.withNewPlan(useCachedData(s.plan, session, canUse, sessionValues))
     }
 
     if (result.fastEquals(plan)) {
       CacheManager.logCacheOperation(
         log"Dataframe cache miss for input plan:\n${MDC(QUERY_PLAN, plan)}")
+      // A plan can match an entry and still miss it because their session contexts differ.
+      CacheManager.logCacheOperation {
+        val context = CacheManager.sessionContextOf(session, plan, sessionValues)
+        log"Session context of the input plan: ${MDC(DATAFRAME_CACHE_ENTRY, context)}"
+      }
       CacheManager.logCacheOperation(log"Last 20 Dataframe cache entry logical plans:\n" +
-        log"[${MDC(DATAFRAME_CACHE_ENTRY, cachedData.take(20).map(_.plan).mkString(",\n"))}]")
+        log"[${MDC(DATAFRAME_CACHE_ENTRY, cachedData.take(20).map { cd =>
+          s"${cd.plan}sessionContext=${cd.sessionContext}"
+        }.mkString(",\n"))}]")
     } else {
       CacheManager.logCacheOperation(log"Dataframe cache hit plan change summary:\n" +
         log"${MDC(
@@ -608,8 +656,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /** Transaction-aware variant of [[useCachedData]]. */
-  private[sql] def useCachedData(plan: LogicalPlan, txn: Transaction): LogicalPlan =
-    useCachedData(plan, validateCachedEntryForTransaction(_, txn))
+  private[sql] def useCachedData(
+      plan: LogicalPlan, session: SparkSession, txn: Transaction): LogicalPlan =
+    useCachedData(plan, session, validateCachedEntryForTransaction(_, txn))
 
   /**
    * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
@@ -741,31 +790,34 @@ object CacheManager extends Logging {
   /**
    * Returns the session values read by the session-context functions in `plan` (including its
    * subqueries), keyed by what they read. The optimizer binds these functions only after the
-   * cache lookup. Clock functions read no session value; their time zone is part of the plan.
+   * cache lookup (see `ReplaceCurrentLike` and `ComputeCurrentTime`). Clock functions read no
+   * session value; their time zone is part of the plan. Any other function with the CURRENT_LIKE
+   * pattern gets a unique value, so a plan that calls it is never reused under another lookup.
    */
-  private[execution] def sessionContextOf(
-      spark: SparkSession, plan: LogicalPlan): Map[String, String] = {
-    if (plan.containsPattern(CURRENT_LIKE)) {
-      val keys = scala.collection.mutable.Set[String]()
-      plan.foreachWithSubqueries(_.expressions.foreach(_.foreach {
-        case CurrentTimeZone() => keys += "timeZone"
-        case CurrentCatalog() => keys += "catalog"
-        case CurrentDatabase() => keys += "namespace"
-        case CurrentUser() => keys += "user"
-        case _ =>
-      }))
-      keys.map(key => key -> sessionContextValue(spark, key)).toMap
-    } else {
-      Map.empty
-    }
+  private[sql] def sessionContextOf(
+      spark: SparkSession,
+      plan: LogicalPlan,
+      sessionValues: mutable.Map[String, String] = mutable.Map.empty): Map[String, String] = {
+    if (!plan.containsPattern(CURRENT_LIKE)) return Map.empty
+    val catalogManager = spark.sessionState.catalogManager
+    val context = mutable.Map[String, String]()
+    def read(key: String, value: => String): Unit =
+      context(key) = sessionValues.getOrElseUpdate(key, value)
+    plan.foreachWithSubqueries(_.expressions.foreach(_.foreach {
+      case CurrentTimeZone() => read("timeZone", spark.sessionState.conf.sessionLocalTimeZone)
+      case CurrentCatalog() => read("catalog", catalogManager.currentCatalog.name())
+      case CurrentDatabase() => read("namespace", catalogManager.currentNamespace.quoted)
+      case CurrentPath() => read("path", catalogManager.currentPathString)
+      case CurrentUser() => read("user", CurrentUserContext.getCurrentUser)
+      case _: CurrentDate | _: CurrentTimestampLike | _: LocalTimestamp | _: LocalTimestampNanos |
+           _: CurrentTime | _: CurrentBatchTimestamp =>
+      case e: LeafExpression if e.containsPattern(CURRENT_LIKE) =>
+        context(s"unknown:${e.nodeName}") = UUID.randomUUID().toString
+      case _ =>
+    }))
+    context.toMap
   }
 
-  // The value each session-context function returns (see the optimizer's ReplaceCurrentLike).
-  private[execution] def sessionContextValue(spark: SparkSession, key: String): String =
-    key match {
-      case "timeZone" => spark.sessionState.conf.sessionLocalTimeZone
-      case "catalog" => spark.sessionState.catalogManager.currentCatalog.name()
-      case "namespace" => spark.sessionState.catalogManager.currentNamespace.quoted
-      case "user" => CurrentUserContext.getCurrentUser
-    }
+  private[execution] def ignoreSessionContext(spark: SparkSession): Boolean =
+    spark.sessionState.conf.getConf(SQLConf.CACHE_IGNORE_SESSION_CONTEXT_IN_PLAN_MATCHING)
 }

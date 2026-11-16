@@ -321,8 +321,8 @@ class QueryExecution(
       val planToRewrite = normalized.clone()
       val cacheManager = sparkSession.sharedState.cacheManager
       transactionOpt match {
-        case Some(txn) => cacheManager.useCachedData(planToRewrite, txn)
-        case None => cacheManager.useCachedData(planToRewrite)
+        case Some(txn) => cacheManager.useCachedData(planToRewrite, sparkSession, txn)
+        case None => cacheManager.useCachedData(planToRewrite, sparkSession)
       }
     }
   }
