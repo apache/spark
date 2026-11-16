@@ -66,30 +66,43 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
     Assignment(cleanedKey, finalValue)
   }
 
-  /** Resolves omitted generated values against the aligned assignments of one action. */
-  def resolveGeneratedColumns(
+  /**
+   * Fills omitted generated-column assignments for UPDATE and MERGE actions, including INSERT
+   * actions within MERGE. Regular INSERT uses WriteOutputResolution instead.
+   *
+   * For g GENERATED ALWAYS AS (a * 2), UPDATE t SET a = b + 1, b = 100 must assign
+   * g = (old.b + 1) * 2. Resolve the generation expression against attributes for the new values,
+   * then substitute the aligned assignments while preserving their references to the original row.
+   * Explicitly supplied generated values pass through for validation against the final row.
+   */
+  def resolveGeneratedColumnAssignments(
       table: LogicalPlan,
       assignments: Seq[Assignment],
       analyze: LogicalPlan => LogicalPlan): Seq[Assignment] = {
-    if (!assignments.exists(_.value.isInstanceOf[GeneratedColumnValue])) {
+    if (!assignments.exists(_.value.isInstanceOf[GeneratedColumnAssignmentValue])) {
       return assignments
     }
 
     val relation = table.collectFirst { case r: DataSourceV2Relation => r }.get
     val generationExpressions = GeneratedColumn.expressionReaders(relation)
+    // Fresh attributes distinguish the new assigned values from the original input attributes.
+    // In the example, the new a attribute represents old.b + 1, and the new b represents 100.
     val assigned = assignments.collect {
-      case Assignment(attr: Attribute, value) if !value.isInstanceOf[GeneratedColumnValue] =>
+      case Assignment(attr: Attribute, value)
+          if !value.isInstanceOf[GeneratedColumnAssignmentValue] =>
         Alias(value, attr.name)()
     }
     val input = assigned.map(_.toAttribute)
     val valuesByAttribute = AttributeMap(assigned.map(a => a.toAttribute -> a.child))
 
     assignments.map {
-      case Assignment(attr: Attribute, _: GeneratedColumnValue) =>
+      case Assignment(attr: Attribute, _: GeneratedColumnAssignmentValue) =>
+        // Resolve a * 2 against the new a attribute using the shared stored-expression settings.
         val resolved = generationExpressions(attr.name).resolve(input, analyze) { expr =>
           Cast(expr, attr.dataType, Some(conf.sessionLocalTimeZone), ansiEnabled = true)
         }
-        // Substitute once: assignment right-hand sides still refer to the original input row.
+        // Replace the new a with old.b + 1 to get (old.b + 1) * 2. Substitute once: replacing
+        // old.b with its new assignment (100) would change the simultaneous SET semantics.
         val generated = resolved.transform {
           case a: AttributeReference if valuesByAttribute.contains(a) => valuesByAttribute(a)
         }
@@ -109,13 +122,13 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
       case u @ UpdateAction(_, assignments, fromStar) =>
         val aligned = AssignmentUtils.alignUpdateAssignments(table.output, assignments,
           fromStar, coerceNestedTypes, ansiStoreAssignmentCastCheck, generatedColumns)
-        u.copy(assignments = resolveGeneratedColumns(table, aligned, analyze))
+        u.copy(assignments = resolveGeneratedColumnAssignments(table, aligned, analyze))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>
         val aligned = AssignmentUtils.alignInsertAssignments(table.output, assignments,
           coerceNestedTypes, ansiStoreAssignmentCastCheck, generatedColumns)
-        i.copy(assignments = resolveGeneratedColumns(table, aligned, analyze))
+        i.copy(assignments = resolveGeneratedColumnAssignments(table, aligned, analyze))
       case other =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3052",

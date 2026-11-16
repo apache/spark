@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, EqualTo, Expression, Literal, Or, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, EqualTo, Expression, If, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
@@ -151,8 +151,9 @@ private[sql] class TableConstraintResolution(
           v2Write match {
             // MERGE and split UPDATE deltas also contain deletes, whose row values may be null.
             case _: WriteDelta =>
-              Or(EqualTo(UnresolvedAttribute.quoted(OPERATION_COLUMN), Literal(DELETE_OPERATION)),
-                invariant)
+              val isDelete = EqualTo(
+                UnresolvedAttribute.quoted(OPERATION_COLUMN), Literal(DELETE_OPERATION))
+              If(isDelete, Literal.TrueLiteral, invariant)
             case _ => invariant
           }
         }

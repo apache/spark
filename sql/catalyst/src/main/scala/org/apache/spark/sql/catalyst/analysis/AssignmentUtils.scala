@@ -77,7 +77,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     val output = attrs.map { attr =>
       if (generatedColumns.contains(attr.name) &&
           !assignments.exists(_.key.references.contains(attr))) {
-        GeneratedColumnValue(attr.dataType, attr.nullable)
+        GeneratedColumnAssignmentValue(attr.dataType, attr.nullable)
       } else {
         applyAssignments(
           col = restoreActualType(attr),
@@ -140,7 +140,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         case assignment if assignment.key.semanticEquals(attr) => assignment
       }
       val resolvedValue = if (matchingAssignments.isEmpty && generatedColumns.contains(attr.name)) {
-        GeneratedColumnValue(attr.dataType, attr.nullable)
+        GeneratedColumnAssignmentValue(attr.dataType, attr.nullable)
       } else if (matchingAssignments.isEmpty) {
         val defaultExpr = getDefaultValueExprOrNullLit(
           attr, conf.useNullsForMissingDefaultColumnValues)
@@ -421,8 +421,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 }
 
 /**
- * Marks an omitted generated-column assignment until all assignments have been aligned.
+ * Marks an omitted generated-column assignment in UPDATE or MERGE until assignments are aligned.
  * Assignment resolution replaces it with the generation expression over the assigned values.
  */
-private[sql] case class GeneratedColumnValue(dataType: DataType, nullable: Boolean)
+private[sql] case class GeneratedColumnAssignmentValue(dataType: DataType, nullable: Boolean)
   extends LeafExpression with Unevaluable

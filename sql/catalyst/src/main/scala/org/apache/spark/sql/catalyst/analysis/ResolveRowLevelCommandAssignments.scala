@@ -55,7 +55,7 @@ class ResolveRowLevelCommandAssignments(analyze: LogicalPlan => LogicalPlan)
         padded.assignments, fromStar = false, coerceNestedTypes = false,
         ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck(u.table),
         generatedColumns = generatedColumnNames(u.table))
-      val newAssignments = RowLevelAssignmentResolution.resolveGeneratedColumns(
+      val newAssignments = RowLevelAssignmentResolution.resolveGeneratedColumnAssignments(
         u.table, alignedAssignments, analyze)
       padded.copy(table = newTable, assignments = newAssignments).rewriteAttrs(metadataAttrMap)
 
