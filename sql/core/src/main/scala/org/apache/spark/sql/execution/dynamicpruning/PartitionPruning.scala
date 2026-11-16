@@ -113,7 +113,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     } else {
       None
     }
-    lazy val hasBenefit = pruningHasBenefit(
+    // A standalone DPP subquery reads the filtering side again, apart from the join. A V2 scan
+    // with a row-selecting pushdown, such as a limit, may then return other rows, and the DPP
+    // filter would prune partitions that the join needs. So such a side may only reuse the
+    // join's broadcast, which reads it once.
+    lazy val hasBenefit = !filteringPlan.exists {
+      case r: DataSourceV2ScanRelation => !r.onlyRowWisePushdowns
+      case _ => false
+    } && pruningHasBenefit(
       pruningKey, partScan, filteringKeys.head, filteringPlan, hasSelectivePredicate(filteringPlan))
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning

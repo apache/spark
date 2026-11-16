@@ -29,13 +29,15 @@ object ExternalLookupJoinStrategy extends SparkStrategy {
         lookup.lookupParameters,
         lookup.lookupInput,
         lookup.lookupOutput,
-        lookup.nullSafeParameters,
+        lookup.lookupTransforms,
         lookup.lookupKeys,
+        lookup.lookupKeyComparisons,
         lookup.joinType,
         lookup.residualCondition,
         lookup.scan,
         lookup.readerFactory,
         lookup.maxParameterRowsPerRequest,
+        lookup.cacheOptions,
         planLater(lookup.child)) :: Nil
     case _ => Nil
   }

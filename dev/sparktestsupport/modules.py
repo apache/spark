@@ -85,6 +85,7 @@ ignored_file_patterns = (
     "/.github/workflows/images/",
     "/.github/workflows/stale.yml",
     "/.github/workflows/test_report.yml",
+    "/.github/workflows/update_build_status.js",
     "/.github/workflows/update_build_status.yml",
     # Linters, formatters, and their configs. These are typically triggered by
     # the `precondition` job regardless of modifications to these files.

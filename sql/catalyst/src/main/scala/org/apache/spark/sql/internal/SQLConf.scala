@@ -666,7 +666,7 @@ object SQLConf {
       "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
       "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
       s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
-    .version("4.3.0")
+    .version("4.4.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -1279,6 +1279,40 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
+  val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
+    .internal()
+    .doc("When true, a non-equi join whose condition is a range predicate (a value in a " +
+      "range, two ranges overlapping, or a single `<`/`<=`/`>`/`>=` comparison) may be " +
+      "planned as a broadcast range join instead of a broadcast nested loop join. Each " +
+      "range key must be deterministic, of boolean, integer, floating-point, decimal, " +
+      "string, binary, date, or timestamp type, and drawn entirely from one side. Planning " +
+      "still requires a side that is broadcastable by size or by a BROADCAST hint and that " +
+      "BroadcastRangeJoinExec can build: either side for inner joins, the right side for " +
+      "left outer, semi, and anti joins, the left side for right outer joins, and never a " +
+      "full outer join. An unsupported hinted side, a full outer join, and an unhinted join " +
+      "with no small side keep the previous plan (a cartesian product for an inner join, " +
+      "otherwise a nested loop join). The broadcast side is sorted and indexed once, which " +
+      "evaluates the range key of every broadcast row. When probing, each row of the other " +
+      "side evaluates its range key and reads only the part of the index that can match it. " +
+      "Keys are evaluated before any pair is tested, so a key expression that throws can " +
+      "fail a query that a nested loop join would have completed. The range join is much " +
+      "faster when that part is small. It can be slower under interleaved overlap, where " +
+      "the tree cannot prune whole miss runs; collated string and other boxed key families " +
+      "reach that regime sooner than long-specialized keys (including float and double), " +
+      "while fully overlapping builds stay near parity via the all-covering shortcut. Tiny " +
+      "builds (a handful of ranges) skip the tree walk and scan stored rows linearly so they " +
+      "stay near parity with the nested loop join. Building the index costs driver-side work " +
+      "that grows with the broadcast side and can outweigh the scans the range join saves - " +
+      "most visibly when a BROADCAST hint forces a large build side that only a handful of " +
+      "streamed rows ever probe, where that one-time cost has few scans to amortize against. " +
+      "BroadcastExchangeExec also charges the index's retained memory against " +
+      "maxBroadcastTableSize, so a hinted or raised-threshold build can fail where a nested " +
+      "loop join ran. This is disabled by default.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val SHUFFLE_HASH_JOIN_FACTOR =
     buildConfFromConfigFile[Int]("spark.sql.shuffledHashJoinFactor")
       .checkValue(_ >= 1, "The shuffle hash join factor must be at least 1.")
@@ -1807,10 +1841,10 @@ object SQLConf {
     buildConf("spark.sql.subexpressionElimination.filterExec.enabled")
       .internal()
       .doc("When true (and subexpression elimination is enabled), FilterExec whole-stage " +
-        "codegen eliminates common subexpressions shared across its predicates. When false, " +
-        "FilterExec falls back to the predicate codegen that loads input columns lazily and " +
-        "short-circuits, avoiding eager materialization of all predicate-referenced columns on " +
-        "every row. Only affects FilterExec; subexpression elimination elsewhere is unaffected.")
+        "codegen eliminates the common subexpressions shared across its predicates when one " +
+        "of them is not cheap. When false, FilterExec falls back to the predicate codegen " +
+        "without subexpression elimination. Only affects FilterExec; subexpression elimination " +
+        "elsewhere is unaffected.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -1865,6 +1899,20 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
+
+  val INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED =
+    buildConf("spark.sql.optimizer.inferFiltersAcrossAsOfJoin.enabled")
+      .internal()
+      .doc("When true, the query optimizer infers filters for the inputs of a sort-merge " +
+        "AS-OF join from its ON condition and its other input, such as `q.k = 7` from " +
+        "`ON t.k = q.k` and `t.k = 7`, but never a filter that can fail, and only IS NOT NULL " +
+        "while spark.sql.legacy.inferFailableFiltersFromConstraints is true. When false, it " +
+        "infers no filter across such a join, while each input keeps the filters inferred " +
+        "from its own constraints and other joins keep theirs.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
@@ -2535,8 +2583,9 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("Size in bytes of input rows at which an external lookup join stops adding rows to " +
         "a lookup request. The row that reaches this size stays in the request, so a request " +
-        "can exceed it by one row. A request always takes at least one row, and never more rows " +
-        "than the source allows, or 1000.")
+        "can exceed it by one row. A request always takes at least one row, and never more than " +
+        "1000. Its rows are also no more than the parameter rows that the source allows, unless " +
+        "they share one parameter row, as with a range lookup.")
       .version("4.4.0")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
@@ -2558,6 +2607,50 @@ object SQLConf {
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED =
+    buildConf("spark.sql.join.externalLookup.cache.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("When true, external lookup join caches the complete lookup result of each key, " +
+        "including a key with no result, within a task, per input partition (a task that reads " +
+        "several input partitions, e.g. after coalesce, has one cache per partition). A cached " +
+        "result is reused as it was read. A left semi or left anti join caches one row of a " +
+        "key instead when any row of the key gives its answer. This configuration can be " +
+        "overridden per join with the EXTERNAL_LOOKUP hint option 'cache_enabled', a string " +
+        "parameter of the form key=value such as 'cache_enabled=false'. A string parameter of " +
+        "the hint that does not contain '=' names a relation. At present, a join whose source " +
+        "serves a range comparison (<, <=, >, >=) with a stream-side value caches nothing, " +
+        "whatever this configuration or the hint option says.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val JOIN_EXTERNAL_LOOKUP_CACHE_MAX_BYTES =
+    buildConf("spark.sql.join.externalLookup.cache.maxBytes")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Maximum size of one external lookup join cache, that is per input partition of a " +
+        "task: the binary size of its lookup keys and of their result rows, after lookup-side " +
+        "projections and filters, plus a fixed overhead per key and per row for the objects " +
+        "that hold them. Beyond it, the least recently " +
+        "used keys are evicted. A key whose result rows take more than a sixteenth of it is " +
+        "returned but not cached. It can be overridden per join with the EXTERNAL_LOOKUP hint " +
+        "option 'cache_max_bytes'.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "External lookup join cache max bytes must be positive")
+      .createWithDefaultString("16m")
+
+  val JOIN_EXTERNAL_LOOKUP_CACHE_TTL =
+    buildConf("spark.sql.join.externalLookup.cache.ttl")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Time-to-live of a cached external lookup join result, such as 30s or 10m, counted " +
+        "from when the result is cached, not from its last use. A number without a unit is in " +
+        "milliseconds. A value of 0 disables expiration. It can be overridden per join with the " +
+        "EXTERNAL_LOOKUP hint option 'cache_ttl'.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ >= 0, "External lookup join cache TTL must be non-negative")
+      .createWithDefault(0L)
 
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
@@ -5814,8 +5907,9 @@ object SQLConf {
         "from upstream operators that produce ColumnarBatch. If the inputs of the UDFs " +
         "are plain column references, those of Arrow-backed batches are written to " +
         "Python directly, bypassing the ColumnarToRow and ArrowWriter conversion. The " +
-        "columns that the UDFs pass through are still converted to rows and back, " +
-        "which can cost more than leaving this disabled.")
+        "columns that the UDFs pass through are still copied as rows, and converted back " +
+        "to columnar batches for a columnar downstream operator, which can cost more " +
+        "than leaving this disabled.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -10087,6 +10181,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyInferFailableFiltersFromConstraints: Boolean =
     getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
 
+  def inferFiltersAcrossAsOfJoinEnabled: Boolean = getConf(INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
@@ -10206,6 +10302,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def broadcastRangeJoinEnabled: Boolean = getConf(BROADCAST_RANGE_JOIN_ENABLED)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 

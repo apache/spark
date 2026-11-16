@@ -103,6 +103,42 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Xxh3128, BinaryType)
   }
 
+  test("SPARK-61770: farm_fingerprint") {
+    def fp(s: String): Expression = FarmFingerprint(Literal(s.getBytes(StandardCharsets.UTF_8)))
+    // Published BigQuery FARM_FINGERPRINT outputs, which pin cross-system compatibility.
+    checkEvaluation(fp("1footrue"), -1541654101129638711L)
+    checkEvaluation(fp("2applefalse"), 2794438866806483259L)
+    checkEvaluation(fp("3true"), -4880158226897771312L)
+    // Fingerprint64 length branches: 0, 1-3, 4-7, 8-16 (vectors above), 17-32, 33-64, > 64 bytes.
+    checkEvaluation(fp(""), -7286425919675154353L)
+    checkEvaluation(fp("a"), -5528939962900187677L)
+    checkEvaluation(fp("ab"), -6157143815960550114L)
+    checkEvaluation(fp("abc"), 2640714258260161385L)
+    checkEvaluation(fp("Spark"), -2743780590904673122L)
+    checkEvaluation(fp("abcdefghijklmnopqrstu"), -7134631463417682838L)
+    checkEvaluation(fp("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJ"), -194909966897934073L)
+    checkEvaluation(
+      fp("The quick brown fox jumps over the lazy dog. " +
+        "The quick brown fox jumps over the lazy dog."),
+      8965812338493689749L)
+    // Exact boundaries between the length branches, and two full 64-byte blocks.
+    Seq(
+      16 -> 1080060857502750420L, 17 -> -4920561954712641764L,
+      32 -> 1917831512995979081L, 33 -> -1696327906013916594L,
+      64 -> -755192159902184373L, 65 -> -4133415862504178242L,
+      128 -> 2037963038260878803L
+    ).foreach { case (len, expected) =>
+      checkEvaluation(FarmFingerprint(Literal(Array.tabulate[Byte](len)(_.toByte))), expected)
+    }
+    // Multi-byte UTF-8 input: the encoding of the two-character CJK string U+6570 U+636E.
+    checkEvaluation(
+      FarmFingerprint(Literal(Array[Byte](-26, -107, -80, -26, -115, -82))),
+      -7555523796863189993L)
+    checkEvaluation(FarmFingerprint(Literal(Array[Byte](1, 2, 3, 4, 5, 6))), 8673355959317488908L)
+    checkEvaluation(FarmFingerprint(Literal.create(null, BinaryType)), null)
+    checkConsistencyBetweenInterpretedAndCodegen(FarmFingerprint, BinaryType)
+  }
+
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
     // Note : All expected hashes need to be computed using Hive 1.2.1
     val actual = HiveHashFunction.hash(
