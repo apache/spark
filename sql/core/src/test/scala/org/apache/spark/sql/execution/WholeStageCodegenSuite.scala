@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ObjectOutputStream, OutputStream}
+import java.io.{File, ObjectOutputStream, OutputStream}
 import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
@@ -418,6 +418,23 @@ class WholeStageCodegenSuite extends SharedSparkSession
     planNodes.toSeq
   }
 
+  /**
+   * All the nodes of `plan`, including those in adaptive query stages, in cached plans and in
+   * subqueries.
+   */
+  private def allPlanNodes(plan: SparkPlan): Seq[SparkPlan] = (plan +: (plan match {
+    case a: AdaptiveSparkPlanExec => allPlanNodes(a.executedPlan)
+    case q: QueryStageExec => allPlanNodes(q.plan)
+    case i: InMemoryTableScanExec => allPlanNodes(i.relation.cachedPlan)
+    case other => other.children.flatMap(allPlanNodes)
+  })) ++ plan.subqueries.flatMap(allPlanNodes)
+
+  /** The plan nodes that a codegen stage generates code for, from the child of the stage. */
+  private def generatedNodes(plan: SparkPlan): Seq[SparkPlan] = plan match {
+    case _: InputAdapter => Nil
+    case other => other +: other.children.flatMap(generatedNodes)
+  }
+
   test("SPARK-61661: HashAggregate codegen references do not serialize plan nodes") {
     // The generated code must not reference a plan node: for the final aggregate, it would carry
     // the whole map-side plan through the exchange (see `serializedPlanNodes`).
@@ -708,15 +725,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
               (SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString): _*) {
             val clue = s"$name, usePartitionEvaluator=$usePartitionEvaluator"
             val df = query("SHUFFLE_HASH")
-            // The plan nodes run by a codegen stage itself.
-            def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
-              case _: InputAdapter => Nil
-              case other => other +: other.children.flatMap(inStage)
-            }
             val stages = df.queryExecution.executedPlan.collect {
               case s: WholeStageCodegenExec
-                  if inStage(s.child).exists(_.isInstanceOf[ShuffledHashJoinExec]) =>
-                inStage(s.child).foreach {
+                  if generatedNodes(s.child).exists(_.isInstanceOf[ShuffledHashJoinExec]) =>
+                generatedNodes(s.child).foreach {
                   case j: ShuffledHashJoinExec => assert(check(j), s"$clue: ${s.treeString}")
                   case _ =>
                 }
@@ -811,10 +823,6 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("SPARK-61666: Sort and sort merge joins do not serialize plan nodes into tasks") {
     // The RDD that a codegen stage, or an operator outside codegen, adds on top of its input RDDs
     // is serialized into every task binary (see `serializedPlanNodes`).
-    def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
-      case _: InputAdapter => Nil
-      case other => other +: other.children.flatMap(inStage)
-    }
     // Checks the codegen stages and the operators outside codegen that run a sort or a sort merge
     // join. `expectedNodes` are the node names that must run, in codegen or not.
     def checkPlans(df: => DataFrame, expectedNodes: Set[String]): Unit = {
@@ -827,16 +835,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
           checkAnswer(result, expected)
           // The RDDs are cached by the plans, so these are the ones the query ran.
           val plan = result.queryExecution.executedPlan
-          // All the nodes of the plan, including those in adaptive query stages.
-          def allNodes(p: SparkPlan): Seq[SparkPlan] = p +: (p match {
-            case a: AdaptiveSparkPlanExec => allNodes(a.executedPlan)
-            case q: QueryStageExec => allNodes(q.plan)
-            case other => other.children.flatMap(allNodes)
-          })
-          val nodes = allNodes(plan)
+          val nodes = allPlanNodes(plan)
           val stages = nodes.collect { case s: WholeStageCodegenExec => s }
-          val generated = stages.flatMap(s => inStage(s.child))
-          val targets = stages.filter(s => inStage(s.child).exists(
+          val generated = stages.flatMap(s => generatedNodes(s.child))
+          val targets = stages.filter(s => generatedNodes(s.child).exists(
               p => expectedNodes.contains(p.nodeName))).map { s =>
             (s.treeString, s.execute(), s.child.asInstanceOf[CodegenSupport].inputRDDs())
           } ++ nodes.collect {
@@ -904,6 +906,202 @@ class WholeStageCodegenSuite extends SharedSparkSession
                 quotes, trades("ts"), quotes("ts"), usingColumns = Seq("k"), joinType = "inner",
                 tolerance = null, allowExactMatches = true, direction = direction),
               Set("Sort", "SortMergeAsOfJoin"))
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * A MergeRows node, built as in `MergeRowsExecBenchmark`, that matches and updates every row of
+   * `source`.
+   */
+  private def mergeRows(source: DataFrame): DataFrame = {
+    val attrs = source.queryExecution.analyzed.output
+    classic.Dataset.ofRows(spark, MergeRows(
+      isSourceRowPresent = Literal.TrueLiteral,
+      isTargetRowPresent = Literal.TrueLiteral,
+      matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, attrs)),
+      notMatchedInstructions = Nil,
+      notMatchedBySourceInstructions = Nil,
+      checkCardinality = false,
+      output = attrs.map(_.newInstance()),
+      child = source.queryExecution.analyzed))
+  }
+
+  /**
+   * A query checked by the SPARK-61761 tests: the configs to run it with, the query (given an empty
+   * temporary directory), and the names of the plan nodes that must be generated.
+   */
+  private case class PlanRefCase(
+      name: String,
+      confs: Seq[(String, String)],
+      query: File => DataFrame,
+      expectedNodes: Set[String]) {
+    override def toString: String = name
+  }
+
+  private lazy val planRefCases: Seq[PlanRefCase] = {
+    val noBroadcast = Seq(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1")
+    val forceShj = noBroadcast :+ ("spark.sql.join.forceApplyShuffledHashJoin" -> "true")
+    val sortAgg =
+      Seq(SQLConf.USE_HASH_AGG.key -> "false", SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
+    def l = spark.table("l")
+    def r = spark.table("r")
+    def join(strategy: String, joinType: String, buildLeft: Boolean = false): File => DataFrame =
+      _ => {
+        val cond = $"k1" === $"k2" && $"v1" =!= $"v2"
+        if (buildLeft) l.hint(strategy).join(r, cond, joinType)
+        else l.join(r.hint(strategy), cond, joinType)
+      }
+    val existenceJoin = "SELECT * FROM l WHERE EXISTS (SELECT 1 FROM r WHERE k2 = k1) OR v1 < 3"
+    val aggs = Seq(
+      PlanRefCase("hash aggregate without a fast hash map",
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false"),
+        _ => l.groupBy("k1").agg(sum("v1"), avg("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate, row-based fast hash map",
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false"),
+        _ => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate, vectorized fast hash map",
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true"),
+        _ => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate, adaptive partial aggregation",
+        Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true"),
+        _ => l.groupBy("k1").agg(sum("v1")), Set("HashAggregate")),
+      PlanRefCase("hash aggregate without grouping keys", Nil,
+        _ => l.agg(sum("v1"), max("k1")), Set("HashAggregate")),
+      PlanRefCase("distinct aggregate", Nil,
+        _ => l.groupBy("k1").agg(countDistinct("v1"), sum("v1")), Set("HashAggregate")),
+      PlanRefCase("aggregate with a filter", Nil,
+        _ => sql("SELECT k1, sum(v1) FILTER (WHERE v1 > 10) FROM l GROUP BY k1"),
+        Set("HashAggregate")),
+      PlanRefCase("sort aggregate", sortAgg,
+        _ => l.groupBy("k1").agg(sum("v1"), max("v1")), Set("SortAggregate")),
+      PlanRefCase("sort aggregate without grouping keys", sortAgg,
+        _ => l.agg(sum("v1"), max("v1")), Set("SortAggregate")))
+    val joinTypes =
+      Seq("inner", "left_outer", "right_outer", "full_outer", "left_semi", "left_anti")
+    val smj = joinTypes.map { joinType =>
+      PlanRefCase(s"sort merge join, $joinType", noBroadcast, join("SHUFFLE_MERGE", joinType),
+        Set("Sort", "SortMergeJoin"))
+    } :+ PlanRefCase("sort merge join, existence", noBroadcast, _ => sql(existenceJoin),
+      Set("Sort", "SortMergeJoin"))
+    val shj = joinTypes.flatMap { joinType =>
+      Seq(false, true).filter(buildLeft => joinType match {
+        case "left_semi" | "left_anti" => !buildLeft
+        case _ => true
+      }).map { buildLeft =>
+        PlanRefCase(
+          s"shuffled hash join, $joinType, build ${if (buildLeft) "left" else "right"}",
+          noBroadcast, join("SHUFFLE_HASH", joinType, buildLeft), Set("ShuffledHashJoin"))
+      }
+    } :+ PlanRefCase("shuffled hash join, existence", forceShj, _ => sql(existenceJoin),
+      Set("ShuffledHashJoin"))
+    val bhj = Seq(("inner", false), ("inner", true), ("left_outer", false),
+        ("right_outer", true), ("left_semi", false), ("left_anti", false)).map {
+      case (joinType, buildLeft) =>
+        PlanRefCase(
+          s"broadcast hash join, $joinType, build ${if (buildLeft) "left" else "right"}",
+          noBroadcast, join("BROADCAST", joinType, buildLeft), Set("BroadcastHashJoin"))
+    } :+ PlanRefCase("broadcast hash join, existence", Nil, _ => sql(existenceJoin),
+      Set("BroadcastHashJoin"))
+    val bnlj = Seq("inner", "left_outer", "left_semi", "left_anti").map { joinType =>
+      PlanRefCase(s"broadcast nested loop join, $joinType", noBroadcast,
+        _ => l.join(broadcast(r), $"k1" < $"k2" || $"v1" === $"v2", joinType),
+        Set("BroadcastNestedLoopJoin"))
+    }
+    val rangeJoin = Seq("inner", "left_outer", "left_semi").map { joinType =>
+      PlanRefCase(s"broadcast range join, $joinType",
+        noBroadcast :+ (SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true"),
+        _ => l.join(broadcast(r), $"v1" >= $"k2" && $"v1" <= $"v2", joinType),
+        Set("BroadcastRangeJoin"))
+    }
+    val asOfJoin = PlanRefCase("as-of join",
+      noBroadcast :+ (SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true"),
+      _ => {
+        val right = r.withColumnRenamed("k2", "k1")
+        l.joinAsOf(right, l("v1"), right("v2"), usingColumns = Seq("k1"), joinType = "inner",
+          tolerance = null, allowExactMatches = true, direction = "backward")
+      },
+      Set("SortMergeAsOfJoin"))
+    val others = Seq(
+      PlanRefCase("sort", Nil, _ => l.orderBy($"v1".desc), Set("Sort")),
+      PlanRefCase("expand", Nil, _ => l.rollup("k1").agg(sum("v1")), Set("Expand")),
+      PlanRefCase("generate", Nil, _ => l.select($"k1", explode(array($"v1", $"v1" + 1))),
+        Set("Generate")),
+      PlanRefCase("limit", Nil, _ => l.limit(5).groupBy("k1").count(), Set("GlobalLimit")),
+      PlanRefCase("sample", Nil, _ => l.sample(0.5, 1L), Set("Sample")),
+      PlanRefCase("union", Nil,
+        _ => l.select("k1").union(r.select("k2")).groupBy("k1").count(), Set("Union")),
+      PlanRefCase("objects", Nil,
+        _ => spark.range(10).as[Long].map(_ * 2).filter(_ > 3).toDF(), Set("MapElements")),
+      // The aggregate is only in the subquery.
+      PlanRefCase("scalar subquery", Nil,
+        _ => sql("SELECT k1, (SELECT max(v2) FROM r WHERE v2 < 5) FROM l"),
+        Set("HashAggregate")),
+      PlanRefCase("vectorized parquet scan", Nil, tempDir => {
+        val path = tempDir.getCanonicalPath
+        l.write.mode(SaveMode.Overwrite).parquet(path)
+        spark.read.parquet(path).where($"v1" > 3).groupBy("k1").count()
+      }, Set("ColumnarToRow")),
+      // `Range` is only in the cached plan, which is cached in the configs of the run, and
+      // uncached after it.
+      PlanRefCase("cached table scan", Nil, _ => {
+        val cached = spark.range(0, 50, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
+        cached.cache().groupBy("k1").count()
+      }, Set("HashAggregate", "Range")),
+      PlanRefCase("merge rows", Nil,
+        _ => mergeRows(l.selectExpr("CAST(v1 AS INT) AS t", "CAST(k1 AS INT) AS s")),
+        Set("MergeRows")))
+    aggs ++ smj ++ shj ++ bhj ++ bnlj ++ rangeJoin ++ (asOfJoin +: others)
+  }
+
+  gridTest("SPARK-61761: Whole-stage codegen stages do not serialize plan nodes into tasks")(
+      planRefCases) { case PlanRefCase(name, confs, query, expectedNodes) =>
+    // The RDD that a codegen stage adds on top of its input RDDs is serialized into every task
+    // binary, so it must not hold a plan node (see `serializedPlanNodes`). This checks every
+    // codegen stage of the query, through adaptive query stages, cached plans and subqueries.
+    withTempView("l", "r") {
+      spark.range(0, 100, 1, 2).select(($"id" % 10).as("k1"), $"id".as("v1"))
+        .createOrReplaceTempView("l")
+      spark.range(0, 30, 1, 2).select(($"id" % 7).as("k2"), $"id".as("v2"))
+        .createOrReplaceTempView("r")
+      for {
+        aqe <- Seq(false, true)
+        usePartitionEvaluator <- Seq(false, true)
+      } {
+        // Forced, so that AQE also applies to the plans without an exchange or a subquery.
+        withSQLConf(confs ++ Seq(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+            SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> aqe.toString,
+            SQLConf.USE_PARTITION_EVALUATOR.key -> usePartitionEvaluator.toString): _*) {
+          val clue = s"$name, aqe=$aqe, usePartitionEvaluator=$usePartitionEvaluator"
+          withTempDir { tempDir =>
+            try {
+              val df = query(tempDir)
+              df.collect()
+              // The RDDs are cached by the plans, so these are the ones the query ran.
+              val plan = df.queryExecution.executedPlan
+              if (aqe) {
+                assert(plan.isInstanceOf[AdaptiveSparkPlanExec], s"$clue: ${plan.treeString}")
+              }
+              val stages = allPlanNodes(plan).collect { case s: WholeStageCodegenExec => s }
+              val generated = stages.flatMap(s => generatedNodes(s.child))
+                .map(_.nodeName.stripSuffix("(skew=true)"))
+              expectedNodes.foreach { expected =>
+                assert(generated.contains(expected),
+                  s"$clue: $expected is not generated in\n${plan.treeString}")
+              }
+              stages.foreach { stage =>
+                val planNodes = serializedPlanNodes(stage)
+                assert(planNodes.isEmpty,
+                  s"$clue: $planNodes referenced by\n${stage.treeString}")
+              }
+            } finally {
+              spark.catalog.clearCache()
+            }
           }
         }
       }
@@ -3877,19 +4075,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // call is in a consume function added right after it, into the same nested class unless that
     // class fills up in between. The MergeRows node is built as in `MergeRowsExecBenchmark`,
     // matching every row.
-    val source = spark.range(10).selectExpr("CAST(id AS INT) AS t", "CAST(id AS INT) AS s")
-    val attrs = source.queryExecution.analyzed.output
-    val mergeRows = MergeRows(
-      isSourceRowPresent = Literal.TrueLiteral,
-      isTargetRowPresent = Literal.TrueLiteral,
-      matchedInstructions = Seq(Keep(Update, Literal.TrueLiteral, attrs)),
-      notMatchedInstructions = Nil,
-      notMatchedBySourceInstructions = Nil,
-      checkCardinality = false,
-      output = attrs.map(_.newInstance()),
-      child = source.queryExecution.analyzed)
-    def df: DataFrame =
-      classic.Dataset.ofRows(spark, mergeRows).selectExpr(s"${largeCaseWhen("s", 2000)} AS v")
+    val merged =
+      mergeRows(spark.range(10).selectExpr("CAST(id AS INT) AS t", "CAST(id AS INT) AS s"))
+    def df: DataFrame = merged.selectExpr(s"${largeCaseWhen("s", 2000)} AS v")
     withSplitAlways {
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
         val code = genCode(df)
