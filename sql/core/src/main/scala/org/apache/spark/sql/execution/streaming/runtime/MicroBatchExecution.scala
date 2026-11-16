@@ -212,6 +212,15 @@ class MicroBatchExecution(
     assert(queryExecutionThread eq Thread.currentThread,
       "logicalPlan must be initialized in QueryExecutionThread " +
         s"but the current thread was ${Thread.currentThread}")
+    val streamConf = sparkSessionForStream.sessionState.conf
+    initialLatestOffsetSeq.foreach { case (_, offsets) =>
+      // Restore this before optimizing the first resumed batch. A missing key is legacy false.
+      val retainEventTime = offsets.metadataOpt.map { metadata =>
+        OffsetSeqMetadata.readValue(
+          metadata, SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS).toBoolean
+      }.getOrElse(false)
+      streamConf.setConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS, retainEventTime)
+    }
     val nextSourceId = new AtomicLong(0L)
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
@@ -242,7 +251,6 @@ class MicroBatchExecution(
     // (legacy) key order, so recompute the keys from the recipe carried on the resolved node using
     // the order pinned in the offset log (mirroring how `enforceNamed` is read above). For a new
     // query the offset log has no entry yet, so the session value is used and pinned at batch 0.
-    val streamConf = sparkSessionForStream.sessionState.conf
     applyJoinStateConfigGuardrails(streamConf)
     val orderDeterministically = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
