@@ -34,7 +34,7 @@ import com.google.common.util.concurrent.Uninterruptibles
 import org.apache.logging.log4j.Level
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
-import org.apache.spark.{SharedSparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SharedSparkContext, SparkConf, SparkEnv, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.util.TaskCompletionListener
 
 class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
@@ -1109,6 +1109,32 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
           "No data received from the worker process - handle.map(_.isAlive) = None, " +
           s"$blockingWorkerStatus - $task"))
       handler.throwIfKilled(-1)
+    }
+  }
+
+  test("SPARK-61764: the idle timeout is limited to what fits in an Int of milliseconds") {
+    import org.apache.spark.internal.config.Python._
+
+    val maxSeconds = PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS
+    assert(maxSeconds === 2147483L)
+    // The largest idle timeout converts to a socket read timeout without overflow.
+    assert(Math.toIntExact(TimeUnit.SECONDS.toMillis(maxSeconds)) === 2147483000)
+
+    def idleTimeout(value: String): Long =
+      new SparkConf(false).set(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS.key, value)
+        .get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
+
+    assert(idleTimeout("0") === 0L)
+    assert(idleTimeout("120") === 120L)
+    assert(idleTimeout("2m") === 120L)
+    assert(idleTimeout(maxSeconds.toString) === maxSeconds)
+
+    // With Int arithmetic, the first two of these gave a negative socket read timeout, which
+    // fails the task, the third gave 704 milliseconds, and the last gave 0, no timeout.
+    Seq((maxSeconds + 1).toString, "30d", "4294968", "4294967296").foreach { value =>
+      val e = intercept[IllegalArgumentException](idleTimeout(value))
+      assert(e.getMessage.contains(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS.key))
+      assert(e.getMessage.contains(s"at most $maxSeconds seconds"))
     }
   }
 }
