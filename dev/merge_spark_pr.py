@@ -1855,6 +1855,16 @@ def remove_inherited_post_merge_ci_skip(message):
     >>> distant = "Subject\\n\\nskip-checks: true\\n" + "x" * 256 + "\\n"
     >>> remove_inherited_post_merge_ci_skip(distant) == distant
     True
+
+    A pick of a sampled backport-PR merge keeps its provenance in a paragraph of its own, which
+    `backport_pr` still reads past:
+
+    >>> from spark_merge_footer import backport_pr
+    >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nBackport-PR: #9\\n\\n"
+    >>> pick = "skip-checks: true\\n(cherry picked from commit abc)\\nSigned-off-by: X <x@e.org>"
+    >>> picked = "Fix\\n\\n" + footer + pick
+    >>> backport_pr(remove_inherited_post_merge_ci_skip(picked + "\\n"))
+    9
     """
     tail = message[-POST_MERGE_CI_TRAILER_SEARCH_LENGTH:]
     marker = "\n%s\n" % POST_MERGE_CI_SKIP_TRAILER
@@ -2485,13 +2495,22 @@ class _PickLedger:
         self.commits += picked
 
 
+def _finish_landed(record, pair):
+    """Record a landed pick, then leave its branch. Both can fail or stop the run ([a]bort),
+    so the pick is recorded first."""
+    if record:
+        record(pair)
+    _restore_original_head()
+    clean_up()
+
+
 def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None, record=None):
     """Cherry-pick `merge_hash` onto `pick_ref` and land it.
 
     Returns (pick_ref, marker), where the marker says how it landed (see _landed):
     a commit hash for a direct push (landed), a PR URL for a draft backport PR, or
     `fork:<owner>:<branch>` when the fork push worked but the PR did not open (both pending).
-    `record` gets that pair as soon as it lands, before the cleanup that follows.
+    `record` gets that pair as soon as it lands, before the checkout and cleanup that follow.
     `pending_sibling` is the (branch-M.x, marker) whose backport is only pending; a direct push
     then needs an explicit maintenance-only confirmation. Raises `SkipCherryPick` when the
     committer declines to resolve a conflict (after aborting the pick), declines the
@@ -2543,9 +2562,9 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     >>> compile_check.call_args_list == [call(pushes[0].args[1])] * 4
     True
 
-    [s] restores the original checkout, waiting out local edits, before cleaning up. A landing
-    is recorded before the cleanup, so one that fails loses nothing; a skip, and a landing that
-    fails, record nothing:
+    Every exit restores the original checkout, waiting out local edits, before cleaning up. A
+    landing is recorded before both, so a refused checkout or an [a]bort there loses nothing;
+    a skip, and a landing that fails, record nothing:
 
     >>> def leaves(answers, via_fork=("https://x/pull/9",), **effects):
     ...     steps = Mock()
@@ -2564,24 +2583,24 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     ...     ):
     ...         try:
     ...             _do_cherry_pick(1, "feed", "branch-4.2", record=steps.record)
-    ...         except (SkipCherryPick, SystemExit, subprocess.CalledProcessError):
+    ...         except (SkipCherryPick, SystemExit):
     ...             pass
     ...     return [name for name, _, _ in steps.mock_calls], [
     ...         c.args[0] for c in steps.record.call_args_list]
     >>> leaves(["s"])
     (['restore', 'clean_up'], [])
     >>> leaves(["p"])
-    (['fork', 'record', 'clean_up'], [('branch-4.2', 'https://x/pull/9')])
+    (['fork', 'record', 'restore', 'clean_up'], [('branch-4.2', 'https://x/pull/9')])
     >>> leaves(["d"])
-    (['push', 'record', 'clean_up'], [('branch-4.2', 'abc')])
+    (['push', 'record', 'restore', 'clean_up'], [('branch-4.2', 'abc')])
     >>> leaves(["p", "s"], via_fork=[None])
     (['fork', 'restore', 'clean_up'], [])
     >>> leaves(["d", "s"], push=OSError("rejected"))
     (['push', 'restore', 'clean_up'], [])
-    >>> leaves(["d"], clean_up=subprocess.CalledProcessError(1, "git checkout"))
-    (['push', 'record', 'clean_up'], [('branch-4.2', 'abc')])
-    >>> leaves(["p"], clean_up=subprocess.CalledProcessError(1, "git checkout"))
-    (['fork', 'record', 'clean_up'], [('branch-4.2', 'https://x/pull/9')])
+    >>> leaves(["d"], restore=SystemExit(-1))
+    (['push', 'record', 'restore'], [('branch-4.2', 'abc')])
+    >>> leaves(["p"], restore=SystemExit(-1))
+    (['fork', 'record', 'restore'], [('branch-4.2', 'https://x/pull/9')])
 
     A sampled pick carries the skip trailer only when pushed to apache, so [p] always sends
     the fork a head without it. Both keep an amend the committer made during the checks.
@@ -2698,9 +2717,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
             _set_skip_trailer(False)
             marker = _land_via_fork(pr_num, pick_ref, pick_branch_name, title)
             if marker:
-                if record:
-                    record((pick_ref, marker))
-                clean_up()
+                _finish_landed(record, (pick_ref, marker))
                 return pick_ref, marker
             # Nothing was pushed and the pick is intact: retry, push directly, or skip.
             continue
@@ -2726,10 +2743,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
                 % (e, pick_ref)
             )
 
-    # Before clean_up(), which can raise: the push has landed either way.
-    if record:
-        record((pick_ref, pick_hash))
-    clean_up()
+    _finish_landed(record, (pick_ref, pick_hash))
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
@@ -5855,8 +5869,9 @@ __test__ = {
     """,
     "main_ledgers": """
     What main() passes on as landed and pending. Only landed branches are already_picked and
-    reach JIRA; pending ones go to the pick and stay out of the default. A merged backport PR,
-    whether merged in this run or an earlier one, starts from the original PR's branches.
+    reach JIRA; pending ones go to the pick and stay out of the default. A pick the stand-in
+    hands to `record` reaches the merge summary either way. A merged backport PR, whether
+    merged in this run or an earlier one, starts from the original PR's branches.
 
     >>> import sys
     >>> from unittest.mock import Mock, patch
@@ -5882,9 +5897,9 @@ __test__ = {
     ...     def ask(prompt, *args, **kwargs):
     ...         return next(answers) if "into another branch" in prompt else "n"
     ...     picked = []  # the ledger is live, so snapshot what each pick is handed
-    ...     def pick(*args, already_picked, pending, **kwargs):
+    ...     def pick(*args, already_picked, pending, record, **kwargs):
     ...         picked.append((already_picked, sorted(pending)))
-    ...         return [("branch-4.x", "https://x/pull/10")]
+    ...         record(("branch-4.x", "https://x/pull/10"))
     ...     def fork_backports(pr, names):
     ...         if interrupt:
     ...             raise KeyboardInterrupt  # e.g. a stalled ls-remote on the fork
@@ -5919,9 +5934,10 @@ __test__ = {
     ...     if message is None:
     ...         authors = ["X <x@x>", "F <f@f>"] if head.startswith("backport-pr") else ["F <f@f>"]
     ...         assert merge.call_args.args[-1] == authors
+    ...     assert comment.call_args.args[1][-1] == ("branch-4.x", "https://x/pull/10")
     ...     return sorted(default.call_args_list[0].args[1]), picked[0], update.call_args.args[2]
 
-    A merge seeds only the merged branch; the pick that comes back pending is not landed:
+    A merge seeds only the merged branch; the pick recorded as pending is not landed:
 
     >>> run()
     (['master'], (('master',), []), ['master'])

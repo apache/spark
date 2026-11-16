@@ -67,6 +67,10 @@ _MERGE_FOOTER_RE = re.compile(
     re.MULTILINE,
 )
 _BACKPORT_PR_RE = re.compile(r"^Backport-PR: #(\d+)\s*$", re.MULTILINE)
+# What the merge script and `git cherry-pick -sx` add after the trailer paragraph.
+_AFTER_TRAILER_RE = re.compile(
+    r"skip-checks:|\(cherry picked from commit |Signed-off-by:", re.IGNORECASE
+)
 
 
 def merge_footer_trailer(pr_num):
@@ -124,7 +128,8 @@ def merge_footer_pr(message):
 
 def backport_pr(message):
     """The backport PR merged by `message`, or None: a `Backport-PR` trailer in the final
-    paragraph, after the generated footer, so one quoted in a body does not count.
+    paragraph after the generated footer, so one quoted in a body does not count. Paragraphs
+    of only a skip trailer, `-x` provenance or sign-offs do not count as the final one.
 
     >>> footer = "Closes #7 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
     >>> backport_pr("Fix\\n\\n%s\\nBackport-PR: #9\\nSigned-off-by: M <m@e.org>" % footer)
@@ -140,16 +145,31 @@ def backport_pr(message):
     >>> backport_pr(chained), has_merge_footer(chained, 10), has_merge_footer(chained, 9)
     (10, True, False)
 
-    A trailing `skip-checks` paragraph, added for the post-merge CI sampling, does not hide it:
+    A trailing `skip-checks` paragraph, added for the post-merge CI sampling, does not hide it,
+    nor does the provenance paragraph that a pick of such a merge is left with once the skip
+    trailer is removed:
 
     >>> backport_pr("Fix\\n\\n%s\\nBackport-PR: #9\\n\\n\\nskip-checks: true\\n" % footer)
     9
+    >>> trailer = "Fix\\n\\n%s\\nBackport-PR: #9\\nSigned-off-by: M <m@e.org>" % footer
+    >>> provenance = "(cherry picked from commit abc)\\nSigned-off-by: X <x@e.org>"
+    >>> picked = trailer + "\\n\\n" + provenance
+    >>> backport_pr(picked), has_merge_footer(picked, 9), has_merge_footer(picked, 7)
+    (9, True, True)
+
+    A pick of an unsampled merge, of an ordinary merge, and of a merge with a quoted trailer
+    read as before:
+
+    >>> backport_pr(trailer + "\\n" + provenance)
+    9
+    >>> backport_pr("Fix\\n\\n%s\\n%s" % (footer, provenance))
+    >>> backport_pr("Fix\\n\\nBackport-PR: #9\\n\\n%s\\n\\n%s" % (footer, provenance))
     """
     matches = list(_MERGE_FOOTER_RE.finditer(message))
     if not matches:
         return None
     paragraphs = [p.strip() for p in message[matches[-1].start() :].split("\n\n")]
-    while paragraphs and (not paragraphs[-1] or paragraphs[-1].lower().startswith("skip-checks:")):
+    while paragraphs and all(map(_AFTER_TRAILER_RE.match, paragraphs[-1].splitlines())):
         paragraphs.pop()
     found = _BACKPORT_PR_RE.findall(paragraphs[-1]) if paragraphs else []
     return int(found[-1]) if found else None
