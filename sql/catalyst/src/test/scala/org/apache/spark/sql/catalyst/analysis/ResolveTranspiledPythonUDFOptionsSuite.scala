@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
@@ -24,6 +26,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project, Sort}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType}
 
 /**
@@ -147,15 +150,6 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
     assert(pruned.transpiledOptions.isEmpty)
   }
 
-  test("float matches FloatType columns") {
-    val a = AttributeReference("a", FloatType)()
-    val floatOpt = Add(a, Literal(1.0f))
-    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)),
-      List(floatOpt), List(List("float")))
-    val pruned = prune(node, LocalRelation(a))
-    assert(pruned.transpiledOptions == List(floatOpt))
-  }
-
   // "integral", "integral32" and "fractional" must each match strictly less than
   // "numeric" does (see ResolveTranspiledPythonUDFOptions). The option expressions
   // are stand-ins -- the rule only reads the declared categories. The column is
@@ -187,6 +181,12 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
     ("fractional", FloatType, false),
     ("numeric", FloatType, false),
     ("numeric", DoubleType, true),
+    ("numeric", IntegerType, true),
+    ("numeric", ShortType, true),
+    ("numeric", ByteType, true),
+    // The legacy "float" label is DoubleType only, for the same reason.
+    ("float", DoubleType, true),
+    ("float", FloatType, false),
     ("fractional", LongType, false)
   ).foreach { case (category, dataType, survives) =>
     val verb = if (survives) "keeps" else "drops"
@@ -329,5 +329,40 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest with AnalysisTest 
       plan,
       "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       Map("objectName" -> "`c`", "proposal" -> "`u`"))
+  }
+
+  // A partial drop keeps ConvertToCatalyst's first survivor and says so; a full drop says the call
+  // falls back. Both put the first dropped expression through the string redaction pattern.
+  test("SPARK-59090: a partial drop keeps the resolvable option and each drop warns, redacted") {
+    val a = $"a".binary
+    val neverResolves = Cast(a, LongType)
+    val resolves = Concat(Seq(a, a))
+    val partial = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(neverResolves, resolves),
+      List(List("binary"), List("binary")))
+    val dropAll = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(neverResolves),
+      List(List("binary")))
+    val appender = new LogAppender("dropped transpiled options")
+    var kept: Seq[Seq[Expression]] = Nil
+    withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "bigint") {
+      withLogAppender(appender,
+          loggerNames = Seq(classOf[DropUnresolvedTranspiledPythonUDFOptions].getName),
+          level = Some(Level.WARN)) {
+        kept = Seq(partial, dropAll).map { node =>
+          val plan = Project(Seq(Alias(node, "r")()), LocalRelation(a))
+          val analyzed = getAnalyzer.executeAndCheck(plan, new QueryPlanningTracker)
+          analyzed.expressions.flatMap(_.collect { case t: TranspiledPythonUDF => t })
+            .head.transpiledOptions
+        }
+      }
+    }
+    assert(kept == Seq(Seq(resolves), Nil))
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.size == 2, messages)
+    assert(messages.exists(m => m.contains("1 option(s) remain.") &&
+      !m.contains("falls back")), messages)
+    assert(messages.exists(m => m.contains("falls back to interpreted Python")), messages)
+    messages.foreach { m =>
+      assert(m.contains("*********(redacted)") && !m.contains("bigint"), m)
+    }
   }
 }

@@ -629,7 +629,8 @@ jobs:
             pyspark-pandas-slow-connect
         exclude:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing, pyspark-core, pyspark-errors, pyspark-logger' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql-slow' }}
+          # Its only goal skips the differential tests unless RUN_HYPOTHESIS (the transpile flag) is on.
+          - modules: ${{ (fromJson(needs.precondition.outputs.required).pyspark != 'true' || fromJson(needs.precondition.outputs.required).transpile != 'true') && 'pyspark-sql-slow' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}

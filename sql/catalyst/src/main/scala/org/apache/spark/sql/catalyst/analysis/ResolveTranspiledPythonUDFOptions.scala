@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{
-  BinaryType, BooleanType, ByteType, DataType, DoubleType, FloatType,
-  IntegerType, LongType, ShortType, StringType}
+  BinaryType, BooleanType, ByteType, DataType, DoubleType, IntegerType, LongType, ShortType,
+  StringType}
 import org.apache.spark.util.Utils
 
 /**
@@ -56,8 +56,8 @@ import org.apache.spark.util.Utils
  * that overlap is deliberate. Some Python operators only have an exact lowering once the operand's
  * *kind* of number is known -- `x ** 3` as `x*x*x` is exact on a bigint but rounds twice on a
  * double, and `a // b` needs `div`, which rejects fractional input -- so the transpiler tags those
- * options with the narrower category and leaves everything else on plain "numeric". A body using
- * no such operator produces the same options, and the same plan size, as before they existed.
+ * options with the narrower category. Comparisons and `min`/`max`/`round` split the same way;
+ * every other body keeps the single "numeric" option.
  */
 object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -124,7 +124,7 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   // - "fractional" -> DoubleType, which lets `a / b` lower for a double operand
   //   since Python also converts to double before dividing. Python's `float` is an
   //   IEEE binary64, so DoubleType is its counterpart; FloatType has none, which is
-  //   the third exclusion below.
+  //   the second exclusion below.
   //
   // Three deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT "numeric" (nor "fractional", which it extends): Python
@@ -145,8 +145,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   type would hide the rounding for a single operation but not for a chain of
   //   them, and not the overflow at all -- and the return type isn't visible from
   //   here anyway. Float columns therefore fall back to interpreted Python.
-  // The "integer" and "float" labels remain accepted for custom transpilers.
-  // The built-in transpiler uses the richer categories above.
+  // The "integer" and "float" labels remain accepted for custom transpilers ("float" is
+  // DoubleType only, like "fractional"). The built-in transpiler uses the richer categories above.
   // - "string" requires the default UTF8_BINARY collation: under a non-binary
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
@@ -168,7 +168,7 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("integral32", ByteType | ShortType | IntegerType) => true
         case ("fractional", DoubleType) => true
         case ("integer", ByteType | ShortType | IntegerType | LongType) => true
-        case ("float", FloatType | DoubleType) => true
+        case ("float", DoubleType) => true
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
@@ -217,7 +217,7 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
  * needing a resolution rule not listed here fails `CheckAnalysis` as it did before the drop rule
  * existed, rather than analyzing wrongly.
  *
- * @param resolveReferences the Analyzer's `ResolveReferences`, shared with the Resolution batch.
+ * @param resolveReferences a `ResolveReferences`; the Analyzer builds a new one for this batch.
  * @param resolveAliases the Analyzer's `ResolveAliases`.
  * @param resolveAggregateFunctions the Analyzer's `ResolveAggregateFunctions`.
  */
@@ -250,8 +250,8 @@ class DropUnresolvedTranspiledPythonUDFOptions(
                   } else {
                     logWarning(log"Dropping ${MDC(LogKeys.COUNT, dropped.length)} transpiled " +
                       log"option(s) for Python UDF ${MDC(LogKeys.FUNCTION_NAME, t.name)}; " +
-                      log"${MDC(LogKeys.COUNT, kept.length)} option(s) remain. First dropped: " +
-                      log"${MDC(LogKeys.EXPR, first)}")
+                      log"${MDC(LogKeys.NUM_REMAINED, kept.length)} option(s) remain. " +
+                      log"First dropped: ${MDC(LogKeys.EXPR, first)}")
                   }
                 }
                 typed.copy(transpiledOptions = kept)

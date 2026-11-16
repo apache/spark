@@ -149,7 +149,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
             # Count EvalPython nodes rather than matching "UDF" as a substring:
-            # the NULL guard's raise_error renders as USER_RAISED_EXCEPTION.
+            # the NULL guard's raise_error message says "Python UDF transpiler".
             self.assertEqual(0, self._eval_python_count(transformed_df))
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
@@ -235,6 +235,25 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 else:
                     self.assertEqual(len(messages), 1)
                     self.assertIn(repr(unknown), messages[0])
+
+    def test_custom_transpiler_without_func_keyword_still_runs(self):
+        # `func` was added to `_transpile_from_ast` after the fact. An override without it
+        # must be called as written, not fed the keyword and have every option dropped.
+        from unittest import mock
+
+        from pyspark.sql.functions import lit
+        from pyspark.sql.transpile import AbstractTranspiler, _transpile_func
+
+        class NoFunc(AbstractTranspiler):
+            def _transpile_from_ast(
+                self, src, ast_info, function_ast, params, returnType, param_categories=None
+            ):
+                return lit(1)
+
+        with mock.patch("pyspark.sql.transpile._get_transpilers", return_value=[NoFunc()]):
+            options, errors, *_ = _transpile_func(self.spark, _times_two, LongType())
+        self.assertEqual([], errors)
+        self.assertTrue(options, "the old-signature transpiler was never called")
 
     def test_udf_transpile_does_not_mask_char_varchar_ddl(self):
         # DDL CHAR/VARCHAR is parsed via ``returnType`` inside the optional
@@ -1143,9 +1162,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_falls_back_for_uncastable_return_type(self):
         # The lowered expression is cast to the declared return type; a return
         # type no atomic lowering can be cast to (maps, structs, datetimes, ...)
-        # would make that Cast fail CheckAnalysis and break the whole query
-        # (the options are children of TranspiledPythonUDF), so such UDFs must
-        # fall back at construction instead. Arrays of atomic elements are let
+        # gets an option that never resolves. The drop rule would discard it,
+        # but it is a safety net, so such UDFs fall back at construction
+        # instead of emitting one. Arrays of atomic elements are let
         # through the outer gate (other transpiler varieties can produce full
         # array-typed expressions), but the CatalystTranspiler's per-variant
         # body-category check still refuses every array-typed body, so an
@@ -1198,6 +1217,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 list_udf = UserDefinedFunction(list_body, ArrayType(LongType()))
             self.assertEqual([], list_udf.transpiled, "array-typed body must fail closed")
             df = self.spark.createDataFrame([Row(a=1), Row(a=None)])
+            self.assertEqual(0, self._eval_python_count(df.select(null_udf("a"))))
             self.assertEqual(
                 [None, None],
                 [r[0] for r in df.select(null_udf("a")).collect()],
@@ -2676,6 +2696,22 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self._raises(strlen, "a string", [(None,)], needle="len()")
         self._raises(strlen, "a long", [(5,)], needle="")
 
+    def test_udf_transpile_len_feeds_the_integral_lowerings(self):
+        # len() is an int, so `//`, `&`, `<<` and round() take it natively. Reporting it as the
+        # unrefined "numeric" would drop those options and fall back, with the values still right.
+        L = LongType()
+        floordiv = lambda s: len(s) // 2  # noqa: E731
+        bit_and = lambda s: len(s) & 6  # noqa: E731
+        shift = lambda s: len(s) << 2  # noqa: E731
+        rounded = lambda s: round(len(s), -1)  # noqa: E731
+        rows = [("",), ("ab",), ("hello",), ("a" * 15,)]
+        for func in (floordiv, bit_and, shift, rounded):
+            with self.subTest(func=func):
+                self.assertEqual(
+                    self._native_vals(func, L, "s string", rows),
+                    [func(s) for (s,) in rows],
+                )
+
     def test_udf_transpile_string_operands_fall_back(self):
         # Operand/type combos with no valid string lowering for the bound column
         # types fall back to the Python UDF, which raises the same way CPython does:
@@ -3086,10 +3122,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # signs differ -- the four cases Python's floor division rounds away from
         # `div`'s truncation. Pin each sign combination, the LongType width
         # boundary (the halved range keeps `MinValue // -1` out, but the
-        # near-edge values still exercise the widening cast `div` does), and a
-        # NULL operand (transpiled NULL, interpreted raises -- the harness
-        # accepts that as the ANSI tier, but the transpiled side must not
-        # diverge on a non-NULL row).
+        # near-edge values still exercise the widening cast `div` does).
         L = LongType()
         fdiv = lambda a, b: a // b  # noqa: E731
         self.assertEqual(
@@ -3358,7 +3391,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             pudf = UserDefinedFunction(_repeat_with_condition, StringType())
             self.assertTrue(pudf.transpiled)
             df = self.spark.createDataFrame([Row(s="ab", n=2.0)])
-            self.assertEqual(["abab"], [r[0] for r in df.select(pudf("s", "n")).collect()])
+            projected = df.select(pudf("s", "n"))
+            self.assertEqual(0, self._eval_python_count(projected), "the option was pruned")
+            self.assertEqual(["abab"], [r[0] for r in projected.collect()])
 
     def test_udf_transpile_integer_eq_no_nan_guard(self):
         # `a == b` on BIGINT columns must NOT emit a NaN guard. Integers can never

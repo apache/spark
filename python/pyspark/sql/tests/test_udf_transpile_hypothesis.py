@@ -38,9 +38,9 @@ it. So the numeric tests here come in four flavours, and a lowering needs all
 four before we can claim it's bounded correctly:
 
 1. **Inside the region**, across every column width the category admits, not
-   just ``LongType``. The widening casts in ``**`` and the shifts exist for
-   tinyint columns specifically, so a suite that only ever binds bigints never
-   executes the reason they're there.
+   just ``LongType``. Operand promotion (``+``, ``-``, ``*``, ``**``, ``abs``) and
+   the shifts' widening cast exist for narrow columns specifically, so a suite
+   that only ever binds bigints never executes the reason they're there.
 2. **Across the whole value space** of the category, which for doubles means
    NaN and both infinities -- previously excluded outright because ``nan !=
    nan`` made the differential fail on its own terms. ``_values_equal`` fixes
@@ -84,9 +84,10 @@ To run locally::
 
 Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test example count
 (default 1000). Each generated example runs two full Spark jobs (a
-transpiled-vs-interpreted differential), so CI caps this at 10 via
-``build_and_test.yml`` to stay under ``PYSPARK_TEST_TIMEOUT``; the explicit
-``@example`` edge seeds always run on top of the generated ones regardless.
+transpiled-vs-interpreted differential), so CI caps this at 20 via
+``build_and_test.yml`` (the ``pyspark-sql-slow`` job, which has its own larger
+``PYSPARK_TEST_TIMEOUT``); the explicit ``@example`` edge seeds always run on top
+of the generated ones regardless.
 The non-raising single-argument tests pack ``_BATCH`` rows into one
 multi-row DataFrame per example, so one collect per side checks ``_BATCH``
 inputs at the cost of two jobs instead of two per row.
@@ -478,15 +479,15 @@ if _have_hypothesis:
     # Every integral width the "integral" category admits, with the largest
     # magnitude each one holds. The suite above binds LongType almost
     # exclusively, which quietly skips the narrow-column reasoning the
-    # lowerings are built around: `**` and the shifts cast their operand to
-    # long *because* Multiply keeps its operands' type (so squaring a tinyint
-    # would raise overflow from |x| >= 12) and because Java masks a shift
-    # count to the operand's width (so `x >> 8` on a tinyint would be a
-    # no-op). Neither line of code is executed by a bigint column.
+    # lowerings are built around: `**` chains promoting multiplies *because*
+    # Multiply keeps its operands' type (so squaring a tinyint would raise
+    # overflow from |x| >= 12), and the shifts cast their operand to long because
+    # Java masks a shift count to the operand's width (so `x >> 32` on an int
+    # would be a no-op). A bigint column executes neither.
     # Each width's full inclusive range -- asymmetric, because two's complement is:
     # writing 2**7 - 1 for both ends would never generate -128, and the negative
-    # extreme is the more interesting one (`abs(Byte.MinValue)` and
-    # `Byte.MinValue // -1` are the overflow cases Python doesn't have).
+    # extreme is the more interesting one (`abs` and negation have no positive
+    # counterpart for it, and `Long.MinValue // -1` overflows where Python doesn't).
     _INTEGRAL_WIDTHS = (
         (ByteType(), -(2**7), 2**7 - 1),
         (ShortType(), -(2**15), 2**15 - 1),
@@ -516,8 +517,8 @@ if _have_hypothesis:
         so the boundary itself no longer raises; ``headroom=4`` bounds the
         tested interior, and the remaining return-type overflow is pinned by
         ``test_overflow_only_raises_when_the_return_type_cannot_hold_it``.
-        A byte or short column widens to IntegerType and cannot overflow,
-        which is exactly why a single flat ``cap`` is the wrong tool here.
+        A byte or short column is widened past anything ``x + 4`` can reach and
+        cannot overflow, which is exactly why a flat ``cap`` is the wrong tool here.
         """
         dtype, low, high = draw(st.sampled_from(widths))
         if cap is not None:
@@ -555,11 +556,10 @@ if _have_hypothesis:
     def _integral_sum_pair(draw, widths=_INTEGRAL_WIDTHS):
         """Two values of one width whose sum or difference stays inside it.
 
-        Two same-width columns coerce to that width, so ``x + y`` on two
-        tinyints is ByteType arithmetic and raises past 127 where Python just
-        keeps counting -- and an overflowing example is unusable rather than
-        merely awkward (the transpiled side raises while the interpreted side
-        returns NULL, so ``_run``'s "both raised" equivalence never fires).
+        Promotion widens two narrow columns past their sum, so only bigint can
+        still overflow ``x + y`` -- and an overflowing example is unusable rather
+        than merely awkward (the transpiled side raises while the interpreted
+        side returns NULL, so ``_run``'s "both raised" equivalence never fires).
         Halving each operand's range makes every sum and difference safe.
         """
         dtype, low, high = draw(st.sampled_from(widths))
@@ -588,8 +588,8 @@ if _have_hypothesis:
         The full width range is safe for a bare ``x / y``, because ``Divide``
         promotes to double and so cannot overflow the column type. ``cap`` is for
         bodies that do integer arithmetic *around* the division (``(x + 1) / (y -
-        1)``), where ANSI keeps the intermediates in IntegerType and would raise
-        at the boundary while Python carries on.
+        1)``); promotion carries those intermediates past the column's width, so
+        it only keeps the operands off the width boundary.
         """
         dtype, low, high = draw(st.sampled_from(widths))
         if cap is not None:
@@ -658,10 +658,10 @@ if _have_hypothesis:
     # never produce a small number next to a large one.
     #
     # Every cell is bounded so a pairwise sum stays inside IntegerType
-    # (2**30 - 1 twice is 2**31 - 2, one under Integer.MaxValue). An overflowing
-    # row is not a usable differential -- it raises on the transpiled side and
-    # nulls on the interpreted one -- so the overflow case gets its own pin
-    # instead, test_mixed_magnitude_overflow_fails_the_whole_query.
+    # (2**30 - 1 twice is 2**31 - 2, one under Integer.MaxValue). Promotion would
+    # carry a bigger sum, but this is about row independence, not width; the
+    # overflow edge has its own pin,
+    # test_overflow_only_raises_when_the_return_type_cannot_hold_it.
     _SUM_SAFE_CELL = 2**30 - 1
     _MAGNITUDE_SAMPLES = (
         0,
@@ -741,9 +741,9 @@ if _have_hypothesis:
         st.none(), st.floats(allow_nan=False, allow_infinity=False, width=32)
     )
     # Shift counts wide enough to matter on a narrow column: 8 clears a tinyint,
-    # 16 a smallint and 32 an int, and each is a point where Java's masking would
-    # turn the shift into a no-op and hand back the operand unchanged if the
-    # lowering hadn't widened it to a long first.
+    # 16 a smallint and 32 an int. Python shifts by the full count, where Java
+    # masks an int shift's count to 5 bits (so 32 is a no-op), which is why the
+    # lowering widens the operand to a long first.
     #
     # `<<` gets its own, narrower pair of bounds for the same reason
     # `_lshift_count_strategy` caps at 30: an overflowing `<<` raises on the
@@ -761,7 +761,7 @@ if _have_hypothesis:
         ((ByteType(), None), None),
         ((ByteType(), 1), 0),
         ((ByteType(), 1), 7),
-        ((ByteType(), 1), 8),  # clears a tinyint; masked to a no-op if unwidened
+        ((ByteType(), 1), 8),  # clears a tinyint's width
         ((ByteType(), 127), 8),
         ((ByteType(), -128), 8),
         ((ByteType(), 1), 40),
@@ -995,8 +995,8 @@ def round_to_tens(x):
 
 
 def add_pair(x, y):
-    # Unguarded `x + y`, unlike `add_two` above, so two same-width narrow
-    # columns really do run their arithmetic at that width.
+    # Unguarded `x + y`, unlike `add_two` above, so a NULL cell reaches the
+    # lowering and two same-width narrow columns reach the promotion.
     return x + y
 
 
@@ -1020,7 +1020,7 @@ def double_mix(x):
 
 def pow_one(x):
     # The degenerate expansion: `x ** 1` is zero multiplications, so the
-    # lowering has to return the (widened) base and not a stray `lit(1)`.
+    # lowering has to return the base itself and not a stray `lit(1)`.
     return x**1
 
 
@@ -1041,16 +1041,16 @@ def pow_negative(x):
 
 
 def compound_integral(x, y):
-    # Several lowerings in one body, which is what `_record_narrowing`'s
-    # "narrowest requirement wins" rule is for: the shift and `//` both
-    # constrain their operands, and `abs` wraps the result of one of them.
+    # Several lowerings in one body: the shift and `//` both need integral
+    # operands, and `abs` wraps the result of one of them. Each parameter is
+    # narrowed once, so `_record_narrowing`'s conjunction rule is not in play.
     return abs(x // 3) + (y >> 2) * 2
 
 
 def int32_div_expr(x, y):
     # `/` over compound integral operands rather than bare parameters, so
     # `_int32_exact` has to walk into the arithmetic to prove both sides stay
-    # inside IntegerType. A `y` of 1 divides by zero, which raises on both sides.
+    # exact as doubles. A `y` of 1 divides by zero, which raises on both sides.
     return (x + 1) / (y - 1)
 
 
@@ -1141,8 +1141,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         differential assertion would succeed for the wrong reason.
 
         ``all_rows`` returns the whole column from each side instead of just the
-        first row. Nearly every test here binds a one-row DataFrame, which cannot
-        see anything that goes wrong *across* rows -- a lowering that hoisted a
+        first row. A one-row DataFrame cannot see anything that goes wrong
+        *across* rows, and many tests here bind one -- a lowering that hoisted a
         per-row branch to a per-batch one, say, or arithmetic whose behaviour
         depends on the other values in the batch. Use it whenever the point of
         the test is that rows are computed independently of one another.
@@ -1205,9 +1205,9 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 interpreted_value = _SENTINEL_RAISED
                 interpreted_error = e
 
-        # If the transpiled path raises, the interpreted path has to raise too. The converse does
-        # not hold: where Python raises, the transpiled path may legitimately return a value --
-        # that is the ANSI-overflow tier, where promotion is the whole point.
+        # A transpiled raise needs an interpreted raise too: an overflow only the transpiled side
+        # hits (the tier-2 rows) is not a usable example. The converse is waved through -- where
+        # only the Python body raises, the transpiled value stands in, so that row is not compared.
         if transpiled_error is not None:
             self.assertIsNotNone(
                 interpreted_error,
@@ -1264,8 +1264,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         """Two nullable columns of independently chosen types.
 
         The shifts need this: the operand's width is the whole point of a narrow
-        column test, but the *count* has to be able to hold values past that
-        width (a shift of 32 on a tinyint column), and a tinyint count cannot.
+        column test, so the *count* column stays IntegerType instead of following it.
         """
         schema = StructType(
             [
@@ -1299,23 +1298,24 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         reference.
 
         The "nothing was lowered" half reads the executed plan rather than
-        ``udf.transpiled``, because there are two routes out of the region and
+        ``udf.transpiled``, because there are three routes out of the region and
         only one of them is visible at construction time: an option can be
-        refused by the transpiler (``transpiled`` is empty), or emitted and then
+        refused by the transpiler (``transpiled`` is empty), emitted and then
         pruned during analysis when its declared categories don't match the
-        bound columns -- which is how bigint and FloatType columns drop out.
+        bound columns -- which is how bigint and FloatType columns drop out -- or
+        emitted, matched and then dropped by ``DropUnresolvedTranspiledPythonUDFOptions``
+        because it never resolves.
 
         ``args`` are the same values the columns hold, passed to ``func``
         directly so CPython is the oracle.
 
-        ``route`` pins *which* of the two it was, and is worth setting whenever
-        the answer is the point of the test. Without it, a transpiler that has
-        stopped working altogether -- refusing every numeric body -- satisfies
-        every assertion here, because one EvalPython node is one EvalPython node
-        however it got there. ``"pruned"`` in particular is what asserts that the
-        transpiler still emits an option and ``ResolveTranspiledPythonUDFOptions``
-        is the thing rejecting it, which is the whole content of a column-type
-        exclusion like FloatType's.
+        ``route`` pins whether the transpiler refused, and is worth setting
+        whenever the answer is the point of the test. Without it, a transpiler
+        that has stopped working altogether -- refusing every numeric body --
+        satisfies every assertion here, because one EvalPython node is one
+        EvalPython node however it got there. ``"pruned"`` asserts only that the
+        transpiler still emits an option, so it separates a refusal from analysis
+        rejecting the option, but not pruning from the drop rule.
         """
         self.assertEqual(
             len(columns),
@@ -1794,8 +1794,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(cols=_integral_sum_pair())
         @_seed_examples(_WIDTH_SUM_PAIR_EDGES, key="cols")
         def test_add_pair_across_integral_widths(self, cols):
-            # Two columns of the same narrow width, so the addition really happens
-            # at that width rather than being promoted by a literal.
+            # Two columns of one width, so promotion has to widen both operands
+            # rather than just aligning one to a literal.
             dtype, x, y = cols
             df = self._two_arg_df(x, y, dtype)
             transpiled, interpreted = self._run(add_pair, LongType(), df, "a", "b")
@@ -1844,10 +1844,10 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(cols=_integral_column_batch(cap=2**31))
         @_seed_width_list_examples(_WIDTH_EDGES)
         def test_square_across_integral_widths(self, cols):
-            # This is the test the widening cast in `_lower_int_pow` exists for.
-            # `Multiply` keeps its operands' type, so without `cast("long")` this
-            # would raise ARITHMETIC_OVERFLOW from |x| >= 12 on a tinyint and
-            # |x| >= 46341 on an int -- ranges Python handles without blinking.
+            # This is the test the promoting multiplies in `_lower_int_pow` exist for.
+            # `Multiply` keeps its operands' type, so a plain one would raise
+            # ARITHMETIC_OVERFLOW from |x| >= 12 on a tinyint and |x| >= 46341 on
+            # an int -- ranges Python handles without blinking.
             dtype, values = cols
             df = self._multi_row_single_arg_df(values, dtype)
             transpiled, interpreted = self._run(square, LongType(), df, "a", all_rows=True)
@@ -1860,7 +1860,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_seed_width_list_examples(_WIDTH_EDGES)
         def test_pow_one_across_integral_widths(self, cols):
             # The degenerate expansion: zero multiplications, so the lowering has
-            # to hand back the widened base. Folding to `lit(1)` here would be the
+            # to hand back the base. Folding to `lit(1)` here would be the
             # obvious off-by-one, and the full width range catches it.
             dtype, values = cols
             df = self._multi_row_single_arg_df(values, dtype)
@@ -1969,8 +1969,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         def test_left_shift_narrow_column(self, cols, count):
             # Byte/Short operands only, so a count of 40 still fits in a Long and
             # the differential stays usable -- see _NARROW_LSHIFT_WIDTHS. Counts
-            # past the operand's own width are the point: Java would mask `x << 8`
-            # on a tinyint down to a no-op, and Python shifts by the full count.
+            # past the operand's own width are the point: Python shifts by the full
+            # count, where an unwidened int shift masks a count of 32 or more.
             dtype, value = cols
             df = self._typed_two_arg_df(value, count, dtype, IntegerType())
             transpiled, interpreted = self._run(left_shift, LongType(), df, "a", "b")
@@ -1985,9 +1985,9 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_seed_pair_examples(_NARROW_RSHIFT_EDGES, keys=("cols", "count"))
         def test_right_shift_narrow_column(self, cols, count):
             # `>>` only shrinks the magnitude, so every width is safe here, over the
-            # full count range. A count at or past the width must shift every bit
-            # out (0, or -1 for a negative operand) rather than being masked into a
-            # no-op -- which on a tinyint means a count of 8, not 64.
+            # full count range. A count at or past 64, the width the lowering shifts
+            # at, must shift every bit out (0, or -1 for a negative operand) rather
+            # than being masked into a no-op.
             dtype, value = cols
             df = self._typed_two_arg_df(value, count, dtype, IntegerType())
             transpiled, interpreted = self._run(right_shift, LongType(), df, "a", "b")
@@ -2001,11 +2001,10 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(cols=_integral_sum_pair())
         @_seed_examples(_WIDTH_SUM_PAIR_EDGES, key="cols")
         def test_compound_integral_expression(self, cols):
-            # `abs(x // 3) + (y >> 2) * 2` -- several lowerings in one body, which
-            # is what `_record_narrowing`'s "narrowest requirement wins" rule
-            # exists for. If any one of them narrowed its parameter wrongly the
-            # option would be kept for a column type it can't reproduce, and this
-            # is where that shows up as a value mismatch rather than a crash.
+            # `abs(x // 3) + (y >> 2) * 2` -- several lowerings in one body. If
+            # any one of them narrowed its parameter wrongly the option would be
+            # kept for a column type it can't reproduce, and this is where that
+            # shows up as a value mismatch rather than a crash.
             dtype, x, y = cols
             df = self._two_arg_df(x, y, dtype)
             transpiled, interpreted = self._run(compound_integral, LongType(), df, "a", "b")
@@ -2028,7 +2027,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         def test_int32_div_expression(self, cols):
             # `/` over compound operands rather than bare parameters, so
             # `_int32_exact` has to walk into the arithmetic to prove both sides
-            # stay inside IntegerType. `y == 1` divides by zero on both sides.
+            # stay exact as doubles. `y == 1` divides by zero on both sides.
             dtype, x, y = cols
             df = self._two_arg_df(x, y, dtype)
             transpiled, interpreted = self._run(int32_div_expr, DoubleType(), df, "a", "b")
@@ -2042,11 +2041,12 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(rows=_mixed_magnitude_rows)
         @_seed_examples(_MIXED_ROW_EDGES, key="rows")
         def test_mixed_magnitude_rows_compute_independently(self, rows):
-            # The batch-independence property. Every other differential in this
-            # file binds a single row, which cannot distinguish "computed this row
-            # correctly" from "computed something correct for the batch". Here one
-            # column holds values from 0 up to Integer.MaxValue/2, and each row has
-            # to come back exactly as it would have alone.
+            # The batch-independence property. A single-row differential cannot
+            # distinguish "computed this row correctly" from "computed something
+            # correct for the batch", and the `_BATCH` ones rarely put a small value
+            # next to a large one. Here one column holds values from 0 up to
+            # Integer.MaxValue/2, and each row has to come back exactly as it would
+            # have alone.
             #
             # `add_two` rather than `add_pair` because it guards NULL itself: an
             # unguarded body raises on a NULL row (CPython's TypeError, and the
@@ -2063,13 +2063,13 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(rows=_mixed_magnitude_rows)
         @_seed_examples(_MIXED_ROW_EDGES, key="rows")
         def test_mixed_magnitude_rows_across_widths(self, rows):
-            # The same property where the column type is narrower than the values
-            # being added, so the arithmetic runs at a width the operands do not
-            # fill. `x + y` on two tinyints is ByteType arithmetic; scaling the
-            # generated values down keeps every row in range while preserving the
-            # spread of magnitudes relative to the width. Preserve the sign so
-            # the negative half of the value space is covered -- `x % (limit+1)`
-            # alone maps everything to [0, limit] and never exercises negatives.
+            # The same property on narrow columns, where promotion widens the
+            # arithmetic past what the operands fill: `x + y` on two tinyints runs
+            # in ShortType. Scaling the generated values down keeps every row inside
+            # the column type while preserving the spread of magnitudes relative to
+            # the width. Preserve the sign so the negative half of the value space
+            # is covered -- `x % (limit+1)` alone maps everything to [0, limit] and
+            # never exercises negatives.
             for dtype, limit in ((ByteType(), 63), (ShortType(), 16383)):
                 scaled = [
                     (
@@ -2158,9 +2158,10 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         def test_bigint_true_div_falls_back(self, x, y):
             # The far side of the int32 boundary. Python divides the exact integers
             # and rounds once; Spark casts each operand to double first, so past
-            # 2^53 the operands themselves have already been rounded. Only the
-            # int32 option is emitted, and it does not match a bigint column -- so
-            # this falls back by *pruning*, which is what `route="pruned"` pins.
+            # 2^53 the operands themselves have already been rounded. Options are
+            # emitted for every integral/fractional pairing, but none matches two
+            # bigint columns -- so this falls back by *pruning*, which is what
+            # `route="pruned"` pins.
             df = self._two_long_arg_df(x, y)
             self._assert_falls_back_to_cpython(
                 true_div_pair,
@@ -2293,11 +2294,12 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         #
         # They take no `@given`, so the `RUN_HYPOTHESIS` gate isn't buying them
         # anything -- but it isn't costing much either: `build_and_test.yml` flips
-        # that gate on precisely when a PR touches the transpiler or this file,
-        # which is when a divergence pin has something to say. They live here
-        # rather than in the unit suite to keep the four bounds flavours readable
-        # as one story; if the gate ever stops tracking transpiler changes, move
-        # them to `test_udf_transpile_unit.py`, which runs unconditionally.
+        # that gate on when a changed path matches `*transpile*` (transpile.py and
+        # this file, though not the Scala expressions behind it), which is when a
+        # divergence pin has something to say. They live here rather than in the
+        # unit suite to keep the four bounds flavours readable as one story; if the
+        # gate ever stops tracking transpiler changes, move them to
+        # `test_udf_transpile_unit.py`, which runs unconditionally.
 
         def test_mod_zero_sign_is_semantically_equal(self):
             # Tier 1 (semantically equal). `_python_mod` gives a zero result the
@@ -2350,10 +2352,10 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
 
         def test_abs_at_the_bigint_minimum_exceeds_the_return_type(self):
             # The one width promotion cannot rescue, and it is worth being explicit
-            # about why: `forNegation(LongType)` is decimal(19, 0), so the `abs` itself
-            # succeeds -- it is the cast back to the UDF's declared LongType that
-            # fails, because 9223372036854775808 is one past Long.MaxValue. No
-            # intermediate width fixes that; only declaring a wider return type would.
+            # about why: `forNegation(LongType)` is empty, since nothing is wider than
+            # a bigint, so `Abs` itself raises ARITHMETIC_OVERFLOW -- 9223372036854775808
+            # is one past Long.MaxValue, and a UDF declared `-> LongType` could not
+            # return it however wide we computed.
             #
             # Interpreted Python returns NULL here rather than raising (makeFromJava
             # takes only Byte/Short/Int/Long for LongType, and a wider Python int
@@ -2375,7 +2377,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 self.assertTrue(udf.transpiled)
                 with self.assertRaises(Exception) as ctx:
                     df.select(udf("a")).collect()
-            self.assertIn("overflow", str(ctx.exception).lower())
+            self.assertIn("ARITHMETIC_OVERFLOW", str(ctx.exception))
 
         def test_overflow_only_raises_when_the_return_type_cannot_hold_it(self):
             # This was the sharpest edge in the numeric surface, and promotion blunted
@@ -2391,10 +2393,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # What remains is a much narrower and more honest failure: the answer really
             # does not fit what the UDF declared it returns. `x * 3` on a bigint at
             # Long.MaxValue/2 is 13835058055282163709, past Long.MaxValue, so a UDF
-            # declared `-> LongType` cannot produce it however wide we compute. Note the
-            # error moved with the cause -- it is CAST_OVERFLOW at the final cast now,
-            # not ARITHMETIC_OVERFLOW at the multiply, because the multiply itself
-            # succeeds in decimal(29, 0).
+            # declared `-> LongType` cannot produce it. Promotion stops at LongType,
+            # so the multiply itself raises ARITHMETIC_OVERFLOW.
             #
             # Interpreted Python does not raise here; it returns NULL, because
             # `EvaluatePython.makeFromJava` accepts only Byte/Short/Int/Long for
@@ -2431,7 +2431,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 self.assertTrue(udf.transpiled)
                 with self.assertRaises(Exception) as ctx:
                     df.select(udf("a")).collect()
-            self.assertIn("overflow", str(ctx.exception).lower())
+            self.assertIn("ARITHMETIC_OVERFLOW", str(ctx.exception))
 
         def test_nan_comparison_matches_python(self):
             # This one used to be a tier-2 pin, asserting that transpiled
