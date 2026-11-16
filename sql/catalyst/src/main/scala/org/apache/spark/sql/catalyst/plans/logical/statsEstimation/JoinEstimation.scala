@@ -59,8 +59,10 @@ case class JoinEstimation(join: Join) extends Logging {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
       val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
-      val leftSideUniqueness = left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys)))
-      val rightSideUniqueness = right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys)))
+      val leftSideUniqueness = left.distinctKeys.exists(
+        _.subsetOf(ExpressionSet(leftKeys.map(stripCastToPlainString))))
+      val rightSideUniqueness = right.distinctKeys.exists(
+        _.subsetOf(ExpressionSet(rightKeys.map(stripCastToPlainString))))
       val (numInnerJoinedRows, keyStatsAfterJoin) =
         computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
 
@@ -354,7 +356,9 @@ case class JoinEstimation(join: Join) extends Logging {
   private def extractJoinKeysWithColStats(
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
-    leftKeys.zip(rightKeys).collect {
+    leftKeys.zip(rightKeys).map { case (lk, rk) =>
+      (stripCastToPlainString(lk), stripCastToPlainString(rk))
+    }.collect {
       // Currently we don't deal with equal joins like key1 = key2 + 5.
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.

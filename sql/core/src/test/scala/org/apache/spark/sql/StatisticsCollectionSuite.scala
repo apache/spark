@@ -296,10 +296,15 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {
         val tableName = "char_varchar_first_class_stats"
-        withTable(tableName) {
+        val stringTable = "char_varchar_first_class_strings"
+        withTable(tableName, stringTable) {
           sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
-          sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING) FROM range(1000)")
+          sql(s"CREATE TABLE $stringTable(s STRING) USING parquet")
+          Seq(tableName, stringTable).foreach { t =>
+            sql(s"INSERT INTO $t SELECT CAST(id % 10 AS STRING) FROM range(1000)")
+          }
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+          sql(s"ANALYZE TABLE $stringTable COMPUTE STATISTICS FOR COLUMNS s")
 
           val clue = s"${mode.key}, $colType"
           assert(estimatedRows(s"SELECT c, count(*) FROM $tableName GROUP BY c") {
@@ -311,6 +316,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
                 case f: Filter => f
               }.contains(BigInt(expectedRows)), s"$clue, $condition")
           }
+          // The join key of the CHAR/VARCHAR column is cast to STRING.
+          assert(estimatedRows(s"SELECT * FROM $tableName JOIN $stringTable ON c = s") {
+            case j: Join => j
+          }.contains(BigInt(100000)), clue)
         }
       }
     }

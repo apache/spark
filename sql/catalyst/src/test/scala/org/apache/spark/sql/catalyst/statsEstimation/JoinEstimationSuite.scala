@@ -22,7 +22,7 @@ import java.time.LocalTime
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, EqualTo, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, Cast, EqualTo, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{DefaultValueInterval, NullValueInterval, ValueInterval}
@@ -698,7 +698,31 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       assert(joinRows(stat).contains(BigInt(10)))
       // Keys without non-null values match no rows.
       assert(joinRows(nullStat).contains(BigInt(0)))
+
+      // Under first-class CHAR/VARCHAR types a key compared with a STRING key is cast to it.
+      val left = checkedSide(column("l", 5), stat)
+      val s = AttributeReference("s", StringType)()
+      val right = StatsTestPlan(Seq(s), 10, AttributeMap(Seq(s -> stat)))
+      assert(Join(left, right, Inner, Some(EqualTo(Cast(left.output.head, StringType), s)),
+        JoinHint.NONE).stats.rowCount.contains(BigInt(10)))
+      // A side unique on its key bounds the join by the rows of the other side, which has no
+      // column stats here, also when its key is cast.
+      val grouped = Aggregate(left.output, left.output, left)
+      val noColumnStats = StatsTestPlan(Seq(s), 1000, AttributeMap(Nil))
+      assert(Join(grouped, noColumnStats, Inner,
+        Some(EqualTo(Cast(grouped.output.head, StringType), s)), JoinHint.NONE).stats.rowCount
+        .contains(BigInt(1000)))
     }
+    // A cast of a column of another type to STRING is not stripped: 10 x 10 rows are estimated
+    // as the cartesian product.
+    val i = attr("i")
+    val intSide = StatsTestPlan(Seq(i), 10, AttributeMap(Seq(i -> ColumnStat(
+      distinctCount = Some(10), min = Some(1), max = Some(10), nullCount = Some(0),
+      avgLen = Some(4), maxLen = Some(4)))))
+    val s = AttributeReference("s", StringType)()
+    val stringSide = StatsTestPlan(Seq(s), 10, AttributeMap(Seq(s -> stat)))
+    assert(Join(intSide, stringSide, Inner, Some(EqualTo(Cast(i, StringType), s)),
+      JoinHint.NONE).stats.rowCount.contains(BigInt(100)))
   }
 
   test("SPARK-61002: a join key without min/max is not taken as holding only nulls") {

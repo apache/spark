@@ -1038,6 +1038,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       CharVarcharUtils.CHAR_TYPE_READ_SIDE_CHECK, attrString :: Literal(2) :: Nil)
     assert(Filter(EqualTo(otherClass, Literal("A0")), child).stats.rowCount
       .contains(BigInt(10)))
+    // A cast of a column of another type to STRING is not stripped, so all 10 rows are kept.
+    val intChild = childStatsTestPlan(Seq(attrInt), tableRowCount = 10L)
+    assert(Filter(EqualTo(Cast(attrInt, StringType), Literal("1")), intChild).stats.rowCount
+      .contains(BigInt(10)))
   }
 
   test("SPARK-60810: equality on a string or binary column with a reported histogram") {

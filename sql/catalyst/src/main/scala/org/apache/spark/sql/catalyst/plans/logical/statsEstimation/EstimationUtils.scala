@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Cast, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{DecimalType, _}
@@ -126,6 +126,17 @@ object EstimationUtils {
     } else {
       stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
     }
+  }
+
+  /**
+   * Strips a cast of a CHAR, VARCHAR or STRING value to a STRING of the same collation, such as
+   * the one a comparison with a STRING adds when CHAR and VARCHAR are first-class types. Such a
+   * cast returns the value unchanged.
+   */
+  def stripCastToPlainString(e: Expression): Expression = e match {
+    case Cast(child, to: StringType, _, _) if StringHelper.plainStringType(child.dataType) == to =>
+      child
+    case _ => e
   }
 
   def getSizePerRow(
