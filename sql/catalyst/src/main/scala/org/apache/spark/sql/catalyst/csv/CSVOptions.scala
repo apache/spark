@@ -362,11 +362,8 @@ class CSVOptions(
       .map(_ => getBool(VARIANT_PRIMITIVES_AS_STRING))
 
   // When true, CSV values read into a VARIANT are stored as strings instead of a type inferred
-  // from their text. See `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`. When the option is not
-  // set, it falls back to the deprecated `variantRespectInferSchema` option, which keeps values as
-  // strings only together with `inferSchema=false`.
-  val variantPrimitivesAsString: Boolean = variantPrimitivesAsStringOpt.getOrElse(
-    getBool(VARIANT_RESPECT_INFER_SCHEMA) && !inferSchemaFlag)
+  // from their text. See `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`.
+  val variantPrimitivesAsString: Boolean = variantPrimitivesAsStringOpt.getOrElse(false)
 
   def needHeaderForSingleVariantColumn: Boolean =
     singleVariantColumn.isDefined && headerFlag
@@ -477,9 +474,6 @@ object CSVOptions extends DataSourceOptions {
   val COLUMN_PRUNING = newOption("columnPruning")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
   val VARIANT_PRIMITIVES_AS_STRING = newOption(DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING)
-  // Deprecated: use `variantPrimitivesAsString` instead. Still honored when that option is not
-  // set; see `CSVOptions.variantPrimitivesAsString`.
-  val VARIANT_RESPECT_INFER_SCHEMA = newOption("variantRespectInferSchema")
 
   // Max error content length in CSV parser/writer exception messages, and the bound on the bad
   // record embedded in MALFORMED_CSV_RECORD errors.

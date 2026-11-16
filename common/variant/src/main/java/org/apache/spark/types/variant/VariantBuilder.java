@@ -51,8 +51,9 @@ public class VariantBuilder {
 
   /**
    * @param primitivesAsString when true, JSON number and boolean tokens are stored as variant
-   *     strings holding their text exactly as written in the input, instead of numeric or boolean
-   *     values. JSON nulls remain variant nulls.
+   *     strings holding the parser's token text, instead of numeric or boolean values. The token
+   *     text is the input text, except that a parser configured to accept leading zeros in
+   *     numbers omits them. JSON nulls remain variant nulls.
    */
   public VariantBuilder(
       boolean allowDuplicateKeys,
@@ -109,7 +110,7 @@ public class VariantBuilder {
 
   /**
    * Similar to {@link #parseJson(JsonParser, boolean, boolean)}, but additionally controls
-   * whether JSON number and boolean tokens are stored as strings holding their input text. See
+   * whether JSON number and boolean tokens are stored as strings holding their token text. See
    * {@link #VariantBuilder(boolean, boolean, boolean)}.
    */
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
@@ -1335,7 +1336,7 @@ public class VariantBuilder {
   // Unpaired UTF-16 surrogate code units cause a `JsonParseException` to be thrown during
   // `buildJson`, which surfaces as a `MALFORMED_RECORD_IN_PARSING` error to SQL callers.
   private final boolean validateUnicodeInJsonParsing;
-  // When true, `buildJson` stores JSON number and boolean tokens as strings holding their input
-  // text. See `VariantBuilder(boolean, boolean, boolean)`.
+  // When true, `buildJson` stores JSON number and boolean tokens as strings holding the parser's
+  // token text. See `VariantBuilder(boolean, boolean, boolean)`.
   private final boolean primitivesAsString;
 }

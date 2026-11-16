@@ -114,8 +114,8 @@ Data source options of XML can be set via:
 
   <tr>
       <td><code>variantPrimitivesAsString</code></td>
-      <td><code>false</code></td>
-      <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code>, or a <code>VariantType</code> column in the schema), stores element text, attribute values and value tags as strings holding their text from the input, instead of a type inferred from that text (boolean, long or decimal). For example, <code>007</code> is kept as the string <code>"007"</code> instead of the integer <code>7</code>. Surrounding spaces are still trimmed when <code>ignoreSurroundingSpaces</code> is enabled, and null values, including those matching <code>nullValue</code>, remain variant nulls. XML built-in functions such as <code>from_xml</code> also observe this option.</td>
+      <td><code>true</code> if <code>inferSchema</code> is <code>false</code>, otherwise <code>false</code></td>
+      <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code>, or a <code>VariantType</code> column in the schema), stores element text, attribute values and value tags as strings holding their text from the input, instead of a type inferred from that text (boolean, long or decimal). For example, <code>007</code> is kept as the string <code>"007"</code> instead of the integer <code>7</code>. Surrounding spaces are still trimmed when <code>ignoreSurroundingSpaces</code> is enabled, and null values, including those matching <code>nullValue</code>, remain variant nulls. When the option is not set, values are kept as strings only if <code>inferSchema</code> is <code>false</code>; when it is set, it applies regardless of <code>inferSchema</code>, so set it to <code>false</code> to get inferred types with <code>inferSchema</code> set to <code>false</code>. XML built-in functions such as <code>from_xml</code> also observe this option.</td>
       <td>read</td>
   </tr>
 

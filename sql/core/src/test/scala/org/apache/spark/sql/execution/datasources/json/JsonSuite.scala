@@ -4876,6 +4876,27 @@ abstract class JsonSuite
     }
   }
 
+  test("json variantPrimitivesAsString with allowNumericLeadingZeros drops the leading zeros") {
+    // Jackson strips the leading zeros it accepts under ALLOW_LEADING_ZEROS_FOR_NUMBERS before
+    // exposing the token text, so the option cannot preserve them; the docs state this.
+    val record = """{"a": 007, "b": -007.50, "c": 0001e2, "d": 7}"""
+    val expected = """{"a":"7","b":"-7.50","c":"1e2","d":"7"}"""
+    val options = Map("variantPrimitivesAsString" -> "true", "allowNumericLeadingZeros" -> "true")
+    withTempDir { dir =>
+      val path = new File(dir, "file.json").getAbsolutePath
+      Files.write(new File(path).toPath, record.getBytes(StandardCharsets.UTF_8))
+      checkAnswer(
+        spark.read.format("json").options(options ++ Map("singleVariantColumn" -> "var"))
+          .load(path).selectExpr("to_json(var)"),
+        Row(expected))
+    }
+    checkAnswer(
+      Seq(record).toDF("value").select(
+        F.to_json(F.from_json($"value", StructType.fromDDL("var variant"),
+          options ++ Map("singleVariantColumn" -> "var"))("var"))),
+      Row(expected))
+  }
+
   test("from_json with variant: variantPrimitivesAsString keeps primitives as strings") {
     val df = Seq("""{"a": 1e2, "b": [true, 2], "c": NaN}""").toDF("value")
     checkAnswer(

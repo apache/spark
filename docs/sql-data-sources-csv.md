@@ -237,7 +237,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>variantPrimitivesAsString</code></td>
     <td>false</td>
-    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code>, or a <code>VariantType</code> column in the schema), stores every non-null value as a string holding its text from the input, instead of a type inferred from that text (boolean, long, decimal, date or timestamp). For example, <code>0001</code> is kept as the string <code>"0001"</code> instead of the integer <code>1</code>. Null values, including those matching <code>nullValue</code>, remain variant nulls. Unlike most options here, CSV built-in functions such as <code>from_csv</code> also observe this option.</td>
+    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code>, or a <code>VariantType</code> column in the schema), stores every non-null value as a string holding its text from the input, instead of a type inferred from that text (boolean, long, decimal, date or timestamp). For example, <code>0001</code> is kept as the string <code>"0001"</code> instead of the integer <code>1</code>. Null values, including those matching <code>nullValue</code>, remain variant nulls. CSV built-in functions such as <code>from_csv</code> also observe this option.</td>
     <td>read</td>
   </tr>
   <tr>

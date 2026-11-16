@@ -221,8 +221,9 @@ class JSONOptions(
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
   // When true, JSON number and boolean values read into a VARIANT are stored as strings holding
-  // their text exactly as written, instead of numeric or boolean values. This avoids precision
-  // loss for numbers that do not fit a variant decimal. See
+  // their text as written, instead of numeric or boolean values. This avoids precision loss for
+  // numbers that do not fit a variant decimal. The one exception is leading zeros accepted via
+  // `allowNumericLeadingZeros`, which the JSON parser drops before the text is read. See
   // `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`. Unlike `primitivesAsString`, which applies
   // to non-variant columns, it has no effect on schema inference. `variantPrimitivesAsStringOpt` is
   // None if the user did not set the option.

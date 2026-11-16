@@ -79,8 +79,9 @@ object DataSourceOptions {
   // The common option name for the text-based data sources (CSV, JSON and XML) that can read
   // records into a VARIANT, either with `singleVariantColumn` or with a VARIANT column in the
   // schema. When true, every non-null primitive value is stored in the variant as a string holding
-  // its text from the input, instead of a type inferred from that text. Nulls remain variant
-  // nulls, and objects and arrays keep their structure.
+  // its text from the input, instead of a type inferred from that text (for JSON, the text the
+  // parser reports; see `JSONOptions.variantPrimitivesAsString`). Nulls remain variant nulls, and
+  // objects and arrays keep their structure.
   val VARIANT_PRIMITIVES_AS_STRING = "variantPrimitivesAsString"
   // The common option name for all data sources that supports corrupt record. In case of a parsing
   // error, the record will be stored as a string in the column with the given name.
