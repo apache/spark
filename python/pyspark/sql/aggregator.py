@@ -45,11 +45,13 @@ class Aggregator(ABC):
     combine partial buffers in any order), and :meth:`zero` must be its identity element -- see
     :meth:`zero` for the identity law that makes the result independent of the partition count.
 
-    Over a window (``udaf(...)(...).over(window)``), :meth:`merge` is not used: each row's frame
-    is folded with :meth:`reduce` from :meth:`zero`, and :meth:`finish` produces the row's value.
-    While the frame's lower bound stays fixed, as in the default frame of an ordered window,
-    consecutive rows extend one buffer instead of refolding it, so :meth:`finish` is called on a
-    buffer that later rows keep reducing into and must not modify it.
+    Over a window (``udaf(...)(...).over(window)``), :meth:`merge` is not used. A frame that spans
+    the whole partition, as that of a window without ``orderBy``, is folded with :meth:`reduce`
+    from :meth:`zero` once, and its :meth:`finish` value is repeated for every row. Otherwise,
+    each row's frame is folded and finished. While the frame's lower bound stays fixed, as in the
+    default frame of an ordered window, consecutive rows extend one buffer instead of refolding
+    it, so :meth:`finish` is called on a buffer that later rows keep reducing into and must not
+    modify it.
 
     .. versionadded:: 4.4.0
 
@@ -136,10 +138,11 @@ class Aggregator(ABC):
 
     @abstractmethod
     def finish(self, buffer: Tuple[Any, ...]) -> Any:
-        """Produce the output value from the final merged buffer.
+        """Produce the output value from ``buffer``: the merged buffer of a group, or the
+        folded buffer of a window frame.
 
-        It must not modify ``buffer``: over a window, it is called once per row on a buffer that
-        later rows keep reducing into.
+        It must not modify ``buffer``: over a window, later rows can keep reducing into the
+        buffer that it is called on.
         """
         ...
 

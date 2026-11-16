@@ -27,6 +27,8 @@ unregistered.
 
 from __future__ import annotations
 
+import datetime
+import decimal
 import inspect
 import itertools
 import os
@@ -591,27 +593,111 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
             yield ArrowBatchTransformer.enforce_schema(batch, self._return_schema)
 
 
-def _may_be_mutable_python_value(arrow_type: pa.DataType) -> bool:
-    """Whether a Python value of ``arrow_type`` can be a mutable object -- a list, a dict, a
-    tuple holding one, or a bytearray -- rather than an immutable scalar."""
+# Python scalar types whose values are immutable; see ``_is_immutable_python_value``.
+_IMMUTABLE_PYTHON_SCALAR_TYPES = frozenset(
+    [
+        type(None),
+        bool,
+        int,
+        float,
+        str,
+        bytes,
+        decimal.Decimal,
+        datetime.date,
+        datetime.datetime,
+        datetime.time,
+        datetime.timedelta,
+    ]
+)
+
+
+def _python_values_are_immutable(arrow_type: pa.DataType) -> bool:
+    """Whether every Python value that converts to ``arrow_type`` is an immutable scalar, such
+    as an ``int``, a ``Decimal`` or a ``datetime``. A value of any other type can be a mutable
+    object: a ``bytearray`` for a string or binary type, or a ``list`` or ``dict`` for a nested
+    type."""
     import pyarrow as pa
 
+    types = pa.types
     return (
-        pa.types.is_nested(arrow_type)
-        or pa.types.is_binary(arrow_type)
-        or pa.types.is_large_binary(arrow_type)
-        or pa.types.is_fixed_size_binary(arrow_type)
+        types.is_null(arrow_type)
+        or types.is_boolean(arrow_type)
+        or types.is_integer(arrow_type)
+        or types.is_floating(arrow_type)
+        or types.is_decimal(arrow_type)
+        or types.is_date(arrow_type)
+        or types.is_time(arrow_type)
+        or types.is_timestamp(arrow_type)
+        or types.is_duration(arrow_type)
+        or types.is_interval(arrow_type)
     )
+
+
+def _is_immutable_python_value(value: Any) -> bool:
+    """Whether ``value`` is an immutable scalar, such as a ``str`` or ``bytes``, or a tuple of
+    them, so that nothing can update it in place."""
+    if type(value) is tuple:
+        return all(_is_immutable_python_value(v) for v in value)
+    return type(value) in _IMMUTABLE_PYTHON_SCALAR_TYPES
+
+
+class _WindowAggResults:
+    """Collects the per-row ``finish`` results of one window aggregate into an Arrow array.
+
+    A result can share state with the buffer that it was finished from, e.g. the list that
+    ``reduce`` appends to, and ``reduce`` may update that buffer in place for later rows. The
+    results are held as Python values and converted in batches: ``flush``, called before
+    ``reduce`` updates the buffer that the pending results were finished from, converts them if
+    any of them may share state with it. Every ``_COMBINE_CHUNKS`` such chunks are combined
+    into one array, so that the per-array overhead of the small chunks stays bounded.
+    """
+
+    _COMBINE_CHUNKS = 1024
+
+    def __init__(self, arrow_type: pa.DataType, may_be_mutable: bool) -> None:
+        self._arrow_type = arrow_type
+        # Whether a Python value of ``arrow_type`` can be mutable at all.
+        self._may_be_mutable = may_be_mutable
+        self._pending: list[Any] = []
+        self._pending_may_share_state = False
+        self._chunks: list[pa.Array] = []  # each combined from ``_COMBINE_CHUNKS`` small chunks
+        self._small_chunks: list[pa.Array] = []
+
+    def append(self, result: Any) -> None:
+        self._pending.append(result)
+        if self._may_be_mutable and not _is_immutable_python_value(result):
+            self._pending_may_share_state = True
+
+    def flush(self) -> None:
+        """Convert the pending results if any of them may share state with a buffer."""
+        if not self._pending_may_share_state:
+            return
+        import pyarrow as pa
+
+        self._small_chunks.append(pa.array(self._pending, type=self._arrow_type))
+        self._pending = []
+        self._pending_may_share_state = False
+        if len(self._small_chunks) == self._COMBINE_CHUNKS:
+            self._chunks.append(pa.concat_arrays(self._small_chunks))
+            self._small_chunks = []
+
+    def to_array(self) -> pa.Array:
+        import pyarrow as pa
+
+        chunks = self._chunks + self._small_chunks
+        chunks.append(pa.array(self._pending, type=self._arrow_type))
+        return pa.chunked_array(chunks, type=self._arrow_type).combine_chunks()
 
 
 class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: window aggregation with an incremental
     ``Aggregator``. A window partition is evaluated within one task after the exchange, so
     there is no PARTIAL/FINAL split and ``merge`` is not used. The operator streams each
-    partition; for a bounded frame, each row also carries its frame's ``[begin, end)``
-    bounds. Each row's frame is folded with ``reduce`` from ``zero`` -- or, while the lower
-    bound stays fixed, by extending the previous row's buffer -- and ``finish`` produces
-    the row's value."""
+    partition. An unbounded frame is the whole partition: it is folded with ``reduce`` from
+    ``zero`` once, and its ``finish`` value is repeated for every row. For a bounded frame,
+    each row also carries its frame's ``[begin, end)`` bounds, and each row's frame is folded
+    from ``zero`` -- or, while the lower bound stays fixed, by extending the previous row's
+    buffer -- and finished."""
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
     _multi_udf = True
@@ -630,6 +716,11 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
         )
         # The Aggregator object itself, unwrapped (see ArrowGroupedAggIncrementalPartialUDFHandler).
         self._aggs = self._raw_funcs
+        # Whether a Python value of each UDF's result type can be a mutable object, which a
+        # bounded frame has to convert before ``reduce`` can update it (see ``run``).
+        self._result_may_be_mutable = [
+            not _python_values_are_immutable(field.type) for field in self._return_schema
+        ]
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -671,13 +762,11 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                     # advanced (a row left the window, which ``reduce`` cannot subtract) or the
                     # frame shrank -- refold the frame from ``zero``.
                     #
-                    # Later rows keep reducing into the running buffer, which ``reduce`` may
-                    # update in place, so a row's ``finish`` result can share state with it,
-                    # e.g. a list that ``reduce`` appends to. Convert such a result to Arrow at
-                    # its own row, before the next ``reduce`` changes it; a result whose Python
-                    # value is immutable is converted with the others after the loop.
-                    convert_per_row = _may_be_mutable_python_value(result_type)
-                    results: list[Any] = []
+                    # ``reduce`` may update the running buffer in place, so an earlier row's
+                    # ``finish`` result can share state with it, e.g. a list that ``reduce``
+                    # appends to. ``results`` converts such results to Arrow before the buffer
+                    # is extended again; a refold starts from a new buffer, which needs none.
+                    results = _WindowAggResults(result_type, self._result_may_be_mutable[udf_index])
                     have_running = False
                     running: Any = None
                     prev_begin = -1
@@ -686,22 +775,15 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                         begin = begin_col[i].as_py()
                         end = end_col[i].as_py()
                         if have_running and begin == prev_begin and end >= prev_end:
+                            if end > prev_end:
+                                results.flush()
                             running = fold(agg, running, value_cols, prev_end, end)
                         else:
                             running = fold(agg, agg.zero(), value_cols, begin, end)
                         have_running = True
                         prev_begin, prev_end = begin, end
-                        result = agg.finish(running)
-                        if convert_per_row:
-                            results.append(pa.array([result], type=result_type))
-                        else:
-                            results.append(result)
-                    if not convert_per_row:
-                        result_arrays.append(pa.array(results, type=result_type))
-                    elif results:
-                        result_arrays.append(pa.concat_arrays(results))
-                    else:
-                        result_arrays.append(pa.array([], type=result_type))
+                        results.append(agg.finish(running))
+                    result_arrays.append(results.to_array())
                 else:
                     raise PySparkRuntimeError(
                         errorClass="INVALID_WINDOW_BOUND_TYPE",

@@ -32,7 +32,15 @@ from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers._typing import UDF
 from pyspark.eval_handlers.utils import hashable_grouping_key
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
-from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    DoubleType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+)
 from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import PythonEvalType
 from pyspark.worker_metrics import WorkerMetrics
@@ -57,6 +65,7 @@ if have_pyarrow:
         ArrowScalarUDFHandler,
         ArrowWindowAggIncrementalUDFHandler,
         ArrowWindowAggUDFHandler,
+        _WindowAggResults,
     )
     from pyspark.sql.conversion import ArrowBatchTransformer
 
@@ -83,6 +92,35 @@ class _SumAggregator:
 
     def merge(self, left, right):
         return (left[0] + right[0], left[1] + right[1])
+
+    def finish(self, buffer):
+        return buffer[0]
+
+
+class _InPlaceCollector:
+    """Incremental ``Aggregator`` stub whose ``reduce`` appends to the buffer's ``bytearray``
+    (the digits of each input) or ``list`` in place, and whose ``finish`` returns that very
+    object."""
+
+    bufferSchema = StructType([StructField("c", BinaryType())])
+
+    def __init__(self, as_list=False):
+        self._as_list = as_list
+
+    def zero(self):
+        return ([] if self._as_list else bytearray(),)
+
+    def reduce(self, buffer, values):
+        (v,) = values
+        if self._as_list:
+            buffer[0].append(v)
+        else:
+            buffer[0].extend(b"%d" % v)
+        return buffer
+
+    def merge(self, left, right):
+        left[0].extend(right[0])
+        return left
 
     def finish(self, buffer):
         return buffer[0]
@@ -775,10 +813,65 @@ class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         self.assertEqual(out[0].column("_0").to_pylist(), [1, 3, 5, 7])
         self.assertEqual(agg.reduce_calls, 1 + 1 + 2 + 2)
 
+    def test_bounded_frame_results_do_not_share_the_running_buffer(self):
+        # Rows 0-3 extend the running buffer, row 4 has row 3's frame, and row 5 refolds from
+        # ``zero``. ``reduce`` updates the buffer in place and ``finish`` returns it, so every
+        # row must keep its own frame's value, for string, binary and nested result types.
+        batch = self._batch(begin=[0, 0, 0, 0, 0, 2], end=[1, 2, 3, 4, 4, 6], v=[1, 2, 3, 4, 5, 6])
+        digits = ["1", "12", "123", "1234", "1234", "3456"]
+        cases = [
+            (StringType(), _InPlaceCollector(), digits),
+            (BinaryType(), _InPlaceCollector(), [d.encode() for d in digits]),
+            (
+                ArrayType(LongType()),
+                _InPlaceCollector(as_list=True),
+                [[int(c) for c in d] for d in digits],
+            ),
+        ]
+        for return_type, agg, expected in cases:
+            with self.subTest(return_type=return_type):
+                handler = ArrowWindowAggIncrementalUDFHandler(
+                    udf_descs=[self._udf(agg, [0, 1, 2], return_type=return_type)],
+                    runner_conf=RunnerConf({"window_bound_types": "bounded"}),
+                    eval_conf=None,
+                )
+                out = list(handler.run(0, self._one_group(batch)))
+                self.assertEqual(out[0].column("_0").to_pylist(), expected)
+
     def test_invalid_bound_type_raises(self):
         handler = self._handler(_SumAggregator(), "bogus", [0])
         with self.assertRaises(PySparkRuntimeError):
             list(handler.run(0, self._one_group(self._batch(v=[1]))))
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class WindowAggResultsTests(PySparkBaseTestCase):
+    def test_flush_converts_only_values_that_may_share_state(self):
+        # ``flush`` converts a pending mutable value, so a later in-place update of it does not
+        # change the result. Immutable values stay pending.
+        results = _WindowAggResults(pa.binary(), may_be_mutable=True)
+        results.append(b"x")
+        results.append(None)
+        results.flush()
+        self.assertEqual(results._small_chunks, [])
+        value = bytearray(b"a")
+        results.append(value)
+        results.flush()
+        value.extend(b"b")
+        results.append(value)
+        self.assertEqual(results.to_array().to_pylist(), [b"x", None, b"a", b"ab"])
+
+    def test_combines_small_chunks(self):
+        # Each flush of a mutable value makes a single-row chunk; they are combined in groups,
+        # so that their number stays bounded.
+        results = _WindowAggResults(pa.list_(pa.int64()), may_be_mutable=True)
+        n = _WindowAggResults._COMBINE_CHUNKS * 2 + 3
+        for i in range(n):
+            results.append([i])
+            results.flush()
+        self.assertEqual(len(results._chunks), 2)
+        self.assertEqual(len(results._small_chunks), 3)
+        self.assertEqual(results.to_array().to_pylist(), [[i] for i in range(n)])
 
 
 class HashableGroupingKeyTests(PySparkBaseTestCase):

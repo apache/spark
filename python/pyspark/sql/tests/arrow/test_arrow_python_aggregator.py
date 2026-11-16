@@ -21,10 +21,12 @@ from pyspark.errors import AnalysisException, PySparkNotImplementedError, PySpar
 from pyspark.sql import functions as sf
 from pyspark.sql.types import (
     ArrayType,
+    BinaryType,
     CharType,
     DecimalType,
     DoubleType,
     LongType,
+    StringType,
     StructField,
     StructType,
 )
@@ -148,6 +150,43 @@ if have_pyarrow:
 
         def finish(self, buffer):
             return (buffer[0],)
+
+    class ConcatStrings(Aggregator):
+        # Appends each non-null value to a bytearray in place, comma-separated like
+        # ``concat_ws(",", collect_list(...))``, and returns that very bytearray from ``finish``:
+        # a mutable value of a string type, which is not nested.
+        @property
+        def bufferSchema(self):
+            return StructType([StructField("s", BinaryType())])
+
+        @property
+        def outputType(self):
+            return StringType()
+
+        def zero(self):
+            return (bytearray(),)
+
+        def reduce(self, buffer, value):
+            (s,) = value
+            if s is not None:
+                if buffer[0]:
+                    buffer[0].extend(b",")
+                buffer[0].extend(s.encode("utf-8"))
+            return buffer
+
+        def merge(self, b1, b2):
+            if b1[0] and b2[0]:
+                b1[0].extend(b",")
+            b1[0].extend(b2[0])
+            return b1
+
+        def finish(self, buffer):
+            return buffer[0]
+
+    class ConcatBinary(ConcatStrings):
+        @property
+        def outputType(self):
+            return BinaryType()
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -439,30 +478,67 @@ class ArrowPythonAggregatorTestsMixin:
         for r, e in zip(result, expected):
             self.assertAlmostEqual(r["m"], e["m"], places=6)
 
-    def test_window_growing_frame_with_in_place_buffer(self):
-        # ``reduce`` may update its buffer in place, and over a frame whose lower bound stays fixed
+    def _data_with_ties_and_nulls(self):
+        # 60 rows across 3 keys, with ties and nulls in ``v``, and ``v`` as a string in ``s``.
+        # Each key has two nulls, which an ordered window sorts first. ``id`` breaks the ties of
+        # ROWS frames, so that every frame is deterministic; a RANGE frame includes all peers of a
+        # row, which share ``v`` and ``s``.
+        return (
+            self.spark.range(0, 60)
+            .select(
+                "id",
+                (sf.col("id") % 3).alias("k"),
+                sf.when(sf.col("id") % 11 == 0, sf.lit(None))
+                .otherwise((sf.col("id") % 4).cast("double"))
+                .alias("v"),
+            )
+            .withColumn("s", sf.col("v").cast("string"))
+            .repartition(4, sf.col("id") % 2)
+        )
+
+    def test_window_frames_with_in_place_buffer(self):
+        # ``reduce`` may update its buffer in place, and while a frame's lower bound stays fixed,
         # later rows keep reducing into the buffer that earlier rows were finished from. Each row
-        # must still get its own frame's value, also when ``finish`` returns the buffer's list
-        # itself or nests it in a struct.
-        df = self._data()
-        ordered = Window.partitionBy("k").orderBy("v")
+        # must still get its own frame's value when ``finish`` returns the buffer's list, nests it
+        # in a struct, or returns its bytearray as a string or binary value.
+        df = self._data_with_ties_and_nulls()
+        by_v = Window.partitionBy("k").orderBy("v")
+        by_v_id = Window.partitionBy("k").orderBy("v", "id")
         frames = {
-            "default": ordered,
-            "rows": ordered.rowsBetween(Window.unboundedPreceding, Window.currentRow),
-            "range": ordered.rangeBetween(Window.unboundedPreceding, Window.currentRow),
+            # RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW. The peers of a row (its ties and
+            # nulls in ``v``) share its frame, so ``finish`` runs again on a buffer that did not
+            # grow.
+            "default": by_v,
+            "rows": by_v_id.rowsBetween(Window.unboundedPreceding, Window.currentRow),
+            # The upper bound runs ahead of the current row.
+            "range": by_v.rangeBetween(Window.unboundedPreceding, 1),
+            # The lower bound stays at the first row for the first three rows, then advances.
+            # The third row extends the buffer that the first two (nulls) were finished from.
+            "sliding": by_v_id.rowsBetween(-2, Window.currentRow),
         }
         for name, w in frames.items():
             with self.subTest(frame=name):
                 result = (
-                    df.withColumn("l", udaf(CollectList())(sf.col("v")).over(w))
-                    .withColumn("s", udaf(CollectListStruct())(sf.col("v")).over(w))
-                    .orderBy("k", "v")
+                    df.select(
+                        "id",
+                        udaf(CollectList())(sf.col("v")).over(w).alias("l"),
+                        udaf(CollectListStruct())(sf.col("v")).over(w).alias("ls"),
+                        udaf(ConcatStrings())(sf.col("s")).over(w).alias("cs"),
+                        udaf(ConcatBinary())(sf.col("s")).over(w).alias("cb"),
+                    )
+                    .orderBy("id")
                     .collect()
                 )
+                concat = sf.concat_ws(",", sf.collect_list("s").over(w))
                 expected = (
-                    df.withColumn("l", sf.collect_list("v").over(w))
-                    .withColumn("s", sf.struct(sf.collect_list("v").over(w).alias("values")))
-                    .orderBy("k", "v")
+                    df.select(
+                        "id",
+                        sf.collect_list("v").over(w).alias("l"),
+                        sf.struct(sf.collect_list("v").over(w).alias("values")).alias("ls"),
+                        concat.alias("cs"),
+                        concat.cast("binary").alias("cb"),
+                    )
+                    .orderBy("id")
                     .collect()
                 )
                 self.assertEqual(result, expected)
