@@ -751,6 +751,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
           if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonAggregate]) =>
+        // A batch session window groups by one provisional session per input row and relies on
+        // the aggregate operator to merge the overlapping ones (see `UpdatingSessionsExec`). The
+        // incremental operators group by the exact session value and never merge sessions, so
+        // they would silently return the unmerged sessions; reject the query instead.
+        if (groupingExpressions.exists(_.metadata.contains(SessionWindow.marker))) {
+          throw QueryCompilationErrors.pythonAggregateWithSessionWindowError(
+            aggExpressions.map(_.aggregateFunction.asInstanceOf[PythonAggregate].name).distinct)
+        }
         // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
         // `groupingExpressions` is not extracted during logical phase. Without this, 0.0/-0.0 (and
         // distinct NaN bit patterns) would split one logical group across output rows.

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
 import unittest
 from decimal import Decimal
 
@@ -346,6 +347,44 @@ class ArrowPythonAggregatorTestsMixin:
         )
         with self.assertRaises(AnalysisException):
             df.groupBy("k").pivot("p").agg(udaf(Mean())(sf.col("v"))).collect()
+
+    def test_session_window_rejected(self):
+        # A batch session window groups by one provisional session per row and relies on the
+        # aggregate operator to merge the overlapping ones. The incremental operators do not
+        # merge sessions, so grouping by a session window is rejected rather than returning one
+        # row per unmerged session. A tumbling window needs no merging and still works.
+        df = self.spark.createDataFrame(
+            [
+                (datetime.datetime(2026, 1, 1, 10, 0), 1.0),
+                (datetime.datetime(2026, 1, 1, 10, 2), 3.0),
+            ],
+            "ts timestamp, v double",
+        )
+        mean = udaf(Mean())
+        df.createOrReplaceTempView("session_input")
+        self.spark.udf.register("session_mean", mean)
+        queries = {
+            "dataframe": lambda: df.groupBy(sf.session_window("ts", "5 minutes")).agg(
+                mean(sf.col("v"))
+            ),
+            "sql": lambda: self.spark.sql(
+                "SELECT session_mean(v) FROM session_input GROUP BY session_window(ts, '5 minutes')"
+            ),
+        }
+        for name, query in queries.items():
+            with self.subTest(query=name):
+                with self.assertRaises(AnalysisException) as ctx:
+                    query().collect()
+                self.assertEqual(
+                    ctx.exception.getCondition(),
+                    "UNSUPPORTED_FEATURE.PYTHON_AGGREGATOR_WITH_SESSION_WINDOW",
+                )
+
+        result = (
+            df.groupBy(sf.window("ts", "5 minutes")).agg(mean(sf.col("v")).alias("m")).collect()
+        )
+        expected = df.groupBy(sf.window("ts", "5 minutes")).agg(sf.avg("v").alias("m")).collect()
+        self.assertEqual(result, expected)
 
     def test_window_unbounded(self):
         # Unbounded partition frame: every row gets its whole group's aggregate. Cross-checked
