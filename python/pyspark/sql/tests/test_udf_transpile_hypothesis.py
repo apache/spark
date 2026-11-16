@@ -253,8 +253,8 @@ if _have_hypothesis:
         (0, 1, None),
         (1, 0, None),  # first link false -> None never reached
         # Boundary orderings.
-        (0, 1, 2),
-        (2, 1, 0),
+        (0, 1, 7),
+        (7, 1, 0),
         (_INT32_MIN, 0, _INT32_MAX),
         (-_LONG_BOUND, 0, _LONG_BOUND),
     )
