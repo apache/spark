@@ -1072,6 +1072,42 @@ class UDFInHigherOrderFunctionTestsMixin:
             [([2, 3, 4],), ([],), (None,), ([11, 21],), ([6],)],
         )
 
+    def test_scalar_arrow_udf_result_cast_is_safe(self):
+        # A lifted Arrow UDF casts its result to the declared type safely, as the same UDF does
+        # outside a lambda, whatever spark.sql.execution.pandas.convertToArrowArraySafely says
+        # (that setting applies to pandas UDFs only). A value that does not fit the declared type
+        # raises instead of silently overflowing.
+        from typing import Iterator
+
+        import pyarrow as pa
+
+        from pyspark.errors import PythonException
+        from pyspark.sql.functions import arrow_udf
+
+        df = self.spark.createDataFrame([([1, 2],)], "values array<long>")
+
+        @arrow_udf(IntegerType())
+        def add_max_int(a: pa.Array) -> pa.Array:
+            return pa.compute.add(a, 2147483647)
+
+        @arrow_udf(IntegerType())
+        def add_max_int_iter(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                yield pa.compute.add(a, 2147483647)
+
+        for safecheck in [False, True]:
+            with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safecheck}):
+                for f in [add_max_int, add_max_int_iter]:
+                    with self.subTest(safecheck=safecheck, udf=f.__name__):
+                        with self.assertRaisesRegex(
+                            PythonException, "RESULT_COLUMN_TYPES_MISMATCH"
+                        ):
+                            df.select(f(df.values[0])).collect()
+                        with self.assertRaisesRegex(
+                            PythonException, "RESULT_COLUMN_TYPES_MISMATCH"
+                        ):
+                            df.select(sf.transform("values", lambda x: f(x))).collect()
+
     def test_scalar_pandas_iter_udf_multiple_arguments_differ_in_type(self):
         # A two-argument iterator UDF whose arguments have different element types: the array
         # element (int) and an outer column (string) that the rewrite repeats into an aligned
