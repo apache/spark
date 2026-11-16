@@ -399,15 +399,22 @@ abstract class JdbcDialect extends Serializable with Logging {
       val timestampFormatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       s"'${timestampFormatter.format(timestampValue)}'"
+    case timestampValue: Instant if SQLConf.get.legacyJdbcSessionZoneTimestampLiteral =>
+      compileInstantInSessionZone(timestampValue)
     case timestampValue: Instant =>
-      val timestampFormatter = TimestampFormatter.getFractionFormatter(
-        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"'${timestampFormatter.format(timestampValue)}'"
+      // Same text as the Timestamp a non-java8 API session would pass: JVM-zone wall clock.
+      compileValue(DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(timestampValue)))
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("X'", "", "'")
     case _ => value
+  }
+
+  private[jdbc] def compileInstantInSessionZone(value: Instant): String = {
+    val timestampFormatter = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    s"'${timestampFormatter.format(value)}'"
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {

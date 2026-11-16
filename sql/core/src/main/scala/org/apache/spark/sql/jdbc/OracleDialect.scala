@@ -19,14 +19,14 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
 import java.sql.Types.TIMESTAMP
-import java.time.LocalDateTime
+import java.time.{Instant, LocalDateTime}
 import java.util.Locale
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -266,6 +266,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
     case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
+    case instantValue: Instant if !conf.legacyJdbcSessionZoneTimestampLiteral =>
+      compileValue(DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(instantValue)))
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] =>
