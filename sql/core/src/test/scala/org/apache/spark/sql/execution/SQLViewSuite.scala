@@ -1437,7 +1437,9 @@ abstract class SQLViewSuite extends QueryTest {
             try {
               sql("SET PATH = spark_catalog.path_view_db_a, system.builtin")
               sql("CREATE VIEW default.v_path_frozen AS SELECT id FROM frozen_t")
-              sql("SET PATH = spark_catalog.path_view_db_b, system.builtin")
+              // The two-part reference needs the catalog listed explicitly: schema entries alone
+              // do not qualify two-part names.
+              sql("SET PATH = spark_catalog, spark_catalog.path_view_db_b, system.builtin")
 
               checkAnswer(sql("SELECT id FROM frozen_t"), Row(2))
               checkAnswer(sql("SELECT id FROM default.v_path_frozen"), Row(1))
