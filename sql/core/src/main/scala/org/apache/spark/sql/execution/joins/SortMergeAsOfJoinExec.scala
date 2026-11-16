@@ -113,11 +113,23 @@ case class SortMergeAsOfJoinExec(
     val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold
     val numAsOfCursorTasks = longMetric("numAsOfCursorTasks")
     val useCursorScan = cursorScanEnabled
+    // Read the fields here, so that the closure below does not capture this node, and with it
+    // the whole child subtree, into every task.
+    val leftOutput = left.output
+    val rightOutput = right.output
+    val leftKeys = this.leftKeys
+    val rightKeys = this.rightKeys
+    val leftSortExprs = this.leftSortExprs
+    val rightSortExprs = this.rightSortExprs
+    val asOfCondition = this.asOfCondition
+    val joinType = this.joinType
+    val condition = this.condition
+    val direction = this.direction
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val scanner = new SortMergeAsOfJoinScanner(
         leftIter, rightIter,
-        left.output, right.output,
+        leftOutput, rightOutput,
         leftKeys, rightKeys,
         leftSortExprs, rightSortExprs,
         asOfCondition,
