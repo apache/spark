@@ -1490,6 +1490,19 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df18, Seq(Row("abc\\def@gmail.com")))
   }
 
+  test("SPARK-61341: do not push down STARTS_WITH, ENDS_WITH and CONTAINS with a column pattern") {
+    val address = spark.table("h2.test.address")
+    // Every email starts with, ends with and contains itself.
+    Seq(
+      $"email".startsWith($"email"),
+      $"email".endsWith($"email"),
+      $"email".contains($"email")).foreach { condition =>
+      val df = address.filter(condition)
+      checkFiltersRemoved(df, removed = false)
+      checkAnswer(df, address)
+    }
+  }
+
   test("scan with filter push-down with ansi mode") {
     Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
