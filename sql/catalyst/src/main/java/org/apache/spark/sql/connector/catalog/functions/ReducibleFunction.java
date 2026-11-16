@@ -85,11 +85,13 @@ public interface ReducibleFunction<I, O> {
    * {@code days(ts)} may be offered {@code truncate(ts, 3)} but never {@code bucket(4, ts)}.
    * <p>
    * Returning {@code null} means "not reducible for these parameters" and is authoritative:
-   * Spark consults no other overload. Dispatch order: Spark tries this generalized overload
-   * first, for every pair. Only if it is not implemented (throws
-   * {@link UnsupportedOperationException}) does Spark fall back: to
-   * {@link #reducer(ReducibleFunction)} when neither side has a parameter, or to the deprecated
-   * {@code reducer(int, ReducibleFunction, int)} overload when both sides are
+   * Spark consults no other overload. Spark reduces only one side of a pair when the other
+   * function answers, by returning {@code null}, and only with a reducer that satisfies
+   * {@code r(f1(x)) = f2(x)}; if the other function implements no reducer for the pair, the pair
+   * is not reducible. Dispatch order: Spark tries this generalized overload first, for every pair.
+   * Only if it is not implemented (throws {@link UnsupportedOperationException}) does Spark fall
+   * back: to {@link #reducer(ReducibleFunction)} when neither side has a parameter, or to the
+   * deprecated {@code reducer(int, ReducibleFunction, int)} overload when both sides are
    * {@code bucket(n, col)} transforms of the same function with a non-null count. If every
    * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
    * reducer" warning; any other exception, from either side's call, is logged and the pair is

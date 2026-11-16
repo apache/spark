@@ -8868,6 +8868,77 @@ class KeyGroupedPartitioningSuite
     assert(threw.nonEmpty && threw.forall(_.contains("failing_input_types")), threw)
   }
 
+  test("SPARK-50593: a reducer counts only if the other direction answered") {
+    // `careless` returns a gcd reducer for any pair without checking the other function, and
+    // `silent`, bound by another catalog, implements no reducer. Reading that as a one-side reduce
+    // would reduce bucket(8) by % 4 and report it as bucket(12), against the 12 side's raw keys:
+    // 16 of 48 rows. A gcd reducer is two-sided; only an answer from the other side, `null` or a
+    // reducer, says otherwise, so the pair is not reducible.
+    def bucketLike(canonical: String, reduce: Boolean): ScalarFunction[Int] =
+      new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "bucket"
+        override def canonicalName(): String = canonical
+        override def produceResult(input: InternalRow): Int = 0
+        override def reducer(
+            thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+            otherFunc: ReducibleFunction[_, _],
+            otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+            : Reducer[Int, Int] = if (!reduce) super.reducer(thisParams, otherFunc, otherParams)
+          else BucketFunction.gcdReducer(
+            thisParams(0).value().asInstanceOf[Int], otherParams(0).value().asInstanceOf[Int])
+      }
+    val data = AttributeReference("id", LongType)()
+    def spec(t: TransformExpression): physical.KeyedShuffleSpec = physical.KeyedShuffleSpec(
+      physical.KeyedPartitioning(Seq(t), Seq.empty), physical.ClusteredDistribution(Seq(data)))
+    val careless = bucketTransform(bucketLike("bucket", reduce = true), 8, data)
+    val silent = bucketTransform(bucketLike("other_catalog.bucket", reduce = false), 12, data)
+    assert(careless.reducers(silent).isDefined, "test setup: one direction alone reduces")
+    assert(careless.pairReducers(silent) == ((None, None)))
+    assert(!careless.isCompatible(silent) && !silent.isCompatible(careless))
+    withReducingJoinConfs {
+      assert(!spec(careless).areKeysCompatible(spec(silent), allowReduce = true))
+      assert(spec(careless).reducersBothWays(spec(silent)) == ((None, None)))
+    }
+  }
+
+  test("SPARK-50593: a literal type mismatch is reported when the deprecated reducer finds " +
+      "nothing") {
+    // A bucket whose generalized overload is skipped for a BIGINT count against its INT literal,
+    // and that implements no deprecated overload either. It does implement the generalized one,
+    // so it must be told that the types differ, not to implement it.
+    val generalizedOnly = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = Array(LongType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket_long_count"
+      override def canonicalName(): String = name()
+      override def produceResult(input: InternalRow): Int = 0
+      override def reducer(
+          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+          otherFunc: ReducibleFunction[_, _],
+          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+          : Reducer[Int, Int] = null
+    }
+    val logs = transformExpressionLogs {
+      bucketTransform(generalizedOnly, 8, attr("id"))
+        .pairReducers(bucketTransform(generalizedOnly, 4, attr("id")))
+    }.map(_.getMessage.getFormattedMessage)
+    assert(logs.exists(_.contains("declares other input types")), logs)
+    assert(!logs.exists(_.contains("implements no reducer")), logs)
+  }
+
+  test("SPARK-50593: a reducer that throws for a pair of the same function is not reported") {
+    // Two scans of one transform pair as they stand, so a throwing reducer costs nothing there.
+    val logs = transformExpressionLogs {
+      val l = bucketTransform(ThrowingReducerFunction, 4, attr("id"))
+      val r = bucketTransform(ThrowingReducerFunction, 4, attr("store_id"))
+      assert(l.isSameFunction(r), "test setup")
+      l.pairReducers(r)
+    }.map(_.getMessage.getFormattedMessage)
+    assert(!logs.exists(_.contains("reducer threw an exception")), logs)
+  }
+
   test("SPARK-50593: a reducer warning is logged once per function") {
     // Every planning pass, and every AQE re-plan, asks a pair again. The WARN is logged once per
     // function; each failure is still logged at DEBUG, with its stack trace.

@@ -302,6 +302,11 @@ case class TransformExpression(
    * one-side reduce, which is only right for a reducer that satisfies `r(f1(x)) = f2(x)`; a
    * two-sided one such as a gcd of bucket counts would then pair keys from two different spaces.
    *
+   * For the same reason, a reducer in one direction counts only if the other direction answered,
+   * by returning a reducer or `null`. A direction that implements no reducer, or was not asked
+   * because its literal types differ, says nothing about whether this one is one-sided, so the
+   * pair is `(None, None)` too.
+   *
    * Also `(None, None)` when either side has no identity, since a reduce could be neither recorded
    * (`reducedTogetherWith`) nor reported for it. `sameArgumentLayout` already refuses every such
    * pair; deciding it here keeps `isCompatible` and `reducersBothWays` from disagreeing on one.
@@ -312,6 +317,8 @@ case class TransformExpression(
     if (functionId.isEmpty || other.functionId.isEmpty) return (None, None)
     (reducerOutcome(other), other.reducerOutcome(this)) match {
       case (Threw(_, _), _) | (_, Threw(_, _)) => (None, None)
+      case (Reducible(_), Unimplemented | LiteralTypesDiffer) |
+           (Unimplemented | LiteralTypesDiffer, Reducible(_)) => (None, None)
       case (o1, o2) => (reducerOf(o1), reducerOf(o2))
     }
   }
@@ -383,19 +390,24 @@ case class TransformExpression(
           probe(thisFunction.reducer(otherFunction))
         // The deprecated overload is documented for bucket against bucket, and master offered it
         // only a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`.
-        case Unimplemented | LiteralTypesDiffer
+        // If that finds nothing either, the outcome stays why the generalized one was not asked.
+        case skipped @ (Unimplemented | LiteralTypesDiffer)
             if fromBucketTransform && other.fromBucketTransform &&
               isSingleInt(thisParams) && isSingleInt(otherParams) &&
               thisName == other.function.canonicalName() =>
           probe(thisFunction.reducer(
             thisParams(0).value().asInstanceOf[Int], otherFunction,
-            otherParams(0).value().asInstanceOf[Int]))
+            otherParams(0).value().asInstanceOf[Int])) match {
+            case Unimplemented => skipped
+            case found => found
+          }
         case outcome => outcome
       }
 
-    // A missing reducer costs nothing for a pair of the same function, which needs none.
+    // A pair of the same function needs no reducer and pairs as it stands, so nothing its probe
+    // reports is logged.
     outcome match {
-      case Threw(e, true) => logReducerThrew(function, thisName, e)
+      case Threw(e, true) if !isSameFunction(other) => logReducerThrew(function, thisName, e)
       case Unimplemented if !isSameFunction(other) => logNoReducer(function, thisName)
       case LiteralTypesDiffer if !isSameFunction(other) =>
         // Name the side whose literal parameters do not have its declared types. That is this
