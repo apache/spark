@@ -261,7 +261,7 @@ jobs:
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: ${{ matrix.timeout-minutes || 150 }}
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -322,6 +322,8 @@ jobs:
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
             comment: "- other tests"
+            # This group often runs close to the default 150 minutes.
+            timeout-minutes: 180
         exclude:
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
           # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
