@@ -3110,6 +3110,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
   }
 
+  def useColumnarUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_ON_CLAUSE",
+      messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
+  }
+
   def useExternalUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_ON_CLAUSE",

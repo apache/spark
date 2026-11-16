@@ -37,6 +37,8 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType}
  * @param children the arguments
  * @param udfDeterministic whether the function returns the same result for the same arguments
  * @param udfNullable whether the function can return null
+ * @param resultId the id of the call, which tells two calls of a function that is not
+ *                 deterministic apart
  */
 case class ColumnarUDF(
     name: String,
@@ -46,12 +48,19 @@ case class ColumnarUDF(
     dataType: DataType,
     children: Seq[Expression],
     udfDeterministic: Boolean = true,
-    udfNullable: Boolean = true)
+    udfNullable: Boolean = true,
+    resultId: ExprId = NamedExpression.newExprId)
   extends Expression with Unevaluable with ImplicitCastInputTypes {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = udfNullable
+
+  override lazy val canonicalized: Expression = {
+    // `resultId` does not affect the result, so that equal calls of a deterministic function
+    // are evaluated once.
+    copy(resultId = ExprId(-1)).withNewChildren(children.map(_.canonicalized))
+  }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(COLUMNAR_UDF)
 

@@ -18,14 +18,15 @@
 package org.apache.spark.sql.execution.columnar.udf
 
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.columnar.{ColumnarScalarFunction, ColumnarUDFImplementation, ColumnarUserDefinedFunction}
 import org.apache.spark.sql.execution.{RowToColumnarExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.functions.{col, count, lit, sum}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -94,6 +95,22 @@ class ShoutFunction extends ColumnarScalarFunction {
   }
 }
 
+/** Returns the number of values that it has returned so far, which differs for every value. */
+class CounterFunction extends ColumnarScalarFunction {
+  private val counter = new AtomicLong()
+
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    val n = args.numRows()
+    val out = new OnHeapColumnVector(n, LongType)
+    var i = 0
+    while (i < n) {
+      out.putLong(i, counter.incrementAndGet())
+      i += 1
+    }
+    out
+  }
+}
+
 class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -108,6 +125,14 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     case e: EvalColumnarUDFsExec => e
   }
 
+  /** Registers the functions for SQL, and drops them afterwards. */
+  private def withFunctions(udfs: ColumnarUserDefinedFunction*)(f: => Unit): Unit = {
+    withUserDefinedFunction(udfs.map(_.name -> true): _*) {
+      udfs.foreach(spark.udf.registerColumnar)
+      f
+    }
+  }
+
   test("a call over a row-based child") {
     val df = spark.range(5).select(col("id"), addOne(col("id")))
     checkAnswer(df, (0 until 5).map(i => Row(i.toLong, i + 1L)))
@@ -115,10 +140,11 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a call from SQL, with an argument that is cast") {
-    spark.udf.registerColumnar(addOne)
-    checkAnswer(sql("SELECT add_one(1), add_one(CAST(NULL AS INT))"), Row(2L, null))
-    checkAnswer(
-      sql("SELECT sum(add_one(id)) FROM range(1000)"), Row((1 to 1000).map(_.toLong).sum))
+    withFunctions(addOne) {
+      checkAnswer(sql("SELECT add_one(1), add_one(CAST(NULL AS INT))"), Row(2L, null))
+      checkAnswer(
+        sql("SELECT sum(add_one(id)) FROM range(1000)"), Row((1 to 1000).map(_.toLong).sum))
+    }
   }
 
   test("a call over a columnar scan has no transition from rows") {
@@ -155,6 +181,126 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     checkAnswer(df, (5 until 10).map(i => Row(i.toLong)))
     val pushed = spark.range(10).select(col("id"), addOne(col("id")).as("r")).filter("id < 3")
     checkAnswer(pushed, (0 until 3).map(i => Row(i.toLong, i + 1L)))
+  }
+
+  test("an argument that is cast is computed by a row-based projection") {
+    withTempPath { path =>
+      spark.range(100).selectExpr("cast(id as int) as i").write.parquet(path.getCanonicalPath)
+      val df = spark.read.parquet(path.getCanonicalPath).select(addOne(col("i")))
+      checkAnswer(df, (0 until 100).map(i => Row(i + 1L)))
+      val plan = df.queryExecution.executedPlan
+      assert(evalNodes(plan).length == 1)
+      assert(collect(plan) { case r: RowToColumnarExec => r }.length == 1)
+    }
+  }
+
+  test("calls in an aggregate that read grouping keys, or no column") {
+    withFunctions(addOne) {
+      withTempView("t") {
+        spark.range(10).selectExpr("id % 3 AS k", "id AS v").createOrReplaceTempView("t")
+        checkAnswer(
+          sql("SELECT add_one(k), count(*) FROM t GROUP BY k"),
+          Seq(Row(1L, 4L), Row(2L, 3L), Row(3L, 3L)))
+        checkAnswer(
+          spark.table("t").groupBy("k").agg(addOne(col("k")), count("*")),
+          Seq(Row(0L, 1L, 4L), Row(1L, 2L, 3L), Row(2L, 3L, 3L)))
+        checkAnswer(sql("SELECT add_one(1), count(*) FROM t"), Row(2L, 10L))
+        // The call is the grouping key.
+        checkAnswer(
+          sql("SELECT add_one(k), count(*) FROM t GROUP BY add_one(k)"),
+          Seq(Row(1L, 4L), Row(2L, 3L), Row(3L, 3L)))
+        checkAnswer(
+          sql("SELECT add_one(k) + 1, sum(add_one(v)) FROM t GROUP BY add_one(k)"),
+          Seq(Row(2L, 22L), Row(3L, 15L), Row(4L, 18L)))
+      }
+    }
+  }
+
+  test("calls over aggregate and window functions") {
+    withFunctions(addOne, add) {
+      withTempView("t") {
+        spark.range(10).selectExpr("id % 3 AS k", "id AS v").createOrReplaceTempView("t")
+        checkAnswer(sql("SELECT add_one(max(id)) FROM range(10)"), Row(10L))
+        checkAnswer(
+          sql("SELECT k, add_one(sum(v)) FROM t GROUP BY k"),
+          Seq(Row(0L, 19L), Row(1L, 13L), Row(2L, 16L)))
+        checkAnswer(
+          sql("SELECT k, add(k, sum(add_one(v))) + 1 FROM t GROUP BY k"),
+          Seq(Row(0L, 23L), Row(1L, 17L), Row(2L, 21L)))
+        checkAnswer(
+          spark.table("t").groupBy("k").agg(addOne(sum("v"))),
+          Seq(Row(0L, 19L), Row(1L, 13L), Row(2L, 16L)))
+        checkAnswer(
+          sql("SELECT k, sum(v) FROM t GROUP BY k HAVING add_one(sum(v)) > 13"),
+          Seq(Row(0L, 18L), Row(2L, 15L)))
+        checkAnswer(
+          sql("SELECT DISTINCT add_one(sum(v) OVER (PARTITION BY k)) FROM t"),
+          Seq(Row(19L), Row(13L), Row(16L)))
+      }
+    }
+  }
+
+  test("a call in a join condition that reads both sides") {
+    val a = spark.range(5).toDF("x")
+    val b = spark.range(5).toDF("y")
+    val condition = add(a("x"), b("y")) === 1
+    checkAnswer(a.join(b, condition), Seq(Row(0L, 1L), Row(1L, 0L)))
+    checkAnswer(
+      a.join(b, condition && a("x") < b("y")), Seq(Row(0L, 1L)))
+    // A call that reads one side stays in the join.
+    checkAnswer(
+      a.join(b, addOne(a("x")) === b("y"), "left_outer"),
+      Seq(Row(0L, 1L), Row(1L, 2L), Row(2L, 3L), Row(3L, 4L), Row(4L, null)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        a.join(b, condition, "left_outer").collect()
+      },
+      condition = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_ON_CLAUSE",
+      parameters = Map("joinType" -> "LEFT OUTER"))
+  }
+
+  test("a call in a lambda function is not supported") {
+    withFunctions(addOne) {
+      val e = intercept[AnalysisException] {
+        sql("SELECT transform(array(1L, 2L), x -> add_one(x))")
+      }
+      assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_COLUMNAR_UDF")
+    }
+  }
+
+  test("a call with named arguments is not supported") {
+    withFunctions(addOne) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT add_one(x => id) FROM range(3)")
+        },
+        condition = "NAMED_PARAMETERS_NOT_SUPPORTED",
+        parameters = Map("functionName" -> "`add_one`"),
+        context = ExpectedContext("add_one(x => id)", 7, 22))
+    }
+  }
+
+  test("equal calls of a function that is not deterministic are evaluated separately") {
+    val counter = ColumnarUserDefinedFunction(
+      "counter", Seq(LongType), LongType, Some(new CounterFunction), deterministic = false)
+    val df = spark.range(0, 10, 1, 1).select(counter(col("id")), counter(col("id")))
+    val rows = df.collect()
+    assert(rows.length == 10)
+    assert(rows.forall(r => r.getLong(0) != r.getLong(1)))
+    val node = evalNodes(df.queryExecution.executedPlan).head
+    assert(node.udfs.length == 2)
+
+    // Equal calls of a deterministic function share a result.
+    val shared = spark.range(5).select(addOne(col("id")), addOne(col("id")) + 1)
+    checkAnswer(shared, (0 until 5).map(i => Row(i + 1L, i + 2L)))
+    assert(evalNodes(shared.queryExecution.executedPlan).head.udfs.length == 1)
+  }
+
+  test("a call below a limit") {
+    val df = spark.range(100000).select(addOne(col("id"))).limit(3)
+    assert(df.collect().length == 3)
+    val sorted = spark.range(100).select(addOne(col("id")).as("r")).orderBy(col("r").desc).limit(2)
+    checkAnswer(sorted, Seq(Row(100L), Row(99L)))
   }
 
   test("strings and nulls") {

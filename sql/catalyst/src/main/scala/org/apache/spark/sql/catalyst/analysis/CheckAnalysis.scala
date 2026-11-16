@@ -612,6 +612,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
 
+          // A columnar UDF is evaluated by an operator of its own, over the columns of its
+          // child, so it cannot be evaluated for the elements that a lambda function iterates.
+          case hof: HigherOrderFunction
+              if hof.resolved && hof.functions.exists(_.exists(_.isInstanceOf[ColumnarUDF])) =>
+            val udf = hof.functions.flatMap(_.collectFirst { case u: ColumnarUDF => u }).head
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_COLUMNAR_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(udf)))
+
           case ResolvedHigherOrderFunctionWithExternalUDF(hof, udf) =>
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_EXTERNAL_UDF",

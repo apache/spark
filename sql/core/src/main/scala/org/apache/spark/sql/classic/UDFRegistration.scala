@@ -19,7 +19,7 @@ package org.apache.spark.sql.classic
 
 import java.lang.reflect.ParameterizedType
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Evolving, Stable}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql
@@ -56,7 +56,10 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
    *
    * @since 4.4.0
    */
+  @Evolving
   def registerColumnar(udf: ColumnarUserDefinedFunction): ColumnarUserDefinedFunction = {
+    // A FILE in the return type cannot have a qualifier.
+    TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(udf.dataType, udf.name)
     // `ExpressionInfo` accepts a fixed set of sources. This is the one of a Scala UDF, which is
     // what the JVM implementation of a columnar function is closest to.
     functionRegistry.createOrReplaceTempFunction(udf.name, udf.builder, "scala_udf")

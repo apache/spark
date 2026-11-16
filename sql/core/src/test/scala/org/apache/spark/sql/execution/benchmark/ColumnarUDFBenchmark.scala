@@ -25,7 +25,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.columnar.{ColumnarScalarFunction, ColumnarUserDefinedFunction}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, LongType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
 
@@ -209,7 +209,10 @@ object ColumnarUDFBenchmark extends SqlBasedBenchmark {
     runBenchmark("Columnar UDF") {
       withTempPath { path =>
         spark.range(rows)
-          .select(col("id"), concat(lit("user_"), col("id"), lit("_lorem ipsum dolor")).as("s"))
+          .select(
+            col("id"),
+            col("id").cast(IntegerType).as("i"),
+            concat(lit("user_"), col("id"), lit("_lorem ipsum dolor")).as("s"))
           .write.parquet(path.getCanonicalPath)
         def in: DataFrame = spark.read.parquet(path.getCanonicalPath)
         val id = col("id")
@@ -222,6 +225,14 @@ object ColumnarUDFBenchmark extends SqlBasedBenchmark {
           "columnar UDF" -> in.select(max(addOneColumnar(id))),
           "built-in expression" -> in.select(max(id + 1)),
           "scan and aggregate only" -> in.select(max(id)))
+        // The argument is cast to the type of the parameter. The cast is computed by a row-based
+        // projection below the columnar function, whose result is converted back to columns.
+        val i = col("i")
+        run("add_one(bigint): bigint, over an int column that is cast", rows)(
+          "Scala UDF" -> in.select(max(addOneScala(i))),
+          "columnar UDF" -> in.select(max(addOneColumnar(i))),
+          "built-in expression" -> in.select(max(i.cast(LongType) + 1)),
+          "scan and aggregate only" -> in.select(max(i)))
         run("mix(bigint): bigint", rows)(
           "Scala UDF" -> in.select(max(mixScala(id))),
           "columnar UDF" -> in.select(max(mixColumnar(id))),

@@ -9606,6 +9606,11 @@
           "Collated strings for keys of maps"
         ]
       },
+      "COLUMNAR_UDF_IN_ON_CLAUSE" : {
+        "message" : [
+          "Columnar UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -9709,6 +9714,12 @@
       "INTERRUPT_TYPE" : {
         "message" : [
           "Unsupported interrupt type: <interruptType>."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_COLUMNAR_UDF" : {
+        "message" : [
+          "Cannot evaluate the columnar UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_EXTERNAL_UDF" : {
