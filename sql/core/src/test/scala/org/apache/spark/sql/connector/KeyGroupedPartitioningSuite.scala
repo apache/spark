@@ -752,7 +752,7 @@ class KeyGroupedPartitioningSuite
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
+      Seq(bucketTransform(BucketFunction, 32, attr("ts"))))
 
     checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
   }
@@ -764,7 +764,7 @@ class KeyGroupedPartitioningSuite
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
+      Seq(bucketTransform(BucketFunction, 32, attr("ts"))))
 
     // Has exactly one partition.
     val partitionKeys = Seq(0).map(v => InternalRow.fromSeq(Seq(v)))
@@ -820,7 +820,7 @@ class KeyGroupedPartitioningSuite
 
       val df = sql(s"SELECT * FROM testcat.ns.$table")
       val distribution = physical.ClusteredDistribution(
-        Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
+        Seq(bucketTransform(BucketFunction, 32, attr("ts"))))
 
       checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
     }
@@ -889,6 +889,16 @@ class KeyGroupedPartitioningSuite
   private val ordersColumns: Array[Column] = Array(
     Column.create("order_amount", DoubleType),
     Column.create("customer_id", LongType))
+
+  /**
+   * `fn(numBuckets, argument)` as a scan resolves a V2 `bucket` transform, marked so. Only a pair
+   * of such transforms is offered the deprecated `reducer(int, ReducibleFunction, int)`.
+   */
+  private def bucketTransform(
+      fn: BoundFunction,
+      numBuckets: Int,
+      argument: org.apache.spark.sql.catalyst.expressions.Expression): TransformExpression =
+    TransformExpression(fn, Seq(Literal(numBuckets), argument), fromBucketTransform = true)
 
   private def selectWithMergeJoinHint(t1: String, t2: String): String = {
     s"SELECT /*+ MERGE($t1, $t2) */ "
@@ -1718,7 +1728,7 @@ class KeyGroupedPartitioningSuite
       val child = ShuffleExchangeExec(
         KeyedPartitioning(Seq(attr), Nil),
         new LocalTableScanExec(Seq(attr), Nil, None, false))
-      val reduced = TransformExpression(BucketFunction, Seq(Literal(2), otherAttr))
+      val reduced = bucketTransform(BucketFunction, 2, otherAttr)
       GroupPartitionsExec(child,
         reducers = Some(Seq(Some(physical.KeyReducer(reducer, reduced)))))
     }
@@ -1727,9 +1737,9 @@ class KeyGroupedPartitioningSuite
       groupPartitions(a2, o2, BucketReducer(2)).canonicalized)
     // The identity-derived reducer, whose transform is over this side's own attribute.
     assert(groupPartitions(a1, o1, physical.IdentityReducer(
-        TransformExpression(BucketFunction, Seq(Literal(2), a1)))).canonicalized ==
+        bucketTransform(BucketFunction, 2, a1))).canonicalized ==
       groupPartitions(a2, o2, physical.IdentityReducer(
-        TransformExpression(BucketFunction, Seq(Literal(2), a2)))).canonicalized)
+        bucketTransform(BucketFunction, 2, a2))).canonicalized)
     // Structurally different reducers stay unequal after canonicalization.
     assert(groupPartitions(a1, o1, BucketReducer(2)).canonicalized !=
       groupPartitions(a2, o2, BucketReducer(3)).canonicalized)
@@ -1745,7 +1755,7 @@ class KeyGroupedPartitioningSuite
       val child = ShuffleExchangeExec(
         KeyedPartitioning(Seq(attr, dt), Nil),
         new LocalTableScanExec(Seq(attr, dt), Nil, None, false))
-      val reduced = TransformExpression(BucketFunction, Seq(Literal(2), otherAttr))
+      val reduced = bucketTransform(BucketFunction, 2, otherAttr)
       GroupPartitionsExec(child,
         reducers = Some(Seq(None, Some(physical.KeyReducer(BucketReducer(2), reduced)))))
     }
@@ -8160,6 +8170,15 @@ class KeyGroupedPartitioningSuite
     checkAnswer(df, Seq(Row(1), Row(5)))
   }
 
+  test("SPARK-50593: the truncate test functions take a null key") {
+    // A one-side shuffle onto a truncate layout evaluates the function on every row of the
+    // shuffled side, and an outer join before it gives those rows null keys.
+    val nullKey = TransformExpression(TruncateFunction,
+      Seq(Literal(null, StringType), Literal(3)))
+    assert(nullKey.eval(InternalRow.empty) == null)
+    assert(TruncateReducer(2).reduce(null) == null)
+  }
+
   test("SPARK-50593: identical truncate widths trigger SPJ under the default config") {
     val table1 = "trunc_same_a"
     val table2 = "trunc_same_b"
@@ -8288,7 +8307,7 @@ class KeyGroupedPartitioningSuite
     val a = attr("a")
     val b = attr("b")
     def bucket(n: Int, e: Expression): TransformExpression =
-      TransformExpression(BucketFunction, Seq(Literal(n), e))
+      bucketTransform(BucketFunction, n, e)
     def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
     def days(e: Expression): TransformExpression = TransformExpression(DaysFunction, Seq(e))
 
@@ -8327,7 +8346,7 @@ class KeyGroupedPartitioningSuite
     def truncate(e: Expression, width: Int): TransformExpression =
       TransformExpression(TruncateFunction, Seq(e, Literal(width)))
     def bucket(n: Int, e: Expression): TransformExpression =
-      TransformExpression(BucketFunction, Seq(Literal(n), e))
+      bucketTransform(BucketFunction, n, e)
 
     // Truncate widths are distinguished.
     assert(!truncate(a, 3).isSameFunction(truncate(a, 5)))
@@ -8346,7 +8365,7 @@ class KeyGroupedPartitioningSuite
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     def bucket(n: Int, e: Expression): TransformExpression =
-      TransformExpression(BucketFunction, Seq(Literal(n), e))
+      bucketTransform(BucketFunction, n, e)
 
     // Flat parameterized transform over a bare column -> admitted (one non-literal child = column).
     assert(physical.KeyedPartitioning.supportsExpressions(Seq(bucket(4, a))))
@@ -8402,8 +8421,8 @@ class KeyGroupedPartitioningSuite
     // overload is not implemented, so a ReducibleFunction that overrides ONLY the deprecated
     // method still reduces.
     // This mirrors how Iceberg 1.10.0 (and earlier) ship -- they predate the Literal[] API.
-    val bucketExpr4 = TransformExpression(LegacyBucketFunction, Seq(Literal(4), attr("id")))
-    val bucketExpr2 = TransformExpression(LegacyBucketFunction, Seq(Literal(2), attr("id")))
+    val bucketExpr4 = bucketTransform(LegacyBucketFunction, 4, attr("id"))
+    val bucketExpr2 = bucketTransform(LegacyBucketFunction, 2, attr("id"))
 
     val reducer = bucketExpr4.reducers(bucketExpr2)
     assert(reducer.isDefined, "Expected a reducer for legacy_bucket(4) on legacy_bucket(2)")
@@ -8418,24 +8437,85 @@ class KeyGroupedPartitioningSuite
   test("SPARK-50593: a connector that modifies the parameter arrays does not change later " +
       "answers") {
     val id = attr("id")
-    val b8 = TransformExpression(ArrayMutatingBucketFunction, Seq(Literal(8), id))
-    val b4 = TransformExpression(ArrayMutatingBucketFunction, Seq(Literal(4), id))
+    val b8 = bucketTransform(ArrayMutatingBucketFunction, 8, id)
+    val b4 = bucketTransform(ArrayMutatingBucketFunction, 4, id)
     assert(b8.reducers(b4) == Some(BucketReducer(4)))
     assert(b8.reducers(b4) == Some(BucketReducer(4)), "asked again, the answer is the same")
   }
 
-  test("SPARK-50593: the deprecated int reducer is offered only the bucket(n, col) layout") {
-    // A width-last truncate whose deprecated overload has bucket logic would otherwise get a gcd
-    // reducer for its own pair, and apply it to keys from a different key space.
+  test("SPARK-50593: the deprecated int reducer is offered only a pair of V2 bucket transforms") {
+    // BucketLogicTruncateFunction inherits a bucket-style deprecated overload that does not check
+    // the other function. Whatever layout its truncate has, width first as Iceberg writes it or
+    // width last, a pair of them must not be offered that overload: the gcd reducer it returns
+    // would merge keys from different key spaces. Only a transform resolved from a V2 `bucket`
+    // is a bucket; the argument layout cannot tell `bucket(n, c)` from `truncate(w, c)`.
     val id = attr("id")
-    val t2 = TransformExpression(BucketLogicTruncateFunction, Seq(id, Literal(2)))
-    val t4 = TransformExpression(BucketLogicTruncateFunction, Seq(id, Literal(4)))
-    assert(t4.reducers(t2).isEmpty && t2.reducers(t4).isEmpty)
-    // The count-first layout still reaches it.
-    val b2 = TransformExpression(BucketLogicTruncateFunction, Seq(Literal(2), id))
-    val b4 = TransformExpression(BucketLogicTruncateFunction, Seq(Literal(4), id))
-    assert(b4.reducers(b2).isDefined)
+    def truncate(args: org.apache.spark.sql.catalyst.expressions.Expression*): TransformExpression =
+      TransformExpression(BucketLogicTruncateFunction, args)
+    assert(truncate(id, Literal(4)).reducers(truncate(id, Literal(2))).isEmpty)
+    assert(truncate(Literal(8), id).reducers(truncate(Literal(4), id)).isEmpty)
+    assert(!truncate(Literal(8), id).isCompatible(truncate(Literal(4), id)))
+    // A bucket of the same function still reaches it.
+    assert(bucketTransform(BucketLogicTruncateFunction, 8, id)
+      .reducers(bucketTransform(BucketLogicTruncateFunction, 4, id)).isDefined)
   }
+
+  test("SPARK-50593: a literal type mismatch does not route a non-bucket to the deprecated " +
+      "reducer") {
+    // A width-first truncate that implements the generalized overload, which answers "not
+    // reducible", but declares its width as BIGINT against the INT literal the transform carries.
+    // The mismatch means Spark does not ask the generalized overload, and must not then ask the
+    // deprecated one it inherits, which would answer with a gcd reducer.
+    val truncateLike = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = Array(LongType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "truncate"
+      override def canonicalName(): String = "truncate"
+      override def produceResult(input: InternalRow): Int = 0
+      override def reducer(
+          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+          otherFunc: ReducibleFunction[_, _],
+          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+          : Reducer[Int, Int] = null
+      override def reducer(
+          thisWidth: Int,
+          otherFunc: ReducibleFunction[_, _],
+          otherWidth: Int): Reducer[Int, Int] = {
+        val gcd = BigInt(thisWidth).gcd(BigInt(otherWidth)).toInt
+        if (gcd > 1 && gcd != thisWidth) BucketReducer(gcd) else null
+      }
+    }
+    val t6 = TransformExpression(truncateLike, Seq(Literal(6), attr("id")))
+    val t3 = TransformExpression(truncateLike, Seq(Literal(3), attr("id")))
+    val appender = new LogAppender("literal types differ")
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+        level = Some(Level.DEBUG)) {
+      assert(t6.pairReducers(t3) == ((None, None)))
+      assert(!t6.isCompatible(t3))
+    }
+    // The connector implements the generalized overload, so it is told why Spark did not ask it,
+    // not to override it.
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(_.contains("declares other input types")), messages)
+    assert(!messages.exists(_.contains("implements no reducer")), messages)
+  }
+
+  test("SPARK-50593: a scan marks a bucket transform as one, and no other transform") {
+    // The mark is what offers the deprecated reducer, so it must come from the V2 transform the
+    // scan reports, not from the bound function.
+    def reported(partitions: Array[Transform]): Seq[TransformExpression] = {
+      catalog.clearTables()
+      createTable(table, columns2, partitions)
+      sql(s"SELECT * FROM testcat.ns.$table").queryExecution.optimizedPlan.collect {
+        case r: DataSourceV2ScanRelation => r.keyGroupedPartitioning.toSeq.flatten
+      }.flatten.collect { case t: TransformExpression => t }
+    }
+    assert(reported(Array(bucket(4, "store_id"))).map(_.fromBucketTransform) == Seq(true))
+    assert(reported(Array(Expressions.apply("truncate", Expressions.column("data"),
+      Expressions.literal(2)))).map(_.fromBucketTransform) == Seq(false))
+  }
+
 
   test("SPARK-50593: the deprecated int reducer does not depend on the declared count type") {
     // The literal-type check guards only the generalized overload, which reads literals by type.
@@ -8444,8 +8524,8 @@ class KeyGroupedPartitioningSuite
     val id = attr("id")
     Seq(Array[DataType](LongType, LongType), Array[DataType](LongType)).foreach { declared =>
       val fn = new LegacyBucketDeclaring(declared)
-      val b8 = TransformExpression(fn, Seq(Literal(8), id))
-      val b4 = TransformExpression(fn, Seq(Literal(4), id))
+      val b8 = bucketTransform(fn, 8, id)
+      val b4 = bucketTransform(fn, 4, id)
       assert(b8.reducers(b4).isDefined, s"declared ${declared.mkString(", ")}")
     }
   }
@@ -8455,9 +8535,9 @@ class KeyGroupedPartitioningSuite
     // check the other function. CarelessLegacyBucketFunction does not, and would return a gcd
     // reducer for any pair of ints; offered a different function with the same argument layout, it
     // would pair partitions that do not hold the same rows.
-    val careless4 = TransformExpression(CarelessLegacyBucketFunction, Seq(Literal(4), attr("id")))
-    val careless2 = TransformExpression(CarelessLegacyBucketFunction, Seq(Literal(2), attr("id")))
-    val other2 = TransformExpression(LiteralFirstIntFunction, Seq(Literal(2), attr("id")))
+    val careless4 = bucketTransform(CarelessLegacyBucketFunction, 4, attr("id"))
+    val careless2 = bucketTransform(CarelessLegacyBucketFunction, 2, attr("id"))
+    val other2 = bucketTransform(LiteralFirstIntFunction, 2, attr("id"))
 
     assert(careless4.reducers(other2).isEmpty && other2.reducers(careless4).isEmpty,
       "a different function must not be offered the deprecated overload")
@@ -8465,7 +8545,7 @@ class KeyGroupedPartitioningSuite
     assert(careless4.reducers(careless2).isDefined, "the same function still reduces")
 
     // Same function means the same canonicalName; name() is only a display name.
-    val lookalike2 = TransformExpression(CarelessLookalikeFunction, Seq(Literal(2), attr("id")))
+    val lookalike2 = bucketTransform(CarelessLookalikeFunction, 2, attr("id"))
     assert(careless4.reducers(lookalike2).isEmpty,
       "a different function sharing only name() must not be offered the deprecated overload")
   }
@@ -8484,8 +8564,10 @@ class KeyGroupedPartitioningSuite
     // bucket-style int param and routed to the deprecated reducer(int, ...). LegacyBucketFunction
     // overrides ONLY that deprecated method, so with a DateType param it must be unreachable,
     // leaving the pair not reducible (rather than producing a bogus GCD reducer over epoch-days).
-    val l = TransformExpression(LegacyBucketFunction, Seq(Literal(8, DateType), attr("id")))
-    val r = TransformExpression(LegacyBucketFunction, Seq(Literal(4, DateType), attr("id")))
+    val l = TransformExpression(LegacyBucketFunction, Seq(Literal(8, DateType), attr("id")),
+      fromBucketTransform = true)
+    val r = TransformExpression(LegacyBucketFunction, Seq(Literal(4, DateType), attr("id")),
+      fromBucketTransform = true)
     assert(!l.isSameFunction(r))
     assert(!l.isCompatible(r), "a DateType param must not reach the deprecated int reducer")
     assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
@@ -8500,7 +8582,7 @@ class KeyGroupedPartitioningSuite
     val s = AttributeReference("s", structType)()
     val t = AttributeReference("t", structType)()
     def bucket(n: Int, arg: Expression): TransformExpression =
-      TransformExpression(BucketFunction, Seq(Literal(n), arg))
+      bucketTransform(BucketFunction, n, arg)
     assert(bucket(8, GetStructField(s, 0)).reducers(bucket(4, GetStructField(t, 0))).isDefined,
       "the same field of another struct column reaches the reducer")
     assert(bucket(8, GetStructField(s, 0)).reducers(bucket(4, GetStructField(s, 1))).isEmpty,
@@ -8530,8 +8612,8 @@ class KeyGroupedPartitioningSuite
     // null, the generalized reducer(Literal[], ...) returns a valid GCD reducer. Generalized-first
     // dispatch reduces via the generalized overload directly; the deprecated overload is not
     // consulted (its null is irrelevant).
-    val l = TransformExpression(DualApiBucketFunction, Seq(Literal(4), attr("id")))
-    val r = TransformExpression(DualApiBucketFunction, Seq(Literal(2), attr("store_id")))
+    val l = bucketTransform(DualApiBucketFunction, 4, attr("id"))
+    val r = bucketTransform(DualApiBucketFunction, 2, attr("store_id"))
     assert(l.isCompatible(r), "the generalized overload must produce a reducer")
     val red = l.reducers(r)
     assert(red.isDefined, "generalized reducer must be reached")
@@ -8543,8 +8625,8 @@ class KeyGroupedPartitioningSuite
     // single-int pair its deprecated reducer WOULD reduce (gcd). Under generalized-first dispatch
     // the generalized null is authoritative: Spark must not fall back to the deprecated overload,
     // so the pair is not reducible. (Deprecated-first would instead co-partition via gcd(4,2)=2.)
-    val l = TransformExpression(DualApiGeneralizedNullFunction, Seq(Literal(4), attr("id")))
-    val r = TransformExpression(DualApiGeneralizedNullFunction, Seq(Literal(2), attr("store_id")))
+    val l = bucketTransform(DualApiGeneralizedNullFunction, 4, attr("id"))
+    val r = bucketTransform(DualApiGeneralizedNullFunction, 2, attr("store_id"))
     assert(l.reducers(r).isEmpty,
       "a generalized null must not fall back to the deprecated overload")
     assert(r.reducers(l).isEmpty, "symmetric")
@@ -8667,8 +8749,8 @@ class KeyGroupedPartitioningSuite
     // reducible" would leave a one-side reduce: the 16 side reduced by % 4 and reported as
     // bucket(12), against the 12 side's raw keys, so only keys 0 to 3 would meet.
     val id = attr("id")
-    val b16 = TransformExpression(DirectionalBucketFunction, Seq(Literal(16), id))
-    val b12 = TransformExpression(DirectionalBucketFunction, Seq(Literal(12), id))
+    val b16 = bucketTransform(DirectionalBucketFunction, 16, id)
+    val b12 = bucketTransform(DirectionalBucketFunction, 12, id)
     assert(b16.reducers(b12).isDefined, "the finer side alone does reduce")
     assert(b16.pairReducers(b12) == ((None, None)) && b12.pairReducers(b16) == ((None, None)))
     assert(!b16.isCompatible(b12) && !b12.isCompatible(b16))
@@ -8739,9 +8821,8 @@ class KeyGroupedPartitioningSuite
     // overload must not be probed once it reduced. Here the generalized reducer succeeds and the
     // deprecated one throws; SPJ must succeed via the generalized path with NO "reducer threw"
     // warning (which an eager probe of the deprecated overload would spuriously log).
-    val l = TransformExpression(GeneralizedOkDeprecatedThrowsFunction, Seq(Literal(4), attr("id")))
-    val r = TransformExpression(
-      GeneralizedOkDeprecatedThrowsFunction, Seq(Literal(2), attr("store_id")))
+    val l = bucketTransform(GeneralizedOkDeprecatedThrowsFunction, 4, attr("id"))
+    val r = bucketTransform(GeneralizedOkDeprecatedThrowsFunction, 2, attr("store_id"))
     val appender = new LogAppender("deprecated overload probed eagerly")
     withLogAppender(appender) {
       assert(l.reducers(r).isDefined, "the generalized reducer must produce a reducer")
@@ -8758,9 +8839,8 @@ class KeyGroupedPartitioningSuite
     // authoritative -- it logs the exception and does NOT fall back to the deprecated overload, so
     // the pair shuffles. (Deprecated-first would have silently reduced via the deprecated overload,
     // masking the new-API bug.)
-    val l = TransformExpression(DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(4), attr("id")))
-    val r = TransformExpression(
-      DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(2), attr("store_id")))
+    val l = bucketTransform(DeprecatedOkGeneralizedThrowsFunction, 4, attr("id"))
+    val r = bucketTransform(DeprecatedOkGeneralizedThrowsFunction, 2, attr("store_id"))
     val appender = new LogAppender("generalized bug masked")
     appender.setThreshold(Level.DEBUG)
     // DEBUG: the WARN is logged once per function, so an earlier test may already have taken it.
@@ -8777,8 +8857,10 @@ class KeyGroupedPartitioningSuite
     // typed-null parameter would reach it as null.asInstanceOf[Int], a fabricated 0, so Spark
     // refuses null parameters before asking any overload.
     val col = AttributeReference("id", IntegerType)()
-    val l = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
-    val r = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
+    val l = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col),
+      fromBucketTransform = true)
+    val r = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col),
+      fromBucketTransform = true)
     assert(l.reducers(r).isEmpty,
       "a typed-null int param must not reach the deprecated int fallback")
   }
@@ -8787,8 +8869,9 @@ class KeyGroupedPartitioningSuite
     // BucketFunction implements the generalized overload and reads its parameter with
     // `value().asInstanceOf[Int]`, which turns null into 0; gcd(0, 4) would then give a reducer.
     val col = AttributeReference("id", IntegerType)()
-    val nullBucket = TransformExpression(BucketFunction, Seq(Literal(null, IntegerType), col))
-    val bucket4 = TransformExpression(BucketFunction, Seq(Literal(4), col))
+    val nullBucket = TransformExpression(BucketFunction, Seq(Literal(null, IntegerType), col),
+      fromBucketTransform = true)
+    val bucket4 = bucketTransform(BucketFunction, 4, col)
     assert(nullBucket.reducers(bucket4).isEmpty && bucket4.reducers(nullBucket).isEmpty)
     assert(!nullBucket.isCompatible(bucket4))
   }

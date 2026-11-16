@@ -704,6 +704,8 @@ object TruncateFunction
   override def canonicalName(): String = "truncate(string)"
   override def toString: String = name()
   override def produceResult(input: InternalRow): UTF8String = {
+    // A one-side shuffle onto a truncate layout evaluates this on every row, null keys included.
+    if (input.isNullAt(0)) return null
     val str = input.getUTF8String(0)
     val width = input.getInt(1)
     str.substring(0, width)
@@ -729,7 +731,7 @@ object TruncateFunction
 
 case class TruncateReducer(width: Int) extends Reducer[UTF8String, UTF8String] {
   override def reduce(value: UTF8String): UTF8String = {
-    value.substring(0, width)
+    if (value == null) null else value.substring(0, width)
   }
   override def resultType(): DataType = StringType
   override def displayName(): String = s"truncate($width)"

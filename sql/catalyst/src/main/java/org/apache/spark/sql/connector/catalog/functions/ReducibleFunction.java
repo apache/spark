@@ -88,8 +88,8 @@ public interface ReducibleFunction<I, O> {
    * first, for every pair. Only if it is not implemented (throws
    * {@link UnsupportedOperationException}) does Spark fall back: to
    * {@link #reducer(ReducibleFunction)} when neither side has a parameter, or to the deprecated
-   * {@code reducer(int, ReducibleFunction, int)} overload when both sides are the same function
-   * and each has a single non-null integer parameter in the first position. If every
+   * {@code reducer(int, ReducibleFunction, int)} overload when both sides are
+   * {@code bucket(n, col)} transforms of the same function with a non-null count. If every
    * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
    * reducer" warning; any other exception, from either side's call, is logged and the pair is
    * treated as not reducible (the join falls back to a shuffle).
@@ -116,10 +116,9 @@ public interface ReducibleFunction<I, O> {
   }
 
   /**
-   * This method is for the bucket function. When the generalized overload is not implemented,
-   * Spark offers it a pair of the same function whose single integer parameter comes first, as in
-   * {@code bucket(n, col)}, so an implementation should check {@code otherBucketFunction} rather
-   * than assume it is a bucket.
+   * This method is for the bucket function. Spark offers it only a pair of the same function, both
+   * resolved from a {@code bucket(n, col)} transform, and only when the generalized overload is not
+   * implemented.
    *
    * If this bucket function is 'reducible' on another bucket function,
    * return the {@link Reducer} function.
@@ -150,7 +149,10 @@ public interface ReducibleFunction<I, O> {
   }
 
   /**
-   * This method is for all other functions.
+   * This method is for a pair of transforms that have no literal parameters, such as
+   * {@code days(x)} and {@code hours(x)}. Spark asks it only when neither side has a parameter and
+   * the generalized {@link #reducer(Literal[], ReducibleFunction, Literal[])} is not implemented; a
+   * pair where either side has one is offered the generalized overload, which receives them.
    *
    * If this function is 'reducible' on another function, return the {@link Reducer} function.
    * <p>

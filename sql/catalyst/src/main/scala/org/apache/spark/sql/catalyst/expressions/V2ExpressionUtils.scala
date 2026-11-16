@@ -163,9 +163,19 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
       funCatalogOpt.flatMap { catalog =>
         loadV2FunctionOpt(catalog, name, catalystArgs).map { bound =>
-          TransformExpression(bound, catalystArgs)
+          TransformExpression(bound, catalystArgs, fromBucketTransform = isBucketTransform(trans))
         }
       }
+  }
+
+  /**
+   * Whether `trans` is a V2 `bucket(numBuckets, col)`, the shape a dedicated bucket arm resolved
+   * before literal parameters became children. See `TransformExpression.fromBucketTransform`.
+   */
+  private def isBucketTransform(trans: Transform): Boolean = trans match {
+    case NamedTransform("bucket", Seq(count: V2Literal[_], _: NamedReference)) =>
+      count.dataType == IntegerType
+    case _ => false
   }
 
   /**

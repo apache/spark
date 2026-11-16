@@ -94,19 +94,26 @@ object TransformFunctionId {
  *                    transform describes. The keys become `r1(f1(x))` = `r2(f2(x))`, so this
  *                    expression computes neither their values nor their data type. Set, it says
  *                    exactly that, and names the other half of the pairing that produced the space,
- *                    which is the only thing that tells two such key spaces apart. See
- *                    `KeyedShuffleSpec.reducersBothWays`, which is the only producer.
- */
-case class TransformExpression(
-    function: BoundFunction,
-    children: Seq[Expression],
-    reducedWith: Option[TransformFunctionId] = None) extends Expression {
+  *                    which is the only thing that tells two such key spaces apart. See
+  *                    `KeyedShuffleSpec.reducersBothWays`, which is the only producer.
+  * @param fromBucketTransform whether this was resolved from a V2 `bucket(numBuckets, col)`
+  *                            transform. Only a pair of such transforms is offered the deprecated
+  *                            `ReducibleFunction.reducer(int, ReducibleFunction, int)`, which is
+  *                            documented for the bucket function. Nothing else tells a bucket
+  *                            apart: a `truncate(width, col)` has the same layout, and the bound
+  *                            function may report any name. Not part of the transform's identity.
+  */
+ case class TransformExpression(
+     function: BoundFunction,
+     children: Seq[Expression],
+     reducedWith: Option[TransformFunctionId] = None,
+     fromBucketTransform: Boolean = false) extends Expression {
 
-  override def nullable: Boolean = true
+   override def nullable: Boolean = true
 
-  /** Drops the trailing `reducedWith` when it is unset, so the ordinary form is unchanged. */
-  override protected def stringArgs: Iterator[Any] =
-    if (reducedWith.isEmpty) super.stringArgs.take(productArity - 1) else super.stringArgs
+   /** The function and the children, and `reducedWith` when it is set. */
+   override protected def stringArgs: Iterator[Any] =
+     Iterator(function, children) ++ Option.when(reducedWith.isDefined)(reducedWith).iterator
 
   /**
    * Extract literal children (constant parameters) from this transform. These are constant
@@ -346,21 +353,21 @@ case class TransformExpression(
     val outcome =
       guarded {
         if (literalParamsMatchInputTypes && other.literalParamsMatchInputTypes) {
-          // A copy of the memoized arrays per call, so a connector cannot change them.
-          probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
-        } else {
-          Unimplemented
-        }
-      } match {
+              // A copy of the memoized arrays per call, so a connector cannot change them.
+              probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
+            } else {
+              LiteralTypesDiffer
+            }
+          } match {
         // A parameterless pair falls back to the parameterless overload.
         case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
           probe(thisFunction.reducer(otherFunction))
-        // The deprecated overload is documented for bucket against bucket, so only offer it a pair
-        // of the same function in the `bucket(n, col)` layout, with the count first.
-        case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) &&
-            function.canonicalName() == other.function.canonicalName() &&
-            children.headOption.exists(_.isInstanceOf[Literal]) &&
-            other.children.headOption.exists(_.isInstanceOf[Literal]) =>
+        // The deprecated overload is documented for bucket against bucket, and master offered it
+        // only a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`.
+        case Unimplemented | LiteralTypesDiffer
+            if fromBucketTransform && other.fromBucketTransform &&
+              isSingleInt(thisParams) && isSingleInt(otherParams) &&
+              function.canonicalName() == other.function.canonicalName() =>
           probe(thisFunction.reducer(
             thisParams(0).value().asInstanceOf[Int], otherFunction,
             otherParams(0).value().asInstanceOf[Int]))
@@ -370,6 +377,7 @@ case class TransformExpression(
     outcome match {
       case Threw(e) => logReducerThrew(function, thisName, e)
       case Unimplemented => logNoReducer(function, thisName)
+      case LiteralTypesDiffer => logLiteralTypesDiffer(function, thisName)
       case _ =>
     }
     outcome
@@ -643,6 +651,19 @@ object TransformExpression extends Logging {
     logDebug(log"V2 function ${MDC(FUNCTION_NAME, name)} reducer threw an exception.", e)
   }
 
+  /**
+   * Logs that `function` declares other types for its literal parameters than the transform's
+   * literals have, so Spark does not ask its generalized reducer: at WARN once per function, and
+   * at DEBUG.
+   */
+  private def logLiteralTypesDiffer(function: BoundFunction, name: String): Unit = {
+    def line: MessageWithContext = log"V2 function ${MDC(FUNCTION_NAME, name)} declares other " +
+      log"input types than the transform's literal parameters have, so Spark does not offer them " +
+      log"to reducer(Literal[], ReducibleFunction, Literal[]); treating as not reducible."
+    logOnce(s"literalTypes:${function.getClass.getName}:$name", log.isWarnEnabled)(logWarning(line))
+    logDebug(line)
+  }
+
   /** Logs that `function` implements no reducer: at WARN once per function, and at DEBUG. */
   private def logNoReducer(function: BoundFunction, name: String): Unit = {
     def line: MessageWithContext = log"V2 function ${MDC(FUNCTION_NAME, name)} implements no " +
@@ -716,6 +737,8 @@ object TransformExpression extends Logging {
   private case object NotReducible extends Outcome
   private case class Threw(e: Throwable) extends Outcome
   private case object Unimplemented extends Outcome
+  /** The generalized overload was not asked, since a literal parameter's type is not declared. */
+  private case object LiteralTypesDiffer extends Outcome
 
   /** The reducer an [[Outcome]] found, if it found one. */
   private def reducerOf(o: Outcome): Option[Reducer[_, _]] = o match {
