@@ -3685,8 +3685,9 @@ class XmlSuite
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         Seq(xml).toDF("value").coalesce(1).write.text(path)
-        // The Dataset[String] input, and the multi-line file read, where an escaping error fails
-        // the query instead of producing a corrupt record.
+        // If an exception escaped schema inference, the Dataset[String] read would produce a
+        // corrupt record, as would the multi-line file read with the legacy parser; with the
+        // default parser, the multi-line file read would fail the query.
         Seq(readData(xml, None, options), spark.read.options(options).xml(path)).foreach { df =>
           assert(df.schema("time").dataType === StringType)
           assert(!df.schema.fieldNames.contains("_corrupt_record"))
