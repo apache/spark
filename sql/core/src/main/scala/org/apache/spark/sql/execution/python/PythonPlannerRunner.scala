@@ -216,12 +216,12 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       while (n == 0) {
         idleTimeoutHandler.select(buffer.hasRemaining)
         if (worker.selectionKey.isReadable) {
-          n = idleTimeoutHandler.read(worker.channel.read(buf))
+          n = idleTimeoutHandler.read(buf)
         }
         if (worker.selectionKey.isWritable) {
           var acceptsInput = true
           while (acceptsInput && buffer.hasRemaining) {
-            val n = idleTimeoutHandler.write(worker.channel.write(buffer))
+            val n = idleTimeoutHandler.write(buffer)
             acceptsInput = n > 0
           }
           if (!buffer.hasRemaining) {
