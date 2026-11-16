@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.python
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, Closeable, DataInputStream, DataOutputStream, EOFException}
-import java.net.{InetAddress, InetSocketAddress}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, Closeable, DataInputStream, DataOutputStream, EOFException, IOException}
+import java.net.{InetAddress, InetSocketAddress, SocketException, SocketTimeoutException, StandardSocketOptions}
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ClosedByInterruptException, SelectionKey, ServerSocketChannel, SocketChannel}
 import java.nio.charset.StandardCharsets
@@ -888,11 +888,13 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
   private class RecordingWorkerHandle(
       alive: Boolean = true,
       destroyIssued: Boolean = true,
-      diagnostics: Option[String] = None) extends PythonWorkerHandle {
+      diagnostics: Option[String] = None,
+      onDestroy: () => Unit = () => ()) extends PythonWorkerHandle {
     val destroyCalls = new AtomicInteger(0)
     override def isAlive(): Boolean = alive
     override def destroy(): Boolean = {
       destroyCalls.incrementAndGet()
+      onDestroy()
       destroyIssued
     }
     override def terminationDiagnostics(): Option[String] = diagnostics
@@ -975,14 +977,15 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
           nonBlockingWorkerStatus + "hasInputs = true"))
       assert(handle.destroyCalls.get() === 1)
 
-      // Only the end of the stream fails the read.
-      handler.throwIfKilled(0)
-      handler.throwIfKilled(16)
+      // A read that returns data, or no data yet, does not fail; the end of the stream does.
+      assert(handler.read(0) === 0)
+      assert(handler.read(16) === 16)
       val e = intercept[PythonWorkerException] {
-        handler.throwIfKilled(-1)
+        handler.read(-1)
       }
       assert(e.getMessage ===
         "Python worker process terminated due to idle timeout (timeout: 1 seconds): worker stack")
+      assert(e.getCause === null)
     }
   }
 
@@ -1001,7 +1004,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
           worker, Some(handle), idleTimeoutSeconds = 0, killOnIdleTimeout = true,
           Some(TaskContext.empty()), idleTimeoutLoggerName)
         noTimeoutHandler.select(hasInputs = false)
-        noTimeoutHandler.throwIfKilled(-1)
+        assert(noTimeoutHandler.read(-1) === -1)
       }
       assert(warnings.isEmpty)
       assert(handle.destroyCalls.get() === 0)
@@ -1022,7 +1025,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
       assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
       assert(handle.destroyCalls.get() === 0)
-      handler.throwIfKilled(-1)
+      assert(handler.read(-1) === -1)
     }
 
     withIdleWorker(blocking = false) { (worker, _) =>
@@ -1040,7 +1043,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
           nonBlockingWorkerStatus + "hasInputs = false"))
       assert(handle.destroyCalls.get() === 1)
       val e = intercept[PythonWorkerException] {
-        handler.throwIfKilled(-1)
+        handler.read(-1)
       }
       assert(e.getMessage ===
         "Python worker process terminated due to idle timeout (timeout: 1 seconds)")
@@ -1066,7 +1069,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
           s"handle.map(_.isAlive) = Some(true), $blockingWorkerStatus"))
       assert(handle.destroyCalls.get() === 1)
       val e = intercept[PythonWorkerException] {
-        handler.throwIfKilled(-1)
+        handler.read(-1)
       }
       assert(e.getMessage ===
         "Python worker process terminated due to idle timeout (timeout: 3 seconds)")
@@ -1082,7 +1085,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
       assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
       assert(handle.destroyCalls.get() === 2)
-      handler.throwIfKilled(-1)
+      assert(handler.read(-1) === -1)
     }
 
     // A worker that has already exited is not asked to terminate and does not count as killed.
@@ -1096,7 +1099,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
           "No data received from the worker process - handle.map(_.isAlive) = Some(false), " +
           s"$blockingWorkerStatus - $task"))
       assert(handle.destroyCalls.get() === 0)
-      handler.throwIfKilled(-1)
+      assert(handler.read(-1) === -1)
     }
 
     // Without a handle there is nothing to kill.
@@ -1108,7 +1111,120 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
         "Idle timeout reached for Python worker (timeout: 3 seconds). " +
           "No data received from the worker process - handle.map(_.isAlive) = None, " +
           s"$blockingWorkerStatus - $task"))
-      handler.throwIfKilled(-1)
+      assert(handler.read(-1) === -1)
+    }
+  }
+
+  /**
+   * Closes `peer` so that the other end of the connection sees a reset instead of the end of
+   * the stream, like the connection of a worker that is killed while it has unread input.
+   */
+  private def reset(peer: SocketChannel): Unit = {
+    peer.setOption[Integer](StandardSocketOptions.SO_LINGER, 0)
+    peer.close()
+  }
+
+  test("a read that fails after the idle timeout killed the worker reports the idle timeout") {
+    // Pipelined mode: the read times out, the worker is killed, and the read that is tried
+    // again fails with a connection reset.
+    withIdleWorker(blocking = true) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle(
+        diagnostics = Some("worker stack"), onDestroy = () => reset(peer))
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      worker.channel.socket().setSoTimeout(1000)
+      val in = worker.channel.socket().getInputStream
+      val e = intercept[PythonWorkerException] {
+        handler.read(in.read())
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 1 seconds): worker stack")
+      assert(e.getCause.isInstanceOf[SocketException], e.getCause)
+      assert(handle.destroyCalls.get() === 1)
+    }
+
+    // Selector based streams: the wait on the selector times out, the worker is killed, and
+    // the read from the channel fails with a connection reset.
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle(onDestroy = () => reset(peer))
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        None, idleTimeoutLoggerName)
+      handler.select(hasInputs = false)
+      assert(handle.destroyCalls.get() === 1)
+      handler.select(hasInputs = false)
+      assert(worker.selectionKey.isReadable)
+      val e = intercept[PythonWorkerException] {
+        handler.read(worker.channel.read(ByteBuffer.allocate(8)))
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 1 seconds)")
+      assert(e.getCause.isInstanceOf[IOException], e.getCause)
+      assert(!e.getCause.isInstanceOf[SocketTimeoutException], e.getCause)
+    }
+  }
+
+  test("a write that fails after the idle timeout killed the worker reports the idle timeout") {
+    withIdleWorker(blocking = false) { (worker, _) =>
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(new RecordingWorkerHandle()), idleTimeoutSeconds = 1,
+        killOnIdleTimeout = true, None, idleTimeoutLoggerName)
+      val failure = new IOException("Broken pipe")
+      assert(intercept[IOException](handler.write(throw failure)) eq failure)
+      handler.onIdleTimeout(hasInputs = true)
+      assert(handler.write(4) === 4)
+      val e = intercept[PythonWorkerException] {
+        handler.write(throw failure)
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 1 seconds)")
+      assert(e.getCause eq failure)
+      // Only an I/O failure is attributed to the kill.
+      val other = new IllegalStateException("not I/O")
+      assert(intercept[IllegalStateException](handler.write(throw other)) eq other)
+      assert(intercept[IllegalStateException](handler.read(throw other)) eq other)
+    }
+  }
+
+  test("a read that fails with no idle timeout kill fails as before") {
+    // No timeout was reached: the worker closed the connection on its own.
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 60, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      reset(peer)
+      handler.select(hasInputs = false)
+      val e = intercept[IOException] {
+        handler.read(worker.channel.read(ByteBuffer.allocate(8)))
+      }
+      assert(!e.isInstanceOf[SocketTimeoutException], e)
+      assert(handle.destroyCalls.get() === 0)
+    }
+
+    // The timeout was reached but the worker is not killed, so the read is tried again and
+    // its failure is not attributed to the idle timeout.
+    Seq(
+      (new RecordingWorkerHandle(), false),
+      (new RecordingWorkerHandle(destroyIssued = false), true),
+      (new RecordingWorkerHandle(alive = false), true)
+    ).foreach { case (handle, killOnIdleTimeout) =>
+      withIdleWorker(blocking = true) { (worker, _) =>
+        val handler = new BasePythonRunner.IdleTimeoutHandler(
+          worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = killOnIdleTimeout,
+          Some(TaskContext.empty()), idleTimeoutLoggerName)
+        val failure = new IOException("Connection reset")
+        var reads = 0
+        val e = intercept[IOException] {
+          handler.read {
+            reads += 1
+            throw (if (reads == 1) new SocketTimeoutException("Read timed out") else failure)
+          }
+        }
+        assert(e eq failure)
+        assert(reads === 2)
+      }
     }
   }
 }

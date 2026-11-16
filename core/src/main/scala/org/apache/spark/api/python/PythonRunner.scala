@@ -612,9 +612,10 @@ private[spark] object BasePythonRunner extends Logging {
    * worker has closed the connection.
    *
    * The caller decides how a timeout is detected. Streams that wait on the worker's selector
-   * use `select`; a stream that relies on the socket read timeout calls `onIdleTimeout` when
-   * the read times out. Either way, the stream passes the result of each read to
-   * `throwIfKilled`.
+   * use `select`; a stream that relies on the socket read timeout gets it handled by `read`.
+   * Either way, the stream runs every read from the worker, and every write to it on the same
+   * thread, through `read` and `write`, so that a read or a write that fails because the worker
+   * was killed is reported as the idle timeout and not as a crash of the worker.
    *
    * This class is not thread-safe. Use an instance only from the thread that reads from the
    * worker.
@@ -702,15 +703,53 @@ private[spark] object BasePythonRunner extends Logging {
     }
 
     /**
-     * Throws a [[PythonWorkerException]] if `n`, the result of a read from the worker, is the
-     * end of the stream and the worker was killed because of the idle timeout.
+     * Runs `op`, which reads from the worker, and returns its result.
+     *
+     * If the read times out, which only a blocking socket with a read timeout does, the idle
+     * timeout is handled and the read is tried again. Once the worker has been killed because
+     * of the idle timeout, the end of the stream and a failure of the read both throw a
+     * [[PythonWorkerException]] for the idle timeout: the connection of a killed worker can be
+     * reset instead of closed, for example when the worker had unread input. A failure of the
+     * read with no kill is thrown as is.
      */
-    def throwIfKilled(n: Int): Unit = {
-      if (n == -1 && pythonWorkerKilled) {
-        throw new PythonWorkerException(withTerminationDiagnostics(
-          "Python worker process terminated due to idle timeout " +
-            s"(timeout: $idleTimeoutSeconds seconds)", handle))
+    def read(op: => Int): Int = {
+      var n = 0
+      var done = false
+      while (!done) {
+        try {
+          n = op
+          done = true
+        } catch {
+          case _: SocketTimeoutException =>
+            onIdleTimeout(hasInputs = true)
+          case e: IOException if pythonWorkerKilled =>
+            throw killedException(e)
+        }
       }
+      if (n == -1 && pythonWorkerKilled) {
+        throw killedException(null)
+      }
+      n
+    }
+
+    /**
+     * Runs `op`, which writes to the worker, and returns its result. A failure of the write
+     * after the worker has been killed because of the idle timeout throws a
+     * [[PythonWorkerException]] for the idle timeout; with no kill it is thrown as is.
+     */
+    def write(op: => Int): Int = {
+      try {
+        op
+      } catch {
+        case e: IOException if pythonWorkerKilled =>
+          throw killedException(e)
+      }
+    }
+
+    private def killedException(cause: Throwable): PythonWorkerException = {
+      new PythonWorkerException(withTerminationDiagnostics(
+        "Python worker process terminated due to idle timeout " +
+          s"(timeout: $idleTimeoutSeconds seconds)", handle), cause)
     }
   }
 }
@@ -973,30 +1012,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
     // - Log warning on each timeout
-    // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException
+    // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException once the
+    //   read ends or fails
     // - If killOnIdleTimeout=false: log only, retry read (continue waiting)
     val idleTimeoutHandler = new IdleTimeoutHandler(
       worker, handle, idleTimeoutSeconds, killOnIdleTimeout, Some(context), logName)
     val socketInput = new InputStream {
       private val inner = worker.channel.socket().getInputStream
-      override def read(): Int = doRead(() => inner.read())
+      override def read(): Int = idleTimeoutHandler.read(inner.read())
       override def read(b: Array[Byte], off: Int, len: Int): Int =
-        doRead(() => inner.read(b, off, len))
-      private def doRead(op: () => Int): Int = {
-        var result = 0
-        var retry = true
-        while (retry) {
-          try {
-            result = op()
-            retry = false
-          } catch {
-            case _: java.net.SocketTimeoutException =>
-              idleTimeoutHandler.onIdleTimeout(hasInputs = true)
-          }
-        }
-        idleTimeoutHandler.throwIfKilled(result)
-        result
-      }
+        idleTimeoutHandler.read(inner.read(b, off, len))
     }
     new DataInputStream(new BufferedInputStream(socketInput, bufferSize))
   }
@@ -1532,7 +1557,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       while (n == 0) {
         idleTimeoutHandler.select(hasInput || buffer.hasRemaining)
         if (worker.selectionKey.isReadable) {
-          n = worker.channel.read(buf)
+          n = idleTimeoutHandler.read(worker.channel.read(buf))
         }
         if (worker.selectionKey.isWritable) {
           val mainIfbhThreadLocalValue = InputFileBlockHolder.getThreadLocalValue()
@@ -1575,7 +1600,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
         }
       }
-      idleTimeoutHandler.throwIfKilled(n)
       n
     }
 
@@ -1648,7 +1672,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
         // Try to write as much buffered data as possible to the socket.
         while (buffer.hasRemaining && acceptsInput) {
-          val n = worker.channel.write(buffer)
+          val n = idleTimeoutHandler.write(worker.channel.write(buffer))
           acceptsInput = n > 0
         }
       }
