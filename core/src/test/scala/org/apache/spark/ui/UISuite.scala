@@ -201,12 +201,15 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("/static/sql resources are served by the core static handler") {
+  test("SPARK-59613: /static/sql resources are served by the core static handler") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
       Seq(
+        "allexecutionspage.js",
+        "executionpage.js",
         "spark-sql-viz.css",
-        "spark-sql-viz.js").foreach { name =>
+        "spark-sql-viz.js",
+        "sql-table-utils.js").foreach { name =>
         val url = new URI(s"${ui.webUrl}/static/sql/$name").toURL
         // fromURL throws on a non-2xx response, so reading the body also checks the status.
         val content = Utils.tryWithResource(Source.fromURL(url))(_.mkString)
