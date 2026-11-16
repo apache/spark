@@ -269,18 +269,26 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   private def numDistinctAggGroups(a: Aggregate): Int =
     groupDistinctAggs(collectAggregateExprs(a)).size
 
+  /**
+   * [[normalizeCountDistinctConditional]] of `a`, if it strictly reduces the number of distinct
+   * groups. Otherwise shapes like COUNT(DISTINCT IF) + SUM(DISTINCT IF) (same IF) or a repeated
+   * COUNT(DISTINCT IF) next to COUNT(*) would move from the single-distinct path onto an Expand
+   * with no fan-out win.
+   */
+  private def normalizedWithFewerGroups(a: Aggregate): Option[Aggregate] = {
+    val normalized = normalizeCountDistinctConditional(a)
+    if (numDistinctAggGroups(normalized) < numDistinctAggGroups(a)) Some(normalized) else None
+  }
+
   def rewrite(origAgg: Aggregate): Aggregate = {
-    // Keep the normalized form only when it strictly reduces the number of distinct
-    // groups. Otherwise shapes like COUNT(DISTINCT IF) + SUM(DISTINCT IF) (same IF)
-    // or a repeated COUNT(DISTINCT IF) next to COUNT(*) would move from the
-    // single-distinct path onto an Expand with no fan-out win.
-    val normalized = normalizeCountDistinctConditional(origAgg)
-    val a =
-      if (numDistinctAggGroups(normalized) < numDistinctAggGroups(origAgg)) {
-        normalized
-      } else {
-        origAgg
-      }
+    // Read the config once, so that the normalization and the union-of-filters guard below
+    // see the same value.
+    val conditionalRewriteEnabled = SQLConf.get.rewriteCountDistinctConditionalEnabled
+    val a = if (conditionalRewriteEnabled) {
+      normalizedWithFewerGroups(origAgg).getOrElse(origAgg)
+    } else {
+      origAgg
+    }
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
     val distinctAggGroups = groupDistinctAggs(aggExpressions)
@@ -355,7 +363,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // today's evaluation count and error behavior. The guard shares the
           // rewriteCountDistinctConditional kill switch so conf=false restores the
           // pre-feature Expand key (raw child) for user-written FILTER distincts too.
-          val canGuard = SQLConf.get.rewriteCountDistinctConditionalEnabled &&
+          val canGuard = conditionalRewriteEnabled &&
             expressions.forall(_.filter.isDefined) &&
             filters.forall { f =>
               f.deterministic && !f.containsPattern(PLAN_EXPRESSION)
@@ -503,7 +511,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * Canonicalizes COUNT(DISTINCT IF(cond, base, NULL)) and
    * COUNT(DISTINCT CASE WHEN cond THEN base END) to COUNT(DISTINCT base) FILTER (WHERE cond).
    * Multiple conditional counts on the same base then share one distinct group, shrinking
-   * Expand fan-out from Nx to 1x. [[rewrite]] only keeps this form when it strictly
+   * Expand fan-out from Nx to 1x. [[rewrite]] calls this only when
+   * rewriteCountDistinctConditional is enabled, and keeps the result only when it strictly
    * reduces the number of distinct groups.
    *
    * With the union-of-filters guard enabled, an all-filtered group whose children
@@ -519,7 +528,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    *
    * A condition that itself contains a subquery is not normalized. Guarding that
    * group would duplicate the predicate into a second existence join, and collapsing
-   * it without the guard would project the raw base.
+   * it without the guard would project the raw base. Nor is a non-deterministic
+   * condition: the guard does not apply to it, so collapsing it would project the raw
+   * base too.
    *
    * A count whose IF/CASE child is also the distinct child of an aggregate that is
    * not normalized (e.g. SUM(DISTINCT IF(...)) on the same expression) is skipped:
@@ -529,7 +540,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * original key sharing.
    */
   private def normalizeCountDistinctConditional(a: Aggregate): Aggregate = {
-    if (!SQLConf.get.rewriteCountDistinctConditionalEnabled) return a
     // Distinct children (canonicalized) of aggregates this method will not
     // normalize. A conditional count sharing one of these children stays put, so
     // the shared group survives instead of its keys being carried twice.
@@ -567,17 +577,17 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * CASE WHEN cond THEN base ELSE NULL END (including null wrapped in Cast).
    * Multi-branch CaseWhen is intentionally not rewritten -- Or-flattening is out of scope.
    * The base must pass [[ExprUtils.canEvaluateUnconditionally]]. The condition must
-   * not contain a subquery: normalizing one would merge the counts into a group
-   * that cannot be guarded, so Expand would project the raw base. The condition
-   * needs no [[ExprUtils.canEvaluateUnconditionally]] check, because it is already
-   * evaluated unconditionally as the IF/CASE WHEN predicate. A non-deterministic
-   * filter skips the guard and the raw base is projected for every row
-   * (see [[normalizeCountDistinctConditional]]).
+   * be deterministic and must not contain a subquery: normalizing one that is not
+   * would merge the counts into a group that cannot be guarded, so Expand would
+   * project the raw base. The condition needs no
+   * [[ExprUtils.canEvaluateUnconditionally]] check, because it is already evaluated
+   * unconditionally as the IF/CASE WHEN predicate.
    * Returns None for anything else.
    */
   private def extractCondAndBase(expr: Expression): Option[(Expression, Expression)] = {
     def eligible(cond: Expression, base: Expression): Boolean = {
-      !cond.containsPattern(PLAN_EXPRESSION) && ExprUtils.canEvaluateUnconditionally(base)
+      cond.deterministic && !cond.containsPattern(PLAN_EXPRESSION) &&
+        ExprUtils.canEvaluateUnconditionally(base)
     }
 
     expr match {

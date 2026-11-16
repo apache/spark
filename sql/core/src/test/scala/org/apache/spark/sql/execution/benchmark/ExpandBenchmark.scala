@@ -210,7 +210,11 @@ object ExpandBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark.run()
+    // Pin the conditional distinct rewrite on, as the other two rewrite benchmarks do, so that
+    // both cases measure the rewritten Expand that the class doc describes.
+    withSQLConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED -> "true") {
+      benchmark.run()
+    }
   }
 
   /**

@@ -3673,7 +3673,8 @@ object SQLConf {
         "IF/CASE rewrite is only applied to base expressions that are safe to " +
         "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
         "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
-        "subquery is not rewritten. When spark.sql.optimizer.optimizeExpandRatio " +
+        "subquery or is non-deterministic is not rewritten. When " +
+        "spark.sql.optimizer.optimizeExpandRatio " +
         "enables OptimizeExpand, the normalized FILTER form is not eligible for " +
         "pre-aggregation because Expand projects filter flags. Enabling both can " +
         "therefore trade lower Expand fan-out for losing pre-aggregation on " +
