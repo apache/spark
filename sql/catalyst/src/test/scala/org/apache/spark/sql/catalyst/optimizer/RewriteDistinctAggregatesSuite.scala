@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{
   Add, Ascending, AttributeReference, CaseWhen, Cast, Coalesce, Divide, EvalMode, Exists,
   Expression, GetMapValue, GetStructField, If, InSubquery, ListQuery, Literal, Lower, Not,
-  NumericEvalContext, Or, Rand, Round, SortOrder, Substring
+  NumericEvalContext, Or, Rand, Round, SortOrder, Substring, UnaryExpression, Unevaluable
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
   AggregateExpression, CollectSet, Count, ListAgg, Sum
@@ -30,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{
-  DoubleType, IntegerType, MapType, StringType, StructField, StructType
+  BooleanType, DataType, DoubleType, IntegerType, MapType, StringType, StructField, StructType
 }
 
 class RewriteDistinctAggregatesSuite extends PlanTest {
@@ -399,6 +401,31 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
   }
 
+  test("SPARK-61819: conditional: the rule reads the config once per aggregate") {
+    // The condition turns the config off the first time its determinism is checked, which
+    // happens while the rule rewrites the aggregate, after the rule has read the config. The
+    // rule then still guards the group it normalized. Reading the config again for the guard
+    // would leave the normalized group keyed by the raw base.
+    val Seq(a, b, c, _) = conditionalTestRelation.output
+    def conditional(cond: Expression): Expression =
+      Count(If(cond, c, Literal(null, IntegerType))).toAggregateExpression(isDistinct = true)
+    val cond = OnFirstDeterminismCheck(b > 1, () =>
+      SQLConf.get.setConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED, false))
+    // Analysis would check the condition's determinism first, so the plan is built directly.
+    val input = Aggregate(
+      Seq(a),
+      Seq(conditional(cond).as("cnt1"), conditional(b > 2).as("cnt2")),
+      conditionalTestRelation)
+    assert(input.resolved, s"the input plan must be resolved:\n$input")
+    val optimized = withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+      val plan = RewriteDistinctAggregates(input)
+      assert(!SQLConf.get.rewriteCountDistinctConditionalEnabled,
+        "the config was not turned off during the rewrite")
+      plan
+    }
+    assertGuardedExpandKey(optimized, c, Seq(cond, b > 2))
+  }
+
   test("conditional: unfiltered count in the group keeps the raw base key") {
     val base = conditionalTestRelation.output.find(_.name == "c").get
     val input = conditionalTestRelation
@@ -517,6 +544,45 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
     assert(subqueryExprCount(optimized) == 1,
       "the EXISTS condition should appear once, in its own group")
+  }
+
+  gridTest("SPARK-61819: conditional: do not normalize counts whose condition is " +
+      "non-deterministic")(Seq("if", "case")) { form =>
+    // Normalizing the non-deterministic count would put it in one group with the other two,
+    // and the guard does not apply to a non-deterministic filter, so the group would be keyed
+    // by the raw base. Analysis rejects a non-deterministic aggregate argument, so the plan is
+    // built directly.
+    val Seq(a, b, c, _) = conditionalTestRelation.output
+    def conditional(cond: Expression): Expression = {
+      val child = form match {
+        case "if" => If(cond, c, Literal(null, IntegerType))
+        case "case" => CaseWhen(Seq((cond, c)), None)
+      }
+      Count(child).toAggregateExpression(isDistinct = true)
+    }
+    val input = Aggregate(
+      Seq(a),
+      Seq(
+        conditional(Rand(42) < Literal(0.5, DoubleType)).as("cnt0"),
+        conditional(b > 1).as("cnt1"),
+        conditional(b > 2).as("cnt2")),
+      conditionalTestRelation)
+    assert(input.resolved, s"the input plan must be resolved:\n$input")
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }
+      .getOrElse(fail(s"expected an Expand:\n$optimized"))
+    assert(!expand.projections.exists(_.exists(_.semanticEquals(c))),
+      s"a distinct group is keyed by the raw base:\n$optimized")
+    val guards = expand.projections.flatten.collect {
+      case i @ If(_, trueValue, _) if trueValue.semanticEquals(c) => i
+    }
+    assert(guards.exists { guard =>
+      val leaves = orLeaves(guard.predicate)
+      leaves.size == 2 && Seq(b > 1, b > 2).forall(cond => leaves.exists(_.semanticEquals(cond)))
+    }, s"no guard over exactly the two deterministic conditions:\n$optimized")
+    val filters = collectAggregateExpressions(optimized).flatMap(_.filter)
+    assert(!filters.exists(_.find(_.isInstanceOf[Rand]).isDefined),
+      s"the non-deterministic condition must not become a FILTER:\n$optimized")
   }
 
   test("conditional: throwable distinct child keeps the raw key") {
@@ -753,6 +819,27 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     assert(expands.head.projections.size == 2)
   }
 
+  test("SPARK-61819: conditional: do not normalize COUNT(DISTINCT IF(...), col)") {
+    // Normalizing would drop the count's other arguments, so only a count with one argument
+    // is normalized.
+    val Seq(_, b, c, d) = conditionalTestRelation.output
+    def countWithTwoArguments(cond: Expression): Expression =
+      Count(Seq(If(cond, c, Literal(null, IntegerType)), d))
+        .toAggregateExpression(isDistinct = true)
+    val input = conditionalTestRelation
+      .groupBy(Symbol("a"))(
+        countWithTwoArguments(b > 1).as("cnt1"),
+        countWithTwoArguments(b > 2).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }
+      .getOrElse(fail(s"expected an Expand:\n$optimized"))
+    assert(expand.projections.size == 2, s"expected one distinct group per count:\n$optimized")
+    val userFilters = collectAggregateExpressions(optimized).flatMap(_.filter)
+      .filter(_.references.exists(_.name != "gid"))
+    assert(userFilters.isEmpty, s"expected no user-condition FILTER:\n$optimized")
+  }
+
   test("conditional: do not rewrite multi-branch CASE WHEN") {
     val caseWhen1 = new CaseWhen(
       Seq(
@@ -881,3 +968,22 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   }
 }
 
+/**
+ * A predicate that runs `onFirstCheck` the first time the determinism of it, or of any copy of
+ * it, is checked.
+ */
+private case class OnFirstDeterminismCheck(
+    child: Expression,
+    onFirstCheck: () => Unit,
+    checked: AtomicBoolean = new AtomicBoolean(false))
+  extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = BooleanType
+  override lazy val deterministic: Boolean = {
+    if (checked.compareAndSet(false, true)) {
+      onFirstCheck()
+    }
+    child.deterministic
+  }
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}

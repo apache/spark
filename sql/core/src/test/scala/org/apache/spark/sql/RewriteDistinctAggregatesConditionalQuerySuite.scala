@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, If, Or}
+import org.apache.spark.sql.catalyst.expressions.{Expression, If, Literal, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Join, LogicalPlan}
@@ -355,6 +355,57 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     }
   }
 
+  test("SPARK-61819: guard: the aggregate above the Expand outputs no more rows than with " +
+      "the config off") {
+    withTempView("t") {
+      // The shape of the test above, with more rows: ord is unique, and each condition matches
+      // 1% of the rows. Without the guard, the distinct key of the normalized group would be ord
+      // on every row, so the aggregate above the Expand would output one row per input row.
+      spark.range(10000)
+        .selectExpr(
+          "cast(id % 7 as int) as key",
+          "cast(id as bigint) as ord",
+          "cast(id % 100 as int) as bucket")
+        .createOrReplaceTempView("t")
+      val query =
+        """SELECT key,
+          |  COUNT(DISTINCT IF(bucket = 0, ord, NULL)),
+          |  COUNT(DISTINCT IF(bucket = 3, ord, NULL))
+          |FROM t GROUP BY key""".stripMargin
+      // The number of rows that the aggregate directly above the Expand outputs.
+      def rowsAboveExpand(plan: LogicalPlan): Long = {
+        val first = plan.collectFirst {
+          case a: Aggregate if a.child.isInstanceOf[Expand] => a
+        }.getOrElse(fail(s"expected an aggregate above an Expand:\n$plan"))
+        classic.Dataset.ofRows(spark, first).count()
+      }
+      val rowsWithConfigOff = withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+        rowsAboveExpand(spark.sql(query).queryExecution.optimizedPlan)
+      }
+      withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        val plan = spark.sql(query).queryExecution.optimizedPlan
+        val expand = plan.collectFirst { case e: Expand => e }
+          .getOrElse(fail(s"expected an Expand:\n$plan"))
+        assert(expand.projections.size == 1, s"expected one distinct group:\n$plan")
+        // The same plan without the guard on the Expand key.
+        val unguarded = plan.transformUp {
+          case e: Expand => e.copy(projections = e.projections.map(_.map {
+            case If(_, base, Literal(null, _)) => base
+            case other => other
+          }))
+        }
+        // Each condition matches 100 rows, and the rows that match no condition add one NULL
+        // row per grouping value and distinct group: 2 * (100 + 7) rows with the config off,
+        // 200 + 7 with the guard, and one row per input row without it.
+        assert(rowsWithConfigOff == 214)
+        assert(rowsAboveExpand(plan) == 207)
+        assert(rowsAboveExpand(unguarded) == 10000)
+      }
+    }
+  }
+
   test("guard: mixed overlapping windows and disjoint flags") {
     withTempView("t") {
       spark.range(1000)
@@ -448,6 +499,55 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           |  COUNT(DISTINCT ord),
           |  COUNT(DISTINCT ord) FILTER (WHERE bucket = 0)
           |FROM t GROUP BY key""".stripMargin)
+    }
+  }
+
+  gridTest("SPARK-61819: guard: conditions on a column computed by a non-deterministic " +
+      "expression keep the guard")(Seq("condition-in-subquery", "column-in-subquery")) { form =>
+    withTable("t_files") {
+      spark.range(200)
+        .selectExpr(
+          "cast(id % 3 as int) as key",
+          "id as ord",
+          "cast(id % 10 as int) as bucket")
+        .write.saveAsTable("t_files")
+      // Analysis rejects a non-deterministic expression in an aggregate argument, so
+      // input_file_name() can reach the counts only through a column computed in a subquery.
+      // The condition that the rule sees reads that column, so it is deterministic, and the
+      // three counts share one guarded distinct group.
+      val (subqueryColumn, condition) = form match {
+        case "condition-in-subquery" =>
+          ("input_file_name() LIKE '%part%' AS from_file", "from_file")
+        case "column-in-subquery" => ("input_file_name() AS file", "file LIKE '%part%'")
+      }
+      val query =
+        s"""SELECT key,
+           |  COUNT(DISTINCT IF($condition, ord, NULL)),
+           |  COUNT(DISTINCT IF(bucket = 3, ord, NULL)),
+           |  COUNT(DISTINCT IF(bucket = 5, ord, NULL))
+           |FROM (SELECT key, ord, bucket, $subqueryColumn FROM t_files)
+           |GROUP BY key""".stripMargin
+      val expected = withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+        spark.sql(query).collect().toSeq
+      }
+      withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        val df = spark.sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.optimizedPlan
+        val expand = plan.collectFirst { case e: Expand => e }
+          .getOrElse(fail(s"expected an Expand:\n$plan"))
+        val ord = expand.child.output.find(_.name == "ord").get
+        assert(!expand.projections.exists(_.exists(_.semanticEquals(ord))),
+          s"a distinct group is keyed by the raw base:\n$plan")
+        assert(expand.projections.size == 1, s"expected one distinct group:\n$plan")
+        val guard = expand.projections.head.collectFirst {
+          case i @ If(_, trueValue, Literal(null, _)) if trueValue.semanticEquals(ord) => i
+        }.getOrElse(fail(s"no guard over ord:\n$plan"))
+        assert(orLeaves(guard.predicate).size == 3,
+          s"the guard does not cover the three conditions: ${guard.predicate}")
+      }
     }
   }
 
