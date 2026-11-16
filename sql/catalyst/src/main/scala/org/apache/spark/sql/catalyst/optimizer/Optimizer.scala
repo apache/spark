@@ -2286,7 +2286,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
 
   // The main plan inlines the body of a correlated scalar or lateral subquery and runs this rule
   // on it again, after later rules can have moved the Filters the AsOfJoin case added out of
-  // their tag. So only that run infers filters across as-of joins.
+  // their tag. So only that run infers filters across as-of joins. A correlated EXISTS or IN
+  // body is inlined only after this batch, so it gets none, as before.
   // TODO: An uncorrelated LATERAL subquery is inlined too, so its body still goes through the
   //  AsOfJoin case twice.
   private def inferAcrossAsOfJoins(plan: LogicalPlan): Boolean = plan match {

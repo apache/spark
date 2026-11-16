@@ -751,7 +751,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("as-of joins: no filter is inferred across them in the body of a correlated subquery") {
-    // The main plan inlines such a body and runs this rule on it there, once.
+    // The main plan inlines a correlated scalar or lateral body and runs this rule on it there,
+    // once. A correlated EXISTS or IN body is inlined after that batch, so it gets none.
     val join = asOfJoin(asOfLeft.where(leftKey === 1), asOfRight, LeftOuter).analyze
     val leftFiltered = asOfLeft.where(IsNotNull(leftKey) && leftKey === 1)
     comparePlans(

@@ -1552,7 +1552,7 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
-  test("an as-of join in a correlated subquery gets no filter that can fail") {
+  test("an as-of join in a subquery or lateral body gets no filter that can fail") {
     // The body goes through filter inference on its own and again after the main plan inlines
     // it. A filter the as-of case added must not lead the second run to one that can fail, such
     // as 10 / k > 0 from k = a and 10 / a > 0 on the row with k = 0 and a = 5.
@@ -1576,6 +1576,17 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |    ON l.k = r.k AND r.k = l.a
           |  WHERE l.id = o.id) lat
           |WHERE 10 / lat.a > 0
+          |""".stripMargin -> Seq(Row(2, 30)),
+        // An uncorrelated lateral body runs the as-of case twice. Only IS NOT NULL, not k = a,
+        // may come out of the first run, under the legacy flag.
+        """
+          |SELECT o.id, lat.v
+          |FROM asof_o o, LATERAL (
+          |  SELECT l.id, l.k, l.a, r.v
+          |  FROM asof_l l ASOF JOIN asof_r r
+          |    MATCH_CONDITION (l.ts >= r.ts)
+          |    ON l.k = r.k AND r.k = l.a) lat
+          |WHERE lat.id = o.id AND 10 / lat.a > 0
           |""".stripMargin -> Seq(Row(2, 30)),
         // r.k > 5 and l.y = r.k must not lead to CAST(s AS INT) > 5, which casts 'abc'.
         """
