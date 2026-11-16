@@ -7283,6 +7283,14 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED" : {
+    "message" : [
+      "Changing the comment of a struct field nested under consecutive arrays or maps is not supported.",
+      "The comment of <columnPath> in the pipeline's declared or inferred schema differs from the comment on the table.",
+      "Declare the field with the comment the table currently has to keep it, or drop the table and full refresh it so that it is re-created with the new comment."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED" : {
     "message" : [
       "Schema evolution within a complex type (array or map) whose element is itself a complex type is not supported.",

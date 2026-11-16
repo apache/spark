@@ -1242,6 +1242,34 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  test("SPARK-59268: a comment change under consecutive arrays fails a streaming table update " +
+    "with a comment-specific error") {
+    withRecordingCatalog {
+      def schema(nestedComment: String): StructType = new StructType()
+        .add("id", IntegerType)
+        .add("arr", ArrayType(ArrayType(
+          new StructType().add("a", IntegerType, nullable = true, nestedComment))))
+
+      materializeStreamingTable("t", schema("c1"), Map.empty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
+
+      // The comment change on `arr.element.element.a` is carried into the diff, but cannot be
+      // applied in place (SPARK-59188). The update fails naming the field, before any alter.
+      val ex = intercept[TableMaterializationException] {
+        materializeStreamingTable("t", schema("c2"), Map.empty)
+      }
+      checkError(
+        exception = ex.cause.asInstanceOf[SparkThrowable],
+        condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
+        parameters = Map("columnPath" -> "arr.element.element.a"))
+      assert(recordingCatalog.recordedAlters.isEmpty)
+      assert(
+        loadTableFromRecordingCatalog("t").columns() sameElements
+          CatalogV2Util.structTypeToV2Columns(schema("c1"))
+      )
+    }
+  }
+
   test("SPARK-58517: re-materializing with a case-only column difference is a no-op under " +
     "case-insensitive resolution") {
     withRecordingCatalog {

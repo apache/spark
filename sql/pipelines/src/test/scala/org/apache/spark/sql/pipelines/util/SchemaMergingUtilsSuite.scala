@@ -89,7 +89,8 @@ class SchemaMergingUtilsSuite extends SparkFunSuite {
       new StructType()
         .add("s", inner)
         .add("arr", ArrayType(inner))
-        .add("m", MapType(StringType, inner))
+        // A struct map key, so that the key side of the map is recursed into as well.
+        .add("m", MapType(inner, inner))
     }
     val currentSchema = schema("old")
     val desiredSchema = schema("new")
@@ -101,11 +102,19 @@ class SchemaMergingUtilsSuite extends SparkFunSuite {
 
   test("SPARK-59268: mergeSchemasWithDataMetadata keeps the table-side name under " +
     "case-insensitive merge") {
-    val currentSchema = new StructType().add("value", StringType, nullable = true, "old")
-    val desiredSchema = new StructType().add("Value", StringType, nullable = true, "new")
+    val currentSchema = new StructType()
+      .add("value", StringType, nullable = true, "old")
+      .add("s", new StructType().add("a", IntegerType, nullable = true, "old nested"))
+    val desiredSchema = new StructType()
+      .add("Value", StringType, nullable = true, "new")
+      .add("s", new StructType().add("A", IntegerType, nullable = true, "new nested"))
 
     val merged = SchemaMergingUtils.mergeSchemasWithDataMetadata(
       currentSchema, desiredSchema, caseSensitive = false)
-    assert(merged === new StructType().add("value", StringType, nullable = true, "new"))
+    // Both the top-level and the nested field keep the table's spelling and take the declared
+    // comment.
+    assert(merged === new StructType()
+      .add("value", StringType, nullable = true, "new")
+      .add("s", new StructType().add("a", IntegerType, nullable = true, "new nested")))
   }
 }

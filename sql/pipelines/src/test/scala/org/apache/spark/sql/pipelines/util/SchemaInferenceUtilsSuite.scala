@@ -763,6 +763,55 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
         "targetType" -> valTarget.simpleString))
   }
 
+  test("SPARK-59268: diffSchemas - comment change under array<array<struct>> throws a " +
+    "comment-specific error") {
+    def schema(comment: String): StructType = new StructType()
+      .add("arr", ArrayType(ArrayType(
+        new StructType().add("a", IntegerType, nullable = true, comment))))
+
+    // The only rejected change is the comment on `arr.element.element.a`, so the error names that
+    // field rather than reporting two identical element types.
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(schema("c1"), schema("c2"))),
+      condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
+      parameters = Map("columnPath" -> "arr.element.element.a"))
+  }
+
+  test("SPARK-59268: diffSchemas - comment change under map<string, array<struct>> throws a " +
+    "comment-specific error") {
+    def schema(comment: String): StructType = new StructType()
+      .add("m", MapType(StringType, ArrayType(
+        new StructType().add("x", IntegerType, nullable = true, comment))))
+
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(schema("c1"), schema(null))),
+      condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
+      parameters = Map("columnPath" -> "m.value.element.x"))
+  }
+
+  test("SPARK-59268: diffSchemas - comment change mixed with a type change under " +
+    "array<array<struct>> throws the type-change error") {
+    val innerCurrent =
+      ArrayType(new StructType().add("a", IntegerType, nullable = true, "c1"))
+    val innerTarget = ArrayType(
+      new StructType().add("a", IntegerType, nullable = true, "c2").add("b", StringType))
+
+    val currentSchema = new StructType().add("arr", ArrayType(innerCurrent))
+    val targetSchema = new StructType().add("arr", ArrayType(innerTarget))
+
+    // Not every rejected change is a comment change, so the general error is kept.
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema)),
+      condition = "PIPELINE_NESTED_COMPLEX_TYPE_SCHEMA_EVOLUTION_UNSUPPORTED",
+      parameters = Map(
+        "columnPath" -> "arr.element",
+        "currentType" -> innerCurrent.simpleString,
+        "targetType" -> innerTarget.simpleString))
+  }
+
   test("diffSchemas - map<struct, map<string, int>> recurses into struct key") {
     val keyCurrent = new StructType().add("a", IntegerType)
     val keyTarget =

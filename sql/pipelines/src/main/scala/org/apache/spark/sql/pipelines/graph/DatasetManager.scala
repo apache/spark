@@ -413,6 +413,10 @@ object DatasetManager extends Logging {
           desiredSchema = outputSchema,
           properties = mergedProperties,
           mergeWithExistingSchema = isTableIncrementallyUpdated,
+          // On the incremental path, shared columns take the declared or inferred schema's
+          // metadata, so that a changed or removed column comment reaches the table as it does on
+          // the non-merging paths (materialized views and full refreshes).
+          mergeWithDesiredMetadata = true,
           caseSensitive = effectiveCaseSensitive
         )
       case None =>
@@ -531,6 +535,12 @@ object DatasetManager extends Logging {
             desiredSchema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
             mergeWithExistingSchema = true,
+            // The auxiliary schema is derived from the target's inferred schema, not from a
+            // declaration, and nothing reads the auxiliary table's column comments. Keep its
+            // persisted metadata on shared columns, so that comment drift in the source never
+            // alters this table, nor fails the update when the drift sits under nested complex
+            // types that `diffSchemas` cannot evolve.
+            mergeWithDesiredMetadata = false,
             caseSensitive = caseSensitive
           )
         case None =>
@@ -662,6 +672,11 @@ object DatasetManager extends Logging {
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
+   * @param mergeWithDesiredMetadata when merging, whether a column present in both schemas takes
+   *                                its metadata (e.g. comment) from the desired schema, so that
+   *                                comment changes are diffed and applied, rather than keeping the
+   *                                existing table's. Ignored when `mergeWithExistingSchema` is
+   *                                `false`, where the desired schema is used as-is.
    * @param caseSensitive           whether the additive schema merge treats field names differing
    *                                only in case as distinct columns. Callers should pass the
    *                                effective `spark.sql.caseSensitive` used to resolve the schema
@@ -679,12 +694,16 @@ object DatasetManager extends Logging {
       desiredSchema: StructType,
       properties: Map[String, String],
       mergeWithExistingSchema: Boolean,
+      mergeWithDesiredMetadata: Boolean,
       caseSensitive: Boolean): Unit = {
     val currentSchema = v2ColumnsToStructType(existingTable.columns())
-    val targetSchema = if (mergeWithExistingSchema) {
-      // Column metadata (e.g. comments) of columns present in both schemas comes from the desired
-      // schema, so that metadata changes are diffed and applied below rather than dropped.
+    val targetSchema = if (mergeWithExistingSchema && mergeWithDesiredMetadata) {
+      // Shared columns take their metadata from the desired schema, so comment changes are diffed
+      // and applied below; other metadata changes (e.g. defaults, SPARK-59269) are only logged.
       SchemaMergingUtils.mergeSchemasWithDataMetadata(currentSchema, desiredSchema, caseSensitive)
+    } else if (mergeWithExistingSchema) {
+      // Shared columns keep the existing table's metadata.
+      SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema, caseSensitive)
     } else {
       desiredSchema
     }
