@@ -5792,34 +5792,48 @@ class ExternalLookupJoinRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase
       }
       assert(query.exception.isEmpty)
     }
+  }
 
-    test(s"real-time mode fills a request of more rows before it sends it: $joinType") {
-      withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1000") {
-        val clock = useManualClock()
-        val input = LowLatencyMemoryStream.singlePartition[Int]
-        val query = startJoin(s"external_lookup_rtm_$joinType", joinType, input,
-          lookupTable(maxBatchSize = 2))
-        try {
-          // A request takes up to the two stream rows that the source allows, and its output
-          // comes once the request is full, before the next stream row arrives. Each addition
-          // fills a request and starts the next. Each full request has a key with lookup rows and
-          // one without, so that every join type emits rows for it.
-          input.addData(1, 3, 2)
-          awaitOutputs(query, joinOutputs(joinType, 1, 3))
-          input.addData(4, 1)
-          awaitOutputs(query, joinOutputs(joinType, 1, 3, 2, 4))
-          input.addData(3, 5)
-          awaitOutputs(query, joinOutputs(joinType, 1, 3, 2, 4, 1, 3))
-          // The last request is not full, so the join sends it when the batch ends.
-          endBatch(query, clock)
-          awaitOutputs(query, joinOutputs(joinType, 1, 3, 2, 4, 1, 3, 5))
-          // The third request is served from the cache.
-          assert(SimpleExternalLookupDataSource.requestSizes.asScala.toSeq === Seq(2, 2, 1))
-        } finally {
-          query.stop()
-        }
-        assert(query.exception.isEmpty)
+  // The micro-batch tests cover a request of more than one row for each join type, so this test
+  // of the non-default request size runs one.
+  test("real-time mode fills a request of more rows before it sends it") {
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1000") {
+      val clock = useManualClock()
+      val input = LowLatencyMemoryStream.singlePartition[Int]
+      // The join computes the key of each stream row that it reads once, so the calls of the
+      // key count the rows that it has read.
+      val countedKey = udf { (id: Int) =>
+        CountingKeyUDF.calls.incrementAndGet()
+        id
       }
+      CountingKeyUDF.calls.set(0)
+      val query = startJoin("external_lookup_rtm_multi_row_request", "inner", input,
+        lookupTable(maxBatchSize = 2), countedKey(_))
+      try {
+        // A request takes up to the two stream rows that the source allows, and its output
+        // comes once the request is full, before the next stream row arrives. Each addition
+        // fills a request and starts the next. Each full request has a key with lookup rows, so
+        // that the join emits rows for it.
+        input.addData(1, 3, 2)
+        awaitOutputs(query, joinOutputs("inner", 1, 3))
+        input.addData(4, 1)
+        awaitOutputs(query, joinOutputs("inner", 1, 3, 2, 4))
+        input.addData(3, 5)
+        awaitOutputs(query, joinOutputs("inner", 1, 3, 2, 4, 1, 3))
+        // The last request is not full, so the join sends it when the batch ends. The batch ends
+        // only once the join has read row 5, so that the row is in this batch.
+        awaitQuery(query)(CountingKeyUDF.calls.get() == 7)
+        endBatch(query, clock)
+        // Key 5 has no lookup row, so the request sizes, not the outputs, show that the join
+        // sent the last request. The third request is served from the cache.
+        awaitQuery(query) {
+          SimpleExternalLookupDataSource.requestSizes.asScala.toSeq == Seq(2, 2, 1)
+        }
+        assert(outputs.sorted === joinOutputs("inner", 1, 3, 2, 4, 1, 3, 5).sorted)
+      } finally {
+        query.stop()
+      }
+      assert(query.exception.isEmpty)
     }
   }
 
