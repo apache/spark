@@ -24,6 +24,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 import org.apache.logging.log4j.Level
 import org.scalatest.exceptions.TestFailedException
@@ -2143,8 +2144,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
       fe.get
     }
     // Each `select` mints fresh exprIds that appear in the codegen dump's plan header but not in
-    // the generated Java; normalize them, and whitespace, away to compare the generated code.
-    def normalize(code: String): String = code.replaceAll("#\\d+", "#").replaceAll("\\s+", " ")
+    // the generated Java. Normalize them, the `/* NNN */` line numbers `codegenString` prefixes
+    // each line with, and whitespace away to compare the generated code.
+    def normalize(code: String): String =
+      code.replaceAll("#\\d+", "#").replaceAll("/\\* \\d+ \\*/", "").replaceAll("\\s+", " ")
 
     // A condition, and whether the shape relies on the inferred IsNotNull(n).
     case class Shape(predicate: String, inferredNotNullN: Boolean = false)
@@ -2202,7 +2205,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
                 "each shape should take the CSE path (codegen differs on/off)")
             } catch {
               case e: TestFailedException => throw e
-              case e: Exception => fail("the query failed", e)
+              case NonFatal(e) => fail("the query failed", e)
             }
           }
         }
