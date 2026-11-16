@@ -1,2 +1,3 @@
-# Let rg search agent docs, which live in hidden .agents/ directories.
+# rg skips hidden directories by default; let it search these tracked ones.
 !.agents/
+!.github/

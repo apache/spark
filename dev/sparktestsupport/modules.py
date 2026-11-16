@@ -40,7 +40,7 @@ all_modules = []
 ignored_file_patterns = (
     # Contributor docs.
     ".agents/*.md",
-    "/.ignore",  # lets rg search .agents/
+    "/.ignore",  # lets rg search .agents/ and .github/
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
