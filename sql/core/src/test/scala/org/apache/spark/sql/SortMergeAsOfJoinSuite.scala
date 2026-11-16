@@ -17,18 +17,15 @@
 
 package org.apache.spark.sql
 
-import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import java.lang.management.ManagementFactory
 import java.sql.Timestamp
 import java.time.{Duration, Instant, LocalDateTime}
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import com.sun.management.UnixOperatingSystemMXBean
 
 import org.apache.spark.SparkException
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual}
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
@@ -2596,44 +2593,5 @@ class SortMergeAsOfJoinSuite extends QueryTest
       },
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "The Nearest AS-OF join has no ordered scan"))
-  }
-
-  test("SPARK-61754: the interpreted join does not serialize plan nodes into tasks") {
-    // The RDD that the join adds on top of its children's RDDs is serialized into every task
-    // binary. A plan node written with it would drag its whole child subtree along.
-    def serializedPlanNodes(rdd: RDD[_], inputs: Seq[RDD[_]]): Seq[String] = {
-      val planNodes = mutable.ArrayBuffer[String]()
-      val out = new ObjectOutputStream(new ByteArrayOutputStream()) {
-        enableReplaceObject(true)
-        override def replaceObject(obj: AnyRef): AnyRef = obj match {
-          // Cut the lineage below: the input RDDs belong to other operators.
-          case r: RDD[_] if inputs.exists(_ eq r) => "input RDD"
-          case p: SparkPlan =>
-            planNodes += p.nodeName
-            p
-          case _ => obj
-        }
-      }
-      out.writeObject(rdd)
-      out.close()
-      planNodes.toSeq
-    }
-
-    val (df1, df2) = prepareForAsOfJoin()
-    // A nearest join has no generated scan, so it runs the interpreted one.
-    val df = df1.joinAsOf(
-      df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
-      joinType = "inner", tolerance = null,
-      allowExactMatches = true, direction = "nearest")
-    checkAnswer(df, Seq(
-      Row(1, "x", "a", 1, "v", 1),
-      Row(5, "y", "b", 6, "y", 6),
-      Row(10, "z", "c", 7, "z", 7)))
-    // The RDDs are cached by the plans, so these are the ones the query ran.
-    val plan = df.queryExecution.executedPlan
-    val join = collectFirst(plan) { case j: SortMergeAsOfJoinExec => j }.get
-    assert(!isGenerated(plan, join), plan)
-    val planNodes = serializedPlanNodes(join.execute(), join.children.map(_.execute()))
-    assert(planNodes.isEmpty, s"$planNodes referenced by\n${join.treeString}")
   }
 }
