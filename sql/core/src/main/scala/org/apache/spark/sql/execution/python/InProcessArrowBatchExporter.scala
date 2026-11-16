@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.execution.python
 
 import java.util.UUID
@@ -49,16 +48,18 @@ import org.apache.spark.util.Utils
  *  - filling (`startBatch`): `write` adds rows to the batch, counted by `rowCount`.
  *  - evaluated (`evaluate`): the batch was exported and the results of every UDF imported.
  *    The returned rows read the input and result vectors of the batch, and are valid until
- *    the next `startBatch` or `close`, which release those vectors.
+ *    the next `startBatch` or `close`, which release those vectors. A batch is evaluated
+ *    once, also if `evaluate` fails.
  *
  * The UDFs are registered with the session before the first batch is exported, and released
  * by `close` if any registration was attempted. A failure leaves the batch and the
- * registrations to `close`.
+ * registrations to `close`, after which the exporter cannot start another batch.
  *
  * The exporter is not thread safe. The consumer of the evaluator's iterator calls
- * `startBatch`, `write` and `evaluate`, with the iterator's lock held. `close` is called once,
+ * `startBatch`, `write` and `evaluate`, with the iterator's lock held. `close` is called
  * with that lock held too and not while Python runs, by the consumer or by the task
  * completion listener (see [[InProcessArrowEvalPythonEvaluatorFactory.IteratorResources]]).
+ * Only its first call has an effect.
  *
  * @param session the interpreter session to register and invoke the UDFs with
  * @param functions the Python function of each UDF
@@ -67,6 +68,11 @@ import org.apache.spark.util.Utils
  * @param arrowSchema the Arrow schema of the UDF arguments, which the written rows have
  * @param readBackInput whether the returned rows start with the input columns, read back from
  *                      the exported input vectors
+ * @param hideTraceback passed to `session.register`, like the three parameters that follow:
+ *                      whether Python hides the traceback of a failed UDF
+ * @param simplifiedTraceback whether Python simplifies the traceback of a failed UDF
+ * @param tracebackWithLocals whether the traceback of a failed UDF includes local variables
+ * @param fullValidation whether Python fully validates the Arrow result of each UDF
  * @param metrics the metrics of `InProcessArrowEvalPythonExec`, except `pythonTotalTime`
  * @param context the task context, checked for cancellation before each UDF is invoked
  */
@@ -90,6 +96,8 @@ private[python] class InProcessArrowBatchExporter(
   private var registered = false
   private var writer: ArrowWriter = null
   private var numRows = 0
+  private var evaluated = false
+  private var closed = false
   private val results = ArrayBuffer.empty[ArrowColumnVector]
 
   /** The number of rows written to the current batch. */
@@ -100,6 +108,7 @@ private[python] class InProcessArrowBatchExporter(
 
   /** Releases the previous batch, if any, and starts an empty one. */
   def startBatch(): Unit = {
+    assert(!closed, "The exporter is closed")
     // Each batch needs buffers of its own, which Python may retain, but sizing flat vectors
     // like the previous batch's avoids growing them from Arrow's defaults row by row.
     // Nested vectors keep the defaults, since Arrow sizes their children per record.
@@ -107,6 +116,7 @@ private[python] class InProcessArrowBatchExporter(
       writer.root.getFieldVectors.asScala.map(v => (v.getValueCount, dataBytes(v))).toSeq
     }
     closeBatch()
+    evaluated = false
     val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     capacities.zip(root.getFieldVectors.asScala).foreach { case ((count, bytes), v) =>
       if (count > 0) v match {
@@ -123,7 +133,6 @@ private[python] class InProcessArrowBatchExporter(
     } catch {
       case t: Throwable => Utils.tryWithSafeFinally { throw t } { root.close() }
     }
-    numRows = 0
   }
 
   /** Adds a row of UDF arguments to the current batch. */
@@ -140,6 +149,8 @@ private[python] class InProcessArrowBatchExporter(
    * @param python runs each call into Python
    */
   def evaluate(python: PythonCall): Iterator[InternalRow] = {
+    assert(writer != null && !evaluated, "The exporter has no batch to evaluate")
+    evaluated = true
     if (!registered) {
       // Mark before registering so failure after any registration still cleans up.
       registered = true
@@ -201,8 +212,12 @@ private[python] class InProcessArrowBatchExporter(
     new ColumnarBatch(columns, numRows).rowIterator().asScala
   }
 
-  /** Releases the current batch, if any, and the registrations of the UDFs. */
-  override def close(): Unit = {
+  /**
+   * Releases the current batch, if any, and the registrations of the UDFs. The exporter
+   * cannot be used afterwards, and closing it again does nothing.
+   */
+  override def close(): Unit = if (!closed) {
+    closed = true
     Utils.tryWithSafeFinally {
       closeBatch()
     } {
@@ -218,6 +233,7 @@ private[python] class InProcessArrowBatchExporter(
       resources += writer.root
       writer = null
     }
+    numRows = 0
     AutoCloseables.close(resources.asJava)
   }
 }
@@ -225,7 +241,9 @@ private[python] class InProcessArrowBatchExporter(
 private[python] object InProcessArrowBatchExporter {
   /**
    * Runs a call into Python, which returns the nanoseconds it took, and adds them to the
-   * metric. It may throw instead of running the call, or after it, to stop the evaluation.
+   * metric. It must either run the call or throw: it may throw instead of running the call,
+   * or after it, to stop the evaluation, but it must not return without having run the call,
+   * since the exporter then goes on as if Python had registered the UDF or filled the result.
    */
   type PythonCall = (SQLMetric, () => Long) => Unit
 

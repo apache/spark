@@ -15,17 +15,14 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.execution.python
-
-import java.util.Collections
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.arrow.vector.types.pojo.Field
 
 import org.apache.spark.{SparkFunSuite, TaskContext, TaskKilledException}
-import org.apache.spark.api.python.{PythonFunction, SimplePythonFunction}
+import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
@@ -50,9 +47,8 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
   override def afterEach(): Unit = {
     try {
       assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocatedBefore)
-      session.shutdown()
     } finally {
-      super.afterEach()
+      try { session.shutdown() } finally { super.afterEach() }
     }
   }
 
@@ -76,13 +72,12 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
       functions.map(_ => ArrowUtils.toArrowField("result", LongType, true, "UTC"))
     new InProcessArrowBatchExporter(session, functions,
       functions.map(_ => Array(ArgumentMetadata(0, None))).toArray, fields,
-      ArrowUtils.toArrowSchema(schema, "UTC", false), readBackInput,
-      false, false, false, true, metrics, context)
+      ArrowUtils.toArrowSchema(schema, "UTC", false), readBackInput = readBackInput,
+      hideTraceback = false, simplifiedTraceback = false, tracebackWithLocals = false,
+      fullValidation = true, metrics = metrics, context = context)
   }
 
-  private def function(): PythonFunction = SimplePythonFunction(
-    Seq.empty, Collections.emptyMap[String, String](), Collections.emptyList[String](),
-    "", "3.12", Collections.emptyList(), null)
+  private def function(): PythonFunction = emptyFunction()
 
   private def fill(exporter: InProcessArrowBatchExporter, ids: Range, value: String): Unit = {
     exporter.startBatch()
@@ -118,7 +113,7 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
     exporter.close()
   }
 
-  test("closing releases a batch in any state, and is idempotent for batches") {
+  test("closing releases a batch in any state, and is idempotent") {
     val metrics = allMetrics()
     val unused = exporter(metrics)
     unused.close()
@@ -135,6 +130,27 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
     fill(evaluated, 0 until 100, "abc")
     evaluated.evaluate(new Calls(metrics).run)
     evaluated.close()
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocatedBefore)
+    assert(evaluated.rowCount == 0)
+  }
+
+  test("a batch is evaluated once, and a closed exporter starts no batch") {
+    val metrics = allMetrics()
+    val calls = new Calls(metrics)
+    val exporter = this.exporter(metrics)
+    // There is no batch before the first one is started.
+    intercept[AssertionError](exporter.evaluate(calls.run))
+    fill(exporter, 0 until 5, "a")
+    exporter.evaluate(calls.run)
+    intercept[AssertionError](exporter.evaluate(calls.run))
+    assert(metrics("pythonNumRowsReceived").value == 5)
+    // The next batch can be evaluated again.
+    fill(exporter, 0 until 3, "a")
+    exporter.evaluate(calls.run)
+    assert(metrics("pythonNumRowsReceived").value == 8)
+    exporter.close()
+    intercept[AssertionError](exporter.startBatch())
+    intercept[AssertionError](exporter.evaluate(calls.run))
     assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocatedBefore)
   }
 
@@ -162,8 +178,24 @@ class InProcessArrowBatchExporterSuite extends SparkFunSuite {
     }
     assert(e.getMessage == "closed" && metrics("pythonDataSent").value == 0)
     exporter.close()
-    session.shutdown()
-    assert(session.isTerminated)
+  }
+
+  test("a failed invocation releases the exported inputs") {
+    val metrics = allMetrics()
+    val exporter = this.exporter(metrics, Seq(function(), function()))
+    fill(exporter, 0 until 5, "a")
+    // Registration succeeds without Python, and the first invocation fails once its inputs
+    // are exported.
+    val run: InProcessArrowBatchExporter.PythonCall = (metric, _) => {
+      if (metric eq metrics("pythonProcessingTime")) throw new IllegalStateException("invoke")
+    }
+    assert(intercept[IllegalStateException](exporter.evaluate(run)).getMessage == "invoke")
+    assert(metrics("pythonDataSent").value > 0)
+    assert(metrics("pythonDataReceived").value == 0)
+    assert(metrics("pythonNumRowsReceived").value == 0)
+    exporter.close()
+    // The C Data structs, and the references to the input vectors they held, are freed.
+    assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocatedBefore)
   }
 
   test("cancellation is checked before each UDF is invoked") {

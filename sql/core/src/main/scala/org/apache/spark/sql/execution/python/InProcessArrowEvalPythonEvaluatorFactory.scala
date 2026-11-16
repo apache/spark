@@ -195,8 +195,9 @@ class InProcessArrowEvalPythonEvaluatorFactory(
     }
     val joined = new JoinedRow
     val exporter = new InProcessArrowBatchExporter(runtime, functions, argMetas, expectedFields,
-      arrowSchema, joinInput == ReadBack, hideTraceback, simplifiedTraceback,
-      tracebackWithLocals, fullValidation, metrics, context)
+      arrowSchema, readBackInput = joinInput == ReadBack, hideTraceback = hideTraceback,
+      simplifiedTraceback = simplifiedTraceback, tracebackWithLocals = tracebackWithLocals,
+      fullValidation = fullValidation, metrics = metrics, context = context)
 
     val resources = new InProcessArrowEvalPythonEvaluatorFactory.IteratorResources(
       releaseTaskMemory = () => if (queue != null) queue.close(),

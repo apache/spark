@@ -25,7 +25,7 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.api.plugin.PluginContext
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.internal.config.Python.{IN_PROCESS_PATH_RULE, IN_PROCESS_SITE_PACKAGES}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
@@ -160,9 +160,7 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   test("evaluators retain the generation captured before consuming any input") {
     val metrics = allMetrics()
     val context = TaskContext.empty()
-    val function = SimplePythonFunction(
-      Seq.empty, Collections.emptyMap[String, String](), Collections.emptyList[String](),
-      "", "3.12", Collections.emptyList(), null)
+    val function = emptyFunction()
     val udf = PythonUDF("identity", function, LongType, Seq.empty,
       PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, true)
     var lookups = 0
