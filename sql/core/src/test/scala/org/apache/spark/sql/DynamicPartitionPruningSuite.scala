@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.connector.RotatingLimitDataSourceV2
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
@@ -2475,6 +2476,26 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
               |FROM VALUES (1) AS outer(dummy)""".stripMargin)
           checkNoDpp(scalarSubqueryKeys)
         }
+      }
+    }
+  }
+
+  test("SPARK-61811: DPP does not read a V2 scan with a pushed LIMIT again in a subquery") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("dim_limit") {
+        spark.read.format(classOf[RotatingLimitDataSourceV2].getName).load()
+          .createOrReplaceTempView("dim_limit")
+        // Each read of the scan returns another row, and every `i` has a fact partition. A DPP
+        // subquery that reads the scan apart from the join would prune the join row's partition.
+        val df = sql(
+          """SELECT count_if(f.date_id IS NULL)
+            |FROM (SELECT * FROM dim_limit LIMIT 1) d
+            |LEFT JOIN fact_sk f ON d.i = f.store_id
+            |WHERE d.i > 0""".stripMargin)
+        checkAnswer(df, Row(0))
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
       }
     }
   }
