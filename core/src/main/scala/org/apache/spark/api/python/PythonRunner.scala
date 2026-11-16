@@ -1094,7 +1094,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     /**
      * Whether `exception` is an I/O failure of a write to the socket of the Python worker, as
-     * opposed to a failure to produce the input. Only the pipelined writer sets it.
+     * opposed to a failure to produce the input or a write to a channel that this side closed.
+     * Only the pipelined writer sets it.
      */
     def failedWritingToWorker: Boolean = _failedWritingToWorker
 
@@ -1453,22 +1454,31 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
-      case e: PythonWorkerException if writer.failedWritingToWorker =>
-        // The worker was killed because of the idle timeout while the pipelined writer was
-        // still sending input to it, so the writer failed as well. That failure is a result of
-        // the kill and not its cause: report the idle timeout. A writer that failed to produce
-        // the input is handled below and takes precedence, since the worker may have stopped
-        // responding because of it.
-        writer.exception.foreach(e.addSuppressed)
-        throw e
-
       case e: Exception if writer.exception.isDefined =>
-        logError(log"Python worker exited unexpectedly (crashed) - " +
-          log"${MDC(TASK_NAME, taskIdentifier(context))}", e)
-        logError(log"This may have been caused by a prior exception - " +
-          log"${MDC(TASK_NAME, taskIdentifier(context))}",
-          writer.exception.get)
-        throw writer.exception.get
+        val writerException = writer.exception.get
+        e match {
+          // The flag is read only after the exception was seen, which makes this consistent
+          // with a writer that fails concurrently; see `Writer.setException`.
+          case killed: PythonWorkerException if writer.failedWritingToWorker =>
+            // The worker was killed because of the idle timeout while the pipelined writer
+            // was still sending input to it, so the writer failed as well. That failure is a
+            // result of the kill and not its cause: report the idle timeout. A writer that
+            // failed to produce the input takes precedence instead, since the worker may have
+            // stopped responding because of it.
+            // A read that calls itself passes the same exception through here once per level.
+            if (!killed.getSuppressed.contains(writerException)) {
+              killed.addSuppressed(writerException)
+            }
+            throw killed
+
+          case _ =>
+            logError(log"Python worker exited unexpectedly (crashed) - " +
+              log"${MDC(TASK_NAME, taskIdentifier(context))}", e)
+            logError(log"This may have been caused by a prior exception - " +
+              log"${MDC(TASK_NAME, taskIdentifier(context))}",
+              writerException)
+            throw writerException
+        }
 
       case e: IOException if !faultHandlerEnabled =>
         throw new SparkException(
@@ -1866,7 +1876,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           worker.channel.write(buf) // blocking write
         }
       } catch {
-        case e: IOException =>
+        // A ClosedChannelException means that this side closed the channel or shut down its
+        // output, as in `IdleTimeoutHandler.causedByKill`.
+        case e: IOException if !e.isInstanceOf[ClosedChannelException] =>
           failedInSocketWrite = true
           throw e
       }

@@ -548,10 +548,6 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       writeNextInput: DataOutputStream => Boolean)(
       run: Runnable => Unit)(
       check: (BasePythonRunner[Array[Byte], Array[Byte]]#Writer, SocketChannel) => Unit): Unit = {
-    val func = SimplePythonFunction(
-      Seq.empty, Collections.emptyMap(), Collections.emptyList(), "python3", "3",
-      Collections.emptyList(), null)
-    val runner = new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), None)
     val server = ServerSocketChannel.open()
     try {
       server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
@@ -562,15 +558,11 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
         pythonSide.socket().setSoTimeout(TimeUnit.MINUTES.toMillis(1).toInt)
         val context = TaskContext.empty()
         val worker = PythonWorker(channel)
-        val writer = new runner.Writer(SparkEnv.get, worker, Iterator.empty, 0, context) {
-          override def open(dataOut: DataOutputStream): Unit = {}
-          override protected def writeCommand(dataOut: DataOutputStream): Unit = {}
-          override def writeNextInputToStream(dataOut: DataOutputStream): Boolean =
-            writeNextInput(dataOut)
-          override def close(dataOut: DataOutputStream): Unit = {}
+        withRunnerAndWriter(worker, context, writeNextInput) { (runner, writer) =>
+          run(new runner.PipelinedWriterRunnable(
+            worker, writer.asInstanceOf[runner.Writer], 1024, context))
+          check(writer, pythonSide)
         }
-        run(new runner.PipelinedWriterRunnable(worker, writer, 1024, context))
-        check(writer, pythonSide)
       } finally {
         pythonSide.close()
         channel.close()
@@ -1283,10 +1275,13 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   /**
-   * Runs `f` with a runner, and with a writer of it that has no input and writes nothing to
-   * `worker`.
+   * Runs `f` with a runner, and with a writer of it whose input is written by `writeNextInput`
+   * and that writes nothing else. By default it has no input.
    */
-  private def withRunnerAndWriter(worker: PythonWorker, context: TaskContext)(
+  private def withRunnerAndWriter(
+      worker: PythonWorker,
+      context: TaskContext,
+      writeNextInput: DataOutputStream => Boolean = _ => false)(
       f: (PythonRunner, BasePythonRunner[Array[Byte], Array[Byte]]#Writer) => Unit): Unit = {
     val func = SimplePythonFunction(
       Seq.empty, Collections.emptyMap(), Collections.emptyList(), "python3", "3",
@@ -1295,7 +1290,8 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     val writer = new runner.Writer(SparkEnv.get, worker, Iterator.empty, 0, context) {
       override def open(dataOut: DataOutputStream): Unit = {}
       override protected def writeCommand(dataOut: DataOutputStream): Unit = {}
-      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = false
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean =
+        writeNextInput(dataOut)
       override def close(dataOut: DataOutputStream): Unit = {}
     }
     f(runner, writer)
@@ -1353,6 +1349,10 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     // The writer failed to write to the killed worker: the idle timeout is the error.
     assert(handle(idleTimeout, brokenPipe, whileWritingToWorker = true) eq idleTimeout)
     assert(idleTimeout.getSuppressed === Array(brokenPipe))
+    // A read that calls itself handles the same exception once per level. The failure of the
+    // writer is added only once.
+    assert(handle(idleTimeout, brokenPipe, whileWritingToWorker = true) eq idleTimeout)
+    assert(idleTimeout.getSuppressed === Array(brokenPipe))
     // The writer failed to produce the input: its failure stays the error, also when the
     // worker was killed afterwards because it no longer responded.
     val inputFailure = new IOException("failed to read the input")
@@ -1389,6 +1389,21 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     } { (writer, _) =>
       assert(writer.exception.map(_.getMessage) === Some("failed to read the input"))
       assert(!writer.failedWritingToWorker)
+    }
+
+    // The write fails because this side shut down the output, not because of the worker.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val context = TaskContext.empty()
+      withRunnerAndWriter(worker, context, { dataOut =>
+        worker.channel.shutdownOutput()
+        dataOut.write(new Array[Byte](2048))
+        true
+      }) { (runner, writer) =>
+        new runner.PipelinedWriterRunnable(
+          worker, writer.asInstanceOf[runner.Writer], 1024, context).run()
+        assert(writer.exception.exists(_.isInstanceOf[ClosedChannelException]), writer.exception)
+        assert(!writer.failedWritingToWorker)
+      }
     }
   }
 }
