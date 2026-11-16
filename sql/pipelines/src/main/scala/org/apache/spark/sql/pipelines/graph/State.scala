@@ -87,8 +87,8 @@ object State extends Logging {
       case f if flowMetadata.latestCheckpointLocationOpt().isEmpty =>
         logInfo(
           log"Skipping resetting flow ${MDC(LogKeys.FLOW_NAME, f.identifier)} since its " +
-          log"destination not been previously" +
-          log"materialized and we can't find the checkpoint location."
+          log"destination has not been previously materialized and we can't find the " +
+          log"checkpoint location."
         )
       case _ =>
         val hadoopConf = env.spark.sessionState.newHadoopConf()
