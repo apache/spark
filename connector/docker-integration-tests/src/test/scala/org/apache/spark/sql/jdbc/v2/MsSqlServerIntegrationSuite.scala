@@ -19,6 +19,8 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import scala.util.Using
+
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -319,6 +321,30 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       val grp = sql(s"SELECT flag IS NULL, COUNT(*) FROM $table GROUP BY flag")
       val grpRows = grp.collect().map(r => (r.getBoolean(0), r.getLong(1))).toSet
       assert(grpRows === Set((false, 1L), (true, 1L)))
+    }
+  }
+
+  test("SPARK-58372: pushed integral casts of MONEY values truncate like Spark") {
+    val tableName = "money_cast"
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (m MONEY, sm SMALLMONEY, label VARCHAR(8))").executeUpdate()
+        conn.prepareStatement(
+          s"INSERT INTO $tableName VALUES (1.6, 1.6, 'a'), (2.6, 2.6, 'b'), (-1.6, -1.6, 'c')")
+          .executeUpdate()
+      }
+      // SQL Server's own cast rounds MONEY, which would match 1.6 and sum to 2 + 3 + (-2) = 3.
+      for (col <- Seq("m", "sm"); target <- Seq("INT", "BIGINT")) {
+        val filtered = sql(s"SELECT label FROM $table WHERE CAST($col AS $target) = 2")
+        checkFilterPushed(filtered)
+        assert(filtered.collect().map(_.getString(0)) === Array("b"))
+
+        val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $table")
+        checkAggregateRemoved(aggregated)
+        assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
+      }
     }
   }
 }

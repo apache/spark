@@ -80,6 +80,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override val db = new MySQLDatabaseOnDocker
   override def roundsIntegralCast: Boolean = true
 
+  override def pushesIntCast: Boolean = false
+
+  // MySQL has no INTEGER or BIGINT CAST target.
+  override def acceptsLegacyIntegralCast(target: String): Boolean = false
+
   case class JdbcClientTypes(INTEGER: String, STRING: String)
 
   val jdbcClientTypes: JdbcClientTypes =

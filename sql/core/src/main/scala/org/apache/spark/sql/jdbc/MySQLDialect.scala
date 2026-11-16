@@ -130,11 +130,19 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           // The common JDBC mapping is DOUBLE PRECISION, which is not a portable CAST target for
           // MySQL-compatible databases. In particular, MariaDB rejects it with a syntax error.
           throw new UnsupportedOperationException("Cannot cast to double type")
-        // MySQL does not support casting to SHORT, INT or BIGINT, it uses SIGNED instead.
-        case _: IntegralType if exprDataType.isInstanceOf[FractionalType] &&
-          !conf.legacyJdbcRoundIntegralCastPushdown =>
-          s"CAST(${truncateFractionalValue(expr)} AS SIGNED)"
-        case _: IntegralType => s"CAST($expr AS SIGNED)"
+        // MySQL's only integral CAST target is 64-bit SIGNED, which matches Spark only for BIGINT
+        // casts from FLOAT, DOUBLE, or a DECIMAL that fits 64 bits. Spark evaluates other casts.
+        case LongType if !conf.legacyJdbcRoundIntegralCastPushdown && (exprDataType match {
+          case FloatType | DoubleType => true
+          case d: DecimalType => d.precision - d.scale <= 18
+          case _ => false
+        }) =>
+          val value =
+            if (dropsFraction(exprDataType, dataType)) truncateFractionalValue(expr) else expr
+          s"CAST($value AS SIGNED)"
+        case _: IntegralType if !conf.legacyJdbcRoundIntegralCastPushdown =>
+          throw new UnsupportedOperationException(
+            s"Cannot cast $exprDataType to $dataType without changing the result")
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
     }

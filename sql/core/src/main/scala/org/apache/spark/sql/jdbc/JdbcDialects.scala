@@ -459,26 +459,37 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      val databaseTypeDefinition =
-        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType match {
-          // Spark's type names `short` and `long` are not valid SQL types in most databases.
+      val mappedType = getJDBCType(dataType).map(_.databaseTypeDefinition)
+      if (SQLConf.get.legacyJdbcRoundIntegralCastPushdown) {
+        s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
+      } else {
+        if (exprDataType.isInstanceOf[DatetimeType] && dataType.isInstanceOf[IntegralType]) {
+          // Spark casts a datetime to seconds since the epoch; database casts don't.
+          throw new UnsupportedOperationException(
+            s"Cannot cast $exprDataType to $dataType without changing the result")
+        }
+        val databaseTypeDefinition = mappedType.getOrElse(dataType match {
+          // Spark's names `short` and `long` aren't valid SQL types. TINYINT isn't portable either,
+          // so ByteType keeps Spark's name.
           case ShortType => "SMALLINT"
           case IntegerType => "INTEGER"
           case LongType => "BIGINT"
           case _ => dataType.typeName
         })
-      // Spark truncates toward zero when casting a fractional value to an integral type, but many
-      // databases round instead, so a pushed down cast can return a different result than Spark.
-      // Dialects for such databases override `truncateFractionalValue` to truncate the value first.
-      val castedExpr = if (exprDataType.isInstanceOf[FractionalType] &&
-        dataType.isInstanceOf[IntegralType] &&
-        !SQLConf.get.legacyJdbcRoundIntegralCastPushdown) {
-        truncateFractionalValue(expr)
-      } else {
-        expr
+        val castedExpr =
+          if (dropsFraction(exprDataType, dataType)) truncateFractionalValue(expr) else expr
+        s"CAST($castedExpr AS $databaseTypeDefinition)"
       }
-      s"CAST($castedExpr AS $databaseTypeDefinition)"
     }
+
+    // Whether a cast from `from` to `to` drops digits after the decimal point. Spark truncates
+    // them, but many databases round.
+    protected def dropsFraction(from: DataType, to: DataType): Boolean =
+      to.isInstanceOf[IntegralType] && (from match {
+        case d: DecimalType => d.scale > 0
+        case _: FractionalType => true
+        case _ => false
+      })
 
     override def visitSQLFunction(funcName: String, inputs: Array[Expression]): String = {
       if (isSupportedFunction(funcName)) {

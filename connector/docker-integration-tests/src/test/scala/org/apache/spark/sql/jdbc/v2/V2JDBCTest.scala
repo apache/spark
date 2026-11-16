@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -709,6 +710,12 @@ private[v2] trait V2JDBCTest
   // Whether this database rounds a fractional to integral cast rather than truncating like Spark.
   protected def roundsIntegralCast: Boolean = false
 
+  // Whether a fractional to INT cast is pushed down. MySQL can only cast to 64-bit SIGNED.
+  protected def pushesIntCast: Boolean = true
+
+  // Whether this database accepts the SQL that Spark 4.3 pushed for a cast to `target`.
+  protected def acceptsLegacyIntegralCast(target: String): Boolean = true
+
   test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
     val tbl = s"$catalogName.composite_is_null"
     withTable(tbl) {
@@ -1366,7 +1373,7 @@ private[v2] trait V2JDBCTest
     }
   }
 
-  test("fractional to integral cast pushed down truncates toward zero like Spark") {
+  test("SPARK-58372: fractional to integral cast pushed down truncates toward zero like Spark") {
     val tbl = s"$catalogName.integral_cast"
     withTable(tbl) {
       // label is a string so the result type is the same across dialects (a numeric column
@@ -1382,32 +1389,36 @@ private[v2] trait V2JDBCTest
         assert(projected.collect().map(_.getInt(0)) === Array(-1, 1, 2))
       }
 
-      // A filter cast is pushed down, so only 2.6 truncates to 2.
+      // A pushed filter cast truncates like Spark, so only 2.6 truncates to 2. So does an
+      // aggregate: 1 + 2 + (-1) = 2.
       for (col <- Seq("double_col", "decimal_col"); target <- Seq("INT", "BIGINT")) {
+        val pushed = target == "BIGINT" || pushesIntCast
         val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS $target) = 2")
-        checkFilterPushed(filtered)
+        checkFilterPushed(filtered, pushed)
         assert(filtered.collect().map(_.getString(0)) === Array("b"))
-      }
 
-      // An aggregate cast is pushed down too. Truncation gives 1 + 2 + (-1) = 2.
-      Seq("double_col", "decimal_col").foreach { col =>
-        val aggregated = sql(s"SELECT SUM(CAST($col AS INT)) FROM $tbl")
-        checkAggregateRemoved(aggregated)
+        val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $tbl")
+        checkAggregateRemoved(aggregated, pushed)
         assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
       }
 
-      // Legacy behavior: the conf disables the truncation, so a rounding database rounds instead.
-      // The filter then matches 1.6, and the sum rounds to 2 + 3 + (-2) = 3.
+      // Legacy behavior: the conf restores the previous pushed SQL. A rounding database then
+      // rounds, so a filter matches 1.6 and a sum is 2 + 3 + (-2) = 3.
       if (roundsIntegralCast) {
-        withSQLConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled" -> "true") {
-          Seq("double_col", "decimal_col").foreach { col =>
-            val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS INT) = 2")
-            checkFilterPushed(filtered)
-            assert(filtered.collect().map(_.getString(0)) === Array("a"))
-
-            val aggregated = sql(s"SELECT SUM(CAST($col AS INT)) FROM $tbl")
-            checkAggregateRemoved(aggregated)
-            assert(aggregated.collect().map(_.getLong(0)) === Array(3L))
+        withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+          for (col <- Seq("double_col", "decimal_col"); target <- Seq("INT", "BIGINT")) {
+            val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $tbl")
+            if (acceptsLegacyIntegralCast(target)) {
+              val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS $target) = 2")
+              checkFilterPushed(filtered)
+              assert(filtered.collect().map(_.getString(0)) === Array("a"))
+              checkAggregateRemoved(aggregated)
+              assert(aggregated.collect().map(_.getLong(0)) === Array(3L))
+            } else {
+              // The database rejects the previous SQL, so Spark evaluates the aggregate.
+              checkAggregateRemoved(aggregated, pushed = false)
+              assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
+            }
           }
         }
       }
