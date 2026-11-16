@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression, 
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward, Nearest}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
@@ -1878,6 +1879,176 @@ class SortMergeAsOfJoinSuite extends QueryTest
             assert(!error.getMessage.contains("MATCH_CONDITION"))
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Writes a left input of one parquet file, and a right input of a smaller and a bigger file
+   * with one row each. The left file size is between them, nearer the smaller one. Passes `f`
+   * the two paths.
+   */
+  private def withFileSizeInputs(f: (String, String) => Unit): Unit = {
+    withTempPath { dir =>
+      val leftPath = s"${dir.getCanonicalPath}/left"
+      val rightPath = s"${dir.getCanonicalPath}/right"
+      // SHA-256 digests do not compress, so the number of digests sets the file size.
+      def text(digests: Int): String = "concat_ws('', transform(" +
+        s"sequence(1, $digests), x -> sha2(CAST(id * 1000 + x AS STRING), 256))) AS text"
+      spark.range(0, 3).selectExpr("id AS lid", text(20))
+        .coalesce(1).write.parquet(leftPath)
+      spark.range(100, 101).selectExpr("id AS rid", text(1))
+        .coalesce(1).write.parquet(rightPath)
+      spark.range(200, 201).selectExpr("id AS rid", text(600))
+        .coalesce(1).write.mode("append").parquet(rightPath)
+
+      val leftSize = spark.read.parquet(leftPath).select("_metadata.file_size").head().getLong(0)
+      val rightSizes = spark.read.parquet(rightPath)
+        .select("rid", "_metadata.file_size").collect().map(r => r.getLong(0) -> r.getLong(1))
+        .toMap
+      assert(rightSizes(100L) < leftSize && leftSize < rightSizes(200L) &&
+        leftSize - rightSizes(100L) < rightSizes(200L) - leftSize,
+        s"Unexpected file sizes: left $leftSize, right $rightSizes")
+      f(leftPath, rightPath)
+    }
+  }
+
+  test("join keys can reference file metadata columns") {
+    withFileSizeInputs { (leftPath, rightPath) =>
+      for ((direction, rid) <- Seq("backward" -> 100L, "forward" -> 200L, "nearest" -> 100L)) {
+        withClue(s"$direction: ") {
+          val expected = Seq(Row(0L, rid), Row(1L, rid), Row(2L, rid))
+          checkAnswerCodegenOffAndOn({
+            val left = spark.read.parquet(leftPath)
+            val right = spark.read.parquet(rightPath)
+            left.joinAsOf(
+              right, left.col("_metadata.file_size"), right.col("_metadata.file_size"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = direction
+            ).select(left.col("lid"), right.col("rid"))
+          }, expected)
+
+          // The same join with the metadata fields selected into regular columns first.
+          val left = spark.read.parquet(leftPath)
+            .select(functions.col("lid"), functions.col("_metadata.file_size").as("lk"))
+          val right = spark.read.parquet(rightPath)
+            .select(functions.col("rid"), functions.col("_metadata.file_size").as("rk"))
+          checkAnswer(
+            left.joinAsOf(
+              right, left.col("lk"), right.col("rk"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = direction
+            ).select("lid", "rid"),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("self join keys can reference file metadata columns through aliases") {
+    withFileSizeInputs { (_, path) =>
+      val df = spark.read.parquet(path)
+      for ((direction, expected) <- Seq(
+          "backward" -> Seq(Row(200L, 100L)),
+          "forward" -> Seq(Row(100L, 200L)),
+          "nearest" -> Seq(Row(100L, 200L), Row(200L, 100L)))) {
+        withClue(s"$direction: ") {
+          checkAnswerCodegenOffAndOn(
+            df.as("l").joinAsOf(
+              df.as("r"), functions.col("l._metadata.file_size"),
+              functions.col("r._metadata.file_size"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null,
+              allowExactMatches = false, direction = direction
+            ).select("l.rid", "r.rid"),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("join keys over file metadata columns must each reference one input") {
+    withFileSizeInputs { (leftPath, rightPath) =>
+      val left = spark.read.parquet(leftPath)
+      val right = spark.read.parquet(rightPath)
+      val metadataKey = "\"_metadata.file_size AS file_size\""
+      for {
+        direction <- Seq("backward", "forward", "nearest")
+        (input, other, leftKey, rightKey, refs1) <- Seq(
+          (left, right, left.col("_metadata.file_size") + right.col("rid"),
+            right.col("_metadata.file_size"), "\"(_metadata.file_size AS file_size + rid)\""),
+          (left, right, left.col("_metadata.file_size"), left.col("_metadata.file_size"),
+            metadataKey),
+          // Without aliases, both keys of a self join resolve to its left input.
+          (right, right, right.col("_metadata.file_size"), right.col("_metadata.file_size"),
+            metadataKey))
+      } {
+        checkError(
+          exception = intercept[AnalysisException] {
+            input.joinAsOf(
+              other, leftKey, rightKey, usingColumns = Seq.empty, joinType = "inner",
+              tolerance = null, allowExactMatches = true, direction = direction
+            ).queryExecution.analyzed
+          },
+          condition = "AS_OF_JOIN.KEY_REFERENCE",
+          parameters = Map("refs1" -> refs1, "refs2" -> metadataKey))
+      }
+    }
+  }
+
+  test("join keys can reference DSv2 metadata columns") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      withTable("testcat.asof_left", "testcat.asof_right") {
+        // One write task per table, so the `index` metadata column numbers the rows in order.
+        spark.sql("SELECT * FROM VALUES (1, 'a'), (1, 'b'), (2, 'c') AS t(k, lid)")
+          .coalesce(1).writeTo("testcat.asof_left").create()
+        spark.sql("SELECT * FROM VALUES (1, 'x'), (2, 'y') AS t(k, rid)")
+          .coalesce(1).writeTo("testcat.asof_right").create()
+        checkAnswer(spark.table("testcat.asof_left").select("lid", "index"),
+          Seq(Row("a", 0), Row("b", 1), Row("c", 2)))
+        checkAnswer(spark.table("testcat.asof_right").select("rid", "index"),
+          Seq(Row("x", 0), Row("y", 1)))
+
+        def join(usingColumns: Seq[String], joinType: String, direction: String): DataFrame = {
+          val left = spark.table("testcat.asof_left")
+          val right = spark.table("testcat.asof_right")
+          left.joinAsOf(
+            right, left.col("index"), right.col("index"), usingColumns = usingColumns,
+            joinType = joinType, tolerance = null,
+            allowExactMatches = true, direction = direction
+          ).select(left.col("lid"), right.col("rid"))
+        }
+        for ((direction, expected) <- Seq(
+            "backward" -> Seq(Row("a", "x"), Row("b", "y"), Row("c", "y")),
+            "forward" -> Seq(Row("a", "x"), Row("b", "y")),
+            "nearest" -> Seq(Row("a", "x"), Row("b", "y"), Row("c", "y")))) {
+          withClue(s"$direction: ") {
+            checkAnswerCodegenOffAndOn(join(Nil, "inner", direction), expected)
+          }
+        }
+        // No right row has an index at or after the last left row.
+        checkAnswerCodegenOffAndOn(
+          join(Nil, "leftouter", "forward"), Seq(Row("a", "x"), Row("b", "y"), Row("c", null)))
+        // The ON key limits each left row to the right rows with the same `k`.
+        checkAnswerCodegenOffAndOn(
+          join(Seq("k"), "inner", "backward"), Seq(Row("a", "x"), Row("b", "x"), Row("c", "y")))
+      }
+    }
+  }
+
+  test("SQL MATCH_CONDITION does not accept file metadata operands yet") {
+    withFileSizeInputs { (leftPath, rightPath) =>
+      // A known limit: SQL operands skip metadata columns, so both analyzers accept the same ones.
+      withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(s"SELECT l.lid, r.rid FROM parquet.`$leftPath` l " +
+              s"ASOF JOIN parquet.`$rightPath` r " +
+              "MATCH_CONDITION (l._metadata.file_size >= r._metadata.file_size)")
+          },
+          condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+          parameters = Map(
+            "refs1" -> "\"_metadata.file_size AS file_size\"",
+            "refs2" -> "\"_metadata.file_size AS file_size\""))
       }
     }
   }
