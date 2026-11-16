@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.logging.log4j.Level
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFormatException, SparkThrowable}
@@ -2112,13 +2113,14 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("SPARK-61377: FilterExec CSE computes an input column just before the first conjunct " +
     "that reads it") {
     // Each input column of the filter is a UDF alias the child `ProjectExec` computes in the same
-    // codegen stage; `r`, `rb`, `rc` and `u` all throw for the rows that an earlier condition
-    // drops. The common `f + 1` (or `r + 1`) makes the filter take the CSE path, which must still
-    // compute a column just before the first condition that reads it, not up front. The
-    // projection split is turned off so the filter over the aliases stays above the projection.
+    // codegen stage; `r`, `rb`, `rc` and `u` all throw for the rows that an earlier check or
+    // condition drops. The common `f + 1` (or `r + 1`) makes the filter take the CSE path, which
+    // must still compute a column just before the first check or condition that reads it, not up
+    // front. The projection split is turned off so the filter over the aliases stays above the
+    // projection.
     val f = udf((x: Long) => x)
     // Returns a primitive, so `r` is non-nullable and gets no inferred IsNotNull: it is first
-    // read by a plain condition (`r > 0` or the common `r + 1`).
+    // read by a plain condition (`r > 0`, `n + r > 0` or the common `r + 1`).
     val r = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"r($x)"); x })
     // Returns a boxed Long, so `rb` is nullable and is first read by its own IsNotNull check.
     val rb = udf { (x: Long) =>
@@ -2128,6 +2130,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
       if (x <= 5) throw new IllegalStateException(s"rc($x)"); java.lang.Long.valueOf(x) }
     // Not read by the filter at all, so the parent's `consume` loads it.
     val u = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"u($x)"); x })
+    // NULL for the rows `r` throws on, so the inferred IsNotNull(n), generated among the checks
+    // of `n + r > 0`, the first condition that reads `r`, drops them: `r` must be loaded after it.
+    val n = udf { (x: Long) => if (x <= 5) null else java.lang.Long.valueOf(x) }
 
     def firstFilterOverProject(df: DataFrame): FilterExec = {
       val plan = df.queryExecution.executedPlan
@@ -2138,8 +2143,23 @@ class WholeStageCodegenSuite extends SharedSparkSession
       fe.get
     }
     // Each `select` mints fresh exprIds that appear in the codegen dump's plan header but not in
-    // the generated Java; normalize them away to compare the generated code.
-    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+    // the generated Java; normalize them, and whitespace, away to compare the generated code.
+    def normalize(code: String): String = code.replaceAll("#\\d+", "#").replaceAll("\\s+", " ")
+
+    // A condition, and whether the shape relies on the inferred IsNotNull(n).
+    case class Shape(predicate: String, inferredNotNullN: Boolean = false)
+    val shapes = Seq(
+      // `r` (non-nullable, no IsNotNull) first read by `r > 0`, after the dropping `f + 1 > 6`.
+      Shape("f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0"),
+      // `rb` (nullable) first read by its IsNotNull check, just before `rb > 0`.
+      Shape("f + 1 > 6 AND f + 1 < 100 AND rb IS NOT NULL AND rb > 0"),
+      // `r` first read by the common subexpression `r + 1`, referenced after `f + 1 > 6`.
+      Shape("f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100"),
+      // `rc` read only by a leftover IsNotNull; `rb`, `u` and `n` are not read by the filter.
+      Shape("f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL"),
+      // `r` first read by `n + r > 0`, after the inferred IsNotNull(n) generated among the checks
+      // of `n + r > 0`.
+      Shape("n + r > 0 AND f + 1 > 0 AND f + 1 < 100", inferredNotNullN = true))
 
     // `methodSplitThreshold` 1 exercises the path that splits each common subexpression into its
     // own function, whose parameters are the input columns' variables; Int.MaxValue keeps the
@@ -2154,32 +2174,37 @@ class WholeStageCodegenSuite extends SharedSparkSession
         SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
         val df = spark.range(10).select(
           f($"id").as("f"), r($"id").as("r"), rb($"id").as("rb"),
-          rc($"id").as("rc"), u($"id").as("u"))
-        Seq(
-          // `r` (non-nullable, no IsNotNull) first read by `r > 0`, after the dropping `f + 1 > 6`.
-          "f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0",
-          // `rb` (nullable) first read by its IsNotNull check, just before `rb > 0`.
-          "f + 1 > 6 AND f + 1 < 100 AND rb IS NOT NULL AND rb > 0",
-          // `r` first read by the common subexpression `r + 1`, referenced after `f + 1 > 6`.
-          "f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100",
-          // `rc` read only by a leftover IsNotNull; `rb` and `u` are not read by the filter.
-          "f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL"
-        ).foreach { predicate =>
-          val filtered = df.where(predicate)
-          firstFilterOverProject(filtered)
-          checkAnswer(filtered,
-            (6L to 9L).map(i => Row(i, i, i, i, i)))
-          // With the config off the same query returns the same rows (non-CSE path), and the
-          // generated code differs, so the shape above does take the CSE path.
-          val cseOn = codegenString(filtered.queryExecution.executedPlan)
-          val cseOff = withSQLConf(
-              SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
-            val off = df.where(predicate)
-            checkAnswer(off, (6L to 9L).map(i => Row(i, i, i, i, i)))
-            codegenString(off.queryExecution.executedPlan)
+          rc($"id").as("rc"), u($"id").as("u"), n($"id").as("n"))
+        shapes.foreach { case Shape(predicate, inferredNotNullN) =>
+          // Names the shape and the threshold in a failure, also when the query raises.
+          withClue(s"methodSplitThreshold $threshold, $predicate: ") {
+            try {
+              val filtered = df.where(predicate)
+              val fe = firstFilterOverProject(filtered)
+              if (inferredNotNullN) {
+                assert(fe.condition.exists {
+                  case IsNotNull(a: Attribute) => a.name == "n"
+                  case _ => false
+                }, s"IsNotNull(n) should be inferred: ${fe.condition}")
+              }
+              checkAnswer(filtered,
+                (6L to 9L).map(i => Row(i, i, i, i, i, i)))
+              // With the config off the same query returns the same rows (non-CSE path), and
+              // the generated code differs, so the shape above does take the CSE path.
+              val cseOn = codegenString(filtered.queryExecution.executedPlan)
+              val cseOff = withSQLConf(
+                  SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
+                val off = df.where(predicate)
+                checkAnswer(off, (6L to 9L).map(i => Row(i, i, i, i, i, i)))
+                codegenString(off.queryExecution.executedPlan)
+              }
+              assert(normalize(cseOn) != normalize(cseOff),
+                "each shape should take the CSE path (codegen differs on/off)")
+            } catch {
+              case e: TestFailedException => throw e
+              case e: Exception => fail("the query failed", e)
+            }
           }
-          assert(normalize(cseOn) != normalize(cseOff),
-            s"each shape should take the CSE path (codegen differs on/off): $predicate")
         }
 
         // `subExpr` names appear only when the states are split into functions, so they confirm
