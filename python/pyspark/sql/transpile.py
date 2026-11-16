@@ -1540,8 +1540,8 @@ def _variety_option(result: Any, combo: dict, num_params: int) -> Tuple[Column, 
                 "transpiler returned a (Column, list[str]) tuple whose first "
                 "element is not a Column; return None to decline"
             )
-        # A non-list categories (e.g. a string) has a len and is iterable, so
-        # it would otherwise slip through as bogus per-char categories.
+        # Categories must be an ordered list, one per public param: a tuple, dict,
+        # or set of valid names would pass the checks below, and a set's order is arbitrary.
         if not isinstance(categories, list):
             raise UnsupportedOperationException(
                 "transpiler returned categories that are not a list"
