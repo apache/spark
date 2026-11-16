@@ -34,7 +34,7 @@ import com.google.common.util.concurrent.Uninterruptibles
 import org.apache.logging.log4j.Level
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
-import org.apache.spark.{SharedSparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{SharedSparkContext, SparkConf, SparkEnv, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.util.TaskCompletionListener
 
 class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
@@ -928,31 +928,6 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("idle timeout in seconds to socket read timeout in milliseconds") {
-    import BasePythonRunner.idleTimeoutToSoTimeoutMillis
-
-    // No timeout.
-    assert(idleTimeoutToSoTimeoutMillis(0L) === 0)
-    assert(idleTimeoutToSoTimeoutMillis(-1L) === 0)
-    assert(idleTimeoutToSoTimeoutMillis(Long.MinValue) === 0)
-
-    assert(idleTimeoutToSoTimeoutMillis(1L) === 1000)
-    assert(idleTimeoutToSoTimeoutMillis(120L) === 120000)
-
-    // The largest timeout that fits in an Int of milliseconds.
-    val maxExactSeconds = Int.MaxValue / 1000L
-    assert(maxExactSeconds === 2147483L)
-    assert(idleTimeoutToSoTimeoutMillis(maxExactSeconds) === 2147483000)
-
-    // Timeouts beyond that are capped. With Int arithmetic these gave, in order: a negative
-    // value, which Socket.setSoTimeout rejects; 0, which means no timeout; 704 milliseconds;
-    // 0; 0; and a negative value.
-    Seq(maxExactSeconds + 1, 536870912L, 4294968L, 1L << 32, Int.MaxValue.toLong + 1,
-        Long.MaxValue).foreach { seconds =>
-      assert(idleTimeoutToSoTimeoutMillis(seconds) === Int.MaxValue, s"for $seconds seconds")
-    }
-  }
-
   private val idleTimeoutLoggerName = "org.apache.spark.api.python.IdleTimeoutTestRunner"
 
   /** Runs `f` and returns the warnings logged under `idleTimeoutLoggerName`. */
@@ -1134,6 +1109,32 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
           "No data received from the worker process - handle.map(_.isAlive) = None, " +
           s"$blockingWorkerStatus - $task"))
       handler.throwIfKilled(-1)
+    }
+  }
+
+  test("SPARK-61764: the idle timeout is limited to what fits in an Int of milliseconds") {
+    import org.apache.spark.internal.config.Python._
+
+    val maxSeconds = PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS
+    assert(maxSeconds === 2147483L)
+    // The largest idle timeout converts to a socket read timeout without overflow.
+    assert(Math.toIntExact(TimeUnit.SECONDS.toMillis(maxSeconds)) === 2147483000)
+
+    def idleTimeout(value: String): Long =
+      new SparkConf(false).set(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS.key, value)
+        .get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
+
+    assert(idleTimeout("0") === 0L)
+    assert(idleTimeout("120") === 120L)
+    assert(idleTimeout("2m") === 120L)
+    assert(idleTimeout(maxSeconds.toString) === maxSeconds)
+
+    // With Int arithmetic, the first two of these gave a negative socket read timeout, which
+    // fails the task, the third gave 704 milliseconds, and the last gave 0, no timeout.
+    Seq((maxSeconds + 1).toString, "30d", "4294968", "4294967296").foreach { value =>
+      val e = intercept[IllegalArgumentException](idleTimeout(value))
+      assert(e.getMessage.contains(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS.key))
+      assert(e.getMessage.contains(s"at most $maxSeconds seconds"))
     }
   }
 }
