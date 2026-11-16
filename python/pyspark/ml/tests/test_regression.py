@@ -53,11 +53,18 @@ class RegressionTestsMixin:
             ["label", "features", "censor"],
         )
 
-        aft = AFTSurvivalRegression()
+        self.assertEqual(AFTSurvivalRegression().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        aft = AFTSurvivalRegression(intermediateStorageLevel="DISK_ONLY")
+        self.assertEqual(aft.getIntermediateStorageLevel(), "DISK_ONLY")
+        aft.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(aft.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        aft.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(aft.getIntermediateStorageLevel(), "DISK_ONLY")
         aft.setMaxIter(1)
         self.assertEqual(aft.getMaxIter(), 1)
 
         model = aft.fit(df)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(aft.uid, model.uid)
         self.assertEqual(model.numFeatures, 1)
         self.assertTrue(np.allclose(model.intercept, 0.0, atol=1e-4), model.intercept)
@@ -110,14 +117,22 @@ class RegressionTestsMixin:
             [(1.0, Vectors.dense(1.0)), (0.0, Vectors.sparse(1, [], []))], ["label", "features"]
         )
 
+        self.assertEqual(IsotonicRegression().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         ir = IsotonicRegression(
             isotonic=True,
             featureIndex=0,
+            intermediateStorageLevel="DISK_ONLY",
         )
+        self.assertEqual(ir.getIntermediateStorageLevel(), "DISK_ONLY")
+        ir.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(ir.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        ir.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(ir.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertTrue(ir.getIsotonic())
         self.assertEqual(ir.getFeatureIndex(), 0)
 
         model = ir.fit(df)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(model.numFeatures, 1)
         self.assertTrue(
             np.allclose(model.boundaries.toArray(), [0.0, 1.0], atol=1e-4), model.boundaries
@@ -160,18 +175,26 @@ class RegressionTestsMixin:
             .sortWithinPartitions("weight")
         )
 
+        self.assertEqual(LinearRegression().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         lr = LinearRegression(
             regParam=0.0,
             maxIter=2,
             solver="normal",
             weightCol="weight",
+            intermediateStorageLevel="DISK_ONLY",
         )
+        self.assertEqual(lr.getIntermediateStorageLevel(), "DISK_ONLY")
+        lr.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(lr.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        lr.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(lr.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(lr.getRegParam(), 0)
         self.assertEqual(lr.getMaxIter(), 2)
         self.assertEqual(lr.getSolver(), "normal")
         self.assertEqual(lr.getWeightCol(), "weight")
 
         model = lr.fit(df)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(lr.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(np.allclose(model.scale, 1.0, atol=1e-4))
@@ -393,13 +416,22 @@ class RegressionTestsMixin:
             .select("label", "features")
         )
 
-        fm = FMRegressor(factorSize=2, maxIter=1, regParam=1.0, seed=1)
+        self.assertEqual(FMRegressor().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        fm = FMRegressor(
+            factorSize=2, maxIter=1, regParam=1.0, seed=1, intermediateStorageLevel="DISK_ONLY"
+        )
+        self.assertEqual(fm.getIntermediateStorageLevel(), "DISK_ONLY")
+        fm.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(fm.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        fm.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(fm.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(fm.getFactorSize(), 2)
         self.assertEqual(fm.getMaxIter(), 1)
         self.assertEqual(fm.getRegParam(), 1.0)
         self.assertEqual(fm.getSeed(), 1)
 
         model = fm.fit(df)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(fm.uid, model.uid)
         self.assertEqual(model.numFeatures, 2)
         self.assertTrue(

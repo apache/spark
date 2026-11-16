@@ -29,7 +29,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{RelationCacheIneligible, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{ExternalLookupJoinEligibility,
+  RelationCacheIneligible, Resolver}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentBatchTimestamp, CurrentCatalog, CurrentDatabase, CurrentDate, CurrentPath, CurrentTime, CurrentTimestampLike, CurrentTimeZone, CurrentUser, LeafExpression, LocalTimestamp, LocalTimestampNanos, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -557,11 +558,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       plan: LogicalPlan,
       session: SparkSession,
       sessionContext: => Map[String, String],
-      canUse: CachedData => Boolean = _ => true): Option[CachedData] = {
+      canUse: CachedData => Boolean = _ => true,
+      entries: IndexedSeq[CachedData] = cachedData): Option[CachedData] = {
     lazy val context = sessionContext
     lazy val ignoreContext = CacheManager.ignoreSessionContext(session)
     // `canUse` can have side effects, so call it only for an entry whose context matches.
-    val result = cachedData.find { cd =>
+    val result = entries.find { cd =>
       plan.sameResult(cd.plan) && (ignoreContext || cd.sessionContext == context) && canUse(cd)
     }
     if (result.isDefined) {
@@ -601,24 +603,33 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private[sql] def useCachedData(
       plan: LogicalPlan,
       session: SparkSession,
-      canUse: CachedData => Boolean = _ => true): LogicalPlan = {
-    useCachedData(plan, session, canUse, mutable.Map.empty[String, String])
-  }
+      canUse: CachedData => Boolean = _ => true): LogicalPlan =
+    useCachedEntries(plan, session, canUse, cachedData, mutable.Map.empty[String, String])
 
-  // `sessionValues` memoizes the session values read during one call: they do not change during
-  // it, and reading one can call into a catalog.
-  private def useCachedData(
+  // `entries` is one read of the cache list, which another thread may replace meanwhile, so that
+  // an entry that is used is also one that the lookup sides were protected from. `sessionValues`
+  // memoizes the session values read during one call: they do not change during it, and reading
+  // one can call into a catalog.
+  private def useCachedEntries(
       plan: LogicalPlan,
       session: SparkSession,
       canUse: CachedData => Boolean,
+      entries: IndexedSeq[CachedData],
       sessionValues: mutable.Map[String, String]): LogicalPlan = {
-    val newPlan = plan transformDown {
+    // An external lookup join reads its lookup side by lookups. If cached data replaced that side
+    // or a CTE definition that it reads, the join would silently read the cached data instead, or
+    // fail.
+    // TODO: protect only the lookup side's path, so that the other readers of a CTE definition
+    //   that a lookup side reads keep using cached data. Today the whole definition is skipped.
+    val lookupSidePlans =
+      if (entries.isEmpty) Nil else ExternalLookupJoinEligibility.lookupSidePlans(plan)
+    val newPlan = plan.transformDownWithPruning(node => !lookupSidePlans.exists(_ eq node)) {
       case command: Command => command
 
       case currentFragment =>
         lookupCachedDataInternal(currentFragment, session,
           CacheManager.sessionContextOf(session, currentFragment, sessionValues),
-          canUse).map { cached =>
+          canUse, entries).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -632,7 +643,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case s: SubqueryExpression =>
-        s.withNewPlan(useCachedData(s.plan, session, canUse, sessionValues))
+        s.withNewPlan(useCachedEntries(s.plan, session, canUse, entries, sessionValues))
     }
 
     if (result.fastEquals(plan)) {
@@ -644,7 +655,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         log"Session context of the input plan: ${MDC(DATAFRAME_CACHE_ENTRY, context)}"
       }
       CacheManager.logCacheOperation(log"Last 20 Dataframe cache entry logical plans:\n" +
-        log"[${MDC(DATAFRAME_CACHE_ENTRY, cachedData.take(20).map { cd =>
+        log"[${MDC(DATAFRAME_CACHE_ENTRY, entries.take(20).map { cd =>
           s"${cd.plan}sessionContext=${cd.sessionContext}"
         }.mkString(",\n"))}]")
     } else {
@@ -761,8 +772,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
-   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS`.
+   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is disabled, return the session with disabled
+   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS` and
+   * `PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED`.
    * `AUTO_BUCKETED_SCAN_ENABLED` is always disabled.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
@@ -775,8 +787,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
-      disableConfigs =
-        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
+      disableConfigs ++= Seq(
+        SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS,
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED)
     }
     SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }

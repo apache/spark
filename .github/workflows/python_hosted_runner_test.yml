@@ -50,6 +50,16 @@ on:
         required: false
         type: string
         default: arm64
+      precompile_timeout_minutes:
+        description: Timeout for precompilation. Raise it for slower runners.
+        required: false
+        type: number
+        default: 90
+      build_timeout_minutes:
+        description: Timeout for each build matrix job. Raise it for slower runners.
+        required: false
+        type: number
+        default: 120
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -61,6 +71,7 @@ jobs:
   precompile:
     name: "Precompile Spark"
     runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.precompile_timeout_minutes }}
     outputs:
       # Pinned so the build job checks out the same snapshot, even if the branch advances mid-run.
       head_sha: ${{ steps.checkout.outputs.head_sha }}
@@ -106,6 +117,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     needs: precompile
     runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
       fail-fast: false
       max-parallel: 20

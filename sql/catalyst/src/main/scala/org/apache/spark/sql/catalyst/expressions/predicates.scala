@@ -329,7 +329,7 @@ trait PredicateHelper extends AliasHelper with Logging {
   since = "1.0.0",
   group = "predicate_funcs")
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
@@ -466,7 +466,7 @@ case class UnresolvedInSubqueryPlanId(values: Seq[Expression], planId: Long)
   since = "1.0.0",
   group = "predicate_funcs")
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate with NoThrow {
 
   require(list != null, "list should not be null")
 
@@ -631,7 +631,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
+case class InSet(child: Expression, hset: Set[Any])
+  extends UnaryExpression with Predicate with NoThrow {
 
   require(hset != null, "hset could not be null")
 
@@ -858,7 +859,7 @@ object InSet {
   since = "1.0.0",
   group = "predicate_funcs")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate
-  with CommutativeExpression {
+  with CommutativeExpression with NoThrow {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -961,7 +962,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   since = "1.0.0",
   group = "predicate_funcs")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
-  with CommutativeExpression {
+  with CommutativeExpression with NoThrow {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -1107,6 +1108,25 @@ object Equality {
   }
 }
 
+/** Matches a `<`/`<=`/`>`/`>=` comparison; see `unapply` for the exact normalization. */
+object RangePredicate {
+  /**
+   * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with
+   * `>` and `>=` reordered so the lower bound leads. Inclusivity stays on the
+   * original predicate, which execution evaluates as-is; a strict predicate
+   * also selects the exclusive point-index bound.
+   */
+  def unapply(expression: Expression): Option[(DataType, Expression, Expression, Boolean)] = {
+    expression match {
+      case LessThan(low, high) => Some((low.dataType, low, high, true))
+      case LessThanOrEqual(low, high) => Some((low.dataType, low, high, false))
+      case GreaterThan(high, low) => Some((low.dataType, low, high, true))
+      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high, false))
+      case _ => None
+    }
+  }
+}
+
 // TODO: although map type is not orderable, technically map type should be able to be used
 // in equality comparison
 @ExpressionDescription(
@@ -1132,7 +1152,7 @@ object Equality {
   since = "1.0.0",
   group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "="
 
@@ -1180,7 +1200,8 @@ case class EqualTo(left: Expression, right: Expression)
   """,
   since = "1.1.0",
   group = "predicate_funcs")
-case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualNullSafe(left: Expression, right: Expression)
+    extends BinaryComparison with NoThrow {
 
   override def symbol: String = "<=>"
 
@@ -1284,7 +1305,7 @@ case class EqualNull(left: Expression, right: Expression, replacement: Expressio
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<"
 
@@ -1320,7 +1341,7 @@ case class LessThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<="
 
@@ -1356,7 +1377,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">"
@@ -1393,7 +1414,7 @@ case class GreaterThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">="

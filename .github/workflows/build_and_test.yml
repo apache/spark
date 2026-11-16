@@ -81,6 +81,7 @@ jobs:
     # `ubuntu-slim` is lighter than `ubuntu-latest`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
+    timeout-minutes: 10
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -123,13 +124,13 @@ jobs:
             # must run when either the Kubernetes support or the credential-aws module
             # (including its integration-tests module, mapped to credential-aws) changes.
             oidc_e2e=`./dev/is-changed.py -m kubernetes,credential-aws`
-            sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
             # Also we only run the very slow transpile changes when that logic changes
             transpile=false
+            sparkr=false
             static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
@@ -145,6 +146,17 @@ jobs:
                   *transpile*) transpile=true; break ;;
                 esac
               done
+              # The scheduled builds cover SparkR. On PRs, run SparkR tests only when the files
+              # of the `sparkr` module or its Scala backend change, not when only its
+              # dependencies such as `hive` and `mllib` change.
+              for f in $changed_files; do
+                case "$f" in
+                  R/*|dev/spark-test-image/sparkr/*) sparkr=true; break ;;
+                  core/src/main/scala/org/apache/spark/api/r/*) sparkr=true; break ;;
+                  sql/core/src/main/scala/org/apache/spark/sql/api/r/*) sparkr=true; break ;;
+                  mllib/src/main/scala/org/apache/spark/ml/r/*) sparkr=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -156,7 +168,9 @@ jobs:
             buf=true
             ui=true
             docs=true
-            java25=true
+            # The scheduled Java 25 builds cover the whole build. On PRs, run this job only
+            # when the native data source tests, which are skipped before Java 22, are affected.
+            java25=`./dev/is-changed.py -m "sql,connect"`
           else
             pyspark_periodic=false
             pyspark_connect_old_client=false
@@ -337,7 +351,13 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
+            included-tags: org.apache.spark.tags.DataSourceV2Test
+            comment: "- DSv2 tests"
+          - modules: sql
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest,org.apache.spark.tags.DataSourceV2Test
             comment: "- other tests"
         exclude:
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
@@ -441,6 +461,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       packages: write
     steps:
@@ -819,6 +840,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
