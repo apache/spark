@@ -2485,12 +2485,13 @@ class _PickLedger:
         self.commits += picked
 
 
-def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None):
+def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None, record=None):
     """Cherry-pick `merge_hash` onto `pick_ref` and land it.
 
     Returns (pick_ref, marker), where the marker says how it landed (see _landed):
     a commit hash for a direct push (landed), a PR URL for a draft backport PR, or
     `fork:<owner>:<branch>` when the fork push worked but the PR did not open (both pending).
+    `record` gets that pair as soon as it lands, before the cleanup that follows.
     `pending_sibling` is the (branch-M.x, marker) whose backport is only pending; a direct push
     then needs an explicit maintenance-only confirmation. Raises `SkipCherryPick` when the
     committer declines to resolve a conflict (after aborting the pick), declines the
@@ -2542,29 +2543,45 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     >>> compile_check.call_args_list == [call(pushes[0].args[1])] * 4
     True
 
-    [s] restores the original checkout, waiting out local edits, before cleaning up; a [p]
-    that opened its PR cleans up too:
+    [s] restores the original checkout, waiting out local edits, before cleaning up. A landing
+    is recorded before the cleanup, so one that fails loses nothing; a skip, and a landing that
+    fails, record nothing:
 
-    >>> def leaves(answer):
-    ...     clean = Mock()
+    >>> def leaves(answers, via_fork=("https://x/pull/9",), **effects):
+    ...     steps = Mock()
+    ...     steps.fork.side_effect = via_fork
+    ...     for name, effect in effects.items():
+    ...         getattr(steps, name).side_effect = effect
     ...     with (
-    ...         patch("builtins.input", side_effect=[answer]),
-    ...         patch.object(git, "run", return_value="") as run,
-    ...         patch.dict(clean_up.__globals__, original_head="master"),
+    ...         patch("builtins.input", side_effect=answers),
+    ...         patch.object(git, "run", return_value="abc\\n"),
+    ...         patch.object(git, "push", steps.push),
     ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
-    ...                        maybe_compile_check=Mock(), clean_up=clean,
-    ...                        should_skip_post_merge_ci=Mock(return_value=False),
-    ...                        _land_via_fork=Mock(return_value="https://x/pull/9")),
+    ...                        maybe_compile_check=Mock(), clean_up=steps.clean_up,
+    ...                        _restore_original_head=steps.restore, _land_via_fork=steps.fork,
+    ...                        should_skip_post_merge_ci=Mock(return_value=False)),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         try:
-    ...             _do_cherry_pick(1, "feed", "branch-4.2")
-    ...         except SkipCherryPick:
+    ...             _do_cherry_pick(1, "feed", "branch-4.2", record=steps.record)
+    ...         except (SkipCherryPick, SystemExit, subprocess.CalledProcessError):
     ...             pass
-    ...     cmds = [c.args[0] for c in run.call_args_list]
-    ...     return ["git", "checkout", "--quiet", "master"] in cmds, clean.call_count
-    >>> leaves("s"), leaves("p")
-    ((True, 1), (False, 1))
+    ...     return [name for name, _, _ in steps.mock_calls], [
+    ...         c.args[0] for c in steps.record.call_args_list]
+    >>> leaves(["s"])
+    (['restore', 'clean_up'], [])
+    >>> leaves(["p"])
+    (['fork', 'record', 'clean_up'], [('branch-4.2', 'https://x/pull/9')])
+    >>> leaves(["d"])
+    (['push', 'record', 'clean_up'], [('branch-4.2', 'abc')])
+    >>> leaves(["p", "s"], via_fork=[None])
+    (['fork', 'restore', 'clean_up'], [])
+    >>> leaves(["d", "s"], push=OSError("rejected"))
+    (['push', 'restore', 'clean_up'], [])
+    >>> leaves(["d"], clean_up=subprocess.CalledProcessError(1, "git checkout"))
+    (['push', 'record', 'clean_up'], [('branch-4.2', 'abc')])
+    >>> leaves(["p"], clean_up=subprocess.CalledProcessError(1, "git checkout"))
+    (['fork', 'record', 'clean_up'], [('branch-4.2', 'https://x/pull/9')])
 
     A sampled pick carries the skip trailer only when pushed to apache, so [p] always sends
     the fork a head without it. Both keep an amend the committer made during the checks.
@@ -2681,6 +2698,8 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
             _set_skip_trailer(False)
             marker = _land_via_fork(pr_num, pick_ref, pick_branch_name, title)
             if marker:
+                if record:
+                    record((pick_ref, marker))
                 clean_up()
                 return pick_ref, marker
             # Nothing was pushed and the pick is intact: retry, push directly, or skip.
@@ -2695,6 +2714,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
                 continue
         # Only a direct push gets the skip trailer: on a fork head it would skip the PR's CI.
         _set_skip_trailer(skip_post_merge_ci)
+        pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
         try:
             git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
             break
@@ -2706,7 +2726,9 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
                 % (e, pick_ref)
             )
 
-    pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
+    # Before clean_up(), which can raise: the push has landed either way.
+    if record:
+        record((pick_ref, pick_hash))
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
@@ -2896,12 +2918,11 @@ def cherry_pick(
     but a direct push needs the maintenance-only confirmation. The same holds inside the
     both-branches path when branch-M.x goes to a backport PR.
 
-    Returns the (ref, marker) pairs picked, markers as in `_do_cherry_pick`, so the main loop
-    can advance its remaining-branches list and record each one. The list is empty (or, for
-    the two-branch path, holds only the first pick) when a branch is skipped -- any
-    SkipCherryPick trigger -- so the caller simply offers the next branch and still resolves
-    JIRA. `title` is the normalized PR title, for the backport-PR path only.
-    `record` gets each pair as it lands, so one survives a later pick that ends the run.
+    `record` gets each (ref, marker) pair, markers as in `_do_cherry_pick`, as soon as it lands,
+    and main() learns of picks only through it, so one survives a later pick that ends the run.
+    A branch is skipped, recording nothing, on any SkipCherryPick trigger; the caller then
+    offers the next branch and still resolves JIRA. The returned list repeats the recorded
+    pairs; nothing reads it. `title` is the normalized PR title, for the backport-PR path only.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
@@ -2986,21 +3007,43 @@ def cherry_pick(
     >>> both
     [('branch-4.x', 'https://github.com/apache/spark/pull/9')]
 
-    >>> recorded = []
-    >>> def do(pr_num, merge_hash, ref, **kwargs):
-    ...     if ref == "branch-4.2":
-    ...         sys.exit(-1)  # e.g. [a]bort at the checkout-retry prompt
-    ...     return ref, "abc"
-    >>> with (
-    ...     patch.multiple(sys.modules[__name__], _do_cherry_pick=do, get_input=lambda *a: "b"),
-    ...     patch("builtins.input", return_value="branch-4.2"), redirect_stdout(StringIO()),
-    ... ):
-    ...     try:
-    ...         cherry_pick(1, "abc", "branch-4.2", ["branch-4.x", "branch-4.2"], "master",
-    ...                     already_picked=("master",), record=recorded.append)
-    ...     except SystemExit:
-    ...         pass
-    >>> recorded
+    Each pick site records what lands, in order, and a skipped pick records nothing; the
+    branch-M.x pick survives a branch-M.N pick that is skipped or ends the run:
+
+    >>> def picks(branch, choice="", ends=(), skips=(), pending=None):
+    ...     recorded = []
+    ...     def do(pr_num, merge_hash, ref, record, **kwargs):
+    ...         if ref in ends:
+    ...             sys.exit(-1)  # e.g. [a]bort at the checkout-retry prompt
+    ...         if ref in skips:
+    ...             raise SkipCherryPick()
+    ...         record((ref, "abc"))
+    ...         return ref, "abc"
+    ...     with (
+    ...         patch.multiple(sys.modules[__name__], _do_cherry_pick=do,
+    ...                        get_input=lambda *a: choice),
+    ...         patch("builtins.input", return_value=branch), redirect_stdout(StringIO()),
+    ...     ):
+    ...         try:
+    ...             cherry_pick(1, "abc", branch, ["branch-4.x", "branch-4.2"], "master",
+    ...                         already_picked=("master",), pending=pending,
+    ...                         record=recorded.append)
+    ...         except SystemExit:
+    ...             pass
+    ...     return recorded
+    >>> picks("branch-4.x"), picks("branch-4.2", "o")
+    ([('branch-4.x', 'abc')], [('branch-4.2', 'abc')])
+    >>> picks("branch-4.2", "b")
+    [('branch-4.x', 'abc'), ('branch-4.2', 'abc')]
+    >>> picks("branch-4.2", pending={"branch-4.x": url})
+    [('branch-4.2', 'abc')]
+    >>> picks("branch-4.x", skips=("branch-4.x",)), picks("branch-4.2", "o", skips=("branch-4.2",))
+    ([], [])
+    >>> picks("branch-4.2", pending={"branch-4.x": url}, skips=("branch-4.2",))
+    []
+    >>> picks("branch-4.2", "b", skips=("branch-4.2",))
+    [('branch-4.x', 'abc')]
+    >>> picks("branch-4.2", "b", ends=("branch-4.2",))
     [('branch-4.x', 'abc')]
     """
     pending = pending or {}
@@ -3017,12 +3060,9 @@ def cherry_pick(
         )
 
     def pick(ref, pending_sibling=None):
-        pair = _do_cherry_pick(
-            pr_num, merge_hash, ref, title=title, pending_sibling=pending_sibling
+        return _do_cherry_pick(
+            pr_num, merge_hash, ref, title=title, pending_sibling=pending_sibling, record=record
         )
-        if record:
-            record(pair)
-        return pair
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x in pending:
@@ -3047,8 +3087,8 @@ def cherry_pick(
             {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
         if choice == "b":
-            # If the branch-M.N pick is skipped, still return branch-M.x so it is recorded;
-            # `record` keeps it even when the branch-M.N pick ends the run.
+            # A branch-M.x pick that landed stays recorded when the branch-M.N pick is skipped
+            # or ends the run.
             picked = []
             try:
                 picked.append(pick(sibling_x))
@@ -5226,7 +5266,7 @@ __test__ = {
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
     >>> from unittest.mock import patch
-    >>> entrypoint = ast.parse(Path(__file__).read_text()).body[-1]
+    >>> entrypoint = ast.parse(Path(__file__).read_bytes()).body[-1]
     >>> code = compile(ast.Module(body=[entrypoint], type_ignores=[]), __file__, "exec")
     >>> refused = subprocess.CalledProcessError(1, "git checkout")
     >>> def abort_then_fail():
@@ -5254,8 +5294,19 @@ __test__ = {
     _restore_original_head ['checkout'] -1
     abort_then_fail ['checkout'] -1
     ordinary_exit ['checkout'] CalledProcessError
-    >>> preserve_local_state
+
+    The flag clean_up() reads is off again, and one left on stops the run before main():
+
+    >>> clean_up.__globals__["preserve_local_state"]
     False
+    >>> ran = []
+    >>> with patch.object(doctest, "testmod", return_value=(0, 0)):
+    ...     try:
+    ...         exec(code, dict(globals(), __name__="__main__", main=lambda: ran.append(1),
+    ...                         preserve_local_state=True))
+    ...     except SystemExit as e:
+    ...         print(e.code, ran)
+    -1 []
     """,
     "revert_jira_issue": """
     A revert removes the versions for its branches while preserving released, archived,
@@ -5891,6 +5942,85 @@ __test__ = {
     >>> run("branch-4.2", "backport-pr7-branch-4.2", "Backport-of: #7" + footer, interrupt=True)
     (True, [('branch-4.2', 'abc')], ['branch-4.2'])
     """,
+    "main_records": """
+    main() reports the picks cherry_pick hands to `record`, on a merge and on a backport of a
+    merged PR: the merge comment gets them in order and the JIRA update their branches, also
+    for picks recorded before a later pick ends the run. Each run takes the pairs the
+    cherry_pick stand-in records, one list per call (None ends the run), and returns the
+    pairs the merge comment receives, the branches the JIRA update receives, and the exit code.
+
+    >>> import sys
+    >>> from unittest.mock import Mock, patch
+    >>> footer = "\\n\\nBody\\n\\nCloses #1 from x/h.\\n\\nAuthored-by: X <x@x>"
+    >>> def run(calls, message=None):
+    ...     pr = {"url": "u", "title": "[SPARK-1][SQL] Fix", "draft": False, "body": "b",
+    ...           "base": {"ref": "master"}, "user": {"login": "x"}, "head": {"ref": "h"},
+    ...           "state": "open" if message is None else "closed", "mergeable": True}
+    ...     def get_json(url):
+    ...         if url.endswith("/branches"):
+    ...             return [{"name": b} for b in ("master", "branch-4.x", "branch-4.2")]
+    ...         if url.endswith("/pulls/1"):
+    ...             return pr
+    ...         if url.endswith("/users/x"):
+    ...             return {"name": "X", "email": "x@x", "id": 1}
+    ...         return []
+    ...     remaining = list(calls)
+    ...     def ask(prompt, *args, **kwargs):
+    ...         return "y" if remaining and "into another branch" in prompt else "n"
+    ...     def pick(*args, record, **kwargs):
+    ...         for pair in remaining.pop(0):
+    ...             if pair is None:
+    ...                 sys.exit(-1)  # a later pick ends the run
+    ...             record(pair)
+    ...     found = (None, None) if message is None else ("abc", message)
+    ...     comment, update = Mock(), Mock()
+    ...     with (
+    ...         patch.object(sys, "argv", ["merge_spark_pr.py", "1"]), patch("os.chdir"),
+    ...         patch.dict(main.__globals__, DRY_RUN_ENV=False, check_script_up_to_date=Mock(),
+    ...                    initialize_jira=Mock(), asf_jira=Mock(), jira_disabled=False,
+    ...                    clean_up=Mock(), get_current_ref=Mock(return_value="master"),
+    ...                    get_json=get_json, get_json_pages=get_json,
+    ...                    find_merge_commit=Mock(return_value=found),
+    ...                    git=Mock(), github=Mock(), check_linked_jira_issues=Mock(),
+    ...                    continue_maybe=Mock(), get_input=ask, merge_pr=Mock(return_value="abc"),
+    ...                    post_merge_comment=comment,
+    ...                    prompt_for_components=Mock(return_value=["CORE"]),
+    ...                    branches_with_merge_footer=Mock(return_value=[]),
+    ...                    pending_fork_backports=Mock(return_value={}),
+    ...                    default_pick_branch=Mock(return_value="branch-4.x"),
+    ...                    cherry_pick=pick, update_jira_for_pr=update, print=Mock()),
+    ...     ):
+    ...         code = None
+    ...         try:
+    ...             main()
+    ...         except SystemExit as e:
+    ...             code = e.code
+    ...     return (comment.call_args.args[1] if comment.called else None,
+    ...             update.call_args.args[2], code)
+
+    On a merge, the merged branch comes first and every recorded pick follows:
+
+    >>> run([[("branch-4.x", "d")], [("branch-4.2", "e")]])  # doctest: +NORMALIZE_WHITESPACE
+    ([('master', 'abc'), ('branch-4.x', 'd'), ('branch-4.2', 'e')],
+     ['master', 'branch-4.x', 'branch-4.2'], None)
+
+    A pick recorded before a later pick ends the run is still reported, and so is a merge
+    with no picks:
+
+    >>> run([[("branch-4.x", "d")], [None]])
+    ([('master', 'abc'), ('branch-4.x', 'd')], ['master', 'branch-4.x'], -1)
+    >>> run([])
+    ([('master', 'abc')], ['master'], None)
+
+    On a backport of a merged PR the comment holds only the picks, and the JIRA update also
+    the branch the PR merged into:
+
+    >>> message = "[SPARK-1][SQL] Fix" + footer
+    >>> run([[("branch-4.x", "d")], [("branch-4.2", "e")]], message)
+    ([('branch-4.x', 'd'), ('branch-4.2', 'e')], ['master', 'branch-4.x', 'branch-4.2'], 0)
+    >>> run([[("branch-4.x", "d")], [None]], message)
+    ([('branch-4.x', 'd')], ['master', 'branch-4.x'], -1)
+    """,
     "main_titles": """
     main() hands the title that title_for_run() returns to the commit, the JIRA checks, and
     the JIRA update: on a merge the prepared title, with a component entered at the prompt;
@@ -6259,7 +6389,8 @@ if __name__ == "__main__":
     import doctest
 
     failure_count, test_count = doctest.testmod()
-    if failure_count:
+    # A doctest that left the abort flag on would make every clean_up() of this run a no-op.
+    if failure_count or preserve_local_state:
         sys.exit(-1)
     try:
         main()
