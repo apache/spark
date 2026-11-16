@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SizeBasedWindowFunction, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SizeBasedWindowFunction, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Project, Window, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 
 /**
  * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
@@ -71,9 +72,18 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  *     WindowGroupLimit(partitionSpec, orderSpec, row_number(), limit = 1)
  *       Tab1
  * }}}
+ * A deterministic extra conjunct alongside the top-1 predicate (e.g. `rn = 1 AND v > 6`) is kept
+ * as a `Filter` over the new `Project` rather than dropped, since it is evaluated on the same
+ * single surviving row either way. A nondeterministic one is left in place instead (keeping the
+ * `Window`/`Filter` unchanged), since relocating it would change which rows it is evaluated on.
  * This special case never applies when `partitionSpec` is empty and `limit` is below
  * `spark.sql.execution.topKSortFallbackThreshold` (the default), since that case is instead
  * rewritten straight to a `Limit` on top of the `Window`, with no `WindowGroupLimit` involved.
+ * It also never applies when a `partitionSpec` expression is not binary-stable (e.g. a STRING
+ * with a non-`UTF8_BINARY` collation): `WindowGroupLimitExec` groups rows by raw `UnsafeRow`
+ * byte equality, so collation-equal keys with different bytes land in separate groups and each
+ * keeps its own row. The `Window`/`Filter` being eliminated here is what re-merges those rows
+ * back into one group today, so dropping them would let the extras leak through as `rn = 1`.
  */
 object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -101,13 +111,13 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Recognizes a `Filter` condition that keeps only the first-ranked row produced by a
-   * `row_number()` `Window`, i.e. `rn = 1`, `1 = rn`, `rn <= 1`, `1 >= rn`, `rn < 2` or `2 > rn`,
-   * and nothing else (a conjunction with another predicate does not count, since dropping the
-   * `Window`/`Filter` would also silently drop that other predicate).
+   * Splits a `Filter` condition into its top-1 conjunct(s) for `attr` (see `extractLimit`) and
+   * the rest, e.g. `rn = 1 AND v > 6` -> `(Seq(rn = 1), Seq(v > 6))`. The first element is empty
+   * if `condition` has no top-1 conjunct for `attr`.
    */
-  private def isTop1(condition: Expression, attr: Attribute): Boolean =
-    extractLimit(condition, attr).contains(1)
+  private def splitTop1Conjuncts(
+      condition: Expression, attr: Attribute): (Seq[Expression], Seq[Expression]) =
+    splitConjunctivePredicates(condition).partition(c => extractLimit(c, attr).contains(1))
 
   /**
    * All window expressions should use the same expanding window and do not contains
@@ -163,18 +173,26 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
                 } else {
                   val windowGroupLimit =
                     WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
+                  lazy val (top1Conjuncts, remainingConjuncts) =
+                    splitTop1Conjuncts(condition, alias.toAttribute)
                   if (limit == 1 && windowExpressions.length == 1 && window.hint.isEmpty &&
                     rankLikeFunction.isInstanceOf[RowNumber] &&
-                    isTop1(condition, alias.toAttribute)) {
-                    // The surviving row's row_number() can only be 1, and the top-1 filter is
-                    // then always true, so the Window/Filter above are dead computation. Keep
-                    // the alias's qualifier/metadata so the output schema is unaffected by
-                    // taking this path instead of the regular WindowGroupLimit-insertion one.
+                    partitionSpec.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)) &&
+                    top1Conjuncts.nonEmpty && remainingConjuncts.forall(_.deterministic)) {
+                    // The surviving row's row_number() can only be 1, so the top-1 conjunct(s)
+                    // are always true and that part of the Filter is dead computation. Keep the
+                    // alias's qualifier/metadata so the output schema is unaffected. See the
+                    // class doc for the binary-stable and determinism requirements above.
                     val newAlias = Alias(Literal(1), alias.name)(
                       exprId = alias.exprId,
                       qualifier = alias.qualifier,
                       explicitMetadata = Some(alias.metadata))
-                    Project(child.output :+ newAlias, windowGroupLimit)
+                    val project = Project(child.output :+ newAlias, windowGroupLimit)
+                    if (remainingConjuncts.isEmpty) {
+                      project
+                    } else {
+                      Filter(remainingConjuncts.reduceLeft(And), project)
+                    }
                   } else {
                     filter.withNewChildren(Seq(window.withNewChildren(Seq(windowGroupLimit))))
                   }

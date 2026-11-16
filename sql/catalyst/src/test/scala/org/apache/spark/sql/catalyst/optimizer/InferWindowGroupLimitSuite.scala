@@ -18,15 +18,18 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentRow, DenseRank, Literal, NthValue, NTile, PercentRank, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CurrentRow, DenseRank, Literal, NthValue, NTile, PercentRank, Rand, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Window, WindowGroupLimit, WindowHint}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class InferWindowGroupLimitSuite extends PlanTest {
   private object Optimize extends RuleExecutor[LogicalPlan] {
@@ -443,7 +446,9 @@ class InferWindowGroupLimitSuite extends PlanTest {
         .where($"rn" === 1)
         .analyze
 
-    val rnAttr = Optimize.execute(originalQuery).output.last
+    val optimized = Optimize.execute(originalQuery)
+    assert(!optimized.exists(_.isInstanceOf[Window]) && !optimized.exists(_.isInstanceOf[Filter]))
+    val rnAttr = optimized.output.last
     assert(rnAttr.qualifier == Seq("t"))
     assert(rnAttr.metadata == metadata)
   }
@@ -500,8 +505,8 @@ class InferWindowGroupLimitSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
-  test("Not eliminated for Rank/DenseRank even when the limit is 1 (ties could leave more " +
-      "than one row per group)") {
+  test("Not eliminated for Rank/DenseRank even when the limit is 1 (their limit iterators " +
+      "can let a row past the limit through even without ties)") {
     for (function <- rankLikeFunctions.filterNot(_.isInstanceOf[RowNumber])) {
       val originalQuery =
         testRelation
@@ -524,7 +529,35 @@ class InferWindowGroupLimitSuite extends PlanTest {
     }
   }
 
-  test("Not eliminated when the filter has an extra conjunct beyond the top-1 predicate") {
+  test("Not eliminated when a partition key is not binary-stable (e.g. a collated STRING)") {
+    val k = AttributeReference("k", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))()
+    val v = AttributeReference("v", IntegerType)()
+    val collatedRelation = LocalRelation(Seq(k, v), data = Seq(
+      InternalRow(UTF8String.fromString("a"), 1),
+      InternalRow(UTF8String.fromString("A"), 2)))
+
+    val originalQuery =
+      collatedRelation
+        .select(k, v,
+          windowExpr(RowNumber(),
+            windowSpec(k :: Nil, v.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1)
+
+    val correctAnswer =
+      collatedRelation
+        .windowGroupLimit(k :: Nil, v.desc :: Nil, RowNumber(), 1)
+        .select(k, v,
+          windowExpr(RowNumber(),
+            windowSpec(k :: Nil, v.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Eliminate the Window/Filter and keep a deterministic extra conjunct as a Filter " +
+      "over the new Project") {
     val originalQuery =
       testRelation
         .select(a, b, c,
@@ -535,10 +568,51 @@ class InferWindowGroupLimitSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .windowGroupLimit(a :: Nil, c.desc :: Nil, RowNumber(), 1)
+        .select(a, b, c, Literal(1).as("rn"))
+        .where(b > 0)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Eliminate the Window/Filter and correctly rebind a remaining conjunct that itself " +
+      "references rn") {
+    // "rn >= 1" isn't a recognized top-1 shape, so it stays as a remaining conjunct that must
+    // still bind to rn's (reused) exprId after rn is rewritten to the literal 1.
+    val originalQuery =
+      testRelation
         .select(a, b, c,
           windowExpr(RowNumber(),
             windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
-        .where($"rn" === 1 && b > 0)
+        .where($"rn" === 1 && $"rn" >= 1)
+
+    val correctAnswer =
+      testRelation
+        .windowGroupLimit(a :: Nil, c.desc :: Nil, RowNumber(), 1)
+        .select(a, b, c, Literal(1).as("rn"))
+        .where($"rn" >= 1)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Not eliminated when the filter has a nondeterministic extra conjunct") {
+    val originalQuery =
+      testRelation
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1 && Rand(Literal(0L)) > 0.5)
+
+    val correctAnswer =
+      testRelation
+        .windowGroupLimit(a :: Nil, c.desc :: Nil, RowNumber(), 1)
+        .select(a, b, c,
+          windowExpr(RowNumber(),
+            windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1 && Rand(Literal(0L)) > 0.5)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),
