@@ -127,7 +127,11 @@ class Aggregator(ABC):
         """Fold a single input row ``value`` into ``buffer`` and return the updated buffer.
 
         It may update mutable fields of ``buffer`` (e.g. a list) in place and return it, as long
-        as :meth:`zero` returns a new buffer on each call.
+        as :meth:`zero` returns a new buffer on each call. It must not update ``value``, or keep
+        a mutable object of ``value`` (e.g. an input list) in ``buffer``: in a grouped
+        aggregation, the aggregators that read the same input column get the same objects, and
+        over a window, a row's objects are passed again for each frame that is folded from
+        :meth:`zero` and includes the row.
         """
         ...
 

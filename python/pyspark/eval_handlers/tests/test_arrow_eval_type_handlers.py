@@ -30,7 +30,11 @@ from unittest.mock import patch
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers._typing import UDF
-from pyspark.eval_handlers.utils import hashable_grouping_key
+from pyspark.eval_handlers.utils import (
+    WindowAggResults,
+    hashable_grouping_key,
+    is_immutable_python_value,
+)
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
 from pyspark.sql.types import (
     ArrayType,
@@ -41,7 +45,13 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.utils import (
+    PySparkBaseTestCase,
+    have_numpy,
+    have_pyarrow,
+    numpy_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.util import PythonEvalType
 from pyspark.worker_metrics import WorkerMetrics
 
@@ -65,7 +75,6 @@ if have_pyarrow:
         ArrowScalarUDFHandler,
         ArrowWindowAggIncrementalUDFHandler,
         ArrowWindowAggUDFHandler,
-        _WindowAggResults,
     )
     from pyspark.sql.conversion import ArrowBatchTransformer
 
@@ -838,6 +847,35 @@ class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
                 out = list(handler.run(0, self._one_group(batch)))
                 self.assertEqual(out[0].column("_0").to_pylist(), expected)
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_bounded_frame_results_do_not_share_a_numpy_buffer(self):
+        # ``reduce`` adds into a 0-d numpy array in place and ``finish`` returns it. pyarrow
+        # converts such an array to an integer type, so the result type alone does not show
+        # that a result can share state with the running buffer.
+        import numpy as np
+
+        class ZeroDimSum:
+            bufferSchema = StructType([StructField("s", LongType())])
+
+            def zero(self):
+                return (np.zeros((), dtype=np.int64),)
+
+            def reduce(self, buffer, values):
+                acc = buffer[0]
+                acc += values[0]
+                return buffer
+
+            def merge(self, left, right):
+                return (left[0] + right[0],)
+
+            def finish(self, buffer):
+                return buffer[0]
+
+        handler = self._handler(ZeroDimSum(), "bounded", [0, 1, 2])
+        batch = self._batch(begin=[0, 0, 0], end=[1, 2, 3], v=[1, 2, 3])
+        out = list(handler.run(0, self._one_group(batch)))
+        self.assertEqual(out[0].column("_0").to_pylist(), [1, 3, 6])
+
     def test_invalid_bound_type_raises(self):
         handler = self._handler(_SumAggregator(), "bogus", [0])
         with self.assertRaises(PySparkRuntimeError):
@@ -846,14 +884,12 @@ class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class WindowAggResultsTests(PySparkBaseTestCase):
-    def test_flush_converts_only_values_that_may_share_state(self):
-        # ``flush`` converts a pending mutable value, so a later in-place update of it does not
-        # change the result. Immutable values stay pending.
-        results = _WindowAggResults(pa.binary(), may_be_mutable=True)
+    def test_results_do_not_follow_later_updates(self):
+        # A result flushed before an in-place update of its value keeps the value it had.
+        results = WindowAggResults(pa.binary())
         results.append(b"x")
         results.append(None)
         results.flush()
-        self.assertEqual(results._small_chunks, [])
         value = bytearray(b"a")
         results.append(value)
         results.flush()
@@ -861,17 +897,68 @@ class WindowAggResultsTests(PySparkBaseTestCase):
         results.append(value)
         self.assertEqual(results.to_array().to_pylist(), [b"x", None, b"a", b"ab"])
 
-    def test_combines_small_chunks(self):
-        # Each flush of a mutable value makes a single-row chunk; they are combined in groups,
-        # so that their number stays bounded.
-        results = _WindowAggResults(pa.list_(pa.int64()), may_be_mutable=True)
-        n = _WindowAggResults._COMBINE_CHUNKS * 2 + 3
-        for i in range(n):
-            results.append([i])
+    def test_many_flushed_results(self):
+        values = [[i] for i in range(WindowAggResults._COMBINE_CHUNKS * 2 + 3)]
+        results = WindowAggResults(pa.list_(pa.int64()))
+        for value in values:
+            results.append(value)
             results.flush()
-        self.assertEqual(len(results._chunks), 2)
-        self.assertEqual(len(results._small_chunks), 3)
-        self.assertEqual(results.to_array().to_pylist(), [[i] for i in range(n)])
+        for value in values:
+            value.append(-1)
+        self.assertEqual(results.to_array().to_pylist(), [[i] for i in range(len(values))])
+
+    def test_no_results(self):
+        array = WindowAggResults(pa.int64()).to_array()
+        self.assertEqual(array.type, pa.int64())
+        self.assertEqual(array.to_pylist(), [])
+
+
+class IsImmutablePythonValueTests(PySparkBaseTestCase):
+    def test_immutable_values(self):
+        import collections
+        import datetime
+        import decimal
+
+        from pyspark.sql import Row
+
+        Point = collections.namedtuple("Point", ["x", "y"])
+        values = [
+            None,
+            True,
+            1,
+            1.5,
+            "s",
+            b"b",
+            decimal.Decimal("1.5"),
+            datetime.date(2026, 1, 1),
+            datetime.datetime(2026, 1, 1, 10),
+            datetime.time(10),
+            datetime.timedelta(1),
+            (1, ("a", None)),
+            Row(mn=1.0, mx=2.0),
+            Point(1, 2),
+        ]
+        for value in values:
+            with self.subTest(value=value):
+                self.assertTrue(is_immutable_python_value(value))
+
+    def test_mutable_values(self):
+        from pyspark.sql import Row
+
+        for value in [bytearray(b"b"), [1], {"a": 1}, {1}, (1, [2]), Row(l=[1])]:
+            with self.subTest(value=value):
+                self.assertFalse(is_immutable_python_value(value))
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_numpy_values(self):
+        import numpy as np
+
+        for value in [np.int64(1), np.float64(1.5), np.bool_(True), np.str_("s"), (np.int64(1),)]:
+            with self.subTest(value=value):
+                self.assertTrue(is_immutable_python_value(value))
+        for value in [np.zeros((), dtype=np.int64), np.zeros(2), np.zeros(1, dtype="i8,f8")[0]]:
+            with self.subTest(value=value):
+                self.assertFalse(is_immutable_python_value(value))
 
 
 class HashableGroupingKeyTests(PySparkBaseTestCase):

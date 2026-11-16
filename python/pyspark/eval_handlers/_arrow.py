@@ -27,8 +27,6 @@ unregistered.
 
 from __future__ import annotations
 
-import datetime
-import decimal
 import inspect
 import itertools
 import os
@@ -43,6 +41,7 @@ from pyspark.eval_handlers._base import (
     GroupedEvalTypeHandler,
 )
 from pyspark.eval_handlers.utils import (
+    WindowAggResults,
     extract_key_value_indexes,
     hashable_grouping_key,
     wrap_kwargs_support,
@@ -593,102 +592,6 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
             yield ArrowBatchTransformer.enforce_schema(batch, self._return_schema)
 
 
-# Python scalar types whose values are immutable; see ``_is_immutable_python_value``.
-_IMMUTABLE_PYTHON_SCALAR_TYPES = frozenset(
-    [
-        type(None),
-        bool,
-        int,
-        float,
-        str,
-        bytes,
-        decimal.Decimal,
-        datetime.date,
-        datetime.datetime,
-        datetime.time,
-        datetime.timedelta,
-    ]
-)
-
-
-def _python_values_are_immutable(arrow_type: pa.DataType) -> bool:
-    """Whether every Python value that converts to ``arrow_type`` is an immutable scalar, such
-    as an ``int``, a ``Decimal`` or a ``datetime``. A value of any other type can be a mutable
-    object: a ``bytearray`` for a string or binary type, or a ``list`` or ``dict`` for a nested
-    type."""
-    import pyarrow as pa
-
-    types = pa.types
-    return (
-        types.is_null(arrow_type)
-        or types.is_boolean(arrow_type)
-        or types.is_integer(arrow_type)
-        or types.is_floating(arrow_type)
-        or types.is_decimal(arrow_type)
-        or types.is_date(arrow_type)
-        or types.is_time(arrow_type)
-        or types.is_timestamp(arrow_type)
-        or types.is_duration(arrow_type)
-        or types.is_interval(arrow_type)
-    )
-
-
-def _is_immutable_python_value(value: Any) -> bool:
-    """Whether ``value`` is an immutable scalar, such as a ``str`` or ``bytes``, or a tuple of
-    them, so that nothing can update it in place."""
-    if type(value) is tuple:
-        return all(_is_immutable_python_value(v) for v in value)
-    return type(value) in _IMMUTABLE_PYTHON_SCALAR_TYPES
-
-
-class _WindowAggResults:
-    """Collects the per-row ``finish`` results of one window aggregate into an Arrow array.
-
-    A result can share state with the buffer that it was finished from, e.g. the list that
-    ``reduce`` appends to, and ``reduce`` may update that buffer in place for later rows. The
-    results are held as Python values and converted in batches: ``flush``, called before
-    ``reduce`` updates the buffer that the pending results were finished from, converts them if
-    any of them may share state with it. Every ``_COMBINE_CHUNKS`` such chunks are combined
-    into one array, so that the per-array overhead of the small chunks stays bounded.
-    """
-
-    _COMBINE_CHUNKS = 1024
-
-    def __init__(self, arrow_type: pa.DataType, may_be_mutable: bool) -> None:
-        self._arrow_type = arrow_type
-        # Whether a Python value of ``arrow_type`` can be mutable at all.
-        self._may_be_mutable = may_be_mutable
-        self._pending: list[Any] = []
-        self._pending_may_share_state = False
-        self._chunks: list[pa.Array] = []  # each combined from ``_COMBINE_CHUNKS`` small chunks
-        self._small_chunks: list[pa.Array] = []
-
-    def append(self, result: Any) -> None:
-        self._pending.append(result)
-        if self._may_be_mutable and not _is_immutable_python_value(result):
-            self._pending_may_share_state = True
-
-    def flush(self) -> None:
-        """Convert the pending results if any of them may share state with a buffer."""
-        if not self._pending_may_share_state:
-            return
-        import pyarrow as pa
-
-        self._small_chunks.append(pa.array(self._pending, type=self._arrow_type))
-        self._pending = []
-        self._pending_may_share_state = False
-        if len(self._small_chunks) == self._COMBINE_CHUNKS:
-            self._chunks.append(pa.concat_arrays(self._small_chunks))
-            self._small_chunks = []
-
-    def to_array(self) -> pa.Array:
-        import pyarrow as pa
-
-        chunks = self._chunks + self._small_chunks
-        chunks.append(pa.array(self._pending, type=self._arrow_type))
-        return pa.chunked_array(chunks, type=self._arrow_type).combine_chunks()
-
-
 class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: window aggregation with an incremental
     ``Aggregator``. A window partition is evaluated within one task after the exchange, so
@@ -716,11 +619,6 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
         )
         # The Aggregator object itself, unwrapped (see ArrowGroupedAggIncrementalPartialUDFHandler).
         self._aggs = self._raw_funcs
-        # Whether a Python value of each UDF's result type can be a mutable object, which a
-        # bounded frame has to convert before ``reduce`` can update it (see ``run``).
-        self._result_may_be_mutable = [
-            not _python_values_are_immutable(field.type) for field in self._return_schema
-        ]
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -766,7 +664,7 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                     # ``finish`` result can share state with it, e.g. a list that ``reduce``
                     # appends to. ``results`` converts such results to Arrow before the buffer
                     # is extended again; a refold starts from a new buffer, which needs none.
-                    results = _WindowAggResults(result_type, self._result_may_be_mutable[udf_index])
+                    results = WindowAggResults(result_type)
                     have_running = False
                     running: Any = None
                     prev_begin = -1
