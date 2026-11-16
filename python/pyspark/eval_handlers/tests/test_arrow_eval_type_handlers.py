@@ -847,6 +847,22 @@ class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
                 out = list(handler.run(0, self._one_group(batch)))
                 self.assertEqual(out[0].column("_0").to_pylist(), expected)
 
+    def test_refolded_frame_result_does_not_share_the_extended_buffer(self):
+        # rangeBetween(-1, currentRow) over 1, 3, 5 and 6: rows 1 and 2 refold from ``zero``, and
+        # row 3 extends row 2's buffer, whose result must keep its own frame's value.
+        batch = self._batch(begin=[0, 1, 2, 2], end=[1, 2, 3, 4], v=[1, 3, 5, 6])
+        handler = ArrowWindowAggIncrementalUDFHandler(
+            udf_descs=[
+                self._udf(
+                    _InPlaceCollector(as_list=True), [0, 1, 2], return_type=ArrayType(LongType())
+                )
+            ],
+            runner_conf=RunnerConf({"window_bound_types": "bounded"}),
+            eval_conf=None,
+        )
+        out = list(handler.run(0, self._one_group(batch)))
+        self.assertEqual(out[0].column("_0").to_pylist(), [[1], [3], [5], [5, 6]])
+
     @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_bounded_frame_results_do_not_share_a_numpy_buffer(self):
         # ``reduce`` adds into a 0-d numpy array in place and ``finish`` returns it. pyarrow
@@ -896,6 +912,19 @@ class WindowAggResultsTests(PySparkBaseTestCase):
         value.extend(b"b")
         results.append(value)
         self.assertEqual(results.to_array().to_pylist(), [b"x", None, b"a", b"ab"])
+
+    def test_refolded_result_checked_at_flush(self):
+        # A result finished from a buffer just folded from ``zero`` is converted by the flush
+        # before that buffer is updated in place.
+        results = WindowAggResults(pa.list_(pa.int64()))
+        first = [1]
+        results.append(first, refolded=True)
+        second = [2]
+        results.append(second, refolded=True)
+        results.flush()
+        second.append(3)
+        results.append(second)
+        self.assertEqual(results.to_array().to_pylist(), [[1], [2], [2, 3]])
 
     def test_many_flushed_results(self):
         values = [[i] for i in range(WindowAggResults._COMBINE_CHUNKS * 2 + 3)]

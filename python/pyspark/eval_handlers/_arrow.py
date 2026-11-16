@@ -676,11 +676,13 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                             if end > prev_end:
                                 results.flush()
                             running = fold(agg, running, value_cols, prev_end, end)
+                            refolded = False
                         else:
                             running = fold(agg, agg.zero(), value_cols, begin, end)
+                            refolded = True
                         have_running = True
                         prev_begin, prev_end = begin, end
-                        results.append(agg.finish(running))
+                        results.append(agg.finish(running), refolded)
                     result_arrays.append(results.to_array())
                 else:
                     raise PySparkRuntimeError(

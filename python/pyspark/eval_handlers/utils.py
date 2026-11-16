@@ -143,9 +143,9 @@ def is_immutable_python_value(value: Any) -> bool:
     """
     Whether nothing can update ``value`` in place: ``None``, a ``bool``, ``int``, ``float``,
     ``str``, ``bytes``, ``Decimal``, date, time or timedelta, or a subclass of one (such as a
-    numpy ``float64``), another numpy scalar, or a tuple of such values, including a ``Row`` or a
-    namedtuple, whose items are all that Arrow reads of it. A ``bytearray``, ``list``, ``dict``,
-    set or numpy array, even a 0-d one, can be updated in place.
+    numpy ``float64``), a numpy scalar other than ``numpy.void``, or a tuple of such values,
+    including a ``Row`` or a namedtuple, whose items are all that Arrow reads of it. A ``list``,
+    ``dict``, set, ``bytearray``, ``numpy.void`` or numpy array (even 0-d) can be updated in place.
     """
     if type(value) in _IMMUTABLE_PYTHON_SCALAR_TYPE_SET:
         return True
@@ -160,6 +160,10 @@ def is_immutable_python_value(value: Any) -> bool:
     )
 
 
+# No result yet; see ``WindowAggResults._unchecked``.
+_NO_RESULT = object()
+
+
 class WindowAggResults:
     """
     Collects the per-row ``finish`` results of one window aggregate into an Arrow array.
@@ -168,9 +172,10 @@ class WindowAggResults:
     ``reduce`` appends to, and ``reduce`` may update that buffer in place for later rows. The
     results are held as Python values and converted in batches: ``flush``, called before
     ``reduce`` updates the buffer that the pending results were finished from, converts them if
-    one of them may be updated in place (see ``is_immutable_python_value``). Every
-    ``_COMBINE_CHUNKS`` such chunks are combined into one array, so that the per-array overhead
-    of the small chunks stays bounded.
+    one of them may be updated in place (see ``is_immutable_python_value``). A result finished
+    from a buffer just folded from ``zero`` is checked only if such a ``flush`` follows, which a
+    sliding frame mostly skips. Every ``_COMBINE_CHUNKS`` such chunks are combined into one
+    array, so that the per-array overhead of the small chunks stays bounded.
     """
 
     _COMBINE_CHUNKS = 1024
@@ -179,16 +184,30 @@ class WindowAggResults:
         self._arrow_type = arrow_type
         self._pending: list[Any] = []
         self._pending_may_share_state = False
+        # The result finished from a buffer just folded from ``zero``, not checked yet.
+        self._unchecked: Any = _NO_RESULT
         self._chunks: list["pa.Array"] = []  # each combined from ``_COMBINE_CHUNKS`` small chunks
         self._small_chunks: list["pa.Array"] = []
 
-    def append(self, result: Any) -> None:
+    def append(self, result: Any, refolded: bool = False) -> None:
+        """
+        Add the next row's result. ``refolded`` says that ``result`` was finished from a buffer
+        just folded from ``zero``. Nothing updates the buffers of the earlier results any more
+        then, so only ``result`` still needs a check, which ``flush`` makes if it comes.
+        """
         self._pending.append(result)
-        if not self._pending_may_share_state and not is_immutable_python_value(result):
+        if refolded:
+            self._pending_may_share_state = False
+            self._unchecked = result
+        elif not self._pending_may_share_state and not is_immutable_python_value(result):
             self._pending_may_share_state = True
 
     def flush(self) -> None:
         """Convert the pending results if one of them may share state with a buffer."""
+        if self._unchecked is not _NO_RESULT:
+            if not self._pending_may_share_state and not is_immutable_python_value(self._unchecked):
+                self._pending_may_share_state = True
+            self._unchecked = _NO_RESULT
         if not self._pending_may_share_state:
             return
         import pyarrow as pa
