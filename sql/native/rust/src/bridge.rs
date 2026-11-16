@@ -440,7 +440,10 @@ pub(crate) fn provider_call<T>(
 pub(crate) fn drop_provider<T>(value: T) {
     // Close has no error channel and must never unwind across the native ABI, so log the panic.
     if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(value))) {
-        log::warn!("Ignoring a panic during a drop: {}", panic_message(payload));
+        // Outside the log call, which skips its arguments when WARN is off: panic_message must
+        // run to forget a payload whose drop could panic.
+        let message = panic_message(payload);
+        log::warn!("Ignoring a panic during a drop: {message}");
     }
 }
 
