@@ -1498,8 +1498,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       $"email".endsWith($"email"),
       $"email".contains($"email")).foreach { condition =>
       val df = address.filter(condition)
-      checkFiltersRemoved(df, removed = false)
       checkAnswer(df, address)
+      checkFiltersRemoved(df, removed = false)
     }
   }
 
