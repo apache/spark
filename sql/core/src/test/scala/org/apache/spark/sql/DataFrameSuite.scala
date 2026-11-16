@@ -3097,8 +3097,16 @@ class DataFrameSuite extends SharedSparkSession
           $"id" > 5 && $"i" > 0 && lit(10) / ($"id" - 3) > 0 && $"i" === 1,
           // `id = 7` folds `id > 0`, and goes first, as `i > 0` and `i = 1` can fail.
           $"id" > 0 && $"i" > 0 && $"id" === 7,
-          $"id" > 0 && $"i" === 1 && $"id" === 7)
+          $"id" > 0 && $"i" === 1 && $"id" === 7,
+          // `nullif(id, 7)` becomes NULL, after which `coalesce` still reads `i`.
+          coalesce(nullif($"id", lit(7)), $"i") > 0 && $"id" === 7,
+          // `i = 1` replaces `i` in a branch, where the division by zero is not folded, as on
+          // 4.3.0.
+          when($"id" < 0, $"id" > lit(10) / ($"i" - 1)).otherwise($"s".isNotNull) &&
+            $"id" > 5 && $"i" === 1)
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+          // The sample keeps the row ("x", 0).
+          assert(projected.sample(0.999, 1).select($"s").as[String].collect().contains("x"))
           conditions.foreach { condition =>
             // With `r` read, the filter stays above the projection, and so it does above a
             // sample. The projection computes `i` only for the rows that reach a condition
@@ -3112,40 +3120,94 @@ class DataFrameSuite extends SharedSparkSession
               checkAnswer(df, Row("1", 7L, true))
             }
           }
-          // As on master, `i = 1` simplifies the other conditions, so `i` is not computed
-          // for the row ("x", 0).
+          // As on master and 4.3.0, `i = 1` makes the condition FALSE, so the filter is pruned,
+          // and `i` is not computed for the row ("x", 0).
           Seq(
             $"i" + 1 > 3 && $"i" === 1,
             $"i" === 1 && $"i" + 1 > 3,
-            ($"id" < 0 || $"i" + 1 > 3) && $"i" === 1,
             nullif($"i", lit(1)) > 0 && $"i" === 1,
-            // Also with a division in between, so `i` is propagated, and no row computes it.
+            // Also with a division in between.
             $"i" + 1 > 3 && lit(10) / ($"id" - 3) > 0 && $"i" === 1,
             $"i" === 1 && lit(10) / ($"id" - 3) > 0 && $"i" === 2,
-            nullif($"i", lit(1)) > 0 && lit(10) / ($"id" - 3) > 0 && $"i" === 1
+            nullif($"i", lit(1)) > 0 && lit(10) / ($"id" - 3) > 0 && $"i" === 1,
+            // Also when the conjunct that becomes FALSE comes after the division.
+            $"i" > 0 && lit(10) / ($"id" - 3) > 0 && $"i" + 1 > 3 && $"i" === 1,
+            $"i" > 0 && lit(10) / ($"id" - 3) > 0 && $"i" === 1 && $"i" + 1 > 3,
+            $"i" > 0 && lit(10) / ($"id" - 3) > 0 && nullif($"i", lit(1)) > 0 && $"i" === 1
           ).foreach { condition =>
-            checkAnswer(
-              projected.select($"*", rand(1).as("r")).where(condition)
-                .select($"s", $"id", $"r" >= 0),
+            val df = projected.select($"*", rand(1).as("r")).where(condition)
+              .select($"s", $"id", $"r" >= 0)
+            assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Filter]))
+            checkAnswer(df, Seq.empty)
+          }
+          // Here `id < 0` is left, and filters out the row ("x", 0) before `i = 1`.
+          checkAnswer(projected.select($"*", rand(1).as("r"))
+            .where(($"id" < 0 || $"i" + 1 > 3) && $"i" === 1).select($"s", $"id", $"r" >= 0),
+            Seq.empty)
+          // Also into the correlation of a scalar subquery, as on 4.3.0, so that the subquery
+          // does not read `i`.
+          withTempView("spark61437_t") {
+            Seq((1L, 10L), (7L, 20L)).toDF("k", "v").createOrReplaceTempView("spark61437_t")
+            checkAnswer(projected.select($"*", rand(1).as("r")).where($"id" > 5 && $"i" === 1 &&
+              $"id" < expr("(SELECT max(v) FROM spark61437_t t WHERE t.k = i)"))
+              .select($"s", $"id", $"r" >= 0), Row("1", 7L, true))
+          }
+          // Nor the division by zero for the row ("0", 8). And, as on 4.3.0, a condition before
+          // `i = 1` that would fail as written does not, by zero on the row ("8", 8) or with an
+          // overflow on the row ("2147483647", 9).
+          withTempPath { zero =>
+            Seq(("1", 7L), ("0", 8L), ("8", 8L), ("2147483647", 9L)).toDF("s", "id").coalesce(1)
+              .write.parquet(zero.toString)
+            Seq(
+              lit(10) / $"i" > 1 && $"i" === 1,
+              lit(10) / ($"id" - $"i") > 0 && $"i" === 1,
+              $"i" + 1 > 0 && lit(10) / ($"id" - 10) < 0 && $"i" === 1
+            ).foreach { condition =>
+              val df = spark.read.parquet(zero.toString)
+                .select($"s", $"id", $"s".cast("int").as("i"), rand(1).as("r"))
+                .where(condition).select($"s", $"id", $"r" >= 0)
+              assert(filtersAboveI(df))
+              checkAnswer(df, Row("1", 7L, true))
+            }
+          }
+          // A condition that would fail to fold with the constant is handled as on master, so it
+          // does not fail the query with no row where `i` is 0.
+          withTempPath { one =>
+            Seq(("1", 7L)).toDF("s", "id").write.parquet(one.toString)
+            checkAnswer(spark.read.parquet(one.toString)
+              .select($"s", $"id", $"s".cast("int").as("i"), rand(1).as("r"))
+              .where($"i" === 0 && $"id" > lit(10) / $"i").select($"s", $"id", $"r" >= 0),
               Seq.empty)
           }
-          // Nor the division by zero for the row ("0", 8).
-          withTempPath { zero =>
-            Seq(("1", 7L), ("0", 8L)).toDF("s", "id").coalesce(1).write.parquet(zero.toString)
-            val df = spark.read.parquet(zero.toString)
-              .select($"s", $"id", $"s".cast("int").as("i"), rand(1).as("r"))
-              .where(lit(10) / $"i" > 1 && $"i" === 1).select($"s", $"id", $"r" >= 0)
-            assert(filtersAboveI(df))
-            checkAnswer(df, Row("1", 7L, true))
+          // `id < 3` decides whether `i > 0` runs. It is rewritten, as on master, and `id = 7`
+          // goes first, ahead of `i > 0`.
+          Seq("true", "false").foreach { cse =>
+            withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse) {
+              val df = projected.select($"*", rand(1).as("r"))
+                .where(($"id" < 3 || $"i" > 0) && $"id" === 7).select($"s", $"id", $"r" >= 0)
+              assert(filtersAboveI(df))
+              checkAnswer(df, Row("1", 7L, true))
+            }
           }
-          // `id < 3` decides whether `i > 0` runs. Without the subexpression elimination path of
-          // `FilterExec`, which computes `i` up front for the `i > 0` that
-          // `InferFiltersFromConstraints` infers from it.
-          withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> "false") {
-            val df = projected.select($"*", rand(1).as("r"))
-              .where(($"id" < 3 || $"i" > 0) && $"id" === 7).select($"s", $"id", $"r" >= 0)
-            assert(filtersAboveI(df))
-            checkAnswer(df, Row("1", 7L, true))
+          // `id = 7` makes an operand TRUE or not NULL, also inside another operator, so the
+          // filter no longer reads `i`, which is not computed for the row ("x", 7).
+          withTempPath { seven =>
+            Seq(("1", 7L), ("x", 7L)).toDF("s", "id").coalesce(1).write.parquet(seven.toString)
+            Seq(
+              ($"id" > 0 || $"i" > 0) && $"id" === 7,
+              coalesce($"id", $"i") > 0 && $"id" === 7,
+              ($"id" > 0 || $"s" > "a" || $"i" > 0) && $"id" === 7,
+              (coalesce($"id", functions.length($"s").cast("long")) > 0 || $"i" > 0) &&
+                $"id" === 7
+            ).foreach { condition =>
+              val df = spark.read.parquet(seven.toString)
+                .select($"s", $"id", $"s".cast("int").as("i"), rand(1).as("r"))
+                .where(condition).select($"s", $"id", $"r" >= 0)
+              assert(df.queryExecution.optimizedPlan.collect {
+                case f: Filter => f.condition.references.map(_.name)
+              }.flatten == Seq("id"))
+              checkAnswer(df, Seq(Row("1", 7L, true), Row("x", 7L, true)))
+            }
           }
         }
         // Without `r`, the projection goes away and the filter reads `cast(s as int)` itself.

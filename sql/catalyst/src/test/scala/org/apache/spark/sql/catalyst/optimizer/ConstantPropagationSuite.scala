@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, StringType}
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -348,72 +348,102 @@ class ConstantPropagationSuite extends PlanTest {
   test("SPARK-61437: Do not move an equality over a column of the projection below that can " +
       "fail") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      // `i = 1` can fail, as the cast does, so it is not moved ahead of `id > 5`.
+      // `i = 1` can fail, as the cast does, so it is not moved ahead of `id > 5`. Its constant is
+      // propagated in place, so only `i = 1` reads `i`.
       val written = $"id" > 5L && $"i".cast(LongType) * $"id" > 0L && $"i" === 1
+      val expected = $"id" > 5L && Literal(1L) * $"id" > 0L && $"i" === 1
       Seq(
         projected,
         projected.select($"s", $"id", $"i"),
         projected.where($"id" > 1L).select($"s", $"id", $"i"),
         projected.sample(0.0, 0.5, withReplacement = false, 1L).select($"s", $"id", $"i"),
         projected.select($"s", $"id", $"i".as("j")).select($"s", $"id", $"j".as("i"))
-      ).foreach(child => checkOrdered(child, written, written))
+      ).foreach(child => checkOrdered(child, written, expected))
     }
   }
 
-  test("SPARK-61437: Propagate an equality over a column that can fail where it is written") {
+  test("SPARK-61437: Propagate an equality over a column that can fail in place") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      // A conjunct before it that it rewrites can pass a row it would not only where it would fail
-      // as well or where `i` does not fail, so `i = 1` raises no new error, and the conjuncts
-      // after it only run where it does not fail.
+      // Into every conjunct, also one that can fail, as before SPARK-60983, so that a conjunct
+      // that it rewrites no longer reads `i`.
+      val twoCasts = projected.select($"s", $"id", $"x", $"i", castS.as("j"))
+      val threeCasts = twoCasts.select($"s", $"id", $"x", $"i", $"j", castS.as("k"))
       Seq(
         ($"id" > 5L && $"i" + 1 > 1 && $"i" === 1) -> ($"id" > 5L && $"i" === 1),
         (($"id" < 0L || $"i" + 1 > 3) && $"i" === 1) -> ($"id" < 0L && $"i" === 1),
         (divide($"i") > 1.0 && $"i" === 1) -> ($"i" === 1),
         ($"id" > 5L && ($"i" <=> 1) && $"i" > 0) -> ($"id" > 5L && ($"i" <=> 1)),
         ($"id" > 5L && (Literal(1) <=> $"i") && $"i" > 0) -> ($"id" > 5L && (Literal(1) <=> $"i")),
-        // Only the conjuncts from the first rewritten one to it count.
         (divide($"x") > 0.0 && $"i" > 0 && $"i" === 1) -> (divide($"x") > 0.0 && $"i" === 1),
         ($"i" + 1 > 1 && $"i" === 1 && divide($"x") > 0.0) -> ($"i" === 1 && divide($"x") > 0.0),
-        // `id > 0` is rewritten by `id = 7`, which goes first. Then `i = 1` is propagated too.
+        ($"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && $"i" === 1) ->
+          ($"id" > 5L && divide($"x") > 0.0 && $"i" === 1),
+        ($"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && Literal(1) === $"i") ->
+          ($"id" > 5L && divide($"x") > 0.0 && Literal(1) === $"i"),
+        ($"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && ($"i" <=> 1)) ->
+          ($"id" > 5L && divide($"x") > 0.0 && ($"i" <=> 1)),
+        // The division reads `i` with the constant, so it does not fail on a row where `id` is
+        // 8 and `i` is 8, but does on one where `id` is 1 and `i` is 2, as before SPARK-60983.
+        (divide($"id" - $"i".cast(LongType)) > 0.0 && $"i" === 1) ->
+          (divide($"id" - 1L) > 0.0 && $"i" === 1),
+        // `id > 0` is rewritten by `id = 7`, which goes first.
         ($"id" > 0L && divide($"x") > 0.0 && $"i" === 1 && $"i" + 1 > 1 && $"id" === 7L) ->
-          ($"id" === 7L && divide($"x") > 0.0 && $"i" === 1)
+          ($"id" === 7L && divide($"x") > 0.0 && $"i" === 1),
+        // But `id = 7` rewrites nothing here, so it stays, as on 4.3.0.
+        ($"i" + 1 > 1 && divide($"x") > 0.0 && $"i" === 1 && $"id" === 7L) ->
+          (divide($"x") > 0.0 && $"i" === 1 && $"id" === 7L)
       ).foreach { case (condition, expected) => checkOrdered(projected, condition, expected) }
-    }
-  }
-
-  test("SPARK-61437: Do not propagate an equality over a column that can fail past a " +
-      "conjunct that can fail") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      // The division would run on the rows that `i > 0` passes when rewritten, i.e. all rows.
-      val twoCasts = projected.select($"s", $"id", $"x", $"i", castS.as("j"))
       Seq(
-        $"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && $"i" === 1,
-        $"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && Literal(1) === $"i",
-        $"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && ($"i" <=> 1),
-        $"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && (Literal(1) <=> $"i"),
-        // Without `i = 1`, `i > 0` can fail, and it comes between `j = 2` and `j > 0`.
-        $"j" > 0 && $"i" > 0 && $"j" === 2 && divide($"x") > 0.0 && $"i" === 1
-      ).foreach(condition => checkOrdered(twoCasts, condition, condition))
+        ($"j" > 0 && $"i" > 0 && $"j" === 2 && divide($"x") > 0.0 && $"i" === 1) ->
+          ($"j" === 2 && divide($"x") > 0.0 && $"i" === 1),
+        ($"i" > 0 && $"k" > 5 && $"i" === 1 && $"j" + 1 > 1 && $"j" === 2) ->
+          ($"k" > 5 && $"i" === 1 && $"j" === 2),
+        // `i + 1` does not overflow on a row where `i` is the largest integer.
+        ($"i" + 1 > 0 && $"k" > 5 && $"i" === 1) -> ($"k" > 5 && $"i" === 1),
+        // `j < 5` no longer stops a row before `i = 2`, as before SPARK-60983.
+        ($"j" < 5 && $"i" > 0 && $"i" === 2 && $"j" === 1) -> ($"i" === 2 && $"j" === 1)
+      ).foreach { case (condition, expected) => checkOrdered(threeCasts, condition, expected) }
 
-      // Unless a conjunct before it becomes FALSE, or NULL, which is made FALSE, so no row
-      // reaches it.
-      Seq(
-        $"i" + 1 > 3 && divide($"x") > 0.0 && $"i" === 1,
-        $"i" === 1 && divide($"x") > 0.0 && $"i" === 2,
-        If($"i" === 1, Literal(null, IntegerType), $"i") > 0 && divide($"x") > 0.0 && $"i" === 1
-      ).foreach { condition =>
-        comparePlans(Optimize.execute(projected.where(condition).analyze),
-          projected.where(false).analyze)
-      }
-      // But not NULL under a `NOT`, where the division still runs after it.
-      val upperNotNull = LocalRelation($"s".string.notNull, $"x".long.notNull)
-        .select($"x", Upper($"s").as("u"))
-      Optimize.execute(upperNotNull.where(Not(
-        If($"u" === "X", Literal(null, StringType), $"u") === "Y" && divide($"x") > 0.0 &&
-          $"u" === "X")).analyze) match {
-        case Filter(negated, _) => assert(negated.exists(_.isInstanceOf[If]))
-        case other => fail(s"Expected a Filter: $other")
-      }
+      // But not where the condition then fails to fold, which would fail the query with no row,
+      // unlike in a conditional branch, which is not folded where it fails. Then the equalities
+      // are handled as since SPARK-60983, and go first.
+      val failsToFold = $"i" === 0 && $"x".cast(DoubleType) > divide($"i")
+      checkOrdered(projected, failsToFold, failsToFold)
+      checkOrdered(projected,
+        $"id" > 5L && $"i" + 1 > 0 && $"x".cast(DoubleType) > divide($"i") && $"i" === 0,
+        $"i" === 0 && $"id" > 5L && $"x".cast(DoubleType) > divide($"i"))
+      // Also where the comparison folds, but the conjunct does not.
+      checkOrdered(projected,
+        $"i" === 0 && ElementAt(CreateArray(Seq(Literal(true))), ($"i" > 0).cast(IntegerType)),
+        $"i" === 0 && ElementAt(Literal.create(Seq(true), ArrayType(BooleanType, false)),
+          ($"i" > 0).cast(IntegerType)))
+      checkOrdered(projected,
+        $"i" === 0 && If($"x" > 0L, divide($"i"), Literal(0.0)) > 0.0,
+        $"i" === 0 && If($"x" > 0L, divide(Literal(0)), Literal(0.0)) > 0.0)
+      checkOrdered(projected,
+        CaseWhen(Seq(($"id" < 0L) -> ($"x".cast(DoubleType) > divide($"i"))), $"s".isNotNull) &&
+          $"i" === 0,
+        CaseWhen(Seq(($"id" < 0L) -> ($"x".cast(DoubleType) > divide(Literal(0)))),
+          $"s".isNotNull) && $"i" === 0)
+      // Trying to fold it leaves no mark on a part that fails in a conditional branch, which
+      // would keep `ConstantFolding` from failing on the same part elsewhere.
+      val byZero = Divide(Literal(10.0), Literal(0.0))
+      val sharesByZero = projected.where($"x".cast(DoubleType) > byZero && $"i" === 0 &&
+        If($"x" > 0L, byZero, Literal(0.0)) > $"i".cast(DoubleType)).analyze
+      intercept[ArithmeticException](Optimize.execute(sharesByZero))
+      intercept[ArithmeticException](Optimize.execute(projected
+        .where($"i" === 0 && If($"x" > 0L, byZero, Literal(0.0)) > $"i".cast(DoubleType))
+        .select($"id", byZero.as("z")).analyze))
+      // Nor does it remove a mark that is there already.
+      byZero.setTagValue(ConstantFolding.FAILED_TO_EVALUATE, ())
+      Optimize.execute(sharesByZero)
+
+      // Not a string of a trim collation into `length`, as on 4.3.0: a row with `u` = 'A '
+      // passes `u = 'A'`.
+      val trimmed = LocalRelation(AttributeReference("s", StringType("UTF8_BINARY_RTRIM"))())
+        .select(Upper($"s").as("u"))
+      val lengthOfTrimmed = trimmed.where($"u" === "A" && Length($"u") === 2).analyze
+      comparePlans(Optimize.execute(lengthOfTrimmed), lengthOfTrimmed)
     }
   }
 
@@ -423,9 +453,29 @@ class ConstantPropagationSuite extends PlanTest {
       checkOrdered(projected, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"id" === 7L && $"i" > 0)
       checkOrdered(projected, $"id" > 0L && $"i" === 1 && $"id" === 7L,
         $"id" === 7L && $"i" === 1)
-      // `id < 3` decides whether `i > 0` runs, so it keeps `id`, and the equality goes first.
-      checkOrdered(projected, ($"id" < 3L || $"i" > 0) && $"id" === 5L,
-        $"id" === 5L && ($"id" < 3L || $"i" > 0))
+      // `id < 3` decides whether `i > 0` runs. `i > 0` counts as one that can not fail there, as
+      // on master, so `id < 3` is rewritten, and the equality goes first, ahead of `i > 0`.
+      checkOrdered(projected, ($"id" < 3L || $"i" > 0) && $"id" === 5L, $"id" === 5L && $"i" > 0)
+      // So `id > 0` is rewritten too, and becomes TRUE, also inside another operator, so the
+      // operator folds away and `i` is not read.
+      Seq(
+        ($"id" > 0L || $"i" > 0) && $"id" === 7L,
+        ($"id" > 0L || $"x" > 0L || $"i" > 0) && $"id" === 7L
+      ).foreach(condition => checkOrdered(projected, condition, $"id" === 7L))
+      // `NullPropagation`, not in this batch, then drops the operands after the 7, and the
+      // equality goes first until then.
+      checkOrdered(projected, (Coalesce(Seq($"id", $"x")) > 0L || $"i" > 0) && $"id" === 7L,
+        $"id" === 7L && (Coalesce(Seq(Literal(7L), $"x")) > 0L || $"i" > 0))
+      checkOrdered(projected, Coalesce(Seq($"id", $"i".cast(LongType))) > 0L && $"id" === 7L,
+        $"id" === 7L && Coalesce(Seq(Literal(7L), $"i".cast(LongType))) > 0L)
+      checkOrdered(projected, (($"id" < 0L && $"i" > 0) || $"x" > 0L) && $"id" === 7L,
+        $"id" === 7L && $"x" > 0L)
+
+      // Also one that reads the propagated attribute, which a collation keeps.
+      val lcase = LocalRelation($"s".string, AttributeReference("c", StringType("UTF8_LCASE"))())
+        .select($"c", castS.as("i"))
+      checkOrdered(lcase, ($"i" > 0 || Length($"c") > 0) && $"c" === "a",
+        $"c" === "a" && ($"i" > 0 || Length($"c") > 0))
 
       // Also under a `NOT`, with `s` and `id` not nullable.
       val notNull = LocalRelation($"s".string.notNull, $"id".long.notNull)
@@ -440,15 +490,31 @@ class ConstantPropagationSuite extends PlanTest {
       comparePlans(
         Optimize.execute(upperNotNull.where(Not(Length($"u") > 3 && $"u" === "X")).analyze),
         upperNotNull.where(true).analyze)
-      // But one that becomes NULL is not made FALSE, which the `NOT` would turn into TRUE.
-      val nullInside = Optimize.execute(upperNotNull.where(Not(
-        If($"u" === "X", Literal(null, StringType), $"u") === "Y" && $"u" === "X")).analyze)
-      assert(!nullInside.fastEquals(upperNotNull.where(true).analyze))
+      // And one that becomes NULL stays NULL, which the `NOT` keeps NULL.
+      checkOrdered(upperNotNull,
+        Not(If($"u" === "X", Literal(null, StringType), $"u") === "Y" && $"u" === "X"),
+        Literal(null, BooleanType) || Not($"u" === "X"))
     }
   }
 
   test("SPARK-61437: A condition that becomes FALSE with the constants is FALSE") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val twoCasts = projected.select($"s", $"id", $"x", $"i", castS.as("j"))
+      val threeCasts = twoCasts.select($"s", $"id", $"x", $"i", $"j", castS.as("k"))
+      // Wherever the conjunct that becomes FALSE is.
+      Seq(
+        $"i" + 1 > 3 && divide($"x") > 0.0 && $"i" === 1,
+        $"i" === 1 && divide($"x") > 0.0 && $"i" === 2,
+        $"i" > 0 && divide($"x") > 0.0 && $"i" + 1 > 3 && $"i" === 1,
+        $"i" > 0 && $"j" > 5 && $"i" > 10 && $"i" === 1,
+        $"i" > 0 && divide($"x") > 0.0 && $"i" === 1 && $"i" + 1 > 3
+      ).foreach { condition =>
+        comparePlans(Optimize.execute(twoCasts.where(condition).analyze),
+          twoCasts.where(false).analyze)
+      }
+      comparePlans(Optimize.execute(threeCasts.where(
+        $"i" > 0 && $"k" > 5 && $"j" < 0 && $"i" === 1 && $"j" === 2).analyze),
+        threeCasts.where(false).analyze)
       Seq(
         $"id" > 5L && $"i" + 1 > 3 && $"i" === 1,
         $"i" === 1 && $"i" + 1 > 3,
@@ -477,6 +543,8 @@ class ConstantPropagationSuite extends PlanTest {
       // So is one over a column that reads it with an expression that can not fail.
       val randomPlusOne = random.select($"id", ($"r" + 1.0).as("r1"))
       checkOrdered(randomPlusOne, $"r1" > 0.0 && $"r1" === 1.5, $"r1" === 1.5)
+      checkOrdered(randomPlusOne, $"r1" > 0.0 && divide($"id") > 0.0 && $"r1" === 1.5,
+        $"r1" === 1.5 && divide($"id") > 0.0)
       // And one that stands for a cast that can not fail.
       val widened = strings.select($"s", $"id", $"x", $"id".cast(DoubleType).as("k"))
       checkOrdered(widened, $"id" > 5L && $"k" > 0.0 && $"k" === 3.0, $"id" > 5L && $"k" === 3.0)
@@ -486,15 +554,21 @@ class ConstantPropagationSuite extends PlanTest {
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       // The cast can not fail with ANSI mode off, so `i = 1` goes ahead of `length(u) > 0`, which
-      // can, as `upper` is not in the allowlist of `ExprUtils.canEvaluateUnconditionally`.
+      // counts as one that can fail, as `upper` is not in the allowlist of
+      // `ExprUtils.canEvaluateUnconditionally`.
       val withUpper = projected.select($"s", $"id", $"i", Upper($"s").as("u"))
       checkOrdered(withUpper, $"id" > 5L && $"i" > 0 && Length($"u") > 0 && $"i" === 1,
         $"i" === 1 && $"id" > 5L && Length($"u") > 0)
 
-      // So an alias of `upper` or `lower` counts as one that can fail in every mode.
+      // So an alias of `upper` or `lower` counts as one that can fail in every mode, and an
+      // equality over it is not moved, but propagated in place.
       val cased = strings.select($"s", $"id", Upper($"s").as("u"), Lower($"s").as("l"))
-      val condition = Length($"u") > 0 && Length($"l") > 0 && $"u" === "X"
-      checkOrdered(cased, condition, condition)
+      checkOrdered(cased, Length($"u") > 0 && Length($"l") > 0 && $"u" === "X",
+        Length($"l") > 0 && $"u" === "X")
+      checkOrdered(cased, Length($"u") > 0 && divide($"id") > 0.0 && $"u" === "X",
+        divide($"id") > 0.0 && $"u" === "X")
+      // But an operand that decides whether one over it runs is rewritten, as on master.
+      checkOrdered(cased, ($"id" < 3L || $"u" > "A") && $"id" === 7L, $"id" === 7L && $"u" > "A")
 
       // Each projection reads the column below it twice. The check does not expand the column,
       // whose expression would have 2^40 leaves.
