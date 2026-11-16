@@ -37,6 +37,7 @@ import org.apache.spark.sql.types.{AnyTimestampNanoType, BinaryType, BooleanType
   DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegralType,
   NullType, NumericType, StringType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
+import org.apache.spark.util.CompletionIterator
 
 /**
  * Performs an AS-OF join using sort-merge. Both sides are co-partitioned
@@ -106,6 +107,7 @@ case class SortMergeAsOfJoinExec(
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val taskResourceCleaners = TaskResourceCleaner.inStage(this)
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
     val inMemoryThreshold = conf.sortMergeJoinExecBufferInMemoryThreshold
@@ -139,7 +141,10 @@ case class SortMergeAsOfJoinExec(
         useCursorScan, numAsOfCursorTasks
       )
       TaskContext.get().addTaskCompletionListener[Unit](_ => scanner.close())
-      scanner.iterator
+      // Like the generated join, release the sorters below once the left side is done, instead of
+      // holding their memory until the task completes.
+      CompletionIterator[InternalRow, Iterator[InternalRow]](
+        scanner.iterator, taskResourceCleaners.foreach(_.cleanupResources()))
     }
   }
 
