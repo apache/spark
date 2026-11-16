@@ -44,8 +44,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
   with SessionQueryTest

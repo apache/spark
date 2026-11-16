@@ -412,13 +412,14 @@ class IncrementalExecution(
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None)
 
-      case StreamingDeduplicateWithinWatermarkExec(keys, child, None, None, None) =>
+      case StreamingDeduplicateWithinWatermarkExec(keys, child, None, None, None, _) =>
         StreamingDeduplicateWithinWatermarkExec(
           keys,
           child,
           Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None)
+          eventTimeWatermarkForEviction = None,
+          isRealTimeMode = isRealTimeMode)
 
       case m: FlatMapGroupsWithStateExec =>
         // We set this to true only for the first batch of the streaming query.
