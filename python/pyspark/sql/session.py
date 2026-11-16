@@ -2356,7 +2356,7 @@ class SparkSession(SparkConversionMixin):
         are the files added to this session and those added to the server outside of any session,
         but not those of the other sessions, which servers before Spark 4.4 also list. A file
         uploaded with :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the
-        server, and one added with ``ADD FILE`` as :meth:`SparkContext.addFile` lists it, such as
+        server, and one added with ``ADD FILE`` as :attr:`SparkContext.listFiles` lists it, such as
         by the path it was added with when the server runs in local mode.
 
         .. versionadded:: 4.4.0
@@ -2392,7 +2392,7 @@ class SparkSession(SparkConversionMixin):
         added to this session and those added to the server outside of any session, but not those
         of the other sessions, which servers before Spark 4.4 also list. An archive uploaded with
         :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the server, and one
-        added with ``ADD ARCHIVE`` as :meth:`SparkContext.addArchive` lists it, such as by the
+        added with ``ADD ARCHIVE`` as :attr:`SparkContext.listArchives` lists it, such as by the
         path it was added with when the server runs in local mode.
 
         .. versionadded:: 4.4.0
