@@ -20,11 +20,13 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 
 import org.apache.spark.sql.{DataFrame, Encoders, Row}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
-import org.apache.spark.sql.functions.{col, count, expr, lit, session_window, timestamp_seconds, window}
+import org.apache.spark.sql.functions.{broadcast, col, count, expr, lit, session_window, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
 
@@ -112,7 +114,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       result: DataFrame,
       expectedRows: Seq[Row],
       expectedSides: Option[Set[JoinSide]],
-      expectedOutputWatermark: Long): Unit = {
+      expectedOutputWatermark: Long,
+      checkPlan: SparkPlan => Unit = _ => ()): Unit = {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       testStream(result, OutputMode.Append())(
         MultiAddData((impressionInput, Seq((1, 5L), (2, 15L), (3, 25L))),
@@ -129,6 +132,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
         ProcessAllAvailable(),
         CheckAnswer(expectedRows: _*),
         Execute { query =>
+          checkPlan(query.lastExecution.executedPlan)
           val j = join(query)
           assert(j.outputWatermarkSides == expectedSides)
           assert(j.produceOutputWatermark(j.eventTimeWatermarkForEviction.get)
@@ -169,7 +173,9 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       impressionRows: Seq[Row],
       clickRows: Seq[Row],
       impressionWatermark: Long = 79999L,
-      confs: Seq[(String, String)] = Nil)(consumer: (DataFrame, String) => DataFrame): Unit = {
+      confs: Seq[(String, String)] = Nil,
+      checkPlan: SparkPlan => Unit = _ => ())(
+      consumer: (DataFrame, String) => DataFrame): Unit = {
     Seq(
       ("impressionTime", impressionRows, LeftSide, impressionWatermark),
       ("clickTime", clickRows, RightSide, 0L)
@@ -178,7 +184,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
         withSQLConf(confs: _*) {
           val (impressionInput, clickInput, joined) = oneDirectionalJoin()
           runOneDirectionalJoin(impressionInput, clickInput, consumer(joined, timeColumn), rows,
-            Some(Set(side)), outputWatermark)
+            Some(Set(side)), outputWatermark, checkPlan)
         }
       }
     }
@@ -253,6 +259,35 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       .join(other, expr("otherAdId = impressionAdId AND " +
         "otherTime BETWEEN t AND t + INTERVAL 5 SECONDS"))
       .select($"impressionAdId", $"otherTime".cast("long"))
+  }
+
+  // A static input with a row for every ad, so that inner joins keep every joined row.
+  private def ads(): DataFrame = (1 to 9).toDF("staticAdId")
+
+  private def plans[T <: SparkPlan](cls: Class[T]): SparkPlan => Unit = { plan =>
+    assert(plan.exists(cls.isInstance), s"No ${cls.getSimpleName} in $plan")
+  }
+
+  // The static input is the left child here.
+  testTracedConsumer("a broadcast hash stream-static join", impressionWindows, Nil,
+      checkPlan = plans(classOf[BroadcastHashJoinExec])) { (joined, timeColumn) =>
+    windowCounts(broadcast(ads())
+      .join(joined.select($"impressionAdId", col(timeColumn)), $"impressionAdId" === $"staticAdId"),
+      timeColumn)
+  }
+
+  // An outer join, so that the join reads every streaming row in every partition.
+  testTracedConsumer("a sort merge stream-static join", impressionWindows, Nil,
+      checkPlan = plans(classOf[SortMergeJoinExec])) { (joined, timeColumn) =>
+    windowCounts(joined.select($"impressionAdId", col(timeColumn))
+      .join(ads().hint("merge"), $"impressionAdId" === $"staticAdId", "left_outer"), timeColumn)
+  }
+
+  testTracedConsumer("a broadcast nested loop stream-static join", impressionWindows, Nil,
+      checkPlan = plans(classOf[BroadcastNestedLoopJoinExec])) { (joined, timeColumn) =>
+    windowCounts(joined.select($"impressionAdId", col(timeColumn))
+      .join(broadcast(ads()), $"impressionAdId" >= $"staticAdId" &&
+        $"impressionAdId" < $"staticAdId" + 1, "left_outer"), timeColumn)
   }
 
   testTracedConsumer("flatMapGroupsWithState with event-time timeouts",
