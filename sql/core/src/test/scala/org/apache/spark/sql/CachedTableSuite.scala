@@ -2856,13 +2856,15 @@ class CachedTableSuite extends SharedSparkSession
     withTempView("t") {
       sql("""SELECT array(timestamp_micros(0)) AS ats,
             |       array(array(timestamp_micros(0))) AS aats,
+            |       array(CAST(timestamp_micros(0) AS VARIANT)) AS avs,
             |       timestamp_micros(0) AS ts""".stripMargin)
         .createOrReplaceTempView("t")
-      // All three columns hold the same instant, and rendering one as a string localizes it. The
+      // All columns hold the same instant, and rendering one as a string localizes it. The
       // scalar column is the control: it was already classified as zone-dependent.
       Seq(
         ("ats", "[1970-01-01 00:00:00]", "[1969-12-31 16:00:00]"),
         ("aats", "[[1970-01-01 00:00:00]]", "[[1969-12-31 16:00:00]]"),
+        ("avs", "[\"1970-01-01 00:00:00+00:00\"]", "[\"1969-12-31 16:00:00-08:00\"]"),
         ("ts", "1970-01-01 00:00:00", "1969-12-31 16:00:00")).foreach {
         case (column, inUTC, inLA) =>
           val query = s"SELECT CAST($column AS STRING) AS v FROM t"
