@@ -768,18 +768,19 @@ object IntegerTruncateFunction
     if (otherFunc == IntegerTruncateFunction && thisParams.length == 1 && otherParams.length == 1) {
       val thisWidth = thisParams(0).value().asInstanceOf[Int]
       val otherWidth = otherParams(0).value().asInstanceOf[Int]
-      val common = lcm(thisWidth, otherWidth)
-      // Only the finer side reduces; if `common == thisWidth` this side is already the common grid.
-      if (common != thisWidth) {
-        return IntTruncateReducer(common)
+      // Only the finer side reduces; if the common grid is `thisWidth`, this side already is it.
+      lcm(thisWidth, otherWidth) match {
+        case Some(common) if common != thisWidth => return IntTruncateReducer(common)
+        case _ =>
       }
     }
     null
   }
 
-  private def lcm(a: Int, b: Int): Int = {
-    val g = BigInt(a).gcd(BigInt(b))
-    (BigInt(a) / g * BigInt(b)).toInt
+  /** The common grid, or None when it does not fit an Int; then the pair is not reducible. */
+  private def lcm(a: Int, b: Int): Option[Int] = {
+    val common = BigInt(a) / BigInt(a).gcd(BigInt(b)) * BigInt(b)
+    if (common.isValidInt) Some(common.toInt) else None
   }
 }
 

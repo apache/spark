@@ -71,10 +71,11 @@ public interface ReducibleFunction<I, O> {
    * internal representation (e.g. {@code UTF8String} for strings, {@code Decimal} for decimals);
    * use {@link Literal#dataType()} to interpret it rather than assuming a JVM type. Spark does not
    * call this method for a pair where either side has a null literal or a literal of array, map,
-   * struct or UDT type; the join shuffles instead. Nor does it call it when a literal's type
-   * differs from the one the function declares at its position in {@code inputTypes()}; it then
-   * treats this method as not implemented, see the dispatch order below. A literal past the
-   * declared arity has no declared type, so it is passed as it is.
+   * struct or UDT type; such a pair is not reducible, so the join shuffles unless the two
+   * transforms are the same. Nor does it call it when a literal's type differs from the one the
+   * function declares at its position in {@code inputTypes()}; it then treats this method as not
+   * implemented, see the dispatch order below. A literal past the declared arity has no declared
+   * type, so it is passed as it is.
    * <p>
    * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
    * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.
@@ -92,7 +93,7 @@ public interface ReducibleFunction<I, O> {
    * {@code bucket(n, col)} transforms of the same function with a non-null count. If every
    * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
    * reducer" warning; any other exception, from either side's call, is logged and the pair is
-   * treated as not reducible (the join falls back to a shuffle).
+   * treated as not reducible, so the join shuffles unless the two transforms are the same.
    * <p>
    * Examples:
    * <ul>
@@ -118,7 +119,8 @@ public interface ReducibleFunction<I, O> {
   /**
    * This method is for the bucket function. Spark offers it only a pair of the same function, both
    * resolved from a {@code bucket(n, col)} transform, and only when the generalized overload is not
-   * implemented.
+   * implemented, or was not asked because a count's type differs from the one the function
+   * declares.
    *
    * If this bucket function is 'reducible' on another bucket function,
    * return the {@link Reducer} function.

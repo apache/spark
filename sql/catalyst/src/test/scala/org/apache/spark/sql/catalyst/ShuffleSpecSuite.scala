@@ -53,8 +53,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
    * to the suite because catalyst has no BucketFunction.
    */
   /**
-   * `fn(numBuckets, argument)` as a scan resolves a V2 `bucket` transform, marked so, as the bucket
-   * count in `numBucketsOpt` marked it before literal parameters became children.
+   * `fn(numBuckets, argument)` as a scan resolves a V2 `bucket` transform, marked as one, see
+   * `TransformExpression.fromBucketTransform`.
    */
   private def bucketTransform(
       fn: BoundFunction,

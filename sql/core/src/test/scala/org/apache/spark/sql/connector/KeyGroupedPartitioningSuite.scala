@@ -8169,6 +8169,19 @@ class KeyGroupedPartitioningSuite
     checkAnswer(df, Seq(Row(1), Row(5)))
   }
 
+  test("SPARK-50593: the integer truncate test function refuses a grid wider than an int") {
+    // 65536 and 65537 are coprime, so their common grid does not fit an int; wrapping it would
+    // hand Spark a negative width.
+    val a = attr("id")
+    val wide = TransformExpression(IntegerTruncateFunction, Seq(a, Literal(65536)))
+    val wider = TransformExpression(IntegerTruncateFunction, Seq(a, Literal(65537)))
+    assert(wide.pairReducers(wider) == ((None, None)))
+    val narrow = TransformExpression(IntegerTruncateFunction, Seq(a, Literal(4)))
+    val narrower = TransformExpression(IntegerTruncateFunction, Seq(a, Literal(6)))
+    assert(narrow.pairReducers(narrower) == ((Some(IntTruncateReducer(12)),
+      Some(IntTruncateReducer(12)))))
+  }
+
   test("SPARK-50593: the truncate test functions take a null key") {
     // A one-side shuffle onto a truncate layout evaluates the function on every row of the
     // shuffled side, and an outer join before it gives those rows null keys.
@@ -8572,6 +8585,25 @@ class KeyGroupedPartitioningSuite
     assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
   }
 
+  test("SPARK-50593: a nested transform argument is compared by its identity, as functionId does") {
+    // Two scans can bind `years` to two instances of the same function. The arguments line up when
+    // the nested transforms are the same function, whatever instance each is bound to, and not when
+    // they are different functions.
+    def nested(canonical: String): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(TimestampType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = canonical
+      override def canonicalName(): String = canonical
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val c = AttributeReference("c", TimestampType)()
+    val d = AttributeReference("d", TimestampType)()
+    def over(n: Int, inner: ScalarFunction[Int], col: AttributeReference): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), TransformExpression(inner, Seq(col))))
+    assert(over(8, nested("years"), c).reducers(over(4, nested("years"), d)).isDefined)
+    assert(over(8, nested("years"), c).reducers(over(4, nested("days"), d)).isEmpty)
+  }
+
   test("SPARK-50593: struct-field arguments reach the reducer only over the same field") {
     import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField}
     // `sameArgumentLayout` uses the shapes identity tells apart: `s.a` and `t.a` are the same
@@ -8783,6 +8815,71 @@ class KeyGroupedPartitioningSuite
         assert(df.collect().length === 48, "every id must find its match")
       }
     }
+  }
+
+  test("SPARK-50593: a missing reducer is not reported for a pair of the same function") {
+    // LiteralFirstIntFunction implements no reducer. Two scans of the same transform need none,
+    // so telling the connector to override one "to enable SPJ" would be wrong; a pair of two
+    // different transforms of it, which does need one, is reported.
+    def messages(l: TransformExpression, r: TransformExpression): Seq[String] = {
+      val appender = new LogAppender("missing reducer")
+      appender.setThreshold(Level.DEBUG)
+      withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+          level = Some(Level.DEBUG)) {
+        l.pairReducers(r)
+      }
+      appender.loggingEvents.map(_.getMessage.getFormattedMessage).toSeq
+    }
+    def transform(width: Int, column: String): TransformExpression =
+      TransformExpression(LiteralFirstIntFunction, Seq(Literal(width), attr(column)))
+    assert(transform(4, "id").isSameFunction(transform(4, "store_id")), "test setup")
+    assert(!messages(transform(4, "id"), transform(4, "store_id"))
+      .exists(_.contains("implements no reducer")))
+    assert(messages(transform(4, "id"), transform(2, "store_id"))
+      .exists(_.contains("implements no reducer")))
+  }
+
+  test("SPARK-50593: a literal type mismatch is reported against the side that has it") {
+    // Only the truncate side carries a literal, a SMALLINT width against its declared INT, so the
+    // message must name truncate, whichever side asks.
+    val days = TransformExpression(DaysFunction, Seq(attr("ts")))
+    val truncate = TransformExpression(TruncateFunction,
+      Seq(attr("ts"), Literal(3.toShort, ShortType)))
+    val appender = new LogAppender("literal types differ, per side")
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+        level = Some(Level.DEBUG)) {
+      assert(days.pairReducers(truncate) == ((None, None)))
+    }
+    val differ = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("declares other input types"))
+    assert(differ.nonEmpty)
+    assert(differ.forall(_.contains("truncate(string)")), differ)
+    assert(!differ.exists(_.contains("V2 function days")), differ)
+  }
+
+  test("SPARK-50593: a connector failure is reported against the function whose code threw") {
+    // Each direction checks both sides' literal types, so `bucket`'s direction runs the other
+    // function's inputTypes() too. That failure is the other function's: it is logged when the
+    // other direction asks, and never against `bucket`, which did nothing wrong.
+    val failing = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = throw new IllegalStateException("inputTypes")
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "failing_input_types"
+      override def canonicalName(): String = name()
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val appender = new LogAppender("failure attributed to its own function")
+    appender.setThreshold(Level.DEBUG)
+    withLogAppender(appender, loggerNames = Seq(classOf[TransformExpression].getName),
+        level = Some(Level.DEBUG)) {
+      val bucket = bucketTransform(BucketFunction, 8, attr("id"))
+      val other = TransformExpression(failing, Seq(Literal(4), attr("id")))
+      assert(bucket.pairReducers(other) == ((None, None)))
+    }
+    val threw = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("reducer threw an exception"))
+    assert(threw.nonEmpty && threw.forall(_.contains("failing_input_types")), threw)
   }
 
   test("SPARK-50593: a reducer warning is logged once per function") {
