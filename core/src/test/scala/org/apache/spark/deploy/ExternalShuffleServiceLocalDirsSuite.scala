@@ -73,21 +73,27 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite with LocalRootD
       val executorRoot = new File(workerRoot, s"executor-${UUID.randomUUID()}")
       val appScoped = new File(executorRoot, appId)
       val otherAppScoped = new File(executorRoot, otherAppId)
+      // Executors register the blockmgr-* directories below the leaf, not the leaf itself.
+      val blockMgr = new File(appScoped, s"blockmgr-${UUID.randomUUID()}")
+      val otherBlockMgr = new File(otherAppScoped, s"blockmgr-${UUID.randomUUID()}")
       // The pre-upgrade Worker layout has blockmgr in place of the app leaf.
       val unscoped = new File(executorRoot, s"blockmgr-${UUID.randomUUID()}")
-      assert(appScoped.mkdirs() && otherAppScoped.mkdirs() && unscoped.mkdirs())
+      assert(blockMgr.mkdirs() && otherBlockMgr.mkdirs() && unscoped.mkdirs())
       try {
-        // A localDir inside the registering application's own directory is accepted.
-        handler.validateLocalDirs(Array(appScoped.getAbsolutePath), appId)
+        // The application's own leaf and the blockmgr-* directory below it are accepted.
+        handler.validateLocalDirs(
+          Array(appScoped.getAbsolutePath, blockMgr.getAbsolutePath), appId)
 
-        // A directory under a different application id is rejected even though it is contained
-        // under a configured root.
-        intercept[IllegalArgumentException] {
-          handler.validateLocalDirs(Array(otherAppScoped.getAbsolutePath), appId)
+        // Another application's leaf or blockmgr-* directory is rejected even though it is
+        // contained under a configured root.
+        Seq(otherAppScoped, otherBlockMgr).foreach { dir =>
+          intercept[IllegalArgumentException] {
+            handler.validateLocalDirs(Array(dir.getAbsolutePath), appId)
+          }
         }
 
-        // A contained directory without the appId as a path segment (what a Worker without
-        // the per-app layout would report) is rejected.
+        // A contained directory outside the application's leaf (what a Worker without the
+        // per-app layout would report) is rejected.
         intercept[IllegalArgumentException] {
           handler.validateLocalDirs(Array(unscoped.getAbsolutePath), appId)
         }
@@ -140,11 +146,16 @@ class ExternalShuffleServiceLocalDirsSuite extends SparkFunSuite with LocalRootD
       // Each executor has its own random directory above the application leaf.
       assert(appDirs.length == 2)
       assert(appDirs.map(_.getParentFile.getName).distinct.length == 2)
-      // The registered dirs satisfy the app-scoping check for this application only.
+      // Executors register the blockmgr-* directories below each leaf; they satisfy the
+      // app-scoping check for this application only.
       appDirs.foreach { d =>
-        service.getBlockHandler.validateLocalDirs(Array(d.getAbsolutePath), appId)
-        intercept[IllegalArgumentException] {
-          service.getBlockHandler.validateLocalDirs(Array(d.getAbsolutePath), "other-app")
+        val blockMgrDirs = d.listFiles().filter(_.getName.startsWith("blockmgr-"))
+        assert(blockMgrDirs.nonEmpty)
+        (d +: blockMgrDirs).foreach { dir =>
+          service.getBlockHandler.validateLocalDirs(Array(dir.getAbsolutePath), appId)
+          intercept[IllegalArgumentException] {
+            service.getBlockHandler.validateLocalDirs(Array(dir.getAbsolutePath), "other-app")
+          }
         }
       }
     } finally {

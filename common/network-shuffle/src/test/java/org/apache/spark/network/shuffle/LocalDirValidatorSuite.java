@@ -41,6 +41,23 @@ public class LocalDirValidatorSuite {
     }
   }
 
+  /**
+   * With app scoping on, validate() must reject the given directory (relative to a configured
+   * root) for app0, even though it is contained under that root.
+   */
+  private static void assertRejectsAppScopedDir(String relativeDir) throws Exception {
+    File root = Files.createTempDirectory("ess-nm-local").toFile();
+    try {
+      File dir = new File(root, relativeDir);
+      assertTrue(dir.mkdirs(), "precondition: directory created");
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
+      assertThrows(IllegalArgumentException.class,
+        () -> validator.validate(new String[] { dir.getPath() }, "app0"), relativeDir);
+    } finally {
+      JavaUtils.deleteRecursively(root);
+    }
+  }
+
   @Test
   public void rejectsRootLocalDir() throws Exception {
     assertRejectsLocalDir(new String[] { File.separator });
@@ -153,5 +170,26 @@ public class LocalDirValidatorSuite {
     } finally {
       JavaUtils.deleteRecursively(root);
     }
+  }
+
+  @Test
+  public void rejectsAnotherApplicationsStandaloneBlockMgrDir() throws Exception {
+    assertRejectsAppScopedDir("spark-random/executor-random/app1/blockmgr-random");
+  }
+
+  @Test
+  public void rejectsPathBelowStandaloneBlockMgrDir() throws Exception {
+    assertRejectsAppScopedDir("spark-random/executor-random/app0/blockmgr-random/sub");
+  }
+
+  @Test
+  public void rejectsNonBlockMgrChildOfStandaloneAppDir() throws Exception {
+    assertRejectsAppScopedDir("spark-random/executor-random/app0/other");
+  }
+
+  @Test
+  public void rejectsStandaloneAppDirUnderUnexpectedPrefixes() throws Exception {
+    assertRejectsAppScopedDir("random/executor-random/app0");
+    assertRejectsAppScopedDir("spark-random/random/app0");
   }
 }

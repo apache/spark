@@ -85,8 +85,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     // Constrain registered localDirs to the configured local directories and, when
     // spark.shuffle.service.requireAppScopedLocalDirs is enabled, to the registering
-    // application's own per-app directory (spark-*/executor-*/<url-encoded-appId>, with an
-    // optional blockmgr-* child).
+    // application's own directory: spark-*/executor-*/<url-encoded-appId> with an optional
+    // blockmgr-* child, or below appcache/<appId> (see LocalDirValidator for the exact rule).
     // The check is opt-in: executors launched by Workers that predate the per-app layout
     // register unscoped paths and would be rejected, so enable it only after every Worker
     // in the cluster is upgraded.
