@@ -21,8 +21,9 @@
 Render the schedule of the scheduled CI workflows as an SVG timeline.
 
 The schedules are read from the cron entries in .github/workflows: workflows scheduled
-directly run on master, and the branch CI schedulers (branch*_scheduler.yml) dispatch
-workflows on maintenance branches through dev/dispatch-if-changed.sh. Each run is drawn
+directly run on master (or several branches, see MULTI_BRANCH_WORKFLOWS), and the branch CI
+schedulers (branch*_scheduler.yml) dispatch workflows on maintenance branches through
+dev/dispatch-if-changed.sh. Each run is drawn
 from its cron start time for its estimated duration, with its estimated number of runners,
 both from ESTIMATES below. There is one panel per cadence (daily, every N days, weekly),
 followed by a heatmap of the combined runner load.
@@ -118,8 +119,14 @@ EXCLUDED_WORKFLOWS = {
     "update_build_status.yml": "syncs PR build status",
 }
 
-# Branch that workflows scheduled directly (not through a branch scheduler) run on.
+# Branch that workflows scheduled directly (not through a branch scheduler) run on, except for
+# the workflows in MULTI_BRANCH_WORKFLOWS, which build several branches in one run and are drawn
+# with MULTI_BRANCH_LABEL in a neutral color, with what they build.
 DEFAULT_BRANCH = "master"
+MULTI_BRANCH_LABEL = "matrix"
+MULTI_BRANCH_WORKFLOWS = {
+    "publish_snapshot.yml": "publishes every branch in its strategy matrix",
+}
 
 # ASF limits on the GitHub Actions usage of apache/spark, as averages in full-time runners over
 # all of its workflows: over a calendar week, and over any five consecutive days. See
@@ -178,14 +185,14 @@ def parse_scheduler(name, text, crons):
     used = set()
     schedules = []
     for step in STEP_RE.split(text)[1:]:
-        dispatch = DISPATCH_RE.search(step)
-        if not dispatch:
+        dispatches = DISPATCH_RE.findall(step)
+        if not dispatches:
             continue
         conditions = SCHEDULE_CONDITION_RE.findall(step)
         if len(conditions) != 1:
             raise ScheduleError(
-                "%s: the step dispatching %s on %s must check exactly one cron, found %s"
-                % (name, dispatch.group(1), dispatch.group(2), conditions)
+                "%s: the step dispatching %s must check exactly one cron, found %s"
+                % (name, ", ".join("%s on %s" % d for d in dispatches), conditions)
             )
         anchor = env_to_anchor.get(conditions[0])
         if anchor not in anchors:
@@ -193,7 +200,7 @@ def parse_scheduler(name, text, crons):
                 "%s: env.%s does not refer to a cron anchor" % (name, conditions[0])
             )
         used.add(anchor)
-        schedules.append(Schedule(dispatch.group(1), dispatch.group(2), anchors[anchor], name))
+        schedules.extend(Schedule(w, b, anchors[anchor], name) for w, b in dispatches)
     unused = sorted(set(anchors) - used)
     if unused:
         raise ScheduleError("%s: crons not used by any dispatch step: %s" % (name, unused))
@@ -214,7 +221,8 @@ def collect_schedules(workflow_dir):
         if DISPATCH_RE.search(text):
             schedules.extend(parse_scheduler(name, text, crons))
         else:
-            schedules.extend(Schedule(name, DEFAULT_BRANCH, cron, name) for _, cron in crons)
+            branch = MULTI_BRANCH_LABEL if name in MULTI_BRANCH_WORKFLOWS else DEFAULT_BRANCH
+            schedules.extend(Schedule(name, branch, cron, name) for _, cron in crons)
     return schedules
 
 
@@ -269,6 +277,12 @@ def to_timeline(schedule, estimate):
             period = days[1] - days[0] if len(days) > 1 else 0
             if period < 2 or any(b - a != period for a, b in zip(days, days[1:])):
                 raise ScheduleError("the day of month must be a range with a step, e.g. 1-28/3")
+            if period % 7 == 0:
+                # The combined cycle would pin such a run to one weekday, which it is not.
+                raise ScheduleError(
+                    "a day-of-month step that is a multiple of 7 cannot be drawn; use a "
+                    "day-of-week cron such as '17 3 * * 0' instead"
+                )
             day_offsets = [(days[0] - 1) % period]
         else:
             raise ScheduleError("restricting both day of month and day of week is unsupported")
@@ -300,6 +314,12 @@ def build_timelines(schedules):
                 "%s is no longer scheduled. Remove it from %s in %s."
                 % (workflow, table, SCRIPT_NAME)
             )
+    direct = {s.workflow for s in schedules if s.source == s.workflow}
+    for workflow in sorted(set(MULTI_BRANCH_WORKFLOWS) - direct):
+        errors.append(
+            "%s is not scheduled directly. Remove it from MULTI_BRANCH_WORKFLOWS in %s."
+            % (workflow, SCRIPT_NAME)
+        )
     if errors:
         raise ScheduleError("\n".join(errors))
     timelines = [
@@ -326,8 +346,7 @@ def describe_start(period, start):
     return clock
 
 
-def describe_cadence(timeline):
-    period = timeline.period
+def cadence_name(period):
     if period == 1:
         return "daily"
     if period == 7:
@@ -414,7 +433,11 @@ def sample_run(run_id):
 
 
 def sample_workflow(workflow, runs):
-    """Returns the (wall-clock hours, job-hours) of the latest `runs` runs of a workflow."""
+    """Returns the (wall-clock hours, job-hours) of up to `runs` recent runs of a workflow.
+
+    Among the latest 100 runs, only completed first attempts of scheduled or dispatched runs
+    that succeeded or failed are measured, the latest successful ones first.
+    """
     fields = "databaseId,event,status,conclusion,attempt"
     listing = json.loads(
         gh(
@@ -496,7 +519,8 @@ INK_SECONDARY = "#52514e"
 INK_MUTED = "#898781"
 GRID = "#e1e0d9"
 AXIS = "#c3c2b7"
-# Categorical colors assigned to branches in a fixed order: master, then newest first.
+# Categorical colors assigned to branches in a fixed order: master, then newest first. Other
+# labels, such as MULTI_BRANCH_LABEL, get OTHER_BRANCH_COLOR.
 BRANCH_COLORS = [
     "#2a78d6",
     "#eb6834",
@@ -514,8 +538,11 @@ HEAT_ZERO = "#f4f3ef"
 
 
 def branch_sort_key(branch):
+    """Orders master first, then the branches from the newest, then other labels."""
     if branch == DEFAULT_BRANCH:
         return (0, ())
+    if not branch.startswith("branch-"):
+        return (2, (), branch)
     version = re.findall(r"\d+|x", branch)
     return (1, tuple(-(10**6) if v == "x" else -int(v) for v in version), branch)
 
@@ -531,56 +558,58 @@ def fmt_hours(minutes):
 
 
 class Svg:
+    """Collects SVG elements.
+
+    Attributes set to None are left out, numbers are formatted with fmt(), and underscores in
+    attribute names become dashes.
+    """
+
     def __init__(self):
         self.parts = []
 
-    def add(self, element):
-        self.parts.append(element)
+    def add(self, tag, body=None, title=None, **attrs):
+        items = []
+        for name, value in attrs.items():
+            if value is not None:
+                value = value if isinstance(value, str) else fmt(value)
+                quote = "'" if '"' in value else '"'
+                items.append("%s=%s%s%s" % (name.replace("_", "-"), quote, value, quote))
+        if body is None and not title:
+            self.parts.append("<%s %s/>" % (tag, " ".join(items)))
+        else:
+            title = "<title>%s</title>" % escape(title) if title else ""
+            self.parts.append("<%s %s>%s%s</%s>" % (tag, " ".join(items), title, body or "", tag))
 
     def text(
         self, x, y, content, size=12, fill=INK, anchor="start", weight=None, mono=False, title=None
     ):
-        attrs = 'x="%s" y="%s" font-size="%s" fill="%s"' % (fmt(x), fmt(y), size, fill)
-        if anchor != "start":
-            attrs += ' text-anchor="%s"' % anchor
-        if weight:
-            attrs += ' font-weight="%s"' % weight
-        if mono:
-            attrs += " font-family='%s'" % FONT_MONO
-        body = escape(content)
-        if title:
-            body = "<title>%s</title>%s" % (escape(title), body)
-        self.add("<text %s>%s</text>" % (attrs, body))
-
-    def rect(self, x, y, w, h, fill, rx=0, title=None, extra=""):
-        attrs = 'x="%s" y="%s" width="%s" height="%s" fill="%s"' % (
-            fmt(x),
-            fmt(y),
-            fmt(w),
-            fmt(h),
-            fill,
+        self.add(
+            "text",
+            escape(content),
+            title,
+            x=x,
+            y=y,
+            font_size=size,
+            fill=fill,
+            text_anchor=None if anchor == "start" else anchor,
+            font_weight=weight,
+            font_family=FONT_MONO if mono else None,
         )
-        if rx:
-            attrs += ' rx="%s"' % rx
-        if extra:
-            attrs += " " + extra
-        if title:
-            self.add("<rect %s><title>%s</title></rect>" % (attrs, escape(title)))
-        else:
-            self.add("<rect %s/>" % attrs)
+
+    def rect(self, x, y, w, h, fill, rx=None, title=None):
+        self.add("rect", None, title, x=x, y=y, width=w, height=h, fill=fill, rx=rx)
 
     def line(self, x1, y1, x2, y2, stroke=GRID, width=1, dash=None):
-        attrs = 'x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" stroke-width="%s"' % (
-            fmt(x1),
-            fmt(y1),
-            fmt(x2),
-            fmt(y2),
-            stroke,
-            width,
+        self.add(
+            "line",
+            x1=x1,
+            y1=y1,
+            x2=x2,
+            y2=y2,
+            stroke=stroke,
+            stroke_width=width,
+            stroke_dasharray=dash,
         )
-        if dash:
-            attrs += ' stroke-dasharray="%s"' % dash
-        self.add("<line %s/>" % attrs)
 
 
 def wrap(text, width=175):
@@ -592,9 +621,12 @@ class Renderer:
         self.timelines = timelines
         self.excluded = excluded
         branches = sorted({t.schedule.branch for t in timelines}, key=branch_sort_key)
+        palette = iter(BRANCH_COLORS)
         self.branch_colors = {
-            b: BRANCH_COLORS[i] if i < len(BRANCH_COLORS) else OTHER_BRANCH_COLOR
-            for i, b in enumerate(branches)
+            b: next(palette, OTHER_BRANCH_COLOR)
+            if b == DEFAULT_BRANCH or b.startswith("branch-")
+            else OTHER_BRANCH_COLOR
+            for b in branches
         }
         self.branches = branches
         self.periods = sorted({t.period for t in timelines})
@@ -618,7 +650,7 @@ class Renderer:
     # -- Layout helpers -------------------------------------------------------------
 
     def x_of(self, minute, length):
-        return LEFT + PLOT_WIDTH * minute / float(length)
+        return LEFT + PLOT_WIDTH * minute / length
 
     def cycle_day_label(self, day):
         parts = []
@@ -629,14 +661,16 @@ class Renderer:
                 parts.append(phase_name(day % period))
         return " ".join(parts) if parts else "Every day"
 
-    def combined_load(self):
-        length = self.cycle * 1440
-        intervals = []
+    def cycle_runs(self):
+        """Yields (timeline, start minute) for every run in the combined cycle."""
         for t in self.timelines:
             for repeat in range(self.cycle // t.period):
                 for start in t.starts:
-                    intervals.append((repeat * t.period * 1440 + start, t.duration, t.runners))
-        return concurrency(intervals, length)
+                    yield t, repeat * t.period * 1440 + start
+
+    def combined_load(self):
+        intervals = [(start, t.duration, t.runners) for t, start in self.cycle_runs()]
+        return concurrency(intervals, self.cycle * 1440)
 
     def busiest_window(self, days):
         """Returns the most runner-hours used in `days` consecutive days of the cycle."""
@@ -651,20 +685,20 @@ class Renderer:
             MARGIN, self.y + 22, "Apache Spark scheduled CI workflows (UTC)", size=22, weight="bold"
         )
         self.y += 34
-        runs_per_day = sum(len(t.starts) / float(t.period) for t in self.timelines)
+        runs_per_day = sum(len(t.starts) / t.period for t in self.timelines)
         runner_hours_per_day = sum(
             len(t.starts) * t.duration * t.runners / 60.0 / t.period for t in self.timelines
         )
         load = self.load
-        peak = max(load) if load else 0
+        peak = max(load)
         peak_hours = sorted({m // 60 for m, v in enumerate(load) if v == peak})
         weekly_share = self.busiest_window(7) / (ASF_WEEKLY_RUNNERS * 7 * 24.0)
         five_day_share = self.busiest_window(5) / (ASF_FIVE_DAY_RUNNERS * 5 * 24.0)
-        cadences = []
-        for period in self.periods:
-            group = [t for t in self.timelines if t.period == period]
-            cadences.append("%d %s" % (len(group), describe_cadence(group[0])))
-        first = peak_hours[0] if peak_hours else 0
+        cadences = [
+            "%d %s" % (sum(t.period == p for t in self.timelines), cadence_name(p))
+            for p in self.periods
+        ]
+        first = peak_hours[0]
         peak_desc = "%s %02d:00" % (self.cycle_day_label(first // 24), first % 24)
         lines = [
             "%d schedules (%s) start %.1f runs per day, using an estimated %.0f runner-hours per "
@@ -703,9 +737,7 @@ class Renderer:
         """Draws the hour grid, day separators and labels of a timeline panel."""
         svg = self.svg
         length = length_hours * 60
-        label_step = next(
-            s for s in (1, 2, 3, 6, 12, 24) if PLOT_WIDTH * s / float(length_hours) >= 34
-        )
+        label_step = next(s for s in (1, 2, 3, 6, 12, 24) if PLOT_WIDTH * s / length_hours >= 34)
         for hour in range(0, length_hours + 1, label_step):
             x = self.x_of(hour * 60, length)
             day_boundary = hour % 24 == 0
@@ -733,19 +765,9 @@ class Renderer:
         )
         length = period * 1440
         runs = sum(len(t.starts) for t in group)
-        if period == 1:
-            title = "Daily"
-        elif period == 7:
-            title = "Weekly"
-        else:
-            title = "Every %d days" % period
-        svg.text(
-            MARGIN,
-            self.y + 18,
-            "%s: %d runs per %s" % (title, runs, "day" if period == 1 else "%d days" % period),
-            size=17,
-            weight="bold",
-        )
+        per = "day" if period == 1 else "%d days" % period
+        title = "%s: %d runs per %s" % (cadence_name(period).capitalize(), runs, per)
+        svg.text(MARGIN, self.y + 18, title, size=17, weight="bold")
         self.y += 26
         if period == 7:
             note = "Day of the week from the cron expression."
@@ -795,9 +817,9 @@ class Renderer:
                 fmt_hours(t.duration),
                 t.runners,
             )
-            bar_height = MIN_BAR_HEIGHT + (MAX_BAR_HEIGHT - MIN_BAR_HEIGHT) * (
-                t.runners - 1
-            ) / float(max(self.max_runners - 1, 1))
+            bar_height = MIN_BAR_HEIGHT + (MAX_BAR_HEIGHT - MIN_BAR_HEIGHT) * (t.runners - 1) / max(
+                self.max_runners - 1, 1
+            )
             bar_y = row_y + (ROW_HEIGHT - bar_height) / 2.0
             for start in t.starts:
                 end = start + t.duration
@@ -831,24 +853,16 @@ class Renderer:
         counts = concurrency(
             [(start, t.duration, t.runners) for t in group for start in t.starts], length
         )
-        peak = max(counts) if counts else 0
-        svg.text(MARGIN + 4, load_top + 18, "Runners in use", size=12, weight="bold")
-        svg.text(
-            MARGIN + 4,
-            load_top + 32,
-            "this panel only, peak %d" % peak,
-            size=11,
-            fill=INK_SECONDARY,
-        )
-        svg.text(
-            MARGIN + 4,
-            load_top + 46,
-            "dashed: ASF weekly average limit",
-            size=11,
-            fill=INK_SECONDARY,
-        )
+        peak = max(counts)
+        captions = [
+            ("Runners in use", 12, INK, "bold"),
+            ("this panel only, peak %d" % peak, 11, INK_SECONDARY, None),
+            ("dashed: ASF weekly average limit", 11, INK_SECONDARY, None),
+        ]
+        for i, (text, size, fill, weight) in enumerate(captions):
+            svg.text(MARGIN + 4, load_top + 18 + 14 * i, text, size=size, fill=fill, weight=weight)
         svg.line(LEFT, load_bottom, LEFT + PLOT_WIDTH, load_bottom, stroke=AXIS)
-        scale = (load_height - 6) / float(max(peak, ASF_WEEKLY_RUNNERS))
+        scale = (load_height - 6) / max(peak, ASF_WEEKLY_RUNNERS)
         limit_y = load_bottom - ASF_WEEKLY_RUNNERS * scale
         svg.line(LEFT, limit_y, LEFT + PLOT_WIDTH, limit_y, stroke=INK_MUTED, dash="4 3")
         svg.text(
@@ -865,31 +879,33 @@ class Renderer:
                     points.append("%s,%s" % (x, fmt(load_bottom - value * scale)))
                     previous = value
             svg.add(
-                '<polygon points="%s" fill="#2a78d6" fill-opacity="0.25" '
-                'stroke="#2a78d6" stroke-width="1.5" stroke-linejoin="round"/>' % " ".join(points)
+                "polygon",
+                points=" ".join(points),
+                fill="#2a78d6",
+                fill_opacity="0.25",
+                stroke="#2a78d6",
+                stroke_width="1.5",
+                stroke_linejoin="round",
             )
             # Label the peak unless it would overlap the label of the ASF limit.
-            ticks = [peak] if abs(peak - ASF_WEEKLY_RUNNERS) * scale >= 10 else []
-            for value in ticks:
-                y = load_bottom - value * scale
+            if abs(peak - ASF_WEEKLY_RUNNERS) * scale >= 10:
+                y = load_bottom - peak * scale
                 svg.line(LEFT - 4, y, LEFT, y, stroke=AXIS)
-                svg.text(LEFT - 7, y + 4, str(value), size=10, anchor="end", fill=INK_MUTED)
+                svg.text(LEFT - 7, y + 4, str(peak), size=10, anchor="end", fill=INK_MUTED)
         self.y = load_bottom + 34
 
     def heatmap(self):
         svg = self.svg
         load = self.load
-        peak = max(load) if load else 0
+        peak = max(load)
         daily_budget = ASF_WEEKLY_RUNNERS * 24.0
         cell_values = [
             [max(load[(d * 24 + h) * 60 : (d * 24 + h + 1) * 60]) for h in range(24)]
             for d in range(self.cycle)
         ]
         starts_per_day = [0] * self.cycle
-        for t in self.timelines:
-            for repeat in range(self.cycle // t.period):
-                for start in t.starts:
-                    starts_per_day[(repeat * t.period * 1440 + start) // 1440] += 1
+        for _, start in self.cycle_runs():
+            starts_per_day[start // 1440] += 1
 
         svg.text(
             MARGIN,
@@ -938,26 +954,13 @@ class Renderer:
         svg.text(bar_x, top - 6, "of ASF daily budget", size=10, fill=INK_MUTED)
 
         def side_columns(y, starts, used, weight=None, title=None):
-            svg.text(
-                sx + 36,
-                y + 13,
-                starts,
-                size=11,
-                anchor="end",
-                mono=True,
-                weight=weight,
-                title=title,
-            )
-            svg.text(
-                sx + 96,
-                y + 13,
-                "%.0f" % used,
-                size=11,
-                anchor="end",
-                mono=True,
-                weight=weight,
-                title=title,
-            )
+            def number(x, text):
+                svg.text(
+                    x, y + 13, text, size=11, anchor="end", mono=True, weight=weight, title=title
+                )
+
+            number(sx + 36, starts)
+            number(sx + 96, "%.0f" % used)
             share = used / daily_budget
             svg.rect(bar_x, y + 4, bar_w, cell_h - 8, ZEBRA, rx=2)
             svg.rect(
@@ -969,21 +972,12 @@ class Renderer:
                 rx=2,
                 title="%.0f of %.0f runner-hours" % (used, daily_budget),
             )
-            svg.text(
-                bar_x + bar_w + 34,
-                y + 13,
-                "%.0f%%" % (share * 100),
-                size=11,
-                anchor="end",
-                mono=True,
-                weight=weight,
-                title=title,
-            )
+            number(bar_x + bar_w + 34, "%.0f%%" % (share * 100))
 
         def heat_color(value):
             if value == 0:
                 return HEAT_ZERO, INK_MUTED
-            index = int(math.ceil(value * len(HEAT_RAMP) / float(peak))) - 1
+            index = int(math.ceil(value * len(HEAT_RAMP) / peak)) - 1
             index = min(max(index, 0), len(HEAT_RAMP) - 1)
             return HEAT_RAMP[index], ("#ffffff" if index >= 3 else INK)
 
@@ -1025,7 +1019,7 @@ class Renderer:
             else:
                 side_columns(
                     y,
-                    "%.1f" % (sum(starts_per_day) / float(self.cycle)),
+                    "%.1f" % (sum(starts_per_day) / self.cycle),
                     sum(self.used_per_day) / self.cycle,
                     weight="bold",
                     title="average per day",
@@ -1074,9 +1068,15 @@ class Renderer:
             "dev/dispatch-if-changed.sh, which skips a run when the branch has not changed "
             "since its last successful run, so the real load on maintenance branches is "
             "usually lower.",
-            "Workflows scheduled directly run on %s. When this SVG is opened on its own, "
-            "hovering over a bar shows its cron entry and the file that defines it."
-            % DEFAULT_BRANCH,
+            "Workflows scheduled directly run on %s, except those drawn as '%s', which build "
+            "several branches in one run without dev/dispatch-if-changed.sh: %s. When this SVG "
+            "is opened on its own, hovering over a bar shows its cron entry and the file that "
+            "defines it."
+            % (
+                DEFAULT_BRANCH,
+                MULTI_BRANCH_LABEL,
+                "; ".join("%s %s" % item for item in sorted(MULTI_BRANCH_WORKFLOWS.items())),
+            ),
             "Not shown because they usually finish within an hour and do not run tests: %s."
             % "; ".join(excluded),
             "ASF limits apache/spark to %d full-time runners on average per calendar week and %d "
@@ -1138,6 +1138,31 @@ def generate(workflow_dir=WORKFLOW_DIR):
     return Renderer(timelines, excluded).render()
 
 
+def run(args):
+    if args.sample is not None:
+        sample_estimates(args.sample)
+        return 0
+    image = generate()
+    output = os.path.relpath(args.output)
+    if not args.check:
+        with open(args.output, "w", encoding="utf-8", newline="\n") as f:
+            f.write(image)
+        print("Wrote %s." % output)
+        return 0
+    try:
+        with open(args.output, encoding="utf-8", newline="") as f:
+            current = f.read()
+    except FileNotFoundError:
+        raise ScheduleError("%s does not exist. Run %s to generate it." % (output, SCRIPT_NAME))
+    if current != image:
+        raise ScheduleError(
+            "%s is out of date with the schedules in .github/workflows or the estimates in %s. "
+            "Run %s to regenerate it." % (output, SCRIPT_NAME, SCRIPT_NAME)
+        )
+    print("%s is up to date." % output)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument(
@@ -1151,49 +1176,16 @@ def main():
         type=int,
         const=10,
         metavar="RUNS",
-        help="print ESTIMATES measured from the latest RUNS (default 10) runs of each scheduled "
-        "workflow in %s, using the GitHub CLI" % SAMPLE_REPO,
+        help="print ESTIMATES measured from up to RUNS (default 10) recent runs of each scheduled "
+        "workflow in %s, using the GitHub CLI: completed first attempts of scheduled or "
+        "dispatched runs that succeeded or failed, successful runs first" % SAMPLE_REPO,
     )
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="path of the SVG image")
-    args = parser.parse_args()
-    if args.sample is not None:
-        try:
-            sample_estimates(args.sample)
-        except ScheduleError as e:
-            print("ERROR: %s" % e, file=sys.stderr)
-            return 1
-        return 0
     try:
-        image = generate()
+        return run(parser.parse_args())
     except ScheduleError as e:
         print("ERROR: %s" % e, file=sys.stderr)
         return 1
-    output = os.path.relpath(args.output)
-    if args.check:
-        try:
-            with open(args.output, encoding="utf-8", newline="") as f:
-                current = f.read()
-        except FileNotFoundError:
-            current = None
-        if current is None:
-            print(
-                "ERROR: %s does not exist. Run %s to generate it." % (output, SCRIPT_NAME),
-                file=sys.stderr,
-            )
-            return 1
-        if current != image:
-            print(
-                "ERROR: %s is out of date with the schedules in .github/workflows or the "
-                "estimates in %s. Run %s to regenerate it." % (output, SCRIPT_NAME, SCRIPT_NAME),
-                file=sys.stderr,
-            )
-            return 1
-        print("%s is up to date." % output)
-        return 0
-    with open(args.output, "w", encoding="utf-8", newline="\n") as f:
-        f.write(image)
-    print("Wrote %s." % output)
-    return 0
 
 
 if __name__ == "__main__":
