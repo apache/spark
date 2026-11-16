@@ -166,7 +166,7 @@ case class CreateSQLFunctionCommand(
       // The last two elements are the temporary functions the body's analysis bound and the
       // temporary variables it reads only inside IDENTIFIER clauses. Neither can be recovered from
       // the analyzed plan, so both are captured during analysis.
-      val (unresolvedPlan, analyzedPlan, inferredType, tempFuncs, identVars) = if (!isTableFunc) {
+      val (unresolvedPlan, analyzedPlan, inferredReturnType, tempFns, idVars) = if (!isTableFunc) {
         // Build SQL scalar function plan.
         val outputExpr = if (query.isDefined) ScalarSubquery(query.get) else expression.get
         val plan: LogicalPlan = returnType.map { t =>
@@ -281,14 +281,14 @@ case class CreateSQLFunctionCommand(
       // variables read only through IDENTIFIER clauses: with it set they are not rejected (and,
       // as for views, not persisted either).
       val identifierVarsToReject =
-        if (conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) Nil else identVars
+        if (conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) Nil else idVars
       verifyTemporaryObjectsNotExists(
-        catalog, isTemp, name, unresolvedPlan, analyzedPlan, tempFuncs, identifierVarsToReject)
+        catalog, isTemp, name, unresolvedPlan, analyzedPlan, tempFns, identifierVarsToReject)
 
       // Generate function properties.
       val properties =
         generateFunctionProperties(
-          sparkSession, unresolvedPlan, analyzedPlan, tempFuncs, identVars)
+          sparkSession, unresolvedPlan, analyzedPlan, tempFns, idVars)
 
       // Derive determinism of the SQL function.
       val deterministic = analyzedPlan.deterministic
@@ -298,7 +298,7 @@ case class CreateSQLFunctionCommand(
 
       function.copy(
         // Assign the return type, inferring from the function body if needed.
-        returnType = inferredType,
+        returnType = inferredReturnType,
         deterministic = Some(function.deterministic.getOrElse(deterministic)),
         containsSQL = Some(function.containsSQL.getOrElse(!readsSQLData)),
         properties = properties
