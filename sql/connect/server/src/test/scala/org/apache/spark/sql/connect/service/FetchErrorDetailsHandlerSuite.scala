@@ -100,7 +100,8 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       new NoClassDefFoundError("missing/Provider")
         .initCause(new ClassNotFoundException("missing.Provider")),
       new ExceptionInInitializerError(new ClassNotFoundException("missing.Provider")),
-      new NoSuchMethodError("missing method"))) {
+      new NoSuchMethodError("missing method"),
+      new UnsupportedOperationException())) {
     test(s"handleError preserves JVM details for ${testError.getClass.getSimpleName}") {
       val sessionHolder = SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId, None)
@@ -126,7 +127,8 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
         expectedErrors.zipWithIndex.foreach { case (expected, index) =>
           val actual = response.getErrors(index)
           assert(actual.getErrorTypeHierarchy(0) == expected.getClass.getName)
-          assert(actual.getMessage == Option(expected.getMessage).getOrElse(""))
+          assert(
+            actual.getMessage == Option(expected.getMessage).getOrElse(expected.getClass.getName))
           assert(actual.getStackTraceCount == expected.getStackTrace.length)
           expected.getStackTrace.zipWithIndex.foreach { case (frame, frameIndex) =>
             val actualFrame = actual.getStackTrace(frameIndex)

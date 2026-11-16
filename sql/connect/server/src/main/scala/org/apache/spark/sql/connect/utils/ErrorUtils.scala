@@ -85,7 +85,7 @@ private[connect] object ErrorUtils extends Logging {
     while (buffer.size < MAX_ERROR_CHAIN_LENGTH && currentError != null) {
       val builder = FetchErrorDetailsResponse.Error
         .newBuilder()
-        .setMessage(Option(currentError.getMessage).getOrElse(""))
+        .setMessage(Option(currentError.getMessage).getOrElse(currentError.getClass.getName))
         .addAllErrorTypeHierarchy(
           ErrorUtils.allClasses(currentError.getClass).map(_.getName).asJava)
 
@@ -346,6 +346,10 @@ private[connect] object ErrorUtils extends Logging {
           log"Error details will not be available for FetchErrorDetails.")
     }
 
+    def fallbackStatus(e: Throwable): StatusRuntimeException = {
+      Status.UNKNOWN.withCause(e).withDescription(errorDescription(e)).asRuntimeException()
+    }
+
     // Convert throwable to StatusRuntimeException with appropriate error metadata
     val wrapped: StatusRuntimeException = st match {
       case se: SparkException if isPythonExecutionException(se) =>
@@ -357,13 +361,14 @@ private[connect] object ErrorUtils extends Logging {
 
       // Linkage errors are excluded by NonFatal but still need structured JVM error details.
       case e: LinkageError =>
-        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+        try {
+          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+        } catch {
+          // Reading the session configuration can retry failed session-state initialization.
+          case NonFatal(_) | _: LinkageError => fallbackStatus(e)
+        }
 
-      case e: Throwable =>
-        Status.UNKNOWN
-          .withCause(e)
-          .withDescription(errorDescription(e))
-          .asRuntimeException()
+      case e: Throwable => fallbackStatus(e)
     }
 
     // Log the error based on context
