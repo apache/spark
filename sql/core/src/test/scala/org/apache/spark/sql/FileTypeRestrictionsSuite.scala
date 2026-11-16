@@ -111,6 +111,16 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       }
       sql("ALTER TABLE testcat.t ADD COLUMN c FILE EXTERNAL")
     }
+    // A FILE added to a struct is reported at its full path.
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, s STRUCT<x: INT>)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE testcat.t ADD COLUMN s.y FILE")
+        },
+        condition = "FILE_TYPE_MISSING_QUALIFIER",
+        parameters = Map("colName" -> "`s`.`y`", "dataType" -> "\"FILE\""))
+    }
   }
 
   test("CREATE TABLE AS SELECT cannot store a FILE without a qualifier") {
@@ -131,6 +141,15 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           },
           condition = "FILE_TYPE_UNKNOWN_WRITE",
           parameters = Map("colNames" -> "[`s`.`f`]"))
+        // Every FILE without a qualifier is reported, in the order of the columns and fields.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE $table $provider AS SELECT 1 AS id, " +
+              "named_struct('a', CAST(NULL AS FILE), 'b', CAST(NULL AS FILE)) AS s, " +
+              "CAST(NULL AS FILE) AS f")
+          },
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> "[`s`.`a`, `s`.`b`, `f`]"))
         // IF NOT EXISTS does not skip the check when the table exists.
         sql(s"CREATE TABLE $table (id INT) $provider")
         checkError(
@@ -262,6 +281,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       ("PARTITIONED BY (f)", "PARTITION_COLUMN"),
       ("PARTITIONED BY (bucket(4, f))", "BUCKET_COLUMN"),
       ("CLUSTERED BY (f) INTO 4 BUCKETS", "BUCKET_COLUMN"),
+      ("CLUSTERED BY (f) SORTED BY (id) INTO 4 BUCKETS", "BUCKET_COLUMN"),
       ("CLUSTERED BY (id) SORTED BY (f) INTO 4 BUCKETS", "BUCKET_SORT_COLUMN"),
       ("CLUSTER BY (f)", "CLUSTERING_COLUMN")).foreach { case (clause, usage) =>
       Seq("testcat.t", "t").foreach { table =>
@@ -342,6 +362,25 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("CLUSTER BY a field of a struct") {
+    withTable("t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          analyze("CREATE TABLE t (id INT, s STRUCT<f: FILE EXTERNAL>) USING parquet " +
+            "CLUSTER BY (s.f)")
+        },
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+        parameters = Map("colName" -> "`s`.`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    }
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, s STRUCT<f: FILE EXTERNAL>)")
+      checkError(
+        exception = intercept[AnalysisException](sql("ALTER TABLE testcat.t CLUSTER BY (s.f)")),
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+        parameters = Map("colName" -> "`s`.`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    }
+  }
+
   test("ALTER COLUMN requires FILE EXTERNAL and cannot change the type of a FILE column") {
     withTable("testcat.t") {
       sql("CREATE TABLE testcat.t (id INT, s STRING, f FILE EXTERNAL, v VOID)")
@@ -383,6 +422,16 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
               "newType" -> sqlType),
             context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
       }
+    }
+    // A field of a struct is reported at its full path.
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, s STRUCT<x: INT>)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE testcat.t ALTER COLUMN s.x TYPE FILE")
+        },
+        condition = "FILE_TYPE_MISSING_QUALIFIER",
+        parameters = Map("colName" -> "`s`.`x`", "dataType" -> "\"FILE\""))
     }
   }
 

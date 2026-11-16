@@ -72,8 +72,8 @@ private[sql] object CreateTableValidation {
       case _ =>
         TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
     }
-    // FILE is not comparable, so it cannot be a partition, bucket, clustering or write-ordering
-    // column.
+    // FILE is not comparable, so it cannot be a partition, bucket, bucket sort, clustering or
+    // write-ordering column.
     def checkNoFileTypeInColumns(refs: Seq[NamedReference], usage: FileTypeColumnUsage): Unit =
       refs.foreach { ref =>
         create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {

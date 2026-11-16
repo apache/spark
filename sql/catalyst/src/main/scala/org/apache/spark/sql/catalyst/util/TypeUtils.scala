@@ -179,18 +179,22 @@ object TypeUtils extends QueryErrorsBase {
    * Returns the paths of the columns that hold a FILE without a qualifier, for a column at `path`
    * of type `dataType`. The path descends into struct fields, so a FILE in a field of a struct
    * column is reported at that field. A FILE in an array or a map is reported at the column of
-   * the array or map.
+   * the array or map. A schema is given as a struct with an empty path.
    */
   private def unknownFileTypePaths(
       path: Seq[String],
-      dataType: DataType): Seq[(Seq[String], DataType)] = dataType match {
-    case st: StructType =>
-      st.fields.toSeq.flatMap(f => unknownFileTypePaths(path :+ f.name, f.dataType))
-    case dt if dt.existsRecursively {
-        case ft: FileType => ft.mode == FileTypeMode.UNKNOWN
-        case _ => false
-      } => Seq(path -> dt)
-    case _ => Seq.empty
+      dataType: DataType): Seq[(Seq[String], DataType)] = {
+    val hasUnknownFile = dataType.existsRecursively {
+      case ft: FileType => ft.mode == FileTypeMode.UNKNOWN
+      case _ => false
+    }
+    dataType match {
+      // Most types hold no FILE, so this is decided before descending into structs.
+      case _ if !hasUnknownFile => Seq.empty
+      case st: StructType =>
+        st.fields.toSeq.flatMap(f => unknownFileTypePaths(path :+ f.name, f.dataType))
+      case dt => Seq(path -> dt)
+    }
   }
 
   /**
@@ -206,7 +210,7 @@ object TypeUtils extends QueryErrorsBase {
 
   /** Fails if a FILE in a column of `schema` has no qualifier. */
   def checkFileTypeHasQualifier(schema: StructType): Unit = {
-    checkFileTypeHasQualifier(schema.fields.toSeq.map(f => Seq(f.name) -> f.dataType))
+    checkFileTypeHasQualifier(Seq(Seq.empty[String] -> schema))
   }
 
   /**
@@ -225,7 +229,7 @@ object TypeUtils extends QueryErrorsBase {
 
   /** Fails if a column of `schema`, which a write stores in a table, holds an unknown FILE. */
   def checkNoUnknownFileTypeWrite(schema: StructType): Unit = {
-    checkNoUnknownFileTypeWrite(schema.fields.toSeq.map(f => Seq(f.name) -> f.dataType))
+    checkNoUnknownFileTypeWrite(Seq(Seq.empty[String] -> schema))
   }
 
   /**
