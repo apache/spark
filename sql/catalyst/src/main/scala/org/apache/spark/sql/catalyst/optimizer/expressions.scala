@@ -92,6 +92,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case c: ConditionalExpression if !c.foldable =>
       c.mapChildren(constantFolding(_, isConditionalBranch = true))
 
+    case i: MergeRows.Instruction =>
+      i.mapChildren(constantFolding(_, isConditionalBranch = true))
+
     // Skip redundant folding of literals. This rule is technically not necessary. Placing this
     // here avoids running the next rule for Literal values, which would create a new Literal
     // object and running eval unnecessarily.
