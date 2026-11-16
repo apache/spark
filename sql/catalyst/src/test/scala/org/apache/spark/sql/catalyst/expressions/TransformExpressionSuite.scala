@@ -81,8 +81,9 @@ class TransformExpressionSuite extends SparkFunSuite {
   test("SPARK-58769: the two comparisons agree for a function that follows the contract") {
     // `equals` is the finer comparison and the canonical name the coarser one, so a function that
     // overrides both answers both consistently. They still differ in what they take into account:
-    // `isSameFunction` ignores the arguments, because a join compares bucket(4, left.id) against
-    // bucket(4, right.id) and recovers the positions separately, while equality does not.
+    // `isSameFunction` ignores which column an argument is, because a join compares
+    // bucket(4, left.id) against bucket(4, right.id) and recovers the positions separately, while
+    // equality does not. It still compares the literals and the arguments' shapes.
     val left = bucket(new ComparableFunction, a)
     val right = bucket(new ComparableFunction, b)
     assert(left.function ne right.function, "the fixture must use distinct function instances")
@@ -121,6 +122,25 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(!left.hasSameReducedKeys(b12), "an unreduced side never shares one")
     assert(!b12.hasSameReducedKeys(left))
     assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
+  }
+
+  test("SPARK-50593: rewriting a reduced transform's column keeps its partner's shape in step") {
+    // A broadcast join's key expansion, or an alias projection, rewrites a reduced member's column
+    // through withNewChildren. Both sides of one reduce are rewritten the same way, so they must
+    // still share a key space, and a member over the expression must not share one with a member
+    // over the column.
+    val fn = new NamedFunction("test.bucket")
+    val x = AttributeReference("x", IntegerType)()
+    val z = AttributeReference("z", IntegerType)()
+    val left = bucket(fn, a, 8).reducedTogetherWith(bucket(fn, b, 12))
+    val right = bucket(fn, b, 12).reducedTogetherWith(bucket(fn, a, 8))
+    assert(left.hasSameReducedKeys(right), "test setup")
+    def over(t: TransformExpression, from: Expression, to: Expression): TransformExpression =
+      t.transform { case e if e == from => to }.asInstanceOf[TransformExpression]
+    val leftPlusOne = over(left, a, Add(x, Literal(1)))
+    val rightPlusOne = over(right, b, Add(z, Literal(1)))
+    assert(leftPlusOne.hasSameReducedKeys(rightPlusOne))
+    assert(!leftPlusOne.hasSameReducedKeys(right))
   }
 
   test("SPARK-50593: hasSameReducedKeys discriminates non-bucket (truncate-style) reductions") {

@@ -392,12 +392,14 @@ case class TransformExpression(
         case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
           probe(thisFunction.reducer(otherFunction))
         // The deprecated overload is documented for bucket against bucket, and master offered it
-        // only a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`.
+        // only a pair resolved from two V2 `bucket` transforms, see `fromBucketTransform`. Same
+        // function means the same canonical name, or the same function where it keeps
+        // `canonicalName()`'s default, a fresh name on every call.
         // If that finds nothing either, the outcome stays why the generalized one was not asked.
         case skipped @ (Unimplemented | LiteralTypesDiffer)
             if fromBucketTransform && other.fromBucketTransform &&
               isSingleInt(thisParams) && isSingleInt(otherParams) &&
-              thisName == other.function.canonicalName() =>
+              (thisName == other.function.canonicalName() || function == other.function) =>
           probe(thisFunction.reducer(
             thisParams(0).value().asInstanceOf[Int], otherFunction,
             otherParams(0).value().asInstanceOf[Int])) match {
@@ -462,8 +464,23 @@ case class TransformExpression(
 
   override def dataType: DataType = function.resultType()
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(children = newChildren)
+  /**
+   * The same transform over `newChildren`. A reduced transform also carries its partner's
+   * argument shape in `reducedWith`, which has to follow its own, or the two sides of one reduce
+   * stop sharing a key space: a broadcast join's key expansion turns `bucket(12, id)` into
+   * `bucket(12, x + 1)`, and its partner must become an expression over one column too. The
+   * partner that pairs with this one on the other side has the same argument shape, since
+   * `argumentShape` admits no other.
+   */
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    val rebuilt = copy(children = newChildren)
+    rebuilt.columnSlots match {
+      case Seq(slot) if reducedWith.isDefined =>
+        rebuilt.copy(reducedWith = reducedWith.map(TransformExpression.withColumnShape(_, slot)))
+      case _ => rebuilt
+    }
+  }
 
   /**
    * The bound function, when Spark could call it for this transform: a [[ScalarFunction]], over
@@ -474,11 +491,9 @@ case class TransformExpression(
     case _ => None
   }
 
-  /** The arguments of the call: the children, the literal parameters included. */
-  private def callArguments: Seq[Expression] = children
-
   /**
-   * The scalar function call this transform stands for, over its arguments as they are. `None`
+   * The scalar function call this transform stands for, over its arguments as they are, the
+   * literal parameters included. `None`
    * when the bound function is not a [[ScalarFunction]], and also when a join reduced this
    * expression's keys, since then the call no longer computes them. Evaluating it to place a row
    * would send the row to a partition it does not belong to. That second arm is a local gate. No
@@ -487,7 +502,7 @@ case class TransformExpression(
    * arguments to the function's input types itself. `eval` uses [[evaluableFunction]] instead.
    */
   lazy val resolvedFunction: Option[Expression] =
-    scalarFunction.map(V2ExpressionUtils.resolveScalarFunction(_, callArguments))
+    scalarFunction.map(V2ExpressionUtils.resolveScalarFunction(_, children))
 
   /**
    * The call `eval` runs: [[resolvedFunction]], with each argument at the type the function
@@ -524,7 +539,7 @@ case class TransformExpression(
       if (!function.isInstanceOf[ScalarFunction[_]]) TransformExpression.logNotScalar(function)
       None
     case Some(scalarFunc) =>
-      val arguments = callArguments
+      val arguments = children
       val declaredTypes = scalarFunc.inputTypes().toSeq
       val typed = arguments.zip(declaredTypes).map { case (argument, declaredType) =>
         TransformExpression.atDeclaredType(argument, declaredType)
@@ -562,7 +577,9 @@ object TransformExpression extends Logging {
    * `mismatch:functionClass:argumentTypes:declaredTypes` and its `unreachable:` counterpart for a
    * method that cannot be invoked, since one class can declare other input types per instance,
    * e.g. one per column type, and `failure:functionClass:failureClass`, so that a function class
-   * that fails in another way is warned about again.
+   * that fails in another way is warned about again. The reducer dispatch adds
+   * `reducerThrew:functionClass:failureClass`, `literalTypes:functionClass` and
+   * `noReducer:functionClass`.
    */
   private val loggedOnce: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
 
@@ -682,11 +699,14 @@ object TransformExpression extends Logging {
   }
 
   /**
-   * Logs that `function`'s reducer threw: at WARN once per function, since every planning pass and
-   * AQE re-plan asks the pair again, and at DEBUG, with the stack trace, every time.
+   * Logs that `function`'s reducer threw: at WARN once per function class and kind of failure,
+   * since every planning pass and AQE re-plan asks the pair again, and at DEBUG, with the stack
+   * trace, every time. Keyed by class rather than `canonicalName()`, whose default is a fresh name
+   * on every call.
    */
   private def logReducerThrew(function: BoundFunction, name: String, e: Throwable): Unit = {
-    logOnce(s"reducerThrew:${function.getClass.getName}:$name", log.isWarnEnabled) {
+    logOnce(s"reducerThrew:${function.getClass.getName}:${e.getClass.getName}",
+        log.isWarnEnabled) {
       logWarning(log"V2 function ${MDC(FUNCTION_NAME, name)} reducer threw an exception; " +
         log"treating as not reducible: ${MDC(ERROR, orElse(e.toString, e.getClass.getName))}. " +
         log"Further failures of this function are logged at DEBUG.")
@@ -696,23 +716,23 @@ object TransformExpression extends Logging {
 
   /**
    * Logs that `function` declares other types for its literal parameters than the transform's
-   * literals have, so Spark does not ask its generalized reducer: at WARN once per function, and
-   * at DEBUG.
+   * literals have, so Spark does not ask its generalized reducer: at WARN once per function class,
+   * and at DEBUG.
    */
   private def logLiteralTypesDiffer(function: BoundFunction, name: String): Unit = {
     def line: MessageWithContext = log"V2 function ${MDC(FUNCTION_NAME, name)} declares other " +
       log"input types than the transform's literal parameters have, so Spark does not offer them " +
       log"to reducer(Literal[], ReducibleFunction, Literal[]); treating as not reducible."
-    logOnce(s"literalTypes:${function.getClass.getName}:$name", log.isWarnEnabled)(logWarning(line))
+    logOnce(s"literalTypes:${function.getClass.getName}", log.isWarnEnabled)(logWarning(line))
     logDebug(line)
   }
 
-  /** Logs that `function` implements no reducer: at WARN once per function, and at DEBUG. */
+  /** Logs that `function` implements no reducer: at WARN once per function class, and at DEBUG. */
   private def logNoReducer(function: BoundFunction, name: String): Unit = {
     def line: MessageWithContext = log"V2 function ${MDC(FUNCTION_NAME, name)} implements no " +
       log"reducer; treating as not reducible. Override " +
       log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ."
-    logOnce(s"noReducer:${function.getClass.getName}:$name", log.isWarnEnabled)(logWarning(line))
+    logOnce(s"noReducer:${function.getClass.getName}", log.isWarnEnabled)(logWarning(line))
     logDebug(line)
   }
 

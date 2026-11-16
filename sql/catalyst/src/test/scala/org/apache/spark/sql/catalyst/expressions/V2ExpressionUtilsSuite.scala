@@ -135,6 +135,17 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       parameters = Map("expr" -> "DATE_TRUNC('MONTH', a)"))
   }
 
+  test("SPARK-50593: a transform argument may be any NamedReference") {
+    // A connector can report its own NamedReference rather than Spark's FieldReference. Bucket
+    // columns now resolve through toCatalystOpt, so it resolves any of them, as the removed bucket
+    // arm did; resolving reads only fieldNames.
+    val a = AttributeReference("a", StringType)()
+    val custom = new NamedReference {
+      override def fieldNames(): Array[String] = Array("a")
+    }
+    assert(V2ExpressionUtils.toCatalystOpt(custom, LocalRelation(a)).contains(a))
+  }
+
   test("SPARK-59721: resolveRefOpt returns None for an unresolvable reference") {
     val plan = LocalRelation(AttributeReference("a", StringType)())
     assert(V2ExpressionUtils.resolveRefOpt(FieldReference("a"), plan).isDefined)

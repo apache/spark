@@ -1049,6 +1049,21 @@ class ProjectedOrderingAndPartitioningSuite
       s"a literal became an attribute: $orderExpr")
   }
 
+  test("SPARK-50593: alias projection maps a literal that is not a transform parameter") {
+    // Only a transform's own literal parameters stay literals. Any other literal maps to the alias
+    // that holds it, as on master: a parent above a cache, where FoldablePropagation cannot inline
+    // the alias, asks for `(a, z)`.
+    val a = AttributeReference("a", IntegerType)()
+    val child = DummyLeafExecWithPartitioning(Seq(a), HashPartitioning(Seq(a, Literal(0)), 5))
+    val z = Alias(Literal(0), "z")()
+    val project = ProjectExec(Seq(a, z), child)
+    project.outputPartitioning match {
+      case HashPartitioning(Seq(pa: Attribute, pz: Attribute), 5) =>
+        assert(pa.name == "a" && pz.exprId == z.exprId)
+      case other => fail(s"Expected HashPartitioning(a, z), got $other")
+    }
+  }
+
 }
 
 private case class DummyLeafExecWithPartitioning(

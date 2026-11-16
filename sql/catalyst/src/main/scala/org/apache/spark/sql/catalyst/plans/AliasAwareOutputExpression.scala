@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, Literal, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder, TransformExpression}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -69,11 +69,21 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
    */
   protected def projectExpression(expr: Expression): LazyList[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
+    // A transform's literal parameters say what it computes, so they are not aliasable values,
+    // e.g. `2 AS w` would otherwise turn `truncate(data, 2)` into `truncate(d, w)`. Any other
+    // literal maps to its alias, as a cached `repartition(a, lit(0))` projected through `0 AS z`
+    // needs. Kept by identity, since `multiTransformDown` also rewrites the children of what an
+    // arm returns, so a check on the node's type alone would still reach the parameter one level
+    // down.
+    val params = java.util.Collections.newSetFromMap(
+      new java.util.IdentityHashMap[Expression, java.lang.Boolean])
+    expr.foreach {
+      case t: TransformExpression => t.literalChildren.foreach(params.add)
+      case _ =>
+    }
     expr.multiTransformDown {
-      // Mapping with aliases. A literal is left as it is: it means the same in any scope, and it
-      // may be a transform parameter, e.g. `2 AS w` would otherwise turn `truncate(data, 2)` into
-      // `truncate(d, w)`.
-      case e: Expression if !e.isInstanceOf[Literal] && aliasMap.contains(e.canonicalized) =>
+      // Mapping with aliases.
+      case e: Expression if !params.contains(e) && aliasMap.contains(e.canonicalized) =>
         aliasMap(e.canonicalized).toSeq ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
 
       // Prune if we encounter an attribute that we can't map and it is not in output set.

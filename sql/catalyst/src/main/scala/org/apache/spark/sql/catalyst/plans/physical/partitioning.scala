@@ -2509,10 +2509,9 @@ case class KeyedShuffleSpec(
 
   /**
    * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
-   * single pass over the two sides' partition expressions. A pair's reducer lookups
-   * (`TransformExpression.reducers`) are shared between the two directions: the reverse lookup a
-   * direction needs to detect a single-side reduce is exactly the other direction's reducer, so
-   * this materializes each catalog `Reducer` once per direction.
+   * single pass over the two sides' partition expressions. A pair's reducers come from one call,
+   * `TransformExpression.pairReducers`, which decides both directions together: the reverse lookup
+   * a direction needs to detect a single-side reduce is exactly the other direction's reducer.
    * <p>
    * A [[Reducer]] exists for a partition expression of one side if it is 'reducible' on the
    * corresponding partition expression of the other side. If a side's value is returned, there

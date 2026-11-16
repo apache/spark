@@ -8163,6 +8163,74 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  // A table partitioned by `truncate(id, width)` over the int `id`, with ids 0 to 23 and a null.
+  private def createIntTruncateTable(name: String, width: Int): Unit = {
+    createTable(name, columns,
+      Array(Expressions.apply("truncate", Expressions.column("id"), Expressions.literal(width))))
+    val rows = (0 until 24).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))") :+
+      "(null, 'null', CAST('2022-01-01' AS timestamp))"
+    sql(s"INSERT INTO testcat.ns.$name VALUES ${rows.mkString(", ")}")
+  }
+
+  private def joinOnId(left: String, right: String): DataFrame = sql(
+    s"""
+       |${selectWithMergeJoinHint(left, right)}
+       |$left.id FROM testcat.ns.$left JOIN testcat.ns.$right ON $left.id = $right.id
+       |""".stripMargin)
+
+  test("SPARK-50593: integer truncate widths that both reduce join without a shuffle") {
+    // truncate(4) and truncate(6) both reduce onto their lcm, 12, so the two sides end up in a key
+    // space neither transform describes, which is what reducedTogetherWith records.
+    createIntTruncateTable("it4", 4)
+    createIntTruncateTable("it6", 6)
+    withReducingJoinConfs {
+      val df = joinOnId("it4", "it6")
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty)
+      checkAnswer(df, (0 until 24).map(Row(_)))
+    }
+  }
+
+  test("SPARK-50593: a join above a both-sides integer truncate reduce is correct") {
+    // The output of truncate(4) against truncate(6) carries the reduced key space; joining it with
+    // truncate(8) must pair the right partitions whether or not it shuffles.
+    createIntTruncateTable("it4", 4)
+    createIntTruncateTable("it6", 6)
+    createIntTruncateTable("it8", 8)
+    withReducingJoinConfs {
+      val df = sql(
+        s"""
+           |SELECT /*+ MERGE(it4, it6, it8) */ it4.id FROM testcat.ns.it4
+           |JOIN testcat.ns.it6 ON it4.id = it6.id
+           |JOIN testcat.ns.it8 ON it4.id = it8.id
+           |""".stripMargin)
+      checkAnswer(df, (0 until 24).map(Row(_)))
+    }
+  }
+
+  test("SPARK-50593: an identity side reduces onto integer truncate without a shuffle") {
+    createTable("iid", columns, Array(Expressions.identity("id")))
+    val rows = (0 until 24).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
+    sql(s"INSERT INTO testcat.ns.iid VALUES ${rows.mkString(", ")}")
+    createIntTruncateTable("it4", 4)
+    withReducingJoinConfs {
+      val df = joinOnId("iid", "it4")
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty)
+      checkAnswer(df, (0 until 24).map(Row(_)))
+    }
+  }
+
+  test("SPARK-50593: an unpartitioned side is shuffled onto integer truncate") {
+    createIntTruncateTable("it6", 6)
+    createTable("plain", columns, Array.empty)
+    val rows = (0 until 24).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
+    sql(s"INSERT INTO testcat.ns.plain VALUES ${rows.mkString(", ")}")
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      val df = joinOnId("it6", "plain")
+      assert(collectShuffles(df.queryExecution.executedPlan).size == 1)
+      checkAnswer(df, (0 until 24).map(Row(_)))
+    }
+  }
+
   test("SPARK-50593: a sorted bucket with no sort columns resolves as a bucket") {
     // The catalog registers `bucket` only. A sort-free `sorted_bucket` is the same partitioning,
     // so it must resolve to that function and pair with a `bucket` table without a shuffle.
@@ -8358,10 +8426,14 @@ class KeyGroupedPartitioningSuite
     assert(add.isSameFunction(bucket(4, Add(rb, Literal(1)))), "the same shape over another column")
     assert(!add.isSameFunction(bucket(4, ra)), "an expression is not a bare column")
 
-    // A GetStructField chain IS a column reference, so it is ignored like any other column slot.
-    val s = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
-    val sf = GetStructField(s, 0)
-    assert(bucket(4, sf).isSameFunction(bucket(4, sf)))
+    // A struct field is an expression over one column, so it is compared by its shape: the same
+    // field of another struct column of the same type is the same function, the struct itself is
+    // not.
+    val structType = StructType(Seq(StructField("f", IntegerType)))
+    val s = AttributeReference("s", structType)()
+    val t = AttributeReference("t", structType)()
+    assert(bucket(4, GetStructField(s, 0)).isSameFunction(bucket(4, GetStructField(t, 0))))
+    assert(!bucket(4, GetStructField(s, 0)).isSameFunction(bucket(4, s)))
   }
 
   test("SPARK-50593: generalized identity is strictly more discriminating than " +
@@ -8781,6 +8853,56 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-50593: a connector with only the deprecated reducer still gets SPJ") {
+    // The path a shipped connector such as Iceberg takes: V2ExpressionUtils marks the bucket
+    // transforms, the dispatch falls back to the deprecated reducer, and the join reduces both
+    // sides onto the common bucket count. Also for a connector that keeps canonicalName()'s
+    // default, a fresh name on every call, which only function equality ties to itself.
+    for {
+      unbound <- Seq(UnboundLegacyBucketFunction, UnboundDefaultNameLegacyBucketFunction)
+      (b1, b2) <- Seq((4, 2), (2, 4), (6, 4))
+    } withFunction(unbound) {
+      catalog.clearTables()
+      createTable("t1", columns2, Array(bucket(b1, "store_id")))
+      createTable("t2", columns2, Array(bucket(b2, "store_id")))
+      val rows = (0 until 8).map(i => s"($i, 0, 'x$i')").mkString(", ")
+      sql(s"INSERT INTO testcat.ns.t1 VALUES $rows")
+      sql(s"INSERT INTO testcat.ns.t2 VALUES $rows")
+      withReducingJoinConfs {
+        val df = sql(
+          s"""${selectWithMergeJoinHint("t1", "t2")}
+             |t1.store_id, t1.data, t2.data
+             |FROM testcat.ns.t1 t1 JOIN testcat.ns.t2 t2 ON t1.store_id = t2.store_id
+             |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          s"${unbound.bind(null)} ($b1, $b2)")
+        checkAnswer(df, (0 until 8).map(i => Row(i, s"x$i", s"x$i")))
+      }
+    }
+  }
+
+  test("SPARK-50593: a pair admitted through a reducer shuffles if the reducer is gone when " +
+      "asked again") {
+    // SecondAskFailingBucketFunction reduces when isCompatible asks and fails when
+    // reducersBothWays asks. The pair was admitted through the first answer, so merging the raw
+    // keys of bucket(16) and bucket(12) on the second would meet only keys 0 to 11: 12 of 48 rows.
+    withFunction(UnboundSecondAskFailingBucketFunction) {
+      val ids = (0 until 48).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
+      createTable("ask16", columns, Array(bucket(16, "id")))
+      sql(s"INSERT INTO testcat.ns.ask16 VALUES ${ids.mkString(", ")}")
+      createTable("ask12", columns, Array(bucket(12, "id")))
+      sql(s"INSERT INTO testcat.ns.ask12 VALUES ${ids.mkString(", ")}")
+      withReducingJoinConfs {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("ask16", "ask12")}
+             |ask16.id FROM testcat.ns.ask16 JOIN testcat.ns.ask12 ON ask16.id = ask12.id
+             |""".stripMargin)
+        assert(df.collect().length === 48, "every id must find its match")
+      }
+    }
+  }
+
   test("SPARK-50593: a reducer that throws in one direction makes the pair not reducible") {
     // DirectionalBucketFunction reduces bucket(16) onto bucket(12) by gcd 4 from the finer side and
     // throws when asked from the coarser one. Reading the throw as "this direction is not
@@ -8957,6 +9079,27 @@ class KeyGroupedPartitioningSuite
     val years = TransformExpression(YearsFunction, Seq(attr("ts")))
     assert(days.literalParamsMatchInputTypes)
     assert(days.pairReducers(years)._1.isDefined, "days still reduces onto years")
+  }
+
+  test("SPARK-50593: a missing reducer is logged once for a function with the default name") {
+    // canonicalName()'s default is a fresh name on every call, so the once-per-function WARN is
+    // keyed by the function's class: five checks of one pair log it at most once, not ten times.
+    val defaultName = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "default_name_bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val b8 = TransformExpression(defaultName, Seq(Literal(8), attr("id")))
+    val b4 = TransformExpression(defaultName, Seq(Literal(4), attr("id")))
+    val logs = transformExpressionLogs {
+      (1 to 5).foreach(_ => assert(!b8.isCompatible(b4)))
+    }
+    def noReducer(level: Level): Int = logs.count { e =>
+      e.getLevel == level && e.getMessage.getFormattedMessage.contains("implements no reducer")
+    }
+    assert(noReducer(Level.WARN) <= 1, "at most once per function")
+    assert(noReducer(Level.DEBUG) == 10, "both directions, five times")
   }
 
   test("SPARK-50593: a reducer warning is logged once per function") {

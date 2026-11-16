@@ -298,8 +298,8 @@ case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
  * A bucket function that only overrides the deprecated `reducer(int, func, int)` method,
  * not the new `reducer(Literal[], func, Literal[])` method.
  *
- * Used to verify that the default implementation of the new method correctly falls back
- * to the deprecated int-based API, so legacy implementations continue to work.
+ * Used to verify that Spark's dispatch falls back to the deprecated int-based API when the new
+ * method is not implemented (its default throws), so legacy implementations continue to work.
  */
 object LegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
@@ -321,6 +321,71 @@ object LegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[I
       null
     }
   }
+}
+
+object UnboundLegacyBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = LegacyBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+/**
+ * Like [[LegacyBucketFunction]], but keeps `canonicalName()`'s default, a fresh random name on
+ * every call, so only function equality says that two transforms are of one function.
+ */
+object DefaultNameLegacyBucketFunction extends ScalarFunction[Int]
+    with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+    if (otherFunc == this) BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets) else null
+  }
+}
+
+object UnboundDefaultNameLegacyBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = DefaultNameLegacyBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+/**
+ * A bucket that implements only the deprecated reducer and fails when `reducersBothWays` asks for
+ * it, after `isCompatible` got an answer: a stand-in for a connector failure that does not repeat
+ * on every call.
+ */
+object SecondAskFailingBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = "second_ask_failing_bucket"
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+    if (Thread.currentThread().getStackTrace.exists(_.getMethodName == "reducersBothWays")) {
+      throw new IllegalStateException("transient failure on the second probe")
+    }
+    if (otherFunc == this) BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets) else null
+  }
+}
+
+object UnboundSecondAskFailingBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = SecondAskFailingBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
 }
 
 /**

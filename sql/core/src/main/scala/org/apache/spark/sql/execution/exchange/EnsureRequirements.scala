@@ -634,6 +634,25 @@ case class EnsureRequirements(
     }
   }
 
+  /**
+   * Whether `reducers` reduce every position where the two specs hold different transform
+   * functions over raw keys. `areKeysCompatible` admits such a position only through a reducer, so
+   * a position left without one means the connector answered differently when asked again.
+   */
+  private def reducersCoverAdmittedPositions(
+      left: KeyedShuffleSpec,
+      right: KeyedShuffleSpec,
+      reducers: (Option[Seq[Option[KeyReducer]]], Option[Seq[Option[KeyReducer]]])): Boolean = {
+    val (leftReducers, rightReducers) = reducers
+    left.partitioning.expressions.zip(right.partitioning.expressions).zipWithIndex.forall {
+      case ((l: TransformExpression, r: TransformExpression), i)
+          if !l.isSameFunction(r) && !TransformExpression.hasReducedKeys(l) &&
+            !TransformExpression.hasReducedKeys(r) =>
+        leftReducers.exists(_(i).isDefined) || rightReducers.exists(_(i).isDefined)
+      case _ => true
+    }
+  }
+
   private def checkKeyGroupCompatible(
       left: SparkPlan,
       leftRequired: ClusteredDistribution,
@@ -760,6 +779,16 @@ case class EnsureRequirements(
     if (!compatibleAsIs && !pushCommonValues) {
       return None
     }
+    // The pair was admitted through `areKeysCompatible`, which may have relied on a reducer, and
+    // the push branch asks the connector for the reducers again. The answers can differ, e.g. a
+    // failure that does not repeat on every call, which reads as not reducible. A position whose
+    // transforms are different functions then has nothing to put its two sides in one key space,
+    // and merging their raw keys would pair partitions that do not hold the same rows. Shuffle
+    // instead.
+    lazy val reducers = leftSpec.reducersBothWays(rightSpec)
+    if (pushCommonValues && !reducersCoverAdmittedPositions(leftSpec, rightSpec, reducers)) {
+      return None
+    }
     // What the push branch builds, when it runs. Empty otherwise, and then each side gets a plain
     // grouping node instead, which it needs exactly when its source reports more than one partition
     // per key. Building both eagerly would derive a grouping the push branch throws away, and that
@@ -793,7 +822,7 @@ case class EnsureRequirements(
 
       // in case of compatible but not identical partition expressions, we apply 'reduce'
       // transforms to group one side's partitions as well as the common partition values
-      val (leftReducers, rightReducers) = leftSpec.reducersBothWays(rightSpec)
+      val (leftReducers, rightReducers) = reducers
       val (leftReducedDataTypes, leftReducedKeys) = leftReducers.fold(
         (leftPartitioning.keyDataTypes, leftPartitioning.partitionKeys)
       )(leftPartitioning.reduceKeys)
