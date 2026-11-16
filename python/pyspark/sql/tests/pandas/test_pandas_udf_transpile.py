@@ -41,12 +41,13 @@ The tests come in three kinds, and the distinction matters when one fails:
 
 ``...DivergenceTests``
     The places a transpiled pandas UDF is known to answer differently, pinned with the actual
-    values so that a change is a test failure rather than a surprise in production. They all
-    come from numpy computing in the input's fixed width: it wraps on integer overflow, it
+    values so that a change is a test failure rather than a surprise in production. Nearly
+    all come from numpy computing in the input's fixed width: it wraps on integer overflow, it
     keeps ``float32`` through a ``float`` literal, it converts an integral column to
     ``float64`` as soon as a batch contains a NULL. The precision loss is batch-dependent:
     moving the NULL to another partition changes the answer, so the test uses an explicit
-    single-partition DataFrame.
+    single-partition DataFrame. The exception is the ``%`` int64 boundary, where numpy is
+    exact and the lowering raises.
 
 UDF bodies are module-level ``def``s. ``inspect.getsource`` on a lambda passed as a call
 argument returns the enclosing statement, whose top-level node is a call rather than a lambda,
@@ -216,10 +217,18 @@ def equals_five(s):
     return s == 5
 
 
+def not_equals_zero(s):
+    return s != 0
+
+
 def is_none(s):
-    # Always False interpreted: the Series object is not None. `s.isnull()` is the
-    # construct that means per-element.
+    # Interpreted this is a Python bool, not a Series, so it fails with UDF_RETURN_TYPE.
+    # `s.isnull()` is the construct that means per-element.
     return s is None
+
+
+def is_not_none(s):
+    return s is not None
 
 
 def ternary_none_guard(s):
@@ -468,6 +477,24 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
                 results.append((grouped.orderBy("k").collect(), joined.collect()))
         self.assertEqual(results[0], results[1])
 
+    def test_fractional_options_do_not_duplicate_noncheap_arguments(self):
+        # The NaN normalization and the null check read their input once for a float variant,
+        # so a non-cheap argument still transpiles under an aggregate.
+        df = self.spark.createDataFrame(
+            [(0, 1.0), (0, NAN), (1, None), (1, 3.5)], "k int, v double"
+        )
+        for func, return_type in ((add_one, DoubleType()), (is_missing, BooleanType())):
+            with self.subTest(func=func.__name__):
+                results = []
+                for conf in (_TRANSPILE_OFF, _TRANSPILE_ON):
+                    with self.sql_conf(conf):
+                        pudf = self._pandas_udf(func, return_type)
+                        grouped = df.groupBy("k").agg(F.max(pudf(F.col("v") + 1)).alias("m"))
+                        if conf is _TRANSPILE_ON:
+                            self.assertEqual(0, sum(_eval_python_nodes(grouped).values()))
+                        results.append(grouped.orderBy("k").collect())
+                self.assertEqual(results[0], results[1])
+
     def test_arithmetic_on_doubles_including_nan(self):
         # NaN is the case the isnan-to-NULL normalization exists for: interpreted, the result
         # Series is masked with `series.isnull()`, which is True for NaN, so NaN reaches Spark
@@ -510,25 +537,23 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
         self._assert_matches_interpreted(repeat_twice, StringType(), self._strings("ab", None), "a")
 
     def test_string_repeat_by_a_column_falls_back(self):
-        # A Series count makes `str * numeric` unsound in every batch shape: pandas raises
-        # TypeError on any genuine float (so it only succeeds, as NULL, for an all-missing
-        # batch), while the lowered repeat(s, cast(n as int)) returns a repeated string for a
-        # real value and CAST_OVERFLOW for a NaN. So an all-missing batch would turn a
-        # NULL-returning query into an error -- the cardinal sin. The transpiler must refuse.
+        # A bigint count repeats element-wise only while its batch has no NULL: with one,
+        # pandas holds the column as float64 and `str * float64` raises TypeError, where the
+        # lowered repeat(s, cast(n as int)) would return values. So whether the query fails
+        # would depend on batching, and the transpiler must refuse. One partition puts both
+        # rows in one batch. (A double count never reaches the refusal: `_category` has no
+        # string-by-float variant.)
         df = self.spark.createDataFrame(
-            self.spark.sparkContext.parallelize([("ab", float("nan"))], 1), "a string, b double"
+            self.spark.sparkContext.parallelize([("ab", 2), ("ab", None)], 1),
+            "a string, n bigint",
         )
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = self._pandas_udf(repeat_by_column, StringType())
-            self.assertEqual([], pudf.transpiled, "string-repeat by a column must not transpile")
-            on = self._values_or_raised(df.select(pudf("a", "b")))
         with self.sql_conf(_TRANSPILE_OFF):
             off = self._values_or_raised(
-                df.select(self._pandas_udf(repeat_by_column, StringType())("a", "b"))
+                df.select(self._pandas_udf(repeat_by_column, StringType())("a", "n"))
             )
-        # The all-NaN batch: interpreted masks it to NULL, and falling back preserves that.
-        self.assertEqual(([None], None), off)
-        self.assertEqual(off, on)
+        self.assertIs(_RAISED, off[0])
+        self.assertIn("TypeError", str(off[1]))
+        self._assert_falls_back(repeat_by_column, StringType(), df, "a", "n")
 
     def test_string_repeat_by_a_fractional_literal_falls_back(self):
         # A float literal (`s * 1.5`) is refused too: repeat by a fractional count has no
@@ -636,25 +661,39 @@ class PandasUDFTranspileRefusalTests(PandasUDFTranspileTestsMixin, ReusedSQLTest
             BooleanType(),
             self._longs(1, None, -1),
             "a",
-            expect_reason="a comparison",
+            expect_reason="an ordering comparison",
         )
-        self._assert_falls_back(equals_five, BooleanType(), self._longs(5, None), "a")
+        for func in (equals_five, not_equals_zero):
+            with self.subTest(func=func.__name__):
+                self._assert_falls_back(
+                    func,
+                    BooleanType(),
+                    self._longs(5, None),
+                    "a",
+                    expect_reason="an `==` / `!=` comparison",
+                )
 
     def test_is_none_falls_back(self):
-        # Interpreted this returns False for every row (the Series object is not None), so a
-        # rewrite to isnull(a) would change results rather than fix a bug.
+        # Interpreted this fails with UDF_RETURN_TYPE: `s is None` is a Python bool, not a
+        # Series. A rewrite to isnull(a) would turn that failure into values, which this suite
+        # protects. The same holds for `is not`.
+        for func, reason in ((is_none, "an `is` test"), (is_not_none, "an `is not` test")):
+            with self.subTest(func=func.__name__):
+                self._assert_falls_back(
+                    func, BooleanType(), self._longs(1, None), "a", expect_reason=reason
+                )
+
+    def test_none_guard_ternary_falls_back(self):
+        # Interpreted this returns `s` unchanged and never raises: the Series object is not
+        # None. A rewrite to CASE WHEN isnull(a) THEN 0 would turn NULLs into 0.
         self._assert_falls_back(
-            is_none,
-            BooleanType(),
-            self._longs(1, None),
-            "a",
-            expect_reason="`is` / `is not` test",
+            ternary_none_guard, LongType(), self._longs(1, None), "a", expect_reason="an `if`"
         )
 
     def test_control_flow_falls_back_and_still_raises(self):
         # `if <series>:` raises ValueError interpreted. The rewrite must not turn that into a
         # working query -- _assert_falls_back checks the failure survives.
-        for func in (branching, ternary_none_guard, logical_not, logical_and):
+        for func in (branching, logical_not, logical_and):
             with self.subTest(func=func.__name__):
                 self._assert_falls_back(func, LongType(), self._longs(1, None), "a")
 
@@ -753,10 +792,11 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
                 df = self.spark.createDataFrame(values, schema)
                 self._assert_matches_interpreted(modulo, return_type, df, "a", "b")
 
-    def test_modulo_overflow_boundary_raises_where_numpy_wraps(self):
+    def test_modulo_overflow_boundary_raises_where_numpy_is_exact(self):
         # The lowering is `sign(b) * pmod(sign(b) * a, abs(b))`, whose intermediate negation
-        # overflows for a = Long.MinValue with b < 0. Same class as the arithmetic overflow
-        # above, and already noted on the Mod lowering for the scalar eval types.
+        # overflows for a = Long.MinValue with b < 0. numpy returns the exact 0 there, so
+        # unlike the arithmetic overflow below the transpiled side raises on a valid input.
+        # Noted on the Mod lowering too, for the scalar eval types.
         interpreted, transpiled = self._pin_divergence(
             modulo, LongType(), self._mods((LONG_MIN, -1)), "a", "b"
         )
@@ -787,10 +827,17 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
             else:
                 self.assertEqual(([maximum + 1], None), transpiled)
 
+        # A literal too wide for the column's dtype: NumPy 2 refuses it, NumPy 1 widens the
+        # result's dtype (value-based casting) and agrees with the transpiled 1001.
+        import numpy as np
+
         df = self.spark.createDataFrame([(1,)], "a tinyint")
         interpreted, transpiled = self._pin_divergence(add_wide_literal, LongType(), df, "a")
-        self.assertIs(interpreted[0], _RAISED)
-        self.assertIn("OverflowError", str(interpreted[1]))
+        if int(np.__version__.split(".")[0]) >= 2:
+            self.assertIs(interpreted[0], _RAISED)
+            self.assertIn("OverflowError", str(interpreted[1]))
+        else:
+            self.assertEqual(([1001], None), interpreted)
         self.assertEqual(([1001], None), transpiled)
 
     def test_integer_overflow_raises_where_numpy_wraps(self):

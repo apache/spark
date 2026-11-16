@@ -706,14 +706,15 @@ object SQLConf {
         "UDF construction. Transpiled UDFS attempt to match the Python functionality but " +
         "may not be 100% equivalent. Some known differences include: overflows from input types " +
         "(you can precast to decimal to avoid), type coercion on comparison, and implicit " +
-        "returns. Applies to regular Python UDFs whether or not they are Arrow-optimized, " +
-        "except when spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled is set, " +
-        "which changes the values an Arrow-optimized UDF receives and so disables " +
-        "transpilation. Scalar pandas UDFs are transpiled only for element-wise bodies " +
-        "built from `+` `-` `*` `%`, unary `+`/`-` and `Series.isnull()` (and its aliases); " +
-        "a `*` repeating a string Series requires a literal repeat count. Anything else, " +
-        "including comparisons and any use of `if`, `and`, `or`, `not` or `is None`, falls " +
-        "back to interpreted Python, because those do not mean the same thing on a Series. " +
+        "returns. Applies to regular Python UDFs whether or not they are Arrow-optimized. " +
+        "Setting spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled changes the " +
+        "values an Arrow-optimized UDF receives and so disables transpilation of " +
+        "Arrow-optimized UDFs only. Scalar pandas UDFs are transpiled only for element-wise " +
+        "bodies built from `+` `-` `*` `%`, unary `+`/`-` and `Series.isnull()` (and its " +
+        "aliases); a `*` repeating a string Series requires a literal repeat count. " +
+        "Anything else, including comparisons and any use of `if`, `and`, `or`, `not` or " +
+        "`is None`, falls back to interpreted Python, because those do not mean the same " +
+        "thing on a Series. " +
         "Setting spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype=true disables " +
         "all scalar pandas UDF transpilation. " +
         "Where a transpiled pandas UDF does differ, it is because numpy " +

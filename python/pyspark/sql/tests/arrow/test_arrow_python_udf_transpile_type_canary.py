@@ -86,11 +86,12 @@ _PICKLED = PythonEvalType.SQL_BATCHED_UDF
 _ARROW = PythonEvalType.SQL_ARROW_BATCHED_UDF
 _PANDAS = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
-# Classes exported from pyspark.sql.types that are not usable column types: the abstract
-# root, StructField (a field descriptor rather than a type), and the bare UserDefinedType
-# base (its sqlType() raises NotImplementedError; real UDTs are user-authored subclasses
-# this module can't enumerate). None of these are in __all__, so _concrete_data_type_classes
-# never sees them anyway -- named here only so a reader doesn't wonder why they're missing.
+# Classes that are not usable column types. The abstract root DataType and StructField (a
+# field descriptor that subclasses it) ARE in pyspark.sql.types.__all__, so without this set
+# test_data_type_inventory_is_complete would demand samples for them. The bare
+# UserDefinedType base (its sqlType() raises NotImplementedError; real UDTs are
+# user-authored subclasses this module can't enumerate) is not exported and is named only
+# for completeness.
 _NOT_COLUMN_TYPES = frozenset({T.DataType, T.StructField, T.UserDefinedType})
 
 
@@ -215,16 +216,18 @@ _EXPECTED_RETURN_VERDICT = {
 # is reached.
 _ARROW_REJECTED_RETURN_TYPES = frozenset({"year_month_interval", "calendar_interval"})
 
-# Verdict per INPUT column type, pickled eval type, with the unannotated `null_probe` body.
-# boolean and binary are NO_TRANSPILE here but TRANSPILES as return types: an unannotated
-# parameter is only tried as numeric and string, so those columns match no category (see
-# test_annotated_parameters_widen_input_coverage). string_lcase is refused because the check
-# requires UTF8_BINARY -- under UTF8_LCASE 'abc' == 'ABC' is true where Python says False.
+# Verdict per RETURN type, scalar pandas eval type: the pickled table, except that the
+# return types Arrow cannot express are rejected.
 _EXPECTED_PANDAS_RETURN_VERDICT = {
     label: (REJECTED_BY_ARROW if label in _ARROW_REJECTED_RETURN_TYPES else verdict)
     for label, verdict in _EXPECTED_RETURN_VERDICT.items()
 }
 
+# Verdict per INPUT column type, pickled eval type, with the unannotated `null_probe` body.
+# boolean and binary are NO_TRANSPILE here but TRANSPILES as return types: an unannotated
+# parameter is only tried as numeric and string, so those columns match no category (see
+# test_annotated_parameters_widen_input_coverage). string_lcase is refused because the check
+# requires UTF8_BINARY -- under UTF8_LCASE 'abc' == 'ABC' is true where Python says False.
 _EXPECTED_INPUT_VERDICT = {
     "void": NO_TRANSPILE,
     "char": NOT_A_COLUMN_TYPE,
@@ -257,6 +260,7 @@ _EXPECTED_INPUT_VERDICT = {
     "geometry": NO_TRANSPILE,
 }
 
+# Verdict per INPUT column type, scalar pandas eval type: currently the pickled table.
 _EXPECTED_PANDAS_INPUT_VERDICT = dict(_EXPECTED_INPUT_VERDICT)
 
 # Parity fixture per TRANSPILES return type: an input column whose body result already
