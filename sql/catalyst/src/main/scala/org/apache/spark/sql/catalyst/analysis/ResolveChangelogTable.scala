@@ -177,7 +177,6 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     val project = Project(plan.output.filter(a => columnNames.contains(a.name)), plan)
     // Metadata availability must not depend on which post-processing passes were required.
     project.setTagValue(Project.hiddenOutputTag, Seq.empty[Attribute])
-    // A Project alone can be traversed when resolving missing attributes in filters or sorts.
     val boundary = SubqueryAlias(name, project)
     boundary.mergeTagsFrom(source)
     boundary
