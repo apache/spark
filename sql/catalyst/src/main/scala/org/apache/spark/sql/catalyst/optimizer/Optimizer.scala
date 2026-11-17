@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.util.regex.Pattern
-
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.util.Try
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{LogKeys}
@@ -45,7 +42,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -3225,7 +3221,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val following = conds.indices.tail.takeWhile(idx => conds(idx)._2.deterministic)
         // Over the aliases not computed yet, which a later pass inlines into a condition it
         // pushes once the projection on top computes them.
-        val notComputed = AttributeMap(aliasMap.toSeq.filterNot { case (attr, _) =>
+        lazy val notComputed = AttributeMap(aliasMap.toSeq.filterNot { case (attr, _) =>
           computed.contains(attr)
         })
         val followingCannotFail =
@@ -3296,33 +3292,17 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
   /**
    * Whether `e` cannot fail: `ExprUtils.canEvaluateUnconditionally`, also accepting LIKE and RLIKE
-   * with a literal pattern of at most 100 characters (UTF-16 code units) that is null or compiles,
-   * for RLIKE without `(`, `\` or `{`, which version 0 of the regex pattern cost estimate treats
-   * as expensive (SPARK-60731). This is not `Expression.isTotal` of LIKE and RLIKE, which would
-   * also apply to the other rules reading it and promise more than not failing.
+   * whose pattern `StringRegexExpression.cannotFailPattern` accepts, which version 0 of the regex
+   * pattern cost estimate treats as expensive (SPARK-60731). As in `canEvaluateUnconditionally`,
+   * the whole tree is checked once for being deterministic and having no subquery.
    */
-  private def cannotFail(e: Expression): Boolean = e match {
-    case r: Like => cannotFailPattern(r) && cannotFail(r.left)
-    case r: RLike => cannotFailPattern(r) && cannotFail(r.left)
-    case _ if e.children.isEmpty => ExprUtils.canEvaluateUnconditionally(e)
-    case _ => e.deterministic && ExprUtils.isTotalOperator(e) && e.children.forall(cannotFail)
-  }
+  private def cannotFail(e: Expression): Boolean =
+    e.deterministic && !e.containsPattern(PLAN_EXPRESSION) && cannotFailInternal(e)
 
-  private def cannotFailPattern(r: StringRegexExpression): Boolean = r.right match {
-    // A null pattern makes the result null.
-    case Literal(null, _) => true
-    case Literal(pattern: UTF8String, _) =>
-      // Java's regex engine recurses once per node of the pattern, once per repetition of a
-      // quantified group, and, for a `{}` quantifier or for `\R` or `\X`, each time the length of
-      // a match changes, such as for `.` over supplementary characters. So a long pattern, or such
-      // a quantifier over a long input, can overflow the stack. An RLIKE pattern without `(`, `\`
-      // or `{` has none of them, and the only quantifier of the regex LIKE translates to is `.*`,
-      // which loops instead.
-      val str = pattern.toString
-      str.length <= 100 &&
-        (r.isInstanceOf[Like] || !str.exists(c => c == '(' || c == '\\' || c == '{')) &&
-        Try(Pattern.compile(r.escape(str), r.collationRegexFlags)).isSuccess
-    case _ => false
+  private def cannotFailInternal(e: Expression): Boolean = e match {
+    case r: StringRegexExpression => r.cannotFailPattern && cannotFailInternal(r.left)
+    case _ if e.children.isEmpty => ExprUtils.canEvaluateUnconditionally(e)
+    case _ => ExprUtils.isTotalOperator(e) && e.children.forall(cannotFailInternal)
   }
 
   /**

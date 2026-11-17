@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PLAN_EXPRESSION, TreePattern}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -972,15 +973,16 @@ class FilterPushdownSuite extends PlanTest {
       // An alias the layer would compute that can fail: a regex whose pattern is not a literal,
       // does not compile, or has a quantified group, `\R` or a `{}` quantifier, which can
       // overflow the stack on a long input, a LIKE whose pattern is longer than 100 characters, a
-      // regex whose input can fail, a UDF, also under an operator that cannot fail, and a
-      // throwable alias.
+      // regex whose input can fail, a UDF, also under an operator that cannot fail, a throwable
+      // alias, and an expression with a subquery, even one that declares it cannot fail.
       val udfJ = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       val udfString = ScalaUDF((s: String) => s, StringType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       Seq(expensiveRLike("third"), $"e".rlike("["), $"e".rlike("(a|b)*c"), $"e".rlike("\\R*c"),
         $"e".rlike(".{0,99999}c"), $"e".like("_" * 101), udfString.rlike("^3"), udfJ, Not(udfJ),
-        If(literalRLike("^3"), Literal(true), raiseError)).foreach { failingJ =>
+        If(literalRLike("^3"), Literal(true), raiseError),
+        NoThrowPlanExpression(literalRLike("^3"))).foreach { failingJ =>
         val originalQuery = testStringRelation
           .select($"a", f as "f", g as "g", failingJ as "j")
           .where($"f" && Not($"g" === $"j") && $"j")
@@ -3682,4 +3684,16 @@ class FilterPushdownSuite extends PlanTest {
     assert(normalize(renamed) == NormalizeFloatingNumbers.normalize(renamed))
     unchanged($"x".double)
   }
+}
+
+/**
+ * Stands for a subquery expression with a child that declares it cannot fail, which none does
+ * yet: the split must still not evaluate it ahead of a condition (SPARK-60731).
+ */
+private case class NoThrowPlanExpression(child: Expression)
+  extends UnaryExpression with NoThrow with Unevaluable {
+  override def dataType: DataType = BooleanType
+  final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION)
+  override protected def withNewChildInternal(newChild: Expression): NoThrowPlanExpression =
+    copy(child = newChild)
 }
