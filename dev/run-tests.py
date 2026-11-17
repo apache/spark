@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 from collections.abc import Sequence
 from contextlib import contextmanager
 
@@ -36,6 +36,8 @@ from sparktestsupport.utils import (
     determine_modules_to_test,
     determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
+    parse_module_names,
+    resolve_test_modules,
 )
 
 
@@ -401,6 +403,14 @@ def run_sparkr_tests():
         print("Ignoring SparkR tests as R was not found in PATH")
 
 
+def parse_test_modules(value: str) -> list[modules.Module]:
+    try:
+        return resolve_test_modules(parse_module_names(value))
+    except ValueError as error:
+        # argparse drops ValueError text, so we wrap it as an ArgumentTypeError.
+        raise ArgumentTypeError(str(error))
+
+
 def parse_opts():
     parser = ArgumentParser(prog="run-tests")
     parser.add_argument(
@@ -419,7 +429,7 @@ def parse_opts():
     parser.add_argument(
         "-m",
         "--modules",
-        type=str,
+        type=parse_test_modules,
         default=None,
         help="A comma-separated list of modules to test "
         "(default: %s)" % ",".join(sorted([m.name for m in modules.all_modules])),
@@ -477,10 +487,7 @@ def main():
         sys.exit(2)
 
     should_only_test_modules = opts.modules is not None
-    test_modules = []
-    if should_only_test_modules:
-        str_test_modules = [m.strip() for m in opts.modules.split(",")]
-        test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
+    test_modules = opts.modules or []
 
     if not should_only_test_modules or modules.sparkr in test_modules:
         # If tests modules are specified, we will not run R linter.

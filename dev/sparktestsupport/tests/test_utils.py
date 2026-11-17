@@ -26,6 +26,7 @@ from sparktestsupport.utils import (
     determine_modules_to_test,
     determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
+    resolve_test_modules,
 )
 
 
@@ -137,6 +138,32 @@ class DetermineModulesToTestTests(unittest.TestCase):
         }
         result = determine_modules_to_test([modules.sql, modules.core], deduplicated=False)
         self.assertCountEqual([module.name for module in result], expected)
+
+
+class ResolveTestModulesTests(unittest.TestCase):
+    def test_resolves_known_names_in_all_modules_order(self):
+        self.assertEqual(
+            resolve_test_modules(["graphx", "core", "graphx"]),
+            [modules.core, modules.graphx],
+        )
+
+    def test_unknown_name_fails_with_clear_error(self):
+        with self.assertRaises(ValueError) as error:
+            resolve_test_modules(["core", "does-not-exist", "also-missing"])
+        message = str(error.exception)
+        self.assertIn("unrecognized module(s): 'also-missing', 'does-not-exist'", message)
+        supported = message.split("Supported modules: ", 1)[1]
+        self.assertIn("core", supported.split(", "))
+
+    def test_empty_string_is_quoted_in_the_error(self):
+        with self.assertRaises(ValueError) as error:
+            resolve_test_modules(["core", ""])
+        self.assertIn("unrecognized module(s): ''", str(error.exception))
+
+    def test_empty_request_fails(self):
+        with self.assertRaises(ValueError) as error:
+            resolve_test_modules([])
+        self.assertEqual(str(error.exception), "no module names were provided")
 
 
 class DetermineShellScriptTestGoalsTests(unittest.TestCase):
