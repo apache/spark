@@ -692,10 +692,8 @@ private[sql] object GroupPartitionsExec {
                   // reports `bucket(8, b + 1)` next to `bucket(8, id)`, or `b + 1` next to an
                   // identity `id`.
                   // Only the column argument is replaced; `reduced` keeps its own literal
-                  // parameters, e.g. the reduced bucket count. The partner it was reduced
-                  // together with gets the same argument shape, since the member that pairs
-                  // with this one on the other side has it too (`argumentShape` admits no
-                  // other); otherwise the two sides of one reduce stop sharing a key space.
+                  // parameters, e.g. the reduced bucket count, and `rewriteColumnSlots` gives
+                  // the partner it was reduced together with the same argument shape.
                   val argument = expr match {
                     case t: TransformExpression => t.columnSlots match {
                       case Seq(slot) => slot
@@ -704,8 +702,7 @@ private[sql] object GroupPartitionsExec {
                     }
                     case e => e
                   }
-                  reduced.rewriteColumnSlots(_ => argument).copy(reducedWith =
-                    reduced.reducedWith.map(TransformExpression.withColumnShape(_, argument)))
+                  reduced.rewriteColumnSlots(_ => argument)
                 case (expr, None) => expr
               }
             case None => projectedExpressions

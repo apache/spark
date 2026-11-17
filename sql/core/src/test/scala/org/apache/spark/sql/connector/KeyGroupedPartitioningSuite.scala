@@ -8222,7 +8222,11 @@ class KeyGroupedPartitioningSuite
   test("SPARK-50593: an unpartitioned side is shuffled onto integer truncate") {
     createIntTruncateTable("it6", 6)
     createTable("plain", columns, Array.empty)
-    val rows = (0 until 24).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
+    // Null ids among the shuffled rows: the shuffle evaluates truncate on each of them.
+    val rows = (0 until 24).flatMap { i =>
+      Seq(s"($i, 'v$i', CAST('2022-01-01' AS timestamp))",
+        s"(null, 'n$i', CAST('2022-01-01' AS timestamp))")
+    }
     sql(s"INSERT INTO testcat.ns.plain VALUES ${rows.mkString(", ")}")
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
       val df = joinOnId("it6", "plain")
@@ -8272,6 +8276,14 @@ class KeyGroupedPartitioningSuite
       Seq(Literal(null, StringType), Literal(3)))
     assert(nullKey.eval(InternalRow.empty) == null)
     assert(TruncateReducer(2).reduce(null) == null)
+    // The integer one is called with one reused row, so a null right after a value must not read
+    // as that value.
+    val intTruncate = TransformExpression(IntegerTruncateFunction,
+      Seq(org.apache.spark.sql.catalyst.expressions.BoundReference(0, IntegerType, nullable = true),
+        Literal(4)))
+    assert(intTruncate.eval(InternalRow(7)) == 4)
+    assert(intTruncate.eval(InternalRow(null)) == null)
+    assert(IntTruncateReducer(4).reduce(null) == null)
   }
 
   test("SPARK-50593: identical truncate widths trigger SPJ under the default config") {
@@ -8881,12 +8893,40 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-50593: a pair admitted through a reducer shuffles if the reducer is gone when " +
-      "asked again") {
-    // SecondAskFailingBucketFunction reduces when isCompatible asks and fails when
-    // reducersBothWays asks. The pair was admitted through the first answer, so merging the raw
-    // keys of bucket(16) and bucket(12) on the second would meet only keys 0 to 11: 12 of 48 rows.
-    withFunction(UnboundSecondAskFailingBucketFunction) {
+  test("SPARK-50593: a pair asks the connector once, whichever side asks") {
+    // isCompatible admits a pair and reducersBothWays reduces it; both read one decision, in
+    // either order, so the connector is asked once per direction.
+    val calls = new java.util.concurrent.atomic.AtomicInteger()
+    val counting = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "counting_bucket"
+      override def canonicalName(): String = name()
+      override def produceResult(input: InternalRow): Int = 0
+      override def reducer(
+          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+          otherFunc: ReducibleFunction[_, _],
+          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+          : Reducer[Int, Int] = {
+        calls.incrementAndGet()
+        BucketFunction.gcdReducer(
+          thisParams(0).value().asInstanceOf[Int], otherParams(0).value().asInstanceOf[Int])
+      }
+    }
+    val b8 = TransformExpression(counting, Seq(Literal(8), attr("id")))
+    val b4 = TransformExpression(counting, Seq(Literal(4), attr("id")))
+    assert(b8.isCompatible(b4) && b4.isCompatible(b8))
+    assert(b8.pairReducers(b4) == b4.pairReducers(b8).swap)
+    assert(calls.get() == 2, "one call per direction")
+  }
+
+  test("SPARK-50593: a pair is decided from one answer of the connector") {
+    // ChangingAnswerBucketFunction's bucket(12) side reduces when first asked and answers null
+    // after. The pair is admitted on the first answer, both sides reducing onto 4; reducing it on a
+    // later answer would reduce the bucket(16) side alone and merge it against the raw bucket(12)
+    // keys: 16 of 48 rows.
+    ChangingAnswerBucketFunction.reset()
+    withFunction(UnboundChangingAnswerBucketFunction) {
       val ids = (0 until 48).map(i => s"($i, 'v$i', CAST('2022-01-01' AS timestamp))")
       createTable("ask16", columns, Array(bucket(16, "id")))
       sql(s"INSERT INTO testcat.ns.ask16 VALUES ${ids.mkString(", ")}")
@@ -8966,8 +9006,8 @@ class KeyGroupedPartitioningSuite
     }.map(_.getMessage.getFormattedMessage)
       .filter(_.contains("declares other input types"))
     assert(differ.nonEmpty)
-    assert(differ.forall(_.contains("truncate(string)")), differ)
-    assert(!differ.exists(_.contains("V2 function days")), differ)
+    assert(differ.forall(_.contains(TruncateFunction.getClass.getName)), differ)
+    assert(!differ.exists(_.contains(DaysFunction.getClass.getName)), differ)
   }
 
   test("SPARK-50593: a connector failure is reported against the function whose code threw") {
@@ -9090,8 +9130,10 @@ class KeyGroupedPartitioningSuite
       override def name(): String = "default_name_bucket"
       override def produceResult(input: InternalRow): Int = 0
     }
-    val b8 = TransformExpression(defaultName, Seq(Literal(8), attr("id")))
-    val b4 = TransformExpression(defaultName, Seq(Literal(4), attr("id")))
+    // A pair is decided once per expression, so each check builds the transforms afresh, as a
+    // later planning pass does.
+    def b8: TransformExpression = TransformExpression(defaultName, Seq(Literal(8), attr("id")))
+    def b4: TransformExpression = TransformExpression(defaultName, Seq(Literal(4), attr("id")))
     val logs = transformExpressionLogs {
       (1 to 5).foreach(_ => assert(!b8.isCompatible(b4)))
     }
@@ -9100,6 +9142,9 @@ class KeyGroupedPartitioningSuite
     }
     assert(noReducer(Level.WARN) <= 1, "at most once per function")
     assert(noReducer(Level.DEBUG) == 10, "both directions, five times")
+    // Named by name() and class, not the canonical name, which is new on every call.
+    assert(logs.map(_.getMessage.getFormattedMessage).filter(_.contains("implements no reducer"))
+      .forall(_.contains("default_name_bucket")))
   }
 
   test("SPARK-50593: a reducer warning is logged once per function") {
@@ -9119,8 +9164,10 @@ class KeyGroupedPartitioningSuite
           otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
           : Reducer[Int, Int] = throw new IllegalStateException("reducer bug")
     }
-    val b8 = TransformExpression(throwing, Seq(Literal(8), attr("id")))
-    val b4 = TransformExpression(throwing, Seq(Literal(4), attr("id")))
+    // A pair is decided once per expression, so each check builds the transforms afresh, as a
+    // later planning pass does.
+    def b8: TransformExpression = TransformExpression(throwing, Seq(Literal(8), attr("id")))
+    def b4: TransformExpression = TransformExpression(throwing, Seq(Literal(4), attr("id")))
     val logs = transformExpressionLogs {
       (1 to 3).foreach(_ => assert(!b8.isCompatible(b4)))
     }

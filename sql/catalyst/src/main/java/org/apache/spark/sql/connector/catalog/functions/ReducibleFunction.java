@@ -94,8 +94,10 @@ public interface ReducibleFunction<I, O> {
    * deprecated {@code reducer(int, ReducibleFunction, int)} overload when both sides are
    * {@code bucket(n, col)} transforms of the same function with a non-null count. If every
    * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
-   * reducer" warning; any other exception, from either side's call, is logged and the pair is
-   * treated as not reducible, so the join shuffles unless the two transforms are the same.
+   * reducer" warning, or, when this overload was not asked because a literal's type differs from
+   * the declared one, a warning that says so; any other exception, from either side's call, is
+   * logged and the pair is treated as not reducible, so the join shuffles unless the two
+   * transforms are the same.
    * <p>
    * Examples:
    * <ul>

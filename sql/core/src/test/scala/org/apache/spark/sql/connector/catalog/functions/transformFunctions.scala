@@ -357,15 +357,18 @@ object UnboundDefaultNameLegacyBucketFunction extends UnboundFunction {
 }
 
 /**
- * A bucket that implements only the deprecated reducer and fails when `reducersBothWays` asks for
- * it, after `isCompatible` got an answer: a stand-in for a connector failure that does not repeat
- * on every call.
+ * A bucket that implements only the deprecated reducer, and whose `bucket(12)` side answers `null`
+ * on every call after its first: a stand-in for a connector whose answer for a pair changes
+ * between calls. Spark must decide such a pair from one answer. `reset()` before each use.
  */
-object SecondAskFailingBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+object ChangingAnswerBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  private val twelveSideCalls = new java.util.concurrent.atomic.AtomicInteger()
+  def reset(): Unit = twelveSideCalls.set(0)
+
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"
-  override def canonicalName(): String = "second_ask_failing_bucket"
+  override def canonicalName(): String = "changing_answer_bucket"
   override def toString: String = name()
   override def produceResult(input: InternalRow): Int = {
     Math.floorMod(input.getLong(1), input.getInt(0))
@@ -375,15 +378,18 @@ object SecondAskFailingBucketFunction extends ScalarFunction[Int] with Reducible
       thisNumBuckets: Int,
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
-    if (Thread.currentThread().getStackTrace.exists(_.getMethodName == "reducersBothWays")) {
-      throw new IllegalStateException("transient failure on the second probe")
+    if (thisNumBuckets == 12 && twelveSideCalls.incrementAndGet() > 1) {
+      null
+    } else if (otherFunc == this) {
+      BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets)
+    } else {
+      null
     }
-    if (otherFunc == this) BucketFunction.gcdReducer(thisNumBuckets, otherNumBuckets) else null
   }
 }
 
-object UnboundSecondAskFailingBucketFunction extends UnboundFunction {
-  override def bind(inputType: StructType): BoundFunction = SecondAskFailingBucketFunction
+object UnboundChangingAnswerBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = ChangingAnswerBucketFunction
   override def description(): String = name()
   override def name(): String = "bucket"
 }
@@ -808,14 +814,18 @@ case class TruncateReducer(width: Int) extends Reducer[UTF8String, UTF8String] {
  * the coarser width W2.
  */
 object IntegerTruncateFunction
-    extends ScalarFunction[Int]
-    with ReducibleFunction[Int, Int] {
+    extends ScalarFunction[Integer]
+    with ReducibleFunction[Integer, Integer] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "truncate"
   override def canonicalName(): String = "truncate(int)"
   override def toString: String = name()
-  override def produceResult(input: InternalRow): Int = truncate(input.getInt(0), input.getInt(1))
+  // A one-side shuffle onto a truncate layout evaluates this on every row, null keys included,
+  // and the row Spark passes is reused, so a null must be read as null, not as the last value.
+  // The result is boxed so that it can be null.
+  override def produceResult(input: InternalRow): Integer =
+    if (input.isNullAt(0)) null else truncate(input.getInt(0), input.getInt(1))
 
   /** `value` snapped down to a multiple of `width`, as the Iceberg spec truncates an integer. */
   def truncate(value: Int, width: Int): Int = value - (((value % width) + width) % width)
@@ -823,7 +833,7 @@ object IntegerTruncateFunction
   override def reducer(
       thisParams: Array[Literal[_]],
       otherFunc: ReducibleFunction[_, _],
-      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
+      otherParams: Array[Literal[_]]): Reducer[Integer, Integer] = {
     if (otherFunc == IntegerTruncateFunction && thisParams.length == 1 && otherParams.length == 1) {
       val thisWidth = thisParams(0).value().asInstanceOf[Int]
       val otherWidth = otherParams(0).value().asInstanceOf[Int]
@@ -843,8 +853,9 @@ object IntegerTruncateFunction
   }
 }
 
-case class IntTruncateReducer(width: Int) extends Reducer[Int, Int] {
-  override def reduce(value: Int): Int = IntegerTruncateFunction.truncate(value, width)
+case class IntTruncateReducer(width: Int) extends Reducer[Integer, Integer] {
+  override def reduce(value: Integer): Integer =
+    if (value == null) null else IntegerTruncateFunction.truncate(value, width)
   override def resultType(): DataType = IntegerType
   override def displayName(): String = s"truncate($width)"
 }

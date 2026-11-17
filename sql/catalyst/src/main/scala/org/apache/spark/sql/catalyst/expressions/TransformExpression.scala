@@ -140,13 +140,15 @@ case class TransformExpression(
    * cluster key and SPJ is silently lost. Use it for any retargeting of a partition transform.
    *
    * Callers: `KeyedShuffleSpec.rebuiltOver`, which rebuilds a transform over the other side's key,
-   * and `GroupPartitionsExec`, which rebuilds a reduced expression over each member's argument.
+   * and `GroupPartitionsExec`, which rebuilds a reduced expression over each member's argument. It
+   * goes through `withNewChildren`, so a reduced transform's partner follows the new argument's
+   * shape, as for any other rewrite.
    */
   def rewriteColumnSlots(rewriteColumn: Expression => Expression): TransformExpression =
-    copy(children = children.map {
+    withNewChildren(children.map {
       case l: Literal => l
       case c => rewriteColumn(c)
-    })
+    }).asInstanceOf[TransformExpression]
 
   /** The non-literal arguments. */
   def columnSlots: Seq[Expression] = children.filterNot(_.isInstanceOf[Literal])
@@ -313,8 +315,31 @@ case class TransformExpression(
    * Also `(None, None)` when either side has no identity, since a reduce could be neither recorded
    * (`reducedTogetherWith`) nor reported for it. `sameArgumentLayout` already refuses every such
    * pair; deciding it here keeps `isCompatible` and `reducersBothWays` from disagreeing on one.
+   *
+   * A pair is decided once: the answer is kept on both expressions, the other side's swapped, so
+   * `isCompatible`, which admits a pair, and `reducersBothWays`, which then reduces it, read the
+   * same one. Asking the connector again could get another answer, e.g. a failure that does not
+   * repeat, or `null` for one side where both reduced, and the reduce would then not be the one
+   * the pair was admitted on.
    */
   def pairReducers(other: TransformExpression)
+      : (Option[Reducer[_, _]], Option[Reducer[_, _]]) = {
+    val known = decidedPairs.get(other)
+    if (known != null) return known
+    val decided = decidePair(other)
+    decidedPairs.putIfAbsent(other, decided)
+    other.decidedPairs.putIfAbsent(this, decided.swap)
+    decidedPairs.get(other)
+  }
+
+  /**
+   * The pairs [[pairReducers]] decided, by the other side. Not serialized: an executor never
+   * decides a pair.
+   */
+  @transient private lazy val decidedPairs =
+    new ConcurrentHashMap[TransformExpression, (Option[Reducer[_, _]], Option[Reducer[_, _]])]()
+
+  private def decidePair(other: TransformExpression)
       : (Option[Reducer[_, _]], Option[Reducer[_, _]]) = {
     import TransformExpression._
     if (functionId.isEmpty || other.functionId.isEmpty) return (None, None)
@@ -412,14 +437,12 @@ case class TransformExpression(
     // A pair of the same function needs no reducer and pairs as it stands, so nothing its probe
     // reports is logged.
     outcome match {
-      case Threw(e, true) if !isSameFunction(other) => logReducerThrew(function, thisName, e)
-      case Unimplemented if !isSameFunction(other) => logNoReducer(function, thisName)
+      case Threw(e, true) if !isSameFunction(other) => logReducerThrew(function, e)
+      case Unimplemented if !isSameFunction(other) => logNoReducer(function)
       case LiteralTypesDiffer if !isSameFunction(other) =>
         // Name the side whose literal parameters do not have its declared types. That is this
         // side unless its own check passed; the other side's check ran only if it did.
-        val differs = if (literalParamsMatchInputTypes) other.function else function
-        logLiteralTypesDiffer(differs,
-          TransformExpression.orElse(differs.canonicalName(), differs.getClass.getName))
+        logLiteralTypesDiffer(if (literalParamsMatchInputTypes) other.function else function)
       case _ =>
     }
     outcome
@@ -701,17 +724,17 @@ object TransformExpression extends Logging {
   /**
    * Logs that `function`'s reducer threw: at WARN once per function class and kind of failure,
    * since every planning pass and AQE re-plan asks the pair again, and at DEBUG, with the stack
-   * trace, every time. Keyed by class rather than `canonicalName()`, whose default is a fresh name
-   * on every call.
+   * trace, every time. Keyed, and named, by `name()` and class rather than `canonicalName()`, whose
+   * default is a fresh name on every call; see `transformLabel`.
    */
-  private def logReducerThrew(function: BoundFunction, name: String, e: Throwable): Unit = {
+  private def logReducerThrew(function: BoundFunction, e: Throwable): Unit = {
     logOnce(s"reducerThrew:${function.getClass.getName}:${e.getClass.getName}",
         log.isWarnEnabled) {
-      logWarning(log"V2 function ${MDC(FUNCTION_NAME, name)} reducer threw an exception; " +
+      logWarning(log"The " + transformLabel(function) + log": reducer threw an exception; " +
         log"treating as not reducible: ${MDC(ERROR, orElse(e.toString, e.getClass.getName))}. " +
         log"Further failures of this function are logged at DEBUG.")
     }
-    logDebug(log"V2 function ${MDC(FUNCTION_NAME, name)} reducer threw an exception.", e)
+    logDebug(log"The " + transformLabel(function) + log": reducer threw an exception.", e)
   }
 
   /**
@@ -719,8 +742,8 @@ object TransformExpression extends Logging {
    * literals have, so Spark does not ask its generalized reducer: at WARN once per function class,
    * and at DEBUG.
    */
-  private def logLiteralTypesDiffer(function: BoundFunction, name: String): Unit = {
-    def line: MessageWithContext = log"V2 function ${MDC(FUNCTION_NAME, name)} declares other " +
+  private def logLiteralTypesDiffer(function: BoundFunction): Unit = {
+    def line: MessageWithContext = log"The " + transformLabel(function) + log" declares other " +
       log"input types than the transform's literal parameters have, so Spark does not offer them " +
       log"to reducer(Literal[], ReducibleFunction, Literal[]); treating as not reducible."
     logOnce(s"literalTypes:${function.getClass.getName}", log.isWarnEnabled)(logWarning(line))
@@ -728,8 +751,8 @@ object TransformExpression extends Logging {
   }
 
   /** Logs that `function` implements no reducer: at WARN once per function class, and at DEBUG. */
-  private def logNoReducer(function: BoundFunction, name: String): Unit = {
-    def line: MessageWithContext = log"V2 function ${MDC(FUNCTION_NAME, name)} implements no " +
+  private def logNoReducer(function: BoundFunction): Unit = {
+    def line: MessageWithContext = log"The " + transformLabel(function) + log" implements no " +
       log"reducer; treating as not reducible. Override " +
       log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ."
     logOnce(s"noReducer:${function.getClass.getName}", log.isWarnEnabled)(logWarning(line))
