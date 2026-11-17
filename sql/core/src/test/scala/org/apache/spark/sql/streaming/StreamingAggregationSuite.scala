@@ -63,6 +63,37 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
+  testWithAllStateVersions("KLL corrected checkpoint identities survive a rollback-mode cache") {
+    withTempDir { checkpoint =>
+      val rollback = SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key
+      val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+      val input = MemoryStream[Int]
+      val body = """SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+          |FROM VALUES (0L), (1L), (2L) AS t(id)""".stripMargin
+      def query(legacy: Boolean): DataFrame = withSQLConf(rollback -> legacy.toString) {
+        val result = input.toDF().agg(
+          sum(expr(s"($body)")).as("x"), sum(expr(s"($body)")).as("y"))
+        result.queryExecution.assertAnalyzed()
+        result
+      }
+      testStream(query(legacy = false), Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "false")),
+        AddData(input, 1, 2), CheckLastBatch(Row(6L, 6L)), StopStream)
+      val resumed = query(legacy = true)
+      val cached = withSQLConf(rollback -> "true") { sql(body).cache() }
+      try {
+        cached.collect()
+        testStream(resumed, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> "false")),
+          AddData(input, 3), CheckLastBatch(Row(9L, 9L)), StopStream)
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL legacy checkpoints preserve predicate input identities") {
     for (negation <- Seq("", "NOT ")) {
       withTempDir { checkpoint =>
@@ -74,8 +105,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
             |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
         def query(legacy: Boolean): DataFrame = withSQLConf(rollback -> legacy.toString) {
           val result = input.toDF().agg(
-            sum(expr(s"CAST($predicate AS INT)")).as("x"),
-            sum(expr(s"CAST($predicate AS INT)")).as("y"))
+            sum(expr(s"IF($predicate, value, 0)")).as("x"),
+            sum(expr(s"IF($predicate, value, 0)")).as("y"))
           result.queryExecution.assertAnalyzed()
           result
         }
@@ -84,11 +115,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         testStream(historical, Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(sharing -> "true")),
-          AddData(input, 3, 4), CheckLastBatch(Row(1L, 1L)), StopStream)
+          AddData(input, 3, 4),
+          CheckLastBatch(if (negation.isEmpty) Row(3L, 3L) else Row(4L, 4L)), StopStream)
         testStream(current, Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(sharing -> "false")),
-          AddData(input, 3, 4), CheckLastBatch(Row(2L, 2L)), StopStream)
+          AddData(input, 3, 4),
+          CheckLastBatch(if (negation.isEmpty) Row(6L, 6L) else Row(8L, 8L)), StopStream)
       }
     }
   }

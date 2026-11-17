@@ -615,12 +615,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // not introduced.
         val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
           !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !({
-          @scala.annotation.tailrec
-          def body(plan: LogicalPlan): LogicalPlan = plan match {
-            case scope: WithCTE => body(scope.plan)
-            case other => other
-          }
-          body(sub) match {
+          // A retained CTE scope is not protected by OptimizeSubqueries' direct Aggregate
+          // pattern. Correct its empty-input default during decorrelation before recursive
+          // optimization can remove the grouped aggregate introduced by that decorrelation.
+          sub match {
           // Handle count bug only if there exists lower level Aggs with count bugs. It does not
           // matter if the top level agg is count bug vulnerable or not, because:
           // 1. If the top level agg is count bug vulnerable, it can be handled in

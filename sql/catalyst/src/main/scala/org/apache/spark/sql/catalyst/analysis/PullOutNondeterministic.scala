@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 
 /**
  * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
@@ -68,26 +69,32 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         deterministicAggregate
       }
 
-    case join: LateralJoin if join.condition.exists(_.exists {
-        case scalar: ScalarSubquery =>
-          ValidateSubqueryExpression.isIndependentKllScalar(scalar)
-        case _ => false
-      }) =>
+    case join: LateralJoin if join.condition.exists(_.containsPattern(SCALAR_SUBQUERY)) =>
+      val classified = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
+      def independent(scalar: ScalarSubquery): Boolean = {
+        val cached = classified.get(scalar.plan)
+        if (cached != null) cached.booleanValue() else {
+          val result = ValidateSubqueryExpression.isIndependentKllScalar(scalar)
+          classified.put(scalar.plan, result)
+          result
+        }
+      }
       val scalars = join.condition.toSeq.flatMap(_.collect {
-        case scalar: ScalarSubquery
-            if ValidateSubqueryExpression.isIndependentKllScalar(scalar) => scalar
+        case scalar: ScalarSubquery if independent(scalar) => scalar
       })
-      validateNondeterministicSubqueries(join, scalars)
-      val keys = new NondeterministicExpressionCollection.ExpressionKeys
-      val bindings =
-        NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
-      val condition = join.condition.map(_.transformDown {
-        case scalar: ScalarSubquery if bindings.containsKey(keys(scalar)) =>
-          bindings.get(keys(scalar)).toAttribute
-      })
-      Project(join.output, join.copy(
-        left = NondeterministicExpressionCollection.project(join.left, bindings, keys),
-        condition = condition))
+      if (scalars.isEmpty) join else {
+        validateNondeterministicSubqueries(join, scalars)
+        val keys = new NondeterministicExpressionCollection.ExpressionKeys
+        val bindings =
+          NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
+        val condition = join.condition.map(_.transformDown {
+          case scalar: ScalarSubquery if bindings.containsKey(keys(scalar)) =>
+            bindings.get(keys(scalar)).toAttribute
+        })
+        Project(join.output, join.copy(
+          left = NondeterministicExpressionCollection.project(join.left, bindings, keys),
+          condition = condition))
+      }
 
     case join: Join if join.condition.exists(_.exists {
         case scalar: ScalarSubquery => !scalar.deterministic && !scalar.isCorrelated
@@ -117,10 +124,32 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         } else expression.children.foreach(collect)
       }
       join.condition.foreach(collect)
+      val destinations = new java.util.IdentityHashMap[LogicalPlan, java.lang.Integer]
+      def destination(child: LogicalPlan, references: AttributeSet): Int = child match {
+        case alias: SubqueryAlias => destination(alias.child, references)
+        case projection: Project if projection.projectList.forall(_.isInstanceOf[Attribute]) =>
+          destination(projection.child, references)
+        case inner: Join
+            if inner.joinType.isInstanceOf[org.apache.spark.sql.catalyst.plans.InnerLike] &&
+              inner.hint == JoinHint.NONE =>
+          val next = if (references.nonEmpty && references.subsetOf(inner.right.outputSet)) {
+            inner.right
+          } else inner.left
+          destination(next, references)
+        case other =>
+          val cached = destinations.get(other)
+          if (cached != null) cached.intValue() else {
+            val id = destinations.size()
+            destinations.put(other, id)
+            id
+          }
+      }
+      // References to one scalar can belong to different relations within the same join input.
+      // Share an alias at its actual destination, keeping each selective join edge independent.
       val leftBindings = mutable.LinkedHashMap.empty[
-        NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
+        (NondeterministicExpressionCollection.ExpressionKey, Int), NamedExpression]
       val rightBindings = mutable.LinkedHashMap.empty[
-        NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
+        (NondeterministicExpressionCollection.ExpressionKey, Int), NamedExpression]
       val referenceSets = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
       val rightOutput = join.right.outputSet
       def rewrite(expression: Expression, references: AttributeSet): Expression = expression match {
@@ -130,7 +159,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
           val side = if (references.nonEmpty && references.subsetOf(rightOutput)) {
             rightBindings
           } else leftBindings
-          val binding = side.getOrElseUpdate(key, {
+          val input = if (side eq rightBindings) join.right else join.left
+          val binding = side.getOrElseUpdate((key, destination(input, references)), {
             // One scalar identity may occur in both equi-key operands. Keep attributes local to
             // each input while preserving the scalar's original identity and physical reuse policy.
             val alias = nondeterToAttr.get(key).newInstance()

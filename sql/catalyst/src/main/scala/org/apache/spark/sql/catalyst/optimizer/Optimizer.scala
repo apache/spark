@@ -2665,21 +2665,34 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         if fields.exists(!_.deterministic) &&
           fields.forall(e => e.deterministic || isAggregateScalarBinding(e)) &&
           canPushThroughCondition(grandChild, condition) =>
-      val renames = fields.collect {
-        case alias @ Alias(attribute: Attribute, _) => alias.exprId -> attribute
+      val aliases = fields.collect {
+        case alias: Alias if alias.deterministic => alias.exprId -> alias.child
       }.toMap
-      def translate(predicate: Expression): Expression = {
-        predicate.transformDownWithReferenceEquality {
-          case attribute: Attribute if renames.contains(attribute.exprId) =>
-            renames(attribute.exprId)
-        }
-      }
       val (push, stay) = splitConjunctivePredicates(condition).partition { predicate =>
         predicate.deterministic && !predicate.throwable &&
-          translate(predicate).references.subsetOf(grandChild.outputSet)
+          predicate.references.forall { attribute =>
+            grandChild.outputSet.contains(attribute) || aliases.get(attribute.exprId).exists {
+              expression => !expression.throwable &&
+                expression.references.subsetOf(grandChild.outputSet)
+            }
+          }
       }
       if (push.isEmpty) f else {
-        val filtered = project.copy(child = Filter(push.map(translate).reduceLeft(And), grandChild))
+        // Let the ordinary deterministic Project path own alias substitution and expensive
+        // expression splitting. Avoid translating each predicate once here and once again below.
+        val deterministicAliases = fields.collect { case alias: Alias if alias.deterministic =>
+          alias
+        }
+        val filtered = if (push.forall(_.references.subsetOf(grandChild.outputSet))) {
+          project.copy(child = Filter(push.reduceLeft(And), grandChild))
+        } else {
+          val lower = Project(grandChild.output ++ deterministicAliases, grandChild)
+          val outputs = fields.map {
+            case alias: Alias if alias.deterministic => alias.toAttribute
+            case other => other
+          }
+          Project(outputs, Filter(push.reduceLeft(And), lower))
+        }
         stay.reduceLeftOption(And).map(Filter(_, filtered)).getOrElse(filtered)
       }
 

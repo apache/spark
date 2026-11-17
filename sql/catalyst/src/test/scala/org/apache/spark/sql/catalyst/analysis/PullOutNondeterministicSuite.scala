@@ -30,6 +30,30 @@ import org.apache.spark.sql.types.{BinaryType, DoubleType}
  */
 class PullOutNondeterministicSuite extends AnalysisTest {
 
+  test("one scalar identity retains both selective inner join edges") {
+    val a = $"a".long
+    val b = $"b".long
+    val x = $"x".long
+    val y = $"y".long
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchAggBigint(Literal(1L)).toAggregateExpression().as("sketch")))
+    val value = KllSketchGetNBigint(scalar)
+    val left = Join(LocalRelation(a), LocalRelation(b), Cross, None, JoinHint.NONE)
+    val original = Join(left, LocalRelation(x, y), Inner,
+      Some(And(EqualTo(Add(a, value), x), EqualTo(Add(b, value), y))), JoinHint.NONE)
+    val pulled = PullOutNondeterministic(original).asInstanceOf[Project]
+      .child.asInstanceOf[Join]
+    val component = pulled.left.asInstanceOf[Join]
+    val condition = pulled.condition.get.asInstanceOf[And]
+    assert(condition.left.references.subsetOf(component.left.outputSet ++ AttributeSet(Seq(x))))
+    assert(condition.right.references.subsetOf(component.right.outputSet ++ AttributeSet(Seq(y))),
+      pulled)
+    val identities = pulled.collect { case p: Project => p.projectList.flatMap(_.collect {
+      case scalar: ScalarSubquery => scalar.exprId
+    }) }.flatten
+    assert(identities.nonEmpty && identities.forall(_ == scalar.exprId))
+  }
+
   test("checkpoint preparation reconciles compiler provenance by binding identity") {
     val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
     val original = PullOutNondeterministic(r.groupBy(scalar)(count(Literal(1)).as("n")))

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllSketchAggBigint, Sum}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Join, JoinHint, LocalRelation, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Join, JoinHint, LateralJoin, LocalRelation, OneRowRelation}
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
@@ -175,6 +175,30 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     override lazy val canonicalized: Expression = this
     override protected def withNewChildrenInternal(children: IndexedSeq[Expression]): Expression =
       copy(child = children.head)
+  }
+
+  test("lateral extraction classifies a repeated scalar plan once") {
+    def work(width: Int): Int = {
+      val visits = new AtomicInteger
+      val expression = (1 to 32).foldLeft[Expression](
+        KllSketchAggBigint(Literal(1L)).toAggregateExpression()) { (child, _) =>
+        Counted(child, visits)
+      }
+      val scalar = ScalarSubquery(OneRowRelation().groupBy()(expression.as("s")))
+      val value = $"value".binary
+      val condition = Seq.fill(width)(EqualTo(value, scalar)).reduceLeft[Expression](And)
+      val plan = LateralJoin(LocalRelation(value), LateralSubquery(OneRowRelation()),
+        Inner, Some(condition))
+      plan.resolved
+      scalar.plan.treePatternBits
+      scalar.canonicalized
+      visits.set(0)
+      PullOutNondeterministic(plan)
+      visits.get
+    }
+    val small = work(1)
+    val large = work(32)
+    assert(large <= small * 4, s"one=$small visits, repeated=$large visits")
   }
 
   test("legacy restoration does not revisit already expanded binding values") {

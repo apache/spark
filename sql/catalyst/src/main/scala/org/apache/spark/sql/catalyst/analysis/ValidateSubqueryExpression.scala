@@ -249,14 +249,24 @@ object ValidateSubqueryExpression
       case join: Join => join.expressions.forall(
         ExprUtils.isDeterministicAfterPredicateSubqueryRewrite)
       case join: AsOfJoin =>
-        join.copy(condition = None).expressions.forall(_.deterministic) &&
-          join.condition.forall(_.transformDownWithReferenceEquality {
+        val checked = new java.util.IdentityHashMap[Expression, Expression]
+        def rewritten(expression: Expression): Expression = {
+          val cached = checked.get(expression)
+          if (cached != null) return cached
+          val children = expression.mapChildrenWithReferenceEquality(rewritten)
+          val result = children match {
             case scalar: ScalarSubquery if isIndependentKllScalar(scalar) =>
               Literal.default(scalar.dataType)
             case exists: Exists if isIndependentKllSubquery(exists) => Literal.TrueLiteral
             case in: InSubquery if isIndependentKllSubquery(in.query) &&
-                in.values.forall(deterministicWithoutKllRandomness) => Literal.TrueLiteral
-          }.deterministic)
+                in.values.forall(_.deterministic) => Literal.TrueLiteral
+            case other => other
+          }
+          checked.put(expression, result)
+          result
+        }
+        join.copy(condition = None).expressions.forall(_.deterministic) &&
+          join.condition.forall(expression => rewritten(expression).deterministic)
       case _ => false
     }
 

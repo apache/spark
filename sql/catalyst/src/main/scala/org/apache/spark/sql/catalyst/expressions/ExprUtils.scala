@@ -195,7 +195,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   private[sql] def isDeterministicAfterSubqueryExtraction(
       expression: Expression): Boolean = new SubqueryExtractionDeterminism().apply(expression)
 
-  private[sql] final class SubqueryExtractionDeterminism {
+  private[sql] final class SubqueryExtractionDeterminism(extractScalars: Boolean = true) {
     // Function resolution and the single-pass analyzer validate before the post hoc extraction.
     // Rewrite each expression once. A recursive transform at each IN operand would walk
     // rejected descendants again even if their Boolean result had already been memoized.
@@ -204,7 +204,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       val cached = checked.get(expr)
       if (cached != null) return cached
       val result = if (expr.deterministic) expr else expr match {
-        case scalar: ScalarSubquery =>
+        case scalar: ScalarSubquery if extractScalars =>
           Literal.create(null, scalar.dataType)
         case _: Exists => Literal.TrueLiteral
         case in: InSubquery =>
@@ -219,10 +219,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   }
 
   private[sql] def isDeterministicAfterPredicateSubqueryRewrite(expression: Expression): Boolean = {
-    expression.deterministic || expression.transformDownWithReferenceEquality {
-      case _: Exists => Literal.TrueLiteral
-      case in: InSubquery if in.values.forall(_.deterministic) => Literal.TrueLiteral
-    }.deterministic
+    new SubqueryExtractionDeterminism(extractScalars = false).apply(expression)
   }
 
   def assertValidAggregation(

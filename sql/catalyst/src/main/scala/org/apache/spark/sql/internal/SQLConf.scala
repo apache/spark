@@ -4087,6 +4087,7 @@ object SQLConf {
         "CTE evaluations or share independent aggregates. Micro-batch optimization instead uses " +
         "the sharing mode recorded in its checkpoint.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

@@ -134,19 +134,10 @@ class IncrementalExecution(
    */
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
 
-  /**
-   * See [SPARK-18339]
-   * Walk the optimized logical plan and replace CurrentBatchTimestamp
-   * with the desired literal
-   */
-  override
-  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
-    // Performing streaming specific pre-optimization.
-    val preOptimized = withCachedData.transform {
-      // We eliminate the "marker" node for writer on DSv1 as it's only used as representation
-      // of sink information.
-      case w: WriteToMicroBatchDataSourceV1 => w.child
-    }
+  // Reconcile checkpoint semantics before cache substitution can hide static KLL producers.
+  // Both cache matching and extracted scalar identities must use the checkpoint's mode.
+  override lazy val normalized: LogicalPlan = {
+    val preOptimized = super.normalized
     // Checkpoints encode aggregate buffers by ordinal. Their recorded sharing mode takes
     // precedence over the analysis/batch rollback setting captured on KLL expressions.
     val legacySharing = sparkSession.sessionState.conf.getConf(
@@ -179,8 +170,8 @@ class IncrementalExecution(
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
     }
-    // Cache substitution can remove the KLL plan before its mode is rebound. The original
-    // compiler binding identities still require legacy restoration in that case.
+    // Retain original compiler identities even if custom normalization replaces a producer
+    // or its provenance before checkpoint preparation.
     val originalBindings = if (legacySharing) {
       NondeterministicExpressionCollection.extractedBindingIds(logicalPlan)
     } else Set.empty[ExprId]
@@ -265,7 +256,21 @@ class IncrementalExecution(
     } else {
       adjusted
     }
-    val optimized = sparkSession.sessionState.optimizer.executeAndTrack(optimizerInput,
+    optimizerInput
+  }
+
+  /**
+   * See [SPARK-18339]
+   * Walk the optimized logical plan and replace CurrentBatchTimestamp
+   * with the desired literal
+   */
+  override
+  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
+    val preOptimized = withCachedData.transform {
+      // Eliminate the DSv1 writer marker before streaming optimization.
+      case w: WriteToMicroBatchDataSourceV1 => w.child
+    }
+    val optimized = sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
       tracker).transformAllExpressionsWithPruning(
       _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>

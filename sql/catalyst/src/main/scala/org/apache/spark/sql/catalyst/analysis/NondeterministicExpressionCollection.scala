@@ -100,6 +100,7 @@ object NondeterministicExpressionCollection {
 
   private[analysis] class ExpressionKeys {
     private val summaries = new IdentityHashMap[Expression, SubqueryIdentities]
+    private val stagingRequirements = new IdentityHashMap[Expression, java.lang.Boolean]
 
     private def subqueryIds(expression: Expression): SubqueryIdentities = {
       val cached = summaries.get(expression)
@@ -117,6 +118,22 @@ object NondeterministicExpressionCollection {
       ids
     }
 
+    def requiresSubqueryStaging(expression: Expression): Boolean = {
+      if (!expression.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+        return false
+      }
+      val cached = stagingRequirements.get(expression)
+      if (cached != null) return cached.booleanValue()
+      val required = expression match {
+        case subquery: SubqueryExpression => !subquery.deterministic
+        // Even a deterministic IN query can have random operands that need input-row staging.
+        case in: InSubquery => !in.deterministic
+        case other => other.children.exists(requiresSubqueryStaging)
+      }
+      stagingRequirements.put(expression, required)
+      required
+    }
+
     def apply(expression: Expression): ExpressionKey = {
       // Preserve analyzer bindings, including subqueries inside a collected UDF. This does not
       // define physical reuse equivalence: physical subquery/exchange canonicalization can still
@@ -131,7 +148,19 @@ object NondeterministicExpressionCollection {
     }
   }
 
+  private def guardedSubqueries(expression: Expression): Boolean = {
+    val guarded = expression match {
+      case _: ConditionalExpression | _: And | _: Or => true
+      case binary: BinaryExpression => binary.left.nullable
+      case _ => false
+    }
+    guarded && !expression.deterministic && expression.containsAnyPattern(
+      SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)
+  }
+
   private val bindingRoots: PartialFunction[Expression, Expression] = {
+    // Bind the evaluation guard as a whole; its descendants must not become unconditional roots.
+    case expression if guardedSubqueries(expression) => expression
     case expression: Nondeterministic => expression
     case scalar: ScalarSubquery if !scalar.deterministic => scalar
     case exists: Exists if !exists.deterministic => exists
@@ -173,7 +202,7 @@ object NondeterministicExpressionCollection {
         def collect(expression: Expression): Unit = {
           if (visited.put(expression, true) == null) {
             bindingRoots.lift(expression).foreach(leafNondeterministic += _)
-            expression.children.foreach(collect)
+            if (!guardedSubqueries(expression)) expression.children.foreach(collect)
           }
         }
         collect(expr)
@@ -223,6 +252,8 @@ object NondeterministicExpressionCollection {
             conditional.withNewAlwaysEvaluatedInputs(conditional.alwaysEvaluatedInputs.map(replace))
           case And(left, right) => And(replace(left), right)
           case Or(left, right) => Or(replace(left), right)
+          case binary: BinaryExpression if binary.left.nullable =>
+            binary.withNewChildren(Seq(replace(binary.left), binary.right))
           case other => other.mapChildrenWithReferenceEquality(replace)
         }
       }
@@ -231,6 +262,10 @@ object NondeterministicExpressionCollection {
       val replacement = binding match {
         case alias: Alias =>
           val child = alias.child match {
+            // Ordinary nondeterministic UDFs retain their historical single Project. Dependency
+            // layers are needed only for the subqueries introduced by this extraction path.
+            case expression if !keys.requiresSubqueryStaging(expression) => expression
+            case expression if guardedSubqueries(expression) => expression
             // HandleNullInputsForUDF adds its guard after extraction in iterative analysis.
             // Keep all arguments under that future guard, including throwable random arguments.
             case udf: ScalaUDF if udf.inputPrimitives.zip(udf.children).exists {

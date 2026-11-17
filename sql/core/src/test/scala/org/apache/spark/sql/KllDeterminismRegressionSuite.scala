@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.{FileSourceScanExec, ProjectExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{expr, udf}
@@ -30,6 +31,128 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+
+  test("nullable arithmetic preserves the evaluation domain of random dependencies") {
+    withUserDefinedFunction("boxed_kll_identity" -> true) {
+      spark.udf.register("boxed_kll_identity", (value: java.lang.Double) => value)
+      for (legacy <- Seq(false, true); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY");
+          kll <- Seq("", s" + 0D * $scalar")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codegen, SQLConf.ANSI_ENABLED.key -> "true") {
+          checkAnswer(sql(s"""SELECT count(*) FROM range(2) GROUP BY boxed_kll_identity(
+              |IF(id = 0, CAST(NULL AS DOUBLE), 1D) +
+              |element_at(shuffle(array(1D / id, 2D)), 1)$kll)""".stripMargin),
+            Seq(Row(1L), Row(1L)))
+        }
+      }
+    }
+  }
+
+  test("KLL-dependent UDFs retain their enclosing conditional guard") {
+    withUserDefinedFunction("guarded_kll_throw" -> true) {
+      spark.udf.register("guarded_kll_throw", (bytes: Array[Byte]) => {
+        require(bytes.isEmpty, "guarded UDF was evaluated")
+        0L
+      })
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(sql("""SELECT count(*) FROM range(3) GROUP BY CASE WHEN id < 0 THEN
+            |guarded_kll_throw(IF(id < 0,
+            |(SELECT kll_sketch_agg_bigint(id) FROM range(10)), X'00')) ELSE 0 END
+            |""".stripMargin), Row(3L))
+      }
+    }
+  }
+
+  test("ordinary nondeterministic UDF chains retain one extraction projection") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val identity = udf((value: String) => value).asNondeterministic()
+      val input = spark.range(3).selectExpr("CAST(id AS STRING) AS value")
+      val deterministicScalar = expr("""concat(value,
+          |(SELECT CAST(count(*) AS STRING) FROM VALUES (0) AS t(id)))""".stripMargin)
+      for (initial <- Seq(input("value"), deterministicScalar)) {
+        val argument = (1 to 4).foldLeft(initial) { (child, _) => identity(child) }
+        val query = input.groupBy(argument).count()
+        val projects = query.queryExecution.executedPlan.collect { case p: ProjectExec => p }
+        assert(projects.size == 1, query.queryExecution.toString)
+        checkAnswer(query.select("count"), Seq.fill(3)(Row(1L)))
+      }
+    }
+  }
+
+  for (asof <- Seq(false, true)) {
+    test(s"nested KLL predicate operands retain JOIN analysis: asof=$asof") {
+      val exists = "EXISTS (SELECT kll_sketch_agg_bigint(id) " +
+        "FROM VALUES (0L), (1L) AS t(id))"
+      val bools = """SELECT true FROM
+          |(SELECT kll_sketch_agg_bigint(id) AS s
+          |FROM VALUES (0L), (1L) AS t(id)) q WHERE s IS NOT NULL
+          |""".stripMargin
+      for (singlePass <- Seq(false, true)) {
+        withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          if (!asof) {
+            QueryTest.checkAnswer(sql(s"""SELECT l.id, r.id FROM
+                |VALUES (0L), (1L) AS l(id) JOIN VALUES (0L), (1L) AS r(id)
+                |ON ($exists) IN ($bools)""".stripMargin),
+              Seq(Row(0L, 0L), Row(0L, 1L), Row(1L, 0L), Row(1L, 1L)), checkToRDD = false)
+          } else {
+            QueryTest.checkAnswer(sql(s"""SELECT l.k, r.k FROM VALUES (3), (4) AS l(k)
+                |ASOF JOIN VALUES (0), (1) AS r(k) MATCH_CONDITION (l.k >= r.k)
+                |ON $scalar IN (SELECT $scalar)""".stripMargin),
+              Seq(Row(3, 1), Row(4, 1)), checkToRDD = false)
+          }
+        }
+      }
+    }
+  }
+
+  test("retained KLL CTEs preserve COUNT zero after constant-empty optimization") {
+    checkAnswer(sql("""SELECT o.id, (WITH k AS
+        |(SELECT id, kll_sketch_agg_bigint(id) AS s FROM range(2) GROUP BY id)
+        |SELECT count(*) FROM k a JOIN k b ON a.id = b.id
+        |WHERE a.id = o.id AND 1 = 2) AS c FROM range(1) o""".stripMargin), Row(0L, 0L))
+  }
+
+  test("persisted KLL view bodies inherit caller rollback when the saved key is absent") {
+    val key = SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key
+    val correlated = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(i.id))
+        |FROM VALUES (0L), (1L) AS i(id) WHERE o.id >= 0)""".stripMargin
+    withView("old_kll_rollback_view") {
+      withSQLConf(key -> "true") {
+        sql(s"""CREATE VIEW old_kll_rollback_view AS SELECT $correlated AS a,
+            |$correlated AS b FROM VALUES (0), (1) AS o(id) GROUP BY 1""".stripMargin)
+        val catalog = spark.sessionState.catalog
+        val table = catalog.getTableMetadata(TableIdentifier("old_kll_rollback_view"))
+        catalog.alterTable(table.copy(properties = table.properties.filterNot {
+          case (property, _) => property.endsWith(key)
+        }))
+        checkAnswer(spark.table("old_kll_rollback_view"), Row(2L, 2L))
+      }
+    }
+  }
+
+  test("computed siblings retain KLL-independent partition pruning") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(8).selectExpr("id", "IF(id % 2 = 0, 'a', 'b') AS p")
+          .write.partitionBy("p").parquet(path.getAbsolutePath)
+        withTempView("computed_kll_pruning") {
+          spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("computed_kll_pruning")
+          val query = sql(s"""SELECT p2, n FROM (SELECT upper(p) AS p2,
+              |$scalar AS n FROM computed_kll_pruning) q WHERE p2 = 'A'""".stripMargin)
+          val scans = query.queryExecution.sparkPlan.collect { case s: FileSourceScanExec => s }
+          assert(scans.size == 1)
+          assert(scans.head.selectedPartitions.filePartitionIterator
+            .map(_.values.getUTF8String(0).toString).toSet == Set("a"),
+            query.queryExecution.toString)
+          checkAnswer(query, Seq.fill(4)(Row("A", 3L)))
+        }
+      }
+    }
+  }
 
   test("KLL join decoders remain inside dynamic conditional guards") {
     withTempView("guarded_kll_left", "guarded_kll_right") {
