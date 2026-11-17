@@ -48,7 +48,7 @@ import org.apache.spark.util.SizeEstimator
  */
 private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter with HasFeaturesCol
   with HasSeed with HasPredictionCol with HasWeightCol with HasProbabilityCol with HasTol
-  with HasAggregationDepth {
+  with HasAggregationDepth with HasIntermediateStorageLevel {
 
   /**
    * Number of independent Gaussians in the mixture model. Must be greater than 1. Default: 2.
@@ -447,6 +447,11 @@ class GaussianMixture @Since("2.0.0") (
   @Since("3.0.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
 
+  /** @group expertSetParam */
+  @Since("4.4.0")
+  def setIntermediateStorageLevel(value: String): this.type =
+    set(intermediateStorageLevel, value)
+
   /**
    * Number of samples per cluster to use when initializing Gaussians.
    */
@@ -467,7 +472,7 @@ class GaussianMixture @Since("2.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, probabilityCol, weightCol, k, maxIter,
-      seed, tol, aggregationDepth)
+      seed, tol, aggregationDepth, intermediateStorageLevel)
     instr.logNumFeatures(numFeatures)
 
     val instances = dataset.select(
@@ -477,7 +482,9 @@ class GaussianMixture @Since("2.0.0") (
      .setName("training instances")
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) { instances.persist(StorageLevel.MEMORY_AND_DISK) }
+    if (handlePersistence) {
+      instances.persist(StorageLevel.fromString($(intermediateStorageLevel)))
+    }
     // TODO: SPARK-15785 Support users supplied initial GMM.
     val (weights, gaussians) = initRandom(instances, $(k), numFeatures)
     val (logLikelihood, iteration) = trainImpl(instances, weights, gaussians, numFeatures, instr)

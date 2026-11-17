@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
+import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.functions.{col, first}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -218,6 +220,37 @@ class ReuseExchangeAndSubquerySuite extends SharedSparkSession with AdaptiveSpar
 
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           assert(df.collect().map(_.getLong(0)).sorted.toSeq === (3L until 100L by 10))
+        }
+      }
+    }
+  }
+
+  Seq(false, true).foreach { aqeEnabled =>
+    test(s"SPARK-61818: exchange reuse across identical existence joins (AQE: $aqeEnabled)") {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        withTempView("t", "s") {
+          spark.range(100).selectExpr("id % 10 AS k", "id AS x").createOrReplaceTempView("t")
+          spark.range(5).selectExpr("id AS k").createOrReplaceTempView("s")
+          // `InlineCTE` inlines the CTE once per reference, and `RewritePredicateSubquery` then
+          // builds an `ExistenceJoin` with a fresh `exists` attribute in each copy.
+          val df = sql(
+            """
+              |WITH cte AS (
+              |  SELECT k, x FROM t WHERE x > 50 OR EXISTS (SELECT 1 FROM s WHERE s.k = t.k)
+              |)
+              |SELECT * FROM cte c1 JOIN cte c2 ON c1.x = c2.x
+              |""".stripMargin)
+
+          checkAnswer(df, (0L until 100L).filter(x => x > 50 || x % 10 < 5)
+            .map(x => Row(x % 10, x, x % 10, x)))
+          val plan = df.queryExecution.executedPlan
+          val reused = collectWithSubqueries(plan) { case r: ReusedExchangeExec => r }
+          assert(reused.exists(_.child.exists {
+            case j: BaseJoinExec => j.joinType.isInstanceOf[ExistenceJoin]
+            case _ => false
+          }), s"expected the exchange over the existence join to be reused:\n$plan")
         }
       }
     }

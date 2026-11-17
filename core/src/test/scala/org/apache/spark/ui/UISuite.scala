@@ -19,6 +19,7 @@ package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
 import java.net.{URI, URL}
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 import scala.io.Source
@@ -198,6 +199,26 @@ class UISuite extends SparkFunSuite {
       val splitUIAddress = ui.webUrl.split(':')
       val boundPort = ui.boundPort
       assert(splitUIAddress(splitUIAddress.length - 1).toInt == boundPort)
+    }
+  }
+
+  test("SPARK-59613: /static/sql resources are served by the core static handler") {
+    withSpark(newSparkContext()) { sc =>
+      val ui = sc.ui.get
+      Seq(
+        "allexecutionspage.js",
+        "executionpage.js",
+        "spark-sql-viz.css",
+        "spark-sql-viz.js",
+        "sql-table-utils.js").foreach { name =>
+        val url = new URI(s"${ui.webUrl}/static/sql/$name").toURL
+        val content = Utils.tryWithResource(Source.fromURL(url, "UTF-8"))(_.mkString)
+        val expected = Utils.tryWithResource(
+          getClass.getResourceAsStream(s"/${SparkUI.STATIC_RESOURCE_DIR}/sql/$name")) { in =>
+          new String(in.readAllBytes(), StandardCharsets.UTF_8)
+        }
+        assert(content === expected, s"$url did not return the bundled file")
+      }
     }
   }
 
