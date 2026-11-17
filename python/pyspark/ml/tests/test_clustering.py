@@ -221,19 +221,27 @@ class ClusteringTestsMixin:
             .select("weight", "features")
         )
 
+        self.assertEqual(GaussianMixture().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         gmm = GaussianMixture(
             k=2,
             maxIter=2,
             weightCol="weight",
             seed=1,
+            intermediateStorageLevel="DISK_ONLY",
         )
         self.assertEqual(gmm.getK(), 2)
         self.assertEqual(gmm.getMaxIter(), 2)
         self.assertEqual(gmm.getWeightCol(), "weight")
         self.assertEqual(gmm.getSeed(), 1)
+        self.assertEqual(gmm.getIntermediateStorageLevel(), "DISK_ONLY")
+        gmm.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(gmm.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        gmm.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(gmm.getIntermediateStorageLevel(), "DISK_ONLY")
 
         model = gmm.fit(df)
         self.assertEqual(gmm.uid, model.uid)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
         self.assertEqual(model.numFeatures, 2)
         self.assertEqual(len(model.weights), 2)
         self.assertTrue(
@@ -321,10 +329,12 @@ class ClusteringTestsMixin:
         with tempfile.TemporaryDirectory(prefix="gaussian_mixture") as d:
             gmm.write().overwrite().save(d)
             gmm2 = GaussianMixture.load(d)
+            self.assertEqual(gmm2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(gmm), str(gmm2))
 
             model.write().overwrite().save(d)
             model2 = GaussianMixtureModel.load(d)
+            self.assertEqual(model2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(model), str(model2))
 
     def test_local_lda(self):

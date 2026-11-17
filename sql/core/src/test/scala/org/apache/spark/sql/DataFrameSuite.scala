@@ -1699,6 +1699,16 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61254: LogicalRDD constraints should not reference the origin Dataset columns") {
+    val df = spark.range(16).as("t").where($"t.id" > 5)
+    // The optimizer removes the root alias, so the constraint `t.id > 5` differs from the
+    // optimized output `id` only in qualifier.
+    val cp = df.select($"id".as("id")).localCheckpoint()
+    checkAnswer(
+      df.join(cp, df("id") === cp("id") + 1, "right_outer").where(cp("id") > 0),
+      (6L to 14L).map(i => Row(i + 1, i)) :+ Row(null, 15L))
+  }
+
   test("SPARK-10656: completely support special chars") {
     val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
     checkAnswer(df.select(df("*")), Row(1, "a"))
@@ -3062,6 +3072,21 @@ class DataFrameSuite extends SharedSparkSession
             Row(6L, null))
         }
       }
+    }
+  }
+
+  test("SPARK-61823: an inferred filter over a column that can fail is not evaluated " +
+    "ahead of the condition") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `id > 5` keeps `q`, a division by zero on id 3, from being evaluated, unless a filter
+      // `q > 0` inferred from `q = k AND k > 0` goes ahead of it. The non-deterministic `r` keeps
+      // the condition above the projection.
+      val df = spark.range(0, 10, 1, 1).toDF()
+        .select($"id", (lit(10L) / ($"id" - 3)).as("q"), $"id".cast("double").as("k"),
+          rand(2).as("r"))
+        .where($"id" > 5 && $"q" === $"k" && $"k" > 0)
+        .select($"id", $"r" >= 0)
+      checkAnswer(df, Nil)
     }
   }
 

@@ -730,6 +730,25 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       Row("9e947f00ecd6acb2244da40f405c870e", "866737830f560dbf3e1f439d2d785f44"))
   }
 
+  test("SPARK-61770: misc farm_fingerprint function") {
+    val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6)), (null, null))
+      .toDF("a", "b")
+    val expected = Seq(Row(228873345217803866L, 8673355959317488908L), Row(null, null))
+    checkAnswer(df.select(farm_fingerprint($"a"), farm_fingerprint($"b")), expected)
+    checkAnswer(df.selectExpr("farm_fingerprint(a)", "farm_fingerprint(b)"), expected)
+    // A string and its UTF-8 bytes produce the same fingerprint.
+    checkAnswer(
+      df.filter($"a".isNotNull).select(farm_fingerprint($"a".cast("binary"))),
+      Row(228873345217803866L))
+    // Non-ASCII text is hashed as UTF-8: the CJK string U+6570 U+636E, same value as its bytes.
+    val cjk = new String(Array(0x6570, 0x636e), 0, 2)
+    checkAnswer(Seq(cjk).toDF("s").select(farm_fingerprint($"s")), Row(-7555523796863189993L))
+    // Collation is ignored: 'ABC' under UTF8_LCASE hashes like plain 'ABC', not like 'abc'.
+    checkAnswer(
+      sql("SELECT farm_fingerprint('ABC' COLLATE UTF8_LCASE), farm_fingerprint('abc')"),
+      Row(228873345217803866L, 2640714258260161385L))
+  }
+
   test("misc aes function") {
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val encryptedEcb = "9J3iZbIxnmaG+OIA9Amd+A=="

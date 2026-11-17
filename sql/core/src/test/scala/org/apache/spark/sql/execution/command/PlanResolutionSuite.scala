@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, TableSpec, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -1489,6 +1489,25 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       }
       assert(ex.getCondition === "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED")
     }
+  }
+
+  test("ALTER COLUMN preserves the owning rule's deferred resolver") {
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        SQLConf.get
+      }
+    }
+    val identifier = Identifier.of(Array("default"), "t")
+    val v1Table = createV1TableMock(identifier)
+    val target = ResolvedTable.create(v2SessionCatalog, identifier, v1Table)
+    val specification = AlterColumnSpec(
+      ResolvedFieldName(Nil, v1Table.schema("i")), None, None, Some("comment"), None, None)
+    reads = 0
+    val resolved = rule(AlterColumns(target, Seq(specification)))
+    assert(resolved.isInstanceOf[AlterTableChangeColumnCommand])
+    assert(reads == 1)
   }
 
   test("alter table: alter column") {
@@ -3160,6 +3179,31 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
+  gridTest("RTAS preserves the owning rule's deferred default provider")(
+      Seq(false, true)) { explicitProvider =>
+    val owner = new SQLConf
+    owner.setConfString("spark.sql.sources.default", v2Format)
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    val specification = TableSpec(
+      Map.empty, if (explicitProvider) Some(v2Format) else None,
+      Map.empty, None, None, None, None, external = false)
+    val command = ReplaceTableAsSelect(
+      ResolvedIdentifier(v2SessionCatalog, Identifier.of(Array("default"), "t")),
+      Nil, LocalRelation(AttributeReference("i", IntegerType)()), specification, Map.empty,
+      orCreate = false)
+    reads = 0
+    withSQLConf("spark.sql.sources.default" -> "hive") {
+      assert(rule(command) eq command)
+      assert(reads == (if (explicitProvider) 0 else 1))
+    }
+  }
+
   test("RTAS statement with constraints") {
     Seq(
       "CONSTRAINT pk PRIMARY KEY (id)",
@@ -3511,7 +3555,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val ident = Identifier.of(Array.empty[String], "tab")
       val cachedRelation = DataSourceV2Relation.create(table, Some(testCat), Some(ident))
       var sharedRelationCacheLookups = 0
-      val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
+      val sharedRelationCache: RelationCache = (_, _, _, _) => {
         sharedRelationCacheLookups += 1
         Some(cachedRelation)
       }
@@ -3549,7 +3593,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         readOpts: java.util.Map[String, String]): DataSourceV2Relation = {
       AnalysisContext.withNewAnalysisContext {
         val sharedRelationCache: RelationCache =
-          (_, _, _, _, _) => Some(cachedRelationWith(cacheOpts))
+          (_, _, _, _) => Some(cachedRelationWith(cacheOpts))
         val rule = new RelationResolution(catalogManagerWithDefault, sharedRelationCache)
         val unresolved =
           UnresolvedRelation(Seq("testcat", "tab"), new CaseInsensitiveStringMap(readOpts))
@@ -3633,7 +3677,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         sharedRelationCacheEntry(catalog, ident, currentTable, cachedTable)
       var sharedRelationCacheLookups = 0
       val sharedRelationCache: RelationCache =
-        (_, _, _, _, _) => {
+        (_, _, _, _) => {
           sharedRelationCacheLookups += 1
           sharedRelationCacheCandidate
         }

@@ -19,7 +19,8 @@
 use std::ffi::c_void;
 
 use arrow_array::{ffi, Array, RecordBatch, StructArray};
-use arrow_schema::{DataType, SchemaRef};
+use arrow_data::ArrayData;
+use arrow_schema::{ArrowError, DataType, SchemaRef};
 use serde::Serialize;
 
 use crate::abi::{self, ArrowArray, SparkDsTaskContext};
@@ -60,10 +61,8 @@ pub trait DriverWrite: Send {
     fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()>;
 }
 
-/// The driver keeps this coordinator until a successful commit or an abort, after which Spark
-/// only closes the writer, and until close otherwise, including after a failed commit, which
-/// Spark aborts next. Dropping it before close releases its resources even when Spark closes
-/// the writer late, such as a stream writer after the next micro-batch created its own.
+/// The driver keeps this coordinator until close, including after a failed commit, which
+/// Spark aborts next. Spark closes the writer right after it commits or aborts the write.
 pub struct DriverWriter<C: StreamingWrite> {
     coordinator: Option<C>,
 }
@@ -84,18 +83,8 @@ impl<C: StreamingWrite> DriverWriter<C> {
         self.coordinator.as_ref().expect("coordinator is present")
     }
 
-    fn coordinator_mut(&mut self) -> Result<&mut C> {
-        Ok(self
-            .coordinator
-            .as_mut()
-            .ok_or("the write was already committed or aborted")?)
-    }
-
-    /// Drops the coordinator, logging a panic of its Drop instead of failing the call.
-    fn release(&mut self) {
-        if let Some(coordinator) = self.coordinator.take() {
-            drop_provider(coordinator);
-        }
+    fn coordinator_mut(&mut self) -> &mut C {
+        self.coordinator.as_mut().expect("coordinator is present")
     }
 }
 
@@ -105,10 +94,8 @@ impl<C: StreamingWrite> DriverWrite for DriverWriter<C> {
             .iter()
             .map(|message| decode(message.ok_or("missing committed task message")?))
             .collect::<Result<Vec<_>>>()?;
-        self.coordinator_mut()?
-            .commit(StreamingCommitInfo::new(epoch_id, messages))?;
-        self.release();
-        Ok(())
+        self.coordinator_mut()
+            .commit(StreamingCommitInfo::new(epoch_id, messages))
     }
 
     fn abort(&mut self, epoch_id: i64, messages: &[Option<&[u8]>]) -> Result<()> {
@@ -129,17 +116,17 @@ impl<C: StreamingWrite> DriverWrite for DriverWriter<C> {
                 }
             })
             .collect();
-        let result = self
-            .coordinator_mut()?
-            .abort(StreamingAbortInfo::new(epoch_id, messages));
-        self.release();
-        result
+        self.coordinator_mut()
+            .abort(StreamingAbortInfo::new(epoch_id, messages))
     }
 }
 
 impl<C: StreamingWrite> Drop for DriverWriter<C> {
     fn drop(&mut self) {
-        self.release();
+        // A panic of the coordinator's Drop is logged instead of unwinding into close.
+        if let Some(coordinator) = self.coordinator.take() {
+            drop_provider(coordinator);
+        }
     }
 }
 
@@ -220,9 +207,9 @@ unsafe fn open_writer<F: DataWriterFactory>(
 ) -> Result<*mut c_void> {
     validate_schema(&schema)?;
     let factory: F = decode(state)?;
-    let task = unsafe { TaskContext::from_raw(task)? };
+    let (task, partition_id) = unsafe { TaskContext::from_raw(task)? };
     let data_type = DataType::Struct(schema.fields().clone());
-    let mut context = WriterContext::new(schema, task);
+    let mut context = WriterContext::new(schema, partition_id, task);
     context.epoch_id = epoch_id;
     let opened = provider_call(|| factory.open(context));
     // Keep guarded writer destruction in place before dropping the temporary
@@ -257,13 +244,48 @@ unsafe fn task_state<'a>(handle: *mut c_void) -> Result<&'a mut TaskState<'a>> {
 pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result<()> {
     let state = unsafe { task_state(handle)? };
     abi::require_output(array)?;
-    let array = unsafe { ArrowArray::from_raw(array) };
-    let data = unsafe { ffi::from_ffi_and_data_type(array, state.data_type.clone())? };
-    let array = StructArray::from(data);
+    let array = unsafe { import(ArrowArray::from_raw(array), &state.data_type)? };
     if array.null_count() != 0 {
         return Err("write input cannot contain null rows".into());
     }
     state.writer().write(RecordBatch::from(array))
+}
+
+/// Imports a batch to write. Arrow does not validate the C data that it imports, which the safe
+/// accessors of the connector rely on, so this validates its layout and values: a Spark string
+/// may hold bytes that are not UTF-8, such as those of a cast from binary, which a Rust `&str`
+/// must not. It leaves nullability to Spark, for the reason that `validate` gives. Arrow requires
+/// each buffer of fixed-width values to be aligned to its type, such as the 16 bytes of an `i128`
+/// for a decimal on x86_64 and aarch64, which the Arrow Java allocator of Spark does not promise,
+/// so this copies the buffers that are not aligned, and only those.
+///
+/// # Safety
+/// As for write_batch: the array must be Arrow C data of `data_type`.
+unsafe fn import(array: ArrowArray, data_type: &DataType) -> Result<StructArray> {
+    let mut data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
+    data.align_buffers();
+    validate(&data).map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
+    Ok(StructArray::from(data))
+}
+
+/// Validates `data` and its children as `ArrayData::validate_full` does, except that it does not
+/// check nulls against the nullability of fields. Arrow rejects any null in the child of a list
+/// or map whose element is not nullable, even one under a null slot, a layout that Spark accepts
+/// from a native scan: Spark checks nullability itself, masked by the parent, before it passes a
+/// batch to write.
+fn validate(data: &ArrayData) -> std::result::Result<(), ArrowError> {
+    data.validate()?;
+    if let Some(nulls) = data.nulls() {
+        let actual = nulls.len() - nulls.inner().count_set_bits();
+        if actual != nulls.null_count() {
+            return Err(ArrowError::InvalidArgumentError(format!(
+                "null count {} does not match the {actual} nulls of the validity buffer",
+                nulls.null_count()
+            )));
+        }
+    }
+    data.validate_values()?;
+    data.child_data().iter().try_for_each(validate)
 }
 
 /// Commits a task, and returns its serialized message.
@@ -290,4 +312,223 @@ pub unsafe fn close_task(handle: *mut c_void) -> Result<()> {
     abi::require_output(handle)?;
     drop(unsafe { Box::from_raw(handle.cast::<TaskState<'_>>()) });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow_array::builder::{
+        Int64BufferBuilder, Int64Builder, ListBuilder, MapBuilder, StringBuilder,
+    };
+    use arrow_array::cast::AsArray;
+    use arrow_array::ffi::FFI_ArrowArray;
+    use arrow_array::types::{Decimal128Type, Int64Type};
+    use arrow_array::{
+        make_array, Array, ArrayRef, BinaryArray, Int64Array, ListArray, StringArray, StructArray,
+    };
+    use arrow_data::ArrayData;
+    use arrow_schema::{DataType, Field, Fields};
+
+    use super::import;
+
+    /// String data whose second value is not UTF-8, which only unchecked construction builds.
+    fn invalid_utf8() -> ArrayData {
+        let bytes = BinaryArray::from_vec(vec![b"ok".as_slice(), [0xFFu8].as_slice()]);
+        unsafe {
+            bytes
+                .to_data()
+                .into_builder()
+                .data_type(DataType::Utf8)
+                .build_unchecked()
+        }
+    }
+
+    /// Exports a batch of an ID column and the given label column, and imports it to write.
+    fn import_batch(labels: ArrayData) -> crate::Result<StructArray> {
+        let ids = Int64Array::from_iter_values(0..labels.len() as i64);
+        let fields = Fields::from(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("label", labels.data_type().clone(), true),
+        ]);
+        let columns: Vec<ArrayRef> = vec![Arc::new(ids), make_array(labels)];
+        let batch = StructArray::try_new(fields, columns, None)?;
+        import_data(&batch.to_data())
+    }
+
+    /// Exports a batch and imports it to write, without checking it as an array would.
+    fn import_data(batch: &ArrayData) -> crate::Result<StructArray> {
+        unsafe { import(FFI_ArrowArray::new(batch), batch.data_type()) }
+    }
+
+    #[test]
+    fn import_accepts_valid_strings() {
+        let batch = import_batch(StringArray::from(vec!["ok", "fine"]).to_data()).unwrap();
+        assert_eq!(batch.column(0).as_primitive::<Int64Type>().value(1), 1);
+        assert_eq!(batch.column(1).as_string::<i32>().value(1), "fine");
+    }
+
+    #[test]
+    fn import_rejects_strings_that_are_not_utf8() {
+        let error = import_batch(invalid_utf8()).unwrap_err().to_string();
+        assert!(error.contains("not valid Arrow data"), "{error}");
+        assert!(
+            error.contains("Invalid UTF8 sequence at string index 1"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn import_rejects_nested_strings_that_are_not_utf8() {
+        let mut labels = ListBuilder::new(StringBuilder::new());
+        labels.values().append_value("ok");
+        labels.values().append_value("x");
+        labels.append(true);
+        let labels: ListArray = labels.finish();
+        let labels = labels
+            .to_data()
+            .into_builder()
+            .child_data(vec![invalid_utf8()]);
+        let error = import_batch(unsafe { labels.build_unchecked() })
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("Invalid UTF8 sequence at string index 1"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn import_accepts_nulls_under_null_slots_of_non_nullable_elements() {
+        // [[1], null] of array<bigint not null>, where the null list still spans a null element,
+        // as a native scan may return and Spark accepts.
+        let mut labels = ListBuilder::new(Int64Builder::new());
+        labels.values().append_value(1);
+        labels.append(true);
+        labels.values().append_null();
+        labels.append(false);
+        let labels: ListArray = labels.finish();
+        let element = Arc::new(Field::new("element", DataType::Int64, false));
+        let labels = labels
+            .to_data()
+            .into_builder()
+            .data_type(DataType::List(element));
+        let batch = import_batch(unsafe { labels.build_unchecked() }).unwrap();
+        let labels = batch.column(1).as_list::<i32>();
+        assert!(labels.is_null(1));
+        assert_eq!(labels.value(0).as_primitive::<Int64Type>().value(0), 1);
+    }
+
+    #[test]
+    fn import_accepts_nulls_under_null_slots_of_non_nullable_map_values() {
+        // [{1: 10}, null] of map<bigint, bigint not null>, where the null map still spans an
+        // entry with a null value.
+        let mut labels = MapBuilder::new(None, Int64Builder::new(), Int64Builder::new());
+        labels.keys().append_value(1);
+        labels.values().append_value(10);
+        labels.append(true).unwrap();
+        labels.keys().append_value(2);
+        labels.values().append_null();
+        labels.append(false).unwrap();
+        let labels = labels.finish().to_data();
+        let DataType::Map(entries, sorted) = labels.data_type().clone() else {
+            unreachable!()
+        };
+        let DataType::Struct(fields) = entries.data_type() else {
+            unreachable!()
+        };
+        let fields = Fields::from(vec![
+            fields[0].as_ref().clone(),
+            fields[1].as_ref().clone().with_nullable(false),
+        ]);
+        let entries_data = labels.child_data()[0]
+            .clone()
+            .into_builder()
+            .data_type(DataType::Struct(fields.clone()));
+        let entries = entries
+            .as_ref()
+            .clone()
+            .with_data_type(DataType::Struct(fields));
+        let labels = labels
+            .into_builder()
+            .data_type(DataType::Map(Arc::new(entries), sorted))
+            .child_data(vec![unsafe { entries_data.build_unchecked() }]);
+        let batch = import_batch(unsafe { labels.build_unchecked() }).unwrap();
+        let labels = batch.column(1).as_map();
+        assert!(labels.is_null(1));
+        assert_eq!(
+            labels
+                .value(0)
+                .column(1)
+                .as_primitive::<Int64Type>()
+                .value(0),
+            10
+        );
+    }
+
+    #[test]
+    fn import_rejects_a_struct_whose_child_is_shorter_than_it() {
+        let ids = Int64Array::from_iter_values(0..1).to_data();
+        let fields = Fields::from(vec![Field::new("id", DataType::Int64, false)]);
+        let batch = unsafe {
+            ArrayData::builder(DataType::Struct(fields))
+                .len(2)
+                .child_data(vec![ids])
+                .build_unchecked()
+        };
+        let error = import_data(&batch).unwrap_err().to_string();
+        assert!(error.contains("not valid Arrow data"), "{error}");
+        assert!(
+            error.contains("has length smaller than expected"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn import_copies_decimal_values_that_are_not_aligned_to_i128() {
+        // The decimals [123.45, -0.01], as the low and high halves of each value, eight bytes
+        // into an allocation of a buffer builder, which is aligned to at least 32 bytes.
+        let mut words = Int64BufferBuilder::new(5);
+        words.append_slice(&[0, 12345, 0, -1, -1]);
+        let values = words.finish().slice(8);
+        let decimal = DataType::Decimal128(10, 2);
+        let prices = unsafe {
+            ArrayData::builder(decimal.clone())
+                .len(2)
+                .add_buffer(values)
+                .build_unchecked()
+        };
+        let fields = Fields::from(vec![Field::new("price", decimal, false)]);
+        let batch = unsafe {
+            ArrayData::builder(DataType::Struct(fields))
+                .len(2)
+                .child_data(vec![prices])
+                .build_unchecked()
+        };
+        let batch = import_data(&batch).unwrap();
+        let prices = batch.column(0).as_primitive::<Decimal128Type>();
+        let alignment = align_of::<i128>();
+        assert_eq!(prices.values().inner().as_ptr().align_offset(alignment), 0);
+        assert_eq!(prices.value(0), 12345);
+        assert_eq!(prices.value(1), -1);
+    }
+
+    #[test]
+    fn import_rejects_a_null_count_that_disagrees_with_the_validity_buffer() {
+        let labels = Int64Array::from(vec![Some(1), None, Some(3)]);
+        let validity = labels.nulls().unwrap().buffer().clone();
+        let labels = labels
+            .to_data()
+            .into_builder()
+            .nulls(None)
+            .null_bit_buffer(Some(validity))
+            .null_count(2);
+        let error = import_batch(unsafe { labels.build_unchecked() })
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("null count 2 does not match the 1 nulls of the validity buffer"),
+            "{error}"
+        );
+    }
 }

@@ -33,9 +33,9 @@ with a path dependency on a Spark source tree, as the examples do, until SPARK-6
 it to crates.io. It is versioned on its own, from 0.x, and may need a breaking release in any
 release of Spark: for a new major version of Arrow, whose types it exposes, or for a new kind
 of operation, which adds an associated type to `DataSource` that every connector must name.
-Growth within an operation, such as a method with a default implementation or a field of an
-info struct, does not break connectors. The crate supports version 1 of the ABI, which Spark
-supports from 4.4.0 in all the releases of Spark 4.
+Growth within an operation can preserve Rust source compatibility, for example by adding
+fields to non-exhaustive input structs under the conditions described below. The crate
+supports version 1 of the ABI, which Spark supports from 4.4.0 in all the releases of Spark 4.
 
 The API uses the types of Arrow 58, such as `RecordBatch`, `SchemaRef`, and `ArrowError`, so
 a connector must use the same major version of Arrow: the SDK re-exports the crates as
@@ -65,7 +65,7 @@ impl DataSource for RangeSource {
     type MicroBatchStream = RangeStream; // streaming reads, by new_micro_batch_stream
     type BatchWrite = Unsupported; // no batch writes
     type StreamingWrite = Unsupported; // no streaming writes
-    // new, schema, new_scan, and new_micro_batch_stream
+    // new, infer_schema, new_scan, and new_micro_batch_stream
 }
 ```
 
@@ -77,7 +77,8 @@ Read support uses three pieces:
   read, then consume itself in `plan()` to return a typed `ScanPlan<Factory>`.
 * `PartitionReaderFactory`: serialize executor configuration and open one lazy reader,
   an iterator of Arrow batches, from a typed partition and a `ReaderContext`, which
-  carries the schema to read and a borrowed `TaskContext`.
+  carries the schema to read, the index of the partition in its plan, and a borrowed
+  `TaskContext`.
 
 Streaming reads reuse the executor side: `DataSource::new_micro_batch_stream` creates a
 `MicroBatchStream` from a `MicroBatchStreamInfo`, which carries the columns to read and the
@@ -91,15 +92,16 @@ Write support is independent: a write-only connector sets `ScanBuilder` and
 `DataSource::new_streaming_write` and `StreamingWrite`, with the same task writers. The
 write lifecycle is described below.
 
-The inputs of these methods are `#[non_exhaustive]` structs, so that new ABI fields can
-reach connectors without breaking them: `*Info` structs on the driver (`CreateInfo`,
-`ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `MicroBatchInfo`, `CommitOffsetInfo`,
-`WriteInfo`, `CommitInfo`, `AbortInfo`, `StreamingWriteInfo`, `StreamingCommitInfo`, and
-`StreamingAbortInfo`), `*Context` structs, which carry the live `TaskContext`, on the
-executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which `DataSource::init`
-receives in every JVM that loads the library, executors included. `ScanPlan` has a
-constructor for the same reason. The methods whose function of the header passes nothing but
-the size of its info struct yet take no struct: `ScanBuilder::plan`,
+The inputs of these methods are `#[non_exhaustive]` structs: `*Info` structs on the driver
+(`CreateInfo`, `ScanInfo`, `MicroBatchStreamInfo`, `LatestOffsetInfo`, `MicroBatchInfo`,
+`CommitOffsetInfo`, `WriteInfo`, `CommitInfo`, `AbortInfo`, `StreamingWriteInfo`,
+`StreamingCommitInfo`, and `StreamingAbortInfo`), `*Context` structs, which carry the live
+`TaskContext`, on the executors (`ReaderContext` and `WriterContext`), and `HostInfo`, which
+`DataSource::init` receives in every JVM that loads the library, executors included. Fields
+may be added to them: construct them with `new`, as in tests, or `HostInfo` with
+`HostInfo::default()` and then set its fields, and destructure them with `..`.
+`ScanPlan` has a constructor for the same reason. The methods whose function of the header
+passes nothing but the size of its info struct yet take no struct: `ScanBuilder::plan`,
 `MicroBatchStream::initial_offset`, and the `commit` and `abort` of `DataWriter`. A field
 added there would be a breaking change of the SDK, which its 0.x version allows.
 
@@ -146,11 +148,22 @@ creating or accessing the driver registry, and passes the schema to the reader i
 `ReaderContext`. Closing the driver handles cannot invalidate factory or partition
 bytes already copied to Spark, including for retried tasks.
 
+`ReaderContext::partition_index` is the partition's index in its scan or micro-batch's plan,
+not the Spark task's partition ID. One task can read several source partitions, for example
+after a coalesce or union, and different scans can reuse the same index. The task's stage
+and attempt identifiers are in `ReaderContext::task`; `task_attempt_id()` identifies an
+attempt within the Spark application. For writers, `WriterContext::partition_id` is the
+Spark task's partition ID and the position of its winning commit message. `TaskContext`
+does not expose a partition ID, since the ABI does not supply the task's partition ID for
+readers.
+
 The reader owns its executor resources and cannot borrow its temporary factory.
 It may borrow `TaskContext` until the returned Arrow stream is released. Every host
 provides the task IDs of version 1 of the ABI, so the SDK rejects a task context shorter
-than in version 1, as it rejects the info structures and the read limit that Spark passes to
-the calls when they are shorter. `is_interrupted()` checks
+than in Spark 4.4.0, as it rejects the read limit and the info structures with fields besides
+their size that Spark passes to the calls when they are shorter. It reads a field that a later
+release appends to one of them only when Spark passes it, so a connector built with a later
+version of the SDK still runs on 4.4.0. `is_interrupted()` checks
 Spark's live cancellation callback, not a snapshot of its initial value; for a reader, it
 is also true once the task ended. Check it during long operations; blocking I/O still
 requires timeouts. `TaskContext::for_testing()`, with its `with_*` methods and
@@ -268,8 +281,8 @@ state of the writer that native `create_writer` returns. Restoring an executor w
 uses only those bytes and the schema that Spark passes with them, without creating a
 driver registry.
 
-Each `DataWriterFactory::open` receives a `WriterContext` with the input schema and
-the task, and returns a task-bound writer. `write` takes ownership of a
+Each `DataWriterFactory::open` receives a `WriterContext` with the input schema, partition ID,
+and task, and returns a task-bound writer. `write` takes ownership of a
 `RecordBatch`, so its Arrow buffers can be retained after the callback, until the writer
 is dropped: they belong to the data writer of Spark, and the ABI requires the library to
 release them before Spark closes the writer. Spark cannot free a batch that is still
@@ -280,7 +293,15 @@ releases imported resources on failures. Input slices need not have zero offsets
 the zero-offset restriction applies to arrays exported to Spark by readers. When Spark
 writes the batches of a native scan without converting them to rows, it copies their
 values as the scan returned them, without the checks of a conversion, such as the
-precision of a decimal. Check cancellation during lengthy writes and use I/O timeouts.
+precision of a decimal. The SDK does validate the layout and values of each incoming batch,
+since the safe Arrow accessors rely on them, so a write fails on a string that is not UTF-8,
+such as one cast from binary, which a JVM sink writes through as it is. It leaves nullability
+to Spark, which accepts nulls under a null parent, even for an element that is not nullable.
+Arrow in Rust requires each buffer of fixed-width values to be aligned to its type, such as the
+16 bytes of the values of a decimal, which the Arrow Java allocator of Spark does not promise,
+so the SDK copies the buffers that are not aligned, and only those.
+Check cancellation during
+lengthy writes and use I/O timeouts.
 
 Task `commit()` returns a typed, serde-serializable message, the `Message` of the
 `BatchWrite`. Driver `commit` receives a `CommitInfo` with one winning message per partition,
@@ -292,11 +313,11 @@ A task commit whose message cannot be serialized counts as failed, so `abort` ca
 follow a `commit` that returned a message. Spark calls each method at most once, never
 writes after a failure or a commit, and never aborts a successful commit, as the header
 documents; the `# Lifecycle` sections of `BatchWrite` and `DataWriter` list the exact
-call-order guarantees. Drop only releases resources. The SDK drops a driver coordinator right
-after a successful `commit` or after `abort`, so the write of a micro-batch is dropped before
-Spark creates that of the next one. A write that Spark neither commits nor aborts, and a
-`ScanBuilder` that Spark never plans, are dropped when Spark closes their handles, which may
-be late and on another thread.
+call-order guarantees. Drop only releases resources. The SDK drops a driver coordinator when
+Spark closes its writer, which Spark does right after a successful `commit` or after `abort`,
+so the write of a micro-batch is dropped before Spark creates that of the next one. A write
+that Spark neither commits nor aborts, and a `ScanBuilder` that Spark never plans, are dropped
+when Spark closes their handles, which may be late and on another thread.
 
 The callback order does not determine the outcome of a remote transaction. A destination
 can publish a write successfully but lose its acknowledgement, so `commit` returns an error
@@ -327,7 +348,8 @@ Constructors must therefore avoid irreversible changes. The epoch ID tells the t
 of batch writes, whose epoch ID is `-1`, from those of micro-batches.
 
 The [file sink][sink] demonstrates append/truncate using staged JSONL files and
-atomic publication of a manifest on a local or shared filesystem. Its documented
+atomic publication of a manifest on a local or shared filesystem. It is a demonstration of
+the write lifecycle, not a production template. Its documented
 single-writer assumption and orphan cleanup limitations are example constraints,
 not transaction guarantees provided by the SDK.
 
@@ -349,16 +371,25 @@ Executor, per task:
 Spark creates a stream when a query starts or restarts from its checkpoint, and closes it
 when the query stops. It keeps the initial offset in the checkpoint, and asks for it only
 when the checkpoint does not have it yet. For each micro-batch, it asks for the latest
-offset after the end of the previous micro-batch, and plans the data up to that offset.
+offset and plans the data between the previous and latest progress boundaries.
 The executors read the partitions of a micro-batch exactly as those of a batch scan: the
 two share `read`, which gets the kind of the read. `MicroBatchStreamInfo::schema` has the
-columns to read, which are all the columns of the schema until Spark prunes the columns of
-streaming scans.
+columns to read: all the columns of the schema by default, or only the top-level columns that
+the query needs when `spark.sql.streaming.v2ColumnPruning.enabled` is true.
+
+Offsets are progress boundaries defined by the connector, which decides how they map to
+records. The Range example stores the next row to read: `{"next":10}` to `{"next":13}`
+reads rows 10, 11, and 12, the range `[10, 13)`. Equal boundaries describe no data, and
+adjacent ranges must neither repeat nor skip records. Committing an offset acknowledges
+all the data before that progress boundary.
 
 `MicroBatchStream::default_read_limit` limits the data of each micro-batch, for example
 to `ReadLimit::MaxRows` from an option of the source; the default reads all the available
-data. Spark passes the limit to `latest_offset` in `LatestOffsetInfo::limit`, and with
-`Trigger.AvailableNow` and a `ReadLimit::MaxRows` limit, the end of the run in
+data. A `MaxRows` value must be in `1..=i64::MAX`, the range supported by the native ABI.
+The SDK rejects invalid values both when returning a default limit to Spark and when
+receiving a limit from Spark. Spark passes the limit to `latest_offset` in
+`LatestOffsetInfo::limit`. With `Trigger.AvailableNow` and a `ReadLimit::MaxRows` limit,
+it also passes the end of the run in
 `LatestOffsetInfo::run_end`, which the latest offset must not go beyond. Spark also asks
 without a limit for the progress of the query, so a stream does not count the calls of
 `latest_offset` as micro-batches.
@@ -375,6 +406,11 @@ When that version had a different `Offset` type, for example without a field tha
 one adds with `#[serde(default)]`, the same position encodes to different JSON, so Spark
 runs one micro-batch without rows. A failed call, including a panic or an offset that does
 not decode, stops the query: Spark makes no other call on the stream before it closes it.
+JSON has no NaN or infinite numbers: serde writes such a float as `null`. The SDK decodes the
+JSON of each offset that the stream returns before Spark uses it or stores it in the
+checkpoint, so the call fails when a NaN or an infinity is in an `f32` or `f64` field, which
+does not decode from `null`, instead of failing every restart of the query. An `Option<f64>`
+field that holds one decodes as `None`, without an error.
 
 Streaming writes reuse the task writers of batch writes. Spark creates a `StreamingWrite`
 for each micro-batch, from a `StreamingWriteInfo` with the ID of the query, which stays the
@@ -398,7 +434,12 @@ the source: the SDK keeps those of the schema to read, by name and in its order,
 Spark rejects a stream with other columns. The first batch determines the Arrow schema of
 the stream, which every later batch must have; a reader without batches exports the
 schema to read. Exported arrays own their buffers independently of the reader: Spark may
-release a stream before releasing its previously returned batches.
+release a stream before releasing its previously returned batches. When a query stops reading
+a stream before its end, as with a LIMIT, Spark may release the last batch that it read only
+later, from a JVM Cleaner thread. Releasing a batch drops its references to its buffers, so
+the Drop of the owner of a buffer, such as one that returns memory to a pool, may run after the
+task and on another thread: it should be quick and not block. A panic there cannot be
+recovered; see [Scope and limitations](#scope-and-limitations).
 
 Stream callbacks, including release, may run on different threads, but never
 concurrently. Readers must be `Send`; they do not need to be `Sync` or tied to
@@ -482,7 +523,11 @@ directory:
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo fmt --all -- --check
+RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
 ```
+
+Spark's CI runs these commands and `cargo build`, with Rust 1.85, for each pull request that
+changes this directory, the Rust examples, or [the header][header].
 
 The SDK's layout test compiles C assertions against [Spark's header][header], comparing the
 size, alignment, and every field offset of all native ABI structs with the values computed

@@ -111,6 +111,10 @@ impl DataSource for RangeSource {
         if num_partitions == 0 || batch_size == 0 || max_rows_per_trigger == Some(0) {
             return Err("numPartitions, batchSize and maxRowsPerTrigger must be positive".into());
         }
+        // Spark limits a micro-batch to at most i64::MAX rows.
+        if max_rows_per_trigger.is_some_and(|rows| rows > i64::MAX as u64) {
+            return Err(format!("maxRowsPerTrigger must be at most {}", i64::MAX).into());
+        }
         // A failed allocation aborts the process, so bound the sizes that the reads allocate.
         if num_partitions > MAX_PARTITIONS || batch_size > MAX_BATCH_SIZE {
             return Err(format!(
@@ -398,9 +402,12 @@ mod tests {
             .into_iter()
             .enumerate()
             .flat_map(|(index, partition)| {
-                let task = TaskContext::for_testing().with_partition_id(index as i32);
+                let task = TaskContext::for_testing();
                 plan.factory
-                    .open(partition, ReaderContext::new(schema.clone(), task))
+                    .open(
+                        partition,
+                        ReaderContext::new(schema.clone(), index as i32, task),
+                    )
                     .unwrap()
                     .map(|batch| batch.unwrap())
                     .collect::<Vec<_>>()
@@ -515,12 +522,17 @@ mod tests {
             ("numpartitions", "0"),
             ("numpartitions", "100001"),
             ("maxrowspertrigger", "0"),
+            ("maxrowspertrigger", "9223372036854775808"),
             ("end", "-1"),
             ("start", "not-an-integer"),
             ("unknown", "1"),
         ] {
             assert!(RangeSource::new(info(&[(key, value)])).is_err());
         }
+        // The largest limit of a micro-batch is accepted.
+        let largest = source(&[("maxrowspertrigger", "9223372036854775807")]);
+        let limit = stream(&largest).default_read_limit().unwrap();
+        assert_eq!(limit, ReadLimit::MaxRows(i64::MAX as u64));
         let source = source(&[]);
         let invalid = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         assert!(source.new_scan(ScanInfo::new(invalid.clone())).is_err());
@@ -566,6 +578,14 @@ mod tests {
         assert!(stream
             .latest_offset(LatestOffsetInfo::new(outside))
             .is_err());
+        // As if the checkpoint came from a query whose range started before 10.
+        let below = RangeOffset { next: 5 };
+        let error = stream.latest_offset(LatestOffsetInfo::new(below)).err();
+        let error = error.unwrap().to_string();
+        assert!(error.contains("not in the range [10, 25]"), "{error}");
+        let error = stream.plan(MicroBatchInfo::new(below, RangeOffset { next: 12 }));
+        let error = error.err().unwrap().to_string();
+        assert!(error.contains("rows of the range [10, 25)"), "{error}");
     }
 
     #[test]
@@ -611,8 +631,11 @@ mod tests {
             ("batchsize", "2"),
         ]);
         let plan = scan(&source).plan().unwrap();
-        let context =
-            ReaderContext::new(source.infer_schema().unwrap(), TaskContext::for_testing());
+        let context = ReaderContext::new(
+            source.infer_schema().unwrap(),
+            0,
+            TaskContext::for_testing(),
+        );
         let mut reader = plan
             .factory
             .open(plan.partitions[0].clone(), context)

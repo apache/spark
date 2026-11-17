@@ -680,4 +680,22 @@ class SQLConfSuite extends SharedSparkSession {
     assert(e.getMessage.contains("forceSnapshotUploadOnLag"))
     assert(e.getMessage.contains("coordinatorReportSnapshotUploadLag"))
   }
+
+  test("SPARK-61764: the Python UDF worker idle timeout has the limit of its fallback") {
+    import org.apache.spark.internal.config.Python._
+
+    val key = SQLConf.PYTHON_UDF_WORKER_IDLE_TIMEOUT_SECONDS.key
+    val maxSeconds = PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS
+    withSQLConf(key -> maxSeconds.toString) {
+      assert(spark.sessionState.conf.pythonUDFWorkerIdleTimeoutSeconds === maxSeconds)
+    }
+    Seq((maxSeconds + 1).toString, "30d").foreach { value =>
+      val e = intercept[IllegalArgumentException] {
+        withSQLConf(key -> value) {}
+      }
+      // The value is checked by the fallback, so the error names its key.
+      assert(e.getMessage.contains(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS.key))
+      assert(e.getMessage.contains(s"at most $maxSeconds seconds"))
+    }
+  }
 }

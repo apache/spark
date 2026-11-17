@@ -19,8 +19,9 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use arrow_array::builder::NullBufferBuilder;
 use arrow_array::ffi::FFI_ArrowArray;
-use arrow_array::{Array, Int64Array, RecordBatch, StructArray};
+use arrow_array::{Array, ArrayRef, Int64Array, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use serde::{Deserialize, Serialize, Serializer};
 use spark_datasource::__private::abi::{
@@ -96,6 +97,7 @@ impl DataSource for Source {
         match self.capabilities.as_str() {
             "none" => Capabilities::empty(),
             "append" => Capabilities::all().without(Capabilities::BATCH_TRUNCATE),
+            "no_batch_write" => Capabilities::all().without(Capabilities::BATCH_WRITE),
             _ => Capabilities::all(),
         }
     }
@@ -200,6 +202,7 @@ impl DataWriterFactory for Factory {
         }
         Ok(Box::new(Writer {
             task: context.task,
+            partition: context.partition_id,
             failure: self.failure.clone(),
             batches: vec![],
         }))
@@ -208,6 +211,7 @@ impl DataWriterFactory for Factory {
 
 struct Writer<'task> {
     task: TaskContext<'task>,
+    partition: i32,
     failure: String,
     batches: Vec<RecordBatch>,
 }
@@ -251,7 +255,7 @@ impl DataWriter for Writer<'_> {
             })
             .collect();
         Ok(Message {
-            partition: self.task.partition_id(),
+            partition: self.partition,
             attempt: self.task.task_attempt_id(),
             values,
             batches: self.batches.len(),
@@ -544,7 +548,13 @@ fn write_types_and_options_control_capabilities() {
     assert!(library.create_writer.is_some());
     assert!(library.write.is_some());
 
-    for (capabilities, expected) in [("", 4 | 16), ("append", 4), ("none", 0)] {
+    // Truncation goes with the write that supports it.
+    for (capabilities, expected) in [
+        ("", 4 | 16),
+        ("append", 4),
+        ("none", 0),
+        ("no_batch_write", 0),
+    ] {
         let (source, mask) = source(library, "", capabilities);
         assert_eq!(mask, expected);
         for mode in [0, 1] {
@@ -617,7 +627,8 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
         Some(second_message.as_slice()),
     ];
     success(library, driver_finish(&driver, false, &messages));
-    // The coordinator is dropped as soon as its commit succeeds, before Spark closes the writer.
+    // The coordinator is dropped when Spark closes the writer, after its commit.
+    drop(driver);
     assert_eq!(
         events(),
         vec![
@@ -629,6 +640,7 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
             Event::TaskDropped(false),
             Event::TaskCommit,
             Event::TaskDropped(false),
+            // The writer context preserves the input partition ID separately from its task ID.
             Event::DriverCommit(vec![
                 Message {
                     partition: 7,
@@ -648,7 +660,6 @@ fn serialized_factory_and_messages_roundtrip_without_driver_source_or_input_buff
             Event::DriverDropped,
         ]
     );
-    drop(driver);
 }
 
 #[test]
@@ -717,6 +728,33 @@ fn task_failures_and_message_serialization_failures_remain_abortable() {
 }
 
 #[test]
+fn write_rejects_null_rows() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    EVENTS.lock().unwrap().clear();
+    let library = library();
+    let (source, _) = source(library, "", "");
+    let (driver, state) = driver(&source, 0);
+    let task = task(library, &state, 0);
+    let mut rows = NullBufferBuilder::new(2);
+    rows.append_non_null();
+    rows.append_null();
+    let values: ArrayRef = Arc::new(Int64Array::from(vec![1, 2]));
+    let input = StructArray::try_new(schema().fields().clone(), vec![values], rows.finish());
+    let mut array = FFI_ArrowArray::new(&input.unwrap().to_data());
+    assert_ne!(
+        unsafe { library.write.unwrap()(task.pointer, &mut array) },
+        0
+    );
+    assert!(error(library).contains("null rows"));
+    assert!(!events()
+        .iter()
+        .any(|event| matches!(event, Event::Batch(_))));
+    success(library, task_abort(&task));
+    drop(task);
+    success(library, driver_finish(&driver, true, &[None]));
+}
+
+#[test]
 fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
@@ -731,11 +769,12 @@ fn driver_failures_preserve_messages_and_missing_task_positions_for_abort() {
         let committed = [Some(message.as_slice())];
         assert_ne!(driver_finish(&driver, false, &committed), 0);
         assert!(error(library).contains("driver commit"));
-        // Spark aborts a write whose commit failed, so the coordinator is kept for the abort,
-        // after which it is dropped, before Spark closes the writer.
+        // Spark aborts a write whose commit failed, so the coordinator is kept for the abort.
         assert!(!events().contains(&Event::DriverDropped));
         let aborted = [None, Some(message.as_slice()), None];
         success(library, driver_finish(&driver, true, &aborted));
+        assert!(!events().contains(&Event::DriverDropped));
+        drop(driver);
         assert_eq!(events().last(), Some(&Event::DriverDropped));
         let expected = Message {
             partition: 1,
@@ -791,20 +830,21 @@ fn the_epoch_of_a_data_writer_selects_its_write() {
     }
     assert!(error(library).contains("invalid epoch ID -2"));
     success(library, driver_finish(&driver, true, &[]));
+    // The coordinator is dropped when Spark closes the writer, after its abort.
+    drop(driver);
     assert_eq!(
         events(),
         vec![
             Event::WriteCreated(false),
             Event::FactoryCreated,
             Event::DriverAbort(vec![]),
-            // Dropped right after the abort, before Spark closes the writer.
             Event::DriverDropped,
         ],
     );
 }
 
 #[test]
-fn undecodable_messages_fail_commit_but_abort_still_cleans_up() {
+fn missing_or_undecodable_messages_fail_commit_but_abort_still_cleans_up() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     EVENTS.lock().unwrap().clear();
     let library = library();
@@ -815,6 +855,9 @@ fn undecodable_messages_fail_commit_but_abort_still_cleans_up() {
     let message = task_message(&task);
     drop(task);
 
+    // Spark commits a write only with the message of every task.
+    assert_ne!(driver_finish(&driver, false, &[None]), 0);
+    assert!(error(library).contains("missing committed task message"));
     let garbage = b"not a commit message";
     assert_ne!(driver_finish(&driver, false, &[Some(garbage)]), 0);
     assert!(!events()

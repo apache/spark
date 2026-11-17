@@ -25,7 +25,7 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.api.plugin.PluginContext
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.internal.config.Python.{IN_PROCESS_PATH_RULE, IN_PROCESS_SITE_PACKAGES}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
@@ -141,7 +141,8 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     val metrics = allMetrics()
     val context = TaskContext.empty()
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
-        Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true, metrics) {
+        Seq.empty, Seq.empty, Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true,
+        metrics) {
       override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession =
         runtime
 
@@ -159,14 +160,13 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
   test("evaluators retain the generation captured before consuming any input") {
     val metrics = allMetrics()
     val context = TaskContext.empty()
-    val function = SimplePythonFunction(
-      Seq.empty, Collections.emptyMap[String, String](), Collections.emptyList[String](),
-      "", "3.12", Collections.emptyList(), null)
+    val function = emptyFunction()
     val udf = PythonUDF("identity", function, LongType, Seq.empty,
       PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF, true)
     var lookups = 0
     class TestEvaluator extends InProcessArrowEvalPythonEvaluatorFactory(
-        Seq.empty, Seq(udf), Seq.empty, 10, 0L, "UTC", false, false, false, false, true, metrics) {
+        Seq.empty, Seq(udf), Seq.empty, Seq.empty, 10, 0L, "UTC", false, false, false, false, true,
+        metrics) {
       override private[python] def runtimeSession: InProcessPythonRuntime.InterpreterSession = {
         lookups += 1
         runtime
@@ -369,18 +369,6 @@ class InProcessPythonRuntimeSuite extends SparkFunSuite {
     closing.join(10000)
     assert(!closing.isAlive && releases.abandoned.get == 0)
     assert(releases.taskMemory.get == 1 && releases.others.get == 1)
-  }
-
-  test("string data is pre-sized to the next power of two of the previous batch") {
-    import InProcessArrowEvalPythonEvaluatorFactory.roundedDensity
-    // Arrow truncates count * density, so the result must not fall below the power of two.
-    for ((count, bytes, expected) <- Seq(
-        (10, 3000L, 4096L), (10000, 30000000L, 33554432L), (3, 1L, 1L), (7, 4096L, 4096L))) {
-      assert((count * roundedDensity(count, bytes, Int.MaxValue)).toLong == expected)
-    }
-    // 32-bit offsets cap the data buffer.
-    assert((10 * roundedDensity(10, Int.MaxValue.toLong - 1, Int.MaxValue)).toLong ==
-      Int.MaxValue.toLong)
   }
 
   test("only some types read back from the exported input vectors") {

@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.util.Try
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
@@ -311,7 +313,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def toCatalyst(expr: V2Expression): Option[Expression] = expr match {
     case _: AlwaysTrue => Some(Literal.TrueLiteral)
     case _: AlwaysFalse => Some(Literal.FalseLiteral)
-    case l: V2Literal[_] => Some(Literal(l.value, l.dataType))
+    case l: V2Literal[_] => Try(Literal.create(l.value, l.dataType)).toOption
     case r: NamedReference => Some(UnresolvedAttribute(r.fieldNames.toImmutableArraySeq))
     case c: V2Cast => toCatalyst(c.expression).map(Cast(_, c.dataType, ansiEnabled = true))
     case p: PartitionPredicateImpl => Some(p.expression)
@@ -344,15 +346,16 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "STARTS_WITH" => convertBinaryExpr(expr, StartsWith)
       case "ENDS_WITH" => convertBinaryExpr(expr, EndsWith)
       case "CONTAINS" => convertBinaryExpr(expr, Contains)
-      case "IN" => convertExpr(expr, children => In(children.head, children.tail))
-      case "BOOLEAN_EXPRESSION" => toCatalyst(expr.children().head)
+      case "IN" if expr.children.nonEmpty =>
+        convertExpr(expr, children => In(children.head, children.tail))
+      case "BOOLEAN_EXPRESSION" => convertUnaryExpr(expr, identity)
       case _ => None
     }
   }
 
   private def convertConditionalFunc(expr: GeneralScalarExpression): Option[Expression] = {
     expr.name match {
-      case "CASE_WHEN" =>
+      case "CASE_WHEN" if expr.children.length >= 2 =>
         convertExpr(expr, children =>
           if (children.length % 2 == 0) {
             val branches = children.grouped(2).map { case Seq(c, v) => (c, v) }.toSeq
@@ -381,9 +384,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "/" => convertBinaryExpr(expr, Divide(_, _, evalMode = EvalMode.ANSI))
       case "%" => convertBinaryExpr(expr, Remainder(_, _, evalMode = EvalMode.ANSI))
       case "ABS" => convertUnaryExpr(expr, Abs(_, failOnError = true))
-      case "COALESCE" => convertExpr(expr, Coalesce)
-      case "GREATEST" => convertExpr(expr, Greatest)
-      case "LEAST" => convertExpr(expr, Least)
+      case "COALESCE" if expr.children.nonEmpty => convertExpr(expr, Coalesce)
+      case "GREATEST" if expr.children.length >= 2 => convertExpr(expr, Greatest)
+      case "LEAST" if expr.children.length >= 2 => convertExpr(expr, Least)
       case "RAND" =>
         if (expr.children.isEmpty) {
           Some(new Rand())
@@ -406,7 +409,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "DEGREES" => convertUnaryExpr(expr, ToDegrees)
       case "RADIANS" => convertUnaryExpr(expr, ToRadians)
       case "SIGN" => convertUnaryExpr(expr, Signum)
-      case "WIDTH_BUCKET" =>
+      case "WIDTH_BUCKET" if expr.children.length == 4 =>
         convertExpr(
           expr,
           children => WidthBucket(children(0), children(1), children(2), children(3)))

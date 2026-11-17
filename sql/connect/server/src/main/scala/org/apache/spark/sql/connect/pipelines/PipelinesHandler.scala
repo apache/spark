@@ -27,6 +27,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.connect.proto.PipelineCommand.DefineFlow.AutoCdcFlowDetails
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CATALOG_NAME, COMMAND, DATABASE_NAME}
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{PlanWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExecuteImmediate, UnresolvedRelation}
@@ -83,12 +84,12 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.DROP_DATAFLOW_GRAPH =>
-        logInfo(s"Drop pipeline cmd received: $cmd")
+        logInfo(log"Drop pipeline cmd received: ${MDC(COMMAND, cmd)}")
         sessionHolder.dataflowGraphRegistry
           .dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_OUTPUT =>
-        logInfo(s"Define pipelines output cmd received: $cmd")
+        logInfo(log"Define pipelines output cmd received: ${MDC(COMMAND, cmd)}")
         val resolvedDataset =
           defineOutput(cmd.getDefineOutput, sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
@@ -105,7 +106,7 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
-        logInfo(s"Define pipelines flow cmd received: $cmd")
+        logInfo(log"Define pipelines flow cmd received: ${MDC(COMMAND, cmd)}")
         val resolvedFlow =
           defineFlow(
             cmd.getDefineFlow,
@@ -128,11 +129,11 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
           .build()
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
-        logInfo(s"Start pipeline cmd received: $cmd")
+        logInfo(log"Start pipeline cmd received: ${MDC(COMMAND, cmd)}")
         startRun(cmd.getStartRun, responseObserver, sessionHolder)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
-        logInfo(s"Register sql datasets cmd received: $cmd")
+        logInfo(log"Register sql datasets cmd received: ${MDC(COMMAND, cmd)}")
         defineSqlGraphElements(cmd.getDefineSqlGraphElements, sessionHolder)
         defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
@@ -211,8 +212,8 @@ private[connect] object PipelinesHandler extends Logging {
       .getOrElse {
         val currentCatalog = sessionHolder.session.catalog.currentCatalog()
         logInfo(
-          "No default catalog was supplied. " +
-            s"Falling back to the current catalog: $currentCatalog.")
+          log"No default catalog was supplied. " +
+            log"Falling back to the current catalog: ${MDC(CATALOG_NAME, currentCatalog)}.")
         currentCatalog
       }
 
@@ -221,8 +222,8 @@ private[connect] object PipelinesHandler extends Logging {
       .getOrElse {
         val currentDatabase = sessionHolder.session.catalog.currentDatabase
         logInfo(
-          "No default database was supplied. " +
-            s"Falling back to the current database: $currentDatabase.")
+          log"No default database was supplied. " +
+            log"Falling back to the current database: ${MDC(DATABASE_NAME, currentDatabase)}.")
         currentDatabase
       }
 

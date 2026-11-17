@@ -17,7 +17,7 @@
 
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
-use std::mem::{offset_of, size_of};
+use std::mem::{offset_of, size_of, MaybeUninit};
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
@@ -407,6 +407,58 @@ layout! {
     }
 }
 
+/// A structure that Spark passes to the library, to read or to fill.
+///
+/// # Safety
+/// All zero bytes must be a valid value of every field after the first `MIN_SIZE` bytes, as they
+/// are for numbers, pointers, and optional functions.
+pub unsafe trait Input: Copy {
+    /// The size of the structure in Spark 4.4.0, the first release of version 1 of the ABI, which
+    /// is the least that Spark passes. A field that a later release appends does not change it:
+    /// [`input`] reads such a field and [`fill`] sets it only when Spark passes it.
+    const MIN_SIZE: usize;
+}
+
+// The structures that Spark passes, with their sizes in Spark 4.4.0 on 64-bit targets. So far,
+// each binding has the fields of 4.4.0, so its minimum is its size. Once a binding has a field
+// that a later release appended, its minimum must be the offset of that field instead, as the
+// assertion checks.
+macro_rules! inputs {
+    ($($name:ident: $size:literal),* $(,)?) => {
+        $(
+            // SAFETY: the fields of the bindings are numbers, booleans, pointers, and optional
+            // functions.
+            unsafe impl Input for $name {
+                const MIN_SIZE: usize = size_of::<$name>();
+            }
+        )*
+
+        #[cfg(target_pointer_width = "64")]
+        const _: () = {
+            $(assert!(<$name as Input>::MIN_SIZE == $size);)*
+        };
+    };
+}
+
+inputs! {
+    SparkDsCreateInfo: 40,
+    SparkDsReaderInfo: 8,
+    SparkDsPartitionsInfo: 8,
+    SparkDsDomain: 48,
+    SparkDsStreamReaderInfo: 16,
+    SparkDsInitialOffsetInfo: 8,
+    SparkDsReadLimit: 24,
+    SparkDsLatestOffsetInfo: 32,
+    SparkDsStreamPartitionsInfo: 24,
+    SparkDsCommitOffsetInfo: 16,
+    SparkDsTaskContext: 40,
+    SparkDsReadInfo: 56,
+    SparkDsWriteInfo: 24,
+    SparkDsDataWriterInfo: 40,
+    SparkDsFinishWriteInfo: 48,
+    SparkDsFinishDataWriterInfo: 8,
+}
+
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
@@ -459,14 +511,15 @@ pub unsafe fn struct_size<T>(pointer: *const T) -> Result<i64> {
     Ok(size)
 }
 
-/// Copies a structure that Spark passes, which has every field of version 1 of the ABI: fields
-/// are only appended to the structures, so a shorter one is an error, not partly read.
+/// Copies a structure that Spark passes, which has at least the fields of Spark 4.4.0: fields are
+/// only appended to the structures, so a shorter one is an error. The fields of the binding that
+/// Spark does not pass, because a later release appended them, are zero.
 ///
 /// # Safety
 /// A non-null pointer must address a live structure whose first field is its size.
-pub unsafe fn input<T: Copy>(pointer: *const T) -> Result<T> {
+pub unsafe fn input<T: Input>(pointer: *const T) -> Result<T> {
     let size = unsafe { struct_size(pointer)? };
-    if size < size_of::<T>() as i64 {
+    if size < T::MIN_SIZE as i64 {
         let name = std::any::type_name::<T>()
             .rsplit("::")
             .next()
@@ -475,7 +528,38 @@ pub unsafe fn input<T: Copy>(pointer: *const T) -> Result<T> {
             format!("{name} has {size} bytes, fewer than in version 1 of the native ABI").into(),
         );
     }
-    Ok(unsafe { pointer.read_unaligned() })
+    let mut value = MaybeUninit::<T>::zeroed();
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            pointer.cast::<u8>(),
+            value.as_mut_ptr().cast::<u8>(),
+            fitting::<T>(size),
+        );
+        // The bytes that Spark does not pass are zero, which Input makes valid.
+        Ok(value.assume_init())
+    }
+}
+
+/// Sets the fields of a structure that Spark passes for the library to fill, such as the
+/// SparkDsReadLimit of default_read_limit, that fit in its size.
+///
+/// # Safety
+/// `pointer` must address a live structure whose first field is its size.
+pub unsafe fn fill<T: Input>(pointer: *mut T, value: &T) -> Result<()> {
+    let size = unsafe { struct_size(pointer.cast_const())? };
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            (value as *const T).cast::<u8>(),
+            pointer.cast::<u8>(),
+            fitting::<T>(size),
+        )
+    };
+    Ok(())
+}
+
+/// The bytes of a binding that fit in a structure of `size` bytes.
+fn fitting<T>(size: i64) -> usize {
+    usize::try_from(size).map_or(size_of::<T>(), |size| size.min(size_of::<T>()))
 }
 
 pub fn require_output<T>(pointer: *mut T) -> Result<()> {
@@ -620,7 +704,7 @@ pub unsafe fn latest_offset_info(
     let limit = unsafe { input(info.limit)? };
     let limit = match limit.kind {
         READ_ALL_AVAILABLE => ReadLimit::AllAvailable,
-        READ_MAX_ROWS => ReadLimit::MaxRows(u64::try_from(limit.max_rows)?),
+        READ_MAX_ROWS => ReadLimit::MaxRows(checked_max_rows(i128::from(limit.max_rows))? as u64),
         kind => return Err(format!("unsupported kind of read limit: {kind}").into()),
     };
     Ok(LatestOffsetInfo {
@@ -640,12 +724,22 @@ pub unsafe fn set_read_limit(output: *mut SparkDsReadLimit, limit: ReadLimit) ->
         ReadLimit::AllAvailable => value.kind = READ_ALL_AVAILABLE,
         ReadLimit::MaxRows(rows) => {
             value.kind = READ_MAX_ROWS;
-            value.max_rows = i64::try_from(rows)
-                .map_err(|_| format!("a read limit of {rows} rows exceeds the native ABI"))?;
+            value.max_rows = checked_max_rows(i128::from(rows))?;
         }
     }
-    unsafe { output.write_unaligned(value) };
-    Ok(())
+    unsafe { fill(output, &value) }
+}
+
+/// Checks the common range of row limits from the Rust API and the native ABI.
+fn checked_max_rows(rows: i128) -> Result<i64> {
+    match i64::try_from(rows) {
+        Ok(rows) if rows > 0 => Ok(rows),
+        _ => Err(format!(
+            "a read limit must be between 1 and {} rows, got {rows}",
+            i64::MAX
+        )
+        .into()),
+    }
 }
 
 /// # Safety
@@ -778,7 +872,30 @@ mod tests {
         )));
         fs::create_dir(&directory.0)?;
         let source = directory.0.join("abi_layout.c");
-        fs::write(&source, c_layout_assertions())?;
+        let mut assertions = c_layout_assertions();
+        // The constants of the bindings too, such as the capability bits that Spark checks.
+        for (name, value) in [
+            ("ABI_VERSION", i128::from(ABI_VERSION)),
+            ("BATCH_READ", i128::from(BATCH_READ)),
+            ("MICRO_BATCH_READ", i128::from(MICRO_BATCH_READ)),
+            ("BATCH_WRITE", i128::from(BATCH_WRITE)),
+            ("STREAMING_WRITE", i128::from(STREAMING_WRITE)),
+            ("BATCH_TRUNCATE", i128::from(BATCH_TRUNCATE)),
+            ("STREAMING_TRUNCATE", i128::from(STREAMING_TRUNCATE)),
+            ("ADMISSION_CONTROL", i128::from(ADMISSION_CONTROL)),
+            ("READ_BATCH", i128::from(READ_BATCH)),
+            ("READ_MICRO_BATCH", i128::from(READ_MICRO_BATCH)),
+            ("READ_ALL_AVAILABLE", i128::from(READ_ALL_AVAILABLE)),
+            ("READ_MAX_ROWS", i128::from(READ_MAX_ROWS)),
+            ("WRITE_APPEND", i128::from(WRITE_APPEND)),
+            ("WRITE_TRUNCATE", i128::from(WRITE_TRUNCATE)),
+            ("LOG_ERROR", i128::from(LOG_ERROR)),
+        ] {
+            assertions.push_str(&format!(
+                "_Static_assert(SPARK_DS_{name} == {value}, \"SPARK_DS_{name}: value\");\n"
+            ));
+        }
+        fs::write(&source, assertions)?;
         let header = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../core/src/main/resources/org/apache/spark/sql/datasource");
 
@@ -794,7 +911,7 @@ mod tests {
             .output()?;
         assert!(
             compiled.status.success(),
-            "Rust ABI layouts do not match spark_datasource.h:\n{}\n{}",
+            "Rust ABI layouts or constants do not match spark_datasource.h:\n{}\n{}",
             String::from_utf8_lossy(&compiled.stdout),
             String::from_utf8_lossy(&compiled.stderr),
         );
@@ -833,6 +950,99 @@ mod tests {
             "SparkDsCreateInfo has 8 bytes, fewer than in version 1 of the native ABI"
         );
         assert!(unsafe { input::<SparkDsReadInfo>(std::ptr::null()) }.is_err());
+    }
+
+    /// A structure to which a release after 4.4.0 appended `added`.
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    struct Grown {
+        size: i64,
+        value: i64,
+        added: i64,
+    }
+
+    // SAFETY: the fields are numbers.
+    unsafe impl Input for Grown {
+        const MIN_SIZE: usize = offset_of!(Grown, added);
+    }
+
+    #[test]
+    fn appended_fields_are_read_and_set_only_when_spark_passes_them() {
+        let read = |structure: &[i64]| unsafe { input(structure.as_ptr().cast::<Grown>()) };
+        let grown = |size, added| Grown {
+            size,
+            value: 5,
+            added,
+        };
+        // As from Spark 4.4.0, from the release that appended the field, and from a later one.
+        // The -1 after the structure from Spark 4.4.0 stands for the memory that follows it.
+        assert_eq!(read(&[16, 5, -1]).unwrap(), grown(16, 0));
+        assert_eq!(read(&[24, 5, 7]).unwrap(), grown(24, 7));
+        assert_eq!(read(&[32, 5, 7, 9]).unwrap(), grown(32, 7));
+        assert_eq!(
+            read(&[8]).unwrap_err().to_string(),
+            "Grown has 8 bytes, fewer than in version 1 of the native ABI"
+        );
+
+        // The -1 stands for the memory after the structure from Spark 4.4.0 and for the field
+        // of a later release that the binding does not know.
+        let mut structure = [16_i64, 0, -1];
+        unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(16, 7)) }.unwrap();
+        assert_eq!(structure, [16, 5, -1]);
+        let mut structure = [24_i64, 0, 0];
+        unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(24, 7)) }.unwrap();
+        assert_eq!(structure, [24, 5, 7]);
+        let mut structure = [32_i64, 0, 0, -1];
+        unsafe { fill(structure.as_mut_ptr().cast::<Grown>(), &grown(32, 7)) }.unwrap();
+        assert_eq!(structure, [32, 5, 7, -1]);
+    }
+
+    #[test]
+    fn initialization_checks_the_abi_version_and_reads_only_the_fields_of_the_host() {
+        // Fails when it receives a Spark version, to show whether initialize read it.
+        fn init(host: &HostInfo) -> Result<()> {
+            match &host.spark_version {
+                None => Ok(()),
+                Some(version) => Err(format!("init received Spark {version}").into()),
+            }
+        }
+        fn error() -> String {
+            let error = unsafe { CStr::from_ptr(last_error()) };
+            error.to_str().unwrap().to_owned()
+        }
+        // SAFETY: the table has only numbers and nullable function pointers.
+        let table = unsafe { MaybeUninit::<SparkDsLibrary>::zeroed().assume_init() };
+        let library: &'static SparkDsLibrary = Box::leak(Box::new(table));
+        let mut host = SparkDsHost {
+            size: size_of::<SparkDsHost>() as i64,
+            abi_version: 0,
+            spark_version: c"4.4.0".as_ptr(),
+            log: None,
+            is_log_enabled: None,
+        };
+        let mut output: *const SparkDsLibrary = library;
+        assert_ne!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert!(output.is_null(), "an older host receives no table");
+        assert_eq!(
+            error(),
+            format!("host ABI 0 does not support ABI {ABI_VERSION}")
+        );
+
+        host.abi_version = ABI_VERSION;
+        assert_ne!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert_eq!(error(), "init received Spark 4.4.0");
+
+        // A newer host is accepted too: spark_ds_init gets the newest version that Spark
+        // supports.
+        host.abi_version = ABI_VERSION + 1;
+        assert_ne!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert_eq!(error(), "init received Spark 4.4.0");
+
+        // A host whose size ends after abi_version passes no Spark version, even though a
+        // valid pointer follows in memory.
+        host.size = (offset_of!(SparkDsHost, abi_version) + size_of::<i32>()) as i64;
+        assert_eq!(unsafe { initialize(&host, &mut output, library, init) }, 0);
+        assert!(std::ptr::eq(output, library));
     }
 
     #[test]
@@ -915,11 +1125,66 @@ mod tests {
             kind: READ_ALL_AVAILABLE,
             max_rows: 0,
         };
-        unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(4)) }.unwrap();
-        assert_eq!((limit.kind, limit.max_rows), (READ_MAX_ROWS, 4));
+        for rows in [1, 4, i64::MAX as u64] {
+            unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(rows)) }.unwrap();
+            assert_eq!((limit.kind, limit.max_rows), (READ_MAX_ROWS, rows as i64));
+        }
+        limit.max_rows = -1;
         unsafe { set_read_limit(&mut limit, ReadLimit::AllAvailable) }.unwrap();
-        assert_eq!(limit.kind, READ_ALL_AVAILABLE);
-        assert!(unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(u64::MAX)) }.is_err());
+        assert_eq!((limit.kind, limit.max_rows), (READ_ALL_AVAILABLE, -1));
+    }
+
+    #[test]
+    fn latest_offset_info_validates_max_rows_only_for_row_limits() {
+        let mut limit = SparkDsReadLimit {
+            size: size_of::<SparkDsReadLimit>() as i64,
+            kind: READ_MAX_ROWS,
+            max_rows: 1,
+        };
+        let mut info = SparkDsLatestOffsetInfo {
+            size: size_of::<SparkDsLatestOffsetInfo>() as i64,
+            start: c"0".as_ptr(),
+            limit: &limit,
+            run_end: std::ptr::null(),
+        };
+        for rows in [1, i64::MAX] {
+            limit.max_rows = rows;
+            info.limit = &limit;
+            let parsed = unsafe { latest_offset_info(&info) }.unwrap();
+            assert_eq!(parsed.limit, ReadLimit::MaxRows(rows as u64));
+        }
+        for rows in [i64::MIN, -1, 0] {
+            limit.max_rows = rows;
+            info.limit = &limit;
+            let error = unsafe { latest_offset_info(&info) }.unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("a read limit must be between 1 and"));
+        }
+        limit.kind = READ_ALL_AVAILABLE;
+        for rows in [i64::MIN, 0, i64::MAX] {
+            limit.max_rows = rows;
+            info.limit = &limit;
+            let parsed = unsafe { latest_offset_info(&info) }.unwrap();
+            assert_eq!(parsed.limit, ReadLimit::AllAvailable);
+        }
+    }
+
+    #[test]
+    fn invalid_default_read_limits_leave_output_unchanged() {
+        let mut limit = SparkDsReadLimit {
+            size: size_of::<SparkDsReadLimit>() as i64,
+            kind: READ_ALL_AVAILABLE,
+            max_rows: 0,
+        };
+        for rows in [0, i64::MAX as u64 + 1, u64::MAX] {
+            let error =
+                unsafe { set_read_limit(&mut limit, ReadLimit::MaxRows(rows)) }.unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("a read limit must be between 1 and"));
+            assert_eq!((limit.kind, limit.max_rows), (READ_ALL_AVAILABLE, 0));
+        }
     }
 
     #[test]

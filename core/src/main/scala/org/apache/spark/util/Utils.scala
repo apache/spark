@@ -2021,6 +2021,25 @@ private[spark] object Utils
     }
   }
 
+  /**
+   * Detects the distinct messages used by supported JDKs when an array cannot grow any further.
+   * There are two known patterns:
+   *
+   *  - `Required array length 2147483639 + 626 is too large`
+   *  - `Requested array size exceeds VM limit`
+   *
+   * Unlike a heap-space OOM, this failure can be handled because retrying the same operation can
+   * never succeed.
+   */
+  def isJavaArraySizeLimitExceeded(error: Throwable): Boolean = error match {
+    case oom: OutOfMemoryError =>
+      Option(oom.getMessage).exists { message =>
+        (message.startsWith("Required array length") && message.endsWith("is too large")) ||
+          message.contains("Requested array size exceeds VM limit")
+      }
+    case _ => false
+  }
+
   /** Resolve a comma-separated list of paths. */
   def resolveURIs(paths: String): String = {
     if (paths == null || paths.trim.isEmpty) {

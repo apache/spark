@@ -24,8 +24,7 @@
 //! owns handles, plan/message serialization, C ABI adaptation, and Arrow import/export.
 //! Rust traits stay inside the plugin; they are not an ABI between dynamic libraries.
 //!
-//! Methods receive their inputs in `#[non_exhaustive]` structs, so that new ABI fields
-//! can reach connectors without breaking them: `*Info` structs on the driver
+//! Methods receive their inputs in `#[non_exhaustive]` structs: `*Info` structs on the driver
 //! ([`CreateInfo`], [`ScanInfo`], [`MicroBatchStreamInfo`], [`LatestOffsetInfo`],
 //! [`MicroBatchInfo`], [`CommitOffsetInfo`], [`WriteInfo`], [`CommitInfo`], [`AbortInfo`],
 //! [`StreamingWriteInfo`], [`StreamingCommitInfo`], and [`StreamingAbortInfo`]), `*Context`
@@ -92,6 +91,9 @@ pub type Options = BTreeMap<String, String>;
 // name the operations that the source implements.
 
 /// What Spark passes to create a data source.
+///
+/// Use [`Self::new`] to construct this value outside Spark, and include `..` when
+/// destructuring it to allow additional fields.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct CreateInfo {
@@ -252,6 +254,9 @@ pub trait DataSource: Send + Sized + 'static {
 // PartitionReaderFactory opens a reader of each partition on the executors.
 
 /// What Spark passes to create a scan.
+///
+/// Use [`Self::new`] to construct this value outside Spark, and include `..` when
+/// destructuring it to allow additional fields.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct ScanInfo {
@@ -369,7 +374,11 @@ pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static 
     /// - Check [`TaskContext::is_interrupted`] during long operations, and use timeouts
     ///   for blocking I/O.
     /// - Batches must own their buffers, because Spark may release the stream before
-    ///   its batches.
+    ///   its batches. Releasing a batch drops its references to its buffers, which runs the
+    ///   Drop of the owner of a buffer, such as one that returns memory to a pool, when they
+    ///   are the last ones. Spark may release a batch after the task ended, on another thread,
+    ///   such as a JVM Cleaner thread after a LIMIT, so that Drop should be quick and not
+    ///   block. The README's Scope section describes panics there.
     /// - Spark may open the same partition at the same time in several attempts of its
     ///   task, so a reader must not take a resource that another attempt needs exclusively.
     ///
@@ -397,14 +406,22 @@ pub struct ReaderContext<'task> {
     /// [`ScanBuilder::prune_columns`] for a batch scan, and of
     /// [`MicroBatchStreamInfo::schema`] for a micro-batch.
     pub schema: SchemaRef,
+    /// The index of this partition in the scan or micro-batch's [`ScanPlan::partitions`].
+    /// This is not the Spark task's partition ID: one task may read several partitions,
+    /// for example after a coalesce or union. The index is unique only within that plan.
+    pub partition_index: i32,
     /// The task that reads the partition.
     pub task: TaskContext<'task>,
 }
 
 impl<'task> ReaderContext<'task> {
     /// The context of a reader opened outside Spark, for example in a test.
-    pub fn new(schema: SchemaRef, task: TaskContext<'task>) -> Self {
-        Self { schema, task }
+    pub fn new(schema: SchemaRef, partition_index: i32, task: TaskContext<'task>) -> Self {
+        Self {
+            schema,
+            partition_index,
+            task,
+        }
     }
 }
 
@@ -455,6 +472,12 @@ impl MicroBatchStreamInfo {
 ///
 /// # Offsets
 ///
+/// An offset is a progress boundary whose representation and mapping to records the connector
+/// defines. A micro-batch reads the data between its starting and ending boundaries. For example,
+/// when an offset stores the next row to read, `{"next":10}` to `{"next":13}` reads rows 10, 11,
+/// and 12: the row range is `[10, 13)`. Equal boundaries describe no data, and adjacent ranges
+/// must neither repeat nor skip records.
+///
 /// Spark stores offsets in the checkpoint of the query, as the JSON of
 /// [`Offset`](Self::Offset), and compares them by that JSON, so serialize a position to the
 /// same JSON each time: for example, use structs and `BTreeMap` rather than `HashMap`. The
@@ -464,6 +487,11 @@ impl MicroBatchStreamInfo {
 /// library may have written, to `latest_offset`, `plan`, and `commit`. When that version had a
 /// different `Offset` type, the same position may encode to different JSON, so Spark runs one
 /// micro-batch without rows.
+///
+/// JSON has no NaN or infinite numbers: serde writes such a float as `null`. The SDK decodes the
+/// JSON of each offset that the stream returns before Spark uses or stores it, so the call fails
+/// when a NaN or an infinity is in an `f32` or `f64` field, which does not decode from `null`,
+/// but an `Option<f64>` field that holds one decodes as `None`.
 ///
 /// # Admission control
 ///
@@ -482,7 +510,7 @@ impl MicroBatchStreamInfo {
 /// - After a restart, Spark may plan the last range of the query again, so `plan` must
 ///   return partitions that read the same data for the same range.
 pub trait MicroBatchStream: Send + 'static {
-    /// A position in the data, such as the next record of each partition of a log.
+    /// A progress boundary in the data, such as the next record of each partition of a log.
     type Offset: Serialize + DeserializeOwned;
 
     /// The reader factory of the micro-batches, which can be that of batch scans.
@@ -492,10 +520,9 @@ pub trait MicroBatchStream: Send + 'static {
     #[doc(hidden)]
     const SUPPORTED: bool = true;
 
-    /// Returns the offset to start from when the query has no checkpoint: the first
-    /// micro-batch reads the data after it. Spark keeps it in the checkpoint, and asks only
-    /// when the checkpoint does not have it yet, so a query that restarts before its first
-    /// micro-batch is committed starts from the same offset.
+    /// Returns the starting progress boundary when the query has no checkpoint. Spark keeps
+    /// it in the checkpoint, and asks only when the checkpoint does not have it yet, so a query
+    /// that restarts before its first micro-batch is committed starts from the same offset.
     fn initial_offset(&mut self) -> Result<Self::Offset>;
 
     /// Returns the limit on the data of each micro-batch. Spark asks once, when the query
@@ -516,12 +543,12 @@ pub trait MicroBatchStream: Send + 'static {
     /// them.
     fn latest_offset(&mut self, info: LatestOffsetInfo<Self::Offset>) -> Result<Self::Offset>;
 
-    /// Plans the micro-batch that reads the data after [`MicroBatchInfo::start`], up to and
-    /// including [`MicroBatchInfo::end`].
+    /// Plans the micro-batch between the progress boundaries [`MicroBatchInfo::start`] and
+    /// [`MicroBatchInfo::end`], using the connector's mapping from offsets to records.
     fn plan(&mut self, info: MicroBatchInfo<Self::Offset>) -> Result<ScanPlan<Self::Factory>>;
 
-    /// Tells the stream that Spark has processed the data up to and including
-    /// [`CommitOffsetInfo::end`] and will not read it again, so that the stream can release it.
+    /// Tells the stream that Spark has processed all the data before the progress boundary
+    /// [`CommitOffsetInfo::end`] and will not read that data again, so the stream can release it.
     fn commit(&mut self, _info: CommitOffsetInfo<Self::Offset>) -> Result<()> {
         Ok(())
     }
@@ -533,7 +560,9 @@ pub trait MicroBatchStream: Send + 'static {
 pub enum ReadLimit {
     /// All the available data.
     AllAvailable,
-    /// At most this number of rows, at least 1.
+    /// A maximum number of rows, from 1 through [`i64::MAX`]. The SDK rejects values outside
+    /// this range at the native ABI boundary. A stream may exceed this limit when its next
+    /// unit of data is larger, as described by [`MicroBatchStream::latest_offset`].
     MaxRows(u64),
 }
 
@@ -541,8 +570,8 @@ pub enum ReadLimit {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct LatestOffsetInfo<O> {
-    /// The offset that the next micro-batch starts after: the end of the previous one, or
-    /// the initial offset.
+    /// The starting progress boundary: the end of the previous micro-batch, or the initial
+    /// offset.
     pub start: O,
     /// The limit on the data after `start`: that of
     /// [`MicroBatchStream::default_read_limit`], or [`ReadLimit::AllAvailable`] when Spark
@@ -571,11 +600,10 @@ impl<O> LatestOffsetInfo<O> {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct MicroBatchInfo<O> {
-    /// The micro-batch reads the data after this offset: the end of the previous
-    /// micro-batch, or the initial offset.
+    /// The starting progress boundary: the end of the previous micro-batch, or the initial
+    /// offset. See [`MicroBatchStream`]'s offset contract for how boundaries map to records.
     pub start: O,
-    /// The micro-batch reads the data up to and including this offset, which
-    /// [`MicroBatchStream::latest_offset`] returned.
+    /// The ending progress boundary, which [`MicroBatchStream::latest_offset`] returned.
     pub end: O,
 }
 
@@ -590,8 +618,7 @@ impl<O> MicroBatchInfo<O> {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct CommitOffsetInfo<O> {
-    /// Spark has processed the data up to and including this offset, and will not read it
-    /// again.
+    /// The progress boundary of the processed data, which Spark will not read again.
     pub end: O,
 }
 
@@ -654,9 +681,9 @@ pub enum WriteMode {
 ///   without calling it when a task message cannot be decoded.
 /// - `abort` runs at most once, never after a successful `commit`. It follows a failed
 ///   `commit`, or a failed task, also when computing the data to write failed.
-/// - Drop runs exactly once: right after a successful `commit` or after `abort`, on the
-///   thread of that call, or, for a write that Spark neither commits nor aborts, when Spark
-///   closes the writer, which may be late and on another thread.
+/// - Drop runs exactly once, otherwise when Spark closes the writer: right after a
+///   successful `commit` or after `abort`, or, for a write that Spark neither commits nor
+///   aborts, possibly late and on another thread.
 /// - A panic in any method is reported as that method's failure.
 ///
 /// These guarantees do not determine the outcome of a remote transaction. A destination
@@ -748,6 +775,9 @@ pub trait DataWriterFactory: Serialize + DeserializeOwned + Send + 'static {
 pub struct WriterContext<'task> {
     /// The schema of the batches to write, as in [`WriteInfo::schema`].
     pub schema: SchemaRef,
+    /// The Spark task's partition ID. Its winning commit message has this position in
+    /// [`CommitInfo::messages`] or [`StreamingCommitInfo::messages`].
+    pub partition_id: i32,
     /// The task attempt that writes.
     pub task: TaskContext<'task>,
     /// The epoch of the micro-batch of a streaming write, or `None` for a batch write.
@@ -757,9 +787,10 @@ pub struct WriterContext<'task> {
 impl<'task> WriterContext<'task> {
     /// The context of a batch writer opened outside Spark, for example in a test. Set
     /// [`epoch_id`](Self::epoch_id) for a streaming writer.
-    pub fn new(schema: SchemaRef, task: TaskContext<'task>) -> Self {
+    pub fn new(schema: SchemaRef, partition_id: i32, task: TaskContext<'task>) -> Self {
         Self {
             schema,
+            partition_id,
             task,
             epoch_id: None,
         }
@@ -796,8 +827,11 @@ pub trait DataWriter: Send {
     /// [`WriterContext::schema`], and at most `spark.sql.execution.arrow.maxRecordsPerBatch`
     /// rows. When Spark writes the batches of a native scan without converting them to rows,
     /// it copies their values as the scan returned them, without the checks of a conversion,
-    /// such as the precision of a decimal. Process batches incrementally and check task
-    /// cancellation.
+    /// such as the precision of a decimal. The SDK validates the layout and values of each batch
+    /// before this call, and fails the write of one that Arrow rejects, such as a Spark string
+    /// that is not UTF-8. It does not check nullability, which Spark checks masked by the
+    /// parent, so a field that is not nullable can still hold nulls under a null parent.
+    /// Process batches incrementally and check task cancellation.
     fn write(&mut self, batch: RecordBatch) -> Result<()>;
 
     /// Finish staging and return a typed message for the driver. Do not make the
@@ -845,9 +879,9 @@ impl StreamingWriteInfo {
 ///
 /// Spark creates a write for each micro-batch, with the lifecycle of a [`BatchWrite`], and
 /// passes the epoch ID of the micro-batch to `commit` and `abort`, in [`StreamingCommitInfo`]
-/// and [`StreamingAbortInfo`], and to the task writers in [`WriterContext::epoch_id`]. A write
-/// that is committed or aborted is therefore dropped before Spark creates the write of the next
-/// micro-batch.
+/// and [`StreamingAbortInfo`], and to the task writers in [`WriterContext::epoch_id`]. Spark
+/// closes a write that it committed or aborted before it creates the write of the next
+/// micro-batch, so the write is dropped by then.
 ///
 /// # Exactly-once output
 ///

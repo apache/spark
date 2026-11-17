@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{SortExec, SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledJoin}
 
@@ -53,9 +53,23 @@ case class SimpleCost(numSkewJoins: Int, numShuffles: Int, numLocalSorts: Int) e
 /**
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes, skew join nodes and (optionally) local [[SortExec]] nodes in the
- * plan. See [[SimpleCost]] for how the components are compared.
+ * plan. With union shuffle push-down enabled, the exchanges the rewrite inserted in place of the
+ * union exchange are excluded, while a retargeted exchange stays counted as new work. A union
+ * whose direct child is an exchange the rewrite marked counts as one shuffle through
+ * [[PushDownShuffleExchangeThroughUnion.hasPushedShuffle]].
+ * Query-stage contents are not visited. Staging keeps the mark, since the stage wraps the marked
+ * exchange. A branch served by reuse of an already materialized stage keeps that stage's own
+ * exchange: reuse of an unmarked exchange adds no work, while a marked one still counts.
+ * Ordinary exchanges and recognized unions have equal weight, with no separate tie-breaker.
+ * This follows the rewrite, not a record of executed work: pruning the only qualifying branch can
+ * remove the union cost even while the union survives. That decrease can offset an
+ * additional exchange elsewhere, so adoption need not match the push-down-disabled plan.
+ * See [[SimpleCost]] for how the components are compared.
  */
-case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean, countLocalSort: Boolean)
+case class SimpleCostEvaluator(
+    forceOptimizeSkewedJoin: Boolean,
+    countLocalSort: Boolean,
+    pushDownShuffleThroughUnion: Boolean = false)
   extends CostEvaluator {
 
   override def evaluateCost(plan: SparkPlan): Cost = {
@@ -65,7 +79,12 @@ case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean, countLocalSort:
     plan.foreach {
       case j: ShuffledJoin if forceOptimizeSkewedJoin && j.isSkewJoin => numSkewJoins += 1
       case j: BroadcastHashJoinExec if forceOptimizeSkewedJoin && j.isSkewJoin => numSkewJoins += 1
+      case shuffle: ShuffleExchangeLike if pushDownShuffleThroughUnion &&
+          PushDownShuffleExchangeThroughUnion.isPushedDownShuffle(shuffle) =>
       case _: ShuffleExchangeLike => numShuffles += 1
+      case union: UnionExec if pushDownShuffleThroughUnion &&
+          PushDownShuffleExchangeThroughUnion.hasPushedShuffle(union) =>
+        numShuffles += 1
       case s: SortExec if countLocalSort && !s.global => numLocalSorts += 1
       case _ =>
     }

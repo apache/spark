@@ -38,7 +38,7 @@ use crate::{
 #[path = "stream.rs"]
 pub(crate) mod stream;
 
-const STATE_VERSION: u32 = 4;
+const STATE_VERSION: u32 = 1;
 
 type HandleMap<T> = Mutex<HashMap<i64, Arc<Mutex<T>>>>;
 
@@ -367,8 +367,9 @@ pub unsafe fn open_reader<F: PartitionReaderFactory>(
 ) -> Result<FFI_ArrowArrayStream> {
     stream::validate_schema(&schema)?;
     let factory: F = decode(state)?;
-    let task = unsafe { TaskContext::from_raw(task)? };
-    let reader = factory.open(decode(partition)?, ReaderContext::new(schema.clone(), task))?;
+    let (task, partition_index) = unsafe { TaskContext::from_raw(task)? };
+    let context = ReaderContext::new(schema.clone(), partition_index, task);
+    let reader = factory.open(decode(partition)?, context)?;
     Ok(unsafe { stream::export(reader, &schema) })
 }
 
@@ -427,9 +428,18 @@ struct ScanState<B> {
 }
 
 /// Offsets are compact JSON on a single line, which Spark stores in the checkpoint as they
-/// are, so they have no envelope: the library owns their format.
-fn encode_offset<T: Serialize>(offset: &T) -> Result<String> {
-    Ok(serde_json::to_string(offset)?)
+/// are, so they have no envelope: the library owns their format. JSON writes a NaN or an
+/// infinite float as `null`, which does not decode as a float, so this decodes the JSON before
+/// Spark uses or stores it: a restarted query would otherwise fail on that offset every time.
+fn encode_offset<T: Serialize + DeserializeOwned>(offset: &T) -> Result<String> {
+    let json = serde_json::to_string(offset)?;
+    match serde_json::from_str::<T>(&json) {
+        Ok(_) => Ok(json),
+        Err(error) => {
+            let cause = "JSON writes NaN and infinite floats as null";
+            Err(format!("the returned offset {json} does not decode ({cause}): {error}").into())
+        }
+    }
 }
 
 fn decode_offset<T: DeserializeOwned>(json: &str) -> Result<T> {
@@ -482,7 +492,10 @@ pub(crate) fn provider_call<T>(
 pub(crate) fn drop_provider<T>(value: T) {
     // Close has no error channel and must never unwind across the native ABI, so log the panic.
     if let Err(payload) = catch_unwind(AssertUnwindSafe(|| drop(value))) {
-        log::warn!("Ignoring a panic during a drop: {}", panic_message(payload));
+        // Outside the log call, which skips its arguments when WARN is off: panic_message must
+        // run to forget a payload whose drop could panic.
+        let message = panic_message(payload);
+        log::warn!("Ignoring a panic during a drop: {message}");
     }
 }
 
@@ -824,6 +837,53 @@ mod tests {
     }
 
     #[test]
+    fn reader_partition_indices_are_independent_of_task_identity() {
+        #[derive(Serialize, Deserialize)]
+        struct ContextFactory;
+
+        impl PartitionReaderFactory for ContextFactory {
+            type Partition = ();
+
+            fn open<'task>(
+                &self,
+                _: (),
+                context: ReaderContext<'task>,
+            ) -> Result<PartitionReader<'task>> {
+                let task = context.task;
+                let values = Arc::new(Int64Array::from(vec![
+                    i64::from(context.partition_index),
+                    i64::from(task.stage_id()),
+                    i64::from(task.stage_attempt_number()),
+                    i64::from(task.attempt_number()),
+                    task.task_attempt_id(),
+                ]));
+                let batch = RecordBatch::try_new(id_schema(), vec![values])?;
+                Ok(Box::new(std::iter::once(Ok(batch))))
+            }
+        }
+
+        let state = encode(&ContextFactory).unwrap();
+        let partition = encode(&()).unwrap();
+        for index in [3, 9] {
+            // A coalesced task can read several scan partitions under the same task identity.
+            let mut host = task(index, 2);
+            host.task_attempt_id = 42;
+            let stream =
+                unsafe { open_reader::<ContextFactory>(&host, id_schema(), &state, &partition) }
+                    .unwrap();
+            let mut reader = ArrowArrayStreamReader::try_new(stream).unwrap();
+            let batch = reader.next().unwrap().unwrap();
+            let values = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            assert_eq!(values.values(), &[i64::from(index), 1, 0, 2, 42]);
+            assert!(reader.next().is_none());
+        }
+    }
+
+    #[test]
     fn executor_rejects_batches_that_do_not_have_the_schema_to_read() {
         let bridge = Bridge::<Source>::default();
         let (handle, _) = bridge.create(info()).unwrap();
@@ -895,6 +955,101 @@ mod tests {
     }
 
     #[test]
+    fn writes_truncate_only_when_they_declare_it() {
+        use crate::{AbortInfo, CommitInfo, StreamingAbortInfo, StreamingCommitInfo};
+
+        // Writes that keep the default SUPPORTS_TRUNCATE, which these tests never create.
+        struct AppendOnly;
+
+        impl BatchWrite for AppendOnly {
+            type Factory = Unsupported;
+            type Message = Unsupported;
+
+            fn new_writer_factory(&self) -> Result<Unsupported> {
+                unreachable!("not created")
+            }
+
+            fn commit(&mut self, _: CommitInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+
+            fn abort(&mut self, _: AbortInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+        }
+
+        impl StreamingWrite for AppendOnly {
+            type Factory = Unsupported;
+            type Message = Unsupported;
+
+            fn new_writer_factory(&self) -> Result<Unsupported> {
+                unreachable!("not created")
+            }
+
+            fn commit(&mut self, _: StreamingCommitInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+
+            fn abort(&mut self, _: StreamingAbortInfo<Unsupported>) -> Result<()> {
+                unreachable!("not created")
+            }
+        }
+
+        struct Appending;
+
+        impl DataSource for Appending {
+            type ScanBuilder = Unsupported;
+            type MicroBatchStream = Unsupported;
+            type BatchWrite = AppendOnly;
+            type StreamingWrite = AppendOnly;
+
+            fn new(_: CreateInfo) -> Result<Self> {
+                unreachable!("registered directly")
+            }
+        }
+
+        let bridge = Bridge::<Appending>::default();
+        let (handle, mask) = bridge.register_source(Appending).unwrap();
+        assert_eq!(mask, abi::BATCH_WRITE | abi::STREAMING_WRITE);
+        for (query_id, mode) in [
+            (None, "the save mode overwrite"),
+            (Some("query".to_owned()), "the output mode complete"),
+        ] {
+            let created = bridge.create_writer(handle, id_schema(), WriteMode::Truncate, query_id);
+            let error = error_message(created);
+            assert!(error.contains(mode), "{error}");
+        }
+        bridge.close_source(handle).unwrap();
+    }
+
+    #[test]
+    fn non_string_panic_payloads_do_not_escape() {
+        struct PanicsOnDrop;
+
+        impl Drop for PanicsOnDrop {
+            fn drop(&mut self) {
+                panic!("the payload panicked when dropped");
+            }
+        }
+
+        struct DropsWithPanic;
+
+        impl Drop for DropsWithPanic {
+            fn drop(&mut self) {
+                std::panic::panic_any(PanicsOnDrop);
+            }
+        }
+
+        let expected = "native provider panicked with a non-string payload";
+        let error = provider_call::<()>(|| std::panic::panic_any(42));
+        assert_eq!(error.unwrap_err(), expected);
+        let error = provider_call::<()>(|| std::panic::panic_any(PanicsOnDrop));
+        assert_eq!(error.unwrap_err(), expected);
+        // Neither the drop nor its payload unwinds out of drop_provider.
+        drop_provider(DropsWithPanic);
+    }
+
+    #[test]
     fn error_messages_include_their_sources_once() {
         #[derive(Debug)]
         struct Context(std::io::Error);
@@ -933,6 +1088,78 @@ mod tests {
             .to_string()
             .contains("unsupported native state version"));
         assert_eq!(decode::<u64>(&encode(&42_u64).unwrap()).unwrap(), 42);
+    }
+
+    #[test]
+    fn offsets_that_do_not_decode_from_their_json_are_rejected() {
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Offset {
+            next: u64,
+            rate: f64,
+        }
+
+        // Returns an offset with its rate from both calls that return an offset to Spark.
+        struct Rates(f64);
+
+        impl MicroBatchStream for Rates {
+            type Offset = Offset;
+            type Factory = Factory;
+
+            fn initial_offset(&mut self) -> Result<Offset> {
+                Ok(Offset {
+                    next: 10,
+                    rate: self.0,
+                })
+            }
+
+            fn latest_offset(&mut self, _: LatestOffsetInfo<Offset>) -> Result<Offset> {
+                self.initial_offset()
+            }
+
+            fn plan(&mut self, _: MicroBatchInfo<Offset>) -> Result<ScanPlan<Factory>> {
+                unreachable!("not planned")
+            }
+        }
+
+        struct Streaming(f64);
+
+        impl DataSource for Streaming {
+            type ScanBuilder = Unsupported;
+            type MicroBatchStream = Rates;
+            type BatchWrite = Unsupported;
+            type StreamingWrite = Unsupported;
+
+            fn new(_: CreateInfo) -> Result<Self> {
+                unreachable!("registered directly")
+            }
+
+            fn new_micro_batch_stream(&self, _: MicroBatchStreamInfo) -> Result<Rates> {
+                Ok(Rates(self.0))
+            }
+        }
+
+        let offset = Offset {
+            next: 10,
+            rate: 0.5,
+        };
+        let json = encode_offset(&offset).unwrap();
+        assert_eq!(json, r#"{"next":10,"rate":0.5}"#);
+        assert_eq!(decode_offset::<Offset>(&json).unwrap(), offset);
+        // JSON writes a NaN or an infinite float as null, which does not decode as an f64.
+        let expected = r#"offset {"next":10,"rate":null} does not decode"#;
+        for rate in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let bridge = Bridge::<Streaming>::default();
+            let (handle, _) = bridge.register_source(Streaming(rate)).unwrap();
+            let info = MicroBatchStreamInfo::new(id_schema(), "file:/tmp/checkpoint/sources/0");
+            let stream = bridge.create_stream_reader(handle, info).unwrap();
+            bridge.close_source(handle).unwrap();
+            let initial = error_message(bridge.initial_offset(stream));
+            assert!(initial.contains(expected), "{initial}");
+            let latest = bridge.latest_offset(stream, LatestOffsetInfo::new(json.clone()));
+            let latest = error_message(latest);
+            assert!(latest.contains(expected), "{latest}");
+            bridge.close_stream_reader(stream).unwrap();
+        }
     }
 
     #[test]
