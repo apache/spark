@@ -22,7 +22,7 @@ import org.apache.spark.sql.{IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{expr, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -171,6 +171,52 @@ class PythonUDTFSuite extends SharedSparkSession {
         Seq((0, 1), (1, 2)).toDF("a", "b").createOrReplaceTempView("t")
         val df = sql("SELECT f.* FROM t, LATERAL testUDTF(a, b) f")
         df.queryExecution.assertAnalyzed()
+      }
+    }
+  }
+
+  for (predicate <- Seq("null", "false conjunction")) {
+    test(s"SPARK-61734: anti join preserves UDTF partition groups with $predicate") {
+      assume(shouldTestPythonUDFs)
+      val function = createUserDefinedPythonTableFunction(
+        "CountPerKeyUDTF",
+        """
+          |class CountPerKeyUDTF:
+          |    def __init__(self):
+          |        self.k, self.n = None, 0
+          |    def eval(self, row):
+          |        self.k = row["k"]
+          |        self.n += 1
+          |    def terminate(self):
+          |        yield self.k, self.n
+          |""".stripMargin,
+        Some(StructType.fromDDL("k date, n int")),
+        deterministic = true)
+      val name = "partition_count_regression"
+      spark.udtf.registerPython(name, function)
+      try {
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          withTempView("partition_count_input") {
+            val a = java.sql.Date.valueOf("2004-04-12")
+            val b = java.sql.Date.valueOf("2009-11-30")
+            Seq(a, b, a, b).map(Tuple1(_)).toDF("k").coalesce(1)
+              .createOrReplaceTempView("partition_count_input")
+            val input = sql(
+              s"SELECT * FROM $name(TABLE(partition_count_input) PARTITION BY k)")
+            val expected = Seq(Row(a, 2), Row(b, 2))
+            checkAnswer(input, expected)
+            val left = input.alias("l")
+            val right = input.selectExpr("k AS k2").alias("r")
+            val condition = if (predicate == "null") {
+              expr("CAST(NULL AS BOOLEAN)")
+            } else {
+              expr("l.k = r.k2 AND false")
+            }
+            checkAnswer(left.join(right, condition, "left_anti"), expected)
+          }
+        }
+      } finally {
+        spark.sessionState.catalog.dropTempFunction(name, ignoreIfNotExists = true)
       }
     }
   }
