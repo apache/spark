@@ -320,6 +320,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       condition: Option[Expression],
       eventWatermark: Option[Long],
       eventTimeLags: Option[EventTimeLags]): Option[(Attribute, Long)] = {
+    // TODO(SPARK-61508): an inner or left semi join side that is bounded only through a column
+    //   that is not TIMESTAMP, cast to TIMESTAMP, has no eviction predicate, so it keeps its rows
+    //   for the life of the query until eviction through the cast is supported. Projecting the
+    //   column to TIMESTAMP before the join bounds that state.
     // TODO(SPARK-61349): a conjunct that uses only constants still caps the cutoff, so it can
     //   stop eviction.
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
@@ -366,9 +370,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * Conservatively prove that older state can use the current watermark semantics. Without
    * watermarks there is no affected state. An input that neither version evicts keeps the same
    * rows, but its state watermark in the join's output watermark changed, so such an input is
-   * accepted only when no stateful operator after the join reads its event time:
-   * `consumedSides` names the inputs whose event time such an operator reads, both when the
-   * operator cannot be traced and none when no stateful operator follows. A key-only join, with
+   * accepted only when no stateful operator after the join reads it: `consumedSides` names the
+   * inputs whose state watermark reaches a later operator through the join's output watermark,
+   * both when that operator cannot be traced, and none when no stateful operator follows, with a
+   * single global watermark, or for the right input of a left semi join. A key-only join, with
    * no other condition and no equality key that uses an event time, is evicted by neither
    * version, and V4 reads its rows by key prefix. Otherwise each side must have exactly one
    * event-time column, and either its own event time must be the sole watermarked equality key
