@@ -657,10 +657,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * Searches `plan`, including its subqueries, for the
    * [[org.apache.spark.sql.execution.datasources.FileIndex]] of file-backed relations under
    * `qualifiedPath`, refreshes each matching index that is not in `refreshedIndexes` yet, and
-   * returns whether any was found. Every match is refreshed because the rebuilt cache entry reuses
-   * these indexes. Each distinct index in `plan` is checked against the path at most once, and an
-   * index already in `refreshedIndexes` passed that check for an earlier entry of the same
-   * `recacheByPath` call.
+   * returns whether any was found. Unless `includeTimeTravel` is true, relations pinned to a
+   * time-travel version are neither found nor refreshed. Every match is refreshed because the
+   * rebuilt cache entry reuses these indexes. Each distinct index in `plan` is checked against
+   * the path and the time-travel rule at most once, and an index already in `refreshedIndexes`
+   * passed that check for an earlier entry of the same `recacheByPath` call.
    */
   private def lookupAndRefresh(
       plan: LogicalPlan,
