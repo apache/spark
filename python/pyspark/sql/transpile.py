@@ -51,8 +51,11 @@ in a later operand from firing on rows Python never reaches. Two folds do that:
   only once the earlier ones have not decided the result. Under strict null
   strictness (the default) every comparison link is total, so no condition is
   NULL. Under ``transpileNullStrictness=loose`` an ordering link is NULL for a
-  NULL operand and a CASE WHEN would skip it, so loose always takes ``&`` /
-  ``|``, whose three-valued logic propagates the NULL.
+  NULL operand and a CASE WHEN would skip it, so loose takes ``&`` / ``|``,
+  whose three-valued logic propagates the NULL. ``len()`` and ``%`` still raise
+  under loose and the optimizer can drop or hoist an ``&`` / ``|`` operand (see
+  below), so a loose body that would take the CASE WHEN and holds either falls
+  back to interpreted Python.
 
 The CASE WHEN is atomic to the optimizer: ``splitConjunctivePredicates`` matches
 only ``And``, ``BooleanSimplification``'s patterns match ``And`` / ``Or``, and
@@ -387,9 +390,9 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
     produces a boolean. ``and`` / ``or`` need more of every operand before the
     last -- Spark's ``NULL AND false`` is ``false`` where Python's ``None and
     False`` is ``None`` -- so those gate on the stricter
-    ``_is_never_null_boolean``. Everything else (bare Name,
-    arithmetic, function calls, subscript, ...) forces a fallback to
-    interpreted Python instead of silently diverging.
+    ``_is_never_null_boolean``. For ``not`` and the last ``and`` / ``or``
+    operand, anything else (bare Name, arithmetic, calls, ...) falls back to
+    interpreted Python; an if/ternary test takes ``_truthiness_col`` instead.
     """
     match node:
         case ast.Constant(value=v):
@@ -465,6 +468,16 @@ def _needs_atomic_boolops(body: ast.AST) -> bool:
     """
     return any(
         isinstance(n, ast.Compare) and (len(n.ops) > 1 or not _is_definitely_boolean(n))
+        for n in ast.walk(body)
+    )
+
+
+def _holds_raising_lowering(body: ast.AST) -> bool:
+    """Return True when ``body`` holds a ``len()`` or ``%``, the lowerings that
+    can raise under loose null strictness too (a NULL argument, a zero divisor).
+    """
+    return any(
+        isinstance(n, ast.Mod) or (isinstance(n, ast.Name) and n.id == "len")
         for n in ast.walk(body)
     )
 
@@ -568,6 +581,7 @@ class CatalystTranspiler(AbstractTranspiler):
         self._nonnull_params: frozenset = frozenset()
         self._null_guard_emitted: bool = False
         self._atomic_boolops: bool = False
+        self._holds_raising_lowering: bool = False
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
@@ -850,12 +864,26 @@ class CatalystTranspiler(AbstractTranspiler):
         The CASE WHEN needs every operand before the last non-NULL, which
         comparison links are only under strict null strictness. Under loose an
         ordering link is NULL for a NULL operand, and a CASE WHEN would skip it
-        and answer from the later operands, so loose always folds with ``&`` /
-        ``|``: their three-valued logic propagates the NULL, and no ordering
-        ``raise_error`` guard is left for the optimizer to move.
+        and answer from the later operands, so loose folds with ``&`` / ``|``:
+        their three-valued logic propagates the NULL, and no ordering
+        ``raise_error`` guard is left for the optimizer to move. ``len()`` and
+        ``%`` still raise under loose, though, and BooleanSimplification,
+        subexpression elimination and partition pruning can drop or hoist an
+        ``&`` / ``|`` operand, so a body holding either falls back.
+        TODO (SPARK-54783): take the CASE WHEN there when every operand before
+        the last is never NULL under loose.
         """
-        if atomic and self._null_strictness != "loose":
+        if not atomic or len(operands) == 1:
+            return functools.reduce(operator.or_ if is_or else operator.and_, operands)
+        if self._null_strictness != "loose":
             return _short_circuit(operands, stop_on=is_or)
+        if self._holds_raising_lowering:
+            raise UnsupportedOperationException(
+                "under transpileNullStrictness=loose a chained or nested comparison "
+                "folds with `&` / `|`, which the optimizer may reorder around the "
+                "`len()` or `%` in this body, so the UDF falls back to interpreted "
+                "Python"
+            )
         return functools.reduce(operator.or_ if is_or else operator.and_, operands)
 
     def _lower_compare_pair(
@@ -1137,8 +1165,8 @@ class CatalystTranspiler(AbstractTranspiler):
                     and not _is_none_constant(last)
                 ):
                     raise UnsupportedOperationException(
-                        "`and` / `or` operand is not statically known to be a "
-                        "boolean that only the last operand lets be NULL; "
+                        "each `and` / `or` operand must be statically known to be a boolean, "
+                        "never NULL before the last operand, and the last not a literal None; "
                         "Python's short-circuit returns the operand itself (so "
                         "`None and x` is None) while Spark's `&` / `|` build "
                         "logical And / Or over three-valued logic, so the "
@@ -1395,6 +1423,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 "supported by the transpiler"
             )
         self._atomic_boolops = _needs_atomic_boolops(function_body[0])
+        self._holds_raising_lowering = _holds_raising_lowering(function_body[0])
         # Refuse variants whose body category does not MATCH the declared
         # return type's category. Two distinct failure modes hide here:
         #
