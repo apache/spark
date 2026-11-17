@@ -776,6 +776,70 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
     def _one_row(self, dtype, value):
         return self.spark.createDataFrame([(value,)], schema=f"a {dtype}")
 
+    def test_modulo_keeps_narrow_product_at_integer_width(self):
+        def product(a, b):
+            return (a % b) * b
+
+        for dtype, maximum, minimum in (
+            ("tinyint", 127, -128),
+            ("smallint", 32767, -32768),
+        ):
+            df = self.spark.createDataFrame([(maximum, minimum)], f"a {dtype}, b {dtype}")
+            for eval_type in (PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
+                with self.subTest(dtype=dtype, eval_type=eval_type):
+                    with self.sql_conf(_TRANSPILE_ON):
+                        pudf = UserDefinedFunction(product, LongType(), evalType=eval_type)
+                        self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
+                    self._assert_matches_interpreted(
+                        product,
+                        LongType(),
+                        df,
+                        "a",
+                        "b",
+                        eval_type=eval_type,
+                    )
+
+    def test_modulo_minima_and_large_divisors_match_interpreted(self):
+        def modulo(a, b):
+            return a % b
+
+        cases = []
+        for dtype, minimum in (
+            ("tinyint", -(2**7)),
+            ("smallint", -(2**15)),
+            ("int", -(2**31)),
+            ("bigint", -(2**63)),
+        ):
+            cases.append(
+                (
+                    f"a {dtype}, b {dtype}",
+                    [(minimum, -1), (1, minimum), (minimum, 3)],
+                    LongType(),
+                )
+            )
+        cases.append(
+            (
+                "a double, b double",
+                [(-1.0, float("inf")), (1.0, -float("inf")), (-1.0, 1e308), (1.0, -1e308)],
+                DoubleType(),
+            )
+        )
+        for eval_type in (PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_ARROW_BATCHED_UDF):
+            for schema, rows, return_type in cases:
+                with self.subTest(eval_type=eval_type, schema=schema):
+                    df = self.spark.createDataFrame(rows, schema)
+                    with self.sql_conf(_TRANSPILE_ON):
+                        pudf = UserDefinedFunction(modulo, return_type, evalType=eval_type)
+                        self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
+                    self._assert_matches_interpreted(
+                        modulo,
+                        return_type,
+                        df,
+                        "a",
+                        "b",
+                        eval_type=eval_type,
+                    )
+
     def test_numeric_arithmetic_matches_interpreted_arrow(self):
         for dtype, value, return_type in self._INTEGRAL_CASES + self._FLOATING_CASES:
             df = self._one_row(dtype, value)

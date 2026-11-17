@@ -682,6 +682,18 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
 class PandasUDFTranspileRefusalTests(PandasUDFTranspileTestsMixin, ReusedSQLTestCase):
     """Bodies outside the subset must fall back, preserving behavior exactly."""
 
+    def test_scalar_only_modulo_inside_series_body_falls_back(self):
+        def raises(s):
+            return s + 1 % 0
+
+        def succeeds(s):
+            return s + 5 % 3
+
+        for func in (raises, succeeds):
+            self._assert_falls_back(
+                func, LongType(), self._longs(1, 2), "a", expect_reason="scalar-only modulo"
+            )
+
     def test_comparisons_fall_back(self):
         self._assert_falls_back(
             greater_than_zero,
@@ -838,22 +850,35 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
                 df = self.spark.createDataFrame(values, schema)
                 self._assert_matches_interpreted(modulo, return_type, df, "a", "b")
 
-    def test_modulo_overflow_boundary_raises_where_numpy_is_exact(self):
-        # The lowering is `sign(b) * pmod(sign(b) * a, abs(b))`, whose intermediate negation
-        # overflows for a = Long.MinValue with b < 0. numpy returns the exact 0 there, so
-        # unlike the arithmetic overflow below the transpiled side raises on a valid input.
-        # Noted on the Mod lowering too, for the scalar eval types.
-        interpreted, transpiled = self._pin_divergence(
-            modulo, LongType(), self._mods((LONG_MIN, -1)), "a", "b"
+    def test_modulo_matches_numpy_at_integral_minima(self):
+        for dtype, minimum in (
+            ("tinyint", -(2**7)),
+            ("smallint", -(2**15)),
+            ("int", -(2**31)),
+            ("bigint", LONG_MIN),
+        ):
+            with self.subTest(dtype=dtype):
+                df = self.spark.createDataFrame(
+                    [(minimum, -1), (1, minimum), (minimum, 3)], f"a {dtype}, b {dtype}"
+                )
+                with self.sql_conf(_TRANSPILE_ON):
+                    pudf = self._pandas_udf(modulo, LongType())
+                    self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
+                self._assert_matches_interpreted(modulo, LongType(), df, "a", "b")
+
+    def test_modulo_matches_numpy_with_infinite_or_absorbing_divisors(self):
+        df = self.spark.createDataFrame(
+            [(-1.0, float("inf")), (1.0, -float("inf")), (-1.0, 1e308), (1.0, -1e308)],
+            "a double, b double",
         )
-        self.assertEqual(([0], None), interpreted)
-        self.assertIs(transpiled[0], _RAISED)
-        self.assertIn("ARITHMETIC_OVERFLOW", str(transpiled[1]))
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = self._pandas_udf(modulo, DoubleType())
+            self.assertFalse(_eval_python_nodes(df.select(pudf("a", "b"))))
+        self._assert_matches_interpreted(modulo, DoubleType(), df, "a", "b")
 
     def test_modulo_agrees_away_from_the_boundaries(self):
         # The sign rule itself matches: numpy `%` takes the divisor's sign, like Python, which
-        # is what the pmod-based lowering reproduces. Pinned so the boundary tests above are
-        # not mistaken for "modulo is broken".
+        # is what the native modulo lowering reproduces.
         self._assert_matches_interpreted(
             modulo,
             LongType(),
