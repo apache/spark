@@ -1308,7 +1308,7 @@ binByClause
         (BIN_START AS binStartAlias=errorCapturingIdentifier)?
         (BIN_END AS binEndAlias=errorCapturingIdentifier)?
         (BIN_DISTRIBUTE_RATIO AS binRatioAlias=errorCapturingIdentifier)?
-      RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
     ;
 
 gapFillClause
