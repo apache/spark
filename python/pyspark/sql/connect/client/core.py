@@ -1673,6 +1673,10 @@ class SparkConnectClient(object):
                 },
             )
 
+        # Analyze RPCs are issued eagerly (e.g. by `DataFrame.schema` or `DataFrame.columns`)
+        # and each one is a round trip to the server, so log the duration and the user code
+        # that triggered it to help find and remove unnecessary analysis.
+        start_time = time.monotonic() if logger.isEnabledFor(logging.INFO) else None
         try:
             for attempt in self._retrying():
                 with attempt:
@@ -1686,6 +1690,26 @@ class SparkConnectClient(object):
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)
+        finally:
+            if start_time is not None:
+                self._log_analyze_call(method, time.monotonic() - start_time)
+
+    @classmethod
+    def _log_analyze_call(cls, method: str, duration_s: float) -> None:
+        """
+        Log an AnalyzePlan RPC together with its duration and the user code that triggered it.
+        """
+        stack_frames = cls._retrieve_stack_frames()
+        if stack_frames:
+            # The last frame is the user code line that called into PySpark, and its
+            # `function` is the PySpark API that was called (e.g. `columns`).
+            call_site = stack_frames[-1]
+            trigger = f"{call_site.function} at {call_site.file}:{call_site.linenum}"
+        else:
+            trigger = "unknown call site"
+        logger.info(
+            "AnalyzePlan(%s) took %.0f ms, triggered by %s", method, duration_s * 1000, trigger
+        )
 
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """

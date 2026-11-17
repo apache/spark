@@ -19,6 +19,7 @@ import unittest
 import uuid
 from collections.abc import Generator
 from typing import Any, Optional, Union
+from unittest import mock
 
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.utils import eventually
@@ -42,8 +43,10 @@ if should_test_connect:
         DefaultPolicy,
         Retrying,
     )
+    from pyspark.sql.connect.logging import logger as connect_logger
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.metrics import PlanMetrics
+    from pyspark.traceback_utils import CallSite
 
     class TestPolicy(DefaultPolicy):
         def __init__(self):
@@ -948,6 +951,68 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client_disabled._stub = mock_disabled
         client_disabled._analyze("schema", plan=proto.Plan())
         self.assertIsNone(mock_disabled.captured_timeout)
+
+    def _analyze_client(self, stub_cls=None):
+        client = SparkConnectClient(
+            "sc://foo/", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
+        )
+        client._stub = (stub_cls or MockService)(session_id=client._session_id)
+        return client
+
+    def test_analyze_logs_duration_and_call_site(self):
+        client = self._analyze_client()
+        call_sites = [
+            CallSite(function="main", file="/app/job.py", linenum=10),
+            CallSite(function="columns", file="/app/job.py", linenum=57),
+        ]
+        with (
+            mock.patch.object(connect_logger, "disabled", False),
+            mock.patch.object(
+                SparkConnectClient, "_retrieve_stack_frames", return_value=call_sites
+            ),
+            self.assertLogs(connect_logger, level="INFO") as logs,
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(len(logs.records), 1)
+        self.assertRegex(
+            logs.records[0].getMessage(),
+            r"^AnalyzePlan\(schema\) took \d+ ms, triggered by columns at /app/job.py:57$",
+        )
+
+    def test_analyze_logs_unknown_call_site(self):
+        client = self._analyze_client()
+        with (
+            mock.patch.object(connect_logger, "disabled", False),
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
+            self.assertLogs(connect_logger, level="INFO") as logs,
+        ):
+            client._analyze("semantic_hash", plan=proto.Plan())
+        self.assertIn("triggered by unknown call site", logs.records[0].getMessage())
+
+    def test_analyze_logs_failed_call(self):
+        class FailingMock(MockService):
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                raise TestException("boom", grpc.StatusCode.INVALID_ARGUMENT)
+
+        client = self._analyze_client(FailingMock)
+        with (
+            mock.patch.object(connect_logger, "disabled", False),
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
+            self.assertLogs(connect_logger, level="INFO") as logs,
+        ):
+            with self.assertRaises(SparkConnectGrpcException):
+                client._analyze("schema", plan=proto.Plan())
+        self.assertTrue(any("AnalyzePlan(schema)" in r.getMessage() for r in logs.records))
+
+    def test_analyze_does_not_capture_call_site_when_logging_disabled(self):
+        client = self._analyze_client()
+        with (
+            mock.patch.object(connect_logger, "disabled", True),
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames") as retrieve,
+            self.assertNoLogs(connect_logger, level="INFO"),
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        retrieve.assert_not_called()
 
     def test_each_rpc_receives_configured_deadline(self):
         """Every RPC that accepts a deadline should forward it as timeout to the stub."""
