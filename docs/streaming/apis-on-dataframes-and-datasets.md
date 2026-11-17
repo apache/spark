@@ -1304,9 +1304,12 @@ time constraint must have an exact length. An interval of a day or more, such as
 `INTERVAL 1 DAY` or `INTERVAL 48 HOURS`, does not finalize impressions in any session time zone,
 because Spark adds its whole days in the session time zone, where a day can last 23 or 25 hours.
 Nor does a truncating cast such as `CAST(impressionTime AS BIGINT)`. An outer join that relies
-on such a bound fails analysis; add a watermark on `impressionTime`, or use a bound shorter than
-a day. Full outer joins require watermarks and time constraints in both directions to finalize
-both sides.
+on such a bound fails analysis; use an exact bound instead, such as a bound shorter than a day
+on the TIMESTAMP columns in place of the cast. A watermark on `impressionTime` lets the join
+run, but the cutoff then counts a day as 24 hours and reads the cast as exact, so it can
+finalize a row that a later click still matches, in a time zone where a day lasts 25 hours or
+by up to a second with the cast. Full outer joins require watermarks and time constraints in
+both directions to finalize both sides.
 
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.

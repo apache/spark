@@ -409,7 +409,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * Old V4 state indexed it at timestamp 0 under its own key, and the first batch after the
    * restart scans V4 state from the start, so it evicts the row and a preserved side emits it
    * unless an older version already joined it. V1 to V3 test every stored row each batch and
-   * also evict such a row.
+   * also evict such a row. The acceptance of a join where only one input has a watermark also
+   * holds now that the input without one is evicted: older versions kept all its rows with
+   * accurate matched flags, and V1 to V3 test every stored row, so the first batch after the
+   * restart evicts the old rows at or below the new cutoff, and a preserved side emits the
+   * never-matched ones, which no later row of the other input can match.
    */
   private[sql] def isWatermarkCheckpointCompatible(
       leftAttributes: Seq[Attribute],

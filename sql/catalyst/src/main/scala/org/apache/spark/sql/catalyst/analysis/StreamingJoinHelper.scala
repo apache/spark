@@ -533,7 +533,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * `otherInputAttributes`. Without `lags`, only the opposite input's first watermarked column
    * counts as its event time; with them, each of its watermarked columns does at its own
    * watermark, the watermark less its lag, where they bound it; see [[EventTimeLag]].
-   * `exactForUnwatermarkedColumns` is passed on to [[getStateValueWatermark]].
+   * `exactForUnwatermarkedColumns` is passed on to [[getStateValueWatermark]], which this
+   * always asks to give no cutoff from a watermark term with the sign of an unwatermarked column.
    */
   def getStateValueWatermarkForLags(
       stateAttributes: AttributeSet,
@@ -555,7 +556,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // alone and taking the lowest gives the cutoff of all of them at their own watermarks.
     eventTimes.flatMap { case (column, watermark) =>
       getStateValueWatermark(stateAttributes, AttributeSet(Seq(column)), joinCondition,
-        Some(watermark), exactForUnwatermarkedColumns)
+        Some(watermark), exactForUnwatermarkedColumns, signedForUnwatermarkedColumns = true)
     }.minOption
   }
 
@@ -574,6 +575,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     if (getEventTimeKeyOrdinal(keys, inputAttributes).contains(ordinal)) {
       Some(keyWatermark)
     } else {
+      // TODO(SPARK-61381): bound a shift that is not exact too, such as
+      //   `leftTime = rightTime + INTERVAL 1 DAY`. Until then such a key gives its input no
+      //   event-time bound, so the join holds the output watermark at 0 for that input.
       shiftOfKey(keys(ordinal), inputAttributes).filter(_.exact).flatMap { shift =>
         val keyWithWatermark = AttributeReference("stateKey", TimestampType,
           metadata = new MetadataBuilder().putLong(delayKey, 0L).build())()
@@ -807,6 +811,12 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      cutoff from a condition that the solver counts
    *                                      inexactly. State eviction and the admission check set
    *                                      it, so they agree.
+   * @param signedForUnwatermarkedColumns whether a column without its own watermark gets no
+   *                                      cutoff from a condition whose watermark term has the
+   *                                      column's sign, such as `lt + rt > c`. Such a bound falls
+   *                                      as the watermark grows, so it never finalizes a row.
+   *                                      Earlier versions never evicted such a column, and their
+   *                                      admission rule ignores the sign.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -814,7 +824,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long],
-      exactForUnwatermarkedColumns: Boolean = false): Option[Long] = {
+      exactForUnwatermarkedColumns: Boolean = false,
+      signedForUnwatermarkedColumns: Boolean = false): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -825,7 +836,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
         getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
-          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns)
+          attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns,
+          signedForUnwatermarkedColumns)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -875,7 +887,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       eventWatermark: Option[Long],
-      exactForUnwatermarkedColumns: Boolean): Option[Long] = {
+      exactForUnwatermarkedColumns: Boolean,
+      signedForUnwatermarkedColumns: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -935,6 +948,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // match. A column with its own watermark keeps such a cutoff, as existing queries rely on
     // it. With exactForUnwatermarkedColumns, any other column, such as the bounded column of an
     // input without a watermark, gets no cutoff from such a condition.
+    // TODO(SPARK-61381): count a day as 12 to 36 hours and a truncating cast by its loss, so that
+    //   such a column gets a conservative cutoff. Until then an inner join on
+    //   `rightTime <= expiry + INTERVAL 1 DAY`, with `expiry` lacking a watermark, keeps every
+    //   left row, and an outer or left semi join of that shape fails analysis.
     val stateColumnHasWatermark = constraintTerm.exists {
       case a: AttributeReference =>
         attributesToFindStateWatermarkFor.contains(a) && a.metadata.contains(delayKey)
@@ -943,6 +960,18 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     if (exactForUnwatermarkedColumns && !stateColumnHasWatermark &&
         hasInexactArithmetic(allOnLeftExpr)) {
       logDebug(s"Inexact arithmetic gives an unwatermarked column no cutoff: $allOnLeftExpr")
+      return None
+    }
+    // A watermark term with the sign of the constraint term, as in `lt + rt > c`, lowers the
+    // solved bound as the watermark grows, so later input can still match any stored row.
+    // TODO(SPARK-61350): a column with its own watermark still takes a cutoff from such a term.
+    val hasNegativeWatermarkTerm = terms.exists { term =>
+      term.isInstanceOf[UnaryMinus] && term.references.exists { a =>
+        attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey)
+      }
+    }
+    if (signedForUnwatermarkedColumns && !stateColumnHasWatermark && hasNegativeWatermarkTerm) {
+      logDebug(s"A negative watermark term gives an unwatermarked column no cutoff: $terms")
       return None
     }
 
@@ -976,6 +1005,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * Whether the solver counts part of the expression inexactly: an interval of a day or more,
    * whose whole days Spark adds in the session time zone, where a day can be 23 or 25 hours, or a
    * cast that drops part of a time, such as CAST(ts AS BIGINT).
+   * TODO(SPARK-61381): give such terms a conservative bound instead of no cutoff for an input
+   *   without its own watermark.
    */
   private def hasInexactArithmetic(expr: Expression): Boolean = {
     def hasWholeDays(interval: Expression): Boolean = {

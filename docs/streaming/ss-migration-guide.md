@@ -62,8 +62,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   `INTERVAL 48 HOURS`, or a truncating cast such as `CAST(impressionTime AS BIGINT)`, does not
   finalize that input in any session time zone, because Spark adds whole days in the session
   time zone, where a day can last 23 or 25 hours. An outer or left semi join that relies on such
-  a bound fails analysis. Add a watermark on that input's event time and bound it instead, or use
-  a bound shorter than a day.
+  a bound fails analysis. Use an exact bound instead, such as a bound shorter than a day on the
+  TIMESTAMP columns in place of the cast. A watermark on that input lets the join run, but the
+  cutoff then counts a day as 24 hours and reads the cast as exact, so it can finalize a row that
+  a later row still matches, in a time zone where a day lasts 25 hours or by up to a second with
+  the cast.
 
 - Since Spark 4.4, you can set `spark.sql.streaming.join.checkFinalization.enabled` to `false`
   to run a stream-stream outer or left semi join that fails the requirement above, or a query

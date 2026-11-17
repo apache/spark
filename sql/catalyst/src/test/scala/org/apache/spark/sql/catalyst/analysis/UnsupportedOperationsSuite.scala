@@ -891,6 +891,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     // interval of a day or more counts as inexact in every session time zone.
     val inexactNote = "only on a column without its own watermark, through an interval of a day " +
       "or more or a truncating cast"
+    // A watermark on the input would let the join run with the day counted as 24 hours and the
+    // cast read as exact, which the error says instead of recommending it.
+    val exactAdvice = "Use an exact bound instead, such as a bound shorter than a day on the " +
+      "TIMESTAMP columns in place of the cast. A watermark on that input lets the join run, " +
+      "but its cutoff then counts a day as 24 hours and reads the cast as exact."
+    val inexactMessages = Seq("requires a watermark on the right input",
+      s"bounds the left input $inexactNote", exactAdvice)
     for {
       watermarked <- Seq(false, true)
       zone <- Seq("UTC", "America/Los_Angeles")
@@ -911,7 +918,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
       } else {
         assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
-          Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
+          inexactMessages)
       }
     }
     // Here the right time bounds the left time from below through 24 hours.
@@ -920,12 +927,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         condition = Some(unwatermarkedTime >= TimestampAddInterval(rightTime,
           Literal(Duration.ofHours(-24)), Some("UTC")) && unwatermarkedTime <= rightTime)),
       OutputMode.Append(),
-      Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
+      inexactMessages)
     assertNotSupportedInStreamingPlan("LeftOuter with a range over a truncating cast",
       new TestStreamingRelation(unwatermarkedTime).join(right, joinType = LeftOuter,
         condition = Some(unwatermarkedTime.cast(LongType) >= rightTime.cast(LongType) + 5L)),
       OutputMode.Append(),
-      Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
+      inexactMessages)
 
     test("streaming plan - a join that lacks the right watermark gets no inexact-bound note") {
       val unwatermarkedRight = new TestStreamingRelation(AttributeReference("rt", TimestampType)())

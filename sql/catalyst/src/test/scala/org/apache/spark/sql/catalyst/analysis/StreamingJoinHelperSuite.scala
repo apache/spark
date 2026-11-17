@@ -324,6 +324,38 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     }
   }
 
+  test("a watermark term with the sign of an unwatermarked column gives it no cutoff") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftEventTime = AttributeReference("leftEventTime", TimestampType, metadata = watermark)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+
+    case class DummyLeafNode() extends LeafNode {
+      override def output: Seq[Attribute] = Seq(leftTime, leftEventTime, rightTime)
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    def cutoff(conditionStr: String, column: Attribute): Option[Long] = {
+      val plan = Filter(CatalystSqlParser.parseExpression(conditionStr), DummyLeafNode())
+      val condition = SimpleTestOptimizer.execute(SimpleAnalyzer.execute(plan))
+        .asInstanceOf[Filter].condition
+      StreamingJoinHelper.getStateValueWatermarkForLags(AttributeSet(Seq(column)),
+        Seq(rightTime), Some(condition), Some(100000L), None, exactForUnwatermarkedColumns = true)
+    }
+
+    assert(cutoff("CAST(leftTime AS DOUBLE) + CAST(rightTime AS DOUBLE) > 100", leftTime)
+      === None)
+    assert(cutoff("CAST(leftTime AS DOUBLE) > 100 - CAST(rightTime AS DOUBLE)", leftTime)
+      === None)
+    // TODO(SPARK-61350): a column with its own watermark still takes such a cutoff.
+    assert(cutoff("CAST(leftEventTime AS DOUBLE) + CAST(rightTime AS DOUBLE) > 100",
+      leftEventTime) === Some(0L))
+    // A watermark term with the opposite sign still bounds the column.
+    assert(cutoff("leftTime >= rightTime - INTERVAL 5 SECONDS", leftTime) === Some(94999L))
+    assert(cutoff("rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR", leftTime)
+      === Some(100000L - 3600000L - 1))
+  }
+
   test("extract watermark from time condition") {
     val attributesToFindConstraintFor = Seq(
       AttributeReference("leftTime", TimestampType)(),

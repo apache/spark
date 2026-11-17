@@ -724,6 +724,49 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     }
   }
 
+  // Older versions evicted neither input of this left outer join, whose impressions have no
+  // watermark, so the checkpoint holds every impression. The first batch after the restart
+  // evicts those at or below the new cutoff and emits the never-matched one padded with nulls.
+  test("resume old one-sided left outer checkpoint and emit its unmatched impressions") {
+    withJoinConf(version = 2, logVersion = 2) {
+      val impressionInput = MemoryStream[(Int, Int)]
+      val clickInput = MemoryStream[(Int, Int)]
+      val impressions = impressionInput.toDF().toDF("adId", "time")
+        .select($"adId", timestamp_seconds($"time").as("impressionTime"))
+      val clicks = clickInput.toDF().toDF("clickAdId", "time")
+        .select($"clickAdId", timestamp_seconds($"time").as("clickTime"))
+        .withWatermark("clickTime", "0 seconds")
+      val joined = impressions.join(clicks, expr("adId = clickAdId AND " +
+          "clickTime BETWEEN impressionTime AND impressionTime + INTERVAL 1 HOUR"), "left_outer")
+        .select($"adId", $"impressionTime".cast("long"), $"clickAdId",
+          $"clickTime".cast("long"))
+      withTempDir { checkpointDir =>
+        val checkpoint = checkpointDir.getCanonicalPath
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint),
+          // No click has arrived, so no watermark evicts the impressions.
+          AddData(impressionInput, (1, 10), (2, 20)),
+          CheckNewAnswer(),
+          StopStream)
+        setMarker(checkpoint, None)
+        withSQLConf(markerKey -> "0") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint),
+            AddData(clickInput, (2, 30)),
+            CheckNewAnswer(Row(2, 20L, 2, 30L)),
+            AddData(clickInput, (9, 10000)),
+            CheckNewAnswer(),
+            // The eviction watermark is 10000 seconds, so impressions before 6400 seconds are
+            // evicted; impression 2 matched before.
+            AddData(clickInput, (8, 10001)),
+            CheckNewAnswer(Row(1, 10L, null, null)),
+            StopStream)
+        }
+        assert(pinnedMarker(checkpoint).contains("0"))
+      }
+    }
+  }
+
   Seq(2, 4).foreach { version =>
     test(s"reject an incompatible checkpoint retrying batch zero, V$version") {
       withJoinConf(version, logVersion = 1) {
