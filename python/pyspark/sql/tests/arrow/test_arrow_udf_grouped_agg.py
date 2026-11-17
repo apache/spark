@@ -535,6 +535,43 @@ class GroupedAggArrowUDFTestsMixin:
             agg2 = self.spark.sql("select max_udf(id) from table")
             self.assertEqual(agg1.collect(), agg2.collect())
 
+    def test_grouped_without_group_by_clause_empty_input(self):
+        # SPARK-60826: an aggregation without grouping keys returns one row for an empty input
+        import pyarrow as pa
+
+        @arrow_udf("long")
+        def count_udf(v: pa.Array) -> pa.Scalar:
+            return pa.scalar(len(v), pa.int64())
+
+        @arrow_udf("double")
+        def sum_udf(v: pa.Array) -> pa.Scalar:
+            return pa.scalar(pa.compute.sum(v).as_py() or 0.0, pa.float64())
+
+        @arrow_udf("long")
+        def count_iter_udf(it: Iterator[pa.Array]) -> pa.Scalar:
+            return pa.scalar(sum(len(v) for v in it), pa.int64())
+
+        for df in [
+            self.spark.range(10).where("id > 100"),
+            self.spark.range(10).where("id > 100").repartition(3),
+            self.spark.createDataFrame([], "id long"),
+        ]:
+            self.assertEqual(df.agg(count_udf("id")).collect(), df.agg(sf.count("id")).collect())
+            self.assertEqual(
+                df.agg(count_udf("id").alias("c"), (sum_udf("id") + 1).alias("s")).collect(),
+                [Row(c=0, s=1.0)],
+            )
+            self.assertEqual(df.agg(count_iter_udf("id")).collect(), [Row(0)])
+
+            # An aggregation with grouping keys returns no row for an empty input.
+            self.assertEqual(df.groupBy("id").agg(count_udf("id")).collect(), [])
+            self.assertEqual(df.groupBy("id").agg(count_iter_udf("id")).collect(), [])
+
+        with self.temp_view("table"), self.temp_func("count_udf"):
+            self.spark.range(10).where("id > 100").createTempView("table")
+            self.spark.udf.register("count_udf", count_udf)
+            self.assertEqual(self.spark.sql("SELECT count_udf(id) FROM table").collect(), [Row(0)])
+
     def test_no_predicate_pushdown_through(self):
         import pyarrow as pa
 

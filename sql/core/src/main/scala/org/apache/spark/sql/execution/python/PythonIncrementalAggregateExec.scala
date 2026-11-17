@@ -128,9 +128,9 @@ abstract class PythonIncrementalAggregateExecBase extends UnaryExecNode with Pyt
       }
 
       // For a global aggregation with empty input, feed one all-null buffer row so the Python
-      // worker still emits `finish(zero)`. An empty group cannot be sent through
-      // GroupedPythonArrowInput (it asserts a non-empty batch per group), and the worker treats a
-      // null partial buffer as contributing nothing to `merge`.
+      // worker still emits `finish(zero)`. An empty group cannot be sent as is (the worker of this
+      // eval type expects a non-empty batch per group), and the worker treats a null partial
+      // buffer as contributing nothing to `merge`.
       lazy val nullInputRow: UnsafeRow =
         UnsafeProjection.create(aggInputSchema.map(_.dataType).toArray)
           .apply(new GenericInternalRow(aggInputSchema.length)).copy()

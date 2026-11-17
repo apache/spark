@@ -291,7 +291,10 @@ class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         import pyarrow as pa
 
         for group in data:
-            concatenated = ArrowBatchTransformer.concat_batches(group)
+            batches = list(group)
+            # The group of an aggregation without grouping keys can have no rows: it is then a
+            # single batch with no rows, and the UDFs get empty arrays.
+            concatenated = ArrowBatchTransformer.concat_batches(batches, batches[0].schema)
             results = [
                 func(
                     *[concatenated.column(o) for o in udf.args_offsets],
