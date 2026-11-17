@@ -23,7 +23,8 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.LeftAnti
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, MergeRows, ReplaceData, WriteDelta}
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryBaseTable, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.MergeSummary
@@ -1941,6 +1942,80 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              |WHEN NOT MATCHED BY SOURCE AND 1 DIV 0 = 1 THEN DELETE
              |""".stripMargin)
         checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 10, "hr"))
+      }
+    }
+  }
+
+  gridTest("insert-only MERGE defers constant-folding failures")(for {
+    numClauses <- Seq(1, 2)
+    (condition, salary) <- Seq("" -> "1 DIV 0", "AND 1 DIV 0 = 1" -> "s.salary")
+  } yield (numClauses, condition, salary)) { case (numClauses, condition, salary) =>
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+
+        val extraClause = if (numClauses == 2) {
+          "WHEN NOT MATCHED AND s.salary < 0 THEN INSERT *"
+        } else {
+          ""
+        }
+        val merge =
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |$extraClause
+             |WHEN NOT MATCHED $condition THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, $salary, s.dep)
+             |""".stripMargin
+
+        Seq((1, 10L, "hr")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+        sql(merge)
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 100L, "hr"))
+
+        Seq((1, 10L, "hr"), (2, 20L, "hr"))
+          .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+        val error = intercept[SparkArithmeticException] {
+          sql(merge)
+        }
+        assert(error.getCondition == "DIVIDE_BY_ZERO")
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 100L, "hr"))
+      }
+    }
+  }
+
+  test("insert-only MERGE preserves condition pushdown when constants fold") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        Seq((1, 10L, "hr"), (2, 20L, "hr"))
+          .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+        Seq(
+          "s.salary > CAST('5' AS BIGINT)",
+          "s.salary > try_divide(10, 2)",
+          "s.salary > 0 AND CAST('today' AS DATE) = current_date()"
+        ).foreach { condition =>
+          val merge =
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN NOT MATCHED AND $condition THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+               |""".stripMargin
+          val parsed = spark.sessionState.sqlParser.parsePlan(merge)
+          val qe = spark.sessionState.executePlan(parsed)
+          val joins = qe.analyzed.collect {
+            case j @ Join(_: Filter, _, LeftAnti, _, _) => j
+          }
+          assert(joins.size == 1)
+          assert(qe.optimizedPlan.collect { case m: MergeRows => m }.isEmpty)
+
+          sql(merge)
+          checkAnswer(sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1, 100L, "hr"), Row(2, 20L, "hr")))
+        }
       }
     }
   }

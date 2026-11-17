@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, ExposesMetadataColumns, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
@@ -50,7 +53,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
         matchedActions.isEmpty && notMatchedActions.size == 1 &&
-        notMatchedBySourceActions.isEmpty =>
+        notMatchedBySourceActions.isEmpty && canFoldConstants(notMatchedActions.head) =>
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
@@ -108,7 +111,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
           val outputs = notMatchedInstructions.flatMap(_.outputs)
 
-          // merge rows as there are multiple NOT MATCHED actions
+          // evaluate NOT MATCHED actions conditionally for each unmatched source row
           val mergeRows = MergeRows(
             isSourceRowPresent = TrueLiteral,
             isTargetRowPresent = FalseLiteral,
@@ -169,6 +172,18 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   private def isNullAssignment(assignment: Assignment): Boolean = assignment.value match {
     case Literal(null, _) | Alias(Literal(null, _), _) => true
     case _ => false
+  }
+
+  private def canFoldConstants(action: MergeAction): Boolean = {
+    // The Project/Filter rewrite folds constants eagerly, so failures require MergeRows.
+    try {
+      val replaced = ReplaceExpressions.replace(action)
+      val rewritten = SpecialDatetimeValues.applyForExpression(replaced)
+      ConstantFolding.constantFolding(rewritten)
+      true
+    } catch {
+      case NonFatal(_) => false
+    }
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
