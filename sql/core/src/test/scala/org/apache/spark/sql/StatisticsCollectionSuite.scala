@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -198,6 +199,90 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         checkAnswer(
           sql(s"SELECT v FROM $tableName WHERE v > 'x'"),
           Row("yz"))
+      }
+    }
+  }
+
+  test("SPARK-60810: CBO keeps CHAR column statistics through read-side padding") {
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      val tableName = "char_read_side_padding_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(c CHAR(5)) USING parquet")
+        sql(s"INSERT INTO $tableName SELECT CAST(id % 10 AS STRING) FROM range(1000)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+
+        def estimatedRows(query: String)(
+            pick: PartialFunction[LogicalPlan, LogicalPlan]): Option[BigInt] = {
+          val plan = sql(query).queryExecution.optimizedPlan
+          plan.collectFirst(pick).getOrElse(fail(s"no matching node in\n${plan.treeString}"))
+            .stats.rowCount
+        }
+        // Above the padding Project, which carries the column's statistics.
+        assert(estimatedRows(s"SELECT c, count(*) FROM $tableName GROUP BY c") {
+          case a: Aggregate => a
+        }.contains(BigInt(10)))
+        // Pushed below it, where the predicate compares the padding expression itself.
+        assert(estimatedRows(s"SELECT * FROM $tableName WHERE c = '3'") {
+          case f: Filter => f
+        }.contains(BigInt(100)))
+        assert(estimatedRows(s"SELECT * FROM $tableName WHERE c IN ('3', '4')") {
+          case f: Filter => f
+        }.contains(BigInt(200)))
+      }
+    }
+  }
+
+  test("SPARK-60810: CBO plans an outer join on CHAR columns that hold only nulls") {
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      withTable("char_nulls_a", "char_nulls_b", "char_nulls_c") {
+        Seq("char_nulls_a", "char_nulls_b").foreach { t =>
+          sql(s"CREATE TABLE $t(id INT, c CHAR(5)) USING parquet")
+          sql(s"INSERT INTO $t SELECT CAST(id AS INT), CAST(NULL AS STRING) FROM range(10)")
+          sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR COLUMNS id, c")
+        }
+        sql("CREATE TABLE char_nulls_c(x INT) USING parquet")
+        sql("INSERT INTO char_nulls_c VALUES (1)")
+        sql("ANALYZE TABLE char_nulls_c COMPUTE STATISTICS FOR COLUMNS x")
+
+        // The padded keys carry a distinct count of 0 on both sides, so they match no rows and
+        // the full outer join keeps the rows of both sides.
+        val df = sql(
+          """SELECT * FROM (
+            |  SELECT a.id AS aid, b.id AS bid
+            |  FROM char_nulls_a a FULL OUTER JOIN char_nulls_b b ON a.c = b.c) j
+            |CROSS JOIN char_nulls_c""".stripMargin)
+        val plan = df.queryExecution.optimizedPlan
+        val fullOuter = plan.collectFirst {
+          case j: Join if j.joinType == org.apache.spark.sql.catalyst.plans.FullOuter => j
+        }.getOrElse(fail(s"no full outer join in\n${plan.treeString}"))
+        assert(fullOuter.stats.rowCount.contains(BigInt(20)), plan.treeString)
+        checkAnswer(df.selectExpr("count(*)"), Row(20))
+      }
+    }
+  }
+
+  test("SPARK-60810: partition pruning estimates a filter on a CHAR partition column") {
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      val tableName = "char_partition_pruning_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(v INT, p CHAR(5)) USING parquet PARTITIONED BY (p)")
+        sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), CAST(id % 10 AS STRING) " +
+          "FROM range(1000)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS v, p")
+
+        // PruneFileSourcePartitions estimates the pushed-down partition filter, which compares
+        // the padding expression, and saves the result as the pruned relation's statistics.
+        val plan = sql(s"SELECT * FROM $tableName WHERE p = '3'").queryExecution.optimizedPlan
+        val prunedStats = plan.collectFirst {
+          case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
+        }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
+        assert(prunedStats.rowCount.contains(BigInt(100)), plan.treeString)
       }
     }
   }
@@ -639,6 +724,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         .stats.get.colStats(tsCol).toPlanStat(tsCol, TimestampNTZType)
       assert(columnStat.min.contains(1640995201123456L))
       assert(columnStat.max.contains(1641168002987654L))
+    }
+  }
+
+  test("SPARK-61724: CBO estimates joins and filters on analyzed TIMESTAMP_NTZ columns") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("ntz_cbo") {
+        // 100 rows of 10 values, from 2020-01-01 to 2020-01-10.
+        sql("CREATE TABLE ntz_cbo USING parquet AS SELECT " +
+          "make_timestamp_ntz(2020, 1, CAST(id % 10 AS INT) + 1, 0, 0, 0) AS k FROM range(100)")
+        sql("ANALYZE TABLE ntz_cbo COMPUTE STATISTICS FOR COLUMNS k")
+        def estimatedRows(query: String): Option[BigInt] =
+          sql(query).queryExecution.optimizedPlan.stats.rowCount
+        assert(estimatedRows("SELECT * FROM ntz_cbo a JOIN ntz_cbo b ON a.k = b.k")
+          .contains(BigInt(1000)))
+        // 8.5 of the 9 days between the min and the max.
+        assert(estimatedRows("SELECT * FROM ntz_cbo WHERE k > TIMESTAMP_NTZ'2020-01-01 12:00:00'")
+          .contains(BigInt(95)))
+        assert(estimatedRows(
+          """SELECT * FROM (SELECT k FROM ntz_cbo UNION ALL SELECT k FROM ntz_cbo) u
+            |JOIN ntz_cbo b ON u.k = b.k""".stripMargin).contains(BigInt(2000)))
+      }
     }
   }
 

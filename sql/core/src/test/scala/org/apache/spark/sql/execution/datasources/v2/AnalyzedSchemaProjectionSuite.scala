@@ -32,9 +32,11 @@ import org.apache.spark.sql.types.{
   StructField, StructType, VariantType
 }
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils, SchemaValidationMode}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
+@DataSourceV2Test
 class AnalyzedSchemaProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("rebind a root-level addition without inspecting unchanged column types") {

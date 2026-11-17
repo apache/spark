@@ -148,7 +148,7 @@ trait ColumnarStreamReader {
   /**
    * Returns the latest offset available, within a limit.
    *
-   * @param start the offset that the next micro-batch starts after: the end of the last
+   * @param start the starting progress boundary of the next micro-batch: the end of the last
    *              micro-batch, or the initial offset before the first one
    * @param limit `ReadLimit.allAvailable()`, or the default read limit: the latest offset is then
    *              the end of the data of the next micro-batch. Spark only passes the default read
@@ -159,8 +159,10 @@ trait ColumnarStreamReader {
   def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String
 
   /**
-   * Plans the partitions that read the data after `start` up to and including `end`. Spark plans
-   * each range once, also for a micro-batch that reads the source several times.
+   * Plans the partitions that read the data between the progress boundaries `start` and `end`,
+   * which the data source maps to records: equal boundaries describe no data, and adjacent ranges
+   * must neither repeat nor skip records. Spark plans each range once, also for a micro-batch
+   * that reads the source several times.
    */
   def partitions(start: String, end: String): Array[InputPartition]
 
@@ -171,7 +173,7 @@ trait ColumnarStreamReader {
    */
   def readerFactory(): PartitionReaderFactory
 
-  /** Tells the data source that Spark has processed all the data up to and including `end`. */
+  /** Tells the data source that Spark has processed all the data before the boundary `end`. */
   def commit(end: String): Unit = {}
 
   def stop(): Unit = {}
@@ -201,9 +203,10 @@ trait ColumnarWriter extends Serializable {
 }
 
 /**
- * Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. Spark
- * does not abort a micro-batch once the writer committed it, but a restarted query may abort a
- * micro-batch that a writer of an earlier run of the query committed.
+ * Writes data to a [[ColumnarDataSource]] for a streaming write, for a single micro-batch: Spark
+ * creates a new writer for each micro-batch, and does not call a writer after it committed or
+ * aborted its micro-batch. Spark does not abort a micro-batch once the writer committed it, but a
+ * restarted query may abort a micro-batch that a writer of an earlier run of the query committed.
  */
 trait ColumnarStreamWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long, epochId: Long): DataWriter[ColumnarBatch]

@@ -340,3 +340,546 @@ Project [x1#x, x2#x]
 reset spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate
 -- !query analysis
 ResetCommand spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate
+
+
+-- !query
+set spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate = false
+-- !query analysis
+SetCommand (spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate,Some(false))
+
+
+-- !query
+set spark.sql.optimizer.scalarSubqueryUseSingleJoin = false
+-- !query analysis
+SetCommand (spark.sql.optimizer.scalarSubqueryUseSingleJoin,Some(false))
+
+
+-- !query
+select *, (with cte as (select y1, count(*) as cnt from y where y1 = x1 group by y1) select cnt from cte) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Aggregate [y1#x], [y1#x, count(1) AS cnt#xL]
+:     :        +- Filter (y1#x = outer(x1#x))
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     +- Project [cnt#xL]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [y1#x, cnt#xL], false, false
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1) select count(*) from cte group by y1) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [y1#x, y2#x]
+:     :        +- Filter (y1#x = outer(x1#x))
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     +- Aggregate [y1#x], [count(1) AS count(1)#xL]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte1 as (select * from y where y1 = x1), cte2 as (select y1, count(*) as cnt from cte1 group by y1) select cnt from cte2) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte1
+:     :     +- Project [y1#x, y2#x]
+:     :        +- Filter (y1#x = outer(x1#x))
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte2
+:     :     +- Aggregate [y1#x], [y1#x, count(1) AS cnt#xL]
+:     :        +- SubqueryAlias cte1
+:     :           +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
+:     +- Project [cnt#xL]
+:        +- SubqueryAlias cte2
+:           +- CTERelationRef xxxx, true, [y1#x, cnt#xL], false, false
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1) select count(*) from cte left join z on y2 = z2 group by y1) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [y1#x, y2#x]
+:     :        +- Filter (y1#x = outer(x1#x))
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     +- Aggregate [y1#x], [count(1) AS count(1)#xL]
+:        +- Join LeftOuter, (y2#x = z2#x)
+:           :- SubqueryAlias cte
+:           :  +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
+:           +- SubqueryAlias z
+:              +- View (`z`, [z1#x, z2#x])
+:                 +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+:                    +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1) select count(*) from cte a join cte b on a.y2 = b.y2 group by a.y1) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [y1#x, y2#x]
+:     :        +- Filter (y1#x = outer(x1#x))
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     +- Aggregate [y1#x], [count(1) AS count(1)#xL]
+:        +- Join Inner, (y2#x = y2#x)
+:           :- SubqueryAlias a
+:           :  +- SubqueryAlias cte
+:           :     +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
+:           +- SubqueryAlias b
+:              +- SubqueryAlias cte
+:                 +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte as (select * from y) select count(*) from z where z1 = x1 and exists (select * from cte) group by z1) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [y1#x, y2#x]
+:     :        +- SubqueryAlias y
+:     :           +- View (`y`, [y1#x, y2#x])
+:     :              +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                 +- LocalRelation [col1#x, col2#x]
+:     +- Aggregate [z1#x], [count(1) AS count(1)#xL]
+:        +- Filter ((z1#x = outer(x1#x)) AND exists#x [])
+:           :  +- Project [y1#x, y2#x]
+:           :     +- SubqueryAlias cte
+:           :        +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
+:           +- SubqueryAlias z
+:              +- View (`z`, [z1#x, z2#x])
+:                 +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+:                    +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte as (select y1, count(*) as cnt from y where y1 = 2 group by y1), other as (select * from cte) select cnt + x1 + (select count(*) from other) from cte) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Aggregate [y1#x], [y1#x, count(1) AS cnt#xL]
+:     :        +- Filter (y1#x = 2)
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias other
+:     :     +- Project [y1#x, cnt#xL]
+:     :        +- SubqueryAlias cte
+:     :           +- CTERelationRef xxxx, true, [y1#x, cnt#xL], false, false
+:     +- Project [((cnt#xL + cast(outer(x1#x) as bigint)) + scalar-subquery#x []) AS ((cnt + outer(x.x1)) + scalarsubquery())#xL]
+:        :  +- Aggregate [count(1) AS count(1)#xL]
+:        :     +- SubqueryAlias other
+:        :        +- CTERelationRef xxxx, true, [y1#x, cnt#xL], false, false
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [y1#x, cnt#xL], false, false
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1), unused as (select * from z left join cte on z1 = y1) select count(*) from z) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [y1#x, y2#x]
+:     :        +- Filter (y1#x = outer(x1#x))
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias unused
+:     :     +- Project [z1#x, z2#x, y1#x, y2#x]
+:     :        +- Join LeftOuter, (z1#x = y1#x)
+:     :           :- SubqueryAlias z
+:     :           :  +- View (`z`, [z1#x, z2#x])
+:     :           :     +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+:     :           :        +- LocalRelation [col1#x, col2#x]
+:     :           +- SubqueryAlias cte
+:     :              +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
+:     +- Aggregate [count(1) AS count(1)#xL]
+:        +- SubqueryAlias z
+:           +- View (`z`, [z1#x, z2#x])
+:              +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1), unused as (select * from z left join cte on z1 = y1) select count(*) from cte) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [y1#x, y2#x]
+:     :        +- Filter (y1#x = outer(x1#x))
+:     :           +- SubqueryAlias y
+:     :              +- View (`y`, [y1#x, y2#x])
+:     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias unused
+:     :     +- Project [z1#x, z2#x, y1#x, y2#x]
+:     :        +- Join LeftOuter, (z1#x = y1#x)
+:     :           :- SubqueryAlias z
+:     :           :  +- View (`z`, [z1#x, z2#x])
+:     :           :     +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]
+:     :           :        +- LocalRelation [col1#x, col2#x]
+:     :           +- SubqueryAlias cte
+:     :              +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
+:     +- Aggregate [count(1) AS count(1)#xL]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [y1#x, y2#x], false, false
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+with t as (select *, (with cte as (select y1, count(*) as cnt from y where y1 = x1 group by y1) select cnt from cte) as n from x) select * from t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS n#xL]
+:        :  +- WithCTE
+:        :     :- CTERelationDef xxxx, false
+:        :     :  +- SubqueryAlias cte
+:        :     :     +- Aggregate [y1#x], [y1#x, count(1) AS cnt#xL]
+:        :     :        +- Filter (y1#x = outer(x1#x))
+:        :     :           +- SubqueryAlias y
+:        :     :              +- View (`y`, [y1#x, y2#x])
+:        :     :                 +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:        :     :                    +- LocalRelation [col1#x, col2#x]
+:        :     +- Project [cnt#xL]
+:        :        +- SubqueryAlias cte
+:        :           +- CTERelationRef xxxx, true, [y1#x, cnt#xL], false, false
+:        +- SubqueryAlias x
+:           +- View (`x`, [x1#x, x2#x])
+:              +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- Project [x1#x, x2#x, n#xL]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [x1#x, x2#x, n#xL], false, false
+
+
+-- !query
+select *, (with cte as (select y1, count(*) as cnt from y where y1 > x1 group by y1) select cnt from cte) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "value" : "y1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 105,
+    "fragment" : "(with cte as (select y1, count(*) as cnt from y where y1 > x1 group by y1) select cnt from cte)"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select y2 from y where y1 = x1) select y2 from cte) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 75,
+    "fragment" : "(with cte as (select y2 from y where y1 = x1) select y2 from cte)"
+  } ]
+}
+
+
+-- !query
+select *, (with unused as (select 1 as one), cte as (select * from y where y1 = x1) select count(*) from cte group by y1) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 121,
+    "fragment" : "(with unused as (select 1 as one), cte as (select * from y where y1 = x1) select count(*) from cte group by y1)"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1) select count(*) from z left join cte on z1 = y1 where z1 = x1 group by z1) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (y1#x = outer(x1#x))\n+- SubqueryAlias y\n   +- View (`y`, [y1#x, y2#x])\n      +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 53,
+    "fragment" : "select * from y where y1 = x1"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1) select count(*) from z left join cte on z1 = y1) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (y1#x = outer(x1#x))\n+- SubqueryAlias y\n   +- View (`y`, [y1#x, y2#x])\n      +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 53,
+    "fragment" : "select * from y where y1 = x1"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1) select count(*) from cte a left join cte b on a.y2 = b.y2) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (y1#x = outer(x1#x))\n+- SubqueryAlias y\n   +- View (`y`, [y1#x, y2#x])\n      +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 53,
+    "fragment" : "select * from y where y1 = x1"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select y1 from y full outer join (select * from z where z1 = x1) s on y1 = s.z1) select count(*) from z where exists (select * from cte)) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (z1#x = outer(x1#x))\n+- SubqueryAlias z\n   +- View (`z`, [z1#x, z2#x])\n      +- Project [cast(col1#x as int) AS z1#x, cast(col2#x as int) AS z2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 59,
+    "stopIndex" : 87,
+    "fragment" : "select * from z where z1 = x1"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = 2) select count(*) from z left join cte a on z2 = a.y2 join cte b on true where z1 = x1 group by a.y1) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "value" : "y1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 153,
+    "fragment" : "(with cte as (select * from y where y1 = 2) select count(*) from z left join cte a on z2 = a.y2 join cte b on true where z1 = x1 group by a.y1)"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = 2) select count(*) from (select y1 from cte union all select z1 from z) u join cte b on true where b.y2 = x1 group by u.y1) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "value" : "y1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 174,
+    "fragment" : "(with cte as (select * from y where y1 = 2) select count(*) from (select y1 from cte union all select z1 from z) u join cte b on true where b.y2 = x1 group by u.y1)"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1) select count(*) from cte a join cte b on a.y2 = b.y2 group by b.y1) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "value" : "y1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 122,
+    "fragment" : "(with cte as (select * from y where y1 = x1) select count(*) from cte a join cte b on a.y2 = b.y2 group by b.y1)"
+  } ]
+}
+
+
+-- !query
+select *, (with cte as (select * from y where y1 = x1), other as (select * from cte) select count(*) from other a join cte b on a.y2 = b.y2 group by a.y1) from x
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "value" : "y1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 154,
+    "fragment" : "(with cte as (select * from y where y1 = x1), other as (select * from cte) select count(*) from other a join cte b on a.y2 = b.y2 group by a.y1)"
+  } ]
+}
+
+
+-- !query
+set spark.sql.analyzer.singlePassResolver.dualRunWithLegacy = false
+-- !query analysis
+SetCommand (spark.sql.analyzer.singlePassResolver.dualRunWithLegacy,Some(false))
+
+
+-- !query
+with unused as (select *, (with cte as (select y1, count(*) as cnt from y where y1 = x1 group by y1) select cnt from cte) as n from x) select 1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.MUST_AGGREGATE_CORRELATED_SCALAR_SUBQUERY",
+  "sqlState" : "0A000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 121,
+    "fragment" : "(with cte as (select y1, count(*) as cnt from y where y1 = x1 group by y1) select cnt from cte)"
+  } ]
+}
+
+
+-- !query
+reset spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+-- !query analysis
+ResetCommand spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+
+
+-- !query
+reset spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate
+-- !query analysis
+ResetCommand spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate
+
+
+-- !query
+reset spark.sql.optimizer.scalarSubqueryUseSingleJoin
+-- !query analysis
+ResetCommand spark.sql.optimizer.scalarSubqueryUseSingleJoin

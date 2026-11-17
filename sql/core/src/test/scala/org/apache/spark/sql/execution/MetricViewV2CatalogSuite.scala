@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog,
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, Constants, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Metadata
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests that exercise [[org.apache.spark.sql.metricview.logical.CreateMetricView]] on a
@@ -39,6 +40,7 @@ import org.apache.spark.sql.types.Metadata
  * minimal [[RelationCatalog]] so the same instance can also host the source table referenced by
  * the metric view's YAML.
  */
+@DataSourceV2Test
 class MetricViewV2CatalogSuite extends SharedSparkSession {
 
   import testImplicits._

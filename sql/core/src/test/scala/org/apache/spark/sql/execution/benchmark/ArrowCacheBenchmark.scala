@@ -465,6 +465,50 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def cacheShuffledQuery(): Unit = {
+    val numRows = 5000000 // 5M rows
+    // AQE plans a cached query that has an exchange. For a serializer that takes columnar input,
+    // like the Arrow one, its rows then reach the cache through RowToColumnarExec at the end of
+    // the cached plan, a path that the other sections do not take: their queries have no exchange,
+    // or read Parquet, which is columnar already. The Default serializer takes rows. Each case
+    // times the cache build, including the shuffle, after creating its session.
+    runBenchmark("Cache a shuffled query") {
+      val benchmark = new Benchmark("Cache 5M rows after a shuffle", numRows, output = output)
+
+      def addShuffledCase(name: String, serializer: String)(
+          configure: SparkSession => Unit): Unit = {
+        benchmark.addTimerCase(name) { timer =>
+          val spark = createFreshSession(serializer)
+          try {
+            configure(spark)
+            val df = spark.range(numRows).repartition(1).selectExpr(
+              "id as int_col",
+              "id * 2L as long_col",
+              "cast(id as double) as double_col"
+            )
+            timer.startTiming()
+            df.cache()
+            df.count() // Materialize cache
+            timer.stopTiming()
+            df.unpersist(blocking = true)
+          } finally {
+            spark.stop()
+          }
+        }
+      }
+
+      val arrow = classOf[ArrowCachedBatchSerializer].getName
+      addShuffledCase("Default cache - shuffled input",
+        "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")(_ => ())
+      addShuffledCase("Arrow cache - shuffled input", arrow)(_ => ())
+      // Without AQE the same query reaches the Arrow serializer as rows, without RowToColumnarExec.
+      addShuffledCase("Arrow cache - shuffled input (AQE off)", arrow) { spark =>
+        spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      }
+      benchmark.run()
+    }
+  }
+
   private def recacheArrowData(): Unit = {
     val numRows = 2000000 // 2M rows
     runBenchmark("Re-cache Arrow cached data (zero-copy test)") {
@@ -853,6 +897,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       cachePrimitiveTypes()
       cacheWithFilters()
       cacheColumnarInput()
+      cacheShuffledQuery()
       recacheArrowData()
       columnPruning()
       columnPruningWideTable()

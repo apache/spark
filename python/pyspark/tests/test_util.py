@@ -218,6 +218,21 @@ class HandleWorkerExceptionTests(unittest.TestCase):
                 handle_worker_exception(e, stream, hide_traceback)
                 return stream.getvalue()
 
+    def test_exception_with_lone_surrogate(self):
+        import io
+
+        from pyspark.util import handle_worker_exception
+
+        message = "bad path: " + b"/data/\xff.csv".decode("utf-8", "surrogateescape")
+        try:
+            raise ValueError(message)
+        except ValueError as e:
+            with io.BytesIO() as stream:
+                handle_worker_exception(e, stream)
+                result = stream.getvalue()
+
+        self.assertIn(b"/data/\\udcff.csv", result)
+
     @patch.dict(os.environ, {"SPARK_SIMPLIFIED_TRACEBACK": "", "SPARK_HIDE_TRACEBACK": ""})
     def test_env_full(self):
         result = self.run_handle_worker_exception()
