@@ -187,23 +187,64 @@ case class TimeWindow(
 
 object TimeWindow {
   val marker = "spark.timeWindow"
-  // Window length in microseconds, recorded next to the marker. A stream-stream join compares
-  // it to decide whether an ordering of two window columns can evict state.
-  val durationKey = "spark.timeWindow.durationUs"
+  // The shortest and the longest window length in microseconds of the rows in a column,
+  // recorded next to the marker. A stream-stream join compares them to decide whether an
+  // ordering of two window columns can evict state. Only window() in the running query and
+  // unions of its columns record them, so they hold for every row of the column.
+  val minDurationKey = "spark.timeWindow.minDurationUs"
+  val maxDurationKey = "spark.timeWindow.maxDurationUs"
+  private val durationKeys = Seq(minDurationKey, maxDurationKey)
+
+  /** The shortest and the longest window length that the metadata records, if it records both. */
+  def durationRange(metadata: Metadata): Option[(Long, Long)] =
+    if (metadata.contains(minDurationKey) && metadata.contains(maxDurationKey)) {
+      Some((metadata.getLong(minDurationKey), metadata.getLong(maxDurationKey)))
+    } else {
+      None
+    }
+
+  /** The metadata with `min` and `max` as the shortest and the longest window length. */
+  def withDuration(metadata: Metadata, min: Long, max: Long): Metadata =
+    new MetadataBuilder().withMetadata(metadata)
+      .putLong(minDurationKey, min).putLong(maxDurationKey, max).build()
+
+  /**
+   * The metadata without window lengths. A column built from a stored or supplied schema, such
+   * as a table's, holds rows that other queries wrote, so the lengths there need not hold for its
+   * rows. This keeps the metadata as is when it records none.
+   */
+  def withoutDuration(metadata: Metadata): Metadata =
+    if (durationKeys.exists(metadata.contains)) {
+      val builder = new MetadataBuilder().withMetadata(metadata)
+      durationKeys.foreach(builder.remove)
+      builder.build()
+    } else {
+      metadata
+    }
+
+  /**
+   * The metadata of `metadata`, a stored or supplied schema's, with the window lengths of
+   * `column`, the column it applies to, instead of its own.
+   */
+  def withDurationOf(metadata: Metadata, column: Metadata): Metadata =
+    durationRange(column) match {
+      case Some((min, max)) => withDuration(metadata, min, max)
+      case None => withoutDuration(metadata)
+    }
 
   /**
    * The metadata of a union's output column, given the children's columns at its position: the
-   * first child's, which a union keeps, but without the window length unless every child records
-   * the same one. Otherwise a join would read the first child's length for every child's rows.
+   * first child's, which a union keeps, with the smallest shortest and the largest longest window
+   * length of the children, which bound the length of every row. It records none when any child
+   * records none, so that a join does not read one child's lengths for another child's rows.
    */
   def unionOutputMetadata(columns: Seq[Attribute]): Metadata = {
     val first = columns.head.metadata
-    def sameDuration(metadata: Metadata): Boolean =
-      metadata.contains(durationKey) && metadata.getLong(durationKey) == first.getLong(durationKey)
-    if (first.contains(durationKey) && !columns.tail.forall(c => sameDuration(c.metadata))) {
-      new MetadataBuilder().withMetadata(first).remove(durationKey).build()
+    val ranges = columns.map(c => durationRange(c.metadata))
+    if (ranges.forall(_.isDefined)) {
+      withDuration(first, ranges.flatten.map(_._1).min, ranges.flatten.map(_._2).max)
     } else {
-      first
+      withoutDuration(first)
     }
   }
 

@@ -268,9 +268,10 @@ object Project {
       name: String,
       newMetadata: Metadata,
       originalMetadata: Metadata): NamedExpression = {
+    // The supplied schema's window lengths need not hold for the column's rows.
     val metadata = new MetadataBuilder()
       .withMetadata(originalMetadata)
-      .withMetadata(newMetadata)
+      .withMetadata(TimeWindow.withDurationOf(newMetadata, originalMetadata))
       .build()
 
     col match {

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Join, LogicalPlan, Project, UnaryNode, Union}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MILLIS, MICROS_PER_MINUTE, MICROS_PER_SECOND}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -123,7 +124,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
   /**
    * Find the equality key that is this input's first watermarked column, or else, with `lags`,
-   * the watermarked key with the smallest lag that bounds it; see [[findEventTimeLags]].
+   * the watermarked key with the smallest lag that bounds it; see [[findEventTimeLags]]. A key
+   * that the plan relates to the late-filtered column comes before one that it does not relate,
+   * whose cutoff the plan does not show to be safe.
    */
   def getEventTimeKeyOrdinal(
       keys: Seq[Expression],
@@ -135,8 +138,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       Some(keys.indexWhere(_.semanticEquals(eventTime))).filter(_ >= 0).orElse {
         lags.flatMap { l =>
           keys.indices.flatMap { i =>
-            keyLag(keys(i), inputAttributes, l).filterNot(_.unbounded).map(i -> _.micros)
-          }.sortBy(_._2).headOption.map(_._1)
+            keyLag(keys(i), inputAttributes, l).filterNot(_.unbounded).map(i -> _)
+          }.sortBy { case (_, lag) => (lag.unrelated, lag.micros) }.headOption.map(_._1)
         }
       }
     }
@@ -160,9 +163,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * so each input filters late rows by its first watermarked column, and a column's lag is taken
    * against that one. Otherwise the optimizer can prune any watermarked column before a column, so
    * its lag is the largest against all of them. Spark 4.3 bounded state by every watermarked
-   * column at the watermark. A lag lowers that cutoff; see [[EventTimeLag]].
+   * column at the watermark. A lag lowers that cutoff; see [[EventTimeLag]]. A column in
+   * `unwatermarkedUnionColumns` has no bound; see [[findUnwatermarkedUnionColumns]].
    */
-  def findEventTimeLags(plan: LogicalPlan, planned: Boolean): EventTimeLags = {
+  def findEventTimeLags(
+      plan: LogicalPlan,
+      planned: Boolean,
+      unwatermarkedUnionColumns: Set[ExprId]): EventTimeLags = {
     val lags = plan.collect {
       case j: Join if j.left.isStreaming && j.right.isStreaming => Seq(j.left, j.right)
     }.flatten.flatMap { input =>
@@ -170,12 +177,27 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       watermarked.indices.map { i =>
         val lateFiltered = if (planned) watermarked.take(1) else watermarked.take(i)
         watermarked(i) -> lateFiltered.filter(_ != watermarked(i)).map { eventTime =>
-          lagBelow(input, watermarked(i), eventTime, Some(0L), Some(0L))
+          lagBelow(input, watermarked(i), eventTime, Some(0L), Some(0L),
+            unwatermarkedUnionColumns)
         }.foldLeft(EventTimeLag.zero)(_ max _)
       }
     }
     EventTimeLags(lags.groupMapReduce(_._1)(_._2)(_ max _))
   }
+
+  /**
+   * The columns at each position of a union in `plan` that the union watermarks and one of its
+   * inputs does not: the union's output column and every input's column there. That input builds
+   * the column some other way, so the column has no bound. Read them from the analyzed plan: the
+   * optimizer removes a union input whose sources have no data in a batch, and can then give
+   * the column the expression ID of any of these.
+   */
+  def findUnwatermarkedUnionColumns(plan: LogicalPlan): Set[ExprId] = plan.collect {
+    case u: Union => u.output.indices.filter { i =>
+      u.output(i).metadata.contains(delayKey) &&
+        u.children.exists(!_.output(i).metadata.contains(delayKey))
+    }.flatMap(i => u.output(i).exprId +: u.children.map(_.output(i).exprId))
+  }.flatten.toSet
 
   /** How a column relates to the column of a node's child that [[lagBelow]] follows for it. */
   private case class Step(column: ExprId, offset: Option[Long])
@@ -193,21 +215,23 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * them through its condition (see [[lagThroughJoinCondition]]); and into every input of a union,
    * at the same positions. A union input that does not watermark a column that the union, which
    * takes its first input's metadata, watermarks builds it some other way, so the lag is
-   * unbounded. Where both reach the same column, the lag is the difference of the two offsets.
-   * Everything else leaves the columns unrelated.
+   * unbounded, as it is for a column in `unwatermarkedUnion`, which such an input builds in a plan
+   * that the optimizer later removed the input from. Where both reach the same column, the lag is
+   * the difference of the two offsets. Everything else leaves the columns unrelated.
    */
   private def lagBelow(
       plan: LogicalPlan,
       key: ExprId,
       eventTime: ExprId,
       keyLow: Option[Long],
-      eventTimeHigh: Option[Long]): EventTimeLag = {
+      eventTimeHigh: Option[Long],
+      unwatermarkedUnion: Set[ExprId]): EventTimeLag = {
     def outputsBoth(p: LogicalPlan): Boolean =
       p.output.exists(_.exprId == key) && p.output.exists(_.exprId == eventTime)
     def follow(child: LogicalPlan, keyStep: Option[Step], eventTimeStep: Option[Step]) =
       (keyStep, eventTimeStep) match {
         case (Some(k), Some(t)) => lagBelow(child, k.column, t.column,
-          addOffsets(keyLow, k.offset), addOffsets(eventTimeHigh, t.offset))
+          addOffsets(keyLow, k.offset), addOffsets(eventTimeHigh, t.offset), unwatermarkedUnion)
         case _ => EventTimeLag.unrelated
       }
     if (key == eventTime) {
@@ -218,6 +242,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         }
         case _ => EventTimeLag.unbounded
       }
+    } else if (unwatermarkedUnion(key) || unwatermarkedUnion(eventTime)) {
+      EventTimeLag.unbounded
     } else {
       plan match {
         case p: Project =>
@@ -263,15 +289,17 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                 EventTimeLag.unbounded
               } else {
                 lagBelow(child, child.output(keyIndex).exprId,
-                  child.output(eventTimeIndex).exprId, keyLow, eventTimeHigh)
+                  child.output(eventTimeIndex).exprId, keyLow, eventTimeHigh, unwatermarkedUnion)
               }
             }.reduce(_ max _)
           }
         case j: Join =>
-          j.children.find(outputsBoth).map(lagBelow(_, key, eventTime, keyLow, eventTimeHigh))
-            .getOrElse(lagThroughJoinCondition(j, key, eventTime, keyLow, eventTimeHigh))
+          j.children.find(outputsBoth)
+            .map(lagBelow(_, key, eventTime, keyLow, eventTimeHigh, unwatermarkedUnion))
+            .getOrElse(lagThroughJoinCondition(j, key, eventTime, keyLow, eventTimeHigh,
+              unwatermarkedUnion))
         case u: UnaryNode if outputsBoth(u.child) =>
-          lagBelow(u.child, key, eventTime, keyLow, eventTimeHigh)
+          lagBelow(u.child, key, eventTime, keyLow, eventTimeHigh, unwatermarkedUnion)
         case _ => EventTimeLag.unrelated
       }
     }
@@ -279,21 +307,26 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
   /**
    * The lag of `key` below `eventTime` of [[lagBelow]] where `join` outputs them from different
-   * inputs, through an equality `x = y` in its condition between a watermarked column x of the
-   * key's input and a watermarked column y of the event time's input: the key is at most its lag
-   * below x, which equals y, which is at most its lag below the event time, so the lags add up.
-   * That holds on every row that the join outputs with a non-NULL key: all rows of an inner join
+   * inputs, through a conjunct of its condition that bounds a watermarked column x of the key's
+   * input from below by a watermarked column y of the event time's input: an equality `x = y`, or,
+   * for TIMESTAMP columns, `x >= y + c`, `x > y + c`, `x = y + c` or a BETWEEN with such a lower
+   * bound, where c is constant intervals. The key is at most its lag below x, x is at most -c
+   * below y, and y is at most its lag below the event time, so the lags add up. A c whose whole
+   * days, months or years can move a time backward has no bound here, as for equality keys. That
+   * holds on every row that the join outputs with a non-NULL key: all rows of an inner join
    * satisfy its condition, and so do those of a left or right outer join that pads the key's
    * input, whose other rows carry a NULL key that no condition matches. The smallest bounded lag
-   * over such equalities wins. Other conjuncts, such as a range or a shifted equality, and other
-   * join types leave the columns unrelated.
+   * over such conjuncts wins; if every such conjunct gives a lag without bound, the lag has no
+   * bound either. Other conjuncts, such as one that bounds x only from above, and other join
+   * types leave the columns unrelated.
    */
   private def lagThroughJoinCondition(
       join: Join,
       key: ExprId,
       eventTime: ExprId,
       keyLow: Option[Long],
-      eventTimeHigh: Option[Long]): EventTimeLag = {
+      eventTimeHigh: Option[Long],
+      unwatermarkedUnion: Set[ExprId]): EventTimeLag = {
     def watermarked(p: LogicalPlan): Set[ExprId] =
       p.output.filter(_.metadata.contains(delayKey)).map(_.exprId).toSet
     def outputs(p: LogicalPlan, id: ExprId): Boolean = p.output.exists(_.exprId == id)
@@ -314,25 +347,44 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     }.toSeq.flatMap { case (keyInput, eventTimeInput) =>
       val keyColumns = watermarked(keyInput)
       val eventTimeColumns = watermarked(eventTimeInput)
+      // (x, y, c) where x >= y + c on every row that satisfies the conjunct; c is None without
+      // bound. The analyzed plan keeps a BETWEEN, which the optimizer splits into two of them.
+      def lowerBound(high: Expression, low: Expression): Seq[(ExprId, ExprId, Option[Long])] =
+        (high, singleReference(low)) match {
+          case (x: Attribute, Some(y))
+              if x.dataType == TimestampType && y.dataType == TimestampType =>
+            Try(intervalShift(low, y)).toOption.flatten.toSeq.map { shift =>
+              (x.exprId, y.exprId, Some(shift.min).filter(_ => shift.exact || shift.forward))
+            }
+          case _ => Nil
+        }
       join.condition.toSeq.flatMap(splitConjunctivePredicates).flatMap {
-        case EqualTo(a: Attribute, b: Attribute) => Seq(a.exprId -> b.exprId, b.exprId -> a.exprId)
+        case EqualTo(a: Attribute, b: Attribute) =>
+          Seq((a.exprId, b.exprId, Some(0L)), (b.exprId, a.exprId, Some(0L)))
+        case EqualTo(l, r) => lowerBound(l, r) ++ lowerBound(r, l)
+        case GreaterThanOrEqual(l, r) => lowerBound(l, r)
+        case GreaterThan(l, r) => lowerBound(l, r)
+        case LessThanOrEqual(l, r) => lowerBound(r, l)
+        case LessThan(l, r) => lowerBound(r, l)
+        case Between(input, lower, upper, _) => lowerBound(input, lower) ++ lowerBound(upper, input)
         case _ => Nil
-      }.filter { case (x, y) => keyColumns.contains(x) && eventTimeColumns.contains(y) }
-        .map { case (x, y) =>
-          val below = lagBelow(keyInput, key, x, keyLow, Some(0L))
-          val above = lagBelow(eventTimeInput, y, eventTime, Some(0L), eventTimeHigh)
+      }.filter { case (x, y, _) => keyColumns.contains(x) && eventTimeColumns.contains(y) }
+        .map { case (x, y, shift) =>
+          val below = lagBelow(keyInput, key, x, keyLow, Some(0L), unwatermarkedUnion)
+          val above = lagBelow(eventTimeInput, y, eventTime, Some(0L), eventTimeHigh,
+            unwatermarkedUnion)
           if (below.unrelated || above.unrelated) {
             EventTimeLag.unrelated
           } else {
-            Try(Math.addExact(below.micros, above.micros)).toOption
-              .filter(_ => !below.unbounded && !above.unbounded)
-              .map(EventTimeLag(_, unrelated = false, unbounded = false))
+            shift.filter(_ => !below.unbounded && !above.unbounded).flatMap { c =>
+              Try(Math.subtractExact(Math.addExact(below.micros, above.micros), c)).toOption
+            }.map(lag => EventTimeLag(math.max(0L, lag), unrelated = false, unbounded = false))
               .getOrElse(EventTimeLag.unbounded)
           }
         }
     }
     lags.filter(lag => !lag.unrelated && !lag.unbounded).sortBy(_.micros).headOption
-      .getOrElse(EventTimeLag.unrelated)
+      .getOrElse(if (lags.exists(_.unbounded)) EventTimeLag.unbounded else EventTimeLag.unrelated)
   }
 
   // An offset too large to count in microseconds has no bound.
@@ -482,7 +534,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * `otherInputAttributes`. Without `lags`, only the opposite input's first watermarked column
    * counts as its event time; with them, each of its watermarked columns does at its own
    * watermark, the watermark less its lag, where they bound it; see [[EventTimeLag]].
-   * `exactForUnwatermarkedColumns` is passed on to [[getStateValueWatermark]].
+   * `exactForUnwatermarkedColumns` is passed on to [[getStateValueWatermark]], which this
+   * always asks to give no cutoff from a watermark term with the sign of an unwatermarked column.
    */
   def getStateValueWatermarkForLags(
       stateAttributes: AttributeSet,
@@ -523,6 +576,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     if (getEventTimeKeyOrdinal(keys, inputAttributes).contains(ordinal)) {
       Some(keyWatermark)
     } else {
+      // TODO(SPARK-61381): bound a shift that is not exact too, such as
+      //   `leftTime = rightTime + INTERVAL 1 DAY`. Until then such a key gives its input no
+      //   event-time bound, so the join holds the output watermark at 0 for that input.
       shiftOfKey(keys(ordinal), inputAttributes).filter(_.exact).flatMap { shift =>
         val keyWithWatermark = AttributeReference("stateKey", TimestampType,
           metadata = new MetadataBuilder().putLong(delayKey, 0L).build())()
@@ -690,6 +746,30 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
   }
 
+  /**
+   * The join condition in the form the optimizer gives the planned condition, which state
+   * eviction solves, for the admission check, which solves the analyzed condition: each foldable
+   * expression replaced by a literal of its value, as constant folding does, and each NOT over a
+   * comparison replaced by the opposite comparison, through De Morgan's laws, as boolean
+   * simplification does. Both keep the condition's meaning, including for NULLs. Current-time
+   * functions stay, since streaming execution replaces them per batch with expressions that are
+   * not folded, and so does an expression whose evaluation fails, which then fails at run time.
+   * Unlike [[withIntervalLiterals]], this keeps timestampadd, which eviction does not read in a
+   * range condition.
+   */
+  def withFoldedConstants(condition: Expression): Expression = condition.transformDown {
+    case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
+    case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
+    case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
+    case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+    case Not(Or(l, r)) => And(Not(l), Not(r))
+    case Not(And(l, r)) => Or(Not(l), Not(r))
+    case Not(Not(e)) => e
+    case e if e.foldable && !e.isInstanceOf[Literal] &&
+        !e.containsPattern(TreePattern.CURRENT_LIKE) =>
+      try Literal.create(e.eval(), e.dataType) catch { case NonFatal(_) => e }
+  }
+
   /** Microseconds per unit for the timestampadd units that add an exact duration. */
   private def timestampAddUnitMicros(unit: String): Option[Long] =
     unit.toUpperCase(Locale.ROOT) match {
@@ -756,14 +836,21 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      cutoff from a condition that the solver counts
    *                                      inexactly. State eviction and the admission check set
    *                                      it, so they agree.
-   * @param baseAdmissionRules            whether to skip the check that the bounded column is a
-   *                                      TIMESTAMP column or a time window, which Spark 4.4
-   *                                      added to the solver. It does not skip the inexact
-   *                                      arithmetic check for columns without their own
-   *                                      watermark, which exactForUnwatermarkedColumns alone
-   *                                      controls; leave that false too for the result of
-   *                                      earlier versions. Only the admission rule that stays
-   *                                      in force with the finalization check disabled sets it.
+   * @param baseAdmissionRules            whether to skip the checks that Spark 4.4 added to the
+   *                                      solver: that the bounded column is a TIMESTAMP column or a
+   *                                      time window, that a bound has a term on the other input's
+   *                                      watermarked event time, so a conjunct that uses only
+   *                                      constants, such as `CAST(lt AS BIGINT) > 10`, still gives
+   *                                      a cutoff, and that the term has a sign that bounds the
+   *                                      state, so a negated term, as in `CAST(lt AS BIGINT) > 100
+   *                                      - CAST(rt AS BIGINT)`, still gives a cutoff. It does not
+   *                                      skip the inexact arithmetic check for columns without
+   *                                      their own watermark, which exactForUnwatermarkedColumns
+   *                                      alone controls; leave that false too for the result of
+   *                                      earlier versions. Two callers set it: the admission rule
+   *                                      that stays in force with the finalization check disabled,
+   *                                      and the restart compatibility check's solve of the bound
+   *                                      that older versions derived.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -916,6 +1003,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // match. A column with its own watermark keeps such a cutoff, as existing queries rely on
     // it. With exactForUnwatermarkedColumns, any other column, such as the bounded column of an
     // input without a watermark, gets no cutoff from such a condition.
+    // TODO(SPARK-61381): count a day as 12 to 36 hours and a truncating cast by its loss, so that
+    //   such a column gets a conservative cutoff. Until then an inner join on
+    //   `rightTime <= expiry + INTERVAL 1 DAY`, with `expiry` lacking a watermark, keeps every
+    //   left row, and an outer or left semi join of that shape fails analysis.
     val stateColumnHasWatermark = constraintTerm.exists {
       case a: AttributeReference =>
         attributesToFindStateWatermarkFor.contains(a) && a.metadata.contains(delayKey)
@@ -926,7 +1017,6 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       logDebug(s"Inexact arithmetic gives an unwatermarked column no cutoff: $allOnLeftExpr")
       return None
     }
-
     // State eviction compares this cutoff in timestamp units against the constrained column, or
     // against its end for a time window; see [[isWindowEvictionSafe]].
     val stateColumn = constraintTerm.collectFirst {
@@ -984,17 +1074,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
   /** Whether a column of a join input can take a range cutoff: TIMESTAMP, or a time window. */
   def canTakeRangeCutoff(column: Attribute): Boolean =
-    column.dataType == TimestampType || windowDuration(column).isDefined
+    column.dataType == TimestampType || windowDurationRange(column).isDefined
 
-  /** The length of the windows in a column built by window(), when the column records it. */
-  private def windowDuration(column: Attribute): Option[Long] = {
-    val metadata = column.metadata
-    if (metadata.contains(TimeWindow.marker) && metadata.contains(TimeWindow.durationKey)) {
-      Some(metadata.getLong(TimeWindow.durationKey))
-    } else {
-      None
-    }
-  }
+  /**
+   * The shortest and the longest window length in a column of time windows, when the column
+   * records them: window() in the running query does, and a union does from its children's.
+   */
+  private def windowDurationRange(column: Attribute): Option[(Long, Long)] =
+    Option(column.metadata).filter(_.contains(TimeWindow.marker))
+      .flatMap(TimeWindow.durationRange)
 
   /**
    * Whether evicting `stateWindow` by its end is safe when a range condition compares it, as a
@@ -1004,10 +1092,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * input ends above the watermark, so it starts less than its own duration before it. When the
    * stored windows last at least as long as the other input's, every later window therefore
    * starts after every evicted window and orders above it. Shorter stored windows get no cutoff.
+   * TODO(SPARK-61510): give shorter stored windows a cutoff lowered by the difference of the two
+   *   window lengths. Until then an inner join keeps their state, and an outer or left semi join
+   *   bounded only that way fails analysis.
+   * A column can hold windows of several lengths, as a union of window columns does, so the
+   * shortest stored window must last at least as long as the longest window of the other input.
    */
   private def isWindowEvictionSafe(stateWindow: Attribute, watermarkWindow: Attribute): Boolean =
-    (windowDuration(stateWindow), windowDuration(watermarkWindow)) match {
-      case (Some(stored), Some(other)) => stored >= other
+    (windowDurationRange(stateWindow), windowDurationRange(watermarkWindow)) match {
+      case (Some((shortestStored, _)), Some((_, longestOther))) => shortestStored >= longestOther
       case _ => false
     }
 
@@ -1015,6 +1108,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * Whether the solver counts part of the expression inexactly: an interval of a day or more,
    * whose whole days Spark adds in the session time zone, where a day can be 23 or 25 hours, or a
    * cast that drops part of a time, such as CAST(ts AS BIGINT).
+   * TODO(SPARK-61381): give such terms a conservative bound instead of no cutoff for an input
+   *   without its own watermark.
    */
   private def hasInexactArithmetic(expr: Expression): Boolean = {
     def hasWholeDays(interval: Expression): Boolean = {

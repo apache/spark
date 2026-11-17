@@ -734,22 +734,23 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         condition = Some(leftKey === rightKey && leftWindow === rightWindow))
     }
     // Each input copies its event time shifted back by `micros` into a column with the same
-    // watermark.
-    def shiftedJoin(joinType: JoinType, micros: Long): LogicalPlan = {
-      def input(side: String): (LogicalPlan, Attribute, Attribute) = {
+    // watermark. The condition equates the shifted columns, or with `range` bounds the left
+    // event time from below by the right shifted column.
+    def shiftedJoin(joinType: JoinType, micros: Long, range: Boolean = false): LogicalPlan = {
+      def input(side: String): (LogicalPlan, Attribute, Attribute, Attribute) = {
         val key = AttributeReference(s"${side}Key", IntegerType)()
         val time = AttributeReference(s"${side}Time", TimestampType)()
           .withMetadata(watermarkMetadata)
         val shifted = Alias(TimestampAddInterval(time,
           Literal(-micros, DayTimeIntervalType()), Some("UTC")), s"${side}Shifted")(
           explicitMetadata = Some(watermarkMetadata))
-        (Project(Seq(key, time, shifted), TestStreamingRelation(Seq(key, time))), key,
+        (Project(Seq(key, time, shifted), TestStreamingRelation(Seq(key, time))), key, time,
           shifted.toAttribute)
       }
-      val (left, leftKey, leftShifted) = input("left")
-      val (right, rightKey, rightShifted) = input("right")
-      left.join(right, joinType = joinType,
-        condition = Some(leftKey === rightKey && leftShifted === rightShifted))
+      val (left, leftKey, leftTime, leftShifted) = input("left")
+      val (right, rightKey, _, rightShifted) = input("right")
+      val bound = if (range) leftTime >= rightShifted else leftShifted === rightShifted
+      left.join(right, joinType = joinType, condition = Some(leftKey === rightKey && bound))
     }
     val legacyMode = SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false"
     Seq(
@@ -808,6 +809,34 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         .filter(_.contains("rightShifted does not bound state"))
       assert(warnings.nonEmpty)
       assert(!warnings.exists(_.contains("stateful operator after the join")))
+    }
+
+    // A range bound on a column that the plan shows no bound for, such as a column a day below
+    // the right event time, does not finalize the left state, and earlier versions admitted it.
+    Seq(LeftOuter, LeftSemi).foreach { joinType =>
+      val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
+      val plan = shiftedJoin(joinType, 86400000000L, range = true)
+
+      test(s"$joinType bounded only by a range on a column a day below the right event time " +
+          s"fails in legacy mode and warns when $checkConf=false") {
+        val e = intercept[AnalysisException] {
+          withSQLConf(legacyMode) {
+            UnsupportedOperationChecker.checkForStreaming(
+              wrapInStreaming(plan), OutputMode.Append())
+          }
+        }
+        assert(e.getMessage.contains("requires a watermark on the right input"))
+        assert(e.getMessage.contains(checkConf))
+        val appender = new LogAppender("finalization check")
+        withLogAppender(appender, level = Some(Level.WARN)) {
+          withSQLConf(legacyMode, checkConf -> "false") {
+            UnsupportedOperationChecker.checkForStreaming(
+              wrapInStreaming(plan), OutputMode.Append())
+          }
+        }
+        assert(appender.loggingEvents.exists(
+          _.getMessage.getFormattedMessage.contains("requires a watermark on the right input")))
+      }
     }
   }
 
@@ -886,6 +915,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     // interval of a day or more counts as inexact in every session time zone.
     val inexactNote = "only on a column without its own watermark, through an interval of a day " +
       "or more or a truncating cast"
+    // A watermark on the input would let the join run with the day counted as 24 hours and the
+    // cast read as exact, which the error says instead of recommending it.
+    val exactAdvice = "Use an exact bound instead, such as a bound shorter than a day on the " +
+      "TIMESTAMP columns in place of the cast. A watermark on that input lets the join run, " +
+      "but its cutoff then counts a day as 24 hours and reads the cast as exact."
+    val inexactMessages = Seq("requires a watermark on the right input",
+      s"bounds the left input $inexactNote", exactAdvice)
     for {
       watermarked <- Seq(false, true)
       zone <- Seq("UTC", "America/Los_Angeles")
@@ -906,7 +942,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
       } else {
         assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
-          Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
+          inexactMessages)
       }
     }
     // Here the right time bounds the left time from below through 24 hours.
@@ -915,12 +951,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         condition = Some(unwatermarkedTime >= TimestampAddInterval(rightTime,
           Literal(Duration.ofHours(-24)), Some("UTC")) && unwatermarkedTime <= rightTime)),
       OutputMode.Append(),
-      Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
+      inexactMessages)
     assertNotSupportedInStreamingPlan("LeftOuter with a range over a truncating cast",
       new TestStreamingRelation(unwatermarkedTime).join(right, joinType = LeftOuter,
         condition = Some(unwatermarkedTime.cast(LongType) >= rightTime.cast(LongType) + 5L)),
       OutputMode.Append(),
-      Seq("requires a watermark on the right input", s"bounds the left input $inexactNote"))
+      inexactMessages)
 
     test("streaming plan - a join that lacks the right watermark gets no inexact-bound note") {
       val unwatermarkedRight = new TestStreamingRelation(AttributeReference("rt", TimestampType)())

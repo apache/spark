@@ -1304,9 +1304,12 @@ time constraint must have an exact length. An interval of a day or more, such as
 `INTERVAL 1 DAY` or `INTERVAL 48 HOURS`, does not finalize impressions in any session time zone,
 because Spark adds its whole days in the session time zone, where a day can last 23 or 25 hours.
 Nor does a truncating cast such as `CAST(impressionTime AS BIGINT)`. An outer join that relies
-on such a bound fails analysis; add a watermark on `impressionTime`, or use a bound shorter than
-a day. Full outer joins require watermarks and time constraints in both directions to finalize
-both sides.
+on such a bound fails analysis; use an exact bound instead, such as a bound shorter than a day
+on the TIMESTAMP columns in place of the cast. A watermark on `impressionTime` lets the join
+run, but the cutoff then counts a day as 24 hours and reads the cast as exact, so it can
+finalize a row that a later click still matches, in a time zone where a day lasts 25 hours or
+by up to a second with the cast. Full outer joins require watermarks and time constraints in
+both directions to finalize both sides.
 
 ###### Caveats
 There are a few important characteristics to note regarding how the outer results are generated.
@@ -1478,12 +1481,14 @@ Additional details on supported joins:
   time or its time window, or through a range condition on a timestamp column of the input. A
   range condition may also compare the input's time window as a whole with the other input's,
   such as `leftWindow > rightWindow`, when the input's windows last at least as long as the
-  other input's. A bound that uses only constants, such as `CAST(leftTime AS BIGINT) > 10`, or a
-  sum that a later row of the other input can always satisfy, such as
-  `CAST(leftTime AS BIGINT) + CAST(rightTime AS BIGINT) > 100`, does not qualify, and neither
-  does a range condition on a column of another type: a numeric column, such as
-  `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time window shorter
-  than the other input's.
+  other input's. For a union of window columns, its shortest windows must last at least as long
+  as the other input's longest. A bound that uses only constants, such as
+  `CAST(leftTime AS BIGINT) > 10`, or a sum that a later row of the other input can always
+  satisfy, such as `CAST(leftTime AS BIGINT) + CAST(rightTime AS BIGINT) > 100`, does not
+  qualify, and neither does a range condition on a column of another type: a numeric column,
+  such as `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, a time window shorter
+  than the other input's, or a time window column read from a table, from files or under a
+  supplied schema, whose window lengths the query does not know.
 
 - A stream-stream inner join cleans up an input's state only with such a time constraint. For
   example, an inner join whose only time constraint is `leftWindow > rightWindow`, with 10-second
