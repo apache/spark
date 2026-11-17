@@ -804,7 +804,14 @@ pub unsafe fn domains(
                 }
                 let array = unsafe { ArrowArray::from_raw(domain.ranges) };
                 let schema = unsafe { ArrowSchema::from_raw(domain.ranges_schema) };
-                let ranges = make_array(unsafe { from_ffi(array, &schema)? });
+                // As for a batch to write: Arrow neither aligns nor validates the C data that it
+                // imports, and the Arrow Java allocator of Spark does not promise the alignment
+                // of the buffers of decimals.
+                let mut data = unsafe { from_ffi(array, &schema)? };
+                data.align_buffers();
+                data.validate_full()
+                    .map_err(|e| format!("the ranges of a domain are not valid Arrow data: {e}"))?;
+                let ranges = make_array(data);
                 let ranges = ranges
                     .as_struct_opt()
                     .ok_or("the ranges of a domain are not structs");

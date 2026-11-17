@@ -494,8 +494,12 @@ values, sorted and without overlaps, or none for all of them. A scan can skip th
 no value in the domain of a column, such as a file or a row group whose statistics exclude every
 value of the domain, but never a row whose values are all in their domains. Spark evaluates all
 the filters after reading anyway, so the rows of a scan need not match them. The method returns
-whether the scan uses each domain: Spark shows the filters of the used domains as pushed in the
-formatted plan of the query. The default uses none, so a connector can ignore the method.
+whether the scan uses each domain: Spark shows a filter as pushed, in the formatted plan of the
+query and in the SQL tab of the Spark UI, when the scan uses the domains of all the columns that
+the filter constrains. The default uses none, so a connector can ignore the method. Spark pushes
+the domains to every builder, also to one that keeps the default: for a query whose filters give
+a domain, it creates the source and the builder of the scan while it optimizes the query, as it
+does for a LIMIT that it pushes, rather than when it plans the partitions.
 
 | `Domain` field | ABI field | Meaning |
 | --- | --- | --- |
@@ -555,7 +559,7 @@ is dropped, schema, layout, and nullability validation, the columns of the schem
 that the SDK keeps from a batch, sized ABI structures, task-context lifetimes, integer
 boundaries, projections, deterministic partition plans, and the domains that Spark pushes: the
 names of their columns, the values and bounds of each type, the ranges that the SDK moves to own,
-invalid paths, and the number of results. Write ABI tests cover typed
+invalid paths and ranges, and the number of results. Write ABI tests cover typed
 factory/message round trips, retained Arrow buffers, cancellation, failed writes and
 commits, factory creation and serialization failures, missing and undecodable messages,
 and the epoch IDs that select the task writers. Streaming ABI tests cover single-line JSON

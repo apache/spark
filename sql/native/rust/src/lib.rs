@@ -299,9 +299,13 @@ pub trait ScanBuilder: Send + Sized + 'static {
     /// gets no domain from it, and filters such as `id + 1 > 5` constrain no column. Spark
     /// evaluates all the filters after reading anyway.
     ///
-    /// Return whether the scan uses each domain, in order: Spark shows the filters of the used
-    /// domains as pushed in the formatted plan of the query (`EXPLAIN FORMATTED`). The default
-    /// uses none.
+    /// Return whether the scan uses each domain, in order: Spark shows a filter as pushed, in the
+    /// formatted plan of the query (`EXPLAIN FORMATTED`) and in the SQL tab of the Spark UI, when
+    /// the scan uses the domains of all the columns that the filter constrains. The default uses
+    /// none. Spark pushes the domains to every builder, also to one that keeps the default: for a
+    /// query whose filters give a domain, it creates the source and the builder of the scan, with
+    /// [`DataSource::new`] and [`DataSource::new_scan`], while it optimizes the query, as it does
+    /// for a LIMIT that it pushes, rather than when it plans the partitions.
     fn push_domains(&mut self, domains: &[Domain]) -> Result<Vec<bool>> {
         Ok(vec![false; domains.len()])
     }

@@ -23,7 +23,7 @@ use arrow_array::types::{
     Date32Type, Decimal128Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type,
     Int8Type, TimestampMicrosecondType,
 };
-use arrow_array::{Array, ArrayRef, BooleanArray, StructArray};
+use arrow_array::{new_empty_array, Array, ArrayRef, BooleanArray, StructArray};
 use arrow_schema::{DataType, Fields, TimeUnit};
 use serde::{Deserialize, Serialize};
 
@@ -108,10 +108,11 @@ impl Domain {
             return Ok(None);
         }
         names.push(field.name().clone());
-        let ranges = match pushed.ranges.as_ref().map(value_ranges).transpose()? {
-            Some(None) => return Ok(None),
-            ranges => ranges.flatten(),
-        };
+        let ranges = pushed
+            .ranges
+            .as_ref()
+            .map(|ranges| value_ranges(ranges, field.data_type()))
+            .transpose()?;
         Ok(Some(Self {
             path: names,
             null_allowed: pushed.null_allowed,
@@ -192,33 +193,31 @@ mod decimal_string {
 /// Whether the SDK has a [`Value`] for the values of a column of `data_type`: the types that
 /// [`values`] converts.
 fn has_value(data_type: &DataType) -> bool {
-    matches!(
-        data_type,
-        DataType::Boolean
-            | DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::Decimal128(..)
-            | DataType::Utf8
-            | DataType::Binary
-            | DataType::Date32
-            | DataType::Timestamp(TimeUnit::Microsecond, _)
-    )
+    values(&new_empty_array(data_type)).is_some()
 }
 
-/// The ranges of a domain, from the struct array that Spark passes, with the fields `low`,
-/// `high`, `low_inclusive` and `high_inclusive`, or `None` if its values have a type that the SDK
-/// has no [`Value`] for.
-fn value_ranges(ranges: &StructArray) -> Result<Option<Vec<ValueRange>>> {
-    let (Some(lows), Some(highs)) = (
-        values(field(ranges, "low")?),
-        values(field(ranges, "high")?),
-    ) else {
-        return Ok(None);
+/// The ranges of a domain of a column of `data_type`, a type that has a [`Value`], from the
+/// struct array that Spark passes, with the fields `low` and `high`, of the type of the column,
+/// and `low_inclusive` and `high_inclusive`.
+fn value_ranges(ranges: &StructArray, data_type: &DataType) -> Result<Vec<ValueRange>> {
+    let bounds = |name: &str| -> Result<Vec<Option<Value>>> {
+        let array = field(ranges, name)?;
+        let converted = if array.data_type() == data_type {
+            values(array)
+        } else {
+            None
+        };
+        converted.ok_or_else(|| {
+            format!(
+                "the field {name} of the ranges of a domain has the type {}, not the type \
+                 {data_type} of its column",
+                array.data_type()
+            )
+            .into()
+        })
     };
+    let lows = bounds("low")?;
+    let highs = bounds("high")?;
     let low_inclusive = flags(ranges, "low_inclusive")?;
     let high_inclusive = flags(ranges, "high_inclusive")?;
     let bound = |value: Option<Value>, inclusive: bool| match value {
@@ -235,7 +234,7 @@ fn value_ranges(ranges: &StructArray) -> Result<Option<Vec<ValueRange>>> {
             high: bound(high, high_inclusive.value(row)),
         })
         .collect();
-    Ok(Some(ranges))
+    Ok(ranges)
 }
 
 fn field<'a>(ranges: &'a StructArray, name: &str) -> Result<&'a ArrayRef> {
@@ -324,8 +323,22 @@ mod tests {
         .unwrap()
     }
 
-    fn convert(ranges: &StructArray) -> Option<Vec<ValueRange>> {
-        value_ranges(ranges).unwrap()
+    /// The ranges that the SDK converts, of a column of the type of their bounds.
+    fn convert(ranges: &StructArray) -> Vec<ValueRange> {
+        value_ranges(ranges, ranges.column(0).data_type()).unwrap()
+    }
+
+    /// The domain of the only column of a scan, a column of `data_type`, that Spark passes with
+    /// `ranges`, as the SDK converts it.
+    fn domain_of(data_type: &DataType, ranges: StructArray) -> Result<Option<Domain>> {
+        let fields = Fields::from(vec![Field::new("column", data_type.clone(), true)]);
+        let pushed = abi::PushedDomain {
+            path: vec![0],
+            null_allowed: false,
+            nan_allowed: false,
+            ranges: Some(ranges),
+        };
+        Domain::from_abi(&fields, &pushed)
     }
 
     #[test]
@@ -377,9 +390,35 @@ mod tests {
                 Value::TimestampNtz(7),
             ),
         ];
+        // Through the domain of a column of the type, which the SDK skips if it has no value.
         for (array, value) in cases {
-            let ranges = ranges(array.clone(), array, (true, true));
-            assert_eq!(convert(&ranges), Some(vec![ValueRange::single(value)]));
+            let data_type = array.data_type().clone();
+            let domain = domain_of(&data_type, ranges(array.clone(), array, (true, true)));
+            assert_eq!(
+                domain.unwrap().and_then(|domain| domain.ranges),
+                Some(vec![ValueRange::single(value)]),
+                "{data_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_bounds_of_another_type_than_their_column() {
+        let decimals = Decimal128Array::from(vec![12345])
+            .with_precision_and_scale(12, 4)
+            .unwrap();
+        let decimals: ArrayRef = Arc::new(decimals);
+        let strings: ArrayRef = Arc::new(StringArray::from(vec!["1"]));
+        for (data_type, bounds) in [
+            (DataType::Decimal128(10, 2), decimals),
+            (DataType::Int64, strings),
+        ] {
+            let ranges = ranges(bounds.clone(), bounds, (true, true));
+            let error = domain_of(&data_type, ranges).unwrap_err().to_string();
+            assert!(
+                error.contains(&format!("not the type {data_type} of its column")),
+                "{data_type}: {error}"
+            );
         }
     }
 
@@ -397,7 +436,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             convert(&ranges),
-            Some(vec![
+            vec![
                 ValueRange {
                     low: Bound::Unbounded,
                     high: Bound::Excluded(Value::Integer(0)),
@@ -410,11 +449,11 @@ mod tests {
                     low: Bound::Excluded(Value::Integer(10)),
                     high: Bound::Unbounded,
                 },
-            ])
+            ]
         );
         // No range: only null or NaN may be in the domain.
         let empty = ranges.slice(0, 0);
-        assert_eq!(convert(&empty), Some(vec![]));
+        assert!(convert(&empty).is_empty());
     }
 
     #[test]

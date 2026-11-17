@@ -24,7 +24,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::types::Int64Type;
 use arrow_array::{
-    Array, ArrayRef, BooleanArray, Float64Array, Int64Array, ListArray, StringArray, StructArray,
+    make_array, Array, ArrayRef, BinaryArray, BooleanArray, Float64Array, Int64Array, ListArray,
+    StringArray, StructArray,
 };
 use arrow_schema::{DataType, Field, Fields, Schema};
 use serde::{Deserialize, Serialize};
@@ -176,6 +177,8 @@ struct Exported {
     null_allowed: bool,
     nan_allowed: bool,
     ranges: Option<(Box<FFI_ArrowArray>, Box<ArrowSchema>)>,
+    // Whether to pass the ranges without their schema, which Spark never does.
+    without_schema: bool,
 }
 
 impl Exported {
@@ -190,14 +193,18 @@ impl Exported {
             null_allowed,
             nan_allowed: false,
             ranges,
+            without_schema: false,
         }
     }
 
     fn domain(&mut self) -> SparkDsDomain {
-        let (ranges, ranges_schema) = match &mut self.ranges {
+        let (ranges, mut ranges_schema) = match &mut self.ranges {
             Some((array, schema)) => (&mut **array as *mut _, &mut **schema as *mut _),
             None => (ptr::null_mut(), ptr::null_mut()),
         };
+        if self.without_schema {
+            ranges_schema = ptr::null_mut();
+        }
         SparkDsDomain {
             size: size_of::<SparkDsDomain>() as i64,
             path: self.path.as_ptr(),
@@ -408,6 +415,30 @@ fn rejects_invalid_paths_and_a_wrong_number_of_results() {
         let (_, failure) = push(library, "", &mut [Exported::new(path, true, None)]);
         assert_eq!(failure.as_deref(), Some(message));
     }
+    // Ranges without a schema, which the SDK must not import.
+    let ids: ArrayRef = Arc::new(Int64Array::from(vec![3]));
+    let ids = ranges(ids.clone(), ids, &[(true, true)]);
+    let mut without_schema = Exported::new(&[0], false, Some(ids));
+    without_schema.without_schema = true;
+    let (_, failure) = push(library, "", &mut [without_schema]);
+    assert_eq!(
+        failure.as_deref(),
+        Some("the ranges of a domain have no schema")
+    );
+    // Ranges that are not valid Arrow data: strings that are not UTF-8, which a `str` must not
+    // hold.
+    let invalid = BinaryArray::from_vec(vec![b"\xff"])
+        .into_data()
+        .into_builder()
+        .data_type(DataType::Utf8);
+    let invalid = make_array(unsafe { invalid.build_unchecked() });
+    let labels = ranges(invalid.clone(), invalid, &[(true, true)]);
+    let (_, failure) = push(library, "", &mut [Exported::new(&[1], false, Some(labels))]);
+    let failure = failure.unwrap_or_default();
+    assert!(
+        failure.starts_with("the ranges of a domain are not valid Arrow data"),
+        "{failure}"
+    );
     let mut exported = [
         Exported::new(&[0], true, None),
         Exported::new(&[1], true, None),
