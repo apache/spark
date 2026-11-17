@@ -223,7 +223,10 @@ message UncacheTable {
 }
 
 // See `spark.catalog.clearCache`
-message ClearCache { }
+message ClearCache {
+  // (Optional) Whether to clear cached data across all sessions. Defaults to true when omitted.
+  optional bool all_sessions = 1;
+}
 
 // See `spark.catalog.refreshTable`
 message RefreshTable {

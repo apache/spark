@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.IdentityHashMap
+
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
@@ -87,11 +89,67 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
 
+  /**
+   * Tracks the sessions that explicitly cached each entry. A cache entry can be shared by
+   * multiple sessions because cache lookup uses plan semantics rather than session identity.
+   */
+  private case class CacheOwnership(sessionUUIDs: Set[String], retained: Boolean = false)
+
+  @transient
+  private val cacheOwners = new IdentityHashMap[CachedData, CacheOwnership]
+
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
     cachedData.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
     cachedData = IndexedSeq[CachedData]()
+    cacheOwners.clear()
     CacheManager.logCacheOperation(log"Cleared all Dataframe cache entries")
+  }
+
+  /** Clears cached data that is owned only by the given session. */
+  private[sql] def clearCache(session: SparkSession): Unit = {
+    releaseSessionCache(session, removeCachedData = true)
+  }
+
+  /**
+   * Releases a session's cache ownership. If eviction is disabled, retain its entries without
+   * keeping the closed session's UUID. The retention flag survives later cache registrations
+   * and recaching, preserving the data until it is explicitly uncached or globally cleared.
+   */
+  private[sql] def releaseSessionCache(
+      session: SparkSession,
+      removeCachedData: Boolean): Unit = {
+    val sessionUUID = session.sessionUUID
+    val plansToUncache = this.synchronized {
+      val plans = cachedData.filter { cd =>
+        removeCachedData && Option(cacheOwners.get(cd)).exists { ownership =>
+          !ownership.retained && ownership.sessionUUIDs == Set(sessionUUID)
+        }
+      }
+      cachedData = cachedData.filterNot(cd => plans.exists(_ eq cd))
+      val ownerEntries = cacheOwners.entrySet().iterator()
+      while (ownerEntries.hasNext) {
+        val entry = ownerEntries.next()
+        val ownership = entry.getValue
+        if (ownership.sessionUUIDs.contains(sessionUUID)) {
+          val remainingOwners = ownership.sessionUUIDs - sessionUUID
+          val retained = ownership.retained || !removeCachedData
+          if (remainingOwners.nonEmpty || retained) {
+            entry.setValue(CacheOwnership(remainingOwners, retained))
+          } else {
+            ownerEntries.remove()
+          }
+        }
+      }
+      plans
+    }
+    plansToUncache.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
+    if (plansToUncache.nonEmpty) {
+      recacheDependentQueries(session, plan => plansToUncache.exists(_.plan.sameResult(plan)))
+    }
+    CacheManager.logCacheOperation(
+      log"Cleared ${MDC(SIZE, plansToUncache.size)} Dataframe cache entries for session " +
+        log"${MDC(SESSION_ID, sessionUUID)}")
   }
 
   /** Checks if the cache is empty. */
@@ -102,6 +160,16 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   // Test-only
   private[sql] def numCachedEntries: Int = {
     cachedData.size
+  }
+
+  // Test-only: counts ownership references, excluding entries retained after session close.
+  private[sql] def numCacheOwners: Int = this.synchronized {
+    val owners = cacheOwners.values().iterator()
+    var count = 0
+    while (owners.hasNext) {
+      count += owners.next().sessionUUIDs.size
+    }
+    count
   }
 
   // Test-only
@@ -152,7 +220,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         log"Asked to cache a plan that is inapplicable for caching: " +
         log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
       )
-    } else if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
+    } else if (registerCacheOwner(normalizedPlan, spark.sessionUUID)) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
@@ -166,18 +234,30 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
 
       this.synchronized {
-        if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
+        if (registerCacheOwner(normalizedPlan, spark.sessionUUID)) {
           logWarning("Data has already been cached.")
         } else {
           // the cache key is the normalized plan
           val cd = CachedData(normalizedPlan, inMemoryRelation)
           cachedData = cd +: cachedData
+          cacheOwners.put(cd, CacheOwnership(Set(spark.sessionUUID)))
           CacheManager.logCacheOperation(log"Added Dataframe cache entry:" +
             log"${MDC(DATAFRAME_CACHE_ENTRY, cd)}")
         }
       }
     }
   }
+
+  private def registerCacheOwner(plan: LogicalPlan, sessionUUID: String): Boolean =
+    this.synchronized {
+      lookupCachedDataInternal(plan) match {
+        case Some(cd) =>
+          val ownership = Option(cacheOwners.get(cd)).getOrElse(CacheOwnership(Set.empty))
+          cacheOwners.put(cd, ownership.copy(sessionUUIDs = ownership.sessionUUIDs + sessionUUID))
+          true
+        case None => false
+      }
+    }
 
   /**
    * Un-cache the given plan or all the cache entries that refer to the given plan.
@@ -314,6 +394,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
     this.synchronized {
       cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
+      plansToUncache.foreach(cd => cacheOwners.remove(cd))
     }
     plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
     CacheManager.logCacheOperation(log"Removed ${MDC(SIZE, plansToUncache.size)} Dataframe " +
@@ -322,23 +403,29 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {
-      recacheByCondition(spark, cd => {
-        // If the cache buffer has already been loaded, we don't need to recompile the cached plan,
-        // as it does not rely on the plan that has been uncached anymore, it will just produce
-        // data from the cache buffer.
-        // Note that the `CachedRDDBuilder.isCachedColumnBuffersLoaded` call is a non-locking
-        // status test and may not return the most accurate cache buffer state. So the worse case
-        // scenario can be:
-        // 1) The buffer has been loaded, but `isCachedColumnBuffersLoaded` returns false, then we
-        //    will clear the buffer and re-compiled the plan. It is inefficient but doesn't affect
-        //    correctness.
-        // 2) The buffer has been cleared, but `isCachedColumnBuffersLoaded` returns true, then we
-        //    will keep it as it is. It means the physical plan has been re-compiled already in the
-        //    other thread.
-        val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
-        cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
-      })
+      recacheDependentQueries(spark, isMatchedPlan)
     }
+  }
+
+  private def recacheDependentQueries(
+      spark: SparkSession,
+      isMatchedPlan: LogicalPlan => Boolean): Unit = {
+    recacheByCondition(spark, cd => {
+      // If the cache buffer has already been loaded, we don't need to recompile the cached plan,
+      // as it does not rely on the plan that has been uncached anymore, it will just produce
+      // data from the cache buffer.
+      // Note that the `CachedRDDBuilder.isCachedColumnBuffersLoaded` call is a non-locking
+      // status test and may not return the most accurate cache buffer state. So the worse case
+      // scenario can be:
+      // 1) The buffer has been loaded, but `isCachedColumnBuffersLoaded` returns false, then we
+      //    will clear the buffer and re-compiled the plan. It is inefficient but doesn't affect
+      //    correctness.
+      // 2) The buffer has been cleared, but `isCachedColumnBuffersLoaded` returns true, then we
+      //    will keep it as it is. It means the physical plan has been re-compiled already in the
+      //    other thread.
+      val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
+      cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
+    })
   }
 
   // Analyzes column statistics in the given cache data
@@ -386,18 +473,45 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       // Remove the cache entry before creating a new ones.
       cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
-    needToRecache.foreach { cd =>
-      cd.cachedRepresentation.cacheBuilder.clearCache()
-      tryRebuildCacheEntry(spark, cd).foreach { entry =>
+    var remaining = needToRecache
+    try {
+      while (remaining.nonEmpty) {
+        val cd = remaining.head
+        cd.cachedRepresentation.cacheBuilder.clearCache()
+        val rebuiltEntry = tryRebuildCacheEntry(spark, cd)
         this.synchronized {
-          if (lookupCachedDataInternal(entry.plan).nonEmpty) {
-            logWarning("While recaching, data was already added to cache.")
-          } else {
-            cachedData = entry +: cachedData
-            CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
-              log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+          val previousOwnership = Option(cacheOwners.remove(cd))
+          rebuiltEntry.foreach { entry =>
+            previousOwnership.foreach { ownership =>
+              lookupCachedDataInternal(entry.plan) match {
+                case Some(existing) =>
+                  val existingOwnership =
+                    Option(cacheOwners.get(existing)).getOrElse(CacheOwnership(Set.empty))
+                  cacheOwners.put(
+                    existing,
+                    CacheOwnership(
+                      existingOwnership.sessionUUIDs ++ ownership.sessionUUIDs,
+                      existingOwnership.retained || ownership.retained))
+                  logWarning("While recaching, data was already added to cache.")
+                case None =>
+                  cachedData = entry +: cachedData
+                  cacheOwners.put(entry, ownership)
+                  CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
+                    log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+              }
+            }
           }
         }
+        remaining = remaining.tail
+      }
+    } finally {
+      // A planning failure aborts the batch after all entries have already been removed.
+      // Release ownership and buffers for the failed entry and any entries not rebuilt yet.
+      remaining.foreach { cd =>
+        this.synchronized {
+          cacheOwners.remove(cd)
+        }
+        cd.cachedRepresentation.cacheBuilder.clearCache()
       }
     }
   }

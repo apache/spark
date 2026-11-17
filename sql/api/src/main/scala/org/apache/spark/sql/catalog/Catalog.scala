@@ -646,6 +646,22 @@ abstract class Catalog {
   def clearCache(): Unit
 
   /**
+   * Removes cached tables from the in-memory cache.
+   *
+   * @param allSessions
+   *   when true, removes cached data across all Spark sessions. When false, removes cached data
+   *   owned by the current session while preserving data that is also cached by another session.
+   * @since 4.4.0
+   */
+  def clearCache(allSessions: Boolean): Unit = {
+    if (allSessions) {
+      clearCache()
+    } else {
+      catalogUnsupported("clearCache")
+    }
+  }
+
+  /**
    * Invalidates and refreshes all the cached data and metadata of the given table. For
    * performance reasons, Spark SQL or the external data source library it uses might cache
    * certain metadata about a table, such as the location of blocks. When those change outside of
