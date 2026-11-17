@@ -803,7 +803,7 @@ abstract class KllMergeAggBase[T <: KllSketch]
         if (takesLowestCompactingK && inputSketch.isEmpty()) {
           sketchOption
         } else {
-          Some(mergeSketch(sketchOption, inputSketch))
+          Some(mergeSketch(sketchOption, inputSketch, heapifySketch(sketchBytes)))
         }
       } catch {
         case _: Exception =>
@@ -815,20 +815,20 @@ abstract class KllMergeAggBase[T <: KllSketch]
   /**
    * Merges `input` into the buffer, which is created with the k of `input` if absent. Without k
    * and with `lowestCompactingK`, the result takes the lowest k among the first non-empty input
-   * and the compacting inputs.
+   * and the compacting inputs. `heapInput` returns `input` as a heap sketch that can change.
    */
-  private def mergeSketch(sketchOption: Option[T], input: T): T = {
-    val sketch = sketchOption match {
+  private def mergeSketch(sketchOption: Option[T], input: T, heapInput: => T): T =
+    sketchOption match {
       case Some(buffer) if rebuildsAtInputK(buffer, input) =>
-        val rebuilt = newHeapInstance(input.getK())
-        rebuilt.merge(buffer)
-        rebuilt
-      case Some(buffer) => buffer
-      case None => newHeapInstance(input.getK())
+        // A merge keeps the k of its target, so the buffer goes into the input.
+        val sketch = heapInput
+        sketch.merge(buffer)
+        sketch
+      case _ =>
+        val sketch = sketchOption.getOrElse(newHeapInstance(input.getK()))
+        sketch.merge(input)
+        sketch
     }
-    sketch.merge(input)
-    sketch
-  }
 
   private def takesLowestCompactingK: Boolean = kExpr.isEmpty && lowestCompactingK
 
@@ -844,7 +844,8 @@ abstract class KllMergeAggBase[T <: KllSketch]
       case (_, Some(input)) if takesLowestCompactingK && input.isEmpty() => updateBufferOption
       case (Some(_), Some(input)) =>
         try {
-          Some(mergeSketch(updateBufferOption, input))
+          // `deserialize` gives a new heap sketch, so the input can change.
+          Some(mergeSketch(updateBufferOption, input, input))
         } catch {
           case _: Exception =>
             throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
