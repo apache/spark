@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -122,6 +122,44 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  for (wrapped <- Seq(false, true)) {
+    test(s"to_json prepares options with at most one normalization: wrapped=$wrapped") {
+      val normalizations = new AtomicInteger
+      class CountingMap[V](delegate: Map[String, V]) extends Map[String, V] {
+        override def get(key: String): Option[V] = delegate.get(key)
+        override def iterator: Iterator[(String, V)] = delegate.iterator
+        override def removed(key: String): Map[String, V] =
+          new CountingMap(delegate.removed(key))
+        override def updated[V1 >: V](key: String, value: V1): Map[String, V1] =
+          new CountingMap(delegate.updated(key, value))
+        override def filter(p: ((String, V)) => Boolean): Map[String, V] =
+          new CountingMap(delegate.filter(p))
+        override def filterNot(p: ((String, V)) => Boolean): Map[String, V] =
+          new CountingMap(delegate.filterNot(p))
+        override def map[K2, V2](f: ((String, V)) => (K2, V2)): Map[K2, V2] = {
+          normalizations.incrementAndGet()
+          delegate.map(f)
+        }
+      }
+      for (mode <- Seq(true, false); explicit <- Seq(None, Some(true), Some(false))) {
+        val entries = (0 until 32).map(i => s"unused$i" -> i.toString).toMap ++
+          explicit.map(v => "IgNoReNuLlFiElDs" -> v.toString)
+        val raw = new CountingMap(entries)
+        val options = if (wrapped) CaseInsensitiveMap(raw) else raw
+        val before = normalizations.get()
+        val expression = StructsToJson(options, struct, Some("UTC"),
+          ignoreNullFields = false, useCapturedOptionDefaults = mode)
+        withSQLConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+          val ignored = explicit.getOrElse(!mode)
+          val expected = if (ignored) """{"id":1}""" else """{"id":1,"n":null}"""
+          assert(expression.replacement.eval(create_row(1L)).toString == expected)
+        }
+        val limit = if (wrapped && (!mode || explicit.isDefined)) 0 else 1
+        assert(normalizations.get() - before <= limit)
+      }
+    }
+  }
+
   test("ineffective from_json defaults preserve conversion sharing") {
     val input = BoundReference(0, StringType, nullable = false)
     val schema = new StructType().add("ts", TimestampType)
@@ -164,8 +202,8 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(expression.copy(nullValueWrittenAsQuotedEmptyString = true).semanticEquals(
       expression.copy(nullValueWrittenAsQuotedEmptyString = false)))
     val nonEmptyNullValue = expression.copy(options = Map("nullValue" -> "NULL"))
-    assert(!nonEmptyNullValue.copy(nullValueWrittenAsQuotedEmptyString = true).semanticEquals(
-      nonEmptyNullValue.copy(nullValueWrittenAsQuotedEmptyString = false)))
+    assertShared(nonEmptyNullValue.copy(nullValueWrittenAsQuotedEmptyString = true),
+      nonEmptyNullValue.copy(nullValueWrittenAsQuotedEmptyString = false))
     Seq(Map.empty[String, String], Map("treatNullAsEmptyString" -> null)).foreach { options =>
       val configured = expression.copy(options = options)
       assert(!configured.copy(nullValueWrittenAsQuotedEmptyString = true).semanticEquals(
@@ -194,6 +232,24 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
       nullValueWrittenAsQuotedEmptyString = true), "\"\",x", create_row("x"))
     checkEvaluation(StructsToCsv(Map("nullValue" -> " "), input, Some("UTC"),
       nullValueWrittenAsQuotedEmptyString = false), ",x", create_row("x"))
+  }
+
+  test("CSV conversions share plain null markers with default writer settings") {
+    val input = CreateNamedStruct(Seq(Literal("n"), Literal.create(null, StringType),
+      Literal("x"), BoundReference(0, StringType, nullable = false)))
+    for (marker <- Seq("NULL", "NA", "0", "null", "Z9")) {
+      val expression = StructsToCsv(Map("NuLlVaLuE" -> marker), input, Some("UTC"),
+        nullValueWrittenAsQuotedEmptyString = true)
+      val opposite = expression.copy(nullValueWrittenAsQuotedEmptyString = false)
+      val rollback = expression.copy(useCapturedOptionDefaults = false)
+      withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key -> "false") {
+        Seq(expression, opposite, rollback).foreach { csv =>
+          checkEvaluation(csv, s"$marker,x", create_row("x"))
+        }
+      }
+      assertShared(expression, opposite)
+      assertShared(expression, rollback)
+    }
   }
 
   test("CSV conversions share when every top-level field is nonnullable") {

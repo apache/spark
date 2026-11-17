@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
 
 import org.apache.spark.SparkException
@@ -2401,13 +2403,25 @@ case class StructsToJson(
 
   @transient
   private lazy val evaluator = {
-    val parameters = CaseInsensitiveMap(options)
-    val effectiveOptions = if (useCapturedOptionDefaults &&
-        !parameters.contains(JSONOptions.IGNORE_NULL_FIELDS) &&
+    def hasExplicitDefault: Boolean = options match {
+      case parameters: CaseInsensitiveMap[String] =>
+        parameters.contains(JSONOptions.IGNORE_NULL_FIELDS)
+      case _ =>
+        val key = JSONOptions.IGNORE_NULL_FIELDS.toLowerCase(Locale.ROOT)
+        options.keysIterator.exists(_.toLowerCase(Locale.ROOT) == key)
+    }
+    val effectiveOptions = if (useCapturedOptionDefaults && !hasExplicitDefault &&
         StructsToJson.usesNullFieldOmission(inputSchema)) {
-      parameters.updated(JSONOptions.IGNORE_NULL_FIELDS, ignoreNullFields.toString)
+      options match {
+        case parameters: CaseInsensitiveMap[String] =>
+          parameters.updated(JSONOptions.IGNORE_NULL_FIELDS, ignoreNullFields.toString)
+        case _ =>
+          // Match CaseInsensitiveMap.updated's filtering without building a discarded wrapper.
+          options.filterNot(_._1.equalsIgnoreCase(JSONOptions.IGNORE_NULL_FIELDS))
+            .updated(JSONOptions.IGNORE_NULL_FIELDS, ignoreNullFields.toString)
+      }
     } else {
-      parameters
+      options
     }
     StructsToJsonEvaluator(effectiveOptions, inputSchema, timeZoneId)
   }

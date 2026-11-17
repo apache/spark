@@ -215,6 +215,32 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  for (codegen <- Seq(true, false)) {
+    test(s"saved CSV functions share plain null markers with default settings: codegen=$codegen") {
+      val key = SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key
+      val body = """to_csv(named_struct('id', id, 'n', CAST(NULL AS STRING)),
+                   |map('nullValue', 'NULL'))""".stripMargin
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        withUserDefinedFunction("captured_fn_1" -> false, "captured_fn_2" -> false) {
+          for ((name, captured) <- Seq("captured_fn_1" -> true, "captured_fn_2" -> false)) {
+            withSQLConf(key -> captured.toString) {
+              sql(s"CREATE FUNCTION $name(id BIGINT) RETURNS STRING RETURN $body")
+            }
+          }
+          val result = sql("SELECT captured_fn_1(id), captured_fn_2(id) FROM range(1, 3)")
+          val conversions = result.queryExecution.optimizedPlan.flatMap { plan =>
+            plan.expressions.flatMap(_.collect { case c: StructsToCsv => c })
+          }
+          assert(conversions.size == 2)
+          val equivalents = new EquivalentExpressions
+          conversions.foreach(equivalents.addExprTree(_))
+          assert(equivalents.getCommonSubexpressions.exists(_.semanticEquals(conversions.head)))
+          checkAnswer(result, (1 to 2).map(id => Row(s"$id,NULL", s"$id,NULL")))
+        }
+      }
+    }
+  }
+
   test("cached CSV projections cannot substitute a different captured null-marker rendering") {
     val key = SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key
     val query = """SELECT to_csv(named_struct('n', CAST(NULL AS STRING), 'id', CAST(id AS STRING)),

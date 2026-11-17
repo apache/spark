@@ -4884,7 +4884,9 @@ object SQLConf {
         "during analysis. When false, restore the earlier behavior of reading these defaults " +
         "when the generator or parser is initialized. Explicit function options take " +
         "precedence in either mode. This control follows the querying session for saved views " +
-        "and SQL functions; changing it requires reanalyzing existing plans.")
+        "and SQL functions; changing it requires reanalyzing existing plans. Capture for " +
+        "JSON_ARRAY and JSON_OBJECT nested-value writers and from_csv's CSV datetime " +
+        "fallback is deferred; those expressions retain their existing default binding.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

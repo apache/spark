@@ -343,9 +343,17 @@ case class StructsToCsv(
       case schema: StructType => schema.forall(!_.nullable)
       case _ => false
     })
-    // A nonempty nullValue is not a proof: quoting/whitespace processing can distinguish a
-    // literal marker from an actual null. Only schema guarantees or explicit options mask it.
-    val relevant = !explicitDefault && !nonNullableFields
+    // With only an ASCII alphanumeric nullValue, default writer settings render a literal marker
+    // and an actual null identically: neither quoting nor whitespace processing changes it.
+    // Further marker/settings equivalences are deferred; keep their keys conservative without
+    // constructing a writer or validating options during canonicalization.
+    def plainNullMarker: Boolean = parameters.sizeCompare(1) == 0 &&
+      parameters.get(CSVOptions.NULL_VALUE).exists { marker =>
+        marker != null && marker.nonEmpty && marker.forall { c =>
+          (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+        }
+      }
+    val relevant = !explicitDefault && !plainNullMarker && !nonNullableFields
     copy(
       child = child.canonicalized,
       nullValueWrittenAsQuotedEmptyString = relevant && useCapturedOptionDefaults &&
