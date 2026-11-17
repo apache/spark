@@ -24,8 +24,9 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow}
-import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.types.{ArrayType, DataType, DoubleType, IntegerType, StructField, StructType}
 
 class HyperLogLogPlusPlusSuite extends SparkFunSuite {
 
@@ -49,6 +50,65 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
     val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
     assert(error < hll.hllppHelper.trueRsd * 3.0d, "Error should be within 3 std. errors.")
+  }
+
+  private def array(values: Any*): GenericArrayData = new GenericArrayData(values.toArray)
+
+  private val integerArray = ArrayType(IntegerType, containsNull = true)
+  private val complexValues = Seq(
+    ("trailing null", integerArray,
+      Seq[Any](array(0), array(0, null)), 2),
+    ("null position", integerArray,
+      Seq[Any](array(null, 1), array(1, null), array(0, 1)), 3),
+    ("nested boundaries", ArrayType(integerArray, containsNull = true),
+      Seq[Any](array(array(1), array(2, 3)), array(array(1, 2), array(3))), 2),
+    ("empty nested arrays", ArrayType(integerArray, containsNull = true),
+      Seq[Any](array(array(), array(1)), array(array(1), array())), 2),
+    ("struct fields", StructType(Seq(
+      StructField("a", integerArray), StructField("b", integerArray))),
+      Seq[Any](InternalRow(array(1), null), InternalRow(null, array(1))), 2))
+
+  for {
+    (name, dataType, values, cardinality) <- complexValues
+    mergePartials <- Seq(false, true)
+  } {
+    test(s"SPARK-61529: distinct $name, merge=$mergePartials") {
+      val (hll, input, buffer) = createEstimator(0.01, dataType)
+      values.foreach { value =>
+        input.update(0, value)
+        if (mergePartials) {
+          val partial = createBuffer(hll)
+          hll.update(partial, input)
+          hll.merge(buffer, partial.copy())
+        } else {
+          hll.update(buffer, input)
+        }
+      }
+      assert(hll.eval(buffer) == cardinality.toLong)
+    }
+  }
+
+  test("SPARK-61529: array representation does not change distinctness") {
+    val (hll, input, buffer) = createEstimator(0.01, integerArray)
+    val value = array(1, null, 2)
+    input.update(0, value)
+    hll.update(buffer, input)
+    val unsafe = UnsafeProjection.create(Array[DataType](integerArray))(InternalRow(value))
+      .getArray(0).copy()
+    input.update(0, unsafe)
+    hll.update(buffer, input)
+    assert(hll.eval(buffer) == 1L)
+  }
+
+  test("SPARK-61529: floating equality within arrays") {
+    val (hll, input, buffer) = createEstimator(
+      0.01, ArrayType(DoubleType, containsNull = true))
+    val specialNaN = JDouble.longBitsToDouble(0x7ff1234512345678L)
+    Seq(0.0, -0.0, Double.NaN, specialNaN).foreach { value =>
+      input.update(0, array(value, null))
+      hll.update(buffer, input)
+    }
+    assert(hll.eval(buffer) == 2L)
   }
 
   test("test invalid parameter relativeSD") {
