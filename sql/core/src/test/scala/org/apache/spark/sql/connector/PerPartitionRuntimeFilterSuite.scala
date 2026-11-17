@@ -609,9 +609,10 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
   Seq(true, false).foreach { adaptive =>
     test(s"a semi join that goes leaves a broadcast that a DPP filter can reuse (AQE $adaptive)") {
       // `fact` can get a DPP filter on the source column of its bucket transform. The broadcast
-      // side joins `dim` and `dim2`, which gives `dim` a semi join. `dim2` has 4 partition keys,
-      // under the 8 that the threshold needs, so the semi join goes. The DPP filter of `fact` then
-      // reuses the broadcast, as without per-partition bloom filters.
+      // side joins `dim` and `dim2`, which gives `dim` a semi join. `dim2` has 1 partition key,
+      // under the 2 or more that the threshold needs, so the semi join goes. The DPP filter of
+      // `fact` then reuses the broadcast, as without per-partition bloom filters. That holds also
+      // with a projection above `dim` that computes a column or renames one.
       withSQLConf(
           ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
           "spark.sql.catalog.rfcat" -> classOf[InMemoryCatalystRuntimeFilterCatalog].getName) {
@@ -622,23 +623,36 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
             UnboundBucketFunction)
           createIdTable("fact", "v", (0 until 64).map(i => s"($i, $i)").mkString(", "), rfcat)
           createIdTable("dim", "flag", (0 until 32).map(i => s"($i, ${i % 2})").mkString(", "))
-          createIdTable("dim2", "flag", (0 until 64).map(i => s"($i, ${i % 2})").mkString(", "))
+          // All with the partition key 1.
+          createIdTable("dim2", "flag", (1 until 64 by 4).map(i => s"($i, 1)").mkString(", "))
           withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key ->
-              (creationSideSize("dim2") / 8).toString) {
-            val df = sql("SELECT /*+ BROADCAST(d) */ f.id, f.v FROM rfcat.ns.fact f JOIN " +
-              "(SELECT a.id FROM testcat.ns.dim a JOIN testcat.ns.dim2 b ON a.id = b.id " +
-              "WHERE a.flag = 1 AND b.flag = 1) d ON f.id = d.id")
-            assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
-            checkAnswer(df, (1 until 32 by 2).map(i => Row(i, i)))
-            val plan = df.queryExecution.executedPlan
-            assert(executedSemiJoins(plan).isEmpty, plan)
-            val factFilters = collectScans(plan)
-              .filter(_.table.name().split('.').last == "fact").flatMap(_.runtimeFilters)
-            assert(factFilters.exists {
-              case DynamicPruningExpression(Literal.TrueLiteral) => false
-              case _: DynamicPruningExpression => true
-              case _ => false
-            }, s"the DPP filter of `fact` must reuse the broadcast:\n$plan")
+              (creationSideSize("dim2") / 2).toString) {
+            val odd = 1 until 32 by 4
+            Seq(
+              "SELECT /*+ BROADCAST(d) */ f.id, f.v FROM rfcat.ns.fact f JOIN (SELECT a.id " +
+                "FROM testcat.ns.dim a JOIN testcat.ns.dim2 b ON a.id = b.id " +
+                "WHERE a.flag = 1 AND b.flag = 1) d ON f.id = d.id" -> odd.map(i => Row(i, i)),
+              "SELECT /*+ BROADCAST(d) */ f.id, f.v, d.id2 FROM rfcat.ns.fact f JOIN " +
+                "(SELECT a.id, a.id2 FROM (SELECT id, id * 2 AS id2 FROM testcat.ns.dim " +
+                "WHERE flag = 1) a JOIN testcat.ns.dim2 b ON a.id = b.id WHERE b.flag = 1) d " +
+                "ON f.id = d.id" -> odd.map(i => Row(i, i, i * 2)),
+              "SELECT /*+ BROADCAST(d) */ f.id, f.v FROM rfcat.ns.fact f JOIN (SELECT a.k " +
+                "FROM (SELECT id AS k FROM testcat.ns.dim WHERE flag = 1) a " +
+                "JOIN testcat.ns.dim2 b ON a.k = b.id WHERE b.flag = 1) d " +
+                "ON f.id = d.k" -> odd.map(i => Row(i, i))
+            ).foreach { case (query, expected) =>
+              val df = sql(query)
+              assert(perPartitionSemiJoins(df).size == 1, s"test setup: the rule added it: $query")
+              checkAnswer(df, expected)
+              val plan = df.queryExecution.executedPlan
+              assert(executedSemiJoins(plan).isEmpty, plan)
+              val factFilters = executedScans(plan, "fact").flatMap(_.runtimeFilters)
+              assert(factFilters.exists {
+                case DynamicPruningExpression(Literal.TrueLiteral) => false
+                case _: DynamicPruningExpression => true
+                case _ => false
+              }, s"the DPP filter of `fact` must reuse the broadcast:\n$plan")
+            }
           }
         } finally {
           rfcat.clearTables()

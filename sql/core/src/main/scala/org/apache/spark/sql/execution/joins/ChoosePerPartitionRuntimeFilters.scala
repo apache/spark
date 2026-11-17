@@ -65,39 +65,39 @@ case class ChoosePerPartitionRuntimeFilters(
       plan
     } else {
       new SnapshotUnionPreparationConf(unionConf).apply(plan)
-      // `plan` with only those of the semi joins this rule can take out that are in `kept`.
-      def withOnly(kept: Set[ExprId]): SparkPlan = plan.transformDown {
-        case PerPartitionSemiJoin(_, _, bloomFilter)
-            if withouts.contains(bloomFilter.exprId) && !kept(bloomFilter.exprId) =>
-          withouts(bloomFilter.exprId)
+      // `plan` with only those of the semi joins this rule can take out that are in `kept`, each
+      // replaced by its entry there. For a semi join that goes, `withoutRestoringProjection`
+      // rebuilds a projection above it over its side.
+      def withOnly(kept: Map[ExprId, SparkPlan]): SparkPlan = {
+        def goes(bloomFilter: Attribute): Boolean =
+          withouts.contains(bloomFilter.exprId) && !kept.contains(bloomFilter.exprId)
+        plan.transformDown {
+          case p @ ProjectExec(_, ProjectExec(restoring, PerPartitionSemiJoin(_, _, bloomFilter)))
+              if goes(bloomFilter) && restoring.forall(_.isInstanceOf[Attribute]) =>
+            withoutRestoringProjection(p, withouts(bloomFilter.exprId))
+          case p @ ProjectExec(_, PerPartitionSemiJoin(_, _, bloomFilter)) if goes(bloomFilter) =>
+            withoutRestoringProjection(p, withouts(bloomFilter.exprId))
+          case PerPartitionSemiJoin(_, _, bloomFilter) if withouts.contains(bloomFilter.exprId) =>
+            kept.getOrElse(bloomFilter.exprId, withouts(bloomFilter.exprId))
+        }
       }
-      // The size of each bloom filter of each semi join that stays.
-      var sizes = Map.empty[ExprId, (Long, Option[Long])]
-      var current = new Cost(ensureRequirements.apply(withOnly(Set.empty)))
-      semiJoins.foreach { case (_, join, bloomFilter) =>
+      // Each semi join that stays, with its bloom filters sized.
+      var kept = Map.empty[ExprId, SparkPlan]
+      var current = new Cost(ensureRequirements.apply(withOnly(kept)))
+      semiJoins.foreach { case (filter, join, bloomFilter) =>
         val id = bloomFilter.exprId
         if (withouts.contains(id)) {
-          sizeOf(join, bloomFilter).foreach { size =>
-            val trial = new Cost(ensureRequirements.apply(withOnly(sizes.keySet + id)))
+          sizeOf(join, bloomFilter).foreach { case (numItems, numBits) =>
+            val semiJoin = filter.withNewChildren(Seq(withSize(join, numItems, numBits)))
+            val trial = new Cost(ensureRequirements.apply(withOnly(kept + (id -> semiJoin))))
             if (isFree(trial, current, withouts(id))) {
-              sizes += id -> size
+              kept += id -> semiJoin
               current = trial
             }
           }
         }
       }
-      plan.transformDown {
-        case p @ ProjectExec(_, PerPartitionSemiJoin(_, _, bloomFilter))
-            if withouts.contains(bloomFilter.exprId) && !sizes.contains(bloomFilter.exprId) =>
-          withoutRestoringProjection(p, withouts(bloomFilter.exprId))
-        case PerPartitionSemiJoin(filter, join, bloomFilter)
-            if withouts.contains(bloomFilter.exprId) =>
-          sizes.get(bloomFilter.exprId) match {
-            case Some((numItems, numBits)) =>
-              filter.withNewChildren(Seq(withSize(join, numItems, numBits)))
-            case None => withouts(bloomFilter.exprId)
-          }
-      }
+      withOnly(kept)
     }
   }
 
@@ -225,14 +225,17 @@ case class ChoosePerPartitionRuntimeFilters(
     }
   }
 
-  // The projection `p` above a semi join that goes, which restored the output, over `without`, the
-  // application side without the semi join. When `without` ends in a projection of its columns,
-  // the two become one. So that side has the plan it has without per-partition bloom filters, as a
-  // DPP filter that reuses a broadcast of it expects.
+  // The projection `p` over `without`, the application side of a semi join that goes. `p` is the
+  // projection that restored the output of the semi join, or a projection over that one. When
+  // `without` ends in a projection of its columns, the two become one. Without the semi join,
+  // physical planning makes them one as well. So that side has the plan it has without
+  // per-partition bloom filters, as a DPP filter that reuses a broadcast of it expects. Over a
+  // columnar scan of just the columns `p` keeps, physical planning adds no projection at all.
+  // There `p` still stays.
   private def withoutRestoringProjection(p: ProjectExec, without: SparkPlan): SparkPlan =
     without match {
       case ProjectExec(columns, child) if columns.forall(_.isInstanceOf[Attribute]) =>
-        ProjectExec(p.projectList, child)
+        p.withNewChildren(Seq(child))
       case _ => p.withNewChildren(Seq(without))
     }
 }
