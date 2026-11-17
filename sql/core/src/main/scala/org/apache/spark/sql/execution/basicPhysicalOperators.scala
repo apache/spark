@@ -312,9 +312,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       for free, since the IsNotNull check fires before the CSE precompute keyed
     //       off the same reference.
     // Only take the CSE path when there is actually a common subexpression to eliminate, and
-    // one of them is not cheap; otherwise fall back to `generatePredicateCode`. Elimination has
-    // a cost, e.g. with the split above `methodSplitThreshold` a method and up to two mutable
-    // fields per common subexpression, which caching a cheap subexpression does not pay for.
+    // one of them is not cheap; otherwise fall back to `generatePredicateCode`. Kept inline, a
+    // state computes the repeated expression once, before the first conjunct that references it,
+    // instead of at each occurrence, so it adds no local variable, but when the code of the
+    // states together exceeds `methodSplitThreshold` and the parameters of each fit in a Java
+    // method, each common subexpression becomes a method with up to two mutable fields, which is
+    // known only once the states are generated, after this gate. Caching a cheap subexpression
+    // does not pay for that.
     //
     // Note bare columns never reach this point: `EquivalentExpressions` skips
     // `LeafExpression`s (which includes `BoundReference`/`Attribute`), and
@@ -328,7 +332,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //
     // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
     // turned off independently of subexpression elimination elsewhere.
-    val (prologueCode, predicateCode) =
+    val predicateCode =
       if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
           otherPreds.nonEmpty &&
           otherPredsEquivalentExpressions.getCommonSubexpressions
@@ -342,16 +346,23 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         // `ctx.currentVars` swapped for copies whose code is blank: `input` keeps its code, the
         // states read only the columns' variables, and each column is loaded below just before
         // the first check or conjunct that reads it, as `generatePredicateCode` does.
-        // `exprCodesNeedEvaluate` is then empty (nothing is left to hoist), so its evaluation
-        // code below is empty too; it is emitted anyway to keep this in line with master.
+        // `exprCodesNeedEvaluate`, which only the split fills, is then empty, as asserted, and is
+        // not emitted, unlike in `ProjectExec`, which evaluates its states up front: each column
+        // is loaded below, and a split state takes the columns it reads as parameters. Copies
+        // that keep the code would not do: kept inline, a state would declare a column that the
+        // loads below declare too, and split, the column's code would reach
+        // `exprCodesNeedEvaluate`.
         val savedVars = ctx.currentVars
         ctx.currentVars = input.map(_.copy(code = EmptyBlock)).toIndexedSeq
         val subExprs = try {
-          ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
+          val subExprs =
+            ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
+          assert(subExprs.exprCodesNeedEvaluate.isEmpty,
+            "the states must not carry the code of an input column")
+          subExprs
         } finally {
           ctx.currentVars = savedVars
         }
-        val subExprInputEval = evaluateVariables(subExprs.exprCodesNeedEvaluate)
 
         // Group CSE states by the index of the first otherPred that references them.
         // `evaluateSubExprEliminationState` recursively emits each state's children
@@ -437,10 +448,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           case (p, i) if !generatedIsNotNullChecks(i) => genNotNull(p)
         }.mkString("\n")
 
-        (subExprInputEval, predCode + "\n" + leftoverNotNull)
+        predCode + "\n" + leftoverNotNull
       } else {
-        ("", generatePredicateCode(
-          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
+        generatePredicateCode(
+          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
       }
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
@@ -455,7 +466,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $prologueCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
