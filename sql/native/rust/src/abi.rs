@@ -25,8 +25,9 @@ use arrow_array::ffi::from_ffi;
 pub use arrow_array::ffi::FFI_ArrowArray as ArrowArray;
 pub use arrow_array::ffi_stream::FFI_ArrowArrayStream as ArrowArrayStream;
 use arrow_array::{make_array, StructArray};
+use arrow_data::ArrayData;
 pub use arrow_schema::ffi::FFI_ArrowSchema as ArrowSchema;
-use arrow_schema::{Schema, SchemaRef};
+use arrow_schema::{ArrowError, Schema, SchemaRef};
 
 use crate::bridge::{c_message, provider_call};
 use crate::host::{self, LogEnabledFunction, LogFunction};
@@ -804,12 +805,7 @@ pub unsafe fn domains(
                 }
                 let array = unsafe { ArrowArray::from_raw(domain.ranges) };
                 let schema = unsafe { ArrowSchema::from_raw(domain.ranges_schema) };
-                // As for a batch to write: Arrow neither aligns nor validates the C data that it
-                // imports, and the Arrow Java allocator of Spark does not promise the alignment
-                // of the buffers of decimals.
-                let mut data = unsafe { from_ffi(array, &schema)? };
-                data.align_buffers();
-                data.validate_full()
+                let data = check(unsafe { from_ffi(array, &schema)? })
                     .map_err(|e| format!("the ranges of a domain are not valid Arrow data: {e}"))?;
                 let ranges = make_array(data);
                 let ranges = ranges
@@ -850,6 +846,40 @@ pub unsafe fn export_schema(schema: &SchemaRef, output: *mut ArrowSchema) -> Res
     let schema = ArrowSchema::try_from(schema.as_ref())?;
     unsafe { output.write(schema) };
     Ok(())
+}
+
+/// Checks Arrow data that Spark passed, as imported from C data, which Arrow neither aligns nor
+/// validates, while the safe accessors of the connector rely on both. Arrow requires each buffer
+/// of fixed-width values to be aligned to its type, such as the 16 bytes of an `i128` for a
+/// decimal on x86_64 and aarch64, which the Arrow Java allocator of Spark does not promise, so
+/// this copies the buffers that are not aligned, and only those. It then validates the layout
+/// and values of the data: a Spark string may hold bytes that are not UTF-8, such as those of a
+/// cast from binary, which a Rust `&str` must not. It leaves nullability to Spark, for the reason
+/// that `validate` gives.
+pub fn check(mut data: ArrayData) -> Result<ArrayData> {
+    data.align_buffers();
+    validate(&data)?;
+    Ok(data)
+}
+
+/// Validates `data` and its children as `ArrayData::validate_full` does, except that it does not
+/// check nulls against the nullability of fields. Arrow rejects any null in the child of a list
+/// or map whose element is not nullable, even one under a null slot, a layout that Spark accepts
+/// from a native scan: Spark checks nullability itself, masked by the parent, before it passes a
+/// batch to write.
+fn validate(data: &ArrayData) -> std::result::Result<(), ArrowError> {
+    data.validate()?;
+    if let Some(nulls) = data.nulls() {
+        let actual = nulls.len() - nulls.inner().count_set_bits();
+        if actual != nulls.null_count() {
+            return Err(ArrowError::InvalidArgumentError(format!(
+                "null count {} does not match the {actual} nulls of the validity buffer",
+                nulls.null_count()
+            )));
+        }
+    }
+    data.validate_values()?;
+    data.child_data().iter().try_for_each(validate)
 }
 
 #[cfg(test)]

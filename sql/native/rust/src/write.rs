@@ -19,8 +19,7 @@
 use std::ffi::c_void;
 
 use arrow_array::{ffi, Array, RecordBatch, StructArray};
-use arrow_data::ArrayData;
-use arrow_schema::{ArrowError, DataType, SchemaRef};
+use arrow_schema::{DataType, SchemaRef};
 use serde::Serialize;
 
 use crate::abi::{self, ArrowArray, SparkDsTaskContext};
@@ -251,41 +250,14 @@ pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result
     state.writer().write(RecordBatch::from(array))
 }
 
-/// Imports a batch to write. Arrow does not validate the C data that it imports, which the safe
-/// accessors of the connector rely on, so this validates its layout and values: a Spark string
-/// may hold bytes that are not UTF-8, such as those of a cast from binary, which a Rust `&str`
-/// must not. It leaves nullability to Spark, for the reason that `validate` gives. Arrow requires
-/// each buffer of fixed-width values to be aligned to its type, such as the 16 bytes of an `i128`
-/// for a decimal on x86_64 and aarch64, which the Arrow Java allocator of Spark does not promise,
-/// so this copies the buffers that are not aligned, and only those.
+/// Imports a batch to write, which [`abi::check`] aligns and validates.
 ///
 /// # Safety
 /// As for write_batch: the array must be Arrow C data of `data_type`.
 unsafe fn import(array: ArrowArray, data_type: &DataType) -> Result<StructArray> {
-    let mut data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
-    data.align_buffers();
-    validate(&data).map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
+    let data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
+    let data = abi::check(data).map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
     Ok(StructArray::from(data))
-}
-
-/// Validates `data` and its children as `ArrayData::validate_full` does, except that it does not
-/// check nulls against the nullability of fields. Arrow rejects any null in the child of a list
-/// or map whose element is not nullable, even one under a null slot, a layout that Spark accepts
-/// from a native scan: Spark checks nullability itself, masked by the parent, before it passes a
-/// batch to write.
-fn validate(data: &ArrayData) -> std::result::Result<(), ArrowError> {
-    data.validate()?;
-    if let Some(nulls) = data.nulls() {
-        let actual = nulls.len() - nulls.inner().count_set_bits();
-        if actual != nulls.null_count() {
-            return Err(ArrowError::InvalidArgumentError(format!(
-                "null count {} does not match the {actual} nulls of the validity buffer",
-                nulls.null_count()
-            )));
-        }
-    }
-    data.validate_values()?;
-    data.child_data().iter().try_for_each(validate)
 }
 
 /// Commits a task, and returns its serialized message.
