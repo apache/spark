@@ -761,9 +761,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * expression does. A non-deterministic column is computed on every row the projection gets, and
    * no filter is pushed through a projection with one, so it does not count. A limit passes the
    * columns on as they are, in the same stage where its input has one partition; otherwise the
-   * shuffle below it computes them for every row, where counting them changes nothing for the
-   * rows that the filter reads them on. Other operators are not looked through for the columns
-   * that can fail.
+   * shuffle below it computes them for every row anyway. Other operators are not looked through
+   * for the columns that can fail.
    */
   private def failableColumnsOf(plan: LogicalPlan, cache: ChildColumns): AttributeSet =
     cached(cache.failable, plan) {
