@@ -2465,7 +2465,7 @@ Apart from these, the following properties are also available, and may be useful
     removed, since local checkpointing truncates lineage and leaves their cache blocks as the only
     copy of the data. Must be set before the SparkContext is created.
   </td>
-  <td>4.4.0</td>
+  <td>4.5.0</td>
 </tr>
 <tr>
   <td><code>spark.cleaner.ttl.shuffle</code></td>
@@ -2474,15 +2474,19 @@ Apart from these, the following properties are also available, and may be useful
     If set, shuffles that have not been accessed for this duration have their map output removed from
     the driver and their shuffle files deleted on the executors. Interpreted as seconds when no unit
     is given, and must be at least 10 minutes. By default shuffle data is only removed once the
-    shuffle dependency is garbage collected on the driver. An access is only recorded when a map task
-    registers output or the driver serves map output locations, and executors cache those locations,
-    so it is on you to set this longer than any shuffle's useful life: longer than both the longest
-    gap between uses and the longest stage runtime. Removing a shuffle that a running job still needs
-    fails that job -- its readers get a fetch failure, and the map stage cannot re-register its
-    output, so the stage is aborted rather than recomputed -- and no amount of retrying recovers it.
-    Must be set before the SparkContext is created.
+    shuffle dependency is garbage collected on the driver. A shuffle removed between jobs is
+    recomputed by the next job that needs it. Spark does not check whether a running job still needs
+    a shuffle before removing it, though, and removing one that is still needed fails that job: the
+    map stage cannot re-register its output, so the stage is aborted rather than recomputed, and
+    Spark's own retries do not recover it. The job has to be submitted again. An access is only
+    recorded when a map task registers output or an executor first asks the driver for the shuffle's
+    map output locations, which it then caches. A shuffle therefore looks idle while one slow map
+    task finishes, while it waits for the other stages of its job, and for as long as the stage
+    reading it runs. So this must be longer than the longest stage and, to be safe, longer than the
+    longest-running job (for SQL, the longest-running query), not just longer than the longest gap
+    between uses. Must be set before the SparkContext is created.
   </td>
-  <td>4.4.0</td>
+  <td>4.5.0</td>
 </tr>
 </table>
 

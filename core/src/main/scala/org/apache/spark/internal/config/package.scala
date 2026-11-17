@@ -2274,9 +2274,10 @@ package object config {
       .fallbackConf(Network.NETWORK_TIMEOUT)
 
   // Both TTLs below are in seconds when given without a unit, matching the pre-2.0
-  // `spark.cleaner.ttl` they restore, and both refuse anything under 10 minutes: the TTL has to
-  // outlast the longest gap between uses and the longest stage runtime, and a value below that
-  // reclaims blocks a running job still needs.
+  // `spark.cleaner.ttl` they restore, and both refuse anything under 10 minutes. Neither cleaner
+  // checks whether a running job still needs what it is about to remove: for an RDD that costs a
+  // recompute, for a shuffle it fails the job. The minimum only rules out values that cannot have
+  // been meant; keeping the TTL above a workload's own job runtimes is up to the user.
   private[spark] val CLEANER_TTL_MINIMUM_SECONDS = 600L
 
   private[spark] val CLEANER_TTL_RDD =
@@ -2286,7 +2287,7 @@ package object config {
         "driver, which will not happen for DataFrames or RDDs at the global scope. Interpreted " +
         "as seconds when no unit is given, and must be at least 10 minutes. Must be set before " +
         "starting the SparkContext.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= CLEANER_TTL_MINIMUM_SECONDS,
@@ -2297,9 +2298,12 @@ package object config {
     ConfigBuilder("spark.cleaner.ttl.shuffle")
       .doc("Add a TTL for shuffle blocks. By default blocks are only removed after GC on the " +
         "driver, which will not happen for DataFrames or RDDs at the global scope. Interpreted " +
-        "as seconds when no unit is given, and must be at least 10 minutes. Must be set before " +
-        "starting the SparkContext.")
-      .version("4.4.0")
+        "as seconds when no unit is given, and must be at least 10 minutes. Spark does not check " +
+        "whether a running job still needs a shuffle before removing it, and removing one that " +
+        "is still needed fails that job, so this must be longer than the longest stage and, to " +
+        "be safe, longer than the longest-running job. Must be set before starting the " +
+        "SparkContext.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= CLEANER_TTL_MINIMUM_SECONDS,
