@@ -866,6 +866,41 @@ class NumPyCompatTestsMixin:
         for np_func in (np.fmax, np.fmin):
             self.assert_eq(np_func(psdf.x1, psdf.x2), np_func(pdf.x1, pdf.x2))
 
+    def test_np_gcd_lcm(self):
+        # SPARK-60653: np.gcd and np.lcm return the integer dtype NumPy gives the operands, so
+        # values above 2**53 stay exact.
+        pdf = pd.DataFrame(
+            {
+                "a": [2**53 + 1, 12, -18, 0],
+                "b": [2**53 + 1, 8, 24, 5],
+                "i32": pd.Series([6, 12, -18, 0], dtype="int32"),
+                "i8": pd.Series([4, 8, 6, 5], dtype="int8"),
+                "bool": [True, False, True, True],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.gcd, np.lcm):
+            for operands in [("a", "b"), ("i32", "i32"), ("i32", "a"), ("i8", 3), ("bool", "a")]:
+                with self.subTest(ufunc=np_func.__name__, operands=operands):
+                    self.assert_eq(
+                        np_func(*[psdf[c] if isinstance(c, str) else c for c in operands]),
+                        np_func(*[pdf[c] if isinstance(c, str) else c for c in operands]),
+                    )
+            with self.subTest(ufunc=np_func.__name__, operands="float"):
+                with self.assertRaises(TypeError):
+                    np_func(psdf["a"].astype(float), psdf["b"])
+
+    def test_np_gcd_lcm_null(self):
+        # SPARK-60653: a null operand gives a null result.
+        psdf = self.spark.createDataFrame([(0, 6, 4), (1, None, 2)], "i int, x long, y long")
+        psdf = psdf.pandas_api(index_col="i").sort_index()
+        for np_func, expected in ((np.gcd, 2), (np.lcm, 12)):
+            with self.subTest(ufunc=np_func.__name__):
+                result = np_func(psdf.x, psdf.y).to_pandas()
+                self.assertEqual(result.iloc[0], expected)
+                self.assertTrue(pd.isna(result.iloc[1]))
+
     def test_np_fmax_fmin_non_default_dtypes(self):
         # Both helpers select an operand, so the result keeps the operands' type for every
         # dtype NumPy also preserves. Tie rows are equal non-zero pairs, since the signed-zero
