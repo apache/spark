@@ -434,13 +434,12 @@ is. Return batches lazily with bounded memory, with the columns of
 the source: the SDK keeps those of the schema to read, by name and in its order, since
 Spark rejects a stream with other columns. The first batch determines the Arrow schema of
 the stream, which every later batch must have; a reader without batches exports the
-schema to read. Exported arrays own their buffers independently of the reader: Spark may
-release a stream before releasing its previously returned batches. When a query stops reading
-a stream before its end, as with a LIMIT, Spark may release the last batch that it read only
-later, from a JVM Cleaner thread. Releasing a batch drops its references to its buffers, so
-the Drop of the owner of a buffer, such as one that returns memory to a pool, may run after the
-task and on another thread: it should be quick and not block. A panic there cannot be
-recovered; see [Scope and limitations](#scope-and-limitations).
+schema to read. Exported arrays own their buffers independently of the reader: an engine
+that reads the stream in native code may release the stream before its previously returned
+batches, and release them after the task ended, on another thread. Releasing a batch drops
+its references to its buffers, so the Drop of the owner of a buffer, such as one that returns
+memory to a pool, may run after the task and on another thread: it should be quick and not
+block. A panic there cannot be recovered; see [Scope and limitations](#scope-and-limitations).
 
 Stream callbacks, including release, may run on different threads, but never
 concurrently. Readers must be `Send`; they do not need to be `Sync` or tied to

@@ -54,21 +54,20 @@ import org.apache.spark.unsafe.types.UTF8String;
  * count of the buffer, and whether the value is null.
  * Spark does not need these checks here: it reads only the rows of the batch, whose buffers Arrow
  * Java sizes by the lengths of the arrays, which the reader checks before it imports them, and
- * the buffers of a batch stay allocated while the batch may be read: until next is called again,
- * and if the reader is closed before then, until the reader is unreachable, which the vector keeps
- * it from being. The strings, arrays, maps and child vectors that the vector returns do not refer
- * to the reader, so this holds for them only while the vector is reachable too. Spark reads a
- * value of a nullable column only after {@link #isNullAt(int)}, and the reader checks that the
- * columns that the schema declares not nullable have no null, so that the vector of such a
- * column does not count the nulls of each batch. The vector of a nullable
- * column takes the null_count that the library exported, and only counts the nulls when the
- * library did not.
+ * the buffers of a batch stay allocated while the batch may be read: until next is called again
+ * or the reader is closed. Spark reads a value of a nullable column only after
+ * {@link #isNullAt(int)}, and the reader checks that the columns that the schema declares not
+ * nullable have no null, so that the vector of such a column does not count the nulls of each
+ * batch. The vector of a nullable column takes the null_count that the library exported, and only
+ * counts the nulls when the library did not.
  *
  * <p>As the vector does not check the bounds and the reference count of the buffers, a consumer
  * must read only the rows of the current batch, below its number of rows, and only until next is
- * called again, as for the other column vectors that Spark reuses across batches: a read of
- * another row, e.g. through a row of the batch that the consumer kept after next, reads out of
- * range or freed memory, and may crash the JVM rather than throw. The vector does not free its
+ * called again or the reader is closed, as for the other column vectors that Spark reuses across
+ * batches: a read of another row, e.g. through a row of the batch that the consumer kept after
+ * next, reads out of range or freed memory, and may crash the JVM rather than throw. The threads
+ * that read the input of a task on their own are stopped before the task closes its readers (see
+ * {@code TaskInputThread}). The vector does not free its
  * Arrow vector on {@link #close()}, which the reader frees with the other vectors of the batch, so
  * that a consumer that closes the batch, rather than releasing it with
  * {@link #closeIfFreeable()}, does not free the buffers that the vector reads.
@@ -86,45 +85,39 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 class NativeColumnVector extends ReusedArrowColumnVector {
 
-  // The reader, which the vector keeps reachable: a reader closed while its batch may still be
-  // read frees the buffers of the batch only once it is unreachable. Nothing reads the field, but
-  // it must stay: each constructor takes the reader so that no column vector misses it.
-  private final Object reader;
-
   /**
-   * The column vector of a top-level Arrow vector of {@code reader}, of a column that the schema to
-   * read declares {@code nullable} or not.
+   * The column vector of a top-level Arrow vector of a reader, of a column that the schema to read
+   * declares {@code nullable} or not.
    */
-  static NativeColumnVector create(ValueVector vector, boolean nullable, Object reader) {
+  static NativeColumnVector create(ValueVector vector, boolean nullable) {
     if (vector instanceof BitVector) {
-      return new Booleans(vector, nullable, reader);
+      return new Booleans(vector, nullable);
     } else if (vector instanceof TinyIntVector) {
-      return new Bytes(vector, nullable, reader);
+      return new Bytes(vector, nullable);
     } else if (vector instanceof SmallIntVector) {
-      return new Shorts(vector, nullable, reader);
+      return new Shorts(vector, nullable);
     } else if (vector instanceof IntVector || vector instanceof DateDayVector) {
-      return new Ints(vector, nullable, reader);
+      return new Ints(vector, nullable);
     } else if (vector instanceof BigIntVector || vector instanceof TimeStampMicroTZVector ||
         vector instanceof TimeStampMicroVector) {
-      return new Longs(vector, nullable, reader);
+      return new Longs(vector, nullable);
     } else if (vector instanceof Float4Vector) {
-      return new Floats(vector, nullable, reader);
+      return new Floats(vector, nullable);
     } else if (vector instanceof Float8Vector) {
-      return new Doubles(vector, nullable, reader);
+      return new Doubles(vector, nullable);
     } else if (vector instanceof DecimalVector decimalVector) {
-      return new Decimals(decimalVector, nullable, reader);
+      return new Decimals(decimalVector, nullable);
     } else if (vector instanceof VarCharVector) {
-      return new Strings(vector, nullable, reader);
+      return new Strings(vector, nullable);
     } else if (vector instanceof ViewVarCharVector) {
-      return new StringViews(vector, nullable, reader);
+      return new StringViews(vector, nullable);
     } else {
-      return new NativeColumnVector(vector, reader);
+      return new NativeColumnVector(vector);
     }
   }
 
-  NativeColumnVector(ValueVector vector, Object reader) {
+  NativeColumnVector(ValueVector vector) {
     super(vector);
-    this.reader = reader;
   }
 
   @Override
@@ -159,8 +152,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     // The address of the data buffer of the batch.
     long data;
 
-    Direct(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, reader);
+    Direct(ValueVector vector, boolean nullable) {
+      super(vector);
       this.nullable = nullable;
     }
 
@@ -184,8 +177,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Booleans extends Direct {
-    Booleans(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Booleans(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -195,8 +188,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Bytes extends Direct {
-    Bytes(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Bytes(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -206,8 +199,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Shorts extends Direct {
-    Shorts(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Shorts(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -217,8 +210,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Ints extends Direct {
-    Ints(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Ints(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -228,8 +221,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Longs extends Direct {
-    Longs(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Longs(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -239,8 +232,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Floats extends Direct {
-    Floats(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Floats(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -250,8 +243,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
   }
 
   private static final class Doubles extends Direct {
-    Doubles(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Doubles(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -268,8 +261,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     // The scale of the Arrow type.
     private final int scale;
 
-    Decimals(DecimalVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Decimals(DecimalVector vector, boolean nullable) {
+      super(vector, nullable);
       this.scale = vector.getScale();
     }
 
@@ -298,8 +291,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     // The address of the offsets of the values of the batch.
     private long offsets;
 
-    Strings(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    Strings(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override
@@ -322,8 +315,8 @@ class NativeColumnVector extends ReusedArrowColumnVector {
     // The addresses of the data buffers of the batch, which hold the values that a view does not.
     private long[] buffers = new long[0];
 
-    StringViews(ValueVector vector, boolean nullable, Object reader) {
-      super(vector, nullable, reader);
+    StringViews(ValueVector vector, boolean nullable) {
+      super(vector, nullable);
     }
 
     @Override

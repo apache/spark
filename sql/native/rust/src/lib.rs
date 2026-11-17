@@ -352,11 +352,11 @@ pub trait PartitionReaderFactory: Serialize + DeserializeOwned + Send + 'static 
     ///   be `Send` but not necessarily `Sync`.
     /// - Check [`TaskContext::is_interrupted`] during long operations, and use timeouts
     ///   for blocking I/O.
-    /// - Batches must own their buffers, because Spark may release the stream before
-    ///   its batches. Releasing a batch drops its references to its buffers, which runs the
+    /// - Batches must own their buffers, because the stream may be released before its
+    ///   batches. Releasing a batch drops its references to its buffers, which runs the
     ///   Drop of the owner of a buffer, such as one that returns memory to a pool, when they
-    ///   are the last ones. Spark may release a batch after the task ended, on another thread,
-    ///   such as a JVM Cleaner thread after a LIMIT, so that Drop should be quick and not
+    ///   are the last ones. An engine that reads the stream in native code may release a
+    ///   batch after the task ended, on another thread, so that Drop should be quick and not
     ///   block. The README's Scope section describes panics there.
     /// - Spark may open the same partition at the same time in several attempts of its
     ///   task, so a reader must not take a resource that another attempt needs exclusively.

@@ -640,35 +640,25 @@ object NativeWriterCommitMessage {
  * Reads a partition of a native data source: each array of the Arrow stream exported by the
  * library is checked, and imported into the Arrow vectors that back the returned batch.
  *
- * A reader can be closed while another thread is in [[next]]: some operators read their input on
- * a thread of their own that the task does not wait for, such as the stdin writer thread of
- * `PipedRDD`, while `DataSourceRDD` closes the reader once the task completes. The library must
- * not get the release of the stream during get_next, and the task context must stay valid until
- * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
- * for it and keep the task from completing. Spark cannot interrupt get_next, so [[close]] also
- * makes `is_interrupted` true for the read, also outside of a task and before the task ends, so
- * that a library that checks it stops reading. That [[next]] then throws the error of its read, or
- * fails as a [[next]] called once the reader is closed does, without reading from the library: so
- * such a thread does not take the close for the end of the data, whether or not it was in
- * get_next then. Script transformation, for example, then destroys its process.
+ * The batch that [[next]] returned is valid until [[next]] is called again or the reader is
+ * closed: the column vectors read the buffers of the batch at their addresses, and [[close]] frees
+ * these buffers at once, with the stream, the dictionaries, the task and the allocator. So no
+ * thread may read a batch once its reader is closed. Some operators read their input on a thread
+ * of their own, such as the stdin writer thread of `PipedRDD`, and the writer thread of script
+ * transformation, which reads the rows of a batch that the task thread got. The task stops these
+ * threads, and waits for them, before its completion listeners run, of which the one of
+ * `DataSourceRDD` closes the reader: see `TaskInputThread`, and
+ * `BasePythonRunner.startPipelinedWriter` for the writer of pipelined Python UDFs.
  *
- * Such a thread may also still read the batch that [[next]] returned last when another thread
- * closes the reader: script transformation gets its first batch on the task thread, and reads its
- * rows on a thread of its own. The column vectors read the buffers of the batch at their
- * addresses, so [[close]] frees these buffers at once only if [[next]] was called again since it
- * returned the batch, as at the end of the stream, after which consumers no longer read the
- * batch. Otherwise, it releases the stream, the dictionaries and the task at once, since the
- * arrays of a stream may outlive it, and their release does not use the task (see
- * `SparkDsTaskContext` in the header). A Cleaner then frees the buffers of the batch and the
- * allocator once the reader is unreachable, which each of its column vectors keeps it from being,
- * or once a thread calls [[next]] again, which then fails: that thread no longer reads the batch.
- * So a reader closed before the end of its stream, as with a LIMIT, and not called again holds the
- * buffers of one batch until a garbage collection, which these buffers do not trigger: the JVM
- * does not count them. Under `DataSourceRDD`, only a garbage collection frees them: its
- * `PartitionIterator` drops the reader once it closes it, and never calls [[next]] on it again,
- * even for a thread that then asks the iterator for the next batch. That is the only effect of
- * `DataSourceRDD` here: however the iterator then answers that thread, the thread does not get
- * the batch, and a [[next]] called on the reader would free the buffers at once and fail.
+ * A reader can still be closed while another thread is in [[next]], by a caller that does not
+ * wait for that thread. The library must not get the release of the stream during get_next, and
+ * the task context must stay valid until then, so [[close]] then leaves the release to [[next]],
+ * once get_next returns, rather than wait for it. Spark cannot interrupt get_next, so [[close]]
+ * also makes `is_interrupted` true for the read, also outside of a task and before the task ends,
+ * so that a library that checks it stops reading. That [[next]] then throws the error of its
+ * read, or fails as a [[next]] called once the reader is closed does, without reading from the
+ * library: so such a thread does not take the close for the end of the data, whether or not it
+ * was in get_next then.
  *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
  * @param partition the partition, whose index in the scan the library gets as `partition_id`
@@ -702,18 +692,9 @@ class NativePartitionReader(
   private var closed = false
   // Whether a thread is in next. While it is, only that thread uses the stream and the vectors,
   // and it releases them if the reader was closed meanwhile. Otherwise, they are only released
-  // under the lock, except for the buffers of a batch that may still be read when the reader is
-  // closed, which a Cleaner frees once no thread can use them (see close).
+  // under the lock.
   @GuardedBy("this")
   private var reading = false
-  // Whether next returned the batch and was not called again since, so that a consumer may still
-  // read the batch.
-  @GuardedBy("this")
-  private var batchReturned = false
-  // Frees the buffers of the batch that a consumer may still read once the reader is closed: the
-  // Cleaner does when the reader is unreachable, and next does when it is called again.
-  @GuardedBy("this")
-  private var batchCleanable: Cleaner.Cleanable = _
 
   // Synchronized so that a close on another thread sees the task and the vectors.
   synchronized {
@@ -878,9 +859,8 @@ class NativePartitionReader(
 
   /**
    * Wraps a vector of the root, into which every batch is imported, in a `NativeColumnVector`,
-   * which reads the buffers of the batch that `readNext` imported last, and keeps the reader
-   * reachable, so that a Cleaner frees these buffers only once the column vector is unreachable
-   * too (see the class doc). Like the other `ReusedArrowColumnVector`s, it is not freeable
+   * which reads the buffers of the batch that `readNext` imported last, until the reader is
+   * closed (see the class doc). Like the other `ReusedArrowColumnVector`s, it is not freeable
    * between batches: Spark must not close it when it moves to the next batch, as
    * `ColumnarToRowExec` does with the column vectors that are freeable, because closing a struct
    * column also drops its child column vectors. The reader closes the Arrow vectors at the end.
@@ -890,7 +870,7 @@ class NativePartitionReader(
    */
   private def columnVector(vector: FieldVector, nullable: Boolean): NativeColumnVector = {
     try {
-      NativeColumnVector.create(vector, nullable, this)
+      NativeColumnVector.create(vector, nullable)
     } catch {
       case NonFatal(e) =>
         throw QueryExecutionErrors.nativeDataSourceError("read", name,
@@ -908,42 +888,26 @@ class NativePartitionReader(
       if (closed) {
         throw closedError()
       }
-      batchReturned = hasBatch
-      batchReturned
+      hasBatch
     }
   }
 
-  /**
-   * Fails once the reader is closed. In either case, the caller no longer reads the batch that
-   * next returned last, if any, so a closed reader frees its buffers at once. This assumes that no
-   * other thread still reads that batch, as an open reader does when it imports the next batch,
-   * which releases the buffers of the previous one: a consumer that hands a batch to another
-   * thread must not call next until that thread is done with the batch.
-   */
+  /** Fails once the reader is closed. */
   private def startReading(): Unit = synchronized {
     if (closed) {
-      if (batchCleanable != null) {
-        // The Cleaner action does not refer to the batch, which then has no rows, so that it is
-        // not read at the freed addresses.
-        batch.setNumRows(0)
-        batchCleanable.clean()
-      }
       throw closedError()
     }
     reading = true
-    batchReturned = false
   }
 
-  // Not an internal error: a thread that the task does not wait for gets it as the task completes.
+  // Not an internal error: a thread that reads a reader that another thread closed gets it.
   private def closedError(): Throwable = error(name, "read", "The partition reader is closed.")
 
   private def stopReading(): Unit = synchronized {
     reading = false
     if (closed) {
-      // The reader was closed by another thread, which no longer gets a failure from here. No
-      // consumer reads the batch: next does not return the one that it read, and it was called
-      // since it returned the previous one.
-      Utils.tryLogNonFatalError(closeResources(freeBatch = true))
+      // The reader was closed by another thread, which no longer gets a failure from here.
+      Utils.tryLogNonFatalError(closeResources())
     }
   }
 
@@ -1119,10 +1083,9 @@ class NativePartitionReader(
   override def close(): Unit = synchronized {
     if (!closed) {
       closed = true
-      // A thread in next releases the reader once get_next returns, see stopReading. Otherwise, a
-      // consumer may still read the batch that next returned, unless next was called since.
+      // A thread in next releases the reader once get_next returns, see stopReading.
       if (!reading) {
-        closeResources(freeBatch = !batchReturned)
+        closeResources()
       } else {
         // Spark cannot interrupt get_next: is_interrupted tells the library to stop reading.
         task.stop()
@@ -1131,14 +1094,13 @@ class NativePartitionReader(
   }
 
   /**
-   * Releases the stream, the dictionaries and the task, and frees the buffers of the batch and then
-   * the allocator: at once with `freeBatch`, and otherwise once the reader is unreachable or next
-   * is called again, as a consumer may still read the batch (see the class doc).
+   * Frees the buffers of the batch, and releases the stream, the dictionaries and the task, and
+   * then the allocator.
    */
-  private def closeResources(freeBatch: Boolean): Unit = {
+  private def closeResources(): Unit = {
     Utils.tryWithSafeFinally {
       Utils.tryWithSafeFinally {
-        if (freeBatch && root != null) {
+        if (root != null) {
           // The batch has no rows, so that it is not read at the freed addresses.
           if (batch != null) {
             batch.setNumRows(0)
@@ -1156,15 +1118,7 @@ class NativePartitionReader(
       if (task != null) {
         task.close()
       }
-      if (freeBatch) {
-        Utils.tryLogNonFatalError(allocator.close())
-      } else {
-        // The action must not refer to the reader, which would then never become unreachable.
-        val (batchRoot, batchAllocator) = (root, allocator)
-        batchCleanable = NativeHandle.cleaner.register(this, () =>
-          Utils.tryLogNonFatalError(
-            Utils.tryWithSafeFinally(batchRoot.close())(batchAllocator.close())))
-      }
+      Utils.tryLogNonFatalError(allocator.close())
     }
   }
 }
@@ -1431,13 +1385,14 @@ private[ffi] object NativeTask {
    *                    for a read, and by default the partition of the task
    * @param taskAttemptId the ID of the task attempt, by default the one of the task
    * @param read whether the context is the one of a read, which the library may use after the
-   *             task ended: an engine may read the stream of a partition then, and a thread that
-   *             the task does not wait for may be in get_next once it completes, as with
-   *             `PipedRDD`. `is_interrupted` then also reports that the task failed, or that it
-   *             started to complete, which is when the task may wait for such a thread, and the
-   *             context does not keep the task alive. A data writer only runs within its task,
-   *             whose kill `is_interrupted` reports. Outside of a task, it reports nothing. The
-   *             reader of a read can also make it true, see `NativeLibrary.Task.stop`.
+   *             task ended: an engine may read the stream of a partition then. A thread that
+   *             reads the input of the task on its own, as the one of `PipedRDD`, may also be in
+   *             get_next when the task starts to complete, which then waits for it.
+   *             `is_interrupted` then also reports that the task failed, or that it started to
+   *             complete, and the context does not keep the task alive. A data writer only runs
+   *             within its task, whose kill `is_interrupted` reports. Outside of a task, it
+   *             reports nothing. The reader of a read can also make it true, see
+   *             `NativeLibrary.Task.stop`.
    */
   def create(
       partitionId: Option[Int] = None,
@@ -1492,9 +1447,7 @@ final class NativeHandle(handle: Long, release: Long => Unit) {
 }
 
 object NativeHandle extends Logging {
-  // Also frees the buffers of the batches that may still be read when their readers are closed,
-  // see `NativePartitionReader`.
-  private[ffi] val cleaner = Cleaner.create()
+  private val cleaner = Cleaner.create()
 
   // Must not refer to the handle, which would then never become unreachable.
   private class State(value: Long, release: Long => Unit) extends Runnable {

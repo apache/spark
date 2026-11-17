@@ -18,22 +18,22 @@
 package org.apache.spark.rdd
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.Map
-import scala.concurrent.duration._
 import scala.io.Codec
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
-import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
+class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
   val envCommand = if (Utils.isWindows) {
     "cmd.exe /C set"
   } else {
@@ -104,15 +104,76 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     assert(result.collect().length === 0)
 
     // SPARK-29104 PipedRDD will invoke `stdinWriterThread.interrupt()` at task completion,
-    // and `obj.wait` will get InterruptedException. However, there exists a possibility
-    // which the thread termination gets delayed because the thread starts from `obj.wait()`
-    // with that exception. To prevent test flakiness, we need to use `eventually`.
-    eventually(timeout(10.seconds), interval(1.second)) {
-      // collect stdin writer threads
-      val stdinWriterThread = Thread.getAllStackTraces.keySet().asScala
-        .find { _.getName.startsWith(PipedRDD.STDIN_WRITER_THREAD_PREFIX) }
-      assert(stdinWriterThread.isEmpty)
+    // and `obj.wait` will get InterruptedException. SPARK-61195: the task waits for the thread
+    // to exit before it completes, so the thread is gone once the job ends.
+    assert(stdinWriterThreads().isEmpty)
+  }
+
+  test("SPARK-61195: stdin writer thread exits before the completion listeners of the task") {
+    assume(TestUtils.testCommandAvailable("cat"))
+    PipedRDDSuite.readAtCompletion.set(null)
+    PipedRDDSuite.blocked = new CountDownLatch(1)
+    // The read of the input blocks after the first lines, until the stdin writer thread is
+    // interrupted, and then takes a while to stop. The task completes once it read one line of
+    // the output of the command, while the thread is in that read. The completion listener is
+    // the one of the input, which the thread adds: such a listener frees what the thread reads.
+    val input = sc.makeRDD(Seq(1), 1).mapPartitions { _ =>
+      val reading = new AtomicBoolean(false)
+      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+        PipedRDDSuite.readAtCompletion.set(reading.get())
+      }
+      new Iterator[String] {
+        private var count = 0
+
+        override def hasNext: Boolean = true
+
+        override def next(): String = {
+          count += 1
+          // After more lines than the buffer of the thread holds, so that the command gets
+          // lines, and fewer than the pipes of the command hold, so that the thread gets here.
+          if (count == 1000) {
+            reading.set(true)
+            PipedRDDSuite.blocked.countDown()
+            try {
+              new CountDownLatch(1).await()
+            } catch {
+              case e: InterruptedException =>
+                val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(500)
+                while (System.nanoTime() < deadline) {
+                  try Thread.sleep(10) catch {
+                    case _: InterruptedException =>
+                  }
+                }
+                reading.set(false)
+                throw e
+            }
+          }
+          "a line of the input"
+        }
+      }
     }
+    val lines = input.pipe(Seq("cat")).mapPartitions { lines =>
+      val line = lines.next()
+      assert(PipedRDDSuite.blocked.await(1, TimeUnit.MINUTES))
+      Iterator(line)
+    }.collect()
+    assert(lines === Array("a line of the input"))
+    assert(PipedRDDSuite.readAtCompletion.get() === false)
+    assert(stdinWriterThreads().isEmpty)
+  }
+
+  test("SPARK-61195: stdin writer thread stops reading an input that does not end") {
+    assume(TestUtils.testCommandAvailable("cat"))
+    // The PrintWriter of the thread does not fail once the command is gone, and an interrupt does
+    // not end the read of this input.
+    val input = sc.makeRDD(Seq(1), 1).mapPartitions(_ => Iterator.continually("a line"))
+    assert(input.pipe(Seq("cat")).mapPartitions(_.take(1)).collect() === Array("a line"))
+    assert(stdinWriterThreads().isEmpty)
+  }
+
+  private def stdinWriterThreads(): Seq[Thread] = {
+    Thread.getAllStackTraces.keySet().asScala
+      .filter(_.getName.startsWith(PipedRDD.STDIN_WRITER_THREAD_PREFIX)).toSeq
   }
 
   test("advanced pipe") {
@@ -278,4 +339,12 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
     new HadoopPartition(sc.newRddId(), 1, split)
   }
 
+}
+
+private object PipedRDDSuite {
+  // The state of the task of a test. The tasks of the suite run in this JVM.
+  // Whether the stdin writer thread read the input when the completion listener of the input ran.
+  val readAtCompletion = new AtomicReference[java.lang.Boolean]()
+  // Counted down once the read of the input blocks.
+  @volatile var blocked = new CountDownLatch(1)
 }

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 
@@ -469,6 +471,60 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
         !earlierThreads.contains(event.getThreadId)
     }
     assert(errors.isEmpty, errors.map(_.getMessage.getFormattedMessage).mkString("\n"))
+  }
+
+  test("SPARK-61195: TRANSFORM stops reading its input before the completion listeners of its " +
+    "task run") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    SlowToStopInput.readAtCompletion.set(null)
+    SlowToStopInput.blocked = new CountDownLatch(1)
+    // The task completes once it read one row of the output of the script, while the writer
+    // thread reads the input, which takes a while to stop. The completion listener of the input,
+    // which frees what the thread reads, such as the batch of a columnar reader, only runs once
+    // the thread no longer reads the input.
+    val plan = createScriptTransformationExec(
+      script = "cat",
+      output = Seq(AttributeReference("id", StringType)()),
+      child = SlowToStopInputExec(spark.range(0, 1000000, 1, 1).queryExecution.sparkPlan),
+      ioschema = defaultIOSchema)
+    val counts = plan.execute().mapPartitions { rows =>
+      val count = rows.take(1).size
+      assert(SlowToStopInput.blocked.await(1, TimeUnit.MINUTES))
+      Iterator(count)
+    }.collect()
+    assert(counts === Array(1))
+    assert(SlowToStopInput.readAtCompletion.get() === false)
+    assert(uncaughtExceptionHandler.exception.isEmpty)
+  }
+
+  test("SPARK-61195: TRANSFORM kills a script that ignores the signal when its task completes") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    def writerThreads(): Set[Thread] = Thread.getAllStackTraces.keySet.asScala
+      .filter(thread => thread.getName.endsWith("WriterThread-Feed") && thread.isAlive).toSet
+    val before = writerThreads()
+    // The script and the command that it runs ignore the signal and do not read their input, of
+    // which there is more than the pipe holds: the writer thread blocks on writing it, before the
+    // script writes the row that the task reads, which an interrupt does not end, until the
+    // script and the command are killed, after the time that a script gets to exit.
+    val plan = createScriptTransformationExec(
+      script = "trap '' TERM; sleep 2; echo a; echo b; sleep 600; echo c",
+      output = Seq(AttributeReference("id", StringType)()),
+      child = spark.range(0, 1000000, 1, 1).queryExecution.sparkPlan,
+      ioschema = defaultIOSchema)
+    withSQLConf(SQLConf.SCRIPT_TRANSFORMATION_EXIT_TIMEOUT.key -> "1") {
+      // The task gets the configuration of the session, as in a SQL execution.
+      SQLExecution.withSQLConfPropagated(spark) {
+        assert(plan.execute().mapPartitions(rows => Iterator(rows.take(1).size)).collect() ===
+          Array(1))
+      }
+    }
+    // The thread then waits for the script, and exits.
+    eventually(timeout(60.seconds)) {
+      assert((writerThreads() -- before).isEmpty)
+    }
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   def testBasicInputDataTypesWith(serde: ScriptTransformationIOSchema, testName: String): Unit = {
@@ -947,6 +1003,65 @@ case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def withNewChildInternal(newChild: SparkPlan): ExceptionInjectingOperator =
+    copy(child = newChild)
+}
+
+// The state of the task of a SlowToStopInputExec. The tasks of the suites run in this JVM.
+object SlowToStopInput {
+  // Whether a thread read the input when the completion listener of the input ran.
+  val readAtCompletion = new AtomicReference[java.lang.Boolean]()
+  // Counted down once the read of the input blocks.
+  @volatile var blocked = new CountDownLatch(1)
+}
+
+/**
+ * An input whose read blocks after the first rows, until the thread that reads it is interrupted,
+ * and then takes a while to stop.
+ */
+case class SlowToStopInputExec(child: SparkPlan) extends UnaryExecNode {
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitions { rows =>
+      val reading = new AtomicBoolean(false)
+      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+        SlowToStopInput.readAtCompletion.set(reading.get())
+      }
+      new Iterator[InternalRow] {
+        private var count = 0
+
+        override def hasNext: Boolean = rows.hasNext
+
+        override def next(): InternalRow = {
+          count += 1
+          // After more rows than the buffer of the writer thread holds, so that the script gets
+          // rows, and fewer than the pipes of the script hold, so that the thread gets here.
+          if (count == 5000) {
+            reading.set(true)
+            SlowToStopInput.blocked.countDown()
+            try {
+              new CountDownLatch(1).await()
+            } catch {
+              case e: InterruptedException =>
+                val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(500)
+                while (System.nanoTime() < deadline) {
+                  try Thread.sleep(10) catch {
+                    case _: InterruptedException =>
+                  }
+                }
+                reading.set(false)
+                throw e
+            }
+          }
+          rows.next()
+        }
+      }
+    }
+  }
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SlowToStopInputExec =
     copy(child = newChild)
 }
 

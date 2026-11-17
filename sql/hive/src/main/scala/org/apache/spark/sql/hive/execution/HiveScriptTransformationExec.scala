@@ -221,7 +221,7 @@ private[hive] case class HiveScriptTransformationWriterThread(
       val fieldOIs = inputSoi.getAllStructFieldRefs.asScala.map(_.getFieldObjectInspector).toArray
       val wrappers = fieldOIs.zip(inputSchema).map { case (f, dt) => wrapperFor(f, dt) }
 
-      iter.foreach { row =>
+      inputRows.foreach { row =>
         var i = 0
         while (i < fieldOIs.length) {
           hiveData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, inputSchema(i)))

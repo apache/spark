@@ -25,7 +25,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
 import java.util.concurrent.{Callable, CountDownLatch, CyclicBarrier, ExecutionException, TimeUnit}
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.zip.{ZipException, ZipFile}
 
 import scala.collection.mutable.ArrayBuffer
@@ -152,18 +152,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   /**
-   * Checks that the buffers of the readers of native data sources are freed. A reader closed while
-   * the batch that it returned may still be read, as when a query stops before the end of a
-   * partition, frees the buffers of the batch once it is unreachable. Each test checks that they
-   * are freed after it, so that a test that leaks a reader fails, and the readers of a test are
-   * freed before the next test, see readerAndAllocator, and before the suites that run next in
-   * this JVM, which may count the memory of Arrow. `earlierReaders` are those that were not freed
-   * before the test, which a failed test may have left behind, and which it does not check.
+   * Checks that the buffers of the readers of native data sources are freed. A reader frees them
+   * when it is closed, also before the end of its partition, as when a query stops early, so
+   * they are freed without a garbage collection. Each test checks that they are freed after it,
+   * so that a test that leaks a reader fails, and the readers of a test are freed before the next
+   * test, see readerAndAllocator, and before the suites that run next in this JVM, which may
+   * count the memory of Arrow. `earlierReaders` are those that were not freed before the test,
+   * which a failed test may have left behind, and which it does not check.
    */
   private def checkReadersFreed(earlierReaders: Set[BufferAllocator]): Unit = {
     if ((readerAllocators() -- earlierReaders).nonEmpty) {
+      // The tasks of a job that failed or that was canceled may still run.
       eventually(timeout(1.minute), interval(100.milliseconds)) {
-        System.gc()
         val readers = readerAllocators() -- earlierReaders
         assert(readers.isEmpty, readers.map(a => s"${a.getName}: ${a.getAllocatedMemory} bytes"))
       }
@@ -2661,21 +2661,37 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  nativeTest("release a stream only once get_next returns") {
+  nativeTest("wait for a thread that reads a stream before the task completes") {
     assume(TestUtils.testCommandAvailable("cat"))
     val session = newSession(defaultPackage)
     val marker = new File(Utils.createTempDir(), "released")
     val reading = marker.getPath + ".reading"
     val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
     // The contexts of the tasks of earlier tests are closed first, so that the counts below are
-    // exactly those of this test, also the one of the context that stays open.
+    // exactly those of this test.
     eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
-    val contexts = 0
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-pipe-check")
+    val jobEnded = new AtomicBoolean(false)
     try {
-      // PipedRDD reads the scan on a thread of its own, which the task does not wait for. The
-      // task completes without reading the output of the command, once that thread is in
-      // get_next, which waits for the file .continue, and closes the reader then. The job runs
-      // with the artifacts of the session, as in a SQL execution: see checkRows.
+      // Checks, once get_next runs, that the task waits for the thread that is in it, before its
+      // completion listeners close the reader: the job goes on, the stream is not released
+      // during get_next, and the task context stays open. Then it lets get_next return.
+      val check = pool.submit(new Callable[Boolean] {
+        override def call(): Boolean = {
+          eventually(timeout(1.minute)) {
+            assert(new File(reading).isFile, "get_next was not called.")
+          }
+          Thread.sleep(500)
+          val ended = jobEnded.get()
+          if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+          assert(NativeLibrary.openTaskContexts() == 1)
+          new File(marker.getPath + ".continue").createNewFile()
+          ended
+        }
+      })
+      // PipedRDD reads the scan on a thread of its own. The task ends without reading the output
+      // of the command, once that thread is in get_next, which waits for the file .continue. The
+      // job runs with the artifacts of the session, as in a SQL execution: see checkRows.
       val count = session.artifactManager.withResources {
         df.rdd.pipe("cat").mapPartitions { _ =>
           val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(1)
@@ -2685,21 +2701,20 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
           Iterator.empty[String]
         }.count()
       }
+      jobEnded.set(true)
       assert(count == 0)
-      assert(new File(reading).isFile, "get_next was not called.")
-      if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
-      // The task completed, but its context stays valid until the stream is released.
-      assert(NativeLibrary.openTaskContexts() == contexts + 1)
+      assert(!check.get(1, TimeUnit.MINUTES), "The job ended while get_next ran.")
+      // Once get_next returned, the thread exited, and the task closed the reader as it
+      // completed, which released the stream and then the context: nothing is left to a thread
+      // that outlives the task.
+      assert(Files.readString(marker.toPath) == "after get_next")
+      assert(NativeLibrary.openTaskContexts() == 0)
+      // The read learned that its task started to complete, so that it may stop reading.
+      assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "true")
     } finally {
       new File(marker.getPath + ".continue").createNewFile()
+      pool.shutdown()
     }
-    // The thread in get_next releases the stream once get_next returns, and then the context.
-    eventually(timeout(1.minute)) {
-      assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
-      assert(NativeLibrary.openTaskContexts() == contexts)
-    }
-    // The read learned that its task ended, so that it may stop reading.
-    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "true")
   }
 
   nativeTest("close a reader while another thread reads it") {
@@ -2843,100 +2858,36 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  nativeTest("close a reader while another thread reads the batch that it returned") {
+  nativeTest("free the buffers of a closed reader without a GC") {
     val session = newSession(defaultPackage)
-    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
-    def onPool[T](f: => T): T = pool.submit(new Callable[T] {
-      override def call(): T = f
-    }).get(1, TimeUnit.MINUTES)
     // The contexts of the tasks of earlier tests are closed first, so that the counts below are
     // exactly those of this test.
     eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
-    // Closes a reader on this thread once the other thread read a batch. With `nextAgain`, the
-    // other thread then calls next, which tells that it no longer reads the batch. Otherwise
-    // nativeTest checks that a Cleaner frees the buffers once the reader is unreachable.
-    def closeWhileRead(nextAgain: Boolean): Unit = {
-      val marker = new File(Utils.createTempDir(), "released")
-      // get_next does not wait: the file .continue exists.
-      new File(marker.getPath + ".continue").createNewFile()
-      val (reader, allocator) = readerAndAllocator(
-        range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
-          .select("id"))
-      try {
-        assert(onPool(reader.next()))
-        assert(NativeLibrary.openTaskContexts() == 1)
-        reader.close()
-        // The stream and the task are released at once, but not the buffers of the batch, which
-        // the other thread may still read.
-        assert(Files.readString(marker.toPath) == "after get_next")
-        assert(NativeLibrary.openTaskContexts() == 0)
-        assert(readerAllocators().contains(allocator) && allocator.getAllocatedMemory > 0)
-        val rows = onPool((0 until reader.get().numRows()).map(reader.get().column(0).getLong))
-        assert(rows === (0L until 10L))
-        // Closing the reader again does nothing.
-        reader.close()
-        assert(readerAllocators().contains(allocator))
-        if (nextAgain) {
-          // A next then fails, and frees the buffers of the batch and the allocator at once: the
-          // test still references the reader, which a Cleaner would wait for.
-          checkClosed(intercept[ExecutionException](onPool(reader.next())).getCause)
-          assert(!readerAllocators().contains(allocator))
-          // The batch then has no rows, so that it is not read at the freed addresses.
-          assert(reader.get().numRows() == 0)
-          // So does a next on any thread after that.
-          checkClosed(intercept[SparkRuntimeException](reader.next()))
-        }
-      } finally {
-        reader.close()
-      }
-    }
-    try {
-      closeWhileRead(nextAgain = false)
-      closeWhileRead(nextAgain = true)
-    } finally {
-      pool.shutdown()
-    }
-  }
-
-  nativeTest("keep the buffers of a closed reader while its batch is held without the reader") {
-    val session = newSession(defaultPackage)
-    // Closes a reader once it returned a batch, and returns the batch and the allocator of the
-    // reader, but not the reader, as `DataSourceRDD` drops it once it closes it.
-    def closedBatch(): (ColumnarBatch, BufferAllocator) = {
-      val (reader, allocator) = readerAndAllocator(
-        range(session, "end" -> "10", "partitions" -> "1").select("id"))
-      try {
-        assert(reader.next())
-      } finally {
-        reader.close()
-      }
-      (reader.get(), allocator)
-    }
-    // Reads the batch after garbage collections.
-    def readAfterGC(): Unit = {
-      val (batch, allocator) = closedBatch()
-      // An object that a Cleaner action marks once a garbage collection found it unreachable,
-      // after which the reader would be freed too if only the reader referred to it.
-      val collected = new CountDownLatch(1)
-      NativeHandle.cleaner.register(new Object, () => collected.countDown())
-      eventually(timeout(1.minute), interval(100.milliseconds)) {
-        System.gc()
-        assert(collected.getCount == 0)
-      }
-      // The column vectors of the batch keep the reader reachable, so that the Cleaner does not
-      // free the buffers that a consumer still reads.
-      assert(readerAllocators().contains(allocator) && allocator.getAllocatedMemory > 0)
-      assert((0 until batch.numRows()).map(batch.column(0).getLong) === (0L until 10L))
-    }
-    // nativeTest checks that the Cleaner frees them once the batch is dropped too.
-    readAfterGC()
-  }
-
-  nativeTest("free the buffers of a reader closed at the end of its stream without a GC") {
-    val session = newSession(defaultPackage)
     // The ids 0-3, 4-7 and 8-9.
-    val (reader, allocator) = readerAndAllocator(
-      range(session, "end" -> "10", "partitions" -> "1", "batch_size" -> "4").select("id"))
+    def scanOfIds(): DataFrame =
+      range(session, "end" -> "10", "partitions" -> "1", "batch_size" -> "4").select("id")
+    // A reader closed before the end of its stream, as when a query stops early, frees the
+    // buffers of the batch that it returned, the allocator, the stream and the task at once: the
+    // test still references the reader and the batch.
+    val (early, earlyAllocator) = readerAndAllocator(scanOfIds())
+    try {
+      assert(early.next())
+      val batch = early.get()
+      assert((0 until batch.numRows()).map(batch.column(0).getLong) === (0L until 4L))
+      assert(NativeLibrary.openTaskContexts() == 1 && earlyAllocator.getAllocatedMemory > 0)
+      early.close()
+      assert(!readerAllocators().contains(earlyAllocator))
+      assert(NativeLibrary.openTaskContexts() == 0)
+      // The batch then has no rows, so that it is not read at the freed addresses.
+      assert(batch.numRows() == 0)
+      // A reader that was closed reads nothing more, and closing it again does not fail.
+      checkClosed(intercept[SparkRuntimeException](early.next()))
+      early.close()
+    } finally {
+      early.close()
+    }
+    // So does a reader closed at the end of its stream.
+    val (reader, allocator) = readerAndAllocator(scanOfIds())
     try {
       val ids = ArrayBuffer.empty[Long]
       while (reader.next()) {
@@ -2946,11 +2897,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       // The buffers of the last batch stay allocated until the reader is closed.
       assert(allocator.getAllocatedMemory > 0)
       reader.close()
-      // Consumers no longer read a batch once next was called again, here at the end of the
-      // stream, so the close frees its buffers and the allocator at once: the test still
-      // references the reader, which a Cleaner would wait for.
       assert(!readerAllocators().contains(allocator))
-      // The batch then has no rows, so that it is not read at the freed addresses.
       assert(reader.get().numRows() == 0)
     } finally {
       reader.close()
@@ -2968,6 +2915,31 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       assert(!readerAllocators().contains(failedAllocator))
     } finally {
       failed.close()
+    }
+  }
+
+  nativeTest("free the buffers of a scan when its task completes before the end of the scan") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    val session = newSession(defaultPackage)
+    val readers = readerAllocators()
+    // A query that stops before the end of a partition: its task closes the reader when it
+    // completes, which frees the buffers of the batch that it read last.
+    val ids = range(session, "end" -> "100", "partitions" -> "1", "batch_size" -> "4")
+    checkRows(ids.select("id").limit(1), Seq(Row(0L)))
+    assert((readerAllocators() -- readers).isEmpty)
+    // Script transformation gets the first batch of the scan on the task thread, and reads its
+    // rows, and the next batches, on its writer thread, which writes them to the script: much
+    // more than the pipes of the script hold, while the task reads one row of its output. The
+    // task stops that thread before it closes the reader, which then frees the buffers at once.
+    range(session, "end" -> "1000000", "partitions" -> "1").select("id")
+      .createOrReplaceTempView("native_ids")
+    try {
+      val rows = session.sql(
+        "SELECT TRANSFORM(id) USING 'cat' AS (id STRING) FROM native_ids LIMIT 1").collect()
+      assert(rows.length == 1)
+      assert((readerAllocators() -- readers).isEmpty)
+    } finally {
+      session.catalog.dropTempView("native_ids")
     }
   }
 

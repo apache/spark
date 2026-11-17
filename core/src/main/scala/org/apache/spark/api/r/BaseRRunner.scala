@@ -29,7 +29,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.R._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{TaskInputThread, Utils}
 
 /**
  * A helper class to run R UDFs in Spark.
@@ -71,7 +71,16 @@ private[spark] abstract class BaseRRunner[IN, OUT](
     dataStream = try {
       val inSocket = serverSocket.accept()
       BaseRRunner.authHelper.authClient(inSocket)
-      newWriterThread(inSocket.getOutputStream(), inputIterator, partitionIndex).start()
+      val writerThread =
+        newWriterThread(inSocket.getOutputStream(), inputIterator, partitionIndex)
+      // The task waits for the writer thread to exit, before its completion listeners run: the
+      // thread reads the input of the task, and these listeners free what it may still read,
+      // such as the batch that a columnar reader returned last (see TaskInputThread). Closing
+      // the socket fails a write of the thread that is blocked on an R worker that does not read
+      // its input, which an interrupt does not.
+      TaskInputThread.start(TaskContext.get(), writerThread) { _ =>
+        Utils.tryLogNonFatalError(inSocket.close())
+      }
 
       // the socket used to receive the output of task
       val outSocket = serverSocket.accept()

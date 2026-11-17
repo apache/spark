@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStream}
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -39,7 +39,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
+import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, TaskInputThread, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
   def script: String
@@ -115,12 +115,24 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
    * output, and the thread on writing the rest of the input or on reading it, e.g. from a shuffle
    * fetch that the completed task no longer serves, so that neither ends. A process whose whole
    * output the task read runs to its end, as it may still do work after it closes its output.
+   *
+   * The task also waits until the thread no longer reads the input rows, before its completion
+   * listeners run, which free what the thread may still read, such as the batch that a columnar
+   * reader returned last (see `TaskInputThread`). A thread that is still blocked in a write to
+   * the process after the time that a script gets to exit,
+   * `spark.sql.scriptTransformation.exitTimeoutInSeconds`, as for a process that ignores the
+   * signal, is unblocked by killing the process and the processes that it started.
    */
   protected def startWriterThread(writerThread: BaseScriptTransformationWriterThread): Unit = {
-    writerThread.taskContext.addTaskCompletionListener[Unit] { context =>
-      writerThread.stopOnTaskCompletion(context.isFailed())
+    val context = writerThread.taskContext
+    TaskInputThread.start(
+        context,
+        writerThread,
+        gracePeriodMs = TimeUnit.SECONDS.toMillis(
+          conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_EXIT_TIMEOUT)),
+        awaitDone = Some(writerThread.awaitInputRead)) { force =>
+      writerThread.stopOnTaskCompletion(context.isFailed(), force)
     }
-    writerThread.start()
   }
 
   protected def processIterator(
@@ -323,22 +335,60 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
   // and the exit status of the process are expected, and not logged as errors.
   @volatile private var destroyedOnTaskCompletion = false
 
+  // Whether the task completed, after which this thread no longer reads the input rows.
+  @volatile private var stoppedOnTaskCompletion = false
+
+  // Counted down once this thread no longer reads the input rows. It then still closes the input
+  // of the process and waits for the process to end, which the completion of the task does not
+  // wait for.
+  private val inputRead = new CountDownLatch(1)
+
+  private lazy val procStopper = new TaskInputThread.ProcessStopper(proc)
+
   /**
-   * Destroys the process if it is still alive, and interrupts this thread, once a task that did
-   * not read the whole output of the process completes, failed if `taskFailed`.
+   * The input rows, which this thread reads until the task completes: it then fails rather than
+   * end, so that the process does not get the rows that were read so far as its whole input.
    */
-  private[execution] def stopOnTaskCompletion(taskFailed: Boolean): Unit = {
-    if (!outputReadToEnd) {
-      if (proc.isAlive) {
-        destroyedOnTaskCompletion = !taskFailed
-        // `Process.destroy()` would close the input of the process, which waits for a write of
-        // this thread blocked on a full pipe, and so would block the task on a process that
-        // ignores the signal. Only signal the process instead, and close its output, which the
-        // completed task no longer reads, to stop a process blocked on writing it.
-        proc.toHandle.destroy()
-        Utils.tryLogNonFatalError(proc.getInputStream.close())
+  protected def inputRows: Iterator[InternalRow] = new Iterator[InternalRow] {
+    override def hasNext: Boolean = {
+      if (stoppedOnTaskCompletion) {
+        throw new InterruptedException("The task completed before the script read all its input.")
       }
-      interrupt()
+      iter.hasNext
+    }
+
+    override def next(): InternalRow = iter.next()
+  }
+
+  /**
+   * Waits until this thread no longer reads the input rows, for at most `nanos` nanoseconds, and
+   * returns whether it no longer does.
+   */
+  private[execution] def awaitInputRead(nanos: Long): Boolean = {
+    inputRead.await(nanos, TimeUnit.NANOSECONDS) || getState == Thread.State.TERMINATED
+  }
+
+  /**
+   * Stops this thread from reading the input rows once the task completes, failed if
+   * `taskFailed`, and destroys the process if it is still alive and the task did not read its
+   * whole output. With `force`, when this thread still reads the input rows after the time that
+   * a script gets to exit, it kills the process and the processes that it started, also if the
+   * task read its whole output: this thread is then blocked in a write to a process that does
+   * not read its input.
+   */
+  private[execution] def stopOnTaskCompletion(taskFailed: Boolean, force: Boolean): Unit = {
+    stoppedOnTaskCompletion = true
+    if (force) {
+      // Also once the process is gone: the processes that it started may live on.
+      procStopper.stop(force = true)
+    } else if (!outputReadToEnd && proc.isAlive) {
+      destroyedOnTaskCompletion = !taskFailed
+      // `Process.destroy()` would close the input of the process, which waits for a write of
+      // this thread blocked on a full pipe, and so would block the task on a process that
+      // ignores the signal. Only signal the process instead, and close its output, which the
+      // completed task no longer reads, to stop a process blocked on writing it.
+      procStopper.stop(force = false)
+      Utils.tryLogNonFatalError(proc.getInputStream.close())
     }
   }
 
@@ -346,7 +396,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
 
   protected def processRowsWithoutSerde(): Unit = {
     val len = inputSchema.length
-    iter.foreach { row =>
+    inputRows.foreach { row =>
       val data = if (len == 0) {
         ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
       } else {
@@ -379,7 +429,11 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
     // let's use a variable to record whether the `finally` block was hit due to an exception
     var threwException: Boolean = true
     try {
-      processRows()
+      try {
+        processRows()
+      } finally {
+        inputRead.countDown()
+      }
       threwException = false
     } catch {
       // SPARK-25158 Exception should not be thrown again, otherwise it will be captured by
@@ -407,7 +461,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
           Utils.tryLogNonFatalError(outputStream.close())
         }
         val exitCode = try proc.waitFor() catch {
-          // The task completion listener interrupts this thread once it destroyed the process.
+          // The completion of the task interrupts this thread once it destroyed the process.
           // The InterruptedException must not escape the thread, which would exit the executor
           // (see SPARK-25158), so wait for the destroyed process again.
           case _: InterruptedException => proc.waitFor()
