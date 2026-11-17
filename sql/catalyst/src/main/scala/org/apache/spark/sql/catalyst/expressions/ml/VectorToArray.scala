@@ -18,14 +18,18 @@
 package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Expression, GetStructField, If, Literal, RuntimeReplaceable, StringLiteral, UnwrapUDT}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Expression, GetStructField, If, Literal, RuntimeReplaceable, StringLiteral, UnwrapUDT, With}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * Converts the SQL struct representation of an MLlib vector to a dense array of doubles or floats.
- * This expression is dedicated only for Spark ML and should be used with UnwrapUDT.
+ * Converts an MLlib vector to a dense array of doubles or floats. The registered internal function
+ * takes a vector UDT column and a "float64" or "float32" literal. The primary constructor also
+ * accepts the unwrapped vector SQL struct and takes the output element type directly.
  */
 case class VectorToArray(child: Expression, elementType: DataType)
   extends RuntimeReplaceable with UnaryLike[Expression] {
@@ -34,7 +38,7 @@ case class VectorToArray(child: Expression, elementType: DataType)
     "VectorToArray requires a double or float element type.")
 
   def this(input: Expression, dtype: Expression) = {
-    this(UnwrapUDT(input), VectorToArray.elementType(dtype))
+    this(input, VectorToArray.elementType(dtype))
   }
 
   override def prettyName: String = "vector_to_array"
@@ -43,14 +47,49 @@ case class VectorToArray(child: Expression, elementType: DataType)
 
   override def nullable: Boolean = true
 
+  override def sql: String = {
+    val dtype = if (elementType == FloatType) "float32" else "float64"
+    s"$prettyName(${child.sql}, '${dtype}')"
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
-    SparseVectorToArray(child, elementType).checkInputDataTypes()
+    val inputType = child.dataType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case other => other
+    }
+    if (inputType == VectorScaleShift.vectorSqlType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(VectorScaleShift.vectorSqlType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)))
+    }
   }
 
   override lazy val replacement: Expression = {
-    If(EqualTo(GetStructField(child, 0), Literal(1.toByte)),
-      Cast(GetStructField(child, 3), dataType),
-      SparseVectorToArray(child, elementType))
+    def convert(input: Expression): Expression = {
+      val vector = input.dataType match {
+        case _: UserDefinedType[_] => UnwrapUDT(input)
+        case _ => input
+      }
+      If(EqualTo(GetStructField(vector, 0), Literal(1.toByte)),
+        Cast(GetStructField(vector, 3), dataType),
+        SparseVectorToArray(vector, elementType))
+    }
+    // Bind beneath an explicit UnwrapUDT too, so a plain UDT column remains cheap to inline.
+    val input = child match {
+      case UnwrapUDT(vector) => vector
+      case other => other
+    }
+    if (SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+      convert(input)
+    } else {
+      With(input) { case Seq(ref) => convert(ref) }
+    }
   }
 
   override protected def withNewChildInternal(newChild: Expression): VectorToArray = {

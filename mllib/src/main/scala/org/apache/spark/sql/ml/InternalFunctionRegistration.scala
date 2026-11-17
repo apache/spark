@@ -28,7 +28,7 @@ import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFu
 import org.apache.spark.sql.functions.udf
 
 /**
- * Register ML vector conversion functions in the internal function registry.
+ * Register array_to_vector and aggregate_metrics in the internal function registry.
  *
  * This is a bit of a hack because we use the [[SparkSessionExtensions]] mechanism to register
  * functions in a global registry. The use of a Scala object makes sure we only do this once.

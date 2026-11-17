@@ -19,9 +19,11 @@ package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, ExpressionEvalHelper, Literal, UnsafeArrayData, UnwrapUDT}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, EmptyRow, Expression, ExpressionEvalHelper, LeafExpression, Literal, Nondeterministic, UnsafeArrayData, UnsafeProjection, UnwrapUDT, With}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -68,7 +70,7 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
     val vector = InternalRow(1.toByte, null, null,
       UnsafeArrayData.fromPrimitiveArray(Array(1.1, -2.5)))
     for (elementType <- Seq(DoubleType, FloatType)) {
-      assert(VectorToArray(input, elementType).checkInputDataTypes().isFailure)
+      assert(VectorToArray(input, elementType).checkInputDataTypes().isSuccess)
       val expression = VectorToArray(UnwrapUDT(input), elementType)
       assert(expression.checkInputDataTypes().isSuccess)
       val expected = if (elementType == FloatType) Seq(1.1f, -2.5f) else Seq(1.1, -2.5)
@@ -90,9 +92,14 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
       StructType(vectorSqlType.fields.updated(1, StructField("size", LongType)))) ++
       nullableElements
     for (inputType <- invalidTypes; elementType <- Seq(DoubleType, FloatType)) {
-      val expression = VectorToArray(
-        BoundReference(0, inputType, nullable = true), elementType)
-      assert(expression.checkInputDataTypes().isFailure)
+      val udt = new VectorToArrayTestUDT {
+        override def sqlType: DataType = inputType
+      }
+      for (dataType <- Seq(inputType, udt)) {
+        val expression = VectorToArray(
+          BoundReference(0, dataType, nullable = true), elementType)
+        assert(expression.checkInputDataTypes().isFailure)
+      }
     }
   }
 
@@ -105,7 +112,7 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
     for ((dtype, elementType) <- Seq("float64" -> DoubleType, "float32" -> FloatType)) {
       val expression = FunctionRegistry.internal.lookupFunction(name, Seq(input, Literal(dtype)))
         .asInstanceOf[VectorToArray]
-      assert(expression.child === UnwrapUDT(input))
+      assert(expression.child === input)
       assert(expression.dataType === ArrayType(elementType, containsNull = false))
       val expected = if (elementType == FloatType) Seq(1.1f, -2.5f) else Seq(1.1, -2.5)
       checkEvaluation(expression, expected, InternalRow(vector))
@@ -133,6 +140,36 @@ class VectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("vector to array evaluates nondeterministic inputs once") {
+    for (elementType <- Seq(DoubleType, FloatType);
+        inputType <- Seq(vectorSqlType, new VectorToArrayTestUDT)) {
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+        def expression: Expression =
+          VectorToArray(AlternatingVector(inputType), elementType).replacement
+        val expected = if (elementType == FloatType) Seq(1.0f, 2.0f, 3.0f)
+          else Seq(1.0, 2.0, 3.0)
+        val catalystExpected = CatalystTypeConverters.convertToCatalyst(expected)
+        checkEvaluationWithoutCodegen(expression, catalystExpected)
+        checkEvaluationWithMutableProjection(expression, catalystExpected)
+        val projection = UnsafeProjection.create(Seq(expression))
+        projection.initialize(0)
+        assert(projection(EmptyRow).getArray(0).toSeq[Any](elementType) === expected)
+      }
+    }
+  }
+
+  test("vector to array honors the common expression inline setting") {
+    val vector = InternalRow(1.toByte, null, null,
+      UnsafeArrayData.fromPrimitiveArray(Array(1.0, 2.0)))
+    for (inline <- Seq(true, false)) {
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> inline.toString) {
+        val expression = VectorToArray(Literal(vector, vectorSqlType), DoubleType)
+        assert(expression.replacement.exists(_.isInstanceOf[With]) === !inline)
+        checkEvaluation(expression, Seq(1.0, 2.0))
+      }
+    }
+  }
+
   test("vector to array rejects unsupported output types") {
     intercept[IllegalArgumentException] {
       VectorToArray(Literal(null, vectorSqlType), IntegerType)
@@ -145,4 +182,24 @@ class VectorToArrayTestUDT extends UserDefinedType[InternalRow] {
   override def serialize(value: InternalRow): Any = value
   override def deserialize(value: Any): InternalRow = value.asInstanceOf[InternalRow]
   override def userClass: Class[InternalRow] = classOf[InternalRow]
+}
+
+case class AlternatingVector(override val dataType: DataType)
+  extends LeafExpression with Nondeterministic with CodegenFallback {
+  private var calls = 0
+
+  override def nullable: Boolean = false
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = { calls = 0 }
+
+  override protected def evalInternal(input: InternalRow): Any = {
+    calls += 1
+    if (calls % 2 == 1) {
+      InternalRow(1.toByte, null, null,
+        UnsafeArrayData.fromPrimitiveArray(Array(1.0, 2.0, 3.0)))
+    } else {
+      InternalRow(0.toByte, 3, UnsafeArrayData.fromPrimitiveArray(Array(1)),
+        UnsafeArrayData.fromPrimitiveArray(Array(7.0)))
+    }
+  }
 }
