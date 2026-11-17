@@ -67,6 +67,7 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
       case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
       case proto.DataType.KindCase.VARIANT => VariantType
+      case proto.DataType.KindCase.FILE => toCatalystFileType(t.getFile)
 
       case proto.DataType.KindCase.GEOMETRY =>
         val srid = t.getGeometry.getSrid
@@ -90,6 +91,11 @@ object DataTypeProtoConverter {
           "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST",
           Map("kindCase" -> t.getKindCase.toString))
     }
+  }
+
+  private def toCatalystFileType(t: proto.DataType.File): FileType = t.getMode match {
+    case proto.DataType.FileTypeMode.FILE_TYPE_MODE_EXTERNAL => FileType.external
+    case _ => FileType()
   }
 
   private def toCatalystDecimalType(t: proto.DataType.Decimal): DecimalType = {
@@ -364,6 +370,16 @@ object DataTypeProtoConverter {
           .build()
 
       case VariantType => ProtoDataTypes.VariantType
+
+      case f: FileType =>
+        val mode = f.mode match {
+          case FileTypeMode.EXTERNAL => proto.DataType.FileTypeMode.FILE_TYPE_MODE_EXTERNAL
+          case _ => proto.DataType.FileTypeMode.FILE_TYPE_MODE_UNKNOWN
+        }
+        proto.DataType
+          .newBuilder()
+          .setFile(proto.DataType.File.newBuilder().setMode(mode).build())
+          .build()
 
       case pyudt: PythonUserDefinedType =>
         // Python UDT

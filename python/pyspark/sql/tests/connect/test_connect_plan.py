@@ -64,6 +64,7 @@ if should_test_connect:
         ArrayType,
         CharType,
         DoubleType,
+        FileType,
         IntegerType,
         MapType,
         StringType,
@@ -1099,6 +1100,39 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         new_plan = df.to(schema)._plan.to_proto(self.connect)
         self.assertEqual(pyspark_types_to_proto_types(schema), new_plan.root.to_schema.schema)
+
+    def test_file_datatype_conversion(self):
+        for dt in [
+            FileType(),
+            FileType.external(),
+            ArrayType(FileType.external()),
+            MapType(StringType(), FileType()),
+            StructType([StructField("f", FileType.external()), StructField("g", FileType())]),
+        ]:
+            with self.subTest(dt=repr(dt)):
+                self.assertEqual(
+                    dt, proto_schema_to_pyspark_data_type(pyspark_types_to_proto_types(dt))
+                )
+
+        self.assertEqual(
+            proto.DataType.FILE_TYPE_MODE_EXTERNAL,
+            pyspark_types_to_proto_types(FileType.external()).file.mode,
+        )
+        self.assertEqual(
+            proto.DataType.FILE_TYPE_MODE_UNKNOWN,
+            pyspark_types_to_proto_types(FileType()).file.mode,
+        )
+        # A file without a mode, or with a mode this side does not know, such as the reserved
+        # value 2 or a value added later, is an unknown file.
+        for file in [
+            proto.DataType.File(),
+            proto.DataType.File(mode=2),
+            proto.DataType.File(mode=42),
+        ]:
+            with self.subTest(file=str(file)):
+                self.assertEqual(
+                    FileType(), proto_schema_to_pyspark_data_type(proto.DataType(file=file))
+                )
 
     def test_timestamp_nanos_datatype_conversion(self):
         # SPARK-57462: the nanosecond timestamp types round-trip through the DataType proto.
