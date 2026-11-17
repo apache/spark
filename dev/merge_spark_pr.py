@@ -81,6 +81,11 @@ FORK_REMOTE_NAME = os.environ.get("FORK_REMOTE_NAME", "origin")
 # GitHub owner of that fork (the `user` in git@github.com:user/spark.git). Derived from the
 # fork remote URL when unset; set it when that URL uses an SSH host alias.
 FORK_OWNER = os.environ.get("FORK_OWNER", "")
+# Set by --prompt-for-branches-during-backport (see build_arg_parser). Off by default: a finished
+# pick then only asks whether to push it to PUSH_REMOTE_NAME, and the fork is never touched.
+# On, the landing prompt also offers [p], which pushes the pick to the fork and opens a draft
+# backport PR, and earlier runs' open backport PRs on the fork count as pending.
+PROMPT_FOR_BRANCHES_DURING_BACKPORT = False
 # ASF JIRA username
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
@@ -2286,14 +2291,34 @@ def _fork_owner(pushing=True):
 def _landing_choice(pick_branch_name, pick_ref):
     """Ask how a finished pick lands: [d]irect push, [p] fork + draft PR, or [s]kip (default).
 
+    [p] is offered only with --prompt-for-branches-during-backport; without it the question is
+    the plain push-or-skip one, whose y/n answers map to "d"/"s".
+
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
     >>> from unittest.mock import patch
-    >>> with patch("builtins.input", return_value=""), redirect_stdout(StringIO()):
-    ...     choice = _landing_choice("PR_TOOL_PICK_PR_1_BRANCH-4.2", "branch-4.2")
-    >>> choice
+    >>> def choose(answers, enabled):
+    ...     out = StringIO()
+    ...     with (
+    ...         patch.dict(_landing_choice.__globals__,
+    ...                    PROMPT_FOR_BRANCHES_DURING_BACKPORT=enabled),
+    ...         patch("builtins.input", side_effect=answers), redirect_stdout(out),
+    ...     ):
+    ...         return _landing_choice("PR_TOOL_PICK_PR_1_BRANCH-4.2", "branch-4.2")
+    >>> choose([""], True), choose(["p"], True), choose([""], False), choose(["y"], False)
+    ('s', 'p', 's', 'd')
+
+    Without the flag, [p] is not accepted:
+
+    >>> choose(["p", "n"], False)
     's'
     """
+    if not PROMPT_FOR_BRANCHES_DURING_BACKPORT:
+        return get_input(
+            "Pick complete (local ref %s). Push to %s/%s? (y/N): "
+            % (pick_branch_name, PUSH_REMOTE_NAME, pick_ref),
+            {"d": ["y", "yes"], "s": ["n", "no", ""]},
+        )
     return get_input(
         "Pick complete (local ref %s). How should it land?\n"
         "  [d] Push directly to %s/%s\n"
@@ -2538,7 +2563,8 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     ...         patch.object(git, "push", side_effect=push_error) as push,
     ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=policy,
     ...                        maybe_compile_check=compile_check, clean_up=Mock(),
-    ...                        _land_via_fork=Mock(side_effect=via_fork)),
+    ...                        _land_via_fork=Mock(side_effect=via_fork),
+    ...                        PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         try:
@@ -2578,7 +2604,8 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
     ...                        maybe_compile_check=Mock(), clean_up=steps.clean_up,
     ...                        _restore_original_head=steps.restore, _land_via_fork=steps.fork,
-    ...                        should_skip_post_merge_ci=Mock(return_value=False)),
+    ...                        should_skip_post_merge_ci=Mock(return_value=False),
+    ...                        PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         try:
@@ -2634,7 +2661,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
     ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
     ...                        maybe_compile_check=committer_amends, clean_up=Mock(),
     ...                        should_skip_post_merge_ci=Mock(return_value=True),
-    ...                        _land_via_fork=fork),
+    ...                        _land_via_fork=fork, PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         _do_cherry_pick(1, "feed", "branch-4.x")
@@ -2738,9 +2765,10 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title="", pending_sibling=None
         except Exception as e:
             # Likely a race with another push during the compile. The pick is stale then, so
             # only [p] (which keeps it, on the fork) or [s] (which discards it) can get out.
+            hint = "use [p] or [s]" if PROMPT_FOR_BRANCHES_DURING_BACKPORT else "answer n"
             print_error(
-                "Exception while pushing: %s\nIf %s moved, [d] fails again; use [p] or [s]."
-                % (e, pick_ref)
+                "Exception while pushing: %s\nIf %s moved, pushing fails again; %s."
+                % (e, pick_ref, hint)
             )
 
     _finish_landed(record, (pick_ref, pick_hash))
@@ -2776,6 +2804,7 @@ def pending_fork_backports(pr_num, branch_names):
     That PR leaves no merge footer, only its backport-pr<N>-<branch> branch on the fork, so look
     there first and then confirm the PR is still open: a closed one's branch often lingers.
     Best-effort like branches_with_merge_footer: an unusable fork or a failure reports nothing.
+    Without --prompt-for-branches-during-backport the fork is not looked at, so nothing is found.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
@@ -2786,7 +2815,8 @@ def pending_fork_backports(pr_num, branch_names):
     ...     return {"html_url": "https://x/pull/9"} if base == "branch-4.x" else None
     >>> m = sys.modules[__name__]
     >>> with (
-    ...     patch.multiple(m, FORK_REMOTE_NAME="origin", _fork_owner=lambda pushing=True: "me"),
+    ...     patch.multiple(m, FORK_REMOTE_NAME="origin", _fork_owner=lambda pushing=True: "me",
+    ...                    PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
     ...     patch.object(git, "run", return_value=heads) as run,
     ...     patch.object(github, "open_pr", side_effect=open_pr) as gh,
     ... ):
@@ -2797,9 +2827,14 @@ def pending_fork_backports(pr_num, branch_names):
     >>> [c.args for c in gh.call_args_list]
     [('branch-4.x', 'me:backport-pr7-branch-4.x'), ('branch-4.1', 'me:backport-pr7-branch-4.1')]
 
-    An unusable fork is never queried:
+    An unusable fork is never queried, nor is any fork without the flag:
 
+    >>> with patch.object(m, "_fork_owner") as owner, patch.object(git, "run") as run:
+    ...     found = pending_fork_backports(7, ["branch-4.x"])
+    >>> found, owner.call_count, run.call_count
+    ({}, 0, 0)
     >>> with (
+    ...     patch.object(m, "PROMPT_FOR_BRANCHES_DURING_BACKPORT", True),
     ...     patch.object(m, "_fork_owner", side_effect=ValueError("origin is the Apache repo")),
     ...     patch.object(git, "run") as run,
     ...     redirect_stdout(StringIO()),
@@ -2808,6 +2843,8 @@ def pending_fork_backports(pr_num, branch_names):
     >>> found, run.call_count
     ({}, 0)
     """
+    if not PROMPT_FOR_BRANCHES_DURING_BACKPORT:
+        return {}
     pattern = "refs/heads/%s*" % _backport_pr_branch(pr_num, "")
     try:
         owner = _fork_owner(pushing=False)
@@ -2973,6 +3010,7 @@ def cherry_pick(
     ...     patch.object(git, "push") as push,
     ...     patch.object(sys.modules[__name__], "maybe_binding_policy_warning"),
     ...     patch.object(sys.modules[__name__], "maybe_compile_check"),
+    ...     patch.object(sys.modules[__name__], "PROMPT_FOR_BRANCHES_DURING_BACKPORT", True),
     ...     redirect_stdout(StringIO()),
     ... ):
     ...     try:
@@ -2994,7 +3032,8 @@ def cherry_pick(
     ...         patch.multiple(sys.modules[__name__], maybe_binding_policy_warning=Mock(),
     ...                        maybe_compile_check=Mock(), clean_up=Mock(),
     ...                        should_skip_post_merge_ci=Mock(return_value=False),
-    ...                        _land_via_fork=Mock(return_value=fork)),
+    ...                        _land_via_fork=Mock(return_value=fork),
+    ...                        PROMPT_FOR_BRANCHES_DURING_BACKPORT=True),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         try:
@@ -5050,12 +5089,21 @@ def build_arg_parser():
         "logging each as a 'DRY-RUN: would ...' line. Also enabled by setting the DRY_RUN "
         "environment variable.",
     )
+    parser.add_argument(
+        "--prompt-for-branches-during-backport",
+        action="store_true",
+        help="When landing each backport pick, also offer [p]: push it to your fork "
+        "(FORK_REMOTE_NAME) and open a draft backport PR against the branch so CI runs before "
+        "it lands. Open backport PRs from earlier runs then count as pending. Off by default: "
+        "each pick is only pushed directly or skipped, and the fork is never used.",
+    )
     return parser
 
 
 def main():
-    global git, github, jira_ops, original_head
+    global git, github, jira_ops, original_head, PROMPT_FOR_BRANCHES_DURING_BACKPORT
     args = build_arg_parser().parse_args()
+    PROMPT_FOR_BRANCHES_DURING_BACKPORT = args.prompt_for_branches_during_backport
     if args.dry_run:
         # Swap the outbound clients for their logging-only variants; everything else is unchanged.
         git = DryRunGit()
