@@ -562,6 +562,19 @@ class ColumnPruningSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60850: join followed by aggregation keeps legacy pruning") {
+    val (left, right) = watermarkedJoinInputs()
+    val join = Join(left, right, Inner,
+      Some(left.output.head === right.output.head), JoinHint.NONE)
+    val aggregate = Aggregate(Seq(left.output.head), Seq(left.output.head), join)
+    withSQLConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS.key -> "true") {
+      val optimized = Optimize.execute(aggregate)
+      val optimizedJoin = optimized.collectFirst { case j: Join => j }.get
+      assert(optimizedJoin.left.output == Seq(left.output.head))
+      assert(optimizedJoin.right.output == Seq(right.output.head))
+    }
+  }
+
   test("SPARK-60850: joins with residual predicates keep legacy pruning") {
     val (left, right) = watermarkedJoinInputs()
     val condition = (left.output.head === right.output.head) &&
