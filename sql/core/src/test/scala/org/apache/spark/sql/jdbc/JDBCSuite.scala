@@ -3463,6 +3463,47 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-61857: timestampCalendarTimeZone parses TimestampType in the given time zone") {
+    val tableName = "test.timestamp_calendar_tz"
+    conn.prepareStatement(s"create table $tableName (t TIMESTAMP)").executeUpdate()
+    conn.prepareStatement(s"insert into $tableName values ('2026-10-10 11:03:07.123456')")
+      .executeUpdate()
+    conn.commit()
+    try {
+      def readTimestamp(options: Map[String, String]): Timestamp =
+        spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", tableName)
+          .options(options)
+          .load()
+          .head()
+          .getAs[Timestamp](0)
+
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
+        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            val wallClock = LocalDateTime.parse("2026-10-10T11:03:07.123456")
+            assert(
+              readTimestamp(Map("timestampCalendarTimeZone" -> "UTC")).toInstant ===
+                wallClock.toInstant(java.time.ZoneOffset.UTC),
+              s"zone=$zoneId")
+            assert(
+              readTimestamp(Map("timestampCalendarTimeZone" -> "Asia/Kolkata")).toInstant ===
+                wallClock.atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant,
+              s"zone=$zoneId")
+          }
+        }
+
+        intercept[java.time.DateTimeException] {
+          readTimestamp(Map("timestampCalendarTimeZone" -> "Not/AZone"))
+        }
+      }
+    } finally {
+      conn.prepareStatement(s"drop table $tableName").executeUpdate()
+      conn.commit()
+    }
+  }
+
   test("FAILED_JDBC.CONNECTION") {
     val testUrls = Seq(
       "jdbc:mysql",

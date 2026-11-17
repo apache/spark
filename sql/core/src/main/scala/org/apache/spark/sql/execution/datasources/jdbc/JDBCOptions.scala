@@ -283,6 +283,14 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(dialectTimestampNTZAsWallClock)
 
+  // Time zone the source renders TimestampType values in. When set, reads pass a calendar in this
+  // zone to ResultSet.getTimestamp, so offset-less driver text is not interpreted in the JVM
+  // default time zone.
+  val timestampCalendarTimeZone: Option[java.util.TimeZone] =
+    parameters
+      .get(JDBC_TIMESTAMP_CALENDAR_TIME_ZONE)
+      .map(id => java.util.TimeZone.getTimeZone(java.time.ZoneId.of(id)))
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
@@ -399,4 +407,5 @@ object JDBCOptions {
   val JDBC_HINT_STRING = newOption("hint")
   val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("timestampNTZAsWallClock")
   val JDBC_ZONELESS_TIMESTAMP_AS_NTZ = newOption("zonelessTimestampAsNTZ")
+  val JDBC_TIMESTAMP_CALENDAR_TIME_ZONE = newOption("timestampCalendarTimeZone")
 }

@@ -168,6 +168,18 @@ private[jdbc] object JDBCValueGetter {
     }
   }
 
+  final case class TimestampWithCalendarGetter(calendar: java.util.Calendar, dialect: JdbcDialect)
+      extends JDBCValueGetter {
+    def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
+      val t = rs.getTimestamp(pos + 1, calendar)
+      if (t != null) {
+        row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
+      } else {
+        row.update(pos, null)
+      }
+    }
+  }
+
   final case class LogicalTimeNTZGetter(dialect: JdbcDialect) extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
       val micros = nullSafeConvert[Time](rs.getTime(pos + 1), t => {
