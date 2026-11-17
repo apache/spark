@@ -294,10 +294,10 @@ pub trait ScanBuilder: Send + Sized + 'static {
     /// `IS NULL`, `IS NOT NULL` and `STARTS_WITH`, combined with `AND`, `OR` and `NOT`, for the
     /// columns and the fields of structs of the types that a [`Value`] holds, except strings with
     /// a non-binary collation. It calls this only with at least one domain, and at most one for
-    /// each column. A domain has all the values that its column has in the rows for which the filters are
-    /// true, and may have others: a column that only one side of an `OR` constrains gets no
-    /// domain from it, and filters such as `id + 1 > 5` constrain no column. Spark evaluates
-    /// all the filters after reading anyway.
+    /// each column. A domain has all the values that its column has in the rows for which the
+    /// filters are true, and may have others: a column that only one side of an `OR` constrains
+    /// gets no domain from it, and filters such as `id + 1 > 5` constrain no column. Spark
+    /// evaluates all the filters after reading anyway.
     ///
     /// Return whether the scan uses each domain, in order: Spark shows the filters of the used
     /// domains as pushed in the formatted plan of the query (`EXPLAIN FORMATTED`). The default
