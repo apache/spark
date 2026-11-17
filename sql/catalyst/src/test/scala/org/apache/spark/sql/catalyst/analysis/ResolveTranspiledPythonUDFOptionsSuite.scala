@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.{
-  ArrayType, DecimalType, DoubleType, FloatType, LongType, MapType, StringType}
+  ArrayType, BinaryType, BooleanType, DataType, DecimalType, DoubleType, FloatType,
+  IntegerType, LongType, MapType, StringType}
 
 /**
  * Unit tests for [[ResolveTranspiledPythonUDFOptions]], which prunes a
@@ -105,6 +106,53 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
         Seq($"a".string, AttributeReference("a", otherDt)()).foreach { wrong =>
           assert(prune(node(wrong), LocalRelation(wrong, n)).transpiledOptions.isEmpty)
         }
+    }
+  }
+
+  test("matches an element-aware array category only by its element type") {
+    // `def f(x: list[int], y: int): return y + 1`: "array<c>" matches an ArrayType whose
+    // element type matches c, recursively, under the same rules as a top-level c.
+    val n = $"b".long
+    val opt = Add(n, Literal(1L))
+    val lcase = StringType("UTF8_LCASE")
+    val cases: Seq[(String, Seq[DataType], Seq[DataType])] = Seq(
+      ("array<integer>",
+        Seq(ArrayType(IntegerType), ArrayType(LongType, containsNull = false)),
+        Seq(ArrayType(DoubleType), ArrayType(DecimalType(10, 2)), ArrayType(StringType),
+          ArrayType(ArrayType(LongType)), LongType)),
+      ("array<float>",
+        Seq(ArrayType(DoubleType), ArrayType(FloatType)),
+        Seq(ArrayType(LongType), ArrayType(DecimalType(10, 2)))),
+      ("array<string>",
+        Seq(ArrayType(StringType)),
+        Seq(ArrayType(lcase), ArrayType(BinaryType), StringType)),
+      ("array<bool>", Seq(ArrayType(BooleanType)), Seq(ArrayType(LongType))),
+      ("array<binary>", Seq(ArrayType(BinaryType)), Seq(ArrayType(StringType))),
+      ("array<map>",
+        Seq(ArrayType(MapType(StringType, LongType))),
+        Seq(ArrayType(ArrayType(StringType)))),
+      ("array<array<integer>>",
+        Seq(ArrayType(ArrayType(LongType))),
+        Seq(ArrayType(LongType), ArrayType(ArrayType(StringType)),
+          ArrayType(ArrayType(ArrayType(LongType))))),
+      ("array<array>",
+        Seq(ArrayType(ArrayType(StringType)), ArrayType(ArrayType(ArrayType(LongType)))),
+        Seq(ArrayType(LongType))),
+      ("array<array<string>>",
+        Seq(ArrayType(ArrayType(StringType))),
+        Seq(ArrayType(ArrayType(lcase)))),
+      // A malformed category matches nothing rather than throwing.
+      ("array<integer", Nil, Seq(ArrayType(LongType))),
+      ("array<>", Nil, Seq(ArrayType(LongType))))
+    cases.foreach { case (category, matching, other) =>
+      def keeps(dt: DataType): Boolean = {
+        val c = AttributeReference("a", dt)()
+        val node = TranspiledPythonUDF(
+          "udf", pyUDF(Seq(c, n)), List(opt), List(List(category, "numeric")))
+        prune(node, LocalRelation(c, n)).transpiledOptions == List(opt)
+      }
+      matching.foreach(dt => assert(keeps(dt), s"$category should match $dt"))
+      other.foreach(dt => assert(!keeps(dt), s"$category should not match $dt"))
     }
   }
 

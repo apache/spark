@@ -2870,11 +2870,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("list", "array"),
             ("List", "array"),
             ("Sequence", None),
-            ("list[int]", "array"),
+            ("list[int]", "array<integer>"),
             ("Sequence[int]", None),
-            ("typing.List[int]", "array"),
+            ("typing.List[int]", "array<integer>"),
             ('"list"', "array"),
-            ('"list[int]"', "array"),
+            ('"list[int]"', "array<integer>"),
             ('"the input value"', None),  # unparseable text is untyped, not an error
             ("set", None),
             ("torch.float", None),
@@ -2908,20 +2908,21 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         from pyspark.sql.transpile import _param_category_combos
 
-        for ann in (
-            "Sequence",
-            "Sequence[str]",
-            "typing.Sequence",
-            "typing.Sequence[str]",
-            '"Sequence"',
-            '"Sequence[str]"',
-            '"typing.Sequence[str]"',
+        for ann, array_cat in (
+            ("Sequence", "array"),
+            ("Sequence[str]", "array<string>"),
+            ("typing.Sequence", "array"),
+            ("typing.Sequence[str]", "array<string>"),
+            ('"Sequence"', "array"),
+            ('"Sequence[str]"', "array<string>"),
+            ('"typing.Sequence[str]"', "array<string>"),
+            ("Optional[Sequence[str]]", "array<string>"),
         ):
             with self.subTest(ann=ann):
                 fn = _ast.parse(f"def f(a: {ann}, b: dict): return b").body[0]
                 self.assertEqual(
                     _param_category_combos(fn, ["a", "b"]),
-                    [{0: "array", 1: "map"}, {0: "string", 1: "map"}],
+                    [{0: array_cat, 1: "map"}, {0: "string", 1: "map"}],
                 )
         # At the cap boundary: three unpinned params (one a Sequence) get the product.
         fn = _ast.parse("def f(s: Sequence, b, c): return b").body[0]
@@ -3164,6 +3165,310 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ):
                 with self.subTest(func=func.__name__):
                     self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+
+    def test_annotation_category_element_aware_array(self):
+        # A list annotation naming its element type pins an element-aware category,
+        # recursively; Optional[X] / X | None pin what X does.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _annotation_category
+
+        for ann, expected in [
+            ("list[int]", "array<integer>"),
+            ("List[str]", "array<string>"),
+            ("typing.List[float]", "array<float>"),
+            ("list[bool]", "array<bool>"),
+            ("list[bytes]", "array<binary>"),
+            ("list[list[int]]", "array<array<integer>>"),
+            ("list[dict]", "array<map>"),
+            ("list[list]", "array<array>"),
+            ("list[Any]", "array"),
+            ("list[Sequence[int]]", "array"),  # an element that pins nothing
+            ("list[int, str]", "array"),
+            ("list[Optional[int]]", "array<integer>"),
+            ("list[int | None]", "array<integer>"),
+            ("list['int']", "array<integer>"),
+            ('"list[list[\'str\']]"', "array<array<string>>"),
+            ("Optional[list[int]]", "array<integer>"),
+            ("typing.Optional[list[int]]", "array<integer>"),
+            ("list[int] | None", "array<integer>"),
+            ("Optional[int]", "integer"),
+            ("None | str", "string"),
+            ('"Optional[bytes]"', "binary"),
+            ("Optional", None),
+            ("int | str", None),
+            ("Optional[Sequence[int]]", None),
+        ]:
+            with self.subTest(ann=ann):
+                fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
+                self.assertEqual(_annotation_category(fn.args.args[0].annotation), expected)
+
+    def test_element_aware_array_category_predicates(self):
+        from pyspark.sql.transpile import (
+            _array_element_cat,
+            _is_complex_cat,
+            _is_equatable_array_cat,
+            _is_fully_known_array_cat,
+        )
+
+        self.assertEqual(_array_element_cat("array<array<integer>>"), "array<integer>")
+        self.assertIsNone(_array_element_cat("array"))
+        self.assertIsNone(_array_element_cat(None))
+        for cat in ("map", "array", "array<integer>", "array<map>"):
+            self.assertTrue(_is_complex_cat(cat), cat)
+        for cat in ("integer", "string", None):
+            self.assertFalse(_is_complex_cat(cat), cat)
+        for cat, known, equatable in [
+            ("array<integer>", True, True),
+            ("array<string>", True, True),
+            ("array<bool>", True, True),
+            ("array<binary>", True, True),
+            ("array<array<integer>>", True, True),
+            ("array<float>", True, False),
+            ("array<array<float>>", True, False),
+            ("array<map>", False, False),
+            ("array<array>", False, False),
+            ("array", False, False),
+            ("map", False, False),
+            ("integer", False, False),
+        ]:
+            with self.subTest(cat=cat):
+                self.assertEqual(_is_fully_known_array_cat(cat), known)
+                self.assertEqual(_is_equatable_array_cat(cat), equatable)
+
+    def test_udf_transpile_element_aware_array_input_categories(self):
+        # An element-aware option is kept only for an array column whose elements
+        # match, string elements only under UTF8_BINARY; anything else runs the
+        # interpreted Python UDF.
+        def int_array_plus(x: list[int], y: int):
+            return y + 1
+
+        def str_array_plus(x: "List[str]", y: int):
+            return y + 1
+
+        rows_by_schema = {
+            "array<int>": [([1, None], 1), ([], 2), (None, 3)],
+            "array<bigint>": [([1, None], 1), ([], 2), (None, 3)],
+            "array<string>": [(["x", None], 1), ([], 2), (None, 3)],
+            "array<double>": [([1.0], 1), ([], 2), (None, 3)],
+            "array<decimal(10,2)>": [(None, 1), (None, 2), (None, 3)],
+            "array<array<int>>": [([[1]], 1), ([], 2), (None, 3)],
+        }
+        for func, lowered in (
+            (int_array_plus, {"array<int>", "array<bigint>"}),
+            (str_array_plus, {"array<string>"}),
+        ):
+            for element_schema, rows in rows_by_schema.items():
+                with self.subTest(func=func.__name__, schema=element_schema):
+                    with self.sql_conf(_TRANSPILE_ON):
+                        u = self._transpiled_udf(func, LongType())
+                        df = self.spark.createDataFrame(rows, f"a {element_schema}, b long")
+                        projected = df.select(u("a", "b"))
+                        self.assertEqual(
+                            self._eval_python_count(projected) == 0,
+                            element_schema in lowered,
+                        )
+                        self.assertEqual([r[0] for r in projected.collect()], [2, 3, 4])
+        # A collated element type does not match "array<string>".
+        with self.sql_conf(_TRANSPILE_ON):
+            u = self._transpiled_udf(str_array_plus, LongType())
+            df = self.spark.createDataFrame(
+                rows_by_schema["array<string>"], "a array<string>, b long"
+            ).selectExpr("cast(a as array<string collate UTF8_LCASE>) as a", "b")
+            projected = df.select(u("a", "b"))
+            self.assertGreater(self._eval_python_count(projected), 0)
+            self.assertEqual([r[0] for r in projected.collect()], [2, 3, 4])
+
+    def test_udf_transpile_element_aware_array_equality_lowers(self):
+        # `==`/`!=` on element-aware arrays lowers to Spark's `=`, which agrees
+        # with Python element-wise, None elements and None arrays included.
+        from typing import List, Optional
+
+        def int_eq(a: list[int], b: list[int]):
+            return a == b
+
+        def int_ne(a: List[Optional[int]], b: "list[int]"):
+            return a != b
+
+        def str_eq(a: list[str], b: list[str]):
+            return a == b
+
+        def bool_ne(a: list[bool], b: list[bool]):
+            return a != b
+
+        def bytes_eq(a: list[bytes], b: list[bytes]):
+            return a == b
+
+        def nested_eq(a: list[list[int]], b: list[list[int]]):
+            return a == b
+
+        def eq_none(a: list[int]):
+            return a == None  # noqa: E711
+
+        def none_ne(a: Optional[list[str]]):
+            return None != a  # noqa: E711
+
+        def guarded_eq(a: list[int], b: list[int]):
+            return a == b if a is not None else False
+
+        int_rows = [
+            ([1, 2], [1, 2]),
+            ([1, 2], [1, 3]),
+            ([1, 2], [1]),
+            ([], []),
+            ([1, None], [1, None]),
+            ([None], [1]),
+            ([None], [None]),
+            (None, [1]),
+            ([1], None),
+            (None, None),
+        ]
+        str_rows = [
+            (["a", "b"], ["a", "b"]),
+            (["a"], ["A"]),
+            (["a", None], ["a", None]),
+            (None, []),
+        ]
+        bool_rows = [([True], [True]), ([True], [False]), ([None], [False]), (None, None)]
+        bytes_rows = [([b"x"], [b"x"]), ([b"x"], [b"y"]), ([None], [None]), ([b""], None)]
+        nested_rows = [
+            ([[1], [2, None]], [[1], [2, None]]),
+            ([[1], None], [[1], None]),
+            ([[1], None], [[1], []]),
+            ([[1]], [[1, 2]]),
+            (None, [[1]]),
+        ]
+        for func, schema, rows in (
+            (int_eq, "a array<int>, b array<int>", int_rows),
+            (int_eq, "a array<int>, b array<bigint>", int_rows),
+            (int_ne, "a array<bigint>, b array<tinyint>", int_rows),
+            (str_eq, "a array<string>, b array<string>", str_rows),
+            (bool_ne, "a array<boolean>, b array<boolean>", bool_rows),
+            (bytes_eq, "a array<binary>, b array<binary>", bytes_rows),
+            (nested_eq, "a array<array<int>>, b array<array<bigint>>", nested_rows),
+            (eq_none, "a array<int>", [([1],), ([None],), (None,)]),
+            (none_ne, "a array<string>", [(["x"],), ([],), (None,)]),
+            (guarded_eq, "a array<int>, b array<int>", int_rows),
+        ):
+            with self.subTest(func=func.__name__, schema=schema):
+                expected = [func(*row) for row in rows]
+                self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+
+    def test_udf_transpile_element_aware_array_comparison_falls_back(self):
+        # What `==` still refuses on element-aware arrays, and array ordering,
+        # each with the reason it gives.
+        def float_eq(a: list[float], b: list[float]):
+            return a == b
+
+        def nested_float_ne(a: list[list[float]], b: list[list[float]]):
+            return a != b
+
+        def mixed_eq(a: list[int], b: list[str]):
+            return a == b
+
+        def array_vs_untyped(a: list[int], b: list):
+            return a == b
+
+        def int_lt(a: list[int], b: list[int]):
+            return a < b
+
+        def array_eq_scalar(a: list[int], b: int):
+            return a == b
+
+        # No NaN rows: whether Python's `[nan] == [nan]` is True depends on the two
+        # NaNs being one object, which is exactly why float elements are refused.
+        for func, schema, rows, needle in (
+            (
+                float_eq,
+                "a array<double>, b array<double>",
+                [([1.0], [1.0]), ([1.0], [2.0]), ([None], [None])],
+                "(array<float> vs array<float>)",
+            ),
+            (
+                nested_float_ne,
+                "a array<array<double>>, b array<array<double>>",
+                [([[1.0]], [[1.0]]), ([[1.0]], [[1.5]])],
+                "(array<array<float>> vs array<array<float>>)",
+            ),
+            (
+                mixed_eq,
+                "a array<int>, b array<string>",
+                [([1], ["1"]), ([], [])],
+                "incompatible categories (array<integer> vs array<string>)",
+            ),
+            (
+                array_vs_untyped,
+                "a array<int>, b array<int>",
+                [([1], [1]), ([1], [2])],
+                "incompatible categories (array<integer> vs array)",
+            ),
+            (
+                int_lt,
+                "a array<int>, b array<int>",
+                [([1], [2]), ([2], [1]), ([1, None], [2, None])],
+                "operands are both `array<integer>`",
+            ),
+            (
+                array_eq_scalar,
+                "a array<int>, b int",
+                [([1], 1), (None, None)],
+                "incompatible categories (array<integer> vs integer)",
+            ),
+        ):
+            with self.subTest(func=func.__name__):
+                with self.sql_conf(_TRANSPILE_ON):
+                    u, reasons = self._fallback_reason(func, BooleanType())
+                    self.assertIn(needle, reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual(
+                        [r[0] for r in df.select(u(*df.columns)).collect()],
+                        [func(*row) for row in rows],
+                    )
+
+    def test_udf_transpile_element_aware_array_branches(self):
+        # Two branches of one element-aware array category (or one and None) have
+        # a common type, so the if/else lowers; mismatched element types still fall
+        # back rather than fail analysis.
+        def pick_is_none(a: list[int], b: list[int], c: bool):
+            return (a if c else b) is None
+
+        def pick_or_none_eq(a: list[str], b: list[str], c: bool):
+            return (a if c else None) == b
+
+        def if_stmt_eq(a: list[int], b: list[int], c: bool):
+            if c:
+                return a == b
+            return a != b
+
+        def mismatched(a: list[int], b: list[str], c: bool):
+            return (a if c else b) is None
+
+        def unknown_element(a: list[int], b: list, c: bool):
+            return (a if c else b) is None
+
+        int_rows = [([1], [2], True), (None, [2], True), ([1], None, False), ([1], [1], False)]
+        str_rows = [(["x"], ["x"], True), (["x"], ["x"], False), (None, None, True)]
+        for func, schema, rows in (
+            (pick_is_none, "a array<int>, b array<bigint>, c boolean", int_rows),
+            (pick_or_none_eq, "a array<string>, b array<string>, c boolean", str_rows),
+            (if_stmt_eq, "a array<int>, b array<int>, c boolean", int_rows),
+        ):
+            with self.subTest(func=func.__name__):
+                expected = [func(*row) for row in rows]
+                self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+        for func, schema, rows in (
+            (mismatched, "a array<int>, b array<string>, c boolean", [([1], ["x"], True)]),
+            (unknown_element, "a array<int>, b array<binary>, c boolean", [([1], None, False)]),
+        ):
+            with self.subTest(func=func.__name__):
+                with self.sql_conf(_TRANSPILE_ON):
+                    u, reasons = self._fallback_reason(func, BooleanType())
+                    self.assertIn("if/else branches have a `map`/`array` operand", reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual(
+                        [r[0] for r in df.select(u(*df.columns)).collect()],
+                        [func(*row) for row in rows],
+                    )
 
     def test_udf_transpile_integer_eq_no_nan_guard(self):
         # `a == b` on BIGINT columns must NOT emit a NaN guard. Integers can never

@@ -80,15 +80,27 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
 
   // True when each declared category matches the corresponding argument type.
   // Empty categories means "no restriction" and the option is kept.
-  //
+  private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
+    if (categories.isEmpty) {
+      true
+    } else if (categories.length != argTypes.length) {
+      false
+    } else {
+      categories.zip(argTypes).forall { case (category, dt) => categoryMatches(category, dt) }
+    }
+  }
+
   // Category -> Spark type mapping:
-  //   "integer" -> IntegralType (byte/short/int/long; NaN impossible)
-  //   "float"   -> FractionalType minus DecimalType (float/double; NaN possible)
-  //   "numeric" -> any NumericType minus DecimalType (legacy catch-all)
-  //   "string"  -> StringType with UTF8_BINARY collation only
-  //   "bool"    -> BooleanType
-  //   "binary"  -> BinaryType
-  //   "map" -> MapType; "array" -> ArrayType (any element type)
+  //   "integer"  -> IntegralType (byte/short/int/long; NaN impossible)
+  //   "float"    -> FractionalType minus DecimalType (float/double; NaN possible)
+  //   "numeric"  -> any NumericType minus DecimalType (legacy catch-all)
+  //   "string"   -> StringType with UTF8_BINARY collation only
+  //   "bool"     -> BooleanType
+  //   "binary"   -> BinaryType
+  //   "map"      -> MapType
+  //   "array"    -> ArrayType (any element type)
+  //   "array<c>" -> ArrayType whose element type matches category c, recursively
+  //                 (e.g. "array<integer>", "array<array<string>>")
   //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT matched by any numeric category: Python receives
@@ -98,26 +110,31 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   // - "string" requires the default UTF8_BINARY collation: under a non-binary
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
-  //   true where Python returns False.
-  // "map"/"array" need no collation gate: the transpiler refuses to lower any
-  // comparison of them, so no option observes an element type's collation.
-  private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
-    if (categories.isEmpty) {
-      true
-    } else if (categories.length != argTypes.length) {
-      false
-    } else {
-      categories.zip(argTypes).forall {
-        case ("integer", dt) => dt.isInstanceOf[IntegralType]
-        case ("float", dt) =>
-          dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
-        case ("numeric", dt) => dt.isInstanceOf[NumericType] && !dt.isInstanceOf[DecimalType]
-        case ("string", st: StringType) => st.isUTF8BinaryCollation
-        case ("bool", dt) => dt.isInstanceOf[BooleanType]
-        case ("binary", dt) => dt.isInstanceOf[BinaryType]
-        case ("map", dt) => dt.isInstanceOf[MapType]
-        case ("array", dt) => dt.isInstanceOf[ArrayType]
-        case _ => false
+  //   true where Python returns False. "array<string>" inherits the gate through
+  //   the element match, which is what lets the transpiler lower `==` on it.
+  // "map" and a bare "array" need no collation gate: the transpiler refuses to
+  // lower any comparison of them, so no option observes an element's collation.
+  private def categoryMatches(category: String, dt: DataType): Boolean = (category, dt) match {
+    case ("integer", _) => dt.isInstanceOf[IntegralType]
+    case ("float", _) => dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
+    case ("numeric", _) => dt.isInstanceOf[NumericType] && !dt.isInstanceOf[DecimalType]
+    case ("string", st: StringType) => st.isUTF8BinaryCollation
+    case ("bool", _) => dt.isInstanceOf[BooleanType]
+    case ("binary", _) => dt.isInstanceOf[BinaryType]
+    case ("map", _) => dt.isInstanceOf[MapType]
+    case ("array", _) => dt.isInstanceOf[ArrayType]
+    case (ArrayCategory(element), ArrayType(elementType, _)) =>
+      categoryMatches(element, elementType)
+    case _ => false
+  }
+
+  // Extracts the element category from "array<c>".
+  private object ArrayCategory {
+    def unapply(category: String): Option[String] = {
+      if (category.startsWith("array<") && category.endsWith(">")) {
+        Some(category.substring("array<".length, category.length - 1))
+      } else {
+        None
       }
     }
   }
