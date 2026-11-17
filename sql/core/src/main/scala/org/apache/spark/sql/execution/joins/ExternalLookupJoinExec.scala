@@ -55,6 +55,7 @@ case class ExternalLookupJoinExec(
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
     cacheOptions: ExternalLookupCacheOptions,
+    realTimeMode: Boolean,
     child: SparkPlan,
     cacheTicker: Ticker = ExternalLookupJoinExec.SystemCacheTicker)
   extends UnaryExecNode with SupportsCustomDriverMetrics with PredicateHelper {
@@ -151,6 +152,16 @@ case class ExternalLookupJoinExec(
       metric.name -> sqlMetric
     }.toMap
 
+  // A real-time batch runs until its duration elapses, so a stream row in a request that is not
+  // full would wait for more rows or the end of the batch. A request there takes as many rows as
+  // the configuration allows, by default one, and the cache serves the keys that repeat.
+  private def maxStreamRowsPerBatch: Int = if (!realTimeMode) {
+    ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST
+  } else {
+    math.min(ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST,
+      conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS))
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     postDriverMetrics(scan.reportDriverMetrics().map { metric =>
       new CustomTaskMetric {
@@ -177,6 +188,7 @@ case class ExternalLookupJoinExec(
       readerFactory,
       math.min(ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST, maxParameterRowsPerRequest),
       ExternalLookupJoinShapes.oneParameterRowPerRequest(lookupParameters, lookupKeyComparisons),
+      maxStreamRowsPerBatch,
       conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_MAX_BATCH_BYTES),
       cacheOptions,
       cacheTicker,

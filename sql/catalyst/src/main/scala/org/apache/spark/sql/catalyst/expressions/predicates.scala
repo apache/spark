@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project, Sample, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -231,6 +231,30 @@ trait PredicateHelper extends AliasHelper with Logging {
     case _: ColumnarUDF => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
+  }
+
+  /**
+   * The output columns of `plan` that can fail to compute: the deterministic columns of a
+   * [[Project]] whose expression [[ExprUtils.canEvaluateUnconditionally]] rejects or reads such a
+   * column of its child, looking through [[Filter]] and [[Sample]]. A condition over such a column
+   * can fail as its expression does: under whole-stage codegen, the projection computes a
+   * deterministic column for a row only when a condition above first reads it, and
+   * `PushPredicateThroughNonJoin` pushes a condition below the projection with the expression
+   * substituted. A non-deterministic column is computed on every row the projection gets, so it
+   * does not count. Other operators are not looked through.
+   */
+  protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
+    case Project(projectList, child) =>
+      val below = failableOutput(child)
+      AttributeSet(projectList.collect {
+        case a: Alias if a.child.deterministic &&
+            (!ExprUtils.canEvaluateUnconditionally(a.child) ||
+              a.child.references.exists(below.contains)) => a.toAttribute
+        case a: Attribute if below.contains(a) => a
+      })
+    case Filter(_, child) => failableOutput(child)
+    case s: Sample => failableOutput(s.child)
+    case _ => AttributeSet.empty
   }
 
   /**

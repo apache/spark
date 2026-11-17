@@ -724,6 +724,21 @@ object SQLConf {
     .stringConf
     .createWithDefault("catalyst")
 
+  val PYTHON_UDF_TRANSPILE_NULL_STRICTNESS =
+    buildConf("spark.sql.experimental.optimizer.transpileNullStrictness")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .doc("Controls how the Python UDF transpiler handles null/None semantics for ordering " +
+      "comparisons (``<``, ``<=``, ``>``, ``>=``). Under ``strict`` (the default) a NULL " +
+      "operand causes the expression to raise an error, matching Python's TypeError. Under " +
+      "``loose`` a NULL operand silently propagates as NULL instead of raising, which allows " +
+      "more UDFs to be transpiled at the cost of minor semantic divergence on NULL inputs.")
+    .version("4.4.0")
+    .stringConf
+    .checkValue(
+      v => v == "strict" || v == "loose",
+      "Invalid value. Must be 'strict' or 'loose'.")
+    .createWithDefault("strict")
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -1900,6 +1915,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED =
+    buildConf("spark.sql.optimizer.inferFiltersAcrossAsOfJoin.enabled")
+      .internal()
+      .doc("When true, the query optimizer infers filters for the inputs of a sort-merge " +
+        "AS-OF join from its ON condition and its other input, such as `q.k = 7` from " +
+        "`ON t.k = q.k` and `t.k = 7`, but never a filter that can fail, and only IS NOT NULL " +
+        "while spark.sql.legacy.inferFailableFiltersFromConstraints is true. When false, it " +
+        "infers no filter across such a join, while each input keeps the filters inferred " +
+        "from its own constraints and other joins keep theirs.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
       .internal()
@@ -2576,6 +2605,23 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
       .createWithDefaultString("64m")
+
+  val JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS =
+    buildConf("spark.sql.join.externalLookup.realTimeMode.maxBatchRows")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Number of stream rows at which an external lookup join stops adding rows to a " +
+        "lookup request in Real-Time Mode. A Real-Time Mode batch runs until its duration " +
+        "elapses, not until its input ends, so a row in a request that is not full waits for " +
+        "more rows or for the end of the batch. With the default of 1, the join sends each " +
+        "row's request as soon as it reads the row, and the lookup cache, when enabled, serves " +
+        "keys that repeat. A larger value sends fewer requests, but a row can wait longer for " +
+        "its output. A request also keeps the other bounds of a micro-batch request, which " +
+        "spark.sql.join.externalLookup.maxBatchBytes describes. Micro-batch queries do not use " +
+        "this configuration.")
+      .version("4.4.0")
+      .intConf
+      .checkValue(_ > 0, "External lookup join real-time mode max batch rows must be positive")
+      .createWithDefault(1)
 
   val JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED =
     buildConf("spark.sql.join.externalLookup.startupCheck.enabled")
@@ -10166,6 +10212,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyInferFailableFiltersFromConstraints: Boolean =
     getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
+
+  def inferFiltersAcrossAsOfJoinEnabled: Boolean = getConf(INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 

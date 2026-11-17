@@ -67,3 +67,16 @@ SELECT xxh3_128(CAST('Spark' AS BINARY));
 -- Null propagation.
 SELECT xxh3_64(CAST(NULL AS STRING));
 SELECT xxh3_128(CAST(NULL AS BINARY));
+
+-- farm_fingerprint
+SELECT farm_fingerprint('Spark');
+SELECT farm_fingerprint(CAST('Spark' AS BINARY));
+SELECT farm_fingerprint('');
+-- Matches BigQuery FARM_FINGERPRINT.
+SELECT farm_fingerprint(concat(CAST(1 AS STRING), 'foo', CAST(true AS STRING)));
+-- Null propagation.
+SELECT farm_fingerprint(CAST(NULL AS STRING));
+SELECT farm_fingerprint(CAST(NULL AS BINARY));
+-- Non-string and non-binary input is rejected.
+SELECT farm_fingerprint(1);
+SELECT farm_fingerprint(array(1, 2));

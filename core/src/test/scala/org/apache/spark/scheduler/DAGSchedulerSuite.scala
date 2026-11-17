@@ -8056,7 +8056,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       }
     }
     sc.register(accumulator, "in-flight pipelined result")
-    val eventLoop = new DAGSchedulerEventProcessLoop(scheduler)
+    // DAGScheduler.stop() shuts down other services before it stops the event loop, and any of
+    // them can briefly park the stop thread (e.g. a ThreadPoolExecutor's mainLock). Such a park
+    // also reads as WAITING, and an uninterruptible lock wait clears the interrupt flag, so the
+    // state checks below cannot tell it from the join. Releasing the replay then lets the loop
+    // run the next one before stop() marks it stopped. Signal entry to EventLoop.stop() so the
+    // checks below can only observe its join, which starts after the loop is marked stopped.
+    val eventLoopStopEntered = new CountDownLatch(1)
+    val eventLoop = new DAGSchedulerEventProcessLoop(scheduler) {
+      override def stop(): Unit = {
+        eventLoopStopEntered.countDown()
+        super.stop()
+      }
+    }
     val stopThread = new Thread("stop-pipelined-scheduler") {
       override def run(): Unit = {
         try {
@@ -8090,6 +8102,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assert(replayStarted.await(10, TimeUnit.SECONDS))
 
       stopThread.start()
+      assert(eventLoopStopEntered.await(10, TimeUnit.SECONDS))
       eventually(eventuallyTimeout(10.seconds)) {
         assert(stopThread.getState === Thread.State.WAITING)
       }

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COLUMNAR_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COLUMNAR_UDF, EXTERNAL_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
@@ -82,9 +82,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    // Runtime filters are introduced after subquery optimization, so Python and columnar UDFs
-    // in a new creation-side subquery cannot be extracted into their evaluation operators.
-    if (aggregate.containsAnyPattern(PYTHON_UDF, COLUMNAR_UDF)) {
+    // Runtime filters are introduced after subquery optimization, so Python, external and
+    // columnar UDFs in a new creation-side subquery cannot be extracted into their evaluation
+    // operators.
+    if (aggregate.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF, COLUMNAR_UDF)) {
       return filterApplicationSidePlan
     }
     // The subquery evaluates the creation side again, apart from the join. A non-deterministic
@@ -256,8 +257,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   private def isSimpleExpression(e: Expression): Boolean = {
-    !e.containsAnyPattern(PYTHON_UDF, COLUMNAR_UDF, SCALA_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY,
-      REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
+    !e.containsAnyPattern(PYTHON_UDF, SCALA_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY,
+      REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, EXTERNAL_UDF, COLUMNAR_UDF)
   }
 
   // A broadcast hash join can build only a side that its join type allows, and a hint can rule it
