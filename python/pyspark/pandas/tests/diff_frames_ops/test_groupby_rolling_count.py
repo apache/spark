@@ -39,10 +39,9 @@ class GroupByRollingCountMixin:
         psser = ps.from_pandas(pser)
         kkey = ps.from_pandas(pkey)
 
-        # TODO(SPARK-43432): Fix `min_periods` for Rolling.count() to work same as pandas
         self.assert_eq(
             psser.groupby(kkey).rolling(2).count().sort_index(),
-            pser.groupby(pkey).rolling(2, min_periods=1).count().sort_index(),
+            pser.groupby(pkey).rolling(2).count().sort_index(),
         )
 
         pdf = pd.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
@@ -52,15 +51,15 @@ class GroupByRollingCountMixin:
 
         self.assert_eq(
             psdf.groupby(kkey).rolling(2).count().sort_index(),
-            pdf.groupby(pkey).rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(pkey).rolling(2).count().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(kkey)["b"].rolling(2).count().sort_index(),
-            pdf.groupby(pkey)["b"].rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(pkey)["b"].rolling(2).count().sort_index(),
         )
         self.assert_eq(
             psdf.groupby(kkey)[["b"]].rolling(2).count().sort_index(),
-            pdf.groupby(pkey)[["b"]].rolling(2, min_periods=1).count().sort_index(),
+            pdf.groupby(pkey)[["b"]].rolling(2).count().sort_index(),
         )
 
 
