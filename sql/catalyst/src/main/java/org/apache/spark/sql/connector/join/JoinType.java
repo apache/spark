@@ -29,4 +29,6 @@ public enum JoinType {
     INNER_JOIN,
     LEFT_OUTER_JOIN,
     RIGHT_OUTER_JOIN,
+    LEFT_SEMI_JOIN,
+    LEFT_ANTI_JOIN,
 }
