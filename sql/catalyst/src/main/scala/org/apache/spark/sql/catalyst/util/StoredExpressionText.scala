@@ -21,13 +21,14 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier, SimpleAnalyzer, StoredExpressionFunctions}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Reads and analyzes generation expressions stored with a table independently of the writing
- * session, with a session fallback for SQL text that the fixed settings cannot resolve.
+ * Reads and analyzes the SQL text of an expression stored with a table, such as a generation
+ * expression or a CHECK condition, independently of the writing session. A generation
+ * expression falls back to the session for SQL text that the fixed settings cannot resolve.
  */
 object StoredExpressionText {
 
@@ -71,7 +72,8 @@ object StoredExpressionText {
    * Parses `text` under [[conf]] with the ANSI value of the active session, for a text that
    * [[conf]] cannot resolve and the session analyzes. Only its ANSI behavior follows the session.
    */
-  def parseWithSessionAnsi(text: String): Expression = parse(confWithSessionAnsi(SQLConf.get), text)
+  def parseWithSessionAnsi(text: String): Expression =
+    parse(withSessionAnsi(conf(SQLConf.get)), text)
 
   private def parse(c: SQLConf, text: String): Expression = {
     val parsed = try {
@@ -85,9 +87,9 @@ object StoredExpressionText {
     StoredExpressionFunctions.qualifyBuiltinFunctions(parsed)
   }
 
-  private def confWithSessionAnsi(session: SQLConf): SQLConf = {
-    val c = conf(session)
-    c.setConfString(SQLConf.ANSI_ENABLED.key, session.ansiEnabled.toString)
+  /** Sets the ANSI value of the active session in `c`, and returns `c`. */
+  private def withSessionAnsi(c: SQLConf): SQLConf = {
+    c.setConfString(SQLConf.ANSI_ENABLED.key, SQLConf.get.ansiEnabled.toString)
     c
   }
 
@@ -156,12 +158,18 @@ object StoredExpressionText {
    * Whether `text` reads the same under [[conf]] as it does in the active session. The comparison
    * uses the ANSI value of the session, so that it is about how the text reads.
    */
-  def readsAsInSession(text: String): Boolean = {
-    val fixed = confWithSessionAnsi(SQLConf.get)
-    val parsedInSession = CatalystSqlParser.parseExpression(text)
+  def readsAsInSession(text: String): Boolean =
+    readsAsInSession(CatalystSqlParser, text, conf(SQLConf.get))
+
+  /**
+   * Whether `parser` reads `text` the same under `fixed` as it does in the active session. `fixed`
+   * takes the ANSI value of the session.
+   */
+  def readsAsInSession(parser: ParserInterface, text: String, fixed: SQLConf): Boolean = {
+    val parsedInSession = parser.parseExpression(text)
     try {
-      val parsed = SQLConf.withExistingConf(fixed) {
-        CatalystSqlParser.parseExpression(text)
+      val parsed = SQLConf.withExistingConf(withSessionAnsi(fixed)) {
+        parser.parseExpression(text)
       }
       normalize(parsed) == normalize(parsedInSession)
     } catch {
