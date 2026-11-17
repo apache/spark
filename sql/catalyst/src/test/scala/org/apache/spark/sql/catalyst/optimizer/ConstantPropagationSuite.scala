@@ -678,6 +678,17 @@ class ConstantPropagationSuite extends PlanTest {
           comparePlans(optimized, withDd.where(expected).analyze)
         }
       }
+      // Where `ConstantFolding` is excluded, nothing fails to fold, so the constant goes in place.
+      object OptimizeWithoutFolding extends RuleExecutor[LogicalPlan] {
+        val batches = Batch("ConstantPropagation", FixedPoint(10),
+          ConstantPropagation, BooleanSimplification) :: Nil
+      }
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConstantFolding.ruleName) {
+        comparePlans(
+          OptimizeWithoutFolding.execute(projected.where(
+            $"i" === 0 && $"x".cast(DoubleType) > tenDividedBy($"i")).analyze),
+          projected.where($"i" === 0 && $"x".cast(DoubleType) > tenDividedBy(Literal(0))).analyze)
+      }
       checkOrdered(projected,
         tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) &&
           $"i" === 0 && $"id" === 7L,
