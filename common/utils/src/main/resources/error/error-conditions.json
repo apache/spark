@@ -2989,6 +2989,11 @@
           "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition and the lookup-side filters."
         ]
       },
+      "PYTHON_REAL_TIME_MODE" : {
+        "message" : [
+          "The lookup join with the Python data source <table> cannot run in real-time mode, unless <config> is true."
+        ]
+      },
       "SCAN_BUILDER" : {
         "message" : [
           "The scan builder of table <table> does not implement `SupportsExternalLookup`."

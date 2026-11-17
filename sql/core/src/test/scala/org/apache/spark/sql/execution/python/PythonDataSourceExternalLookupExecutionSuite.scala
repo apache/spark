@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkThrowable}
@@ -31,7 +32,7 @@ import org.apache.spark.sql.execution.joins.ExternalLookupJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -42,11 +43,12 @@ import org.apache.spark.sql.types.StructType
  * `nullKey`, one row `(NULL, 0, "null id")`. Its schema is `id BIGINT, tier INT, name STRING`.
  * The reader selects the candidates at the positions that the Python expression of the option
  * `select` picks in `candidates`, by default every equality on `id`, and evaluates them on the
- * stored rows.
- * It appends the number of parameter rows of each request, and its other events, to the file
- * `events` in `markerDir`: `serve` at the first request of each reader, and, with the option
- * `markParameters`, each parameter row. With the option `behavior` set to `sparkFile`, the `name`
- * of each returned row is the text of the file `file`, which it finds through `SparkFiles`.
+ * stored rows. It allows `maxRows` parameter rows per request, by default 1000. It appends
+ * `plan` for each planning call, the number of parameter rows of each request, and its other
+ * events, to the file `events` in `markerDir`: `serve` at the first request of each reader, and,
+ * with the option `markParameters`, each parameter row. With the option `behavior` set to
+ * `sparkFile`, the `name` of each returned row is the text of the file `file`, which it finds
+ * through `SparkFiles`.
  */
 class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuiteBase {
   private val runCount = new AtomicInteger(0)
@@ -57,8 +59,8 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
        |import os
        |import time
        |from pyspark.sql.datasource import (
-       |    DataSource, DataSourceLookupReader,
-       |    EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual)
+       |    DataSource, DataSourceLookupReader, EqualNullSafe, EqualTo, GreaterThan,
+       |    GreaterThanOrEqual, LessThan, LessThanOrEqual)
        |
        |OPS = {
        |    EqualTo: operator.eq,
@@ -75,6 +77,10 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
        |        rows.append((None, 0, "null id"))
        |    return rows
        |
+       |def mark(options, event):
+       |    with open(os.path.join(options["markerDir"], "events"), "a") as f:
+       |        f.write(f"{event}\\n")
+       |
        |def spark_file_text(name):
        |    from pyspark import SparkFiles
        |
@@ -90,25 +96,32 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
        |class TestLookupReader(DataSourceLookupReader):
        |    def __init__(self, options):
        |        self.options = options
-       |        self.selected = []
+       |        self.candidates = []
+       |        self.positions = []
        |        self.served = False
        |
        |    def mark(self, event):
-       |        with open(os.path.join(self.options["markerDir"], "events"), "a") as f:
-       |            f.write(f"{event}\\n")
+       |        mark(self.options, event)
        |
        |    def selectLookupPredicates(self, candidates):
+       |        self.mark("plan")
        |        select = self.options.get(
        |            "select",
        |            "[i for i, c in enumerate(candidates) if c.attribute == ('id',) "
        |            "and isinstance(c, (EqualTo, EqualNullSafe))]")
        |        positions = eval(select, {
        |            "candidates": candidates, "EqualTo": EqualTo, "EqualNullSafe": EqualNullSafe})
-       |        self.selected = [candidates[i] for i in positions]
+       |        # Kept as returned: Spark rejects an invalid selection before any lookup.
+       |        self.candidates = candidates
+       |        self.positions = positions
        |        return positions
+       |
+       |    def maxParameterRowsPerRequest(self):
+       |        return eval(self.options.get("maxRows", "1000"))
        |
        |    def matches(self, parameters):
        |        rows = stored_rows(self.options)
+       |        selected = [self.candidates[i] for i in self.positions]
        |        behavior = self.options.get("behavior", "")
        |        repeat = int(self.options.get("repeat", "1"))
        |        if not self.served:
@@ -122,7 +135,7 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
        |        try:
        |            for ordinal, values in enumerate(parameters):
        |                for row in rows:
-       |                    if all(holds(p, row, v) for p, v in zip(self.selected, values)):
+       |                    if all(holds(p, row, v) for p, v in zip(selected, values)):
        |                        for _ in range(repeat):
        |                            if behavior == "fail":
        |                                raise RuntimeError("lookup failed on purpose")
@@ -178,7 +191,7 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
     spark.dataSource.registerPython(
       dataSourceName, createUserDefinedPythonDataSource(dataSourceName, lookupSourceScript(schema)))
     withTempDir { markerDir =>
-      withSQLConf(Seq(SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key -> "true") ++ confs: _*) {
+      withSQLConf(confs: _*) {
         val lookup = spark.read.format(dataSourceName)
           .options(options.toMap + ("markerDir" -> markerDir.getAbsolutePath)).load()
         f(lookup, markerDir)
@@ -231,6 +244,45 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
   }
 
   private val ids = Seq(1L, 2L, 3L, 5L, 2L, 30L).map(Some(_)) :+ None
+
+  /**
+   * Runs the lookup join of `lookup` with a one-partition stream of `sid BIGINT`, in one
+   * micro-batch per element of `batches`, and returns the rows of each micro-batch. `check` runs
+   * after the query has started, before it has any input.
+   */
+  private def runBatches(
+      lookup: DataFrame,
+      batches: Seq[Seq[Long]],
+      joinType: String = "inner")(check: StreamingQuery => Unit = _ => ()): Seq[Seq[Row]] = {
+    val input = MemoryStream[Long](1)(Encoders.scalaLong, spark.sqlContext)
+    val stream = input.toDF().toDF("sid")
+    val joined = stream.join(lookup, stream("sid") === lookup("id"), joinType)
+      .select(stream("sid"), lookup("name"))
+    val queryName = s"python_lookup_batches_${runCount.incrementAndGet()}"
+    val query = joined.writeStream.format("memory").queryName(queryName).start()
+    try {
+      check(query)
+      var seen = 0
+      batches.map { batch =>
+        input.addData(batch)
+        query.processAllAvailable()
+        val rows = spark.table(queryName).collect().toSeq
+        try rows.drop(seen) finally seen = rows.length
+      }
+    } finally {
+      query.stop()
+      spark.catalog.dropTempView(queryName)
+    }
+  }
+
+  /** The rows of the inner join for the stream rows `sids`. */
+  private def innerJoin(sids: Long*): Seq[Row] = sids.flatMap { sid =>
+    storedRows().filter(_._1.longValue() == sid).map(r => Row(sid, r._3))
+  }
+
+  /** The number of events of each kind among the reader's events: `plan`, `request 2`, ... */
+  private def eventCounts(markerDir: File): Map[String, Int] =
+    events(markerDir).groupBy(identity).view.mapValues(_.length).toMap
 
   test("lookups join a stream, for each join type") {
     withLookupSource()() { (lookup, markerDir) =>
@@ -465,6 +517,178 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
       val metrics = run.lookupJoin.metrics
       assert(metrics(ExternalLookupJoinExec.sourceMetricKey("pythonDataSent")).value > 0)
       assert(metrics(ExternalLookupJoinExec.sourceMetricKey("pythonDataReceived")).value > 0)
+    }
+  }
+
+  test("Python data sources serve lookups by default") {
+    assume(shouldTestPandasUDFs)
+    // No configuration is set: lookups are enabled by default.
+    assert(spark.conf.get(SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key) === "true")
+    withLookupSource()() { (lookup, _) =>
+      checkStream(idStream(Some(1L)).join(lookup, col("sid") === lookup("id"))
+        .select(col("sid"), col("name")), Seq(Row(1L, "name1-0")))
+    }
+  }
+
+  test("a streaming query plans its lookup in Python once, when it starts") {
+    withLookupSource()() { (lookup, markerDir) =>
+      val batches = Seq(Seq(1L, 2L), Seq(4L, 3L), Seq(5L, 1L))
+      val rows = runBatches(lookup, batches) { query =>
+        // The startup check plans the lookup before the first micro-batch, which has no input
+        // yet, and fills the planning cache that the micro-batches use.
+        eventually(timeout(60.seconds)) {
+          assert(new File(markerDir, "events").exists() && events(markerDir) === Seq("plan"))
+        }
+        assert(query.recentProgress.forall(_.numInputRows == 0))
+      }
+      assert(rows.map(_.toSet) === batches.map(batch => innerJoin(batch: _*).toSet))
+      assert(eventCounts(markerDir)("plan") === 1)
+      assert(eventCounts(markerDir)("request 2") === 3)
+    }
+  }
+
+  test("lookups reuse a plan only while filter and limit pushdown are off, as batch reads do") {
+    withLookupSource(confs = Seq(
+        SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false"))() { (lookup, markerDir) =>
+      val stream = MemoryStream[Long](1)(Encoders.scalaLong, spark.sqlContext).toDF().toDF("sid")
+      def plans(nullSafe: Boolean = false): Int = {
+        val condition = if (nullSafe) {
+          stream("sid") <=> lookup("id")
+        } else {
+          stream("sid") === lookup("id")
+        }
+        stream.join(lookup, condition).queryExecution.optimizedPlan
+        eventCounts(markerDir)("plan")
+      }
+      // With both pushdowns off, as by default, a plan is reused for the same candidates, and
+      // another candidate plans again.
+      assert(plans() === 1)
+      assert(plans() === 1)
+      assert(plans(nullSafe = true) === 2)
+      assert(plans(nullSafe = true) === 2)
+      // With either pushdown on, each scan plans again.
+      Seq(
+          SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key,
+          SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key).zipWithIndex.foreach { case (conf, i) =>
+        withSQLConf(conf -> "true") {
+          assert(plans() === 3 + 2 * i)
+          assert(plans() === 4 + 2 * i)
+        }
+      }
+      // Turned off again, the plan of the first call is reused.
+      assert(plans() === 6)
+    }
+  }
+
+  test("micro-batches send no request for a key that the lookup cache holds") {
+    // Two stream rows per request. Within a micro-batch, the repeated keys 1 and 2 of the second
+    // request come from the lookup cache, so the request is not sent; each micro-batch starts
+    // with an empty cache.
+    val batches = Seq(Seq(1L, 2L, 1L, 2L, 4L), Seq(1L, 2L, 1L, 2L, 4L))
+    Seq(true -> Seq("request 2", "request 1"), false -> Seq("request 2", "request 2", "request 1"))
+      .foreach { case (cacheEnabled, requestsPerBatch) =>
+        withLookupSource(confs = Seq(
+            SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED.key -> cacheEnabled.toString))(
+            "maxRows" -> "2") { (lookup, markerDir) =>
+          val rows = runBatches(lookup, batches)()
+          assert(rows.map(_.toSet) === batches.map(batch => innerJoin(batch: _*).toSet))
+          assert(events(markerDir).filter(_.startsWith("request ")) ===
+            requestsPerBatch ++ requestsPerBatch, s"cache enabled: $cacheEnabled")
+        }
+      }
+  }
+
+  test("a selected range on a stream column gives one parameter row per request") {
+    withLookupSource()("select" -> "range(len(candidates))") { (lookup, markerDir) =>
+      val input = MemoryStream[(Long, Int)](1)(
+        Encoders.tuple(Encoders.scalaLong, Encoders.scalaInt), spark.sqlContext)
+      val stream = input.toDF().toDF("sid", "minTier")
+      val joined = stream.join(lookup,
+        stream("sid") === lookup("id") && lookup("tier") >= stream("minTier"))
+        .select(stream("sid"), lookup("name"))
+      val queryName = s"python_lookup_ranges_${runCount.incrementAndGet()}"
+      val query = joined.writeStream.format("memory").queryName(queryName).start()
+      try {
+        input.addData((2L, 1), (5L, 0), (4L, 2))
+        query.processAllAvailable()
+        input.addData((2L, 0), (8L, 1))
+        query.processAllAvailable()
+        checkAnswer(spark.table(queryName), Seq(Row(2L, "name2-1"), Row(5L, "name5-0"),
+          Row(5L, "name5-1"), Row(2L, "name2-0"), Row(2L, "name2-1"), Row(8L, "name8-1")))
+      } finally {
+        query.stop()
+        spark.catalog.dropTempView(queryName)
+      }
+      assert(eventCounts(markerDir).keySet.filter(_.startsWith("request ")) === Set("request 1"))
+      assert(eventCounts(markerDir)("request 1") === 5)
+    }
+  }
+
+  test("the startup check stops a query whose lookup cannot be planned, before a micro-batch") {
+    // An empty selection breaks the lookup join's own contract, which the startup check reports.
+    withLookupSource()("select" -> "[]") { (lookup, markerDir) =>
+      val input = MemoryStream[Long](1)(Encoders.scalaLong, spark.sqlContext)
+      val stream = input.toDF().toDF("sid")
+      val query = stream.join(lookup, stream("sid") === lookup("id"))
+        .writeStream.format("memory").queryName(s"python_lookup_start_${runCount.get()}").start()
+      try {
+        eventually(timeout(60.seconds)) {
+          assert(query.exception.isDefined)
+        }
+        checkError(
+          exception = query.exception.get.getCause.asInstanceOf[SparkThrowable],
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE",
+          parameters = Map("table" -> s"`$dataSourceName`"))
+        assert(query.recentProgress.forall(_.numInputRows == 0))
+        assert(events(markerDir) === Seq("plan"))
+      } finally {
+        query.stop()
+      }
+    }
+    // A broken contract of the lookup API that Python finds stops the query when it starts too,
+    // with the error of a Scala connector.
+    Seq(
+      Seq("select" -> "[5]") ->
+        "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_POSITION",
+      Seq("select" -> "candidates[0]") -> "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_RESULT_TYPE",
+      Seq("maxRows" -> "True") -> "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_RESULT_TYPE"
+    ).foreach { case (options, condition) =>
+      withLookupSource()(options: _*) { (lookup, markerDir) =>
+        val input = MemoryStream[Long](1)(Encoders.scalaLong, spark.sqlContext)
+        val stream = input.toDF().toDF("sid")
+        val query = stream.join(lookup, stream("sid") === lookup("id"))
+          .writeStream.format("memory").queryName(s"python_lookup_start_${runCount.get()}")
+          .start()
+        try {
+          eventually(timeout(60.seconds)) {
+            assert(query.exception.isDefined)
+          }
+          assert(query.exception.get.getCause.asInstanceOf[SparkThrowable].getCondition ===
+            condition)
+          assert(query.recentProgress.forall(_.numInputRows == 0))
+          assert(events(markerDir) === Seq("plan"))
+        } finally {
+          query.stop()
+        }
+      }
+    }
+    // An exception that the Python reader raises while Spark plans the lookup is left to the
+    // first micro-batch, as for a Scala connector, so the query runs until it has input.
+    withLookupSource()("select" -> "1 / 0") { (lookup, markerDir) =>
+      val failure = intercept[StreamingQueryException] {
+        runBatches(lookup, Seq(Seq(1L))) { query =>
+          eventually(timeout(60.seconds)) {
+            assert(new File(markerDir, "events").exists())
+          }
+          assert(query.isActive && query.exception.isEmpty)
+        }
+      }
+      checkError(
+        exception = failure.getCause.asInstanceOf[SparkThrowable],
+        condition = "PYTHON_DATA_SOURCE_ERROR",
+        parameters = Map(
+          "action" -> "plan", "type" -> "lookup", "msg" -> "(?s).*ZeroDivisionError.*"),
+        matchPVals = true)
     }
   }
 }
