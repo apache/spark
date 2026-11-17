@@ -1072,6 +1072,30 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }
   }
 
+  test("SPARK-60733: a task tells that it started to complete before it has completed") {
+    val context = TaskContext.empty()
+    // What each listener sees: whether the task started to complete, and whether it completed.
+    val states = ArrayBuffer.empty[(String, Boolean, Boolean)]
+
+    def recordingListener(id: String): TaskCompletionListener = new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = {
+        states += ((id, context.isCompletionStarted(), context.isCompleted()))
+      }
+    }
+    context.addTaskCompletionListener(recordingListener("A"))
+    context.addTaskPreCompletionListener(recordingListener("P"))
+    assert(!context.isCompletionStarted())
+
+    completeWhilePreCompletionListenerBlocks(context) {
+      // Like a thread that a pre-completion listener stops and waits for: it sees that the task
+      // started to complete, although the task has not completed yet.
+      assert(context.isCompletionStarted())
+      assert(!context.isCompleted())
+    }
+    assert(states === Seq(("P", true, false), ("A", true, true)))
+    assert(context.isCompletionStarted())
+  }
+
   test("SPARK-60556: listeners still run if logging a pre-completion listener's failure fails") {
     val context = TaskContext.empty()
     val invocationOrder = ArrayBuffer.empty[String]

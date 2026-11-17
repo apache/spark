@@ -236,10 +236,14 @@ makes Spark read past its end.
 attempt, and the partition: for `read`, the index of the partition in the list that the planning
 returned, which is unique within a scan but not across the scans that a task reads, and for
 `create_data_writer`, the partition of the task. It also has an `is_interrupted` function that
-returns whether the task was killed, for example because its query was canceled. Spark cannot
-interrupt native code: when a task is killed, Spark stops reading only once the `get_next` function
-of the stream returns. So a read or a write that runs for long, or blocks, for example on network
-I/O, should check `is_interrupted` regularly and use timeouts. The task reaper,
+returns whether the task was killed, for example because its query was canceled. For a read, it
+also returns true once the task failed or starts to complete, and once Spark closes its reader of
+the stream while `get_next` runs: another thread than the one of the task may be in `get_next`
+then, such as the thread that writes the input of a pipelined Python UDF, which a task that
+completes before that thread read all the input, as under a `LIMIT`, stops and waits for. Spark
+cannot interrupt native code: when a task is killed, Spark stops reading only once the `get_next`
+function of the stream returns. So a read or a write that runs for long, or blocks, for example on
+network I/O, should check `is_interrupted` regularly and use timeouts. The task reaper,
 `spark.task.reaper.enabled` and `spark.task.reaper.killTimeout`, kills an executor whose killed
 task does not end.
 
@@ -373,15 +377,15 @@ of a batch or micro-batch scan of a native data source implements
 `openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
 `read` returns. The engine reads the stream in the task that opened it, and owns and releases the
 stream, which it may do after the task ended: Spark frees the `SparkDsTaskContext` of the read once
-the library released its stream. Once the task ended, `is_interrupted` returns true, so the library
-may stop reading then. The callbacks of the stream can be called from any thread, but never
-concurrently. Each call goes through the JVM, which then calls the callback of the stream of the
-library: this adds tens of nanoseconds to the call, while the import of a batch on the JVM takes
-microseconds. The first call on a native thread also attaches the thread to the JVM, which takes
-tens of microseconds, and the thread stays attached until it exits. Since the callbacks call into
-the JVM, the engine releases the stream before the JVM exits. Spark does not check the arrays of
-such a stream, unlike the streams that it reads itself, so the engine checks what its import of the
-arrays requires.
+the library released its stream. Once the task failed or starts to complete, `is_interrupted`
+returns true, so the library may stop reading then. The callbacks of the stream can be called from
+any thread, but never concurrently. Each call goes through the JVM, which then calls the callback of
+the stream of the library: this adds tens of nanoseconds to the call, while the import of a batch on
+the JVM takes microseconds. The first call on a native thread also attaches the thread to the JVM,
+which takes tens of microseconds, and the thread stays attached until it exits. Since the callbacks
+call into the JVM, the engine releases the stream before the JVM exits. Spark does not check the
+arrays of such a stream, unlike the streams that it reads itself, so the engine checks what its
+import of the arrays requires.
 
 ## Finding Native Data Sources
 

@@ -124,8 +124,9 @@ private[spark] class TaskContextImpl(
   private var _interruptible = true
 
   // Whether `markTaskCompleted()` has been called. It sets `completed` once the pre-completion
-  // listeners have run.
-  private var completionStarted: Boolean = false
+  // listeners have run. Written under the TaskContext lock, and volatile so that
+  // `isCompletionStarted()` reads it without the lock.
+  @volatile private var completionStarted: Boolean = false
 
   // Whether the task has completed.
   private var completed: Boolean = false
@@ -783,6 +784,8 @@ private[spark] class TaskContextImpl(
 
   @GuardedBy("this")
   override def isCompleted(): Boolean = synchronized(completed)
+
+  private[spark] override def isCompletionStarted(): Boolean = completionStarted
 
   override def isFailed(): Boolean = synchronized(failureCauseOpt.isDefined)
 

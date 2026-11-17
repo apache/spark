@@ -542,7 +542,8 @@ typedef struct SparkDsCommitOffsetInfo {
  * may get the stream from Spark, read it in the task that opened it and release it later, and
  * Spark itself may read a stream on a thread that the task does not wait for, for example the one
  * of a PipedRDD. The task stays valid until then too, and for a read, is_interrupted then also
- * returns true once the task failed or completed, so the library may stop reading then. Such an
+ * returns true once the task failed or starts to complete, when Spark may wait for such a thread,
+ * and once Spark closes its reader during get_next, so the library may stop reading then. Such an
  * engine may also keep the arrays and the schemas of the stream after it released the stream, and
  * so may Spark: when a query stops reading a stream before its end, as with a LIMIT, Spark may
  * release the last array that it read only once it no longer references the batch, from a JVM
@@ -570,8 +571,9 @@ typedef struct SparkDsTaskContext {
   int64_t task_attempt_id;
   /*
    * Returns whether the task was killed, for example because its query was canceled, and for read,
-   * also whether the task failed or completed, since the stream of a read may be read after its
-   * task ended. Spark cannot interrupt native code, so a read or a write that runs for long, or
+   * also whether the task failed, or started to complete or completed, since the stream of a read
+   * may be read after its task ended, and whether Spark closed its reader of the stream during
+   * get_next. Spark cannot interrupt native code, so a read or a write that runs for long, or
    * blocks, should check it regularly, and fail once it is true.
    */
   bool (*is_interrupted)(const struct SparkDsTaskContext* task);

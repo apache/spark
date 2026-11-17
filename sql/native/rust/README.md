@@ -165,7 +165,8 @@ their size that Spark passes to the calls when they are shorter. It reads a fiel
 release appends to one of them only when Spark passes it, so a connector built with a later
 version of the SDK still runs on 4.4.0. `is_interrupted()` checks
 Spark's live cancellation callback, not a snapshot of its initial value; for a reader, it
-is also true once the task ended. Check it during long operations; blocking I/O still
+is also true once the task failed or starts to complete, and once Spark closes its reader
+of the stream during a read. Check it during long operations; blocking I/O still
 requires timeouts. `TaskContext::for_testing()`, with its `with_*` methods and
 `interrupted_by`, builds a context with chosen IDs and an optional interruption flag for
 tests outside Spark.

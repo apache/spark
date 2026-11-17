@@ -1271,6 +1271,8 @@ final class NativeLibrary {
   static final class Task implements AutoCloseable {
     final long address;
     private boolean closed;
+    // Whether Spark no longer reads the stream of the read, see stop.
+    private volatile boolean stopped;
 
     Task(
         int stageId,
@@ -1288,7 +1290,16 @@ final class NativeLibrary {
       Platform.putInt(null, address + TASK_ATTEMPT_NUMBER, attemptNumber);
       Platform.putLong(null, address + TASK_ATTEMPT_ID, taskAttemptId);
       Platform.putLong(null, address + TASK_IS_INTERRUPTED, Ffm.IS_INTERRUPTED);
-      tasks.put(address, interrupted);
+      tasks.put(address, () -> stopped || interrupted.getAsBoolean());
+    }
+
+    /**
+     * Makes {@code is_interrupted} return true from now on, whatever the state of the task. The
+     * reader of a partition calls it when it is closed while a thread is in get_next, which it
+     * cannot interrupt, so that the library may stop reading.
+     */
+    void stop() {
+      stopped = true;
     }
 
     @Override

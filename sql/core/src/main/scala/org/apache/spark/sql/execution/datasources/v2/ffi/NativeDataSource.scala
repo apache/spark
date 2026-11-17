@@ -645,7 +645,9 @@ object NativeWriterCommitMessage {
  * `PipedRDD`, while `DataSourceRDD` closes the reader once the task completes. The library must
  * not get the release of the stream during get_next, and the task context must stay valid until
  * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
- * for it and keep the task from completing. That [[next]] then throws the error of its read, or
+ * for it and keep the task from completing. Spark cannot interrupt get_next, so [[close]] also
+ * makes `is_interrupted` true for the read, also outside of a task and before the task ends, so
+ * that a library that checks it stops reading. That [[next]] then throws the error of its read, or
  * fails as a [[next]] called once the reader is closed does, without reading from the library: so
  * such a thread does not take the close for the end of the data, whether or not it was in
  * get_next then. Script transformation, for example, then destroys its process.
@@ -1121,6 +1123,9 @@ class NativePartitionReader(
       // consumer may still read the batch that next returned, unless next was called since.
       if (!reading) {
         closeResources(freeBatch = !batchReturned)
+      } else {
+        // Spark cannot interrupt get_next: is_interrupted tells the library to stop reading.
+        task.stop()
       }
     }
   }
@@ -1428,9 +1433,11 @@ private[ffi] object NativeTask {
    * @param read whether the context is the one of a read, which the library may use after the
    *             task ended: an engine may read the stream of a partition then, and a thread that
    *             the task does not wait for may be in get_next once it completes, as with
-   *             `PipedRDD`. `is_interrupted` then also reports that the task failed or completed,
-   *             and the context does not keep the task alive. A data writer only runs within its
-   *             task, whose kill `is_interrupted` reports. Outside of a task, it reports nothing.
+   *             `PipedRDD`. `is_interrupted` then also reports that the task failed, or that it
+   *             started to complete, which is when the task may wait for such a thread, and the
+   *             context does not keep the task alive. A data writer only runs within its task,
+   *             whose kill `is_interrupted` reports. Outside of a task, it reports nothing. The
+   *             reader of a read can also make it true, see `NativeLibrary.Task.stop`.
    */
   def create(
       partitionId: Option[Int] = None,
@@ -1443,11 +1450,16 @@ private[ffi] object NativeTask {
         // volatile fields, unlike `isFailed()` and `isCompleted()`, which lock the task.
         val ended = endedFlag(taskContext)
         val task = new WeakReference(taskContext)
-        () => ended.get() || Option(task.get()).forall(_.isInterrupted())
+        // A task that starts to complete first stops the threads that read its input on their
+        // own, and may wait for one that is in get_next, before any completion listener sets the
+        // flag: so the context also reports the start of the completion.
+        () => ended.get() ||
+          Option(task.get()).forall(t => t.isInterrupted() || t.isCompletionStarted())
       case Some(taskContext) =>
         () => taskContext.isInterrupted()
       case None =>
-        // Outside of a task, as in tests, nothing interrupts the library.
+        // Outside of a task, as in tests, nothing interrupts the library but the close of the
+        // reader of a read, see `NativeLibrary.Task.stop`.
         () => false
     }
     new NativeLibrary.Task(

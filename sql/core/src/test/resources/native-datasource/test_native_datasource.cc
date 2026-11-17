@@ -38,14 +38,16 @@
 //                   null_count of -1 without a validity buffer. "column" gives the first column,
 //                   which has no validity buffer, a null_count of -1 instead. With the option
 //                   "wait_for_interrupt", the stream of a partition creates the file
-//                   <wait_for_interrupt>.waiting, waits until its task is killed, and then creates
-//                   the file <wait_for_interrupt> and fails. With the option "released_path",
+//                   <wait_for_interrupt>.waiting, waits until is_interrupted returns true, as once
+//                   its task is killed, for at most a minute, and then creates the file
+//                   <wait_for_interrupt> and fails. With the option "released_path",
 //                   releasing the stream of a partition creates that file. With the option
 //                   "slow_read", the get_next that creates the file <slow_read>.reading, the first
 //                   one, then waits until the file <slow_read>.continue exists, for at most a
 //                   minute; with the option "fail" set to "slow_read", each get_next then fails.
 //                   After the wait, it creates the file <slow_read>.interrupted with what
-//                   is_interrupted returns for the task context, "true" once the task ended.
+//                   is_interrupted returns for the task context, "true" once the task ended or
+//                   its reader was closed.
 //                   Releasing the stream creates the file <slow_read>, which says whether Spark
 //                   released it "during get_next", which it must not, or "after get_next"
 //                   otherwise. With the option "ignore_read_schema", read returns all the columns

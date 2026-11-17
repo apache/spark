@@ -66,7 +66,7 @@ import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{TaskCompletionListener, ThreadUtils, Utils}
 
 /**
  * Tests native data sources with the library in `native-datasource/test_native_datasource.cc`,
@@ -2705,6 +2705,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   nativeTest("close a reader while another thread reads it") {
     val session = newSession(defaultPackage)
     val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    // The contexts of the tasks of earlier tests are closed first, so that the counts below are
+    // exactly those of this test.
+    eventually(timeout(1.minute))(assert(NativeLibrary.openTaskContexts() == 0))
     // Closes a reader while another thread is in get_next. The reader releases the stream once
     // get_next returns, also when it fails, and then next throws: the error of its read, or the
     // failure of a next once the reader is closed, so that the thread does not take the close for
@@ -2725,14 +2728,17 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         }
         reader.close()
         if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+        // The context of the read stays valid while get_next runs.
+        assert(NativeLibrary.openTaskContexts() == 1)
         new File(marker.getPath + ".continue").createNewFile()
         val result = try Right(read.get(1, TimeUnit.MINUTES)) catch {
           case e: ExecutionException => Left(e.getCause)
         }
         assert(Files.readString(marker.toPath) == "after get_next")
-        // The context was still valid once get_next continued: Spark answers that a context that
-        // it freed is interrupted, and a read outside of a task never is.
-        assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
+        assert(NativeLibrary.openTaskContexts() == 0)
+        // Closing the reader told the read to stop, also outside of a task, whose context
+        // otherwise never tells that it is interrupted.
+        assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "true")
         // A reader that was closed reads nothing more, and closing it again does not fail.
         checkClosed(intercept[SparkRuntimeException](reader.next()))
         reader.close()
@@ -2748,6 +2754,91 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val error = closeWhileReading(failing = true).swap.getOrElse(fail("next did not fail"))
       assert(error.getMessage.contains("injected failure after a slow get_next"))
     } finally {
+      pool.shutdown()
+    }
+  }
+
+  nativeTest("tell a read to stop once its reader is closed") {
+    val session = newSession(defaultPackage)
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    val marker = new File(Utils.createTempDir(), "interrupted")
+    val batch = scan(range(session, "end" -> "10", "partitions" -> "1",
+      "wait_for_interrupt" -> marker.getPath)).toBatch
+    val reader =
+      batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+    try {
+      // The read waits in get_next, as for data that does not come, until is_interrupted tells it
+      // to stop, for at most a minute. Outside of a task, only the close of its reader does.
+      val read = pool.submit(new Callable[Boolean] {
+        override def call(): Boolean = reader.next()
+      })
+      eventually(timeout(1.minute)) {
+        assert(new File(marker.getPath + ".waiting").isFile)
+      }
+      assert(!marker.exists())
+      reader.close()
+      // get_next then returns, with the error of a read that stopped, which next throws.
+      val error = intercept[ExecutionException](read.get(2, TimeUnit.MINUTES)).getCause
+      assert(Files.readString(marker.toPath) == "interrupted")
+      assert(Utils.exceptionString(error).contains("the task was killed"))
+      checkClosed(intercept[SparkRuntimeException](reader.next()))
+    } finally {
+      Utils.tryLogNonFatalError(reader.close())
+      pool.shutdown()
+    }
+  }
+
+  nativeTest("tell a read that its task completes before the task waits for its threads") {
+    val session = newSession(defaultPackage)
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    val marker = new File(Utils.createTempDir(), "interrupted")
+    val batch = scan(range(session, "end" -> "10", "partitions" -> "1",
+      "wait_for_interrupt" -> marker.getPath)).toBatch
+    val (factory, partition) = (batch.createReaderFactory(), batch.planInputPartitions().head)
+    val context = TaskContext.empty()
+    try {
+      // A thread that reads the input of the task on its own, as the writer of a pipelined Python
+      // UDF does. Its read waits in get_next until is_interrupted tells it to stop, for at most a
+      // minute.
+      val read = pool.submit(new Callable[Boolean] {
+        override def call(): Boolean = {
+          TaskContext.setTaskContext(context)
+          try {
+            val reader = factory.createColumnarReader(partition)
+            try reader.next() finally reader.close()
+          } finally {
+            TaskContext.unset()
+          }
+        }
+      })
+      eventually(timeout(1.minute)) {
+        assert(new File(marker.getPath + ".waiting").isFile)
+      }
+      // A task that completes stops such a thread and waits for it in a pre-completion listener,
+      // before its completion listeners close the readers: the listener records the failure of
+      // the read, whether the task completed by then, and what the read learned.
+      val waited = new AtomicReference[(Option[Throwable], Boolean, String)]()
+      context.addTaskPreCompletionListener(new TaskCompletionListener {
+        override def onTaskCompletion(context: TaskContext): Unit = {
+          val error = try {
+            read.get(2, TimeUnit.MINUTES)
+            None
+          } catch {
+            case e: ExecutionException => Some(e.getCause)
+          }
+          waited.set((error, context.isCompleted(), Files.readString(marker.toPath)))
+        }
+      })
+      assert(!marker.exists())
+      context.markTaskCompleted(None)
+      // The read learned that its task completes while the task waited for it, before the
+      // completion listeners ran, rather than once its get_next returned on its own.
+      val (error, completed, result) = waited.get()
+      assert(result == "interrupted" && !completed)
+      assert(Utils.exceptionString(error.get).contains("the task was killed"))
+    } finally {
+      // Does not leave the read waiting if the test failed before the task completed.
+      Utils.tryLogNonFatalError(context.markTaskCompleted(None))
       pool.shutdown()
     }
   }

@@ -383,6 +383,14 @@ abstract class TaskContext extends Serializable {
   /** Marks the task as completed and triggers the completion listeners. */
   private[spark] def markTaskCompleted(error: Option[Throwable]): Unit
 
+  /**
+   * Whether the task started to complete: `markTaskCompleted()` was called, which runs the
+   * listeners added with `addTaskPreCompletionListener` before `isCompleted()` becomes true. A
+   * thread that such a listener stops and waits for can check this to stop on its own. It reads
+   * a volatile field, without the lock of the task.
+   */
+  private[spark] def isCompletionStarted(): Boolean
+
   /** If the task fails, the exception that caused it, otherwise None. */
   private[spark] def getTaskFailure: Option[Throwable] = None
 

@@ -280,6 +280,8 @@ class BarrierTaskContext private[spark] (
     taskContext.markTaskCompleted(error)
   }
 
+  override private[spark] def isCompletionStarted(): Boolean = taskContext.isCompletionStarted()
+
   override private[spark] def getTaskFailure: Option[Throwable] = {
     taskContext.getTaskFailure
   }

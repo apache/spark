@@ -162,7 +162,9 @@ impl TaskContext<'_> {
     }
 
     /// Whether Spark killed this task, read from Spark each time. For a reader, also whether
-    /// the task failed or completed: a native engine may read a stream after its task ended.
+    /// the task failed, or started to complete or completed, since a native engine may read a
+    /// stream after its task ended, and whether Spark closed its reader of the stream during
+    /// a read.
     pub fn is_interrupted(&self) -> bool {
         match self.interruption {
             Interruption::Never => false,
