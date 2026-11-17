@@ -664,6 +664,26 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
+  test("no placeholder for a creation side that needs more partition keys than its buckets give") {
+    // At this threshold `dim1` needs at least 8 partition keys, more than its 4 buckets and null
+    // give. Its semi join would always go, and its placeholder would keep the join with `dim2` on
+    // the same key from getting one.
+    createTables()
+    createIdTable("dim1", "flag", (0 until 64).map(i => s"($i, 1)").mkString(", "))
+    createIdTable("dim2", "flag", (0 until 16).map(i => s"($i, 1)").mkString(", "))
+    val threshold = creationSideSize("dim1") / 8
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> threshold.toString) {
+      val df = sql("SELECT f.id, f.v FROM testcat.ns.fact f JOIN testcat.ns.dim1 d1 " +
+        "ON f.id = d1.id JOIN testcat.ns.dim2 d2 ON f.id = d2.id WHERE d1.flag = 1 AND " +
+        "d2.flag = 1")
+      checkAnswer(df, (0 until 16).map(i => Row(i, i * 10)))
+      val plan = df.queryExecution.executedPlan
+      val semiJoins = executedSemiJoins(plan)
+      assert(semiJoins.size == 1 && executedScans(semiJoins.head.right, "dim2").nonEmpty,
+        s"`fact` must get the semi join of `dim2`:\n$plan")
+    }
+  }
+
   test("a later join on the key of a semi join still gets its bloom filter") {
     // The creation side of `dim` is too big for one bloom filter of all its keys, so its join gets
     // only the semi join. The join with `dim2` on the same key still gets its bloom filter.

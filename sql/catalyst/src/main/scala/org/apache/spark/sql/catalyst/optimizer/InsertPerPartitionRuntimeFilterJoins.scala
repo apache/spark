@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, BloomFilterMightContain, EqualTo, Expression, ExprId, IsNull, Literal, NamedExpression, Or, Predicate, PredicateHelper, SubqueryExpression, Unevaluable, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
-import org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter.partitionTransform
+import org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter.pairedPartitionTransforms
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, HintInfo, Join, JoinHint, LogicalPlan, Project, SHUFFLE_HASH, Subquery}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -219,29 +219,26 @@ object InsertPerPartitionRuntimeFilterJoins extends Rule[LogicalPlan] {
       placeholder: PerPartitionRuntimeFilterSubquery): Option[LogicalPlan] = {
     val creationKey = placeholder.plan.output.head
     val key = placeholder.key
-    for {
-      application <- partitionTransform(key, plan)
-      creation <- partitionTransform(creationKey, placeholder.plan)
-      if application.isSameFunction(creation)
-    } yield {
-      val creationPartitionKey = Alias(creation, "partitionKey")()
-      val bloomFilter = Alias(new BloomFilterAggregate(new XxHash64(Seq(creationKey)))
-        .toAggregateExpression(), "bloomFilter")(
-        explicitMetadata = Some(bloomFilterMetadata(placeholder)))
-      val aggregate = PullOutGroupingExpressions(Aggregate(
-        Seq(creation), Seq(creationPartitionKey, bloomFilter), placeholder.plan))
-      val partitionKey = Alias(application, "partitionKey")()
-      val condition = And(
-        EqualTo(partitionKey.toAttribute, creationPartitionKey.toAttribute),
-        BloomFilterMightContain(bloomFilter.toAttribute, new XxHash64(Seq(key))))
-      val exists = AttributeReference("exists", BooleanType, nullable = false)()
-      val join = Join(
-        Project(plan.output :+ partitionKey, plan),
-        aggregate,
-        ExistenceJoin(exists),
-        Some(condition),
-        JoinHint(None, Some(HintInfo(strategy = Some(SHUFFLE_HASH)))))
-      Project(plan.output, Filter(Or(exists, IsNull(partitionKey.toAttribute)), join))
+    pairedPartitionTransforms(key, plan, creationKey, placeholder.plan).map {
+      case (application, creation) =>
+        val creationPartitionKey = Alias(creation, "partitionKey")()
+        val bloomFilter = Alias(new BloomFilterAggregate(new XxHash64(Seq(creationKey)))
+          .toAggregateExpression(), "bloomFilter")(
+          explicitMetadata = Some(bloomFilterMetadata(placeholder)))
+        val aggregate = PullOutGroupingExpressions(Aggregate(
+          Seq(creation), Seq(creationPartitionKey, bloomFilter), placeholder.plan))
+        val partitionKey = Alias(application, "partitionKey")()
+        val condition = And(
+          EqualTo(partitionKey.toAttribute, creationPartitionKey.toAttribute),
+          BloomFilterMightContain(bloomFilter.toAttribute, new XxHash64(Seq(key))))
+        val exists = AttributeReference("exists", BooleanType, nullable = false)()
+        val join = Join(
+          Project(plan.output :+ partitionKey, plan),
+          aggregate,
+          ExistenceJoin(exists),
+          Some(condition),
+          JoinHint(None, Some(HintInfo(strategy = Some(SHUFFLE_HASH)))))
+        Project(plan.output, Filter(Or(exists, IsNull(partitionKey.toAttribute)), join))
     }
   }
 }

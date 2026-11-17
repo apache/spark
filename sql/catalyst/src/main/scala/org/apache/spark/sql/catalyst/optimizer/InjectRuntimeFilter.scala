@@ -71,19 +71,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         filterApplicationSidePlan,
         filterCreationSide
       )).filterNot(_ eq filterApplicationSidePlan)
-    } else if (filterCreationSide.sizeInBytes > filterCreationSide.sizeThreshold &&
-        canGetPerPartitionBloomFilter(
-          filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide)) {
-      injectPerPartitionBloomFilter(
-        filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide)
+    } else if (filterCreationSide.sizeInBytes > filterCreationSide.sizeThreshold) {
+      perPartitionTransform(filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide)
+        .flatMap(injectPerPartitionBloomFilter(
+          filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide, _))
     } else {
       None
     }
   }
 
   /**
-   * Whether the application side can get a per-partition bloom filter. It needs a V2 scan under
-   * each side that reports a keyed partitioning by the same transform of its join key. A
+   * The partition transform of the creation side, when the application side can get a
+   * per-partition bloom filter. It needs a V2 scan under each side that reports a keyed
+   * partitioning by the same transform of its join key (`pairedPartitionTransforms`). A
    * per-partition bloom filter is a semi join of the application side with one bloom filter per
    * partition key of the creation side.
    *
@@ -95,16 +95,36 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    *
    * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
    */
-  private def canGetPerPartitionBloomFilter(
+  private def perPartitionTransform(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSide: FilterCreationSide): Boolean = {
-    conf.runtimeBloomFilterPerPartitionEnabled && (for {
-      application <- partitionTransform(filterApplicationSideKey, filterApplicationSidePlan)
-      creation <- partitionTransform(filterCreationSide.key, filterCreationSide.plan)
-    } yield application.isSameFunction(creation)).getOrElse(false) &&
-      !hasPerPartitionRuntimeFilter(filterApplicationSidePlan, filterApplicationSideKey)
+      filterCreationSide: FilterCreationSide): Option[TransformExpression] = {
+    if (!conf.runtimeBloomFilterPerPartitionEnabled) {
+      None
+    } else {
+      pairedPartitionTransforms(filterApplicationSideKey, filterApplicationSidePlan,
+        filterCreationSide.key, filterCreationSide.plan).collect {
+        case (_, creation)
+            if !hasPerPartitionRuntimeFilter(filterApplicationSidePlan, filterApplicationSideKey) =>
+          creation
+      }
+    }
   }
+
+  /**
+   * The partition transforms of an application side's key and a creation side's key (see
+   * `partitionTransform`), when both have one and they are the same function.
+   */
+  private[optimizer] def pairedPartitionTransforms(
+      applicationKey: Expression,
+      applicationPlan: LogicalPlan,
+      creationKey: Expression,
+      creationPlan: LogicalPlan): Option[(TransformExpression, TransformExpression)] =
+    for {
+      application <- partitionTransform(applicationKey, applicationPlan)
+      creation <- partitionTransform(creationKey, creationPlan)
+      if application.isSameFunction(creation)
+    } yield (application, creation)
 
   /**
    * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`.
@@ -119,7 +139,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * against the bloom filter of its own partition key. A row whose partition key is null passes it,
    * so the transform may return null for any key.
    */
-  private[optimizer] def partitionTransform(
+  private def partitionTransform(
       key: Expression,
       plan: LogicalPlan): Option[TransformExpression] = {
     if (!conf.v2BucketingEnabled) {
@@ -138,27 +158,31 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  // `filterApplicationSidePlan` with the placeholder of a per-partition bloom filter of its key.
-  // The aggregate of its semi join reads the creation side again, apart from the join. So a
-  // creation side gives none when:
+  // `filterApplicationSidePlan` with the placeholder of a per-partition bloom filter of its key,
+  // over the partition transform `creation` of the creation side. The aggregate of its semi join
+  // reads the creation side again, apart from the join. So a creation side gives none when:
   //  - it has a Python UDF or is not deterministic, as for the bloom filter of the whole creation
   //    side;
   //  - it reads a V2 scan with a pushed operation that does not work on each row by itself, such as
   //    a limit. Such a scan can return other rows when read again (see `canEvaluateAgain`).
+  // A creation side also gives none when it needs more partition keys than a `bucket` transform
+  // gives (its buckets and null). `ChoosePerPartitionRuntimeFilters` would drop the semi join, and
+  // its placeholder would keep another join on the key from getting one.
   private def injectPerPartitionBloomFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
-      filterCreationSide: FilterCreationSide): Option[LogicalPlan] = {
+      filterCreationSide: FilterCreationSide,
+      creation: TransformExpression): Option[LogicalPlan] = {
     val creationSide = ConstantFolding(ColumnPruning(
       Project(Seq(Alias(filterCreationSide.key, "key")()), filterCreationSide.plan)))
+    val (numItems, minPartitionKeys) = perPartitionSizing(filterCreationSide)
     if (creationSide.containsPattern(PYTHON_UDF) || !creationSide.deterministic ||
         creationSide.exists {
           case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
           case _ => false
-        }) {
+        } || creation.numBucketsOpt.exists(minPartitionKeys > _ + 1L)) {
       None
     } else {
-      val (numItems, minPartitionKeys) = perPartitionSizing(filterCreationSide)
       Some(Filter(
         PerPartitionRuntimeFilterSubquery(
           filterApplicationSideKey, creationSide, numItems, minPartitionKeys),
