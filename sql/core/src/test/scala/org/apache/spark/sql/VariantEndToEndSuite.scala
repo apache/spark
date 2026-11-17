@@ -109,13 +109,13 @@ class VariantEndToEndSuite extends SharedSparkSession {
       .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
       Row(
         VariantExpressionEvalUtils.castToVariant(InternalRow(Double.NaN),
-          StructType.fromDDL("a double"))))
+          StructType.fromDDL("a double"), "cast")))
     // String input "NaN" will remain a string instead of double.
     checkAnswer(Seq("""{"a": "NaN"}""").toDF("v")
       .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
       Row(
         VariantExpressionEvalUtils.castToVariant(InternalRow(UTF8String.fromString("NaN")),
-          StructType.fromDDL("a string"))))
+          StructType.fromDDL("a string"), "cast")))
     // to_json should put special floating point values in quotes.
     checkAnswer(Seq("""{"a": NaN}""").toDF("v")
       .selectExpr("to_json(from_json(v, 'variant', map('allowNonNumericNumbers', 'true')))"),
@@ -230,13 +230,13 @@ class VariantEndToEndSuite extends SharedSparkSession {
         val plan = variantDF.queryExecution.executedPlan
         assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
         val v1 = VariantExpressionEvalUtils.castToVariant(InternalRow(1),
-          StructType(Array(StructField("a", IntegerType))))
+          StructType(Array(StructField("a", IntegerType))), "cast")
         val v2 = VariantExpressionEvalUtils.castToVariant(InternalRow(2),
-          StructType(Array(StructField("a", IntegerType))))
+          StructType(Array(StructField("a", IntegerType))), "cast")
         val v3 = VariantExpressionEvalUtils.castToVariant(InternalRow(3),
-          StructType(Array(StructField("a", IntegerType))))
+          StructType(Array(StructField("a", IntegerType))), "cast")
         val v4 = VariantExpressionEvalUtils.castToVariant(null,
-          StructType(Array(StructField("a", IntegerType))))
+          StructType(Array(StructField("a", IntegerType))), "cast")
         val expected = Seq(Row(new VariantVal(v1.getValue, v1.getMetadata)),
           Row(new VariantVal(v2.getValue, v2.getMetadata)),
           Row(new VariantVal(v3.getValue, v3.getMetadata)),

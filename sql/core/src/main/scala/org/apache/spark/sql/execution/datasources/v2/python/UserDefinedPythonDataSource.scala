@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import net.razorvine.pickle.Pickler
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
@@ -462,10 +463,13 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
         val variant = for (v <- value) yield {
           val catalystValue = CatalystTypeConverters.convertToCatalyst(v)
           try {
-            VariantExpressionEvalUtils.castToVariant(catalystValue, dataType)
+            VariantExpressionEvalUtils.castToVariant(catalystValue, dataType, "cast")
           } catch {
             case _: MatchError =>
               // filter is unsupported if we can't cast it to variant
+              return None
+            case e: SparkRuntimeException if e.getCondition == "VARIANT_SIZE_LIMIT" =>
+              // filter is unsupported if the literal does not fit in a variant
               return None
           }
         }

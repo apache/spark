@@ -271,7 +271,8 @@ class VariantShreddingSuite extends SharedSparkSession with ParquetTest {
     checkExpr(path, "v",
       VariantExpressionEvalUtils.castToVariant(
         InternalRow(1, UTF8String.fromString("2"), Decimal("3.3000000000"), Decimal("4.4")),
-        StructType.fromDDL("a int, b string, c decimal(20, 10), d decimal(2, 1)")
+        StructType.fromDDL("a int, b string, c decimal(20, 10), d decimal(2, 1)"),
+        "cast"
       ),
       parseJson(strings(1)),
       parseJson(strings(2))

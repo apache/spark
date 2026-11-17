@@ -1546,7 +1546,8 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
   ).foreach { case (testName, value, dt) =>
     test(s"SPARK-48067: Variant literal `sql` correctly recreates the variant - $testName") {
       val l = Literal.create(
-        VariantExpressionEvalUtils.castToVariant(value, dt.asInstanceOf[DataType]), VariantType)
+        VariantExpressionEvalUtils.castToVariant(value, dt.asInstanceOf[DataType], "cast"),
+        VariantType)
       val jsonString = l.eval().asInstanceOf[VariantVal]
         .toJson(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       val expectedSql = s"PARSE_JSON('$jsonString')"
