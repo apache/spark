@@ -98,6 +98,15 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     assignment.key.semanticEquals(assignment.value)
   }
 
+  // the alignment may wrap an assigned value, such as `a` in `SET a = a`, in an Alias
+  protected def isIdentityAssignment(key: Attribute, value: Expression): Boolean = {
+    val valueWithoutAlias = value match {
+      case Alias(child, _) => child
+      case other => other
+    }
+    key.semanticEquals(valueWithoutAlias)
+  }
+
   // the output of the target table may include metadata columns (see removeMetadataAssignments)
   protected def dataAttrs(relation: DataSourceV2Relation): Seq[AttributeReference] = {
     relation.output.filterNot(attr => MetadataAttribute.isValid(attr.metadata))
@@ -174,14 +183,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
   protected def resolveAttrRef(name: String, plan: LogicalPlan): AttributeReference = {
     V2ExpressionUtils.resolveRef[AttributeReference](FieldReference(name), plan)
-  }
-
-  protected def isIdentityAssignment(key: Attribute, value: Expression): Boolean = {
-    val valueWithoutAlias = value match {
-      case Alias(child, _) => child
-      case other => other
-    }
-    key.semanticEquals(valueWithoutAlias)
   }
 
   protected def deltaDeleteOutput(

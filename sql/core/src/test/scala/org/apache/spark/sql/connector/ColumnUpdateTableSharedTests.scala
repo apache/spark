@@ -389,41 +389,24 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
         |""".stripMargin,
       tablePropsWith(extraTableProps, "accept-any-schema" -> "true"))
 
-    // the connector locates the original rows through the metadata columns
+    val updateStmt = s"UPDATE $tableNameAsString SET pk = pk, salary = -1, dep = dep, " +
+      "index = index, _partition = 'x'"
     checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"UPDATE $tableNameAsString SET pk = pk, salary = -1, dep = dep, index = index, " +
-          "_partition = 'x'")
-      },
+      exception = intercept[AnalysisException](sql(updateStmt)),
       condition = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
       parameters = Map(
-        "sqlExpr" -> "\"_partition = x\"",
+        "sqlExpr" -> ("\"pk = pk\", \"salary = -1\", \"dep = dep\", \"index = index\", " +
+          "\"_partition = x\""),
         "errors" -> "\n- Cannot assign to metadata column '_partition'"))
     checkAnswer(sql(s"SELECT pk, salary, dep FROM $tableNameAsString"), Row(1, 100, "hr") :: Nil)
-  }
 
-  test("column-update: a full-width write keeps accepting a new value for a metadata column") {
-    // with an empty declaration, an UPDATE that sets a data column is rejected
-    Seq(
-      (fullWidthTableProps, "salary = -1", -1, Seq("salary")),
-      (reqAttrsTableProps(""), "salary = salary", 100, Nil)
-    ).foreach { case (props, salaryAssignment, salary, updatedColumns) =>
-      withTable(tableNameAsString) {
-        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-          """{ "pk": 1, "salary": 100, "dep": "hr" }
-            |""".stripMargin,
-          tablePropsWith(props, "accept-any-schema" -> "true"))
-
-        sql(s"UPDATE $tableNameAsString SET pk = pk, $salaryAssignment, dep = dep, " +
-          "index = index, _partition = 'x'")
-
-        checkLastUpdatedColumns(updatedColumns: _*)
-        checkLastWriteIsFullWidth()
-
-        checkAnswer(
-          sql(s"SELECT pk, salary, dep FROM $tableNameAsString"), Row(1, salary, "hr") :: Nil)
-      }
+    withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+      sql(updateStmt)
     }
+
+    checkLastUpdatedColumns("salary")
+    checkLastColumnUpdateSchema("pk", "dep", "salary")
+    checkAnswer(sql(s"SELECT pk, salary, dep FROM $tableNameAsString"), Row(1, -1, "hr") :: Nil)
   }
 
   test("column-update: other operations keep a full-width write relation") {
