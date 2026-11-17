@@ -658,23 +658,9 @@ select a1, ( select count(*) from (select 10 / coalesce(max(b2), 0) d from t2
   where t1.a1 = t2.b1) ) a
 from t1 where a1 = 0 order by a1
 -- !query schema
-struct<>
+struct<a1:int,a:bigint>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "DIVIDE_BY_ZERO",
-  "sqlState" : "22012",
-  "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 43,
-    "stopIndex" : 67,
-    "fragment" : "10 / coalesce(max(b2), 0)"
-  } ]
-}
+0	1
 
 
 -- !query
@@ -682,23 +668,9 @@ select a1, ( select sum(d) from (select 10 / coalesce(max(b2), 0) d from t2
   where t1.a1 = t2.b1) ) a
 from t1 where a1 = 0 order by a1
 -- !query schema
-struct<>
+struct<a1:int,a:double>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "DIVIDE_BY_ZERO",
-  "sqlState" : "22012",
-  "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 41,
-    "stopIndex" : 65,
-    "fragment" : "10 / coalesce(max(b2), 0)"
-  } ]
-}
+0	3.3333333333333335
 
 
 -- !query
@@ -753,26 +725,9 @@ select a1, ( select sum(d) from (select cast(coalesce(max(cast(b2 as string)), '
   from t2 where t1.a1 = t2.b1) ) a
 from t1 where a1 = 0 order by a1
 -- !query schema
-struct<>
+struct<a1:int,a:bigint>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'x'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"INT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 41,
-    "stopIndex" : 91,
-    "fragment" : "cast(coalesce(max(cast(b2 as string)), 'x') as int)"
-  } ]
-}
+0	3
 
 
 -- !query
