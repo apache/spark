@@ -267,6 +267,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             // on a different column. New rows can then pass late-input filtering with keys
             // already eligible for eviction. V4 must scan from the beginning to find them;
             // otherwise, outer joins can fail to emit null rows for these unmatched inputs.
+            // TODO(SPARK-61449): start the scan after the lower of the previous cutoff and the
+            //   smallest timestamp indexed since the previous eviction, instead of from the start.
             val prevStateKeyWatermark =
               if (oneSideInputAttributes.find(_.metadata.contains(delayKey))
                 .exists(oneSideJoinKeys(ordinal).semanticEquals)) {
@@ -292,6 +294,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           eventTimeWatermarkForEviction, eventTimeLags).flatMap { case (attribute, watermark) =>
           // Late filtering only constrains the input's event-time column. A different indexed
           // column can admit values below the previous cutoff and must be scanned from the start.
+          // TODO(SPARK-61449): start the scan after the lower of the previous cutoff and the
+          //   smallest timestamp indexed since the previous eviction, instead of from the start.
           val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
             oneSideInputAttributes.find(_.metadata.contains(delayKey))
               .exists(_.semanticEquals(attribute))
@@ -378,9 +382,14 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * both when that operator cannot be traced, and none when no stateful operator follows, with a
    * single global watermark, or for the right input of a left semi join. A key-only join, with
    * no other condition and no equality key that uses an event time, is evicted by neither
-   * version, and V4 reads its rows by key prefix. Otherwise each side must have exactly one
-   * event-time column, and either its own event time must be the sole watermarked equality key
-   * at the same ordinal, or the join must be a time-interval join on the event times (see
+   * version, and V4 reads its rows by key prefix. Older versions gave an input a range bound
+   * only when it had a watermark of its own, and none to an input whose opposite input has no
+   * watermarked column, so they evicted neither input of a join where only one input has one and
+   * no equality key uses an event time. Such a checkpoint in state formats 1 to 3, which test
+   * every stored row each batch, is accepted when no stateful operator after the join reads the
+   * join's output watermark. Otherwise each side must have exactly one event-time column, and
+   * either its own event time must be the sole watermarked equality key at the same ordinal, or
+   * the join must be a time-interval join on the event times (see
    * [[isOwnEventTimeIntervalJoin]]). This excludes other range bounds. A key computed from the
    * event time by a constant is accepted only when it shifts the event time forward, the other
    * input's key at that ordinal is its own event time, no other equality key uses an event time,
@@ -389,8 +398,14 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * the cutoff this version uses for the shifted side, and at or below the one it uses for the
    * other side, which can no longer match rows at or below it, and both versions store V4 rows
    * at that ordinal. Only the shifted input's bound in the output watermark changes. Older
-   * versions evicted a backward shift before its last match. A NULL selected key does not change
-   * the semantics: such a row can never match.
+   * versions evicted a backward shift before its last match. With
+   * spark.sql.streaming.statefulOperator.allowMultiple=false, `eventTimeLags` holds the lags that
+   * eviction reads, and an input can keep several watermarked columns, such as its event time and
+   * a window over it. Older versions then evicted both inputs at the watermark by the first
+   * watermarked equality key, so such a join is accepted when that key is the sole watermarked
+   * key of each input, at the same ordinal, and its lag on each side gives the watermark itself
+   * as the cutoff. A NULL selected key does not change the semantics: such a row can never
+   * match.
    * Old V4 state indexed it at timestamp 0 under its own key, and the first batch after the
    * restart scans V4 state from the start, so it evicts the row and a preserved side emits it
    * unless an older version already joined it. V1 to V3 test every stored row each batch and
@@ -402,15 +417,20 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],
       condition: Option[Expression],
-      consumedSides: Set[JoinSide]): Boolean = {
-    val leftEventTime = leftAttributes.filter(_.metadata.contains(delayKey))
-    val rightEventTime = rightAttributes.filter(_.metadata.contains(delayKey))
-    val keyOnly = condition.isEmpty && !(leftKeys ++ rightKeys).exists { key =>
+      consumedSides: Set[JoinSide],
+      stateFormatVersion: Int,
+      eventTimeLags: Option[EventTimeLags] = None): Boolean = {
+    // A projection can output the same watermarked column twice under one expression ID.
+    val leftEventTime = leftAttributes.filter(_.metadata.contains(delayKey)).distinctBy(_.exprId)
+    val rightEventTime =
+      rightAttributes.filter(_.metadata.contains(delayKey)).distinctBy(_.exprId)
+    val keysUseEventTime = (leftKeys ++ rightKeys).exists { key =>
       key.references.exists(_.metadata.contains(delayKey)) || (key match {
         case named: NamedExpression => named.metadata.contains(delayKey)
         case _ => false
       })
     }
+    val keyOnly = condition.isEmpty && !keysUseEventTime
 
     def watermarkKeyOrdinals(keys: Seq[Expression]): Seq[Int] = {
       keys.zipWithIndex.collect {
@@ -424,6 +444,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftOrdinals.isEmpty && rightOrdinals.isEmpty
     } else if (keyOnly && consumedSides.isEmpty) {
       true
+    } else if (leftEventTime.isEmpty || rightEventTime.isEmpty) {
+      // TODO(SPARK-61347): state format 4 stays rejected. SPARK-61347 evicts the input without a
+      //   watermark by its time index, which older versions did not write for its rows, so
+      //   reusing such state needs a migration that indexes them.
+      !keysUseEventTime && consumedSides.isEmpty && stateFormatVersion <= 3
     } else if (leftEventTime.size == 1 && rightEventTime.size == 1) {
       val leftOrdinal = StreamingJoinHelper.getEventTimeKeyOrdinal(leftKeys, leftAttributes)
       val rightOrdinal = StreamingJoinHelper.getEventTimeKeyOrdinal(rightKeys, rightAttributes)
@@ -451,6 +476,19 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           LeftSide) ||
         isOwnEventTimeIntervalJoin(leftAttributes, rightAttributes, leftKeys, rightKeys,
           condition, leftEventTime.head, rightEventTime.head, consumedSides)
+    } else if (leftEventTime.nonEmpty && rightEventTime.nonEmpty) {
+      eventTimeLags.exists { lags =>
+        def olderCutoff(keys: Seq[Expression], attributes: Seq[Attribute], ordinal: Int) =
+          StreamingJoinHelper.getStateKeyWatermark(keys, attributes, ordinal, Some(0L),
+            Some(lags)).contains(0L)
+        val ordinal = StreamingJoinHelper.getEventTimeKeyOrdinal(leftKeys, leftAttributes,
+          Some(lags))
+        ordinal.isDefined && leftOrdinals == ordinal.toSeq && rightOrdinals == ordinal.toSeq &&
+          StreamingJoinHelper.getEventTimeKeyOrdinal(rightKeys, rightAttributes, Some(lags)) ==
+            ordinal &&
+          olderCutoff(leftKeys, leftAttributes, ordinal.get) &&
+          olderCutoff(rightKeys, rightAttributes, ordinal.get)
+      }
     } else {
       false
     }
@@ -464,13 +502,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * it. Older versions and this one solve such conjuncts the same way for columns with their own
    * watermark, and older versions solved every column of an input but then found bounds only in the
    * same conjuncts, so they derived the same value predicates, scan starts and V4 index columns,
-   * and neither evicts an input that gets no bound. Old V4 stored a null event time at timestamp 0
-   * under the row's own key; both versions scan that entry the same way. No equality key may use an
-   * event time: older versions evicted both sides of such a key at the unshifted watermark, which
+   * and neither evicts an input that gets no bound. The first batch after restoring an older
+   * generation scans V4 state from the start, so it evicts a row that an older version stored at
+   * timestamp 0 with a NULL event time, and a preserved side emits it padded with nulls, which
+   * older versions never did; that scan must stay. No equality key may use an event time: older
+   * versions evicted both sides of such a key at the unshifted watermark, which
    * [[isWatermarkCheckpointCompatible]] accepts only for a forward shift whose shifted input no
-   * later stateful operator reads. Time windows are excluded: this version still derives the older
-   * ordering bound for them, but SPARK-61348 later removes it for windows shorter than the other
-   * input's.
+   * later stateful operator reads. Time windows are excluded: this version still derives the
+   * older ordering bound for them, but SPARK-61348 later removes it for windows shorter than the
+   * other input's.
    */
   private def isOwnEventTimeIntervalJoin(
       leftAttributes: Seq[Attribute],

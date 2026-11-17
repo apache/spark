@@ -121,6 +121,11 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       ("timestampadd(MILLISECOND, -2500, eventTime)", Some(7499L), Some(12499L)),
       ("timestampadd(MINUTE, 2, eventTime)", Some(129999L), Some(-110001L)),
       ("timestampadd(MINUTE, -2, eventTime)", Some(-110001L), Some(129999L)),
+      // An amount of a day or more in a sub-day unit stays exact, not counted as whole days.
+      ("timestampadd(HOUR, 48, eventTime)", Some(172809999L), Some(-172790001L)),
+      ("timestampadd(HOUR, -48, eventTime)", Some(-172790001L), Some(172809999L)),
+      ("timestampadd(MINUTE, 1440, eventTime)", Some(86409999L), Some(-86390001L)),
+      ("timestampadd(MINUTE, -1440, eventTime)", Some(-86390001L), Some(86409999L)),
       // Keys that the watermark does not bound.
       ("other + INTERVAL 2 SECONDS", None, None),
       ("other + INTERVAL 1 SECOND * 2", None, None),
@@ -140,6 +145,17 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           keys, Seq(eventTime, other)) === keyWatermark.map(_ => 0))
       }
     }
+  }
+
+  test("event time lag lowers the cutoffs by the lag rounded up to a millisecond") {
+    Seq(0L -> 10000L, 500L -> 9999L, 1000L -> 9999L, 1500L -> 9998L, 2000L -> 9998L)
+      .foreach { case (micros, cutoff) =>
+        withClue(s"$micros microseconds") {
+          val lag = EventTimeLag(micros, unrelated = false, unbounded = false)
+          assert(lag.keyWatermark(10000L) === Some(cutoff))
+          assert(lag.rangeWatermark(10000L) === Some(cutoff))
+        }
+      }
   }
 
   test("equality key watermark with whole days or months does not depend on the time zone") {

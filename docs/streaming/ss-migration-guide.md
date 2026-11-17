@@ -106,17 +106,26 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   to that amount later. A key that rows can hold below by an amount that Spark cannot bound no
   longer bounds state: one built from a time shifted backward by whole days, months or years,
   one that copies a column that an earlier session window with a gap that is not constant is
-  built over, and one that an input of a union builds from a column without a watermark. Outer
+  built over, and one that an input of a union builds from a column without a watermark, also in
+  a batch where that input has no data. Outer
   and left semi joins on such a key now fail, and inner joins keep the other input's rows for the
   life of the query. To bound state, join on the first watermarked column itself or on a time
   window over it, or select the key before the other watermarked columns of its input. A range
   condition on a watermarked column after the first one bounds state at that column's watermark
   less the same amount, but only when Spark can see how the column is built from the ones before
   it. Spark can also see this through an earlier inner join whose condition equates a
-  watermarked column of each of its inputs, such as `at = bt`, and through an earlier left or
-  right outer join with such a condition for a column of the input that it pads with nulls.
-  Checkpoints from earlier versions of joins on a watermarked column after the first one are
-  rejected at restart, as described below.
+  watermarked column of each of its inputs, such as `at = bt`, or bounds one of them from below by
+  the other plus constant intervals, such as `bt BETWEEN at AND at + INTERVAL 1 HOUR`, and through
+  an earlier left or right outer join with such a condition for a column of the input that it pads
+  with nulls.
+  When each such condition relates the columns by an amount that Spark cannot bound, the column
+  bounds no state, as above. Among the keys that bound state, Spark prefers one whose amount it
+  can see over one that the plan does not relate to the column that filters late rows. Spark
+  reuses a checkpoint from an earlier version of a join whose only watermarked equality key, at
+  the same position in both inputs, bounds state at the watermark itself, such as a join on a
+  time window over the first watermarked column, or on that column while the input also keeps
+  the window. Other checkpoints from earlier versions of joins on a watermarked column after the
+  first one are rejected at restart, as described below.
 
 - Spark 4.4 holds back the output watermark of a stream-stream join when retained state can
   still emit old event times. Downstream stateful operators may retain more state, take longer
@@ -125,11 +134,14 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   The join holds back only for an input whose event time reaches the next stateful operator: in
   a join on `clickTime <= impressionTime + INTERVAL 1 HOUR`, a window aggregation over
   `impressionTime` makes progress, and one over `clickTime` does not. Spark follows the event
-  time through projections, filters, unions, and time and session windows, to aggregations,
-  deduplication, stream-stream joins, and `flatMapGroupsWithState` or `transformWithState` with
-  event-time timeouts. When Spark cannot tell which input's event time the operator uses, for
-  example when the operator's event time is computed from the join output by a function, it
-  holds back for both inputs.
+  time through projections, filters, unions, stream-static joins, and time and session windows,
+  to aggregations, deduplication, stream-stream joins, `flatMapGroupsWithState` and
+  `applyInPandasWithState` with event-time timeouts, and `transformWithState` in event-time
+  mode. It also follows an event time plus constant intervals with no negative
+  part, such as `impressionTime + INTERVAL 1 MINUTE`, which never falls below that event time.
+  When Spark cannot tell which input's event time the operator uses, for example when the
+  operator's event time subtracts an interval or is computed by another function, it holds back
+  for both inputs.
 
   Since Spark 4.4, a query fails at start with `STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME`
   when an append-mode aggregation after a stream-stream join uses the event time of a join input
@@ -145,11 +157,15 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   existing checkpoint with `STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE`. Spark reuses the checkpoint
   of a join without watermarks, of a join with an equality condition between the two inputs'
   event times, such as `leftTime = rightTime`, and of a join whose time condition compares the
-  two inputs' event times with each other, each optionally cast and offset by constant intervals or
-  numbers, such as `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. When such a
+  two inputs' event times with each other by an ordering comparison (`<`, `<=`, `>`, `>=` or
+  `BETWEEN`), each event time optionally cast and offset by constant intervals or numbers, such as
+  `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. An equality in which one event time
+  is shifted or cast, such as `leftTime = rightTime + INTERVAL 1 SECOND`, is rejected. When such a
   condition bounds only one input, or the join has only equality conditions on columns other than
   event times, such as `leftKey = rightKey`, Spark reuses the checkpoint only when no stateful
-  operator after the join uses the event time of an input without a bound. A stateful operator that
+  operator after the join uses the event time of an input without a bound. Under the same rule,
+  Spark reuses the checkpoint of a join where only one input has a watermark and no equality
+  condition uses an event time, in state formats 1 to 3. A stateful operator that
   does not use the watermark, such as an update-mode aggregation on columns other than event times,
   does not count, while `transformWithState` always counts because its code can read the watermark.
   The time condition may also include comparisons from which Spark derives no bound, such as one
