@@ -78,6 +78,13 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
   private def sweepShuffles(): Unit =
     tracker.ttlCleaner.getOrElse(fail("the shuffle TTL cleaner should be enabled")).sweep()
 
+  /** How many of an RDD's partitions the executors hold, asking them rather than the driver. */
+  private def cachedPartitionsOf(rddId: Int): Int =
+    sc.env.blockManager.master.getMatchingBlockIds({
+      case RDDBlockId(id, _) => id == rddId
+      case _ => false
+    }, askStorageEndpoints = true).size
+
   test("a shuffle's map output is reclaimed by a sweep") {
     startCluster(rddTTL = true, shuffleTTL = true)
     assert(endpoint.rddAccessTime.isEmpty)
@@ -213,18 +220,50 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext with
       "the veto must be specific to locally-checkpointed RDDs, not a blanket refusal")
   }
 
+  test("an RDD locally checkpointed after an earlier reap is still never reaped") {
+    // A reap drops the RDD from SparkContext.persistentRdds and nothing puts it back: the storage
+    // level is not reset, so neither a later action nor localCheckpoint() re-registers it. A veto
+    // read from persistentRdds therefore cannot see this RDD, and the second sweep below would
+    // delete the only copy of the checkpointed data.
+    startCluster(rddTTL = true, shuffleTTL = false)
+    val input = sc.parallelize(1.to(100), numParts).cache()
+    // An async action, because it caches the RDD without going through RDD.doCheckpoint. Only the
+    // first action that does go through it can materialize a checkpoint, and here that has to be
+    // the one after localCheckpoint() below. A job on a checkpointed child leaves a cached parent
+    // in the same state.
+    assert(input.countAsync().get() === 100)
+    eventually { assert(endpoint.rddAccessTime.containsKey(input.id)) }
+
+    // Reaped once, as a plain cached RDD.
+    expire(endpoint.rddAccessTime, input.id)
+    sweepRdds()
+    assert(!sc.getPersistentRDDs.contains(input.id),
+      "the premise of this test: a reap drops the RDD from persistentRdds")
+    // Let the executors finish the removal, so it cannot land on the blocks cached below.
+    eventually { assert(cachedPartitionsOf(input.id) === 0) }
+
+    // Then locally checkpointed, which caches it again and truncates its lineage.
+    input.localCheckpoint()
+    assert(input.count() === 100)
+    assert(input.isCheckpointed)
+    eventually { assert(endpoint.rddAccessTime.containsKey(input.id)) }
+    assert(endpoint.rddReapable(input.id) === false,
+      "a reap in an RDD's past must not cost it the local-checkpoint veto")
+
+    expire(endpoint.rddAccessTime, input.id)
+    sweepRdds()
+
+    assert(endpoint.rddAccessTime.containsKey(input.id), "the vetoed RDD must not have been reaped")
+    assert(input.count() === 100,
+      "the locally-checkpointed RDD must survive the sweep: its blocks are the only copy")
+  }
+
   test("reaping an RDD removes every partition and leaves the RDD usable") {
     // Access times are recorded per RDD id but stamped by individual block accesses, and a reap
     // removes the whole RDD. Pin down both halves of that.
     startCluster(rddTTL = true, shuffleTTL = false)
     val input = sc.parallelize(1.to(100), numParts).cache()
     assert(input.count() === 100)
-
-    def cachedPartitionsOf(rddId: Int): Int =
-      sc.env.blockManager.master.getMatchingBlockIds({
-        case RDDBlockId(id, _) => id == rddId
-        case _ => false
-      }, askStorageEndpoints = true).size
 
     eventually {
       assert(endpoint.rddAccessTime.containsKey(input.id))

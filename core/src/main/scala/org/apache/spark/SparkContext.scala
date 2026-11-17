@@ -334,11 +334,26 @@ class SparkContext(config: SparkConf) extends Logging {
     map.asScala
   }
 
-  // The RDD TTL cleaner must never reap a locally checkpointed RDD: local checkpointing truncates
-  // lineage, so its cache blocks are the only copy of the data. Asked of the RDD itself rather than
-  // tracked alongside; a reaped id is gone from persistentRdds, which is the same answer.
+  // RDDs marked for local checkpointing, by id. The RDD TTL cleaner must never reap one: local
+  // checkpointing truncates lineage, so its cache blocks are the only copy of the data.
+  //
+  // Tracked on its own rather than looked up in persistentRdds, because a TTL reap drops the RDD
+  // from persistentRdds and RDD.persist only re-registers it on the way out of StorageLevel.NONE,
+  // which a reap never restores. An RDD that was reaped once and locally checkpointed afterwards
+  // is therefore missing from persistentRdds, and a veto read from there would let the cleaner
+  // delete its checkpoint.
+  //
+  // RDD.localCheckpoint adds to this and nothing removes from it, so no code path (a reap racing
+  // the mark, an unpersist followed by a re-persist) can drop the protection while the RDD is
+  // still usable. The values are weak, so an entry goes away with its RDD, at which point nothing
+  // can read the blocks any more.
+  private[spark] val locallyCheckpointedRdds = {
+    val map: ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
+    map.asScala
+  }
+
   private[spark] def isLocallyCheckpointedRdd(rddId: Int): Boolean =
-    persistentRdds.get(rddId).exists(_.isLocallyCheckpointed)
+    locallyCheckpointedRdds.contains(rddId)
 
   def statusTracker: SparkStatusTracker = _statusTracker
 
@@ -725,9 +740,12 @@ class SparkContext(config: SparkConf) extends Logging {
       // the RDD from persistentRdds, and RDD.persist only re-registers on the way out of
       // StorageLevel.NONE, so a reaped RDD stops appearing in getPersistentRDDs.
       endpoint.rddReaper = { rddId =>
-        // Re-check the veto here, not just in rddReapable: an RDD can be locally checkpointed
-        // between the cleaner's check and this call, and reaping one destroys the only copy of its
-        // data. This narrows that window to the read below.
+        // Re-check the veto here, not just in rddReapable: an RDD can be marked for local
+        // checkpointing between the cleaner's check and this call. A mark that lands after this
+        // read is still safe unless the checkpoint is also materialized before the removal below
+        // reaches the block manager master. Materializing takes a job, and then asks the master
+        // which partitions are still cached, so a checkpoint materialized after the removal
+        // recomputes whatever this reap took, from lineage that is not truncated yet.
         if (!isLocallyCheckpointedRdd(rddId)) {
           _cleaner match {
             case Some(contextCleaner) => contextCleaner.doCleanupRDD(rddId, blocking = false)
