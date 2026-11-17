@@ -1400,7 +1400,7 @@ class JDBCSuite extends SharedSparkSession {
   test("SPARK-58372: fractional to integral cast pushdown is wrapped in the dialect truncating " +
     "function when needed") {
     val cast = new V2Cast(FieldReference("a"), DoubleType, IntegerType)
-    val mysqlCast = new V2Cast(FieldReference("a"), DoubleType, LongType)
+    val mysqlCast = new V2Cast(FieldReference("a"), DecimalType(10, 2), LongType)
 
     assert(JdbcDialects.get("jdbc:").compileExpression(cast).get === """CAST("a" AS INTEGER)""")
 
@@ -1507,12 +1507,12 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58372: MySQL pushes only BIGINT casts from fractional sources that fit SIGNED") {
+  test("SPARK-58372: MySQL pushes only BIGINT casts from DECIMALs that fit SIGNED") {
     val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     def compile(from: DataType, to: DataType): Option[String] =
       mysql.compileExpression(new V2Cast(FieldReference("a"), from, to))
 
-    Seq(FloatType, DoubleType, DecimalType(10, 2), DecimalType(18, 0), DecimalType(20, 2))
+    Seq(DecimalType(10, 2), DecimalType(18, 0), DecimalType(20, 2))
       .foreach { from =>
         val expected = if (from == DecimalType(18, 0)) {
           "CAST(`a` AS SIGNED)"
@@ -1525,6 +1525,11 @@ class JDBCSuite extends SharedSparkSession {
     // More than 18 integer digits can exceed SIGNED, e.g. BIGINT UNSIGNED is DECIMAL(20, 0).
     Seq(DecimalType(19, 0), DecimalType(20, 0), DecimalType(38, 10)).foreach { from =>
       assert(compile(from, LongType).isEmpty)
+    }
+    // MariaDB clamps FLOAT and DOUBLE values beyond 64 bits where Spark raises an overflow error.
+    for (from <- Seq(FloatType, DoubleType);
+         to <- Seq(ByteType, ShortType, IntegerType, LongType)) {
+      assert(compile(from, to).isEmpty)
     }
     Seq(TimestampType, StringType, IntegerType, BooleanType).foreach { from =>
       Seq(IntegerType, LongType).foreach(to => assert(compile(from, to).isEmpty))

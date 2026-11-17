@@ -710,8 +710,8 @@ private[v2] trait V2JDBCTest
   // Whether this database rounds a fractional to integral cast rather than truncating like Spark.
   protected def roundsIntegralCast: Boolean = false
 
-  // Whether a fractional to INT cast is pushed down. MySQL can only cast to 64-bit SIGNED.
-  protected def pushesIntCast: Boolean = true
+  // Whether a cast of `col` to `target` is pushed down. MySQL can only cast to 64-bit SIGNED.
+  protected def pushesIntegralCast(col: String, target: String): Boolean = true
 
   // Whether this database accepts the SQL that Spark 4.3 pushed for a cast to `target`.
   protected def acceptsLegacyIntegralCast(target: String): Boolean = true
@@ -1392,7 +1392,7 @@ private[v2] trait V2JDBCTest
       // A pushed filter cast truncates like Spark, so only 2.6 truncates to 2. So does an
       // aggregate: 1 + 2 + (-1) = 2.
       for (col <- Seq("double_col", "decimal_col"); target <- Seq("INT", "BIGINT")) {
-        val pushed = target == "BIGINT" || pushesIntCast
+        val pushed = pushesIntegralCast(col, target)
         val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS $target) = 2")
         checkFilterPushed(filtered, pushed)
         assert(filtered.collect().map(_.getString(0)) === Array("b"))
