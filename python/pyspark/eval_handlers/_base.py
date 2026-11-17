@@ -47,7 +47,6 @@ from pyspark.worker_metrics import WorkerMetrics
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
 
-    from pyspark.worker_metrics import _WorkerTimer
     from pyspark.worker_util import EvalConf, RunnerConf
 
 # eval type -> (variant_conf or None, {variant_value: handler class}), populated by
@@ -200,6 +199,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
             self._udf_desc: UDF = udf_descs[0]
             self._raw_func: Any = self._raw_funcs[0]
             self._func: Callable[..., Any] = self._funcs[0]
+        self._metrics = WorkerMetrics()
+        self._create_phase_timers()
 
     def _expected_udf(self) -> str:
         """What a single-UDF handler takes, as named when it is given another number of UDFs:
@@ -328,26 +329,21 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     def serializer(self) -> Serializer:
         """Serializer for both the input and output streams."""
 
-    def _create_phase_timers(
-        self,
-    ) -> Optional[tuple["_WorkerTimer", "_WorkerTimer", "_WorkerTimer"]]:
-        """Create input-preparation, UDF-execution and output-preparation timers.
+    def _create_phase_timers(self) -> None:
+        """Initialize input-preparation, UDF-execution and output-preparation timers.
 
         Serializers measure reads and writes. Exclude nested input iteration from UDF
         time; count consumed transport batches, not groups or output batches. Framework
         work outside the measured intervals remains unattributed.
         """
         if not self._detailed_timing_enabled:
-            return None
-        metrics = WorkerMetrics()
-        timers = (
-            metrics.measure("pythonInputPreparationTime"),
-            metrics.measure("pythonUDFExecutionTime"),
-            metrics.measure("pythonOutputPreparationTime"),
-        )
+            return
+        metrics = self._metrics
+        self._input_preparation_timer = metrics.measure("pythonInputPreparationTime")
+        self._udf_execution_timer = metrics.measure("pythonUDFExecutionTime")
+        self._output_preparation_timer = metrics.measure("pythonOutputPreparationTime")
         metrics.set("pythonNumTimingReports", 1)
         metrics.set("pythonNumTimedBatches", 0)
-        return timers
 
     @abstractmethod
     def run(self, split_index: int, data: Iterator[InputBatch]) -> Iterator[OutputBatch]:

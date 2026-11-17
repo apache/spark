@@ -62,7 +62,6 @@ from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import StructField, StructType
 from pyspark.util import PythonEvalType, fail_on_stopiteration
-from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -882,8 +881,6 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         import pyarrow as pa
 
         runner_conf = self._runner_conf
-        metrics = WorkerMetrics()
-        phase_timers = self._create_phase_timers()
 
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func: Any, args: list[list[Any]], num_rows: int) -> list[Any]:
@@ -911,7 +908,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         num_udfs = len(self._udf_infos)
         try:
             for input_batch in data:
-                if phase_timers is not None:
+                if self._detailed_timing_enabled:
                     num_timed_batches += 1
                     input_start_ns = clock()
                 num_rows = input_batch.num_rows
@@ -929,16 +926,16 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                 # --- Process: evaluate each UDF row-by-row ---
                 output_arrays: list[pa.Array] = []
                 for udf_func, offsets, arrow_return_type, result_conv in self._udf_infos:
-                    if phase_timers is not None and output_arrays:
+                    if self._detailed_timing_enabled and output_arrays:
                         # Reuse the batch start for the first UDF, avoiding another clock read.
                         # Later UDFs start input after the loop transition.
                         input_start_ns = clock()
                     args = [columns[o] for o in offsets]
-                    if phase_timers is not None:
+                    if self._detailed_timing_enabled:
                         udf_start_ns = clock()
                         input_duration_ns += udf_start_ns - input_start_ns
                     results = _evaluate_batch_udf(udf_func, args, num_rows)
-                    if phase_timers is not None:
+                    if self._detailed_timing_enabled:
                         output_start_ns = clock()
                         udf_duration_ns += output_start_ns - udf_start_ns
                     verify_result_row_count(len(results), num_rows)
@@ -957,16 +954,15 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     # All UDF results for this batch are ready; time its assembly as output.
                     if len(output_arrays) == num_udfs:
                         output_batch = pa.RecordBatch.from_arrays(output_arrays, self._col_names)
-                    if phase_timers is not None:
+                    if self._detailed_timing_enabled:
                         output_duration_ns += clock() - output_start_ns
 
                 yield output_batch
                 del output_batch
         finally:
             # Publish the count and completed intervals if the generator closes early or raises.
-            if phase_timers is not None:
-                metrics.set("pythonNumTimedBatches", num_timed_batches)
-                input_timer, udf_timer, output_timer = phase_timers
-                input_timer.add_duration_ns(input_duration_ns)
-                udf_timer.add_duration_ns(udf_duration_ns)
-                output_timer.add_duration_ns(output_duration_ns)
+            if self._detailed_timing_enabled:
+                self._metrics.set("pythonNumTimedBatches", num_timed_batches)
+                self._input_preparation_timer.add_duration_ns(input_duration_ns)
+                self._udf_execution_timer.add_duration_ns(udf_duration_ns)
+                self._output_preparation_timer.add_duration_ns(output_duration_ns)

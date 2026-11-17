@@ -144,8 +144,19 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
                 self.assertEqual(conf.is_pipelined, pipelined)
                 self.assertEqual(conf.detailed_timing_enabled, enabled)
                 self.assertEqual(handler.serializer._detailed_timing_enabled, expected)
-                self.assertEqual(handler._create_phase_timers() is not None, expected)
-                if not expected:
+                self.assertEqual(handler._detailed_timing_enabled, expected)
+                if expected:
+                    self.assertEqual(
+                        metrics.to_dict(),
+                        {
+                            "pythonInputPreparationTime": 0,
+                            "pythonUDFExecutionTime": 0,
+                            "pythonOutputPreparationTime": 0,
+                            "pythonNumTimingReports": 1,
+                            "pythonNumTimedBatches": 0,
+                        },
+                    )
+                else:
                     self.assertEqual(metrics.to_dict(), {})
 
     def test_run_produces_output(self):
