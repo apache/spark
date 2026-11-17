@@ -183,6 +183,28 @@ _TRANSPILABLE_EVAL_TYPES = frozenset(
     }
 )
 
+# The rollback control for the set above: an internal conf naming the eval types that may
+# actually be rewritten, by PythonEvalType attribute name. It defaults to all of them and
+# can only narrow the set -- the JVM rejects any other name -- so that an eval type admitted
+# above can be turned back off without giving up the rest. Setting it to SQL_BATCHED_UDF
+# alone is the scope transpilation had before the Arrow-optimized and scalar pandas eval
+# types were admitted.
+#
+# The default is repeated here, rather than read from the JVM, for the same reason the
+# transpile flag is read with one: see ``_conf_is_true`` in ``UserDefinedFunction.__init__``.
+# pyspark.sql.tests.arrow.test_arrow_python_udf_transpile checks it against the conf's
+# registered default, and ConvertToCatalyst re-checks the conf, since it can be narrowed
+# after a UDF was built.
+_TRANSPILE_EVAL_TYPES_CONF = "spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes"
+_TRANSPILABLE_EVAL_TYPE_NAMES = {
+    PythonEvalType.SQL_BATCHED_UDF: "SQL_BATCHED_UDF",
+    PythonEvalType.SQL_ARROW_BATCHED_UDF: "SQL_ARROW_BATCHED_UDF",
+    PythonEvalType.SQL_SCALAR_PANDAS_UDF: "SQL_SCALAR_PANDAS_UDF",
+}
+_TRANSPILE_EVAL_TYPES_DEFAULT = ",".join(
+    _TRANSPILABLE_EVAL_TYPE_NAMES[evalType] for evalType in sorted(_TRANSPILABLE_EVAL_TYPES)
+)
+
 
 class UserDefinedFunction:
     """
@@ -287,8 +309,8 @@ class UserDefinedFunction:
         #
         # Defining a deterministic UDF of a transpilable eval type, including the default
         # Arrow-optimized type, reads the transpile flag once even when it is off. This
-        # construction-time read decides whether to attach options. ANSI and regime confs
-        # are read only once that flag is on. When ``default`` is given it is
+        # construction-time read decides whether to attach options. The eval type list,
+        # ANSI and regime confs are read only once that flag is on. When ``default`` is given it is
         # passed through to ``RuntimeConfig.get`` so construction never depends
         # on the JVM having the (experimental) conf registered -- e.g. a newer
         # Python client against an older driver. No default is passed for
@@ -303,11 +325,23 @@ class UserDefinedFunction:
                 value = session.conf.get(key, default)
             return value is not None and value.lower() == "true"
 
+        # Whether the rollback conf still lists this eval type. Only called for a member of
+        # ``_TRANSPILABLE_EVAL_TYPES``, and only once the flag is known to be on.
+        def _eval_type_is_enabled() -> bool:
+            if session is None:
+                return False
+            listed = session.conf.get(_TRANSPILE_EVAL_TYPES_CONF, _TRANSPILE_EVAL_TYPES_DEFAULT)
+            if listed is None:
+                return False
+            names = {name.strip().upper() for name in listed.split(",")}
+            return _TRANSPILABLE_EVAL_TYPE_NAMES[evalType] in names
+
         try:
             transpile_enabled = (
                 deterministic
                 and evalType in _TRANSPILABLE_EVAL_TYPES
                 and _conf_is_true("spark.sql.experimental.optimizer.transpilePyUDFs", "false")
+                and _eval_type_is_enabled()
                 # The legacy pandas conversion regime routes an Arrow-optimized UDF's
                 # inputs and outputs through pandas, which changes what the Python
                 # function actually receives: an integer column containing NULL arrives
