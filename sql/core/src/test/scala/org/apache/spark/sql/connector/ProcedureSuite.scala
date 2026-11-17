@@ -494,7 +494,7 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     assert(explain.contains("Call cat.ns.sum(5, 5)"), explain)
   }
 
-  test("SPARK-61889: CALL with an aggregate or window function in an argument") {
+  test("SPARK-61889: CALL with an aggregate, window or generator expression in an argument") {
     // The optimizer folds these arguments away, so the procedure must not be invoked.
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
     val call = "CALL cat.ns.sum(IF(true OR max(1) > 0, 1, 2), 2)"
@@ -503,6 +503,22 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
       condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
       parameters = Map("operator" -> "Call", "invalidExprSqls" -> "\"max(1)\""),
       context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+    val windowCall = "CALL cat.ns.sum(IF(true OR row_number() OVER (ORDER BY 1) > 0, 1, 2), 2)"
+    checkError(
+      exception = intercept[AnalysisException](sql(windowCall)),
+      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      parameters = Map(
+        "operator" -> "Call",
+        "invalidExprSqls" -> ("\"row_number() OVER (ORDER BY 1 ASC NULLS FIRST " +
+          "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"")),
+      context = ExpectedContext(fragment = windowCall, start = 0, stop = windowCall.length - 1))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(IF(true OR size(explode(array(1))) > 0, 1, 2), 2)")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map("plan" -> "(?s)Call cat.ns.sum.*"),
+      matchPVals = true)
   }
 
   test("void procedure") {
