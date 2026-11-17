@@ -362,15 +362,18 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     // The paths the UI's forms post to. The trailing slash matters: without it, a handler
     // attached at the path only redirects to add the slash, which hides the leak.
     val actionPaths = Seq("/jobs/job/kill/", "/stages/stage/kill/", "/jobs/hold/", "/jobs/resume/")
-    def postCodes(): Seq[Int] = actionPaths.map { path =>
-      TestUtils.httpResponseCode(new URI(s"http://$localhost:$port$path").toURL, "POST")
+    def postCodes(basePath: String = ""): Seq[Int] = actionPaths.map { path =>
+      TestUtils.httpResponseCode(new URI(s"http://$localhost:$port$basePath$path").toURL, "POST")
     }
     val codesWithoutApp = postCodes()
 
     // Loading an app attaches its UI handlers to the history server.
-    HistoryServerSuite.getUrl(
-      new URI(s"http://$localhost:$port/history/local-1422981780767/jobs/").toURL)
+    val appBasePath = "/history/local-1422981780767"
+    HistoryServerSuite.getUrl(new URI(s"http://$localhost:$port$appBasePath/jobs/").toURL)
     assert(postCodes() === codesWithoutApp)
+    // They are attached under the app's base path instead, where a POST without the CSRF token
+    // is rejected.
+    assert(postCodes(appBasePath) === actionPaths.map(_ => HttpServletResponse.SC_FORBIDDEN))
   }
 
   test("automatically retrieve uiRoot from request through Knox") {
