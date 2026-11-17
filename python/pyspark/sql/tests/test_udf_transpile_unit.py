@@ -54,20 +54,6 @@ _TRANSPILE_OFF_ANSI_ON = {
 }
 
 
-def _fallback_warnings(caught):
-    """The warnings that mean "this UDF fell back to interpreted Python".
-
-    Asserting on these is what distinguishes a deliberate refusal from a
-    transpile that silently produced nothing: ``transpiled == []`` alone is also
-    what you get if an exception is swallowed before the reason is recorded.
-    """
-    return [
-        w
-        for w in caught
-        if "Unable to transpile" in str(w.message) or "Errors encountered" in str(w.message)
-    ]
-
-
 @unittest.skipIf(
     is_remote_only(),
     "UDF transpilation is only supported in regular (non-Connect) Spark.",
@@ -577,167 +563,156 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # disables whole-stage fusion, but expressions are still compiled through
         # the codegen factory, so `doGenCode` runs either way. Survival through the
         # OPTIMIZER is separate; see test_udf_transpile_chain_survives_optimizer.
-        def chained(a, b, c):
-            return a < b < c
-
-        schema = "a long, b long, c long"
+        B = BooleanType()
+        chain3 = lambda a, b, c: a < b < c  # noqa: E731
+        chain4 = lambda a, b, c, d: a < b < c < d  # noqa: E731
+        abc, abcd = "a long, b long, c long", "a long, b long, c long, d long"
         for factory_mode in ("FALLBACK", "NO_CODEGEN"):
-            conf = dict(_TRANSPILE_ON)
-            conf["spark.sql.codegen.factoryMode"] = factory_mode
+            conf = {"spark.sql.codegen.factoryMode": factory_mode}
             with self.subTest(factory_mode=factory_mode), self.sql_conf(conf):
-                pudf = UserDefinedFunction(chained, BooleanType())
-                self.assertTrue(pudf.transpiled, "3-column chain should transpile")
-                df = self.spark.createDataFrame([(1, 0, None)], schema)
-                [row] = df.select(pudf("a", "b", "c")).collect()
-                self.assertEqual(
-                    False,
-                    row[0],
-                    "first link is false, so the NULL second link must not be evaluated",
-                )
-                # ... but when the first link IS true the second link is reached
+                # An earlier link is false, so the NULL in a later one is never
+                # evaluated -- from the first link, and from an interior one.
+                self.assertEqual(self._vals(chain3, B, abc, [(1, 0, None)]), [False])
+                self.assertEqual(self._vals(chain4, B, abcd, [(1, 2, 1, None)]), [False])
+                # ... but when every earlier link IS true the last one is reached
                 # and its NULL guard fires, exactly as Python raises TypeError.
-                df = self.spark.createDataFrame([(0, 1, None)], schema)
-                with self.assertRaises(Exception) as ctx:
-                    df.select(pudf("a", "b", "c")).collect()
-                self.assertIn("cannot compare NULL", str(ctx.exception))
+                with self.assertRaisesRegex(Exception, "cannot compare NULL"):
+                    self._vals(chain3, B, abc, [(0, 1, None)])
+                with self.assertRaisesRegex(Exception, "cannot compare NULL"):
+                    self._vals(chain4, B, abcd, [(1, 2, 3, None)])
 
     def test_udf_transpile_chain_survives_optimizer(self):
-        # A chain folds to a sequential CASE WHEN, which is atomic to
-        # `splitConjunctivePredicates` and `BooleanSimplification`. An `&` fold
-        # would let BooleanSimplification split or reorder it, moving a later
-        # link's NULL guard ahead of the links that gate it -- as it still does
-        # for the equivalent user-written `and` (see the module docstring). Each
-        # repro below must return Python's answer (or raise like Python) with the
-        # chain fully lowered (no EvalPython in the plan); only the two
-        # BooleanSimplification ones fail under an `&` fold.
+        # A chain folds to a sequential CASE WHEN, and so do the `and` / `or` of a
+        # body holding a chain or a comparison over a non-basic operand. That fold
+        # is atomic to `splitConjunctivePredicates` and `BooleanSimplification`;
+        # an `&` / `|` fold lets BooleanSimplification move a later operand's NULL
+        # guard ahead of the operands that gate it, or drop one, as it still does
+        # for the `and` / `or` bodies that keep `&` / `|` (see the module
+        # docstring). Each body must return Python's answer, or raise like
+        # Python, fully lowered, under generated and interpreted evaluation.
+        abc = "a long, b long, c long"
+        # Common factor: `(p && g) || (q && g) => g && (p || q)` hoists the shared
+        # guarded operand to the front, where its NULL raises.
+        factor_chains = lambda a, b, c, d: (a < b < c) or (d < b < c)  # noqa: E731
 
-        # PushDownPredicates / Aggregate: `b < c` reads only grouping keys, so an
-        # `&` fold could push it below the Aggregate, onto groups Python
-        # short-circuits past. Since SPARK-60633 it stays above whenever `sa < b`
-        # does, so this does not tell the folds apart; it pins the chain over an
-        # aggregate. `sa < b < c` over groupBy(b,c).agg(sum(a)): the group
-        # (b=1, c=NULL, sa=6) has `sa < b` false, so Python returns False without
-        # touching `b < c` (which would raise on the NULL c).
+        def factor_and(a, b):
+            return (0 <= a <= 10 and b > 0) or (20 <= a <= 30 and b > 0)
+
+        def factor_nested(a, b, c):
+            return ((b > 0 and a > 0) or (c > 0 and a > 0)) == True  # noqa: E712
+
+        # Absorption: `(p && g) || g => g` drops the guard in `p`, returning True
+        # where Python raises.
+        absorb_chain = lambda a, b, c: (a < b < c) or (b < c)  # noqa: E731
+        absorb_and = lambda a, b: (0 <= a <= 10 and b > 0) or (b > 0)  # noqa: E731
+        # (body, schema, row, Python's answer or None where Python raises TypeError)
+        cases = [
+            (factor_chains, abc + ", d long", (5, 1, None, 7), False),
+            (factor_and, "a long, b long", (15, None), False),
+            (factor_nested, abc, (None, -1, -1), False),
+            (absorb_chain, abc, (None, 0, 1), None),
+            (absorb_and, "a long, b long", (None, 5), None),
+        ]
+        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
+            conf = {**_TRANSPILE_ON, "spark.sql.codegen.factoryMode": factory_mode}
+            for i, (func, schema, row, expected) in enumerate(cases):
+                with self.subTest(factory_mode=factory_mode, case=i), self.sql_conf(conf):
+                    df = self.spark.createDataFrame([row], schema)
+                    projected = df.select(self._transpiled_udf(func, BooleanType())(*df.columns))
+                    self.assertEqual(0, self._eval_python_count(projected), "must stay lowered")
+                    if expected is None:
+                        with self.assertRaisesRegex(Exception, "cannot compare NULL"):
+                            projected.collect()
+                    else:
+                        self.assertEqual([expected], [r[0] for r in projected.collect()])
+
+        # A chain as a filter over an Aggregate: the group (b=1, c=NULL, sa=6) has
+        # `sa < b` false, so Python never touches `b < c`. Since SPARK-60633 an `&`
+        # fold passes this too; it pins the chain over an aggregate.
         from pyspark.sql.functions import sum as sum_
 
-        def chain_over_agg(sa, b, c):
-            return sa < b < c
-
         with self.sql_conf(_TRANSPILE_ON):
-            udf = UserDefinedFunction(chain_over_agg, BooleanType())
-            self.assertTrue(udf.transpiled, "chain over agg should transpile")
+            chain_over_agg = lambda sa, b, c: sa < b < c  # noqa: E731
+            udf = self._transpiled_udf(chain_over_agg, BooleanType())
             agg = (
-                self.spark.createDataFrame(
-                    [(1, 1, None), (5, 1, None), (2, 2, 3)], "a long, b long, c long"
-                )
+                self.spark.createDataFrame([(1, 1, None), (5, 1, None), (2, 2, 3)], abc)
                 .groupBy("b", "c")
                 .agg(sum_("a").alias("sa"))
             )
             filtered = agg.filter(udf("sa", "b", "c"))
-            # Python: row (sa=6, b=1, c=None) -> 6 < 1 is False -> False (no raise).
-            # row (sa=2, b=2, c=3) -> 2 < 2 is False -> False.
-            # No row passes, and crucially no raise leaks out of the NULL c.
             self.assertEqual([], filtered.select("b", "c").collect())
             self.assertEqual(0, self._eval_python_count(filtered), "chain must stay lowered")
 
-        # BooleanSimplification common-factor: `(a < b < c) or (d < b < c)` on
-        # (5, 1, None, 7). Over an `&` fold, common-factor elimination hoists the
-        # shared `b < c` guard to the front, where the NULL c raises where Python
-        # returns False. The CASE WHEN fold is atomic, so the shared link cannot
-        # be hoisted out of either chain.
-        def or_shared_chain(a, b, c, d):
-            return (a < b < c) or (d < b < c)
+    def test_udf_transpile_and_or_fold_choice(self):
+        # Only a body that holds a chain or a comparison over a non-basic operand
+        # takes the CASE WHEN fold for its `and` / `or`; every other body keeps
+        # `&` / `|`, and with it per-conjunct pushdown.
+        import ast as _ast
 
+        from pyspark.sql.transpile import _needs_atomic_boolops
+
+        for src, atomic in [
+            ("a > 0 and c > 0", False),
+            ("(a == 1 or a == 2) and not (c < 0)", False),
+            ("(0 < a < 10) and c > 0", True),
+            ("((a > 0 and c > 0) or c > 1) == True", True),
+            ("(a if c > 0 else 1) == 1 and c > 0", True),
+        ]:
+            with self.subTest(src=src):
+                self.assertEqual(atomic, _needs_atomic_boolops(_ast.parse(src, mode="eval")))
+
+        df = self.spark.createDataFrame([(1, 2)], "a long, c long")
         with self.sql_conf(_TRANSPILE_ON):
-            udf = UserDefinedFunction(or_shared_chain, BooleanType())
-            self.assertTrue(udf.transpiled, "or of shared chains should transpile")
-            df = self.spark.createDataFrame([(5, 1, None, 7)], "a long, b long, c long, d long")
-            # Python: (5 < 1) False -> first chain False; (7 < 1) False -> second
-            # chain False; or -> False. The NULL c is never reached.
-            self.assertEqual([False], [r[0] for r in df.select(udf("a", "b", "c", "d")).collect()])
-            projected = df.select(udf("a", "b", "c", "d"))
-            self.assertEqual(0, self._eval_python_count(projected), "or of chains stays lowered")
-
-        # BooleanSimplification absorption: `(a < b < c) or (b < c)` on
-        # (None, 0, 1). Over an `&` fold, absorption (`(a && b) || b => b`) drops
-        # the first link's guard, returning True where Python raises TypeError on
-        # `None < 0`. The CASE WHEN fold keeps both links, so the first chain
-        # reaches its NULL guard and raises like Python.
-        def or_absorb_chain(a, b, c):
-            return (a < b < c) or (b < c)
-
-        with self.sql_conf(_TRANSPILE_ON):
-            udf = UserDefinedFunction(or_absorb_chain, BooleanType())
-            self.assertTrue(udf.transpiled, "or with absorption shape should transpile")
-            df = self.spark.createDataFrame([(None, 0, 1)], "a long, b long, c long")
-            with self.assertRaises(Exception) as ctx:
-                df.select(udf("a", "b", "c")).collect()
-            self.assertIn("cannot compare NULL", str(ctx.exception))
+            plain = lambda a, c: a > 0 and c > 0  # noqa: E731
+            chained = lambda a, c: (0 < a < 10) and c > 0  # noqa: E731
+            for func, splittable in [(plain, True), (chained, False)]:
+                udf = self._transpiled_udf(func, BooleanType())
+                plan = self._optimized_plan(df.select(udf("a", "c")))
+                self.assertEqual(splittable, " AND " in plan, plan)
 
     def test_udf_transpile_boolop_short_circuits(self):
         # The `and` / `or` counterpart of the chain short-circuit: a NULL guard in
         # the second operand must not fire when the first already decided the
         # result.
-        #
-        # This is the regression test for SPARK-58627. Before `RaiseError`
-        # overrode `Expression.throwable`, `splitConjunctivePredicates` decomposed
-        # the `And` and `PushPredicateThroughJoin` pushed the guard to one side of
-        # the join, where it fired on rows Python short-circuits past and raised
-        # USER_RAISED_EXCEPTION instead of returning False. Keep it: the override
-        # keeps the guard above the join. BooleanSimplification and subexpression
-        # elimination, listed in the module docstring, remain open.
-        #
-        # The join case disables AQE and broadcast on purpose: otherwise whether
-        # the pushed-down guard fires races AQE eliminating the empty join, and the
-        # test would pass for the wrong reason.
         def both_positive(a, c):
             return a > 0 and c > 0
 
         def either_positive(a, c):
             return a > 0 or c > 0
 
-        # Plain select: the second operand is NULL but the first already decided
-        # the result, so Python's answer must come back unraised. Under both
-        # factory modes, so `And` / `Or`'s `doGenCode` and `eval` laziness are
-        # both covered (see test_udf_transpile_chain_short_circuits).
+        # Under both factory modes, so `And` / `Or`'s `doGenCode` and `eval`
+        # laziness are both covered (see test_udf_transpile_chain_short_circuits).
+        B, schema = BooleanType(), "a long, c long"
         for factory_mode in ("FALLBACK", "NO_CODEGEN"):
-            conf = dict(_TRANSPILE_ON)
-            conf["spark.sql.codegen.factoryMode"] = factory_mode
+            conf = {"spark.sql.codegen.factoryMode": factory_mode}
             with self.subTest(factory_mode=factory_mode), self.sql_conf(conf):
-                and_udf = UserDefinedFunction(both_positive, BooleanType())
-                or_udf = UserDefinedFunction(either_positive, BooleanType())
-                self.assertTrue(and_udf.transpiled, "and over compares should transpile")
-                self.assertTrue(or_udf.transpiled, "or over compares should transpile")
-                df = self.spark.createDataFrame([(-5, None)], "a long, c long")
-                projected = df.select(and_udf("a", "c"))
-                self.assertEqual([False], [r[0] for r in projected.collect()])
-                self.assertEqual(0, self._eval_python_count(projected), "and select lowered")
-                df = self.spark.createDataFrame([(5, None)], "a long, c long")
-                projected = df.select(or_udf("a", "c"))
-                self.assertEqual([True], [r[0] for r in projected.collect()])
-                self.assertEqual(0, self._eval_python_count(projected), "or select lowered")
+                self.assertEqual(self._vals(both_positive, B, schema, [(-5, None)]), [False])
+                self.assertEqual(self._vals(either_positive, B, schema, [(5, None)]), [True])
 
-        # Same thing across a join, where the NULL operand lives entirely on the
-        # right side. Deterministic plan: no AQE, no broadcast, so the pushed-down
-        # guard either exists or does not, rather than racing the join.
-        deterministic = dict(_TRANSPILE_ON)
-        deterministic["spark.sql.adaptive.enabled"] = False
-        deterministic["spark.sql.autoBroadcastJoinThreshold"] = -1
+        # The same across a join, with the NULL operand entirely on the right
+        # side: the regression test for SPARK-58627. Before `RaiseError` overrode
+        # `Expression.throwable`, `splitConjunctivePredicates` decomposed the
+        # `And` and `PushPredicateThroughJoin` pushed the guard to one side of the
+        # join, where it fired on rows Python short-circuits past.
+        # BooleanSimplification and subexpression elimination, listed in the
+        # module docstring, remain open. No AQE and no broadcast, so the
+        # pushed-down guard either exists or does not, rather than racing AQE
+        # eliminating the empty join.
+        deterministic = {
+            **_TRANSPILE_ON,
+            "spark.sql.adaptive.enabled": False,
+            "spark.sql.autoBroadcastJoinThreshold": -1,
+        }
         with self.sql_conf(deterministic):
-            and_udf = UserDefinedFunction(both_positive, BooleanType())
-            self.assertTrue(and_udf.transpiled, "rebuilt and_udf should transpile")
+            and_udf = self._transpiled_udf(both_positive, B)
             left = self.spark.createDataFrame([(1, -5)], "k long, a long")
             right = self.spark.createDataFrame([(1, None)], "k long, c long")
             joined = left.join(right, "k")
+            # Results alone do not prove the lowering ran -- interpreted Python
+            # returns the same -- so also assert zero EvalPython nodes.
             joined_select = joined.select(and_udf("a", "c"))
             self.assertEqual([False], [r[0] for r in joined_select.collect()])
-            # Results alone do not prove the lowering ran -- interpreted Python
-            # returns the same `[False]`. Assert zero EvalPython nodes so a JVM
-            # discard of the transpiled options cannot hide a regression.
             self.assertEqual(0, self._eval_python_count(joined_select), "joined select lowered")
-
-            # Filtering must return Python's answer rather than raising. This is
-            # the assertion SPARK-58627 fixed; see above.
             filtered = joined.filter(and_udf("a", "c"))
             self.assertEqual([], filtered.select("k").collect())
             self.assertEqual(0, self._eval_python_count(filtered), "joined filter lowered")
@@ -796,20 +771,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "a chain of four operators is well under the cap and must transpile",
         )
 
-    def test_udf_transpile_chain_interior_link_short_circuits(self):
-        def chain(a, b, c, d):
-            return a < b < c < d
-
-        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
-            conf = {**_TRANSPILE_ON, "spark.sql.codegen.factoryMode": factory_mode}
-            with self.subTest(factory_mode=factory_mode), self.sql_conf(conf):
-                schema = "a long, b long, c long, d long"
-                self.assertEqual(
-                    self._vals(chain, BooleanType(), schema, [(1, 2, 1, None)]), [False]
-                )
-                with self.assertRaisesRegex(Exception, "cannot compare NULL"):
-                    self._vals(chain, BooleanType(), schema, [(1, 2, 3, None)])
-
     def test_udf_transpile_comparison_fallbacks(self):
         # Comparison forms the transpiler must REFUSE. Each case asserts both that
         # nothing transpiled and that a query using the UDF still returns Python's
@@ -817,9 +778,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # type-checked by CheckAnalysis as a child of TranspiledPythonUDF: a
         # half-refused form would fail the whole query rather than fall back, so
         # "did not transpile" alone is not enough to prove the fallback works.
-        import warnings as _warnings
-
-        # `in` / `not in` are refused wholesale, so these cases all take the same
+        #
+        # `in` / `not in` are refused wholesale, so those cases all take the same
         # branch; they are kept because the reasons differ. `in` on a str is
         # substring containment rather than equality, a container of runtime
         # values would need runtime NULL analysis, and `in` can appear as a link
@@ -829,52 +789,30 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         str_in = lambda x: x in "abc"  # noqa: E731
         runtime_in = lambda x, y: x in (y, 2)  # noqa: E731
         chained_in = lambda a, b: a < b in (1, 2)  # noqa: E731
+        # Short-circuits for non-positive inputs.
         cross_chain = lambda x: 0 < x < "z"  # noqa: E731
+        # Boolean bodies declared LongType return NULL through interpreted Python.
         chain_long_rt = lambda x: 0 < x < 10  # noqa: E731
         in_long_rt = lambda x: x in (1, 2)  # noqa: E731
 
-        # (label, func, schema, rows, expected). `expected` is what interpreted
-        # Python produces, so the query must still run and return it.
+        B, L = BooleanType(), LongType()
+        # (func, return type, schema, rows, what interpreted Python produces)
         cases = [
-            ("`in` on a str", str_in, "a string", [("b",), ("z",)], [True, False]),
-            ("runtime `in`", runtime_in, "a long, b long", [(1, 1), (3, 5)], [True, False]),
-            ("chain + `in`", chained_in, "a long, b long", [(0, 1), (1, 0)], [True, False]),
+            (str_in, B, "a string", [("b",), ("z",)], [True, False]),
+            (runtime_in, B, "a long, b long", [(1, 1), (3, 5)], [True, False]),
+            (chained_in, B, "a long, b long", [(0, 1), (1, 0)], [True, False]),
+            (cross_chain, B, "a long", [(0,)], [False]),
+            (chain_long_rt, L, "a long", [(0,)], [None]),
+            (in_long_rt, L, "a long", [(0,)], [None]),
         ]
         with self.sql_conf(_TRANSPILE_ON):
-            for label, func, schema, rows, expected in cases:
-                with self.subTest(func=label):
-                    with _warnings.catch_warnings(record=True) as caught:
-                        _warnings.simplefilter("always")
-                        pudf = UserDefinedFunction(func, BooleanType())
-                    self.assertEqual([], pudf.transpiled, f"{label} must NOT transpile")
-                    self.assertTrue(
-                        _fallback_warnings(caught),
-                        f"{label}: expected a fallback warning",
-                    )
+            for i, (func, return_type, schema, rows, expected) in enumerate(cases):
+                with self.subTest(case=i):
+                    pudf, _ = self._fallback_reason(func, return_type)
                     df = self.spark.createDataFrame(rows, schema)
                     self.assertEqual(
-                        [r[0] for r in df.select(pudf(*df.columns)).collect()],
-                        expected,
-                        f"{label}: interpreted result diverged",
+                        [r[0] for r in df.select(pudf(*df.columns)).collect()], expected
                     )
-            # The cross-category chain short-circuits for non-positive inputs.
-            # Boolean bodies declared LongType return NULL through interpreted Python.
-            for func, rt, label, expected in [
-                (cross_chain, BooleanType(), "a cross-category chain", [False]),
-                (chain_long_rt, LongType(), "a chain with a LongType return type", [None]),
-                (in_long_rt, LongType(), "an `in` with a LongType return type", [None]),
-            ]:
-                with self.subTest(label=label):
-                    with _warnings.catch_warnings(record=True) as caught:
-                        _warnings.simplefilter("always")
-                        pudf = UserDefinedFunction(func, rt)
-                        self.assertEqual([], pudf.transpiled, f"{label} must NOT transpile")
-                    self.assertTrue(
-                        _fallback_warnings(caught),
-                        f"{label}: expected a fallback warning",
-                    )
-                    df = self.spark.createDataFrame([(0,)], "a long")
-                    self.assertEqual([r[0] for r in df.select(pudf("a")).collect()], expected)
 
     def test_udf_transpile_boolean_body_requires_boolean_return_type(self):
         # A comparison body is boolean whatever its operands look like, so it must
@@ -885,201 +823,170 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # option returned `cast(<boolean> as bigint)` -- 1 or 0 -- where the
         # interpreted path returns NULL. `_category` now classifies every
         # `ast.Compare` as "bool" directly.
-        import warnings as _warnings
-
         def ternary_compare(c, x, y):
             return (x if c > 0 else y) == 1
 
         def eq_true(a, b):
-            # The same gap via `_lower_eq`; pre-dates chained comparisons.
             return (a < b) == True  # noqa: E712
 
-        def chain_of_compare(a, b, c):
-            # ... and via a comparison over comparison operands.
+        def compare_of_compares(a, b, c):
             return (a < b) <= (b < c)
 
         cases = [
-            (ternary_compare, "c long, x long, y long", [(1, 1, 9)]),
-            (eq_true, "a long, b long", [(1, 2)]),
-            (chain_of_compare, "a long, b long, c long", [(1, 2, 3)]),
+            (ternary_compare, "c long, x long, y long", (1, 1, 9)),
+            (eq_true, "a long, b long", (1, 2)),
+            (compare_of_compares, "a long, b long, c long", (1, 2, 3)),
         ]
-        with self.sql_conf(_TRANSPILE_ON):
-            for func, schema, rows in cases:
-                with self.subTest(func=func.__name__):
-                    with _warnings.catch_warnings(record=True):
-                        _warnings.simplefilter("always")
-                        pudf = UserDefinedFunction(func, LongType())
-                    self.assertEqual(
-                        [],
-                        pudf.transpiled,
-                        f"{func.__name__}: a boolean body must not satisfy LongType",
-                    )
-                    # The interpreted path returns NULL for a bool declared
-                    # LongType; falling back reproduces that faithfully.
-                    df = self.spark.createDataFrame(rows, schema)
-                    self.assertEqual(
-                        [None],
-                        [r[0] for r in df.select(pudf(*df.columns)).collect()],
-                        f"{func.__name__}: interpreted result diverged",
-                    )
-            # Declared BooleanType, all three bodies run natively and retain NULL guards.
-            for func, schema, rows in cases:
-                with self.subTest(func=func.__name__, return_type="boolean"):
-                    self.assertEqual(
-                        self._vals(func, BooleanType(), schema, rows),
-                        [func(*row) for row in rows],
-                    )
-                    null_row = (None, *rows[0][1:])
-                    df = self.spark.createDataFrame([null_row], schema)
-                    pudf = self._transpiled_udf(func, BooleanType())
-                    projected = df.select(pudf(*df.columns))
-                    self.assertEqual(0, self._eval_python_count(projected), func.__name__)
-                    with self.assertRaisesRegex(Exception, "cannot compare NULL"):
-                        projected.collect()
+        for func, schema, row in cases:
+            with self.subTest(func=func.__name__), self.sql_conf(_TRANSPILE_ON):
+                # Declared LongType it falls back, and the interpreted path
+                # returns NULL for a bool.
+                pudf, _ = self._fallback_reason(func, LongType())
+                df = self.spark.createDataFrame([row], schema)
+                self.assertEqual([None], [r[0] for r in df.select(pudf(*df.columns)).collect()])
+                # Declared BooleanType it runs natively and keeps its NULL guard.
+                self.assertEqual(self._vals(func, BooleanType(), schema, [row]), [func(*row)])
+                with self.assertRaisesRegex(Exception, "cannot compare NULL"):
+                    self._vals(func, BooleanType(), schema, [(None, *row[1:])])
 
     def test_udf_transpile_lowering_caps(self):
-        # Every bound on comparison lowering. Exercised through
-        # `_transpile_from_ast` rather than a UDF so a refusal cannot be confused
-        # with a fallback for some other reason, while still going through its
-        # per-variant resets. No `sql_conf` here on purpose: nothing on this path
-        # reads SQLConf (only `_get_transpilers` does), so wrapping it would imply
-        # the caps are conf-gated when they are module constants.
+        # The bounds on comparison lowering: the per-chain operator cap, and the
+        # materialized size of everything one application of the UDF builds.
         import ast as _ast
 
-        from pyspark.errors import UnsupportedOperationException
         from pyspark.sql.transpile import (
             _MAX_COMPARISON_OPS,
-            _MAX_LOWERED_COMPARISONS,
             _MAX_MATERIALIZED_WEIGHT,
             CatalystTranspiler,
             _materialized_weight,
         )
 
-        transpiler = CatalystTranspiler()
-
-        def compare_node(src):
-            return _ast.parse(src, mode="eval").body
-
-        def lower(src, category="numeric"):
-            fdef = _ast.parse(f"def f(x):\n    return {src}").body[0]
-            return transpiler._transpile_from_ast(
-                src, fdef, fdef, ["x"], BooleanType(), {0: category}
-            )
-
-        def refused(src):
-            with self.assertRaises(UnsupportedOperationException) as ctx:
-                lower(src)
-            return str(ctx.exception)
-
-        link_msg = f"more than {_MAX_LOWERED_COMPARISONS} comparisons"
         weight_msg = f"more than {_MAX_MATERIALIZED_WEIGHT}"
 
-        def chain_src(n):
+        def weight(src):
+            return _materialized_weight(_ast.parse(src, mode="eval").body)
+
+        def build(src, params="x"):
+            func = self._function_from_source(f"def f({params}):\n    return {src}\n")
+            return self._udf_and_warnings(func, BooleanType())
+
+        def chain(n):
             # n operators over n + 1 operands: x < 0 < 1 < ... < n - 1
             return " < ".join(["x"] + [str(i) for i in range(n)])
 
-        # ---- Per-chain operator cap ----
-        lower(chain_src(_MAX_COMPARISON_OPS))  # at the cap, succeeds
-        self.assertIn("operators", refused(chain_src(_MAX_COMPARISON_OPS + 1)))
-
-        # ---- Link budget, at N and N + 1 ----
-        def or_src(n):
-            return " or ".join(["(x == %d)" % i for i in range(n)])
-
-        lower(or_src(_MAX_LOWERED_COMPARISONS))
-        self.assertIn(link_msg, refused(or_src(_MAX_LOWERED_COMPARISONS + 1)))
-
-        # The budget resets per input-type variant: 2 x 100 links both lower.
-        hundred = " or ".join(["(x == x)"] * 100)
-        for category in ("numeric", "string"):
-            self.assertIsNotNone(lower(hundred, category), category)
-
-        # A comparison may be an operand of another comparison (both category
-        # "bool"), and a chain re-lowers each interior operand once per adjacent
-        # pair, so nesting doubles the link count per level. Before the budget
-        # existed this reached hours of driver-side py4j work from a few hundred
-        # characters of source.
-        def nested_src(depth):
-            src = "(x < 0)"
-            for _ in range(depth):
-                src = "((x < 0) < %s < (x < 0))" % src
-            return src
-
-        lower(nested_src(2))
-        # Depth 5 is 156 links but under the weight bound: only the link budget
-        # stops it.
-        self.assertLess(_materialized_weight(compare_node(nested_src(5))), _MAX_MATERIALIZED_WEIGHT)
-        self.assertIn(link_msg, refused(nested_src(5)))
-        # ... and the refusal part-way through left no stale count behind.
-        lower(chain_src(_MAX_COMPARISON_OPS))
-
-        # ---- Materialized-weight budget ----
-        # Every `ast.Compare` here is under the per-chain cap, and the weight is
-        # checked before the first link is lowered, so the weight is what fires.
-        deep = nested_src(10)
-        self.assertTrue(
-            all(
-                len(n.ops) <= _MAX_COMPARISON_OPS
-                for n in _ast.walk(compare_node(deep))
-                if isinstance(n, _ast.Compare)
-            )
-        )
-        self.assertIn(weight_msg, refused(deep))
-
-        # Right-nested: ONE operand of a single comparison per level, so 2d + 1
-        # links (41 at depth 20, under the link budget) but ~2^d materialized
-        # nodes, since each operand Column is referenced twice (3x for `==`) and
-        # the JVM converter does not memoize.
-        def right_nested_src(depth, leaf="(x < 0)", op="<"):
+        def right_nested(depth, leaf="(x < 0)", op="<"):
+            # ONE operand of a single comparison per level: 2d + 1 links but ~2^d
+            # materialized nodes, since a link reads each operand Column twice
+            # (four times for `==`) and the JVM converter does not memoize.
             src = leaf
             for _ in range(depth):
-                src = "%s %s (%s)" % (leaf, op, src)
+                src = f"{leaf} {op} ({src})"
             return src
 
-        lower(right_nested_src(2))
-        deep_right = right_nested_src(20)
-        self.assertLess(
-            sum(
-                len(n.ops)
-                for n in _ast.walk(compare_node(deep_right))
-                if isinstance(n, _ast.Compare)
-            ),
-            _MAX_LOWERED_COMPARISONS,
-        )
-        self.assertIn(weight_msg, refused(deep_right))
-        self.assertIn(weight_msg, refused(right_nested_src(20, "(x == 1)", "==")))
+        def chain_nested(depth):
+            src = "(x < 0)"
+            for _ in range(depth):
+                src = f"((x < 0) < {src} < (x < 0))"
+            return src
 
-        # The same nest routed through a ternary, in each of its three positions:
-        # the ternary's Column is referenced as often as any other operand.
-        ternary_shapes = {
-            "test": "(x < 0) {op} (True if ({inner}) else False)",
-            "body": "(x < 0) {op} (({inner}) if x > 0 else (x < 0))",
-            "else": "(x < 0) {op} ((x < 0) if x > 0 else ({inner}))",
-        }
-        for position, shape in ternary_shapes.items():
+        lowers = [
+            chain(_MAX_COMPARISON_OPS),
+            right_nested(2),
+            chain_nested(2),
+            # One level over a ternary.
+            "(x < 0) < ((x < 1) if x > 0 else (x < 2))",
+            # `is None` reads only its subject, so an identity nest stays linear.
+            "(" * 20 + "x < 0" + ") is None" * 20,
+        ]
+        # The nest routed through a ternary: its Column is read as often as any
+        # other operand, in each of its three positions.
+        ternary_nests = []
+        for shape in (
+            "(x < 0) {op} (True if ({inner}) else False)",
+            "(x < 0) {op} (({inner}) if x > 0 else (x < 0))",
+            "(x < 0) {op} ((x < 0) if x > 0 else ({inner}))",
+        ):
             for op in ("<", "=="):
-                with self.subTest(position=position, op=op):
-                    src = "(x < 0)"
-                    for _ in range(20):
-                        src = shape.format(op=op, inner=src)
-                    self.assertIn(weight_msg, refused(src))
-        # One level over a ternary still lowers.
-        lower("(x < 0) < ((x < 1) if x > 0 else (x < 2))")
-        # `is None` reads only its subject, so an identity nest stays linear.
-        lower("(" * 20 + "x < 0" + ") is None" * 20)
-
-        # Modulo repeats its divisor five times, so right nesting must hit the
-        # materialized bound even with no nested comparison links.
+                src = "(x < 0)"
+                for _ in range(20):
+                    src = shape.format(op=op, inner=src)
+                ternary_nests.append(src)
+        # Modulo reads its divisor five times and `len` its argument twice.
         modulo = "x"
         for _ in range(10):
             modulo = f"x % ({modulo})"
-        self.assertIn(weight_msg, refused(f"({modulo}) > 0"))
-        len_source = f"len('a' if ({right_nested_src(9)}) else 'b') > 0"
-        self.assertIn(weight_msg, refused(len_source))
+        too_heavy = [
+            right_nested(20),
+            right_nested(20, "(x == 1)", "=="),
+            chain_nested(10),
+            *ternary_nests,
+            f"({modulo}) > 0",
+            f"len('a' if ({right_nested(9)}) else 'b') > 0",
+        ]
+        with self.sql_conf(_TRANSPILE_ON):
+            for src in lowers:
+                with self.subTest(src=src[:40]):
+                    u, reasons = build(src)
+                    self.assertTrue(u.transpiled, reasons)
+            u, reasons = build(chain(_MAX_COMPARISON_OPS + 1))
+            self.assertEqual([], u.transpiled)
+            self.assertIn("operators", reasons)
+            for src in too_heavy:
+                with self.subTest(src=src[:40]):
+                    u, reasons = build(src)
+                    self.assertEqual([], u.transpiled)
+                    self.assertIn(weight_msg, reasons)
 
-        # `in` / `not in` are refused outright; membership needs its own NULL
-        # analysis and is deferred to its own ticket.
-        self.assertIn("`in` / `not in`", refused("x in (1, 2)"))
+            # A NaN-guarded `==` reads each operand four times. Charged three, this
+            # nest weighs under the bound while every float option expands past it.
+            nan_nest = "x == z"
+            for _ in range(7):
+                nan_nest = f"(x if ({nan_nest}) else y) == z"
+            u, reasons = build(nan_nest, "x, y, z")
+            self.assertEqual([], u.transpiled)
+            self.assertIn(weight_msg, reasons)
+
+            # The bound is on the sum over the options, since every one is built
+            # on each application: this body is under it, its 18 options are not.
+            many_options = f"({right_nested(10, '(a < 0)')}) if (b == b) else (c == c)"
+            self.assertLess(weight(many_options), _MAX_MATERIALIZED_WEIGHT)
+            u, reasons = build(many_options, "a, b, c")
+            self.assertEqual([], u.transpiled)
+            self.assertIn(weight_msg, reasons)
+
+        # Each chain operand is lowered once however deep the chains nest, so the
+        # driver-side work is linear in the source rather than doubling per level.
+        class CountingTranspiler(CatalystTranspiler):
+            links = 0
+
+            def _lower_compare_pair(self, *args):
+                self.links += 1
+                return super()._lower_compare_pair(*args)
+
+        src = chain_nested(6)
+        fdef = _ast.parse(f"def f(x):\n    return {src}").body[0]
+        transpiler = CountingTranspiler()
+        transpiler._transpile_from_ast(src, fdef, fdef, ["x"], BooleanType(), {0: "integer"})
+        self.assertEqual(
+            transpiler.links,
+            sum(len(n.ops) for n in _ast.walk(fdef) if isinstance(n, _ast.Compare)),
+        )
+
+    def test_udf_transpile_many_flat_comparisons(self):
+        # A body with many comparisons and none chained or nested grows linearly,
+        # so no bound refuses it.
+        terms = " or ".join(f"(x == {i})" for i in range(200))
+        any_of = self._function_from_source(f"def f(x):\n    return {terms}\n")
+        self.assertEqual(
+            self._vals(any_of, BooleanType(), "a long", [(0,), (199,), (200,), (None,)]),
+            [True, True, False, False],
+        )
+        tests = " else ".join(f"{i} if x == {i}" for i in range(129))
+        ladder = self._function_from_source(f"def f(x):\n    return {tests} else -1\n")
+        # Only built: in tests the optimizer's iteration limit is an error, and
+        # a CASE WHEN nested this deep runs past it.
+        with self.sql_conf(_TRANSPILE_ON):
+            self._transpiled_udf(ladder, LongType())
 
     def test_udf_transpile_multi_row(self):
         # Every other transpile test uses a 1-row DataFrame; this one runs
@@ -1583,15 +1490,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_falls_back_for_none_in_boolop(self):
         # Python's `None and x` short-circuits to None, which Spark's three-valued
-        # `null AND false` (false) does not reproduce. Any operand
-        # `_is_never_null_boolean` cannot prove non-NULL -- a literal None, or a
-        # ternary with a None branch -- must fall back rather than diverge.
-        import warnings as _warnings
-
-        from pyspark.sql.types import StructField, StructType
+        # `null AND false` (false) does not reproduce. An operand before the last
+        # that `_is_never_null_boolean` cannot prove non-NULL -- a literal None, or
+        # a ternary with a None branch -- must fall back rather than diverge, and
+        # so must a literal None in last position.
+        long_schema = "a long"
 
         def none_and(x):
             return None and (x > 0)
+
+        def and_none(x):
+            return (x > 0) and None
 
         def nullable_ternary_and(x):
             return (True if x > 0 else None) and (x > 0)
@@ -1599,27 +1508,51 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def nullable_ternary_body_and(x):
             return (None if x > 0 else True) and (x < 0)
 
-        long_schema = StructType([StructField("a", LongType(), nullable=True)])
         with self.sql_conf(_TRANSPILE_ON):
-            for func in (none_and, nullable_ternary_and, nullable_ternary_body_and):
-                with self.subTest(func=func.__name__):
-                    with _warnings.catch_warnings(record=True):
-                        _warnings.simplefilter("always")
-                        pudf = UserDefinedFunction(func, BooleanType())
-                    self.assertEqual(
-                        [],
-                        pudf.transpiled,
-                        f"{func.__name__}: nullable and/or operand must not transpile",
-                    )
-            pudf = UserDefinedFunction(none_and, BooleanType())
-            df = self.spark.createDataFrame([Row(a=-5)], schema=long_schema)
-            [result] = df.select(pudf("a")).collect()
-            self.assertIsNone(result[0])
             # Python returns None for x = 5 where an `&` fold would say False.
-            pudf = UserDefinedFunction(nullable_ternary_body_and, BooleanType())
-            df = self.spark.createDataFrame([Row(a=5)], schema=long_schema)
-            [result] = df.select(pudf("a")).collect()
-            self.assertIsNone(result[0])
+            for func, value in [
+                (none_and, -5),
+                (and_none, 5),
+                (nullable_ternary_and, -5),
+                (nullable_ternary_body_and, 5),
+            ]:
+                with self.subTest(func=func.__name__):
+                    pudf, _ = self._fallback_reason(func, BooleanType())
+                    df = self.spark.createDataFrame([(value,)], long_schema)
+                    [result] = df.select(pudf("a")).collect()
+                    self.assertIsNone(result[0])
+
+    def test_udf_transpile_nullable_last_boolop_operand(self):
+        # `and` / `or` return their last operand as it is, so it may be NULL:
+        # `false AND v` is false without evaluating `v` and `true AND v` is `v`,
+        # like Python's `False and v` and `True and v`. Returned, as an if/ternary
+        # test and under `not`, with both the `&` and the CASE WHEN fold.
+        B, L = BooleanType(), LongType()
+        rows = [(1, 1), (1, -1), (-1, 1), (-1, -1), (-1, None)]
+        and_last = lambda x, y: (x > 0) and (True if y > 0 else None)  # noqa: E731
+        or_last = lambda x, y: (x < 0) or (True if y > 0 else None)  # noqa: E731
+        guarded = lambda x, y: (x > 0) and ((y < 10) if y is not None else None)  # noqa: E731
+        as_test = lambda x, y: 1 if ((x > 0) and (True if y > 0 else None)) else 0  # noqa: E731
+        negated = lambda x, y: not ((x > 0) and (True if y > 0 else None))  # noqa: E731
+        chain_and = lambda x, y: (0 < x < 10) and (True if y > 0 else None)  # noqa: E731
+        chain_negated = lambda x, y: not ((0 < x < 10) and (True if y > 0 else None))  # noqa: E731
+        cases = [
+            (and_last, B, rows),
+            (or_last, B, rows),
+            (guarded, B, rows + [(1, None)]),
+            (as_test, L, rows),
+            (negated, B, rows),
+            (chain_and, B, rows),
+            (chain_negated, B, rows),
+        ]
+        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
+            conf = {"spark.sql.codegen.factoryMode": factory_mode}
+            for i, (func, return_type, func_rows) in enumerate(cases):
+                with self.subTest(factory_mode=factory_mode, case=i), self.sql_conf(conf):
+                    self.assertEqual(
+                        self._vals(func, return_type, "a long, b long", func_rows),
+                        [func(*row) for row in func_rows],
+                    )
 
     def test_udf_transpile_falls_back_for_uncastable_return_type(self):
         # The lowered expression is cast to the declared return type; a return
@@ -2101,6 +2034,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             warnings.simplefilter("always")
             u = UserDefinedFunction(func, return_type)
         return u, " ".join(str(w.message) for w in caught)
+
+    @staticmethod
+    def _function_from_source(source):
+        """Define ``f`` from generated ``source`` so ``inspect.getsource`` can read it back."""
+        import linecache
+
+        filename = f"<transpile-test-{len(linecache.cache)}>"
+        linecache.cache[filename] = (len(source), None, source.splitlines(True), filename)
+        namespace: dict = {}
+        exec(compile(source, filename, "exec"), namespace)
+        return namespace["f"]
 
     def _fallback_reason(self, func, return_type=LongType()):
         """Assert ``func`` produced no options, and hand back the reason it reported."""
