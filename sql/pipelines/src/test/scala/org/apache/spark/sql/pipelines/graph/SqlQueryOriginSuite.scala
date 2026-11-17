@@ -152,7 +152,7 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ))
   }
 
-  test("Preceeding comment is ommitted from sql text") {
+  test("Preceding comment is omitted from sql text") {
     val sqlQueryOrigins = SqlGraphRegistrationContext.splitSqlFileIntoQueries(
       spark,
       sqlFilePath = "file.sql",
