@@ -144,10 +144,6 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
 
 T = TypeVar("T")
 
-# Must match SparkSession.GET_OR_CREATE_MARKER on the Scala side, so that a dataset stored by
-# one of them is recognised as complete by the other.
-_GET_OR_CREATE_MARKER = "_spark_getorcreate_success"
-
 
 class classproperty(Generic[T]):
     """Same as Python's @property decorator, but for class attributes.
@@ -1993,7 +1989,7 @@ class SparkSession(SparkConversionMixin):
 
         return DataFrame(self._jsparkSession.table(tableName), self)
 
-    def getOrCreate(self, path: str, create: Callable[[], DataFrame]) -> DataFrame:
+    def getOrCreateDataFrame(self, path: str, create: Callable[[], DataFrame]) -> DataFrame:
         """Returns the :class:`DataFrame` stored at ``path``, computing and storing it first if
         it is not already there. The dataset is stored as Parquet.
 
@@ -2025,19 +2021,13 @@ class SparkSession(SparkConversionMixin):
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     path = os.path.join(d, "ids")
-        ...     spark.getOrCreate(path, lambda: spark.range(3)).count()
-        ...     spark.getOrCreate(path, lambda: spark.range(100)).count()
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(3)).count()
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(100)).count()
         3
         3
         """
-        assert self._jvm is not None
-        marker = self._jvm.org.apache.hadoop.fs.Path(path, _GET_OR_CREATE_MARKER)
-        fs = marker.getFileSystem(self._jsc.hadoopConfiguration())
-        if not fs.exists(marker):
-            # Overwrite instead of failing,  so that a partial dataset left by an interrupted write
-            # is replaced instead of blocking every later run.
-            create().write.mode("overwrite").parquet(path)
-            fs.create(marker, True).close()
+        if not self._jsparkSession.isDataFrameMaterialized(path):
+            self._jsparkSession.materializeDataFrame(create()._jdf, path)
         return self.read.parquet(path)
 
     @property

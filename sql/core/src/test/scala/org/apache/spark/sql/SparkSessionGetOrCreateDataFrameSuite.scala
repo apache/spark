@@ -22,14 +22,14 @@ import java.io.File
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkSessionGetOrCreateSuite extends QueryTest with SharedSparkSession {
+class SparkSessionGetOrCreateDataFrameSuite extends QueryTest with SharedSparkSession {
 
   private val threeRows = Seq(Row(0L), Row(1L), Row(2L))
 
   test("SPARK-60775: computes and stores the dataset on the first call") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      checkAnswer(spark.getOrCreate(path, () => spark.range(3).toDF()), threeRows)
+      checkAnswer(spark.getOrCreateDataFrame(path, () => spark.range(3).toDF()), threeRows)
       assert(new File(dir, classic.SparkSession.GET_OR_CREATE_MARKER).exists())
       checkAnswer(spark.read.parquet(path), threeRows)
     }
@@ -44,8 +44,8 @@ class SparkSessionGetOrCreateSuite extends QueryTest with SharedSparkSession {
         spark.range(3).toDF()
       }
 
-      checkAnswer(spark.getOrCreate(path, () => create()), threeRows)
-      checkAnswer(spark.getOrCreate(path, () => create()), threeRows)
+      checkAnswer(spark.getOrCreateDataFrame(path, () => create()), threeRows)
+      checkAnswer(spark.getOrCreateDataFrame(path, () => create()), threeRows)
       assert(calls === 1)
     }
   }
@@ -55,7 +55,7 @@ class SparkSessionGetOrCreateSuite extends QueryTest with SharedSparkSession {
       val path = dir.getCanonicalPath
       spark.range(100).toDF().write.parquet(path)
 
-      checkAnswer(spark.getOrCreate(path, () => spark.range(3).toDF()), threeRows)
+      checkAnswer(spark.getOrCreateDataFrame(path, () => spark.range(3).toDF()), threeRows)
     }
   }
 }

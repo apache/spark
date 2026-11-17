@@ -351,7 +351,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * `path` does not already hold a complete dataset:
    *
    * {{{
-   *   val df = spark.getOrCreate(path, () => expensiveTransform(src))
+   *   val df = spark.getOrCreateDataFrame(path, () => expensiveTransform(src))
    * }}}
    *
    * Completeness is tracked with a marker file written under `path` once the data is stored, so a
@@ -364,7 +364,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 4.4.0
    */
   @ClassicOnly
-  def getOrCreate(path: String, create: () => DataFrame): DataFrame
+  def getOrCreateDataFrame(path: String, create: () => DataFrame): DataFrame
 
   /* ------------------------------- *
    |  Methods for creating DataSets  |
