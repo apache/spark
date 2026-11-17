@@ -20,10 +20,10 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, EqualTo, Expression, If, Literal, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, ReplaceData, RowLevelWrite, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, OPERATION_COLUMN}
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, OPERATION_COLUMN}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
@@ -97,10 +97,10 @@ private[sql] class TableConstraintResolution(
       catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql))
 
   /**
-   * For each generated column whose value was provided by the write, add a CheckInvariant that
-   * validates the column value matches the generation expression. Generated columns Spark
-   * auto-filled are excluded: ResolveOutputRelation marks them in the table output and their
-   * values are correct by construction.
+   * Validates generated values against their generation expressions. For INSERT,
+   * WriteOutputResolution marks auto-filled columns so their checks can be skipped. UPDATE and
+   * MERGE validate every generated column in updated or inserted rows, including computed values.
+   * DELETE, delta delete records and unchanged rows copied by group-based writes are exempt.
    */
   private def buildGeneratedColumnConstraints(
       r: DataSourceV2Relation,
@@ -154,6 +154,10 @@ private[sql] class TableConstraintResolution(
               val isDelete = EqualTo(
                 UnresolvedAttribute.quoted(OPERATION_COLUMN), Literal(DELETE_OPERATION))
               If(isDelete, Literal.TrueLiteral, invariant)
+            case _: ReplaceData =>
+              val isCopy = EqualTo(
+                UnresolvedAttribute.quoted(OPERATION_COLUMN), Literal(COPY_OPERATION))
+              If(isCopy, Literal.TrueLiteral, invariant)
             case _ => invariant
           }
         }

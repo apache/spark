@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, If, KnownNotNull, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, LogicalPlan, MergeRows, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
@@ -74,6 +74,33 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   // aligning UPDATE assignments assigns each column that is not updated to itself
   protected def isSelfAssignment(assignment: Assignment): Boolean = {
     assignment.key.semanticEquals(assignment.value)
+  }
+
+  /** Projects shared assignment values only on rows to which the assignments apply. */
+  protected def projectAssignmentValues(
+      plan: LogicalPlan,
+      assignments: Seq[Assignment],
+      cond: Expression = Literal.TrueLiteral): (LogicalPlan, Seq[Assignment]) = {
+    val shared = assignments.collect {
+      case Assignment(attr: Attribute, value: SharedAssignmentValue) =>
+        val guarded = if (cond == Literal.TrueLiteral) value.child else If(cond, value.child, attr)
+        value.id -> Alias(guarded, attr.name)()
+    }
+    if (shared.isEmpty) {
+      return (plan, assignments)
+    }
+
+    val valuesById = shared.toMap
+    val newAssignments = assignments.map { assignment =>
+      val value = assignment.value.transformDown {
+        case shared: SharedAssignmentValue =>
+          val attr = valuesById(shared.id).toAttribute
+          // The assignment only reads this value where its guard is true.
+          if (!shared.nullable && attr.nullable) KnownNotNull(attr) else attr
+      }
+      assignment.copy(value = value)
+    }
+    (Project(plan.output ++ shared.map(_._2), plan), newAssignments)
   }
 
   // the output of the target table may include metadata columns (see removeMetadataAssignments)

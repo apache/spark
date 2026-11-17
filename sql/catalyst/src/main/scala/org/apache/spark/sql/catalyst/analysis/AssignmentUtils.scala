@@ -41,9 +41,11 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * <p>
    * This method processes and reorders given assignments so that each target column gets
    * an expression it should be set to. If a column does not have a matching assignment,
-   * it will be set to its current value. For example, if one passes table attributes c1, c2
+   * an ordinary column will be set to its current value. For example, with table attributes c1, c2
    * and an assignment c2 = 1, this method will return c1 = c1, c2 = 1. This allows Spark to
-   * construct an updated version of a row.
+   * construct an updated version of a row. Omitted generated columns instead receive
+   * [[GeneratedColumnAssignmentValue]] placeholders, which
+   * [[RowLevelAssignmentResolution.resolveGeneratedColumnAssignments]] must replace before writing.
    * <p>
    * This method also handles updates to nested columns. If there is an assignment to a particular
    * nested field, this method will construct a new struct with one field updated preserving other
@@ -61,7 +63,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
    *                                     ANALYSIS (default) rejects an unsafe cast at analysis
    *                                     time; RUNTIME rejects invalid values at execution time.
-   * @param generatedColumns top-level column names whose omitted values must be generated
+   * @param generatedColumns names of the target table's top-level generated columns
    * @return aligned update assignments that match table attributes
    */
   def alignUpdateAssignments(
@@ -102,10 +104,11 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * Aligns insert assignments to match table columns.
    * <p>
    * This method processes and reorders given assignments so that each target column gets
-   * an expression it should be set to. There must be exactly one assignment for each top-level
-   * attribute and its value must be compatible.
+   * one compatible value. Omitted ordinary columns use their defaults or NULL when allowed.
    * <p>
    * Insert assignments cannot refer to nested columns.
+   * Omitted generated columns receive [[GeneratedColumnAssignmentValue]] placeholders, which
+   * [[RowLevelAssignmentResolution.resolveGeneratedColumnAssignments]] must replace before writing.
    *
    * @param attrs table attributes
    * @param assignments insert assignments to align
@@ -114,7 +117,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param ansiStoreAssignmentCastCheck when the ANSI store-assignment cast check runs:
    *                                     ANALYSIS (default) rejects an unsafe cast at analysis
    *                                     time; RUNTIME rejects invalid values at execution time.
-   * @param generatedColumns omitted columns whose values must be generated from the inserted row
+   * @param generatedColumns names of the target table's top-level generated columns
    * @return aligned insert assignments that match table attributes
    */
   def alignInsertAssignments(
@@ -142,8 +145,10 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       val resolvedValue = if (matchingAssignments.isEmpty && generatedColumns.contains(attr.name)) {
         GeneratedColumnAssignmentValue(attr.dataType, attr.nullable)
       } else if (matchingAssignments.isEmpty) {
+        val useNullAsDefault = conf.useNullsForMissingDefaultColumnValues &&
+          (conf.generatedColumnAllowNullableIngest || generatedColumns.isEmpty)
         val defaultExpr = getDefaultValueExprOrNullLit(
-          attr, conf.useNullsForMissingDefaultColumnValues)
+          attr, useNullAsDefault)
         if (defaultExpr.isEmpty) {
           errors += s"No assignment for '${attr.name}'"
         }
@@ -420,6 +425,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
   }
 }
 
-/** Placeholder for an omitted generated value in an UPDATE or MERGE assignment. */
+/**
+ * An omitted generated value, replaced by
+ * [[RowLevelAssignmentResolution.resolveGeneratedColumnAssignments]] after assignment alignment.
+ */
 private[sql] case class GeneratedColumnAssignmentValue(dataType: DataType, nullable: Boolean)
   extends LeafExpression with Unevaluable

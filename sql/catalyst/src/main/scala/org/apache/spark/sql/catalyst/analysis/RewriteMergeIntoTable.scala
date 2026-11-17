@@ -69,12 +69,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           // only unmatched source rows that match the condition are appended to the table
           val joinPlan = Join(filteredSource, r, LeftAnti, Some(cond), JoinHint.NONE)
 
-          val output = insertAction.assignments.map(_.value)
+          val (projectedPlan, projectedAssignments) =
+            projectAssignmentValues(joinPlan, insertAction.assignments)
+          val output = projectedAssignments.map(_.value)
           val outputColNames = r.output.map(_.name)
           val projectList = output.zip(outputColNames).map { case (expr, name) =>
             Alias(expr, name)()
           }
-          val project = Project(projectList, joinPlan)
+          val project = Project(projectList, projectedPlan)
 
           InsertOnlyMerge(r, project)
 

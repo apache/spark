@@ -25,7 +25,9 @@ import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression =>
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GeneratedColumnDMLSuite extends QueryTest with SharedSparkSession {
 
   private val targetTableName = "rowlevelcat.t"
@@ -73,15 +75,51 @@ class GeneratedColumnDMLSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, "p", 5, 10L), Row(2, "p", 2, 4L), Row(3, "q", 3, 6L)))
   }
 
-  testDML("UPDATE evaluates a nondeterministic assignment once") { props =>
-    createTable("a DOUBLE, g DOUBLE GENERATED ALWAYS AS (a + a)", props)
+  testDML("UPDATE shares fresh nondeterministic assignments with generated values") { props =>
+    createTable("id STRING, g STRING GENERATED ALWAYS AS (upper(id))", props)
+    sql(s"INSERT INTO $targetTableName (pk, part, id) VALUES (1, 'p', 'a'), (2, 'p', 'b')")
+    Seq("", "WHERE pk = 1", "WHERE pk IN (SELECT 1)").foreach { condition =>
+      sql(s"""UPDATE $targetTableName
+             |SET id = reflect('java.util.UUID', 'randomUUID') $condition
+             |""".stripMargin)
+      checkAnswer(sql(s"SELECT g <=> upper(id) FROM $targetTableName"), Seq(Row(true), Row(true)))
+    }
+  }
+
+  testDML("UPDATE shares random assignments with conditional generated values") { props =>
+    createTable("a DOUBLE, b INT, g DOUBLE GENERATED ALWAYS AS (IF(b > 0, a, 0))", props)
+    sql(s"""INSERT INTO $targetTableName (pk, part, a, b)
+           |SELECT id, 'p', 0.5D, IF(id % 2 = 0, 1, -1) FROM range(0, 12, 1, 1)
+           |""".stripMargin)
+    sql(s"UPDATE $targetTableName SET a = rand(17)")
+    checkAnswer(sql(s"SELECT g <=> IF(b > 0, a, 0) FROM $targetTableName"),
+      Seq.fill(12)(Row(true)))
+  }
+
+  testDML("UPDATE evaluates a shared deterministic UDF once per updated row") { props =>
+    createTable("a INT, g INT GENERATED ALWAYS AS (a * 2)", props)
     sql(s"INSERT INTO $targetTableName (pk, part, a) VALUES (1, 'p', 1), (2, 'p', 2)")
-    sql(s"UPDATE $targetTableName SET a = rand()")
-    val rows = spark.table(targetTableName).collect()
-    assert(rows.length == 2)
-    rows.foreach { row =>
-      assert(row.getDouble(2) >= 0 && row.getDouble(2) < 1)
-      assert(row.getDouble(3) == row.getDouble(2) * 2)
+    val calls = spark.sparkContext.longAccumulator
+    withUserDefinedFunction("count_assignment" -> true) {
+      spark.udf.register("count_assignment", (value: Int) => {
+        calls.add(1)
+        value + 1
+      })
+      Seq("pk = 1", "pk IN (SELECT 1)").foreach { condition =>
+        calls.reset()
+        sql(s"UPDATE $targetTableName SET a = count_assignment(a) WHERE $condition")
+        assert(calls.value == 1L)
+      }
+    }
+    checkAnswer(spark.table(targetTableName), Seq(Row(1, "p", 3, 6), Row(2, "p", 2, 4)))
+  }
+
+  Seq("pk = 1", "pk IN (SELECT 1)").foreach { condition =>
+    testDML(s"UPDATE guards shared assignments on copied rows ($condition)") { props =>
+      createTable("a INT, g INT GENERATED ALWAYS AS (a * 2)", props)
+      sql(s"INSERT INTO $targetTableName (pk, part, a) VALUES (1, 'p', 2), (2, 'p', 0)")
+      sql(s"UPDATE $targetTableName SET a = 10 DIV a WHERE $condition")
+      checkAnswer(spark.table(targetTableName), Seq(Row(1, "p", 5, 10), Row(2, "p", 0, 0)))
     }
   }
 
@@ -257,7 +295,7 @@ class GeneratedColumnDMLSuite extends QueryTest with SharedSparkSession {
   testDML("DML enforces NOT NULL on generated values") { props =>
     createTable("a INT, g INT GENERATED ALWAYS AS (a + 1) NOT NULL", props)
     sql(s"INSERT INTO $targetTableName (pk, part, a) VALUES (1, 'p', 1)")
-    sql(s"UPDATE $targetTableName SET a = 10")
+    sql(s"UPDATE $targetTableName SET a = 10 WHERE pk = 1")
     checkAnswer(spark.table(targetTableName), Row(1, "p", 10, 11))
     val updateError = intercept[Exception] {
       sql(s"UPDATE $targetTableName SET a = NULL")
@@ -307,6 +345,53 @@ class GeneratedColumnDMLSuite extends QueryTest with SharedSparkSession {
       checkAnswer(spark.table(targetTableName),
         Seq(Row(1, "p", 1, 2), Row(2, "p", 20, 40), Row(3, "p", 30, 60)))
     }
+
+    testDML(s"insert-only MERGE rejects invalid generated values ($multipleActions)") { props =>
+      createTable("a INT, g INT GENERATED ALWAYS AS (a * 2)", props)
+      sql(s"INSERT INTO $targetTableName (pk, part, a) VALUES (1, 'p', 1)")
+      val lastAction = if (multipleActions) {
+        "WHEN NOT MATCHED THEN INSERT (pk, part, a) VALUES (s.pk, 'p', s.a)"
+      } else {
+        ""
+      }
+      val error = intercept[Exception] {
+        sql(s"""MERGE INTO $targetTableName t
+               |USING (SELECT * FROM VALUES (2, 20) AS v(pk, a)) s ON t.pk = s.pk
+               |WHEN NOT MATCHED AND s.pk = 2
+               |  THEN INSERT (pk, part, a, g) VALUES (s.pk, 'p', s.a, 999)
+               |$lastAction
+               |""".stripMargin)
+      }
+      assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
+      checkAnswer(spark.table(targetTableName), Row(1, "p", 1, 2))
+    }
+  }
+
+  testDML("insert-only MERGE shares nondeterministic assignments with generated values") { props =>
+    createTable("id STRING, a DOUBLE, b INT, " +
+      "g STRING GENERATED ALWAYS AS (upper(id)), " +
+      "h DOUBLE GENERATED ALWAYS AS (IF(b > 0, a, 0))", props)
+    sql(s"""MERGE INTO $targetTableName t
+           |USING (SELECT id AS pk FROM range(0, 12, 1, 1)) s ON t.pk = s.pk
+           |WHEN NOT MATCHED THEN INSERT (pk, part, id, a, b)
+           |  VALUES (s.pk, 'p', reflect('java.util.UUID', 'randomUUID'),
+           |    rand(17), IF(s.pk % 2 = 0, 1, -1))
+           |""".stripMargin)
+    checkAnswer(sql(s"""SELECT g <=> upper(id), h <=> IF(b > 0, a, 0)
+                       |FROM $targetTableName""".stripMargin), Seq.fill(12)(Row(true, true)))
+  }
+
+  testDML("UPDATE validates nested assignments to generated structs") { props =>
+    createTable("a INT, " +
+      "g STRUCT<x: INT, y: INT> GENERATED ALWAYS AS (named_struct('x', a, 'y', a + 1))", props)
+    sql(s"INSERT INTO $targetTableName (pk, part, a) VALUES (1, 'p', 1)")
+    val error = intercept[Exception] {
+      sql(s"UPDATE $targetTableName SET g.x = 999")
+    }
+    assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
+    checkAnswer(spark.table(targetTableName), Row(1, "p", 1, Row(1, 2)))
+    sql(s"UPDATE $targetTableName SET g.x = a")
+    checkAnswer(spark.table(targetTableName), Row(1, "p", 1, Row(1, 2)))
   }
 
   testDML("MERGE star actions generate columns omitted from the source") { props =>
@@ -368,6 +453,72 @@ class GeneratedColumnDMLSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, "p", 5, 10, 6), Row(2, "p", null, null, 1)))
   }
 
+  Seq(false, true).foreach { allowNullable =>
+    testDML(s"MERGE respects nullable ingest for missing ordinary columns ($allowNullable)") {
+      props =>
+        createTable("a INT, b STRING, g INT GENERATED ALWAYS AS (a * 2)", props)
+        sql(s"INSERT INTO $targetTableName (pk, part, a, b) VALUES (1, 'p', 1, 'present')")
+        withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> allowNullable.toString) {
+          val insert = s"INSERT INTO $targetTableName (pk, part, a) VALUES (2, 'p', 2)"
+          if (!allowNullable) {
+            intercept[AnalysisException] { sql(insert) }
+          }
+          Seq("single", "multiple", "full", "star").foreach { shape =>
+            val extraAction = shape match {
+              case "multiple" =>
+                "WHEN NOT MATCHED AND s.pk < 0 " +
+                  "THEN INSERT (pk, part, a) VALUES (s.pk, s.part, s.a)"
+              case "full" => "WHEN MATCHED THEN UPDATE SET a = s.a"
+              case _ => ""
+            }
+            val merge = if (shape == "star") "MERGE WITH SCHEMA EVOLUTION" else "MERGE"
+            val insertAction = if (shape == "star") {
+              "WHEN NOT MATCHED THEN INSERT *"
+            } else {
+              "WHEN NOT MATCHED THEN INSERT (pk, part, a) VALUES (s.pk, s.part, s.a)"
+            }
+            val statement = s"""$merge INTO $targetTableName t
+                               |USING (SELECT 2 AS pk, 'q' AS part, 2 AS a) s ON t.pk = s.pk
+                               |$extraAction
+                               |$insertAction
+                               |""".stripMargin
+            if (allowNullable) {
+              sql(statement)
+              checkAnswer(spark.table(targetTableName),
+                Seq(Row(1, "p", 1, "present", 2), Row(2, "q", 2, null, 4)))
+              sql(s"DELETE FROM $targetTableName WHERE part = 'q'")
+            } else {
+              val error = intercept[AnalysisException] { sql(statement) }
+              assert(error.getCondition ==
+                "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+              assert(error.getMessage.contains("No assignment for 'b'"))
+            }
+          }
+        }
+    }
+
+    testDML(s"MERGE preserves declared defaults with nullable ingest $allowNullable") { props =>
+      createTable("a INT, b STRING DEFAULT 'default', g INT GENERATED ALWAYS AS (a * 2)", props)
+      withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> allowNullable.toString) {
+        sql(s"""MERGE INTO $targetTableName t USING (SELECT 1 AS pk) s ON t.pk = s.pk
+               |WHEN NOT MATCHED THEN INSERT (pk, part, a) VALUES (s.pk, 'p', 2)
+               |""".stripMargin)
+      }
+      checkAnswer(spark.table(targetTableName), Row(1, "p", 2, "default", 4))
+    }
+  }
+
+  testDML("MERGE keeps nullable ingest for connectors that compute generated values") { props =>
+    createTable("a INT, b STRING, g INT GENERATED ALWAYS AS (a * 2)",
+      props + ("generate-column-values-on-write" -> "false"))
+    withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> "false") {
+      sql(s"""MERGE INTO $targetTableName t USING (SELECT 1 AS pk) s ON t.pk = s.pk
+             |WHEN NOT MATCHED THEN INSERT (pk, part, a, g) VALUES (s.pk, 'p', 2, 999)
+             |""".stripMargin)
+    }
+    checkAnswer(spark.table(targetTableName), Row(1, "p", 2, null, 999))
+  }
+
   testDML("DML generation uses stored expression settings and hides internal metadata") { props =>
     createTable("a STRING, g STRING GENERATED ALWAYS AS (concat(a, 'x\\\\y'))", props)
     sql(s"INSERT INTO $targetTableName (pk, part, a) VALUES (1, 'p', 'a')")
@@ -397,6 +548,67 @@ class GeneratedColumnDMLSuite extends QueryTest with SharedSparkSession {
            |""".stripMargin)
     checkAnswer(spark.table(targetTableName),
       Seq(Row(1, "p", "e   ", "e   "), Row(2, "p", "f   ", "f   ")))
+  }
+
+  for {
+    config <- Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key,
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)
+    dataType <- Seq("CHAR(5)", "VARCHAR(5)")
+  } {
+    testDML(s"DML validates generated $dataType values with $config") { props =>
+      withSQLConf(config -> "true") {
+        createTable(s"s $dataType, b $dataType GENERATED ALWAYS AS (s)", props)
+        def padded(value: String): String = if (dataType.startsWith("CHAR")) {
+          value.padTo(5, ' ')
+        } else {
+          value
+        }
+        sql(s"INSERT INTO $targetTableName (pk, part, s) VALUES (1, 'p', 'x')")
+        sql(s"UPDATE $targetTableName SET s = 'y'")
+        checkAnswer(spark.table(targetTableName), Row(1, "p", padded("y"), padded("y")))
+        sql(s"""MERGE INTO $targetTableName t
+               |USING (SELECT * FROM VALUES (1, 'z'), (2, 'w') AS v(pk, s)) s ON t.pk = s.pk
+               |WHEN MATCHED THEN UPDATE SET s = s.s
+               |WHEN NOT MATCHED THEN INSERT (pk, part, s) VALUES (s.pk, 'p', s.s)
+               |""".stripMargin)
+        checkAnswer(spark.table(targetTableName),
+          Seq(Row(1, "p", padded("z"), padded("z")), Row(2, "p", padded("w"), padded("w"))))
+        sql(s"""MERGE INTO $targetTableName t
+               |USING (SELECT * FROM VALUES (1, 'v'), (3, 'u') AS v(pk, s)) s ON t.pk = s.pk
+               |WHEN MATCHED THEN UPDATE SET s = s.s, b = s.s
+               |WHEN NOT MATCHED THEN INSERT (pk, part, s, b) VALUES (s.pk, 'p', s.s, s.s)
+               |""".stripMargin)
+        checkAnswer(spark.table(targetTableName), Seq(
+          Row(1, "p", padded("v"), padded("v")), Row(2, "p", padded("w"), padded("w")),
+          Row(3, "p", padded("u"), padded("u"))))
+      }
+    }
+  }
+
+  testDML("DML preserves copied generated values after the session time zone changes") { props =>
+    createTable("a INT, ts TIMESTAMP, d DATE GENERATED ALWAYS AS (CAST(ts AS DATE))", props)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      sql(s"""INSERT INTO $targetTableName (pk, part, a, ts) VALUES
+             |(1, 'p', 0, TIMESTAMP'2024-01-01 20:00:00'),
+             |(2, 'p', 0, TIMESTAMP'2024-01-01 10:00:00')
+             |""".stripMargin)
+    }
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      sql(s"UPDATE $targetTableName SET a = 1 WHERE pk = 2")
+      sql(s"UPDATE $targetTableName SET a = 2 WHERE pk IN (SELECT 2)")
+      sql(s"""MERGE INTO $targetTableName t
+             |USING (SELECT * FROM VALUES (2), (3) AS v(pk)) s ON t.pk = s.pk
+             |WHEN MATCHED THEN UPDATE SET a = 3
+             |WHEN NOT MATCHED THEN INSERT (pk, part, a, ts)
+             |  VALUES (s.pk, 'p', 3, TIMESTAMP'2024-01-01 10:00:00')
+             |""".stripMargin)
+      checkAnswer(sql(s"SELECT pk, a, CAST(d AS STRING) FROM $targetTableName"),
+        Seq(Row(1, 0, "2024-01-01"), Row(2, 3, "2024-01-01"), Row(3, 3, "2024-01-01")))
+      val error = intercept[Exception] {
+        sql(s"UPDATE $targetTableName SET a = 4, d = DATE'2024-01-01' WHERE pk = 1")
+      }
+      assert(error.getMessage.contains("CHECK_CONSTRAINT_VIOLATION"))
+    }
   }
 
   testDML("DML leaves generation to connectors without the write capability") { props =>
@@ -430,6 +642,37 @@ class GeneratedColumnDMLSuite extends QueryTest with SharedSparkSession {
              |""".stripMargin)
       checkAnswer(spark.table(targetTableName),
         Seq(Row(1, "p", true, true), Row(2, "p", false, false)))
+    }
+  }
+
+  for {
+    (expression, condition) <- Seq("sum(a)" -> None,
+      "missing" -> Some("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+    nullable <- Seq(false, true)
+  } {
+    testDML(s"DML reports invalid stored generation text $expression (nullable: $nullable)") {
+      props =>
+        createTable(Array(
+          Column.create("a", IntegerType),
+          Column.create("g", IntegerType, nullable, null, expression, null)), props)
+        Seq(
+          s"UPDATE $targetTableName SET a = 1",
+          s"""MERGE INTO $targetTableName t USING (SELECT 1 AS pk) s ON t.pk = s.pk
+             |WHEN MATCHED THEN UPDATE SET a = 1
+             |WHEN NOT MATCHED THEN INSERT (pk, part, a) VALUES (s.pk, 'p', 1)
+             |""".stripMargin).foreach { statement =>
+          val error = intercept[AnalysisException] { sql(statement) }
+          assert(error.getCondition == "INVALID_GENERATED_COLUMN_EXPRESSION")
+          assert(error.getMessageParameters.get("columnName") == "`g`")
+          assert(error.getMessageParameters.get("tableName").contains("`t`"))
+          assert(error.getMessageParameters.get("expression") == expression)
+          condition match {
+            case Some(expected) =>
+              assert(error.getCause.asInstanceOf[AnalysisException].getCondition == expected)
+            case _ =>
+              assert(error.getMessageParameters.get("reason").contains("scalar value"))
+          }
+        }
     }
   }
 

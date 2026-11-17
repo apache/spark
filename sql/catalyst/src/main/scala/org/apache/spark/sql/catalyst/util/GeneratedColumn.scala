@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -207,19 +208,7 @@ object GeneratedColumn {
           StoredExpressionText.analyzeStrict(expr, input, analyzer)
         } catch {
           case error: AnalysisException =>
-            val tableName = (relation.catalog, relation.identifier) match {
-              case (Some(catalog), Some(ident)) =>
-                toSQLId(Seq(catalog.name) ++ ident.namespace.toSeq :+ ident.name)
-              case _ => toSQLId(relation.table.name())
-            }
-            throw new AnalysisException(
-              errorClass = "INVALID_GENERATED_COLUMN_EXPRESSION",
-              messageParameters = Map(
-                "tableName" -> tableName,
-                "columnName" -> toSQLId(colName),
-                "expression" -> sql,
-                "reason" -> error.getMessage),
-              cause = Some(error))
+            throw invalidExpression(error.getMessage, Some(error))
         }
       }
     }
@@ -235,11 +224,38 @@ object GeneratedColumn {
         prepare: Expression => Expression): Expression = {
       def inSession: Expression = {
         val value = prepare(toCatalyst(StoredExpressionText.parseWithSessionAnsi))
-        val Project(Seq(Alias(resolved, _)), _) =
-          analyzer(Project(Seq(Alias(value, colName)()), LocalRelation(input)))
-        resolved
+        val plan = analyzer(Project(Seq(Alias(value, colName)()), LocalRelation(input)))
+        plan match {
+          case Project(Seq(alias: Alias), _: LocalRelation) if alias.resolved => alias.child
+          case _ =>
+            try {
+              SimpleAnalyzer.checkAnalysis(plan)
+            } catch {
+              case error: AnalysisException =>
+                throw invalidExpression(error.getMessage, Some(error))
+            }
+            throw invalidExpression("The expression must resolve to a scalar value")
+        }
       }
       analyze(prepare(toCatalyst()), inSession, input, analyzer)
+    }
+
+    private def invalidExpression(
+        reason: String,
+        cause: Option[Throwable] = None): AnalysisException = {
+      val tableName = (relation.catalog, relation.identifier) match {
+        case (Some(catalog), Some(ident)) =>
+          toSQLId(Seq(catalog.name) ++ ident.namespace.toSeq :+ ident.name)
+        case _ => toSQLId(relation.table.name())
+      }
+      new AnalysisException(
+        errorClass = "INVALID_GENERATED_COLUMN_EXPRESSION",
+        messageParameters = Map(
+          "tableName" -> tableName,
+          "columnName" -> toSQLId(colName),
+          "expression" -> sql,
+          "reason" -> reason),
+        cause = cause)
     }
   }
 

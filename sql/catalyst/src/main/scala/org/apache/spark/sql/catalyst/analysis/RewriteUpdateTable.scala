@@ -132,7 +132,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // the plan output may include metadata columns at the end
     // that's why the number of assignments may not match the number of plan output columns
-    val assignedValues = assignments.map(_.value).toIndexedSeq
+    val (projectedPlan, projectedAssignments) = projectAssignmentValues(plan, assignments, cond)
+    val assignedValues = projectedAssignments.map(_.value).toIndexedSeq
     val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
       if (index < assignedValues.size) {
         val assignedExpr = assignedValues(index)
@@ -151,7 +152,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     val writeOp = If(cond, Literal(UPDATE_OPERATION), Literal(COPY_OPERATION))
     val operationCol = Alias(writeOp, OPERATION_COLUMN)()
-    Project(operationCol +: updatedValues, plan)
+    Project(operationCol +: updatedValues, projectedPlan)
   }
 
   // build a rewrite plan for sources that support row deltas
@@ -197,7 +198,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // the plan output may include immutable metadata columns at the end
     // that's why the number of assignments may not match the number of plan output columns
-    val assignedValues = assignments.map(_.value).toIndexedSeq
+    val (projectedPlan, projectedAssignments) = projectAssignmentValues(plan, assignments)
+    val assignedValues = projectedAssignments.map(_.value).toIndexedSeq
     val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
       if (index < assignedValues.size) {
         val assignedExpr = assignedValues(index)
@@ -218,7 +220,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     val operationType = Alias(Literal(UPDATE_OPERATION), OPERATION_COLUMN)()
 
-    Project(Seq(operationType) ++ updatedValues ++ originalRowIdValues, plan)
+    Project(Seq(operationType) ++ updatedValues ++ originalRowIdValues, projectedPlan)
   }
 
   private def buildDeletesAndInserts(
@@ -230,11 +232,13 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       MetadataAttribute.isValid(attr.metadata)
     }
     val deleteOutput = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs)
-    val insertOutput = deltaReinsertOutput(assignments, metadataAttrs)
+    val (projectedPlan, projectedAssignments) =
+      projectAssignmentValues(matchedRowsPlan, assignments)
+    val insertOutput = deltaReinsertOutput(projectedAssignments, metadataAttrs)
     val outputs = Seq(deleteOutput, insertOutput)
     val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
     val attrs = operationTypeAttr +: matchedRowsPlan.output
     val expandOutput = generateExpandOutput(attrs, outputs)
-    Expand(outputs, expandOutput, matchedRowsPlan)
+    Expand(outputs, expandOutput, projectedPlan)
   }
 }
