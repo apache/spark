@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal, TimeWindow}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
@@ -254,10 +254,13 @@ object DataTypeUtils {
   }
 
   /**
-   * Convert a StructField to a AttributeReference.
+   * Convert a StructField to a AttributeReference. The attribute keeps no window lengths, since
+   * the schema can come from a table or a user whose rows other queries wrote; see
+   * [[TimeWindow.withoutDuration]].
    */
   def toAttribute(field: StructField): AttributeReference =
-    AttributeReference(field.name, field.dataType, field.nullable, field.metadata)()
+    AttributeReference(field.name, field.dataType, field.nullable,
+      TimeWindow.withoutDuration(field.metadata))()
 
   /**
    * Convert a [[StructType]] into a Seq of [[AttributeReference]].

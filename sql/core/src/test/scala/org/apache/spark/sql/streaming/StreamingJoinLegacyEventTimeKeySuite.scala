@@ -105,7 +105,8 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
   private def lags(df: DataFrame, planned: Boolean = false): Map[String, EventTimeLag] = {
     val plan = if (planned) df.queryExecution.optimizedPlan else df.queryExecution.analyzed
     val names = plan.flatMap(_.output).map(a => a.exprId -> a.name).toMap
-    StreamingJoinHelper.findEventTimeLags(plan, planned).lags
+    StreamingJoinHelper.findEventTimeLags(plan, planned,
+      StreamingJoinHelper.findUnwatermarkedUnionColumns(df.queryExecution.analyzed)).lags
       .filter(_._2 != EventTimeLag.zero).map { case (id, lag) => names(id) -> lag }
   }
 
@@ -246,8 +247,9 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
           Execute { query =>
             val plan = query.lastExecution.optimizedPlan
             val names = plan.flatMap(_.output).map(a => a.exprId -> a.name).toMap
-            result = StreamingJoinHelper.findEventTimeLags(plan, planned = true).lags
-              .filter(_._2 != EventTimeLag.zero).map { case (id, lag) => names(id) -> lag }
+            result = StreamingJoinHelper.findEventTimeLags(plan, planned = true,
+              StreamingJoinHelper.findUnwatermarkedUnionColumns(query.lastExecution.analyzed))
+              .lags.filter(_._2 != EventTimeLag.zero).map { case (id, lag) => names(id) -> lag }
           })
       }
       result
@@ -259,31 +261,59 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
   }
 
   // The earlier join outputs at from its left input and bt from its right one. Its condition
-  // relates them where every row that it outputs with a non-NULL bt satisfies at = bt: in an
-  // inner join, and in a left outer join, which pads bt's input. Otherwise the key keeps its
-  // bound, as in Spark 4.3, but a range condition gets none from it.
+  // relates them where every row that it outputs with a non-NULL bt satisfies a conjunct that
+  // bounds bt from below by at plus constants: in an inner join, and in a left outer join, which
+  // pads bt's input. Otherwise the key keeps its bound, as in Spark 4.3, but a range condition gets
+  // none from it.
   Seq(
-    ("ak = bk AND at = bt", "inner", true),
-    ("ak = bk AND at = bt", "left_outer", true),
-    ("ak = bk AND at = bt", "right_outer", false),
-    ("ak = bk AND at = bt", "full_outer", false),
-    ("ak = bk", "inner", false),
-    ("ak = bk AND at <= bt", "inner", false)
-  ).foreach { case (condition, joinType, related) =>
-    val outcome = if (related) "has lag zero" else "is unrelated"
+    ("ak = bk AND at = bt", "inner", Some(0)),
+    ("ak = bk AND at = bt", "left_outer", Some(0)),
+    ("ak = bk AND at = bt", "right_outer", None),
+    ("ak = bk AND at = bt", "full_outer", None),
+    ("ak = bk", "inner", None),
+    ("ak = bk AND at <= bt", "inner", Some(0)),
+    ("ak = bk AND bt BETWEEN at AND at + INTERVAL 1 HOUR", "left_outer", Some(0)),
+    ("ak = bk AND bt > at - INTERVAL 1 MINUTE", "inner", Some(60)),
+    ("ak = bk AND bt = at - INTERVAL 1 MINUTE", "inner", Some(60)),
+    ("ak = bk AND bt <= at", "inner", None)
+  ).foreach { case (condition, joinType, lagSeconds) =>
+    val outcome = lagSeconds.map(s => s"has lag $s seconds").getOrElse("is unrelated")
     test(s"window over another input's event time after a $joinType join on $condition " +
         outcome) {
       val left = eventTimeInput(MemoryStream[(Int, Int)], "a")
         .join(eventTimeInput(MemoryStream[(Int, Int)], "b"), expr(condition), joinType)
         .withColumn("lk", $"ak")
         .withColumn("lw", window($"bt", "10 seconds"))
-      val expected = if (related) {
-        Map.empty
-      } else {
-        Map("bt" -> EventTimeLag.unrelated, "lw" -> EventTimeLag.unrelated)
+      val expected = lagSeconds match {
+        case Some(0) => Map.empty
+        case Some(seconds) => Map("bt" -> lagOf(seconds), "lw" -> lagOf(seconds))
+        case None => Map("bt" -> EventTimeLag.unrelated, "lw" -> EventTimeLag.unrelated)
       }
       assert(lags(joinWithRight(left)) === expected)
     }
+  }
+
+  // A tie by a shift whose whole days can move a time backward gives no bound.
+  test("window over another input's event time after a join on a day-shifted range is unbounded") {
+    val left = eventTimeInput(MemoryStream[(Int, Int)], "a")
+      .join(eventTimeInput(MemoryStream[(Int, Int)], "b"),
+        expr("ak = bk AND bt >= at - INTERVAL 1 DAY"))
+      .withColumn("lk", $"ak")
+      .withColumn("lw", window($"bt", "10 seconds"))
+    assert(lags(joinWithRight(left)) ===
+      Map("bt" -> EventTimeLag.unbounded, "lw" -> EventTimeLag.unbounded))
+  }
+
+  // B is the padded left input of an earlier right outer join, so a row has a NULL bt where no
+  // condition matched, and every non-NULL bt ties to at of the preserved input A.
+  test("column built from the padded input of an earlier right outer join has the shift as " +
+      "its lag") {
+    val joined = eventTimeInput(MemoryStream[(Int, Int)], "b")
+      .join(eventTimeInput(MemoryStream[(Int, Int)], "a"), expr("ak = bk AND at = bt"),
+        "right_outer")
+      .select($"ak", $"at", $"bk", $"bt")
+    val left = withShifted(joined, "b").withColumn("lk", $"ak").withColumn("lw", $"bs")
+    assert(lags(joinWithRight(left, copy)) === Map("bs" -> lagOf(20), "lw" -> lagOf(20)))
   }
 
   test("union takes the largest lag of its inputs") {
@@ -308,7 +338,8 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
     val second = Join(Union(Seq(windowed, shifted)), right, Inner, None, JoinHint.NONE)
     val lw = windowed.output(2).exprId
     def lag(plan: LogicalPlan): Option[EventTimeLag] =
-      StreamingJoinHelper.findEventTimeLags(plan, planned = false).lags.get(lw)
+      StreamingJoinHelper.findEventTimeLags(plan, planned = false,
+        StreamingJoinHelper.findUnwatermarkedUnionColumns(plan)).lags.get(lw)
     assert(lag(first) === Some(EventTimeLag.zero))
     assert(lag(second) === Some(lagOf(20)))
     assert(lag(Union(Seq(first, second))) === Some(lagOf(20)))
