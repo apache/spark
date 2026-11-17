@@ -92,7 +92,7 @@ case class MergeRowsExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions(processPartition)
+    child.execute().mapPartitionsWithIndex(processPartition)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -403,13 +403,16 @@ case class MergeRowsExec(
     }
   }
 
-  private def processPartition(rowIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+  private def processPartition(
+      partitionIndex: Int,
+      rowIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
     val isSourceRowPresentPred = createPredicate(isSourceRowPresent)
     val isTargetRowPresentPred = createPredicate(isTargetRowPresent)
 
-    val matchedInstructionExecs = planInstructions(matchedInstructions)
-    val notMatchedInstructionExecs = planInstructions(notMatchedInstructions)
-    val notMatchedBySourceInstructionExecs = planInstructions(notMatchedBySourceInstructions)
+    val matchedInstructionExecs = planInstructions(matchedInstructions, partitionIndex)
+    val notMatchedInstructionExecs = planInstructions(notMatchedInstructions, partitionIndex)
+    val notMatchedBySourceInstructionExecs =
+      planInstructions(notMatchedBySourceInstructions, partitionIndex)
 
     val cardinalityValidator = if (checkCardinality) {
       val rowIdOrdinal = child.output.indexWhere(attr => conf.resolver(attr.name, ROW_ID))
@@ -427,24 +430,29 @@ case class MergeRowsExec(
     mergeIterator.filter(_ != null)
   }
 
-  private def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
-    UnsafeProjection.create(exprs, child.output)
+  private def createProjection(exprs: Seq[Expression], partitionIndex: Int): UnsafeProjection = {
+    val projection = UnsafeProjection.create(exprs, child.output)
+    projection.initialize(partitionIndex)
+    projection
   }
 
   private def createPredicate(expr: Expression): BasePredicate = {
     GeneratePredicate.generate(expr, child.output)
   }
 
-  private def planInstructions(instructions: Seq[Instruction]): Seq[InstructionExec] = {
+  private def planInstructions(
+      instructions: Seq[Instruction],
+      partitionIndex: Int): Seq[InstructionExec] = {
     instructions.map {
       case Keep(context, cond, output) =>
-        KeepExec(context, createPredicate(cond), createProjection(output))
+        KeepExec(context, createPredicate(cond), createProjection(output, partitionIndex))
 
       case Discard(cond) =>
         DiscardExec(createPredicate(cond))
 
       case Split(cond, output, otherOutput) =>
-        SplitExec(createPredicate(cond), createProjection(output), createProjection(otherOutput))
+        SplitExec(createPredicate(cond), createProjection(output, partitionIndex),
+          createProjection(otherOutput, partitionIndex))
 
       case other =>
         throw new AnalysisException(

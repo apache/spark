@@ -2050,6 +2050,26 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("single-insert MERGE initializes nondeterministic values without whole-stage codegen") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        spark.range(2, 3).selectExpr("CAST(id AS INT) AS pk")
+          .createOrReplaceTempView("source")
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s ON t.pk = s.pk
+             |WHEN NOT MATCHED AND (s.pk > 0 OR 1 DIV 0 = 1) THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, CAST(rand() * 0 AS BIGINT), 'hr')
+             |""".stripMargin)
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(Row(1, 100L, "hr"), Row(2, 0L, "hr")))
+      }
+    }
+  }
+
   test("merge resolves and aligns columns by name") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
