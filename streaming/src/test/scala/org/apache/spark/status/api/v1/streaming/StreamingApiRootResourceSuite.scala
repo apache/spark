@@ -16,7 +16,7 @@
  */
 package org.apache.spark.status.api.v1.streaming
 
-import java.net.URI
+import java.net.{URI, URL}
 
 import scala.collection.mutable.Queue
 import scala.concurrent.duration._
@@ -45,7 +45,7 @@ class StreamingApiRootResourceSuite extends SparkFunSuite {
       ssc.start()
       val sc = ssc.sparkContext
       val baseUrl = s"${sc.uiWebUrl.get}/api/v1/applications/${sc.applicationId}/streaming"
-      def url(path: String) = new URI(s"$baseUrl/$path").toURL
+      def url(path: String): URL = new URI(s"$baseUrl/$path").toURL
 
       eventually(timeout(10.seconds), interval(100.milliseconds)) {
         assert(TestUtils.httpResponseCode(url("statistics")) === 200)
