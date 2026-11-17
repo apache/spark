@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, MergeRows, Rep
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryBaseTable, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.MergeSummary
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{CommandExecutionMode, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, InsertOnlyMergeExec, MergeRowsExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
@@ -1989,8 +1989,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }""")
-        Seq((1, 10L, "hr"), (2, 20L, "hr"))
-          .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+        spark.range(1, 3).selectExpr("CAST(id AS INT) AS pk", "id * 10 AS salary", "'hr' AS dep")
+          .createOrReplaceTempView("source")
 
         Seq(
           "s.salary > CAST('5' AS BIGINT)",
@@ -2005,17 +2005,47 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
                |""".stripMargin
           val parsed = spark.sessionState.sqlParser.parsePlan(merge)
-          val qe = spark.sessionState.executePlan(parsed)
-          val joins = qe.analyzed.collect {
-            case j @ Join(_: Filter, _, LeftAnti, _, _) => j
+          val qe = spark.sessionState.executePlan(parsed, CommandExecutionMode.SKIP)
+          assert(qe.analyzed.collect { case m: MergeRows => m }.size == 1)
+          val joins = qe.optimizedPlan.collect {
+            case j @ Join(_, _, LeftAnti, _, _) => j
           }
-          assert(joins.size == 1)
+          assert(joins.size == 1, qe.optimizedPlan.treeString)
+          assert(joins.head.left.collect { case f: Filter => f }.size == 1)
           assert(qe.optimizedPlan.collect { case m: MergeRows => m }.isEmpty)
 
           sql(merge)
           checkAnswer(sql(s"SELECT * FROM $tableNameAsString"),
             Seq(Row(1, 100L, "hr"), Row(2, 20L, "hr")))
         }
+      }
+    }
+  }
+
+  gridTest("single-insert MERGE accepts nondeterministic values")(Seq(false, true)) {
+      failingCondition =>
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        val sourceKey = if (failingCondition) 1 else 2
+        Seq((sourceKey, "hr")).toDF("pk", "dep").createOrReplaceTempView("source")
+        val condition = if (failingCondition) "1 DIV 0 = 1" else "s.pk > 0"
+
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED AND $condition THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, CAST(rand() * 0 AS BIGINT), s.dep)
+             |""".stripMargin)
+
+        val expected = if (failingCondition) {
+          Seq(Row(1, 100L, "hr"))
+        } else {
+          Seq(Row(1, 100L, "hr"), Row(2, 0L, "hr"))
+        }
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), expected)
       }
     }
   }
