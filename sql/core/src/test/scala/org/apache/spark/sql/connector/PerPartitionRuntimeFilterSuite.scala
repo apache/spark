@@ -92,14 +92,12 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
   }
 
   // Replaces the catalog's `bucket` with a function that computes `produce`.
-  private def createBucketFunction(
-      deterministic: Boolean = true,
-      types: Array[DataType] = BucketFunction.inputTypes())(
+  private def createBucketFunction(deterministic: Boolean = true)(
       produce: InternalRow => Integer): Unit = {
     catalog.clearFunctions()
     catalog.createFunction(Identifier.of(Array.empty, "bucket"), new UnboundFunction {
       override def bind(inputType: StructType): BoundFunction = new ScalarFunction[Integer] {
-        override def inputTypes(): Array[DataType] = types
+        override def inputTypes(): Array[DataType] = BucketFunction.inputTypes()
         override def resultType(): DataType = BucketFunction.resultType()
         override def name(): String = BucketFunction.name()
         override def canonicalName(): String = BucketFunction.canonicalName()
@@ -201,6 +199,14 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
 
   private def perPartitionSemiJoins(df: DataFrame): Seq[Join] =
     df.queryExecution.optimizedPlan.collect(perPartitionSemiJoin)
+
+  // Whether `InsertPerPartitionRuntimeFilterJoins` changed the plan of `df`. It does when the plan
+  // has placeholders, even if none gets a semi join.
+  private def replacedPlaceholders(df: DataFrame): Boolean = {
+    df.queryExecution.optimizedPlan
+    df.queryExecution.tracker.rules.get(InsertPerPartitionRuntimeFilterJoins.ruleName)
+      .exists(_.numEffectiveInvocations > 0)
+  }
 
   // The semi joins of per-partition bloom filters of `df`, in its subqueries too.
   private def perPartitionSemiJoinsWithSubqueries(df: DataFrame): Seq[Join] =
@@ -757,6 +763,7 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
         "WHERE d.flag = 1")
       val plan = df.queryExecution.optimizedPlan
       assert(plan.collect { case union: Union => union }.size == 1, plan)
+      assert(replacedPlaceholders(df), s"test setup: the rule must have had placeholders:\n$plan")
       assert(perPartitionSemiJoins(df).isEmpty, plan)
       assert(!plan.containsPattern(PER_PARTITION_RUNTIME_FILTER_SUBQUERY), plan)
       checkAnswer(df, expectedRows ++ Seq(Row(1, 11), Row(3, 31)))
@@ -860,9 +867,38 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
           "JOIN testcat.ns.dim d ON f.id = d.id WHERE d.flag = 1) a, (SELECT max(f.v) s " +
           "FROM testcat.ns.fact f JOIN testcat.ns.dim d ON f.id = d.id WHERE d.flag = 0) b")
         val plan = df.queryExecution.optimizedPlan
+        assert(replacedPlaceholders(df), s"test setup: the rule must have had placeholders:\n$plan")
         assert(perPartitionSemiJoinsWithSubqueries(df).isEmpty, plan)
         assert(!plan.containsPattern(PER_PARTITION_RUNTIME_FILTER_SUBQUERY), plan)
         checkAnswer(df, Seq(Row(180, 60)))
+      }
+    }
+  }
+
+  test("a subplan that holds a placeholder merges with one that holds none on the same level") {
+    // `MergeSubplans` puts a subplan above the level of the subqueries it reads. The plan of the
+    // placeholder of `a` reads one, but is not merged itself. So `a` is on the level of `b`, which
+    // gets no placeholder, since the number threshold allows only one. With filter propagation
+    // through joins and symmetric filter propagation, the two merge. The placeholder then gives way
+    // to `true`, and `fact` is read once.
+    createTables()
+    createTable("t", Array(Column.create("flag", IntegerType)), Array.empty)
+    sql("INSERT INTO testcat.ns.t VALUES (1), (0)")
+    withSQLConf(
+        MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true",
+        MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true",
+        RUNTIME_FILTER_NUMBER_THRESHOLD.key -> "1") {
+      withoutGlobalBloomFilter("dim") {
+        val df = sql("SELECT * FROM (SELECT sum(f.v) s FROM testcat.ns.fact f " +
+          "JOIN testcat.ns.dim d ON f.id = d.id " +
+          "WHERE d.flag = (SELECT max(flag) FROM testcat.ns.t)) a, (SELECT max(f.v) m " +
+          "FROM testcat.ns.fact f JOIN testcat.ns.dim d ON f.id = d.id " +
+          "WHERE d.flag = (SELECT max(flag) FROM testcat.ns.t)) b")
+        assert(replacedPlaceholders(df),
+          s"test setup: the rule must have had placeholders:\n${df.queryExecution.optimizedPlan}")
+        checkAnswer(df, Seq(Row(180, 90)))
+        val plan = df.queryExecution.executedPlan
+        assert(executedScans(plan, "fact").size == 1, plan)
       }
     }
   }
@@ -969,6 +1005,9 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       val df = sql("SELECT * FROM (SELECT sum(f.v) s FROM testcat.ns.fact f " +
         "JOIN testcat.ns.dim d ON f.id = d.id WHERE d.flag = 1) a, (SELECT max(f.v) m " +
         "FROM testcat.ns.fact f JOIN testcat.ns.dim d ON f.id = d.id WHERE d.flag = 1) b")
+      // The merged subplan is inlined into each subquery that reads it.
+      assert(perPartitionSemiJoinsWithSubqueries(df).distinct.size == 1,
+        df.queryExecution.optimizedPlan)
       checkAnswer(df, Seq(Row(180, 90)))
       val plan = df.queryExecution.executedPlan
       assert(executedScans(plan, "fact").size == 1, plan)
@@ -1013,6 +1052,9 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       val df = sql("SELECT (SELECT sum(f.v) FROM testcat.ns.fact f JOIN testcat.ns.dim d " +
         "ON f.id = d.id WHERE d.flag = 1), (SELECT max(f.v) FROM testcat.ns.fact f " +
         "JOIN testcat.ns.dim d ON f.id = d.id WHERE d.flag = 1)")
+      // The merged subplan is inlined into each subquery that reads it.
+      assert(perPartitionSemiJoinsWithSubqueries(df).distinct.size == 1,
+        df.queryExecution.optimizedPlan)
       checkAnswer(df, Seq(Row(180, 90)))
       val executedPlan = df.queryExecution.executedPlan
       assert(executedScans(executedPlan, "fact").size == 1, executedPlan)
@@ -1093,9 +1135,8 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
 
   test("no per-partition bloom filter when the column is wider than the transform's input type") {
     // This `bucket` takes an INT value, which the BIGINT column would have to be narrowed to.
-    createBucketFunction(types = Array(IntegerType, IntegerType)) { input =>
-      Math.floorMod(input.getInt(1), input.getInt(0))
-    }
+    catalog.clearFunctions()
+    catalog.createFunction(Identifier.of(Array.empty, "bucket"), UnboundIntBucketFunction)
     createTables()
     checkNoRuntimeFilter(join())
   }
