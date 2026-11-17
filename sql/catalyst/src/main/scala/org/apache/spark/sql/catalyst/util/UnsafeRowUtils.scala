@@ -243,16 +243,32 @@ object UnsafeRowUtils {
    * If every type is binary-stable, equality is a plain binary comparison. Otherwise (e.g.
    * a STRING with a non-binary collation), values that are semantically equal can have
    * different binary representations, so the checker falls back to an ordering-based
-   * comparison that applies to all fields. Byte-identical rows compare equal under every
-   * collation and SQL ordering, so the fallback checks the bytes first to keep the common
-   * same-spelling case cheap.
+   * comparison that applies to all fields.
+   *
+   * `checkBytesFirst` controls whether that fallback compares the key bytes before the
+   * ordering, and is only observable for non-binary-stable keys: byte-identical rows
+   * compare equal under every collation and SQL ordering, so checking the bytes first
+   * answers the common same-spelling case without the ordering. Pass `true` at grouping
+   * sites whose previous comparison was byte equality (the window group limit, the pandas
+   * window evaluator, and the session-window iterators) -- there the pre-check keeps
+   * same-spelling keys as cheap as they were before. Pass `false` at sites that already
+   * compared collated keys with the interpreted ordering (sort-based aggregation and
+   * WindowExec's evaluator) -- every check with different bytes would run a failed byte
+   * comparison before the same ordering comparison, which is strictly extra work for
+   * inputs whose checks mostly mismatch.
    */
-  def rowEqualityChecker(dataTypes: Seq[DataType]): (UnsafeRow, UnsafeRow) => Boolean = {
+  def rowEqualityChecker(
+      dataTypes: Seq[DataType],
+      checkBytesFirst: Boolean): (UnsafeRow, UnsafeRow) => Boolean = {
     if (dataTypes.forall(isBinaryStable)) {
       (key1, key2) => key1.equals(key2)
     } else {
       val ordering = InterpretedOrdering.forSchema(dataTypes.toIndexedSeq)
-      (key1, key2) => key1.equals(key2) || ordering.compare(key1, key2) == 0
+      if (checkBytesFirst) {
+        (key1, key2) => key1.equals(key2) || ordering.compare(key1, key2) == 0
+      } else {
+        (key1, key2) => ordering.compare(key1, key2) == 0
+      }
     }
   }
 }

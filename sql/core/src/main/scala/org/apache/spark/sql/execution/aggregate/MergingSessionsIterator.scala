@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, MutableProjection, NamedExpression, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
@@ -106,6 +107,14 @@ class MergingSessionsIterator(
   private[this] val groupingWithoutSessionProjection: UnsafeProjection =
     UnsafeProjection.create(groupingWithoutSession, valueAttributes)
 
+  // A non-binary-stable grouping key (e.g. a collated STRING) makes the checker fall back
+  // to an ordering-based comparison, so differently spelled collation-equal keys land in
+  // the same group; the bytes are checked first, as this iterator previously compared
+  // grouping keys by bytes alone.
+  private[this] val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
+    UnsafeRowUtils.rowEqualityChecker(
+      groupingWithoutSession.map(_.dataType), checkBytesFirst = true)
+
   private[this] val sessionProjection: UnsafeProjection =
     UnsafeProjection.create(Seq(sessionExpression), valueAttributes)
 
@@ -164,7 +173,7 @@ class MergingSessionsIterator(
       val sessionEnd = getSessionEnd(sessionStruct)
 
       // Check if the current row belongs the current input row.
-      if (currentGroupingKey == groupingKey) {
+      if (groupKeyEqualityCheck(currentGroupingKey, groupingKey)) {
         if (sessionStart < getSessionStart(currentSession)) {
           errorOnIterator = true
           throw SparkException.internalError("Input iterator is not sorted based on session!")

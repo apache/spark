@@ -64,8 +64,11 @@ class WindowEvaluatorFactory(
         // Get all relevant projections.
         val result = createResultProjection(expressions)
         val grouping = UnsafeProjection.create(partitionSpec, childOutput)
+        // The base branch compared collated keys with the interpreted ordering alone, so
+        // the checker skips the byte pre-check: with mostly mismatched keys it would run a
+        // failed byte comparison before the same ordering comparison.
         val groupEqualityCheck =
-          UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType))
+          UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType), checkBytesFirst = false)
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = null

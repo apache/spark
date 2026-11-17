@@ -3464,8 +3464,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // Exercises the cached group-equality check at every kind of group boundary: group 'a'
     // ends under the limit (r <= 2 but only one row, so the limit is never reached), group
     // 'b' exceeds it (one row is skipped via skipRemainingRows), and group 'c' ends exactly
-    // at the limit. Mixed spellings keep the boundary checks on the collation comparison
-    // path. The default window group limit threshold (1000) already admits r <= 2.
+    // at the limit. Every group's rows mix spellings, so each boundary check -- including
+    // the check of the skipped row, which is spelled unlike the group's first row -- runs
+    // the collation comparison instead of hitting the byte-equality fast path. The default
+    // window group limit threshold (1000) already admits r <= 2.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -3473,7 +3475,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, i INT) USING PARQUET")
         sql("""INSERT INTO t VALUES
               |  ('a', 1),
-              |  ('b', 3), ('B', 4), ('b', 5),
+              |  ('b', 3), ('B', 4), ('B', 5),
               |  ('c', 6), ('C', 7)""".stripMargin)
         val df = sql("""SELECT s, i, r FROM (
                        |  SELECT s, i, ROW_NUMBER() OVER (PARTITION BY s ORDER BY i) AS r
@@ -3487,11 +3489,110 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             w.metrics("numOutputRows").value
         }.sum
         // Post-fix: 1 row from 'a', 2 from 'b' (its third row is skipped), 2 from 'c' = 5
-        // rows. Pre-fix byte grouping: every row is its own byte-group and fits within the
-        // limit, so all 6 rows are forwarded.
+        // rows. Pre-fix byte grouping: each spelling forms its own byte-group ('b' alone,
+        // then the two 'B' rows together), and every byte-group fits within the limit, so
+        // all 6 rows are forwarded.
         assert(finalForwarded == 5,
           s"WindowGroupLimitExec(Final) should forward 5 rows, got $finalForwarded")
       }
+    }
+  }
+
+  test("session window aggregation groups collated keys (plain and distinct aggregates)") {
+    // The two session-window grouping iterators compare the grouping key without the
+    // session column: MergingSessionsIterator for plain aggregates, and
+    // UpdatingSessionsIterator for DISTINCT aggregates (also used by pandas grouped
+    // aggregation over session windows). Before collation-aware grouping they compared
+    // that key by bytes, so a UTF8_LCASE key whose rows mix spellings split into one
+    // session per spelling ('foo' 10:00, 'FOO' 10:05, 'foo' 10:08 gave three one-row
+    // sessions), and the DISTINCT path hit its sortedness guard ("The iterator must be
+    // sorted by key and session start!") as soon as a spelling recurred after the first
+    // session of its byte-group. The session gap is asserted as end - start in seconds
+    // so the expectation does not depend on the session time zone.
+    withTable("t") {
+      sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, ts TIMESTAMP, v INT) USING PARQUET")
+      sql("""INSERT INTO t VALUES
+            |  ('foo', timestamp'2026-01-01 10:00:00', 1),
+            |  ('FOO', timestamp'2026-01-01 10:05:00', 2),
+            |  ('foo', timestamp'2026-01-01 10:08:00', 3)""".stripMargin)
+
+      checkAnswer(
+        sql("""SELECT s,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  count(*) FROM t
+              |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
+        // One merged session from 10:00 to 10:18; the grouping key reported is the first
+        // spelling of the collated group, which the sort on session start makes
+        // deterministic.
+        Row("foo", 1080L, 3L) :: Nil)
+
+      // count(DISTINCT v) plans UpdatingSessionsExec before the aggregation. The
+      // spelling of the reported key depends on shuffle arrival order, so only the
+      // session gap and the count are asserted.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  count(DISTINCT v) FROM t
+              |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 3L) :: Nil)
+    }
+
+    // UTF8_BINARY keeps 'foo' and 'FOO' in separate sessions; the two 'foo' rows still
+    // merge with each other (10:00 to 10:18 spans both).
+    withTable("t2") {
+      sql("CREATE TABLE t2 (s STRING, ts TIMESTAMP, v INT) USING PARQUET")
+      sql("""INSERT INTO t2 VALUES
+            |  ('foo', timestamp'2026-01-01 10:00:00', 1),
+            |  ('FOO', timestamp'2026-01-01 10:05:00', 2),
+            |  ('foo', timestamp'2026-01-01 10:08:00', 3)""".stripMargin)
+
+      checkAnswer(
+        sql("""SELECT s, count(*) FROM t2
+              |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
+        Row("foo", 2L) :: Row("FOO", 1L) :: Nil)
+    }
+  }
+
+  test("session window aggregation groups collated keys nested in a struct") {
+    // Same as the direct-key test, but the collated string sits inside the struct
+    // grouping key, so the binary-stability check must recurse into the struct to
+    // select the ordering-based comparison.
+    withTable("t") {
+      sql("""CREATE TABLE t (st STRUCT<s: STRING COLLATE UTF8_LCASE>, ts TIMESTAMP, v INT)
+            |  USING PARQUET""".stripMargin)
+      sql("""INSERT INTO t VALUES
+            |  (named_struct('s', 'foo'), timestamp'2026-01-01 10:00:00', 1),
+            |  (named_struct('s', 'FOO'), timestamp'2026-01-01 10:05:00', 2),
+            |  (named_struct('s', 'foo'), timestamp'2026-01-01 10:08:00', 3)""".stripMargin)
+
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  count(*) FROM t
+              |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 3L) :: Nil)
+
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  count(DISTINCT v) FROM t
+              |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 3L) :: Nil)
+    }
+
+    // Without the collation the struct keys are compared by bytes and the spellings
+    // stay in separate sessions.
+    withTable("t2") {
+      sql("CREATE TABLE t2 (st STRUCT<s: STRING>, ts TIMESTAMP, v INT) USING PARQUET")
+      sql("""INSERT INTO t2 VALUES
+            |  (named_struct('s', 'foo'), timestamp'2026-01-01 10:00:00', 1),
+            |  (named_struct('s', 'FOO'), timestamp'2026-01-01 10:05:00', 2),
+            |  (named_struct('s', 'foo'), timestamp'2026-01-01 10:08:00', 3)""".stripMargin)
+
+      checkAnswer(
+        sql("""SELECT count(*) FROM t2
+              |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+        Row(2L) :: Row(1L) :: Nil)
     }
   }
 }

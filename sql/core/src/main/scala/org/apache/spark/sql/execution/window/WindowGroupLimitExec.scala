@@ -209,9 +209,11 @@ class GroupedLimitIterator(
   // A non-binary-stable key (e.g. a collated STRING) makes the checker fall back to an
   // ordering-based comparison over all fields. Float and double keys arrive already
   // normalized by NormalizeFloatingNumbers (-0.0 becomes 0.0, NaNs are canonical), so
-  // both branches group them the same way WindowExec does.
+  // both branches group them the same way WindowExec does. The bytes are checked first:
+  // the base branch compared keys by bytes alone, so the pre-check keeps same-spelling
+  // keys as cheap as they were before the collation-aware grouping.
   private val groupEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
-    UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType))
+    UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType), checkBytesFirst = true)
 
   // Manage the stream and the grouping.
   var nextRow: UnsafeRow = null
@@ -220,7 +222,8 @@ class GroupedLimitIterator(
 
   // Result of the group-equality check for the row currently held in nextRow/nextGroup,
   // remembered so that the limit iterators' repeated hasNext calls evaluate the check at
-  // most once per fetched row; for collated keys each evaluation pays a comparison over
+  // most once per fetched row and current group (a row that starts a new group is checked
+  // again after the switch); for collated keys each evaluation pays a comparison over
   // all key fields. Whether the remembered answer is current is tracked with an explicit
   // flag rather than row identity, because the input iterator and the grouping projection
   // reuse their row objects. It is cleared whenever the input advances or the current

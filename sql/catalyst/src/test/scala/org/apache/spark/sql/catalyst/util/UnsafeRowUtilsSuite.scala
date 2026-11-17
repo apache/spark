@@ -403,23 +403,37 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
       projection(row).copy()
     }
 
-    val binaryChecker = UnsafeRowUtils.rowEqualityChecker(Seq(StringType, IntegerType))
-    val collatedChecker = UnsafeRowUtils.rowEqualityChecker(Seq(collatedString, IntegerType))
+    // The collated checker comes in two forms -- with and without the byte pre-check --
+    // which agree on which keys are equal and differ only in whether byte-identical keys
+    // take a shortcut past the interpreted ordering. Both are exercised below.
+    val binaryCheckers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(Seq(StringType, IntegerType), checkBytesFirst)
+    }
+    val collatedCheckers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(Seq(collatedString, IntegerType), checkBytesFirst)
+    }
 
-    // Byte-identical keys are equal under both checkers.
+    // Byte-identical keys are equal under every checker.
     val foo1 = key("foo", 1)
-    assert(binaryChecker(foo1, key("foo", 1)))
-    assert(collatedChecker(foo1, key("foo", 1)))
+    for (checker <- binaryCheckers ++ collatedCheckers) {
+      assert(checker(foo1, key("foo", 1)))
+    }
 
-    // 'foo' and 'FOO' differ in bytes, so they are equal only under the collated checker.
-    assert(!binaryChecker(foo1, key("FOO", 1)))
-    assert(collatedChecker(foo1, key("FOO", 1)))
+    // 'foo' and 'FOO' differ in bytes, so they are equal only under the collated checkers.
+    for (checker <- binaryCheckers) {
+      assert(!checker(foo1, key("FOO", 1)))
+    }
+    for (checker <- collatedCheckers) {
+      assert(checker(foo1, key("FOO", 1)))
+    }
 
-    // The collated checker still compares the remaining fields, and distinguishes values
+    // The collated checkers still compare the remaining fields, and distinguish values
     // that differ under the collation.
-    assert(!collatedChecker(foo1, key("foo", 2)))
-    assert(!collatedChecker(foo1, key("FOO", 2)))
-    assert(!collatedChecker(foo1, key("bar", 1)))
+    for (checker <- collatedCheckers) {
+      assert(!checker(foo1, key("foo", 2)))
+      assert(!checker(foo1, key("FOO", 2)))
+      assert(!checker(foo1, key("bar", 1)))
+    }
   }
 
   test("PaddingProvider handles endianness") {

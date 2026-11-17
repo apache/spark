@@ -107,8 +107,12 @@ class SortBasedAggregationIterator(
       sortedInputHasNewGroup = false
     }
 
+    // The base branch compared collated keys with the interpreted ordering alone, so the
+    // checker skips the byte pre-check: this iterator mostly compares a group's first row
+    // against rows of other groups, and with mostly unique keys every check would run a
+    // failed byte comparison before the same ordering comparison.
     groupKeyEqualityCheck =
-      UnsafeRowUtils.rowEqualityChecker(groupingAttributes.map(_.dataType))
+      UnsafeRowUtils.rowEqualityChecker(groupingAttributes.map(_.dataType), checkBytesFirst = false)
   }
 
   initialize()

@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 
 /**
@@ -51,13 +52,23 @@ class UpdatingSessionsIterator(
   private[this] val groupingWithoutSessionProjection: UnsafeProjection =
     UnsafeProjection.create(groupingWithoutSession, inputSchema)
 
+  // A non-binary-stable grouping key (e.g. a collated STRING) makes the checker fall back
+  // to an ordering-based comparison, so differently spelled collation-equal keys land in
+  // the same group; the bytes are checked first, as this iterator previously compared
+  // grouping keys by bytes alone. processedKeys below still hashes keys by bytes: once
+  // the group boundaries compare under the collation, a collation group cannot recur in
+  // correctly sorted input, so only a byte-identical key can hit the set.
+  private[this] val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
+    UnsafeRowUtils.rowEqualityChecker(
+      groupingWithoutSession.map(_.dataType), checkBytesFirst = true)
+
   private val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupingExpressions)
 
   private[this] val sessionProjection: UnsafeProjection =
     UnsafeProjection.create(Seq(sessionExpression), inputSchema)
 
   // Below three variables hold the information for "current session".
-  private var currentKeys: InternalRow = _
+  private var currentKeys: UnsafeRow = _
   private var currentSession: UnsafeRow = _
   private var rowsForCurrentSession: ExternalAppendOnlyUnsafeRowArray = _
 
@@ -109,7 +120,7 @@ class UpdatingSessionsIterator(
 
       if (currentKeys == null) {
         startNewSession(row, keys, sessionStruct)
-      } else if (keys != currentKeys) {
+      } else if (!groupKeyEqualityCheck(keys, currentKeys)) {
         closeCurrentSession(keyChanged = true)
         processedKeys.add(currentKeys)
         startNewSession(row, keys, sessionStruct)

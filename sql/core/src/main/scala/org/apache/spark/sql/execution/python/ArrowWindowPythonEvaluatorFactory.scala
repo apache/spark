@@ -258,7 +258,11 @@ class ArrowWindowPythonEvaluatorFactory(
         }
       )
       val grouping = UnsafeProjection.create(partitionSpec, childOutput)
-      val groupEqualityCheck = UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType))
+      // The base branch compared grouping keys by bytes alone, so the byte pre-check keeps
+      // same-spelling collated keys as cheap as they were before the collation-aware
+      // grouping.
+      val groupEqualityCheck = UnsafeRowUtils.rowEqualityChecker(
+        partitionSpec.map(_.dataType), checkBytesFirst = true)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
