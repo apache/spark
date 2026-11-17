@@ -221,6 +221,11 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("SPARK-61885: an argument with a valid uncorrelated EXISTS subquery") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkAnswer(sql("CALL cat.ns.sum(CAST(EXISTS (SELECT 1) AS INT), 2)"), Row(3) :: Nil)
+  }
+
   test("type coercion") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
     checkAnswer(sql("CALL cat.ns.sum(1, 2)"), Row(3) :: Nil)
