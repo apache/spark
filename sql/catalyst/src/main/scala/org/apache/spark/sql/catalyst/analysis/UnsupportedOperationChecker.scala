@@ -201,7 +201,8 @@ object UnsupportedOperationChecker extends Logging {
       if (SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
         EventTimeLags.none
       } else {
-        StreamingJoinHelper.findEventTimeLags(plan, planned = false)
+        StreamingJoinHelper.findEventTimeLags(plan, planned = false,
+          StreamingJoinHelper.findUnwatermarkedUnionColumns(plan))
       }
 
     /** Collect all the streaming aggregates in a sub plan */
@@ -722,6 +723,9 @@ object UnsupportedOperationChecker extends Logging {
     val leftKeys = keys.map(_._2).getOrElse(Nil)
     val rightKeys = keys.map(_._3).getOrElse(Nil)
 
+    // Eviction solves the optimized condition, so the check reads the same range bounds.
+    val foldedCondition = join.condition.map(StreamingJoinHelper.withFoldedConstants)
+
     def canEvictState(
         stateInput: LogicalPlan,
         otherInput: LogicalPlan,
@@ -733,7 +737,7 @@ object UnsupportedOperationChecker extends Logging {
       StreamingJoinHelper.getStateKeyWatermarkOrdinal(
         otherKeys, otherInput.output, Some(eventTimeLags)).isDefined ||
         StreamingJoinHelper.getStateValueWatermarkForLags(stateInput.outputSet, otherInput.output,
-          join.condition, Some(1000000), Some(eventTimeLags),
+          foldedCondition, Some(1000000), Some(eventTimeLags),
           exactForUnwatermarkedColumns).isDefined
     }
 
@@ -844,8 +848,10 @@ object UnsupportedOperationChecker extends Logging {
       val inexactNote = requiredSides.filter(finalizedOnlyByInexactBound).map { side =>
         s" The time constraint bounds the $side input only on a column without its own " +
           "watermark, through an interval of a day or more or a truncating cast such as " +
-          "CAST(ts AS BIGINT), and such a bound does not finalize rows. Bound the input's " +
-          "watermarked event time instead, or use a bound shorter than a day."
+          "CAST(ts AS BIGINT), and such a bound does not finalize rows. Use an exact bound " +
+          "instead, such as a bound shorter than a day on the TIMESTAMP columns in place of " +
+          "the cast. A watermark on that input lets the join run, but its cutoff then counts a " +
+          "day as 24 hours and reads the cast as exact."
       }.mkString
       val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
       val canDisableCheck = admittedBeforeFinalizationCheck

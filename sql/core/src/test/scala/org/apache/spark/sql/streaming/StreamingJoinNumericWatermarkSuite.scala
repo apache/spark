@@ -319,10 +319,10 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
     }
   }
 
-  // A union's column keeps its first child's metadata, so with children of different window
-  // lengths it records none, and a whole-window bound evicts neither union's windows nor the
-  // windows compared with them: a 20-second window can start before a 10-second window that ends
-  // at or below the watermark.
+  // A union records the shortest and the longest window length of its children. A whole-window
+  // bound evicts no stored windows when the shortest of them is shorter than the longest window
+  // of the other input: a 20-second window can start before a 10-second window that ends at or
+  // below the watermark.
   test("outer joins cannot finalize windows compared with a union of window lengths") {
     Seq("right", "left").foreach { unionSide =>
       withClue(s"$unionSide union") {
@@ -425,6 +425,101 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
           StartStream(checkpointLocation = checkpoint),
           AddData(rightInput, (2, 26L)),
           CheckNewAnswer(Row(1, 0L, null)))
+      }
+    }
+  }
+
+  // A union records the shortest and the longest window length of its children. Every later
+  // right window of a union of 10- and 5-second windows ends above the watermark, so it starts
+  // after every 20-second left window evicted at the watermark.
+  for (version <- Seq(2, 3, 4)) {
+    test(s"joins evict windows compared with a union of shorter window lengths, V$version") {
+      withJoinConf(version) {
+        val leftInput = MemoryStream[(Int, Long)]
+        val tenSecondInput = MemoryStream[(Int, Long)]
+        val fiveSecondInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", window(timestamp_seconds($"time"), "20 seconds").as("lw"))
+        val right = windowed(tenSecondInput, "rightKey", "rw", "10 seconds", "10 seconds")
+          .union(windowed(fiveSecondInput, "rightKey", "rw", "5 seconds", "5 seconds"))
+        val joined = left.join(right, $"leftKey" === $"rightKey" && $"lw" > $"rw", "left_outer")
+          .select($"leftKey", $"lw.start".cast("long"), $"rw.start".cast("long"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(AddData(leftInput, (1, 5L), (5, 15L)),
+            AddData(tenSecondInput, (5, 5L)), AddData(fiveSecondInput, (2, 45L)))),
+          CheckNewAnswer(Row(5, 0L, 0L)),
+          AddData(tenSecondInput, (2, 45L)),
+          CheckNewAnswer(),
+          // The eviction watermark is 45 seconds, past the end of the left windows [0, 20).
+          AddData(fiveSecondInput, (2, 46L)),
+          CheckNewAnswer(Row(1, 0L, null)))
+        // An inner join evicts by the same bound; the left input is watermarked too.
+        val innerLeftInput = MemoryStream[(Int, Long)]
+        val innerTenSecondInput = MemoryStream[(Int, Long)]
+        val innerFiveSecondInput = MemoryStream[(Int, Long)]
+        val innerLeft = windowed(innerLeftInput, "leftKey", "lw", "20 seconds", "20 seconds")
+        val innerRight =
+          windowed(innerTenSecondInput, "rightKey", "rw", "10 seconds", "10 seconds")
+            .union(windowed(innerFiveSecondInput, "rightKey", "rw", "5 seconds", "5 seconds"))
+        testStream(innerLeft.join(innerRight, $"leftKey" === $"rightKey" && $"lw" > $"rw"))(
+          StreamProgressLockedActions(Seq(AddData(innerLeftInput, (1, 5L)),
+            AddData(innerTenSecondInput, (2, 5L)), AddData(innerFiveSecondInput, (3, 5L)))),
+          CheckNewAnswer(),
+          StreamProgressLockedActions(Seq(AddData(innerLeftInput, (6, 45L)),
+            AddData(innerTenSecondInput, (4, 45L)), AddData(innerFiveSecondInput, (5, 45L)))),
+          CheckNewAnswer(),
+          // The watermark reaches 45 seconds, past the end of left window [0, 20).
+          AddData(innerTenSecondInput, (7, 46L)),
+          CheckNewAnswer(),
+          Execute { query =>
+            // Left window [0, 20) is evicted. Left [40, 60) and the five right rows remain,
+            // because the bound gives right windows no cutoff.
+            val total = query.lastProgress.stateOperators.head.numRowsTotal
+            assert(total == 6, s"numRowsTotal = $total")
+          })
+      }
+    }
+  }
+
+  // A window column read from a table holds rows that other queries wrote, here 10-second
+  // windows under a schema written for 20-second ones, so the column records no length and a
+  // whole-window bound gives it no cutoff.
+  for (version <- Seq(2, 3, 4)) {
+    test(s"inner join keeps windows of a table whose schema records another length, V$version") {
+      withJoinConf(version) {
+        withTable("leftWindows") {
+          val leftRows = Seq((0, 5000L)).toDF("leftKey", "ms")
+          leftRows.select($"leftKey", window(timestamp_millis($"ms"), "20 seconds").as("lw"))
+            .write.format("parquet").saveAsTable("leftWindows")
+          Seq((1, 95000L)).toDF("leftKey", "ms")
+            .select($"leftKey", window(timestamp_millis($"ms"), "10 seconds").as("lw"))
+            .write.format("parquet").mode("append").saveAsTable("leftWindows")
+          val rightInput = MemoryStream[(Int, Long)]
+          val right = rightInput.toDF().toDF("rightKey", "ms")
+            .select($"rightKey", timestamp_millis($"ms").as("t"))
+            .withWatermark("t", "0 seconds")
+            .select($"rightKey", window($"t", "15 seconds", "1 second").as("rw"))
+          def joined(joinType: String): DataFrame = spark.readStream.table("leftWindows")
+            .join(right, $"leftKey" === $"rightKey" && $"lw" > $"rw", joinType)
+            .select($"leftKey", $"lw.start".cast("long"), $"rw.start".cast("long"))
+
+          testStream(joined("inner"))(
+            AddData(rightInput, (9, 100000L)),
+            CheckNewAnswer(),
+            // The eviction watermark is 100 seconds, the end of the left window [90, 100).
+            AddData(rightInput, (8, 100100L)),
+            CheckNewAnswer(),
+            // 100.5 seconds is not late. It is in the right windows [86, 101) to [100, 115), and
+            // [90, 100) orders above those that start before 90.
+            AddData(rightInput, (1, 100500L)),
+            CheckNewAnswer((86L to 89L).map(start => Row(1, 90L, start)): _*))
+          val error = intercept[AnalysisException] {
+            joined("left_outer").writeStream
+              .format("memory").queryName("tableWindowOuterJoin").start()
+          }
+          assert(error.getMessage.contains("a watermark on the right input and a time constraint"))
+        }
       }
     }
   }
