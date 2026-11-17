@@ -46,7 +46,8 @@ class ErrorUtilsSuite extends SharedSparkSession {
       }
 
       val error = intercept[StatusRuntimeException] {
-        ErrorUtils.handleError("execute", observer, "user1", UUID.randomUUID().toString)(fatalError)
+        ErrorUtils.handleError("execute", observer, "user1", UUID.randomUUID().toString)(
+          fatalError)
       }
 
       assert(error.getStatus.getCode == Status.Code.UNKNOWN)
