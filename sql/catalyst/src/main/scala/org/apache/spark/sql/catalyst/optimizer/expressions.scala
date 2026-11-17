@@ -615,8 +615,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * `condition` itself are rewritten regardless, and [[moveEqualitiesFirst]] orders them. A column
    * of the projection below that can fail (see [[FailableColumns]]) counts as one that can not
    * fail here, and [[moveEqualitiesFirst]] can then move the equalities ahead of a conjunct over
-   * it. The constants of `foldOnly`, which [[replaceConstantsInPlace]] has put in elsewhere, go
-   * only into such a whole expression that folds.
+   * it. The constants of `foldOnly`, which [[replaceConstantsInPlace]] puts in elsewhere
+   * afterwards, go only into such a whole expression that folds.
    */
   private def replaceConstants(
       condition: Expression,
