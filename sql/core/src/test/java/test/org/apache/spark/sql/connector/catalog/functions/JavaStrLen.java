@@ -126,6 +126,32 @@ public class JavaStrLen implements UnboundFunction {
   public static class JavaStrLenNoImpl extends JavaStrLenBase {
   }
 
+  // inherit produceResult or the magic method from the superclass
+  public static class JavaStrLenInheritedDefault extends JavaStrLenDefault {
+  }
+
+  public static class JavaStrLenInheritedMagic extends JavaStrLenMagic {
+  }
+
+  public static class JavaStrLenInheritedStaticMagic extends JavaStrLenStaticMagic {
+  }
+
+  public abstract static class JavaStrLenProtectedMagicBase extends JavaStrLenBase {
+    protected int invoke(UTF8String str) {
+      return str.toString().length() + 100;
+    }
+  }
+
+  // inherits a magic method that is not public, which Spark cannot call, so Spark should use
+  // produceResult instead
+  public static class JavaStrLenInheritedProtectedMagic extends JavaStrLenProtectedMagicBase {
+    @Override
+    public Integer produceResult(InternalRow input) {
+      String str = input.getString(0);
+      return str.length();
+    }
+  }
+
   // a null-safe version which returns 0 for null arguments
   public static class JavaStrLenMagicNullSafe extends JavaStrLenBase {
     public int invoke(UTF8String str) {

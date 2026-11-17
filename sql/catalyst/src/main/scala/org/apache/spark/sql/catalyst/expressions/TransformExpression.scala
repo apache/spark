@@ -229,9 +229,10 @@ case class TransformExpression(
   }
 
   /**
-   * The call, or why it failed to resolve, e.g. a `ScalarFunction` that inherits `produceResult`
-   * from a base class, connector code that throws, or a `LinkageError` for a connector class whose
-   * dependency is missing, which the planner would otherwise hit for a layout it does not pick.
+   * The call, or why it failed to resolve, e.g. a Java `ScalarFunction` that implements neither a
+   * magic method nor `produceResult`, connector code that throws, or a `LinkageError` for a
+   * connector class whose dependency is missing, which the planner would otherwise hit for a
+   * layout it does not pick.
    * Computed and logged once, since a `lazy val` whose initializer throws runs it again on each
    * access. Not serialized, so an executor resolves it again rather than receiving the call (or
    * the failure) the driver resolved while planning.
