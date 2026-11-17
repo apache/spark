@@ -234,6 +234,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate),
+    // This batch must run after "Replace Operators", as that one turns Distinct and Deduplicate
+    // into Aggregate.
+    Batch("Insert Variant Canonicalization", FixedPoint(1),
+      InsertVariantCanonicalizationInAggregate,
+      InsertVariantCanonicalizationInRepartitionExpressions),
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions),
@@ -333,6 +338,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteExceptAll.ruleName,
       RewriteIntersectAll.ruleName,
       ReplaceDistinctWithAggregate.ruleName,
+      InsertVariantCanonicalizationInAggregate.ruleName,
+      InsertVariantCanonicalizationInRepartitionExpressions.ruleName,
       PullupCorrelatedPredicates.ruleName,
       RewriteCorrelatedScalarSubquery.ruleName,
       RewritePredicateSubquery.ruleName,
