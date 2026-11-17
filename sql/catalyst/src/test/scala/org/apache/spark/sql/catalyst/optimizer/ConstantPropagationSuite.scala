@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, StringType,
-  StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType}
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -441,6 +440,7 @@ class ConstantPropagationSuite extends PlanTest {
       // A row with `d` = -0.0 passes `d = 0.0`, but `CAST(d * y AS STRING)` keeps the sign, so `d`
       // is kept there, as since SPARK-60983, although the equality is not moved.
       val doubles = stringIds.select($"x".cast(DoubleType).as("y"), $"s".cast(DoubleType).as("d"))
+      val withE = doubles.select($"y", $"d", ($"d" * 2.0).as("e"))
       def signed(e: Expression): Expression = Cast(e, StringType) === "-0.0"
       Seq(
         $"d" === 0.0 && signed($"d" * $"y"),
@@ -448,17 +448,31 @@ class ConstantPropagationSuite extends PlanTest {
         signed($"d" * $"y") && $"d" === 0.0,
         // `pow(-0.0, -1.0)` is -Infinity, and `pow(0.0, -1.0)` is Infinity.
         Pow($"d", Literal(-1.0)) < 0.0 && $"d" === 0.0,
-        Pow($"d", $"y") < 0.0 && $"d" === 0.0
-      ).foreach(condition => checkOrdered(doubles, condition, condition))
+        Pow($"d", $"y") < 0.0 && $"d" === 0.0,
+        // Also below arithmetic, under an operator that keeps the sign.
+        signed(Divide($"d", $"y")) && $"d" === 0.0,
+        // Also with two zeros, which only together give -0.0 as their sum.
+        signed($"d" + $"e") && $"d" === 0.0 && $"e" === 0.0
+      ).foreach(condition => checkOrdered(withE, condition, condition))
       Seq(
         // Where the comparison folds to the same value with either zero, it is replaced.
         (Pow($"d", Literal(2.0)) < 1.0 && tenDividedBy($"y") > 0.0 && $"d" === 0.0) ->
           (tenDividedBy($"y") > 0.0 && $"d" === 0.0),
-        // And so it is under an operator that gives equal results for equal values.
+        // And so it is under an operator that gives equal results for equal values, also under
+        // arithmetic that can fail, as a division by either zero fails.
         ($"d" + $"y" > 1.0 && $"d" === 0.0) -> (Literal(0.0) + $"y" > 1.0 && $"d" === 0.0),
+        (Divide(Literal(10.0), $"d" - $"y") > 0.0 && $"d" === 0.0) ->
+          (Divide(Literal(10.0), Literal(0.0) - $"y") > 0.0 && $"d" === 0.0),
         // Any other value is equal only to itself.
-        (signed($"d" * $"y") && $"d" === 1.0) -> (signed(Literal(1.0) * $"y") && $"d" === 1.0)
-      ).foreach { case (condition, expected) => checkOrdered(doubles, condition, expected) }
+        (signed($"d" * $"y") && $"d" === 1.0) -> (signed(Literal(1.0) * $"y") && $"d" === 1.0),
+        // Two zeros whose sum is 0.0 with either sign of each.
+        (Pow($"d" + $"e", Literal(2.0)) < 1.0 && tenDividedBy($"y") > 0.0 && $"d" === 0.0 &&
+          $"e" === 0.0) -> (tenDividedBy($"y") > 0.0 && $"d" === 0.0 && $"e" === 0.0)
+      ).foreach { case (condition, expected) => checkOrdered(withE, condition, expected) }
+      // Also a FLOAT.
+      val floats = stringIds.select($"x".cast(FloatType).as("y"), $"s".cast(FloatType).as("f"))
+      val signedFloat = floats.where($"f" === 0.0f && signed($"f" * $"y")).analyze
+      comparePlans(Optimize.execute(signedFloat), signedFloat)
       // Nor into a struct with a DOUBLE in it, whose fields the check does not look at.
       val structs = stringIds.select(
         CreateNamedStruct(Seq(Literal("a"), $"s".cast(DoubleType))).as("t"))
@@ -496,10 +510,17 @@ class ConstantPropagationSuite extends PlanTest {
         tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0 && $"i" === 1 && $"id" === 7L,
         $"i" === 1 && $"id" === 7L && tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0)
       // Also where it fails only as it is rewritten, as `id = 7` does not go into an operand that
-      // decides whether one that can fail runs, while it folds with all of the constants in.
+      // decides whether one that can fail runs, and folds with all of the constants in, but not
+      // to a literal, as it reads `x`.
       checkOrdered(projected,
         (($"id" > 10L && tenDividedBy($"i") > 1.0) || $"x" > 5L) && $"i" === 0 && $"id" === 7L,
         $"i" === 0 && $"id" === 7L && (($"id" > 10L && tenDividedBy($"i") > 1.0) || $"x" > 5L))
+      // Also with a constant that a later iteration folds, e.g. of `id = 7` for a BIGINT `id`.
+      checkOrdered(projected,
+        Coalesce(Seq(tenDividedBy($"i"), $"id".cast(DoubleType))) > 0.0 && $"i" === 0 &&
+          $"id" === Literal(7).cast(LongType),
+        $"i" === 0 && $"id" === 7L &&
+          Coalesce(Seq(tenDividedBy($"i"), Literal(7.0))) > 0.0)
       // Or with the foldable columns of the projection below in, which `FoldablePropagation`
       // puts in, also where they make the condition of a branch constant.
       val withTotal = projected.select($"s", $"id", $"x", $"i", Literal(100.0).as("total"))
@@ -507,10 +528,15 @@ class ConstantPropagationSuite extends PlanTest {
         $"i" === 0, $"i" === 0 && $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType))
       checkOrdered(withTotal, If($"total" > 0.0, tenDividedBy($"i"), Literal(0.0)) > 0.0 &&
         $"i" === 0, $"i" === 0 && If($"total" > 0.0, tenDividedBy($"i"), Literal(0.0)) > 0.0)
-      // Also through other projections, which pass the column on or rename it.
+      // Also through other projections, which pass the column on, rename it or compute another one
+      // from it, and through other operators that `FoldablePropagation` looks through.
       Seq(
         withTotal.select($"id", $"i", $"total").where($"id" > 0L),
-        withTotal.select($"id", $"i", $"total".as("t")).select($"id", $"i", $"t".as("total"))
+        withTotal.select($"id", $"i", $"total".as("t")).select($"id", $"i", $"t".as("total")),
+        withTotal.select($"id", $"i", ($"total" * 2.0).as("t")).select($"id", $"i",
+          ($"t" / 2.0).as("total")),
+        stringIds.select($"s", $"id", Literal(100.0).as("total")).limit(5)
+          .select($"id", castS.as("i"), $"total")
       ).foreach { child =>
         checkOrdered(child, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
           $"i" === 0, $"i" === 0 && $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType))
@@ -531,6 +557,23 @@ class ConstantPropagationSuite extends PlanTest {
         $"x" > 0L && ($"id" > 5L || tenDividedBy($"i") > 1.0).cast(IntegerType) === 1 &&
           $"i" === 0 && $"id" === 7L,
         $"id" === 7L && $"x" > 0L && $"i" === 0)
+
+      // But a conjunct that fails to fold only as it is rewritten is replaced with the literal it
+      // folds to with all of the constants in, and the equalities are handled as without such a
+      // failure: here `id = 7` goes first, as `i = 0` after that literal can fail.
+      checkOrdered(projected,
+        $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) && $"i" === 0 && $"id" === 7L,
+        $"id" === 7L && $"x" > 0L && $"i" === 0)
+      checkOrdered(projected,
+        tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) &&
+          $"i" === 0 && $"id" === 7L,
+        $"id" === 7L && tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && $"i" === 0)
+      // Where the cast of such an operand is compared with another column, `replaceConstants`
+      // folds the cast whole, so the rewritten conjunct does not fail.
+      checkOrdered(projected,
+        $"x" > 0L && ($"id" > 5L || tenDividedBy($"i") > 1.0).cast(LongType) <= $"x" &&
+          $"i" === 0 && $"id" === 7L,
+        $"id" === 7L && $"x" > 0L && Literal(1L) <= $"x" && $"i" === 0)
 
       // But not where only a conditional branch would fail, which is not folded.
       checkOrdered(projected,
@@ -640,13 +683,31 @@ class ConstantPropagationSuite extends PlanTest {
         CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x")), Literal(0.0)) > 1.0,
         If($"id" > 7L, $"x" > 1L, Literal(false)),
         // Also where it takes `BooleanSimplification`.
-        ($"id" < 7L && tenDividedBy($"x") > 1.0) || ($"id" > 7L && tenDividedBy($"x") > 2.0)
+        ($"id" < 7L && tenDividedBy($"x") > 1.0) || ($"id" > 7L && tenDividedBy($"x") > 2.0),
+        // Also where it is NULL, which a filter takes as FALSE.
+        CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x"))) > 1.0,
+        If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType))
       ).foreach { conjunct =>
         comparePlans(Optimize.execute(projected.where(
           tenDividedBy($"x" - $"i".cast(LongType)) > 0.0 && conjunct && $"i" === 1 &&
             $"id" === 7L).analyze),
           projected.where(false).analyze)
       }
+      // Also with a constant that a later iteration folds, e.g. of `id = 7` for a BIGINT `id`.
+      comparePlans(Optimize.execute(projected.where(
+        tenDividedBy($"x" - $"i".cast(LongType)) > 0.0 &&
+          CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x")), Literal(0.0)) > 1.0 &&
+          $"i" === 1 && $"id" === Literal(7).cast(LongType)).analyze),
+        projected.where(false).analyze)
+      // But a NULL under a `NOT` is not FALSE. With `s` not nullable, `upper(s)` is not either,
+      // so `u = 'A'` is propagated there.
+      val notNull = LocalRelation($"s".string.notNull, $"id".long.notNull, $"x".long.notNull)
+        .select($"id", $"x", Upper($"s").as("u"))
+      checkOrdered(notNull,
+        Not(If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType)) && $"u" === "A" &&
+          $"id" === 7L),
+        Not($"id" === 7L) || Not(If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType))) ||
+          Not($"u" === "A"))
     }
   }
 

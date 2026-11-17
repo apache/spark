@@ -3230,12 +3230,25 @@ class DataFrameSuite extends SharedSparkSession
     "keeps the rows of the written condition") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
-      // With `r` read, the filter stays above the projection.
-      def check(rows: DataFrame, columns: Seq[Column], condition: Column, expected: Seq[Row])
-        : Unit = withTempPath { dir =>
+      // With `r` read, the filter stays above the projection, unless `pushed`, where the
+      // projection goes away and the filter is pushed below it.
+      def check(
+          rows: DataFrame,
+          columns: Seq[Column],
+          condition: Column,
+          expected: Seq[Row],
+          pushed: Boolean = false): Unit = withTempPath { dir =>
         rows.coalesce(1).write.parquet(dir.getCanonicalPath)
         val df = spark.read.parquet(dir.getCanonicalPath).select(columns :+ rand(1).as("r"): _*)
-          .where(condition).select($"s", $"r" >= 0)
+          .where(condition).select($"s", if (pushed) lit(true) else $"r" >= 0)
+        val withR = df.queryExecution.optimizedPlan.collect {
+          case p: Project if p.projectList.exists(_.name == "r") => p
+        }
+        if (pushed) {
+          assert(withR.isEmpty)
+        } else {
+          assert(!withR.exists(_.child.exists(_.isInstanceOf[Filter])))
+        }
         checkAnswer(df, expected)
       }
       // `d = 0.0` passes a row where `d` is -0.0, on which the sign of the zero can matter.
@@ -3244,33 +3257,48 @@ class DataFrameSuite extends SharedSparkSession
       check(doubles, d, $"d" === 0.0 && ($"d" * $"y").cast("string") === "-0.0",
         Seq(Row("-0.0", true)))
       check(doubles, d, $"d" === 0.0 && pow($"d", $"y") < 0, Seq(Row("-0.00", true)))
-      // But not where the comparison is the same with either zero, which the constant then
-      // folds, so that `d` is not computed on the row ("x", 1.0).
+      // But not where the comparison is the same with either zero, so that `d` is not computed
+      // on the row ("x", 1.0): `pow(0.0, 2) > 100` makes the condition FALSE, and the division
+      // gives the same value, or fails, with either zero.
       val notNumber = Seq(("0.0", 1.0), ("x", 1.0)).toDF("s", "y")
       check(notNumber, d, $"y" > 0 && pow($"d", 2) > 100 && $"d" === 0.0, Seq.empty)
+      check(notNumber, d, lit(10.0) / ($"d" - $"y") > 0 && $"d" === 0.0, Seq.empty)
       // Nor for any other value, which is equal only to itself, as on 4.3.0.
       check(notNumber, d, ($"d" * $"y").cast("string") === "1.0" && $"d" === 2.0, Seq.empty)
 
       val ints = Seq($"s", $"id", $"x", $"s".cast("int").as("i"), lit(100).as("total"))
       val two = Seq(("2", 7, 1)).toDF("s", "id", "x")
-      Seq(
-        // `id = 7` makes the `CASE WHEN` FALSE, as on 4.3.0, although it does not go into it, so
-        // that `10 / (x - 1)` does not run.
+      // `id = 7` makes the `CASE WHEN` FALSE, or NULL, as on 4.3.0, although it does not go into
+      // it, so that `10 / (x - 1)` does not run.
+      val becomeFalse = Seq(
         lit(10) / ($"x" - $"i") > 0 && when($"id" > 10, lit(10) / $"x").otherwise(0) > 1 &&
           $"i" === 1 && $"id" === 7,
         lit(10) / ($"x" - $"i") > 0 && when($"id" > 7, $"x" > 1).otherwise(false) &&
           $"i" === 1 && $"id" === 7,
-        // With all of the constants in, or the foldable `total`, the condition would fail to
-        // fold, so the equalities go first, which filter out the row, as without this change.
+        lit(10) / ($"x" - $"i") > 0 && when($"id" > 10, lit(10) / $"x") > 1 &&
+          $"i" === 1 && $"id" === 7)
+      // With all of the constants in, or the foldable `total`, the condition would fail to fold,
+      // so the equalities go first, which filter out the row, as without this change.
+      val failToFold = Seq(
         coalesce(lit(10) / $"i", $"id") > 0 && $"i" === 0 && $"id" === 7,
         $"id" > $"total" / $"i" && $"i" === 0,
-        lit(10) / ($"id" - 6 - $"i") > 0 && $"i" === 1 && $"id" === 7
-      ).foreach(condition => check(two, ints, condition, Seq.empty))
-      // Then they keep the written order where no conjunct after the one that the constants fold
-      // can fail, so that `x > 0` filters out the row ("x", 0, 0).
-      check(Seq(("0", 7, 1), ("x", 0, 0)).toDF("s", "id", "x"), ints,
+        lit(10) / ($"id" - 6 - $"i") > 0 && $"i" === 1 && $"id" === 7)
+      (becomeFalse ++ failToFold).foreach(condition => check(two, ints, condition, Seq.empty))
+      // Also with a BIGINT `id`, whose `id = 7` has its constant only after `ConstantFolding`,
+      // and once the filter is pushed below the projection.
+      val twoLong = Seq(("2", 7L, 1)).toDF("s", "id", "x")
+      (becomeFalse ++ failToFold).foreach { condition =>
+        Seq(false, true).foreach(pushed => check(twoLong, ints, condition, Seq.empty, pushed))
+      }
+      // `id = 7` folds the second conjunct, and goes first, as `i = 0` after it can fail, so that
+      // the row ("x", 0, 0) is filtered out before `i` is computed. The first one does not fold as
+      // it is rewritten, but does with all of the constants in.
+      val zeroAndX = Seq(("0", 7, 1), ("x", 0, 0)).toDF("s", "id", "x")
+      Seq(
+        $"x" > 0 && ($"id" > 0 || lit(10) / $"i" > 1) && $"i" === 0 && $"id" === 7,
         $"x" > 0 && ($"id" > 5 || lit(10) / $"i" > 1).cast("int") === 1 && $"i" === 0 &&
-          $"id" === 7, Seq(Row("0", true)))
+          $"id" === 7
+      ).foreach(condition => check(zeroAndX, ints, condition, Seq(Row("0", true))))
     }
   }
 
