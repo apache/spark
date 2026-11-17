@@ -51,8 +51,10 @@ case class UserDefinedPythonFunction(
     udfDeterministic: Boolean,
     // TODO: Add support for transpilation with Spark Connect and remove the default value.
     transpiled: JList[Column] = Nil.asJava,
-    // Per-option input-type categories ("numeric"/"string" per public param),
-    // parallel to `transpiled` (same length). The analyzer rule
+    // Per-option input-type categories (one per public param, drawn from
+    // "numeric"/"integral"/"integral32"/"fractional"/"string"/"bool"/"binary" -- see
+    // ResolveTranspiledPythonUDFOptions for what each matches and why the numeric ones
+    // overlap), parallel to `transpiled` (same length). The analyzer rule
     // ResolveTranspiledPythonUDFOptions later keeps only the options whose
     // categories match the bound argument types; when none match, the call
     // falls back to the plain Python UDF. `builder` requires the two lists to
