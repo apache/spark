@@ -36,6 +36,17 @@ class IsIgnoredFileTests(unittest.TestCase):
     def test_sparktestsupport_source_is_not_ignored(self):
         self.assertFalse(modules.is_ignored_file("dev/sparktestsupport/modules.py"))
 
+    def test_agent_docs_are_ignored(self):
+        for path in [
+            ".agents/pr-workflow.md",
+            "sql/core/.agents/x.md",
+            ".ignore",
+            "python/.ignore",
+            "dev/agent_docs_lint.py",
+        ]:
+            self.assertTrue(modules.is_ignored_file(path), path)
+        self.assertFalse(modules.is_ignored_file("x.agents/y.md"))
+
 
 class ShellScriptTestGoalTests(unittest.TestCase):
     def test_default_stage(self):

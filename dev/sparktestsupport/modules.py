@@ -40,7 +40,6 @@ all_modules = []
 ignored_file_patterns = (
     # Contributor docs.
     ".agents/*.md",
-    "/.ignore",  # lets rg search .agents/ and .github/
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
@@ -58,6 +57,7 @@ ignored_file_patterns = (
     ".asf.yaml",
     ".gitattributes",
     ".gitignore",
+    ".ignore",
     # Build and test workflow wrappers or schedulers.
     "/.github/workflows/benchmark.yml",
     "/.github/workflows/branch*_scheduler.yml",

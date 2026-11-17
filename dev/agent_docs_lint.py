@@ -18,31 +18,37 @@
 #
 
 """
-Checks the repository's agent instruction files (AGENTS.md / CLAUDE.md, and the detail files
-in .agents/ directories) for the properties that coding agents such as Claude Code and Codex
-depend on:
+Checks the repository's agent instruction files (AGENTS.md / CLAUDE.md) and their detail
+files for the properties that coding agents such as Claude Code and Codex depend on. A detail
+file is a Markdown file directly in a .agents/ directory; subdirectories such as
+.agents/skills/ are loaded by the tools themselves and are not checked here.
 
   pairing   Each directory with agent instructions has both names, one a symlink to the
-            other, as the root AGENTS.md asks. Codex reads AGENTS.md and ignores CLAUDE.md
-            by default. Claude Code reads AGENTS.md only when no CLAUDE.md exists in the
-            working directory or above it, so once the root has a CLAUDE.md, a nested
-            directory with only an AGENTS.md is skipped. Two real files let the two tools
-            follow different instructions.
+            other, as the root AGENTS.md asks. Codex reads AGENTS.md (or AGENTS.override.md
+            when present) and ignores CLAUDE.md by default. Claude Code reads AGENTS.md only
+            when no CLAUDE.md exists in the working directory or above it, so once the root
+            has a CLAUDE.md, a nested directory with only an AGENTS.md is skipped. Two
+            different files let the two tools follow different instructions.
   codex-cap Codex concatenates AGENTS.md from the repo root down to its working directory
             into one budget of project_doc_max_bytes (32768 by default), filled root first,
-            and silently truncates past it. Every root-to-directory chain must fit.
+            and stops past it without warning. Every root-to-directory chain must fit.
   budget    Soft size targets that keep always-loaded instructions small: the root file
             and nested files. Detail belongs in a sibling .agents/ directory behind a
             pointer. Warnings only.
-  pointers  Every `.agents/...`, `AGENTS.md` or `CLAUDE.md` path quoted in an instruction
-            file, including the files under .agents/, resolves to an existing file.
+  pointers  Every `.agents/...`, `AGENTS.md` or `CLAUDE.md` path quoted in an instruction or
+            detail file resolves to an existing file. A pointer that starts with .agents/
+            names the .agents/ directory beside its index; other paths may be relative to
+            the file's directory or any ancestor, e.g. a path from the repo root.
+  orphans   Every detail file is reachable through pointers from an instruction file. An
+            agent reads a detail file only by following a pointer to it.
 
 Known failures that cannot be fixed yet (e.g. vendored third-party docs) can be exempted in
 an optional exceptions file, dev/agent_docs_lint_exceptions.txt by default. Each line is
 `<check> <subject>`, where the subject is what the error names: the directory for pairing,
-the file where truncation starts for codex-cap, and `<file> <target>` for pointers. `#`
-starts a comment. Exempted errors are still reported but do not fail --strict. An entry that
-no longer matches any error is itself an error, so the list only shrinks as files are fixed.
+the file where truncation starts for codex-cap, `<file> <target>` for pointers, and the
+detail file for orphans. `#` starts a comment. Exempted errors are still reported but do not
+fail --strict. An entry that no longer matches any error is itself an error, so the list only
+shrinks as files are fixed.
 
 Report-only by default; pass --strict to exit non-zero on errors (not on budget warnings).
 CI runs it with --strict.
@@ -61,8 +67,8 @@ from collections import defaultdict
 CODEX_CAP = 32768
 ROOT_BUDGET = 8 * 1024
 NESTED_BUDGET = 4 * 1024
-CHECKS = ("pairing", "codex-cap", "budget", "pointers")
-EXEMPTIBLE = ("pairing", "codex-cap", "pointers")
+CHECKS = ("pairing", "codex-cap", "budget", "pointers", "orphans")
+EXEMPTIBLE = ("pairing", "codex-cap", "pointers", "orphans")
 EXCEPTIONS_FILE = "dev/agent_docs_lint_exceptions.txt"
 NAMES = ("AGENTS.md", "CLAUDE.md", "AGENTS.override.md")
 POINTER_RE = re.compile(r"`((?:[\w.-]+/)*(?:\.agents/[\w./-]+\.md|AGENTS\.md|CLAUDE\.md))`")
@@ -82,8 +88,8 @@ def tracked_files():
 
 
 def is_detail_file(path):
-    """A Markdown file under a .agents/ directory."""
-    return path.endswith(".md") and ".agents" in path.split("/")[:-1]
+    """A Markdown file directly in a .agents/ directory."""
+    return path.endswith(".md") and os.path.basename(os.path.dirname(path)) == ".agents"
 
 
 def codex_selected(directory):
@@ -95,9 +101,9 @@ def codex_selected(directory):
     return None
 
 
-def size(path):
-    with open(path, "rb") as f:
-        return len(f.read())
+def real(path):
+    """`path` with symlinks resolved, relative to the repo root."""
+    return os.path.relpath(os.path.realpath(path))
 
 
 # Each check returns (errors, warnings). An error is a (subject, message) pair; the subject is
@@ -123,11 +129,19 @@ def check_pairing(dirs):
                 "By default Claude Code skips it when a CLAUDE.md exists in or above its "
                 "working directory"
             )
-        elif os.path.realpath(claude) != os.path.realpath(agents):
+        elif not os.path.isfile(claude):
+            msg = "CLAUDE.md is a dangling symlink; make it a symlink to AGENTS.md"
+        elif real(claude) != real(agents):
             msg = (
                 "AGENTS.md and CLAUDE.md are different files, so Claude Code and Codex can "
                 "follow different instructions. Keep one real file and make the other a "
                 "symlink to it"
+            )
+        elif real(claude) != real(codex_selected(d)):
+            msg = (
+                "AGENTS.override.md is a different file, so Codex reads it instead of "
+                "AGENTS.md while Claude Code reads AGENTS.md. Move its content into AGENTS.md "
+                "and delete it"
             )
         else:
             continue
@@ -145,16 +159,15 @@ def check_codex_cap(dirs):
         for i in range(len(parts) + 1):
             f = codex_selected("/".join(parts[:i]))
             if f:
-                chain.append(f)
-        total = sum(size(f) for f in chain)
+                chain.append((f, os.path.getsize(f)))
+        total = sum(n for _, n in chain)
         if total > CODEX_CAP:
-            used, cut_in = 0, None
-            for f in chain:
-                if used + size(f) > CODEX_CAP:
-                    cut_in = f
+            used = 0
+            for f, n in chain:
+                if used + n > CODEX_CAP:
+                    cuts[f].append((d or ".", total))
                     break
-                used += size(f)
-            cuts[cut_in].append((d or ".", total))
+                used += n
     errors = []
     for cut_in, chains in sorted(cuts.items()):
         worst = max(chains, key=lambda c: c[1])
@@ -172,7 +185,7 @@ def check_budget(files):
         if os.path.islink(f):
             continue
         budget = ROOT_BUDGET if os.path.dirname(f) == "" else NESTED_BUDGET
-        n = size(f)
+        n = os.path.getsize(f)
         if n > budget:
             warnings.append(
                 f"{f}: {n} bytes > {budget} target; move branch-only detail into .agents/ "
@@ -181,52 +194,98 @@ def check_budget(files):
     return [], warnings
 
 
-def check_pointers(files):
-    errors = []
+def resolve(f, target):
+    """The file that the pointer `target` in `f` names (see real()), or None if missing."""
+    if target.startswith(".agents/"):
+        # The .agents/ directory beside the index: the file's own directory, or for a detail
+        # file, the directory that holds its .agents/.
+        home = os.path.dirname(f)
+        if is_detail_file(f):
+            home = os.path.dirname(home)
+        bases = [home]
+    else:
+        parts = os.path.dirname(f).split("/") if os.path.dirname(f) else []
+        bases = ["/".join(parts[:i]) for i in range(len(parts), -1, -1)]
+    for base in bases:
+        candidate = os.path.normpath(os.path.join(base, target))
+        if os.path.exists(candidate):
+            return real(candidate)
+    return None
+
+
+def scan_pointers(files):
+    """Returns [(file, lineno, target, resolved)] for every pointer in `files`."""
+    found = []
     for f in files:
         if os.path.islink(f):
             continue
-        # Pointers may be written relative to the file or to any ancestor directory (e.g. a
-        # nested AGENTS.md naming `.agents/x.md` beside it, or a file under .agents/ naming
-        # a sibling as `.agents/y.md`).
-        parts = os.path.dirname(f).split("/") if os.path.dirname(f) else []
-        bases = ["/".join(parts[:i]) for i in range(len(parts), -1, -1)]
         with open(f, encoding="utf-8", errors="replace") as fh:
             for lineno, line in enumerate(fh, 1):
                 for target in POINTER_RE.findall(line):
                     if "..." in target.split("/"):
                         continue  # An elided path such as `a/.../AGENTS.md`, not a pointer.
-                    candidates = [os.path.normpath(os.path.join(b, target)) for b in bases]
-                    if not any(os.path.exists(c) for c in candidates):
-                        msg = f"{f}:{lineno}: pointer to missing file `{target}`"
-                        errors.append((f"{f} {target}", msg))
+                    found.append((f, lineno, target, resolve(f, target)))
+    return found
+
+
+def check_pointers(scan):
+    errors = [
+        (f"{f} {target}", f"{f}:{lineno}: pointer to missing file `{target}`")
+        for f, lineno, target, resolved in scan
+        if resolved is None
+    ]
     return errors, []
 
 
-def load_exceptions(path):
-    """Returns ({check: {subject: lineno}}, errors) for the exceptions file, if it exists."""
+def check_orphans(scan, files, details):
+    edges = defaultdict(set)
+    for f, _, _, resolved in scan:
+        if resolved:
+            edges[real(f)].add(resolved)
+    reached = set()
+    todo = [real(f) for f in files if os.path.exists(f)]
+    while todo:
+        f = todo.pop()
+        if f not in reached:
+            reached.add(f)
+            todo.extend(edges[f])
+    errors = [
+        (d, f"{d}: no pointer reaches it from an AGENTS.md, so agents never read it")
+        for d in details
+        if real(d) not in reached
+    ]
+    return errors, []
+
+
+def load_exceptions(path, required):
+    """Returns ({check: {subject: lineno}}, errors) for the exceptions file."""
     exceptions = defaultdict(dict)
-    errors = []
     if not os.path.isfile(path):
-        return exceptions, errors
+        return exceptions, [f"{path}: exceptions file not found"] if required else []
+    errors = []
     with open(path, encoding="utf-8") as f:
         for lineno, raw in enumerate(f, 1):
             line = raw.split("#", 1)[0].strip()
             if not line:
                 continue
-            check, _, subject = line.partition(" ")
-            subject = " ".join(subject.split())
-            if check not in EXEMPTIBLE or not subject:
+            parts = line.split(None, 1)
+            if len(parts) != 2 or parts[0] not in EXEMPTIBLE:
                 errors.append(
                     f"{path}:{lineno}: expected `<check> <subject>` with <check> one of "
                     f"{', '.join(EXEMPTIBLE)}"
+                )
+                continue
+            check, subject = parts[0], " ".join(parts[1].split())
+            if subject in exceptions[check]:
+                errors.append(
+                    f"{path}:{lineno}: duplicate of line {exceptions[check][subject]}; remove it"
                 )
                 continue
             exceptions[check][subject] = lineno
     return exceptions, errors
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -236,11 +295,17 @@ def main():
     )
     ap.add_argument(
         "--exceptions",
-        default=EXCEPTIONS_FILE,
-        help=f"exceptions file, relative to the repo root (default: {EXCEPTIONS_FILE})",
+        help=f"exceptions file, which must exist (default: {EXCEPTIONS_FILE} in the repo root, "
+        "if it exists)",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    # An explicit path is relative to the current directory, so resolve it before the chdir.
+    exceptions_path = os.path.abspath(args.exceptions) if args.exceptions else None
     os.chdir(repo_root())
+    if exceptions_path is None:
+        shown_path, exceptions_path, required = EXCEPTIONS_FILE, EXCEPTIONS_FILE, False
+    else:
+        shown_path, required = args.exceptions, True
 
     all_files = tracked_files()
     files = [p for p in all_files if os.path.basename(p) in NAMES]
@@ -248,14 +313,16 @@ def main():
     dirs = defaultdict(set)
     for f in files:
         dirs[os.path.dirname(f)].add(os.path.basename(f))
+    scan = scan_pointers(files + details)
 
     runners = {
         "pairing": lambda: check_pairing(dirs),
         "codex-cap": lambda: check_codex_cap(dirs),
         "budget": lambda: check_budget(files),
-        "pointers": lambda: check_pointers(files + details),
+        "pointers": lambda: check_pointers(scan),
+        "orphans": lambda: check_orphans(scan, files, details),
     }
-    exceptions, malformed = load_exceptions(args.exceptions)
+    exceptions, malformed = load_exceptions(exceptions_path, required)
     total_errors = len(malformed)
     if malformed:
         print(f"== exceptions: {len(malformed)} error(s)")
@@ -268,7 +335,7 @@ def main():
         exempted = [m for s, m in errors if s in exempt]
         matched = {s for s, _ in errors}
         stale = [
-            f"{args.exceptions}:{lineno}: stale exception `{name} {s}`; it matches no error, "
+            f"{shown_path}:{lineno}: stale exception `{name} {s}`; it matches no error, "
             "so remove it"
             for s, lineno in sorted(exempt.items(), key=lambda e: e[1])
             if s not in matched
@@ -280,7 +347,7 @@ def main():
         )
         for s, m in failing:
             print(f"  ERROR {m}")
-            print(f"        (to exempt a known failure, add `{name} {s}` to {args.exceptions})")
+            print(f"        (to exempt a known failure, add `{name} {s}` to {shown_path})")
         for m in stale:
             print(f"  ERROR {m}")
         for m in exempted:

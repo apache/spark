@@ -17,8 +17,8 @@ New instructions go in `AGENTS.md` or the `.agents/` directory beside it. Keep a
 situation. Move procedures and reference material to `.agents/`, behind a pointer that starts with
 its trigger. When adding instructions to a directory that has neither file, create `AGENTS.md` as
 the real file and add a `CLAUDE.md` symlink beside it (`ln -s AGENTS.md CLAUDE.md`). After editing
-agent docs, run `dev/agent_docs_lint.py --strict`, which CI also runs: it checks the pairing, the
-pointers, and Codex's 32 KiB budget for each root-to-directory chain.
+agent docs, run `dev/agent_docs_lint.py --strict`, which CI also runs: it checks the pairing, that
+every pointer resolves and every `.agents/` file has one, and Codex's 32 KiB budget per chain.
 
 ## Pre-flight Checks
 
@@ -53,9 +53,11 @@ Before the first code edit or running test in a session, ensure a clean working 
 
 - Keep source lines within 100 characters; the linters enforce this for Scala, Java, and Python.
   Avoid non-ASCII characters in code and comments (string literals may contain them when the
-  content requires it). When adding a member to an existing class or object, put it with the code
-  it belongs with, following the file's existing sectioning. Detail and spot-check commands:
+  content requires it). Before committing Scala, Java or Python changes: run the spot-checks in
   `.agents/code-conventions.md`.
+- When adding a member to an existing class or object, put it with the code it belongs with,
+  following the file's existing sectioning. Do not reorganize existing members unless the change
+  requires it.
 - Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`.
   Read the README there before modifying proto definitions.
 - A change that needs a version (`@since`, config `.version("...")`, new `MimaExcludes`

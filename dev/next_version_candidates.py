@@ -19,8 +19,8 @@
 
 """
 Prints the two candidate first-release versions for a change, so the caller can pick
-one per `.agents/versioning.md` (numbers below are illustrative; the actual versions
-advance as branches are cut):
+one per the versioning policy that `AGENTS.md` points to (numbers below are
+illustrative; the actual versions advance as branches are cut):
 
     master       5.0.0        <- use for master-only changes
     branch-4.x   4.3.0        <- use for normally-backported changes (most PRs)
