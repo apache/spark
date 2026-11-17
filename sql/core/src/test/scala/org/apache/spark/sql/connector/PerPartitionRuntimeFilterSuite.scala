@@ -547,25 +547,40 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  // The expected numbers of items of the bloom filters that the semi joins of `df` build.
-  private def executedNumItems(df: DataFrame): Seq[Long] = {
+  // The expected numbers of items and the numbers of bits of the bloom filters that the semi joins
+  // of `df` build.
+  private def executedSizes(df: DataFrame): Seq[(Long, Long)] = {
     df.collect()
+    def value(e: Expression): Long = e.eval().asInstanceOf[Number].longValue
     executedSemiJoins(df.queryExecution.executedPlan)
       .flatMap(_.right.collect { case a: BaseAggregateExec => a })
       .flatMap(_.aggregateExpressions.flatMap(_.collect { case b: BloomFilterAggregate => b }))
-      .map(_.estimatedNumItemsExpression.eval().asInstanceOf[Number].longValue)
+      .map(b => (value(b.estimatedNumItemsExpression), value(b.numBitsExpression)))
       .distinct
   }
 
-  test("each per-partition bloom filter expects an even share of the items over the creation " +
-      "side's partition keys") {
+  test("each per-partition bloom filter gets an even share of the items and bits over the " +
+      "creation side's partition keys") {
     // Without CBO the Filter on the creation side drops its row count. So the creation side, twice
-    // the size threshold, gets the default expected number of items twice. `dim` has 3 partition
-    // keys, fewer than its 4 buckets.
+    // the size threshold, gets the default expected number of items and number of bits twice. `dim`
+    // has 3 partition keys, fewer than its 4 buckets.
     createTables()
-    withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "300") {
+    withSQLConf(
+        RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "300",
+        RUNTIME_BLOOM_FILTER_NUM_BITS.key -> "2400") {
       withoutGlobalBloomFilter("dim") {
-        assert(executedNumItems(join()) == Seq(200L), "twice the 300 expected items over 3 keys")
+        assert(executedSizes(join()) == Seq((200L, 1600L)),
+          "twice the 300 expected items and the 2400 bits over 3 keys")
+      }
+    }
+  }
+
+  test("an even share of the expected items does not overflow") {
+    // The expected number of items of the whole creation side is capped at `Long.MaxValue`.
+    createTables()
+    withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> Long.MaxValue.toString) {
+      withoutGlobalBloomFilter("dim") {
+        assert(executedSizes(join()).map(_._1) == Seq(Math.ceilDiv(Long.MaxValue, 3L)))
       }
     }
   }
@@ -648,7 +663,7 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
     // Twice the threshold, over 2 partition keys.
     withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "600") {
       withoutGlobalBloomFilter("dim", "ts") {
-        assert(executedNumItems(daysJoin()) == Seq(600L),
+        assert(executedSizes(daysJoin()).map(_._1) == Seq(600L),
           "twice the 600 expected items over 2 keys")
         checkAnswer(daysJoin(), Seq(Row(1), Row(2), Row(3)))
       }

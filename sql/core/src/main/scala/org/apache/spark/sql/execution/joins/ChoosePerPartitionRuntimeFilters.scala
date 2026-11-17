@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, ExprId, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, ExprId, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.optimizer.PerPartitionRuntimeFilterSubquery.{perPartitionRuntimeFilter, sizingOf}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
@@ -45,8 +45,9 @@ import org.apache.spark.sql.execution.exchange.{EnsureRequirements, Exchange, Sh
  * union, as the preparation does ahead of `EnsureRequirements`.
  *
  * Each bloom filter of a semi join that stays expects an even share of the creation side's items
- * over its partition keys. The semi join also goes when the creation side has too few partition
- * keys for each share to be within the size threshold of a bloom filter's input.
+ * over its partition keys. Without a row count, it also gets an even share of the creation side's
+ * bits. The semi join also goes when the creation side has too few partition keys for each share
+ * to be within the size threshold of a bloom filter's input.
  */
 case class ChoosePerPartitionRuntimeFilters(
     ensureRequirements: EnsureRequirements,
@@ -70,16 +71,16 @@ case class ChoosePerPartitionRuntimeFilters(
             if withouts.contains(bloomFilter.exprId) && !kept(bloomFilter.exprId) =>
           withouts(bloomFilter.exprId)
       }
-      // The expected number of items of each bloom filter of each semi join that stays.
-      var numItems = Map.empty[ExprId, Long]
+      // The size of each bloom filter of each semi join that stays.
+      var sizes = Map.empty[ExprId, (Long, Option[Long])]
       var current = new Cost(ensureRequirements.apply(withOnly(Set.empty)))
       semiJoins.foreach { case (_, join, bloomFilter) =>
         val id = bloomFilter.exprId
         if (withouts.contains(id)) {
-          numItemsOf(join, bloomFilter).foreach { n =>
-            val trial = new Cost(ensureRequirements.apply(withOnly(numItems.keySet + id)))
+          sizeOf(join, bloomFilter).foreach { size =>
+            val trial = new Cost(ensureRequirements.apply(withOnly(sizes.keySet + id)))
             if (isFree(trial, current, withouts(id))) {
-              numItems += id -> n
+              sizes += id -> size
               current = trial
             }
           }
@@ -87,12 +88,13 @@ case class ChoosePerPartitionRuntimeFilters(
       }
       plan.transformDown {
         case p @ ProjectExec(_, PerPartitionSemiJoin(_, _, bloomFilter))
-            if withouts.contains(bloomFilter.exprId) && !numItems.contains(bloomFilter.exprId) =>
+            if withouts.contains(bloomFilter.exprId) && !sizes.contains(bloomFilter.exprId) =>
           withoutRestoringProjection(p, withouts(bloomFilter.exprId))
         case PerPartitionSemiJoin(filter, join, bloomFilter)
             if withouts.contains(bloomFilter.exprId) =>
-          numItems.get(bloomFilter.exprId) match {
-            case Some(n) => filter.withNewChildren(Seq(withNumItems(join, n)))
+          sizes.get(bloomFilter.exprId) match {
+            case Some((numItems, numBits)) =>
+              filter.withNewChildren(Seq(withSize(join, numItems, numBits)))
             case None => withouts(bloomFilter.exprId)
           }
       }
@@ -164,13 +166,17 @@ case class ChoosePerPartitionRuntimeFilters(
     case node => node.children.flatMap(applicationScans)
   }
 
-  // The expected number of items of each bloom filter of the semi join, an even share of the
-  // creation side's over its partition keys. None when the creation side has fewer partition keys
-  // than it needs for each share to be within the size threshold, or reports none.
-  private def numItemsOf(join: ShuffledHashJoinExec, bloomFilter: Attribute): Option[Long] = {
-    val (numItems, minPartitionKeys) = sizingOf(bloomFilter)
-    partitionKeysOf(join.right).filter(_ >= minPartitionKeys).map { keys =>
-      ((numItems + keys - 1) / keys).max(1L)
+  // The expected number of items of each bloom filter of the semi join, and its number of bits when
+  // the creation side has no row count. Each is an even share of the creation side's over its
+  // partition keys. None when the creation side has fewer partition keys than it needs for each
+  // share to be within the size threshold, or reports none.
+  private def sizeOf(
+      join: ShuffledHashJoinExec,
+      bloomFilter: Attribute): Option[(Long, Option[Long])] = {
+    val sizing = sizingOf(bloomFilter)
+    partitionKeysOf(join.right).filter(_ >= sizing.minPartitionKeys).map { keys =>
+      def share(n: Long): Long = Math.ceilDiv(n, keys).max(1L)
+      (share(sizing.numItems), sizing.numBits.map(share))
     }
   }
 
@@ -182,13 +188,20 @@ case class ChoosePerPartitionRuntimeFilters(
     }
   }
 
-  // The semi join with each bloom filter of its aggregate expecting `numItems` items.
-  private def withNumItems(join: ShuffledHashJoinExec, numItems: Long): SparkPlan = {
+  // The semi join with each bloom filter of its aggregate expecting `numItems` items, with
+  // `numBits` bits when set, or else the number of bits those items need.
+  private def withSize(
+      join: ShuffledHashJoinExec,
+      numItems: Long,
+      numBits: Option[Long]): SparkPlan = {
     def sized(plan: SparkPlan): SparkPlan = plan match {
       case aggregate: BaseAggregateExec =>
         aggregate.transformExpressions {
           case b: BloomFilterAggregate =>
-            b.withNewChildren(new BloomFilterAggregate(b.child, numItems).children)
+            val size = numBits.fold(new BloomFilterAggregate(b.child, numItems)) { bits =>
+              new BloomFilterAggregate(b.child, Literal(numItems), Literal(bits))
+            }
+            b.withNewChildren(size.children)
         }.withNewChildren(Seq(sized(aggregate.child)))
       case other => other
     }

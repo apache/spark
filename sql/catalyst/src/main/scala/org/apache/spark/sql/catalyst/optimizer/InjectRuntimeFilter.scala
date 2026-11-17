@@ -173,36 +173,41 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSide: FilterCreationSide,
       creation: TransformExpression): Option[LogicalPlan] = {
-    val creationSide = ConstantFolding(ColumnPruning(
+    val sizing = perPartitionSizing(filterCreationSide)
+    lazy val creationSide = ConstantFolding(ColumnPruning(
       Project(Seq(Alias(filterCreationSide.key, "key")()), filterCreationSide.plan)))
-    val (numItems, minPartitionKeys) = perPartitionSizing(filterCreationSide)
-    if (creationSide.containsPattern(PYTHON_UDF) || !creationSide.deterministic ||
+    if (creation.numBucketsOpt.exists(sizing.minPartitionKeys > _ + 1L) ||
+        creationSide.containsPattern(PYTHON_UDF) || !creationSide.deterministic ||
         creationSide.exists {
           case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
           case _ => false
-        } || creation.numBucketsOpt.exists(minPartitionKeys > _ + 1L)) {
+        }) {
       None
     } else {
       Some(Filter(
-        PerPartitionRuntimeFilterSubquery(
-          filterApplicationSideKey, creationSide, numItems, minPartitionKeys),
+        PerPartitionRuntimeFilterSubquery(filterApplicationSideKey, creationSide, sizing),
         filterApplicationSidePlan))
     }
   }
 
   /**
-   * The expected number of items of the whole creation side, and the number of partition keys it
-   * needs at least, so that an even share of it is within the size threshold. Each bloom filter of
-   * a per-partition one holds the keys of one partition key and is built in its own task. Without
-   * a row count, the default expected number of items is for a creation side within the threshold.
-   * A bigger one gets it once for each threshold's worth of its size.
+   * The sizing of a per-partition bloom filter of the creation side. Each of its bloom filters
+   * holds the keys of one partition key and is built in its own task. The creation side needs at
+   * least one partition key for each threshold's worth of its size. Without a row count, the
+   * default expected number of items and number of bits are for a creation side within the
+   * threshold. A bigger one gets them once for each threshold's worth of its size.
    */
-  private def perPartitionSizing(filterCreationSide: FilterCreationSide): (Long, Long) = {
+  private def perPartitionSizing(filterCreationSide: FilterCreationSide): PerPartitionSizing = {
     val threshold = math.max(1L, filterCreationSide.sizeThreshold)
     val thresholds = ((filterCreationSide.sizeInBytes + threshold - 1) / threshold).max(1)
-    val numItems = filterCreationSide.rowCount.getOrElse(
-      thresholds * conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS))
-    (numItems.min(Long.MaxValue).longValue, thresholds.min(Long.MaxValue).longValue)
+    def capped(n: BigInt): Long = n.min(Long.MaxValue).longValue
+    val rowCount = filterCreationSide.rowCount
+    PerPartitionSizing(
+      capped(rowCount.getOrElse(
+        thresholds * conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS))),
+      Option.when(rowCount.isEmpty)(
+        capped(thresholds * conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_NUM_BITS))),
+      capped(thresholds))
   }
 
   private def injectBloomFilter(

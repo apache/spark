@@ -38,15 +38,12 @@ import org.apache.spark.sql.types.{BooleanType, Metadata, MetadataBuilder}
  * Like `DynamicPruningSubquery`, it cannot be evaluated. Where it gets no semi join, it gives way
  * to `true`.
  *
- * `numItems` is the expected number of items of the whole creation side. `minPartitionKeys` is the
- * number of partition keys it needs at least, so that an even share of it is within the size
- * threshold of a bloom filter's input.
+ * `sizing` sizes the bloom filters of its semi join.
  */
 case class PerPartitionRuntimeFilterSubquery(
     key: Expression,
     plan: LogicalPlan,
-    numItems: Long,
-    minPartitionKeys: Long,
+    sizing: PerPartitionSizing,
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(plan, Seq(key), exprId, Nil, None)
   with Predicate
@@ -88,7 +85,7 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
    * The metadata key of the bloom filter column of a per-partition bloom filter's aggregate.
    * [[InsertPerPartitionRuntimeFilterJoins]] sets it. That is how [[InjectRuntimeFilter]] and
    * `ChoosePerPartitionRuntimeFilters` tell the semi join from one a query wrote. Its value holds
-   * the `numItems` and `minPartitionKeys` of the placeholder, for sizing the bloom filters.
+   * the [[PerPartitionSizing]] of the placeholder.
    */
   private val PER_PARTITION_RUNTIME_FILTER = "__per_partition_runtime_filter"
 
@@ -99,10 +96,10 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
   private[optimizer] def bloomFilterMetadata(
       placeholder: PerPartitionRuntimeFilterSubquery): Metadata = {
     val sizing = new MetadataBuilder()
-      .putLong("numItems", placeholder.numItems)
-      .putLong("minPartitionKeys", placeholder.minPartitionKeys)
-      .build()
-    new MetadataBuilder().putMetadata(PER_PARTITION_RUNTIME_FILTER, sizing).build()
+      .putLong("numItems", placeholder.sizing.numItems)
+      .putLong("minPartitionKeys", placeholder.sizing.minPartitionKeys)
+    placeholder.sizing.numBits.foreach(sizing.putLong("numBits", _))
+    new MetadataBuilder().putMetadata(PER_PARTITION_RUNTIME_FILTER, sizing.build()).build()
   }
 
   /**
@@ -115,13 +112,13 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
           if bloomFilter.metadata.contains(PER_PARTITION_RUNTIME_FILTER) => (bloomFilter, key)
     }
 
-  /**
-   * The expected number of items of the whole creation side of the per-partition bloom filter with
-   * the column `bloomFilter`, and the number of partition keys it needs at least.
-   */
-  def sizingOf(bloomFilter: Attribute): (Long, Long) = {
+  /** The sizing of the per-partition bloom filter with the column `bloomFilter`. */
+  def sizingOf(bloomFilter: Attribute): PerPartitionSizing = {
     val sizing = bloomFilter.metadata.getMetadata(PER_PARTITION_RUNTIME_FILTER)
-    (sizing.getLong("numItems"), sizing.getLong("minPartitionKeys"))
+    PerPartitionSizing(
+      sizing.getLong("numItems"),
+      Option.when(sizing.contains("numBits"))(sizing.getLong("numBits")),
+      sizing.getLong("minPartitionKeys"))
   }
 
   /** The key that `plan` checks, when it is the join of a placeholder's semi join. */
@@ -151,6 +148,16 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
     }
   }
 }
+
+/**
+ * The sizing of a per-partition runtime bloom filter, for its whole creation side:
+ *  - `numItems`, the expected number of items;
+ *  - `numBits`, the number of bits, when the creation side has no row count. With one, each bloom
+ *    filter gets the number of bits its expected items need;
+ *  - `minPartitionKeys`, the number of partition keys it needs at least, so that an even share of
+ *    it is within the size threshold of a bloom filter's input.
+ */
+case class PerPartitionSizing(numItems: Long, numBits: Option[Long], minPartitionKeys: Long)
 
 /**
  * Replaces each [[PerPartitionRuntimeFilterSubquery]] with its semi join, right where predicate
