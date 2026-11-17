@@ -666,7 +666,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
   test("SPARK-60451: Check constraint added by CREATE or REPLACE TABLE on a special datetime") {
     // Evaluating a cast does not give the value of a special value such as 'today' or 'epoch'. As
-    // for `current_date()`, the constraint is stored without a predicate and writes read its text.
+    // with `current_date()`, the constraint is stored without a predicate and writes read its text.
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
         Seq(

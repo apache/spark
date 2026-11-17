@@ -1143,7 +1143,7 @@ class DataSourceV2DataFrameSuite
 
   test("SPARK-60451: default values and generated columns on a special datetime value") {
     // Evaluating a cast does not give the value of a special value such as 'today' or 'epoch'. As
-    // for `current_date()`, these columns have no V2 expression, so writes read their SQL text.
+    // with `current_date()`, these columns have no V2 expression, so writes read their SQL text.
     val t = "testcat.ns.t"
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
@@ -1164,10 +1164,14 @@ class DataSourceV2DataFrameSuite
             sql(s"SELECT datediff(current_date(), d) IN (0, 1), e, " +
               s"datediff(current_date(), g) IN (0, 1) FROM $t"),
             Row(true, java.sql.Date.valueOf("1970-01-01"), true))
-          // ALTER TABLE builds the V2 expression of a new default value the same way.
-          sql(s"ALTER TABLE $t ALTER COLUMN e SET DEFAULT CAST('tomorrow' AS DATE)")
-          val altered = catalog("testcat").loadTable(Identifier.of(Array("ns"), "t")).columns()
-          assert(altered(2).defaultValue().getExpression == null, ansi)
+          // ALTER TABLE builds the V2 expression of a new default value the same way. The test
+          // catalog drops it when it rebuilds an altered column, so check the change it receives.
+          val alterExec = executeAndKeepPhysicalPlan[AlterTableExec] {
+            sql(s"ALTER TABLE $t ALTER COLUMN e SET DEFAULT CAST('tomorrow' AS DATE)")
+          }
+          checkDefaultValues(
+            alterExec.changes.map(_.asInstanceOf[UpdateColumnDefaultValue]).toArray,
+            Array(new DefaultValue("CAST('tomorrow' AS DATE)", null)))
         }
       }
     }
