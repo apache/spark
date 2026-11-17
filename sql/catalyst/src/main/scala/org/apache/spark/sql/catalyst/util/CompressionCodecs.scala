@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.reflect.Modifier
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.{SplittableCompressionCodec, ZStandardCodec}
+import org.apache.hadoop.io.compress.{CompressionCodec, SplittableCompressionCodec, ZStandardCodec}
 
 import org.apache.spark.io.HadoopCodecStreams
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -54,9 +55,29 @@ object CompressionCodecs {
    * Read-side counterpart of [[getCodecClassName]]. Accepts the same short names plus `zstd` /
    * `zstandard`, since the file readers can decompress Zstandard even though the writers cannot
    * produce it. Used to parse the `decompression` option.
+   *
+   * Unlike the write side, a class name must also be one Hadoop can create as a codec: a concrete
+   * `CompressionCodec` with a no-argument constructor. The readers instantiate the forced codec
+   * by reflection for every file, on the executors, so anything else would fail there (or be
+   * skipped as a corrupt file under `ignoreCorruptFiles`) instead of at planning like an unknown
+   * codec name.
    */
   def getReadCodecClassName(name: String): String = {
-    getCodecClassName(name, readShortCompressionCodecNames)
+    val codecName = getCodecClassName(name, readShortCompressionCodecNames)
+    if (codecName != null && !isCreatableCodecClass(Utils.classForName(codecName))) {
+      throw QueryExecutionErrors.codecNotAvailableError(
+        codecName, readShortCompressionCodecNames.keys.mkString(", "))
+    }
+    codecName
+  }
+
+  // Whether `ReflectionUtils.newInstance(clazz, conf)` can produce a `CompressionCodec`, checked
+  // by reflection only: the class is never instantiated on the driver.
+  private def isCreatableCodecClass(clazz: Class[_]): Boolean = {
+    classOf[CompressionCodec].isAssignableFrom(clazz) &&
+      !clazz.isInterface &&
+      !Modifier.isAbstract(clazz.getModifiers) &&
+      clazz.getDeclaredConstructors.exists(_.getParameterCount == 0)
   }
 
   private def getCodecClassName(

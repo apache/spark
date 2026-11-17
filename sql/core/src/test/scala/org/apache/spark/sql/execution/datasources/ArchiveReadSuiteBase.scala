@@ -181,6 +181,14 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   protected def supportsDecompressionCodec: Boolean = false
 
   /**
+   * Read options that make [[format]] infer each file as one whole document instead of record by
+   * record (e.g. `multiLine`), or `None` when the format has no such mode. The shared
+   * `decompression` inference test runs once more with them, since whole-document inference
+   * takes its own code path.
+   */
+  protected def multiLineInferenceOptions: Option[Map[String, String]] = None
+
+  /**
    * Whether default (non-merge) inference samples a single file rather than scanning every input.
    * Parquet samples one part-file (SPARK-11500), so a corrupt/missing first-sampled archive fails
    * to infer instead of falling through to a readable one. The streaming formats scan all inputs.
@@ -800,22 +808,29 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
 
     if (supportsSchemaInference) {
-      Seq(true, false).foreach { ignoreCorrupt =>
-        test("decompression is rejected for an archive during schema inference " +
-            s"(ignoreCorruptFiles=$ignoreCorrupt)") {
-          withArchiveFile() { archive =>
-            writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))
-            // Raised on the driver before any inference task opens the archive, so it is neither
-            // wrapped in a task failure nor skipped by `ignoreCorruptFiles`.
-            withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
-              checkErrorMatchPVals(
-                exception = intercept[SparkUnsupportedOperationException] {
-                  inferredSchema(Seq(archive.getCanonicalPath), Map("decompression" -> "gzip"))
-                },
-                condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
-                parameters = Map(
-                  "option" -> "\"decompression\"",
-                  "path" -> s".*${Pattern.quote(archive.getName)}"))
+      // Record-by-record and whole-document (e.g. multiLine) inference take different paths, and
+      // each must reject the option on the driver.
+      val inferenceModes = Seq("" -> Map.empty[String, String]) ++
+        multiLineInferenceOptions.map(opts => s", ${opts.mkString(", ")}" -> opts)
+      inferenceModes.foreach { case (modeSuffix, modeOptions) =>
+        Seq(true, false).foreach { ignoreCorrupt =>
+          test("decompression is rejected for an archive during schema inference " +
+              s"(ignoreCorruptFiles=$ignoreCorrupt$modeSuffix)") {
+            withArchiveFile() { archive =>
+              writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))
+              // Raised on the driver before any inference task opens the archive, so it is neither
+              // wrapped in a task failure nor skipped by `ignoreCorruptFiles`.
+              withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+                checkErrorMatchPVals(
+                  exception = intercept[SparkUnsupportedOperationException] {
+                    inferredSchema(
+                      Seq(archive.getCanonicalPath), modeOptions + ("decompression" -> "gzip"))
+                  },
+                  condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+                  parameters = Map(
+                    "option" -> "\"decompression\"",
+                    "path" -> s".*${Pattern.quote(archive.getName)}"))
+              }
             }
           }
         }

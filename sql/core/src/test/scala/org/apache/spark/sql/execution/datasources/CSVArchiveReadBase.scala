@@ -44,6 +44,8 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   override protected def readSchema: String = "id INT, name STRING"
 
   override protected def supportsDecompressionCodec: Boolean = true
+  override protected def multiLineInferenceOptions: Option[Map[String, String]] =
+    Some(Map("multiLine" -> "true"))
 
   // CSV infers its schema from row content (supportsSchemaInference defaults true); inference is
   // triggered by the `inferSchema` option. CSV is positional/header-keyed and cannot represent
