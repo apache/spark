@@ -668,9 +668,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx: CacheTableContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      messageParameters = Map(
-        "statement" -> toSQLStmt("CACHE TABLE ... AS SELECT"),
-        "name" -> toSQLId(nameParts)),
+      messageParameters =
+        Map("statement" -> toSQLStmt("CACHE TABLE ... AS SELECT"), "name" -> toSQLId(nameParts)),
       ctx)
   }
 
