@@ -258,17 +258,32 @@ class StreamingJoinLegacyEventTimeKeySuite extends StreamTest {
     assert(plannedLags(Seq("lw", "rw")) === Map("lc" -> lagOf(10), "rc" -> lagOf(10)))
   }
 
-  test("window over another input's event time is unrelated") {
-    val a = MemoryStream[(Int, Int)]
-    val b = MemoryStream[(Int, Int)]
-    val left = eventTimeInput(a, "a").join(eventTimeInput(b, "b"), expr("ak = bk AND at = bt"))
-      .withColumn("lk", $"ak")
-      .withColumn("lw", window($"bt", "10 seconds"))
-    // The walk does not compare columns of different join inputs, so the key keeps its bound,
-    // as in Spark 4.3, but a range condition gets none from it; here at = bt makes the window a
-    // window over at.
-    assert(lags(joinWithRight(left)) ===
-      Map("bt" -> EventTimeLag.unrelated, "lw" -> EventTimeLag.unrelated))
+  // The earlier join outputs at from its left input and bt from its right one. Its condition
+  // relates them where every row that it outputs with a non-NULL bt satisfies at = bt: in an
+  // inner join, and in a left outer join, which pads bt's input. Otherwise the key keeps its
+  // bound, as in Spark 4.3, but a range condition gets none from it.
+  Seq(
+    ("ak = bk AND at = bt", "inner", true),
+    ("ak = bk AND at = bt", "left_outer", true),
+    ("ak = bk AND at = bt", "right_outer", false),
+    ("ak = bk AND at = bt", "full_outer", false),
+    ("ak = bk", "inner", false),
+    ("ak = bk AND at <= bt", "inner", false)
+  ).foreach { case (condition, joinType, related) =>
+    val outcome = if (related) "has lag zero" else "is unrelated"
+    test(s"window over another input's event time after a $joinType join on $condition " +
+        outcome) {
+      val left = eventTimeInput(MemoryStream[(Int, Int)], "a")
+        .join(eventTimeInput(MemoryStream[(Int, Int)], "b"), expr(condition), joinType)
+        .withColumn("lk", $"ak")
+        .withColumn("lw", window($"bt", "10 seconds"))
+      val expected = if (related) {
+        Map.empty
+      } else {
+        Map("bt" -> EventTimeLag.unrelated, "lw" -> EventTimeLag.unrelated)
+      }
+      assert(lags(joinWithRight(left)) === expected)
+    }
   }
 
   test("union takes the largest lag of its inputs") {

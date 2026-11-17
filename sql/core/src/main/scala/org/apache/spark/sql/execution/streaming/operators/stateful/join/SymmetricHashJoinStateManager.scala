@@ -269,8 +269,10 @@ class SymmetricHashJoinStateManagerV4(
 
   private val random = new scala.util.Random(System.currentTimeMillis())
   private val bucketCountWithoutTimestamp = 1024
-  // A null indexed timestamp makes the value-eviction predicate SQL-unknown, so V2 and V3 never
-  // evict such a row. Return None for it, so it is kept out of the timestamp eviction index.
+  // A row whose indexed timestamp is NULL can never satisfy the bound on that column, so a side
+  // that evicts by it never stores one, and a side without an eviction predicate keeps such a
+  // row out of the timestamp index, so that timestamp eviction never removes it. V1 to V3 remove
+  // such a row by a separate NULL check.
   private val extractTimestampFromValue: UnsafeRow => Option[Long] = { row =>
     valueTimestampColumnOrdinal.flatMap { idx =>
       val attr = inputValueAttributes(idx)
