@@ -403,7 +403,10 @@ abstract class JdbcDialect extends Serializable with Logging {
       compileInstantInSessionZone(timestampValue)
     case timestampValue: Instant =>
       // Same text as the Timestamp a non-java8 API session would pass: JVM-zone wall clock.
-      compileValue(DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(timestampValue)))
+      // setNanos keeps the TIMESTAMP_LTZ(7-9) digits that instantToMicros drops.
+      val ts = DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(timestampValue))
+      ts.setNanos(timestampValue.getNano)
+      compileValue(ts)
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")

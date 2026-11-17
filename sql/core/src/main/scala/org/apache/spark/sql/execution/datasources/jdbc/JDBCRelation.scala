@@ -224,6 +224,8 @@ private[sql] object JDBCRelation extends Logging {
         case DateType =>
           DateFormatter().format(value.toInt)
         case TimestampType =>
+          // TODO: bounds use the session time zone but pushed TIMESTAMP literals use the JVM
+          // default time zone (SPARK-61543), so partitions can be uneven when the two differ.
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))
           timestampFormatter.format(value)

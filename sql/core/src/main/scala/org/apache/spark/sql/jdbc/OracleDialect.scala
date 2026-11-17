@@ -267,7 +267,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
     case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
     case instantValue: Instant if !conf.legacyJdbcSessionZoneTimestampLiteral =>
-      compileValue(DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(instantValue)))
+      val ts = DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(instantValue))
+      ts.setNanos(instantValue.getNano)
+      compileValue(ts)
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] =>

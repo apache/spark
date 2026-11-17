@@ -2213,6 +2213,11 @@ class JDBCSuite extends SharedSparkSession {
       assert(JdbcDialects.get("jdbc:").compileValue(instant) === "'2026-06-25 22:00:00.0'")
       assert(JdbcDialects.get("jdbc:oracle:").compileValue(instant) ===
         "{ts '2026-06-25 22:00:00.0'}")
+      val nanosInstant = Instant.parse("2026-06-26T05:00:00.123456789Z")
+      assert(JdbcDialects.get("jdbc:").compileValue(nanosInstant) ===
+        "'2026-06-25 22:00:00.123456789'")
+      assert(JdbcDialects.get("jdbc:oracle:").compileValue(nanosInstant) ===
+        "{ts '2026-06-25 22:00:00.123456789'}")
       // SQL Server keeps the session zone: datetimeoffset reads zoneless text as UTC.
       assert(JdbcDialects.get("jdbc:sqlserver:").compileValue(instant) ===
         "'2026-06-26 00:00:00'")
