@@ -9020,6 +9020,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.partialReplay.enabled")
+      .internal()
+      .doc("When the whole-plan check rejects a push-down proposal, the rule replays it one " +
+        "site at a time over the input plan. A site the whole plan rejects takes the layout of " +
+        "the exchange it removes, or keeps that exchange when no child can lay the union out " +
+        "on it. A site is kept only while the whole plan still holds. When false, a rejected " +
+        "proposal goes straight to the whole-plan retry on the removed layouts, which " +
+        "sacrifices the sites that would have held.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED =
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.lookThroughOperators.enabled")
       .internal()
@@ -9102,23 +9116,28 @@ object SQLConf {
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled")
       .internal()
       .doc("When true, union shuffle push-down may use a V2 keyed layout as the union's " +
-        "output, whether the shuffle it replaces was keyed or hash. Children already reporting " +
-        "the picked domain keep their layouts, and an unmarked child reporting a subset of its " +
-        "keys keeps it too; a marked child has to declare the domain's list in the same order. " +
-        "The others are shuffled onto it, which creates keyed shuffles, and rows of a key the " +
-        "domain does not declare are routed by hash, which the layout records. The grouping " +
-        "above the rebuilt union then holds the full-key claim only. Set to false to restrict " +
-        s"the rule to hash layouts. Requires ${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} and " +
-        s"${V2_BUCKETING_ENABLED.key}, ${V2_BUCKETING_SHUFFLE_ENABLED.key} since a child may be " +
-        s"shuffled onto the domain, and " +
-        s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} to be disabled. A target " +
-        s"naming only part of the consumer's cluster keys further needs " +
-        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} off and " +
+        "output, whether the shuffle it replaces was keyed or hash. A child already reporting " +
+        "the picked domain keeps its layout, and so does an unmarked child reporting a subset " +
+        "of its keys; a marked child has to declare the domain's list in the same order. The " +
+        "other children are shuffled onto the domain, and rows of a key the domain does not " +
+        "declare are routed by hash, which the layout records. The grouping above the rebuilt " +
+        "union keeps the claim to that key set. When false, the rule uses hash layouts only. " +
+        s"Requires ${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key}, " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_SHUFFLE_ENABLED.key}, since a child " +
+        s"may be shuffled onto the domain, with " +
+        s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} disabled. " +
+        "A target naming only part of the consumer's cluster keys needs " +
+        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} disabled and " +
         "spark.sql.adaptive.pushDownShuffleThroughUnion.allowPartitionKeysSubsetOfClusterKeys." +
-        "enabled on. A source-reported keyed layout is kept only when the consumer's shuffle " +
-        s"group cannot coalesce, so ${COALESCE_PARTITIONS_ENABLED.key} must be off or " +
-        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key} on.")
-      .version("4.4.0")
+        "enabled on. A target partitioned by a transform over the cluster keys, such as " +
+        "bucket(n, id), needs the subset permission whatever " +
+        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} is set to. " +
+        "A source-reported keyed layout is kept only when the consumer's shuffle group cannot " +
+        s"coalesce: ${COALESCE_PARTITIONS_ENABLED.key} off, " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key} on, or " +
+        "a consumer whose inputs do not all reach an exchange, which the rule admits without " +
+        "either setting.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)

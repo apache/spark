@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{
   ClusteredDistribution, CoalescedBoundary, CoalescedHashPartitioning, Distribution,
   HASH_ROUTING, HashPartitioning, IdentityBroadcastMode, KeyedPartitioning,
   NullAwareHashPartitioning, Partitioning, PartitioningCollection, RoundRobinPartitioning,
-  ROUTING_LOST, UnknownPartitioning}
+  ROUTING_LOST, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.functions.BucketFunction
@@ -214,19 +214,21 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
 
   test("SPARK-61785: a query on the defaults keeps its shuffle") {
-    // The suite opens every opt-in for the rest of its tests. Here they are put back to their
-    // defaults, with only AQE turned on, so the plan is the one an ordinary query gets.
-    withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "false",
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "false",
-        SQLConf
-          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
-          .key -> "false",
-        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+    // The suite opens every opt-in for the rest of its tests. Here each goes back to its declared
+    // default, with only AQE turned on, so flipping a default changes this plan and the answer.
+    val defaults = Seq(
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED,
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED,
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED,
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED,
+      SQLConf
+        .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED,
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR,
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)
+    withSQLConf((defaults.map(entry => entry.key -> entry.defaultValueString) :+
+        (SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") :+
+        (SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") :+
+        (SQLConf.SHUFFLE_PARTITIONS.key -> "4")): _*) {
       withTempView("t1", "t2") {
         createTables()
         val sql = """SELECT /*+ MERGE(u, r) */ u.id, u.v, r.v FROM (
@@ -3986,6 +3988,97 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         s"a leg that lost its routing cannot be merged beside a routed one:\n$grouped")
       assert(grouped.child.children(1).fastEquals(routed))
       assert(ValidateRequirements.validate(grouped))
+    }
+  }
+
+  test("SPARK-61785: a failed keyed target reverts only its own site") {
+    withKeyedLayouts {
+      // A join-like node pairs its children, so a keyed target on one of them cannot pair with the
+      // hash partner and the whole plan rejects it. The other site sits outside that pairing and
+      // keeps the push-down the base branch gives it, on a layout that is not the exchange it
+      // removes.
+      val a1 = attr("id")
+      val a2 = attr("id")
+      val p = attr("id")
+      val b1 = attr("id")
+      val b2 = attr("id")
+      val keyedUnion = UnionExec(Seq(
+        leaf(a1, KeyedPartitioning(Seq(a1), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))),
+        leaf(a2)))
+      val hashUnion = UnionExec(Seq(leaf(b1, hash(b1, 3)), leaf(b2)))
+      val site = PassThroughPlan(ensureShuffle(hash(a1, 3), keyedUnion), clustered(a1))
+      val join = TestPartitioningPlan(
+        children = Seq(site, leaf(p, hash(p, 3))),
+        required = Seq(clustered(a1), clustered(p)),
+        output = Seq(a1))
+      val other = PassThroughPlan(ensureShuffle(hash(b1, 2), hashUnion), clustered(b1))
+      val plan = TestPartitioningPlan(
+        children = Seq(join, other),
+        required = Seq(UnspecifiedDistribution, UnspecifiedDistribution),
+        output = Seq(a1, b1))
+
+      val result = pushDown(plan)
+      val revertedSite = result.children.head.children.head.children.head
+      assert(revertedSite.isInstanceOf[ShuffleExchangeExec],
+        s"the keyed site reverts to its own exchange:\n$result")
+      assert(revertedSite.outputPartitioning === hash(a1, 3),
+        s"the reverted site keeps the layout it came with:\n$result")
+      val keptOther = result.children(1).children.head
+      assert(keptOther.isInstanceOf[UnionExec],
+        s"the other site keeps the push-down the base branch gives it:\n$result")
+      assert(keptOther.outputPartitioning === hash(b1, 3),
+        s"the other site keeps a layout that is not the exchange it removes:\n$result")
+      assert(ValidateRequirements.validate(result), s"invalid plan:\n$result")
+      // With the replay off, the whole-plan retry finds no site offering the layout it removes,
+      // so the plan keeps both exchanges.
+      withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "false") {
+        val unreplayed = pushDown(plan)
+        assert(unreplayed.fastEquals(plan), s"no replay means no push-down:\n$unreplayed")
+        assert(ValidateRequirements.validate(unreplayed))
+      }
+    }
+  }
+
+  test("SPARK-61785: a site the plan rejects takes the layout it removes on its own") {
+    withKeyedLayouts {
+      // The keyed target of one site cannot pair with the join partner, so that site falls back
+      // to the layout of the exchange it removes. The other site keeps its own target: the
+      // whole-plan retry would have put it on the layout it removes as well.
+      val a1 = attr("id")
+      val a2 = attr("id")
+      val a3 = attr("id")
+      val p = attr("id")
+      val b1 = attr("id")
+      val b2 = attr("id")
+      val keyedUnion = UnionExec(Seq(
+        leaf(a1, KeyedPartitioning(Seq(a1), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))),
+        leaf(a3, hash(a3, 3)),
+        leaf(a2)))
+      val hashUnion = UnionExec(Seq(leaf(b1, hash(b1, 3)), leaf(b2)))
+      val site = PassThroughPlan(ensureShuffle(hash(a1, 3), keyedUnion), clustered(a1))
+      val join = TestPartitioningPlan(
+        children = Seq(site, leaf(p, hash(p, 3))),
+        required = Seq(clustered(a1), clustered(p)),
+        output = Seq(a1))
+      val other = PassThroughPlan(ensureShuffle(hash(b1, 2), hashUnion), clustered(b1))
+      val plan = TestPartitioningPlan(
+        children = Seq(join, other),
+        required = Seq(UnspecifiedDistribution, UnspecifiedDistribution),
+        output = Seq(a1, b1))
+
+      val result = pushDown(plan)
+      val revertedSite = result.children.head.children.head.children.head
+      assert(revertedSite.isInstanceOf[UnionExec],
+        s"the rejected site takes the layout it removes:\n$result")
+      assert(revertedSite.outputPartitioning === hash(a1, 3),
+        s"the rejected site takes the layout it removes:\n$result")
+      val keptOther = result.children(1).children.head
+      assert(keptOther.isInstanceOf[UnionExec],
+        s"the other site keeps its own target:\n$result")
+      assert(keptOther.outputPartitioning === hash(b1, 3),
+        s"the other site keeps a layout that is not the exchange it removes:\n$result")
+      assert(ValidateRequirements.validate(result), s"invalid plan:\n$result")
     }
   }
 

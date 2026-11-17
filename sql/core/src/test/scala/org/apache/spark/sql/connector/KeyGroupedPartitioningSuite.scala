@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.{ColumnarToRowExec, ExtendedMode, Formatte
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AQEShuffleReadExec, ResultQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
@@ -708,6 +708,24 @@ class KeyGroupedPartitioningSuite
     case other => other
   }
 
+  /**
+   * The exchanges by kind: keyed, hash laid out by the planner or the rule, and hash repartitions
+   * the user asked for.
+   */
+  private def exchangeKinds(plan: SparkPlan): (Int, Int, Int) = {
+    val exchanges = allExchanges(plan)
+    (
+      exchanges.count(_.outputPartitioning.isInstanceOf[physical.KeyedPartitioning]),
+      exchanges.count { exchange =>
+        exchange.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
+          exchange.shuffleOrigin == ENSURE_REQUIREMENTS
+      },
+      exchanges.count { exchange =>
+        exchange.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
+          exchange.shuffleOrigin != ENSURE_REQUIREMENTS
+      })
+  }
+
   /** The exchanges this rewrite moves: those directly over a union. */
   private def exchangesOverUnion(plan: SparkPlan): Seq[ShuffleExchangeExec] =
     collect(plan) {
@@ -720,6 +738,22 @@ class KeyGroupedPartitioningSuite
       case group: GroupPartitionsExec
           if unwrap(group.child).isInstanceOf[UnionExec] => group
     }.nonEmpty
+
+  /**
+   * The configuration the keyed push-down needs: V2 bucketing shuffles on, coalescing off so a
+   * kept keyed scan survives, shuffled joins, and the rule on.
+   */
+  private def withReplay(f: => Unit): Unit = withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+        "true")(f)
 
   private val columns2: Array[Column] = Array(
       Column.create("store_id", IntegerType),
@@ -875,10 +909,11 @@ class KeyGroupedPartitioningSuite
       sql("INSERT INTO testcat.ns.marked_right VALUES " +
         "(1, 'b', timestamp'2022-01-03'), (2, 'd', timestamp'2022-01-04'), " +
         "(3, 'e', timestamp'2022-01-05')")
-      // The join lays its left side out on the right's keyed domain, which marks the layout: rows
-      // of a key the domain does not declare were routed by hash. A right outer join reports the
-      // right side's layout, so the union's join leg carries the marker, and the rule keeps it
-      // beside an unmarked scan on the same domain.
+      // The planner lays the right side's bucket(2, id) layout out on the left side's
+      // identity(id) domain {1, 2}, which marks the laid-out layout: rows of a key the domain
+      // does not declare, such as key 3, were routed by hash. A right outer join reports its
+      // right side, so the union's join leg carries the marker, and the rule keeps it beside an
+      // unmarked scan on the same domain.
       val df = sql("SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn " +
         "FROM (SELECT id, data FROM testcat.ns.marked_left UNION ALL " +
         "SELECT b.id, b.data FROM testcat.ns.marked_left a " +
@@ -904,6 +939,234 @@ class KeyGroupedPartitioningSuite
       assert(allExchanges(plan).size === 2, s"expected two shuffles:\n$plan")
       assert(exchangesOverUnion(plan).isEmpty, s"the target is pushed down:\n$plan")
       assert(hasGroupedUnion(plan), s"expected a grouped union:\n$plan")
+    }
+  }
+
+  test("SPARK-61785: one pass keeps a keyed site beside a hash site") {
+    withReplay {
+      createTable("one_pass_keyed", columns, Array(Expressions.identity("id")))
+      createTable("one_pass_plain", columns, Array.empty[Transform])
+      sql("INSERT INTO testcat.ns.one_pass_keyed VALUES " +
+        "(1, 'a', timestamp'2022-01-01'), (2, 'c', timestamp'2022-01-02')")
+      sql("INSERT INTO testcat.ns.one_pass_plain VALUES " +
+        "(1, 'b', timestamp'2022-01-03'), (2, 'd', timestamp'2022-01-04')")
+      // Two independent sites: the first keeps its keyed scan, the second keeps a repartition
+      // and lays its values leg out on that layout.
+      val query =
+        """SELECT id, data, rn FROM (
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.one_pass_keyed
+          |    UNION ALL SELECT * FROM VALUES (1, 'v') AS v(id, data))
+          |  UNION ALL
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.one_pass_plain
+          |    UNION ALL SELECT * FROM VALUES (2, 'w') AS w(id, data))
+          |)""".stripMargin
+      val expected = Seq(Row(1, "a", 1), Row(1, "v", 2), Row(2, "c", 1), Row(1, "b", 1),
+        Row(2, "d", 1), Row(2, "w", 2))
+      def check(plan: SparkPlan): Unit = {
+        assert(satisfiesRequirements(plan), s"invalid plan:\n$plan")
+        // The keyed site lays its values leg out; the hash site keeps its repartition and lays
+        // the other leg out.
+        assert(exchangeKinds(plan) === (1, 1, 1), s"unexpected shuffle kinds:\n$plan")
+        assert(hasGroupedUnion(plan), s"expected a grouped keyed union:\n$plan")
+        val unions = collect(plan) { case u: UnionExec => u }
+        assert(unions.exists(_.outputPartitioning.isInstanceOf[physical.KeyedPartitioning]),
+          s"expected a keyed union:\n$plan")
+        assert(unions.exists(_.outputPartitioning.isInstanceOf[physical.HashPartitioning]),
+          s"expected a hash union:\n$plan")
+      }
+      val df = sql(query)
+      checkAnswer(df, expected)
+      check(df.queryExecution.executedPlan)
+      // The proposal holds, so no fallback runs and the replay switch cannot apply.
+      withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "false") {
+        val unreplayed = sql(query)
+        checkAnswer(unreplayed, expected)
+        check(unreplayed.queryExecution.executedPlan)
+      }
+    }
+  }
+
+  test("SPARK-61785: the replay keeps a keyed site beside a hash site") {
+    withReplay {
+      createTable("replay_a", columns, Array(Expressions.identity("id")))
+      createTable("replay_pa", columns, Array.empty[Transform])
+      createTable("replay_b", columns, Array(Expressions.identity("id")))
+      createTable("replay_pc", columns, Array.empty[Transform])
+      sql("INSERT INTO testcat.ns.replay_a VALUES " +
+        "(1, 'a', timestamp'2022-01-01'), (2, 'c', timestamp'2022-01-02')")
+      sql("INSERT INTO testcat.ns.replay_pa VALUES (1, 'p', timestamp'2022-01-03')")
+      sql("INSERT INTO testcat.ns.replay_b VALUES " +
+        "(2, 'b', timestamp'2022-01-04'), (3, 'e', timestamp'2022-01-05')")
+      sql("INSERT INTO testcat.ns.replay_pc VALUES (1, 'q', timestamp'2022-01-06')")
+      // The first site's keyed target cannot pair with its join partner, so the whole plan
+      // rejects the first pass. The replay keeps the other two sites: one keyed, one hash.
+      val df = sql(
+        """SELECT id, data, rn FROM (
+          |  SELECT /*+ MERGE(u, p) */ u.id, u.data, u.rn FROM (
+          |    SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |      SELECT id, data FROM testcat.ns.replay_a
+          |      UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) u
+          |  JOIN (SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.replay_pa) p
+          |    ON u.id = p.id
+          |  UNION ALL
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.replay_b
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))
+          |  UNION ALL
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.replay_pc
+          |    UNION ALL SELECT * FROM VALUES (1, 'z') AS q(id, data))
+          |)""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "a", 1), Row(1, "x", 2), Row(2, "b", 1), Row(2, "y", 2),
+        Row(3, "e", 1), Row(1, "q", 1), Row(1, "z", 2)))
+      val plan = df.queryExecution.executedPlan
+      assert(satisfiesRequirements(plan), s"invalid plan:\n$plan")
+      // The rejected site keeps the exchange it came with; the other two keep their layouts.
+      assert(exchangesOverUnion(plan).size === 1, s"expected the rejected site's exchange:\n$plan")
+      assert(exchangeKinds(plan) === (1, 2, 2), s"unexpected shuffle kinds:\n$plan")
+      assert(hasGroupedUnion(plan), s"expected the kept keyed site:\n$plan")
+      val unions = collect(plan) { case u: UnionExec => u }
+      assert(unions.exists(_.outputPartitioning.isInstanceOf[physical.HashPartitioning]),
+        s"expected the kept hash site:\n$plan")
+    }
+  }
+
+  test("SPARK-61785: the replay falls a site back to the layout it removes") {
+    withReplay {
+      createTable("fallback_a", columns, Array(Expressions.identity("id")))
+      createTable("fallback_pa", columns, Array.empty[Transform])
+      createTable("fallback_b", columns, Array(Expressions.identity("id")))
+      sql("INSERT INTO testcat.ns.fallback_a VALUES " +
+        "(1, 'a1', timestamp'2022-01-01'), (1, 'a2', timestamp'2022-01-02'), " +
+        "(2, 'c1', timestamp'2022-01-03'), (2, 'c2', timestamp'2022-01-04')")
+      sql("INSERT INTO testcat.ns.fallback_pa VALUES (1, 'p', timestamp'2022-01-05')")
+      sql("INSERT INTO testcat.ns.fallback_b VALUES " +
+        "(2, 'b', timestamp'2022-01-06'), (3, 'e', timestamp'2022-01-07')")
+      // The first site's keyed target outranks its repartition leg but cannot pair with the join
+      // partner, so the replay takes the layout of the exchange that site removes, which the
+      // repartition leg reports. The other site keeps its keyed target.
+      val df = sql(
+        """SELECT id, data, rn FROM (
+          |  SELECT /*+ MERGE(u, p) */ u.id, u.data, u.rn FROM (
+          |    SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |      SELECT id, data FROM testcat.ns.fallback_a
+          |      UNION ALL SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.fallback_pa
+          |      UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) u
+          |  JOIN (SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.fallback_pa) p
+          |    ON u.id = p.id
+          |  UNION ALL
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.fallback_b
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))
+          |)""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "a1", 1), Row(1, "a2", 2), Row(1, "p", 3), Row(1, "x", 4),
+        Row(2, "b", 1), Row(2, "y", 2), Row(3, "e", 1)))
+      val plan = df.queryExecution.executedPlan
+      assert(satisfiesRequirements(plan), s"invalid plan:\n$plan")
+      // Both sites are pushed down: neither keeps an exchange above its union.
+      assert(exchangesOverUnion(plan).isEmpty, s"expected both sites pushed:\n$plan")
+      assert(exchangeKinds(plan) === (1, 2, 2), s"unexpected shuffle kinds:\n$plan")
+      assert(hasGroupedUnion(plan), s"expected the keyed site:\n$plan")
+      val unions = collect(plan) { case u: UnionExec => u }
+      assert(unions.exists(_.outputPartitioning.isInstanceOf[physical.HashPartitioning]),
+        s"expected the site on the layout it removes:\n$plan")
+    }
+  }
+
+  test("SPARK-61785: the replay leaves the rejected site alone") {
+    withReplay {
+      createTable("partial_a", columns, Array(Expressions.identity("id")))
+      createTable("partial_pa", columns, Array.empty[Transform])
+      createTable("partial_b", columns, Array(Expressions.identity("id")))
+      sql("INSERT INTO testcat.ns.partial_a VALUES " +
+        "(1, 'a', timestamp'2022-01-01'), (2, 'c', timestamp'2022-01-02')")
+      sql("INSERT INTO testcat.ns.partial_pa VALUES (1, 'p', timestamp'2022-01-03')")
+      sql("INSERT INTO testcat.ns.partial_b VALUES " +
+        "(2, 'b', timestamp'2022-01-04'), (3, 'e', timestamp'2022-01-05')")
+      // The first site's keyed target cannot pair with its join partner and has no other target,
+      // so the replay leaves it as it came; the second site keeps its keyed target.
+      val df = sql(
+        """SELECT id, data, rn FROM (
+          |  SELECT /*+ MERGE(u, p) */ u.id, u.data, u.rn FROM (
+          |    SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |      SELECT id, data FROM testcat.ns.partial_a
+          |      UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) u
+          |  JOIN (SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.partial_pa) p
+          |    ON u.id = p.id
+          |  UNION ALL
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.partial_b
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))
+          |)""".stripMargin)
+      checkAnswer(df, Seq(Row(1, "a", 1), Row(1, "x", 2), Row(2, "b", 1), Row(2, "y", 2),
+        Row(3, "e", 1)))
+      val plan = df.queryExecution.executedPlan
+      assert(satisfiesRequirements(plan), s"invalid plan:\n$plan")
+      // Only the rejected site keeps an exchange above its union; the other site is pushed down.
+      assert(exchangesOverUnion(plan).size === 1, s"expected one rejected site:\n$plan")
+      assert(exchangeKinds(plan) === (1, 1, 1), s"unexpected shuffle kinds:\n$plan")
+      assert(hasGroupedUnion(plan), s"expected the kept site:\n$plan")
+    }
+  }
+
+  test("SPARK-61785: two keyed sites that cannot pair keep the layouts they remove") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0") {
+      withReplay {
+        createTable("retry_a", columns, Array(Expressions.identity("id")))
+        createTable("retry_b", columns, Array(Expressions.identity("id")))
+        createTable("retry_plain", columns, Array.empty[Transform])
+        sql("INSERT INTO testcat.ns.retry_a VALUES " +
+          "(1, 'a1', timestamp'2022-01-01'), (1, 'a2', timestamp'2022-01-02'), " +
+          "(2, 'c1', timestamp'2022-01-03'), (2, 'c2', timestamp'2022-01-04')")
+        sql("INSERT INTO testcat.ns.retry_b VALUES " +
+          "(1, 'b1', timestamp'2022-01-05'), (2, 'd1', timestamp'2022-01-06'), " +
+          "(3, 'e1', timestamp'2022-01-07')")
+        sql("INSERT INTO testcat.ns.retry_plain VALUES (1, 'p1', timestamp'2022-01-08')")
+        // Both sides of the join are sites, with keyed targets of 2 and 3 partitions: neither
+        // target pairs with the other side, so the whole plan rejects the first pass. The
+        // repartition legs report the layout of the exchange each site removes, so the replay
+        // pushes both unions down on it.
+        val query = """SELECT l.id, l.rn, r.rn FROM (
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.retry_a
+          |    UNION ALL SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.retry_plain
+          |    UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) l
+          |  JOIN (SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.retry_b
+          |    UNION ALL SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.retry_plain
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))) r
+          |    ON l.id = r.id""".stripMargin
+        val expected = Seq(
+          Row(1, 1, 1), Row(1, 1, 2), Row(1, 2, 1), Row(1, 2, 2),
+          Row(1, 3, 1), Row(1, 3, 2), Row(1, 4, 1), Row(1, 4, 2),
+          Row(2, 1, 1), Row(2, 1, 2), Row(2, 2, 1), Row(2, 2, 2))
+        def check(plan: SparkPlan): Unit = {
+          assert(satisfiesRequirements(plan))
+          assert(!hasGroupedUnion(plan), s"no keyed target survives:\n$plan")
+          assert(exchangesOverUnion(plan).isEmpty, s"both sites are pushed down:\n$plan")
+          val unions = collect(plan) { case union: UnionExec => union }
+          assert(unions.length === 2)
+          assert(unions.forall(union =>
+            union.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
+              union.outputPartitioning.numPartitions === 2),
+            s"both unions take the layout they remove:\n$plan")
+          assert(exchangeKinds(plan) === (0, 4, 1), s"unexpected shuffle kinds:\n$plan")
+        }
+        val df = sql(query)
+        checkAnswer(df, expected)
+        check(df.queryExecution.executedPlan)
+        // With the replay off, the whole plan falls back to the retry on the layouts it removes,
+        // which settles the same plan.
+        withSQLConf(
+            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "false") {
+          val retried = sql(query)
+          checkAnswer(retried, expected)
+          check(retried.queryExecution.executedPlan)
+        }
+      }
     }
   }
 
@@ -1089,7 +1352,7 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-61785: a keyed target that breaks an upper join is retried on the removed layout") {
+  test("SPARK-61785: a keyed target that breaks an upper join takes the layout it removes") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
@@ -1110,7 +1373,7 @@ class KeyGroupedPartitioningSuite
         "(1, 'p', timestamp'2022-01-06'), (2, 'q', timestamp'2022-01-07')")
       // The keyed leg is the first child and the biggest, so the first attempt takes its domain.
       // The REPARTITION leg offers the hash layout of the exchange above the union, which is what
-      // the retry falls back to.
+      // the site falls back to.
       val core =
         """SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
           |  SELECT id, data FROM testcat.ns.keyed_union
@@ -1124,14 +1387,14 @@ class KeyGroupedPartitioningSuite
         Row(3, "x", 1), Row(3, "y", 2)))
       val keyedPlan = keyed.queryExecution.executedPlan
       assert(satisfiesRequirements(keyedPlan))
-      // The values leg is laid out, and the user repartition legs keeps its exchange and takes
+      // The values leg is laid out, and the user repartition leg keeps its exchange and takes
       // the keyed one on top.
       assert(allExchanges(keyedPlan).size === 3, s"expected three shuffles:\n$keyedPlan")
       assert(hasGroupedUnion(keyedPlan), s"expected the keyed target:\n$keyedPlan")
       assert(exchangesOverUnion(keyedPlan).isEmpty,
         s"the keyed target keeps the union's exchange down:\n$keyedPlan")
-      // With the join, the keyed layout cannot pair with the other side's hash layout; the retry
-      // pushes the removed hash layout down instead.
+      // With the join, the keyed layout cannot pair with the other side's hash layout; the site
+      // takes the removed hash layout instead.
       val joined = sql(s"SELECT w.id, w.rn, p.data FROM ($core) w " +
         "JOIN testcat.ns.plain_probe p ON w.id = p.id")
       checkAnswer(joined, Seq(Row(1, 1, "p"), Row(1, 2, "p"), Row(2, 1, "q"), Row(2, 2, "q")))
@@ -1142,9 +1405,9 @@ class KeyGroupedPartitioningSuite
         s"the keyed target must not survive the join's pairing:\n$plan")
       assert(collect(plan) { case u: UnionExec => u }.head.outputPartitioning
         .isInstanceOf[physical.HashPartitioning],
-        s"the retry should rebuild the union on the removed layout:\n$plan")
+        s"the site should rebuild the union on the removed layout:\n$plan")
       assert(exchangesOverUnion(plan).isEmpty,
-        s"the retry should push the removed layout down:\n$plan")
+        s"the site should push the removed layout down:\n$plan")
       // The two legs laid out on the removed layout and the probe side take one each; the user
       // repartition leg already reports it.
       assert(allExchanges(plan).size === 4, s"expected four shuffles:\n$plan")
@@ -1194,7 +1457,7 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-61785: a grouped but unsorted union leg supplies a sorted target") {
+  test("SPARK-61785: a grouped but unsorted union leg supplies the domain") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
@@ -1211,8 +1474,9 @@ class KeyGroupedPartitioningSuite
         "(4, 'd', timestamp'2022-01-04')")
       // The aggregate between the two unions blocks `CombineUnions`, so the inner union stays a
       // node: it reports a grouped domain in child order, [1, 3, 2, 4], and the aggregate keeps
-      // that layout. The grouping above the outer union sorts it, so a target taken as it stands
-      // could not match the output.
+      // that layout. A grouped leg is offered as it stands, so that order is the target, and the
+      // rebuild keeps it because its final check compares key sets rather than their order; the
+      // grouping above the outer union then sorts the legs into it.
       val df = sql("SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (" +
         "SELECT id, max(data) AS data FROM (" +
         "SELECT id, data FROM testcat.ns.keyed_13 UNION ALL " +
@@ -1222,7 +1486,7 @@ class KeyGroupedPartitioningSuite
         Row(5, "e", 1)))
       val plan = df.queryExecution.executedPlan
       assert(satisfiesRequirements(plan))
-      assert(hasGroupedUnion(plan), s"expected the sorted domain to be picked:\n$plan")
+      assert(hasGroupedUnion(plan), s"expected the union's domain to be the target:\n$plan")
       assert(exchangesOverUnion(plan).isEmpty, s"the target must be pushed down:\n$plan")
       assert(allExchanges(plan).size === 1, s"expected one shuffle:\n$plan")
     }
@@ -1275,11 +1539,12 @@ class KeyGroupedPartitioningSuite
         "(2, 'c', timestamp'2022-01-03')")
       sql("INSERT INTO testcat.ns.keyed_small VALUES " +
         "(1, 'd', timestamp'2022-01-04'), (3, 'e', timestamp'2022-01-05')")
-      // Two keyed domains, {1,2} and {1,3}, and a leg with no layout: one domain is picked and
-      // the two children that do not declare it are laid out on it.
+      // Two keyed domains, {1,2} and {1,3}, and a leg with no layout. The bigger domain is not
+      // the first child, and each has one offer and two partitions, so only the byte ranking
+      // picks {1,2}; the two children that do not declare it are laid out on it.
       val df = sql("SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn " +
-        "FROM (SELECT id, data FROM testcat.ns.keyed_big UNION ALL " +
-        "SELECT id, data FROM testcat.ns.keyed_small UNION ALL " +
+        "FROM (SELECT id, data FROM testcat.ns.keyed_small UNION ALL " +
+        "SELECT id, data FROM testcat.ns.keyed_big UNION ALL " +
         "SELECT * FROM VALUES (2, 'f') AS v(id, data))")
       checkAnswer(df, Seq(Row(1, "a", 1), Row(1, "b", 2), Row(1, "d", 3), Row(2, "c", 1),
         Row(2, "f", 2), Row(3, "e", 1)))
@@ -1289,9 +1554,9 @@ class KeyGroupedPartitioningSuite
       assert(allExchanges(plan).size === 2, s"expected two shuffles:\n$plan")
       assert(exchangesOverUnion(plan).isEmpty, s"unexpected shuffles over the union:\n$plan")
       val union = collect(plan) { case u: UnionExec => u }.head
-      assert(union.children.head.exists(_.isInstanceOf[BatchScanExec]),
+      assert(union.children(1).exists(_.isInstanceOf[BatchScanExec]),
         s"expected the bigger domain to keep its layout:\n$plan")
-      assert(collect(union.children(1)) {
+      assert(collect(union.children(0)) {
         case shuffle: ShuffleExchangeExec => shuffle
       }.nonEmpty, s"expected the other keyed leg to be laid out:\n$plan")
       assert(collect(union.children(2)) {
@@ -1305,9 +1570,6 @@ class KeyGroupedPartitioningSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        // Both locks have to be open: the rule's own subset permission below, and the V2
-        // requirement that the partition keys cover every cluster key.
-        SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2",
         SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
         SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
@@ -1317,26 +1579,32 @@ class KeyGroupedPartitioningSuite
         "(1, 'a', timestamp'2022-01-01'), (1, 'a', timestamp'2022-01-02'), " +
         "(2, 'c', timestamp'2022-01-03')")
       // The domain is partitioned by `id`, the window clusters on `(id, data)`: the layout names
-      // part of the cluster keys only.
-      val df = sql("SELECT id, data, row_number() OVER (PARTITION BY id, data ORDER BY ts) rn " +
+      // part of the cluster keys only. Two locks admit it: the planner's V2 requirement that the
+      // partition keys cover every cluster key, which gates the target before the rule is asked,
+      // and the rule's own subset permission.
+      val query = "SELECT id, data, row_number() OVER (PARTITION BY id, data ORDER BY ts) rn " +
         "FROM (SELECT id, data, ts FROM testcat.ns.keyed_part UNION ALL " +
-        "SELECT * FROM VALUES (1, 'b', timestamp'2022-01-04') AS v(id, data, ts))")
-      checkAnswer(df, Seq(Row(1, "a", 1), Row(1, "a", 2), Row(1, "b", 1), Row(2, "c", 1)))
-      Seq(false, true).foreach { allowed =>
-        withSQLConf(SQLConf
-            .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
-            .key -> allowed.toString) {
-          val plan = sql("SELECT id, data, " +
-            "row_number() OVER (PARTITION BY id, data ORDER BY ts) rn " +
-            "FROM (SELECT id, data, ts FROM testcat.ns.keyed_part UNION ALL " +
-            "SELECT * FROM VALUES (1, 'b', timestamp'2022-01-04') AS v(id, data, ts))")
-            .queryExecution.executedPlan
-          assert(satisfiesRequirements(plan))
-          // Laid out on the domain, the values leg is the only exchange; otherwise the union's
-          // own exchange stays.
-          assert(allExchanges(plan).size === 1, s"expected one shuffle:\n$plan")
-          assert(exchangesOverUnion(plan).size === (if (allowed) { 0 } else { 1 }),
-            s"unexpected shuffles over the union:\n$plan")
+        "SELECT * FROM VALUES (1, 'b', timestamp'2022-01-04') AS v(id, data, ts))"
+      val expected = Seq(Row(1, "a", 1), Row(1, "a", 2), Row(1, "b", 1), Row(2, "c", 1))
+      Seq(false, true).foreach { v2RequiresAllKeys =>
+        Seq(false, true).foreach { allowed =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key ->
+                v2RequiresAllKeys.toString,
+              SQLConf
+                .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+                .key -> allowed.toString) {
+            val df = sql(query)
+            checkAnswer(df, expected)
+            val plan = df.queryExecution.executedPlan
+            assert(satisfiesRequirements(plan))
+            // Both locks are open only in one of the four arms: there the values leg is the only
+            // exchange; otherwise the union's own exchange stays.
+            assert(allExchanges(plan).size === 1, s"expected one shuffle:\n$plan")
+            assert(exchangesOverUnion(plan).size ===
+              (if (allowed && !v2RequiresAllKeys) { 0 } else { 1 }),
+              s"unexpected shuffles over the union:\n$plan")
+          }
         }
       }
     }

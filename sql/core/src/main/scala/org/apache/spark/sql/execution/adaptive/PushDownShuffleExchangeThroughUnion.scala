@@ -118,8 +118,12 @@ import org.apache.spark.sql.internal.SQLConf
  * recorded when `EnsureRequirements` elides exchanges, including requirements below the root.
  * Recording and push-down share the preparation's effective enablement on EnsureRequirements;
  * classic and disabled preparations do not record these origins.
- * A proposal that breaks an ancestor requirement or a recorded layout is retried once on the
- * layout of the exchange being removed, which every ancestor was planned against.
+ * A proposal that breaks an ancestor requirement or a recorded layout is settled by replaying it
+ * one site at a time over the input plan: a site that the whole plan rejects takes the layout of
+ * the exchange it removes, a site is kept only while the whole plan still holds, and a site no
+ * child can lay out keeps the exchange it came with. A plan no site survives falls back to the
+ * whole-plan retry on the removed layouts, which is all the rule does when
+ * `spark.sql.adaptive.pushDownShuffleThroughUnion.partialReplay.enabled` is false.
  * Every exchange the rewrite inserts or retargets below a union carries a [[PushedDownShuffle]]
  * mark naming its kind. The cost model excludes inserted exchanges, keeps retargeted ones
  * counted, and charges a union one shuffle when a direct child carries the mark; a union
@@ -169,20 +173,34 @@ case class PushDownShuffleExchangeThroughUnion(
     lazy val sharedExchanges: Set[SparkPlan] =
       if (conf.exchangeReuseEnabled) AQEUtils.duplicatedShuffleForms(plan) else Set.empty
 
-    // Whether every adopted target is the layout of the exchange this rewrite removes. The retry
-    // cannot help while this holds.
-    var usedRemovedLayout = true
-    // Whether an earlier site in this pass has rewritten the plan. Until then its layouts are the
-    // ones preparation produced and can be read without checking.
-    var hasPushed = false
-    def rewrite(preferRemovedLayout: Boolean): SparkPlan = {
-      hasPushed = false
-      plan.transformUp {
+    /**
+     * One pass over the plan. `sites` restricts the rewrite to the operators it names, by their
+     * index in this pass's traversal; `None` rewrites every site. A site named by
+     * `removedLayoutSites` may adopt only the layout of the exchange it removes. Returns the
+     * rewritten plan, the indices of the sites the pass saw, including one it could not act on
+     * because an earlier change left its child invalid, and whether every target it adopted is
+     * the layout of the exchange it removes.
+     */
+    def rewrite(
+        removedLayoutSites: Set[Int],
+        sites: Option[Set[Int]]): (SparkPlan, Set[Int], Boolean) = {
+      // Whether an earlier site in this pass has rewritten the plan. Until then its layouts are
+      // the ones preparation produced and can be read without checking.
+      var hasPushed = false
+      // Whether every target this pass adopts is the layout of the exchange it removes.
+      var usedRemovedLayout = true
+      var index = -1
+      val candidateSites = mutable.Set.empty[Int]
+      val rewritten = plan.transformUp {
         case join: ShuffledJoin if !allowJoinInputs => join
         case operator: SparkPlan =>
-          val matched = operator.children.map { child =>
-            findPushableShuffle(child, lookThrough, policy)
-          }
+          index += 1
+          val matched =
+            if (sites.forall(_.contains(index))) {
+              operator.children.map(child => findPushableShuffle(child, lookThrough, policy))
+            } else {
+              Nil
+            }
           if (matched.forall(_.isEmpty)) {
             operator
           } else {
@@ -190,26 +208,31 @@ case class PushDownShuffleExchangeThroughUnion(
             val required = operator.requiredChildDistribution
             if (!required.forall(_.isInstanceOf[ClusteredDistribution])) {
               operator
-            } else if (hasPushed && operator.children.exists(child =>
-                !ValidateRequirements.validate(child))) {
-              // An earlier site in this pass can leave a child invalid; its layout cannot be read.
-              operator
             } else {
-              val requirements = required.map(_.asInstanceOf[ClusteredDistribution])
-              val (candidate, operatorUsedRemovedLayout) = pushDownThroughUnion(
-                operator,
-                matched.zip(requirements),
-                sharedExchangesFunc = sharedExchanges,
-                policy = policy.copy(
-                  allowNonCoalescible =
-                    policy.allowNonCoalescible || !allExchangeInputs(operator),
-                  preferRemovedLayout = preferRemovedLayout))
-              usedRemovedLayout = usedRemovedLayout && operatorUsedRemovedLayout
-              hasPushed = hasPushed || (candidate ne operator)
-              candidate
+              candidateSites += index
+              if (hasPushed && operator.children.exists(child =>
+                  !ValidateRequirements.validate(child))) {
+                // An earlier site in this pass can leave a child invalid; its layout cannot be
+                // read here, but the replay can still take the site on its own.
+                operator
+              } else {
+                val requirements = required.map(_.asInstanceOf[ClusteredDistribution])
+                val (candidate, operatorUsedRemovedLayout) = pushDownThroughUnion(
+                  operator,
+                  matched.zip(requirements),
+                  sharedExchangesFunc = sharedExchanges,
+                  policy = policy.copy(
+                    allowNonCoalescible =
+                      policy.allowNonCoalescible || !allExchangeInputs(operator),
+                    preferRemovedLayout = removedLayoutSites.contains(index)))
+                usedRemovedLayout = usedRemovedLayout && operatorUsedRemovedLayout
+                hasPushed = hasPushed || (candidate ne operator)
+                candidate
+              }
             }
           }
       }
+      (rewritten, candidateSites.toSet, usedRemovedLayout)
     }
 
     def accepted(candidate: SparkPlan): Boolean = {
@@ -228,27 +251,59 @@ case class PushDownShuffleExchangeThroughUnion(
       satisfied && !candidate.exists(node => !PartitioningOrigin.validateNode(node))
     }
 
-    val pushed = rewrite(preferRemovedLayout = false)
+    val (pushed, sites, usedRemovedLayout) = rewrite(removedLayoutSites = Set.empty, sites = None)
+
+    /**
+     * The rule's fallback without keyed targets: retry the whole plan on the layouts of the
+     * exchanges it removes, which every ancestor was planned against. The retry cannot help while
+     * every target the proposal adopted is such a layout already.
+     */
+    def retryOnRemovedLayouts(): SparkPlan = {
+      if (usedRemovedLayout) {
+        plan
+      } else {
+        val (retried, _, _) = rewrite(removedLayoutSites = sites, sites = None)
+        if (retried.fastEquals(plan) || !accepted(retried)) plan else retried
+      }
+    }
+
     if (pushed.fastEquals(plan)) {
       plan
     } else if (accepted(pushed)) {
       pushed
-    } else if (usedRemovedLayout) {
-      // Every site already used the layout of the exchange this rewrite removes, so the retry
-      // would rebuild the same proposal and fail again.
-      plan
-    } else {
-      // A target can satisfy the consumer and the fixed siblings yet break an ancestor, such as
-      // a join that pairs this branch with a different partition count. Retry once on the removed
-      // exchange's own layout, which every ancestor was planned against.
-      val retried = rewrite(preferRemovedLayout = true)
-      if (retried.fastEquals(plan)) {
-        plan
-      } else if (accepted(retried)) {
-        retried
-      } else {
-        plan
+    } else if (conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED)) {
+      // The whole plan rejected the proposal, which a keyed target can cause without its own
+      // site, or the sites it was planned against, seeing it. Replay the proposal one site at a
+      // time over the input plan, keeping a site only while the whole plan still holds; a site
+      // the whole plan rejects takes the layout of the exchange it removes instead.
+      var adopted = Set.empty[Int]
+      var onRemovedLayout = Set.empty[Int]
+      var bestPlan = plan
+      def adopt(index: Int, removedLayoutSites: Set[Int]): Boolean = {
+        val (candidate, _, _) = rewrite(removedLayoutSites, sites = Some(adopted + index))
+        if (!candidate.fastEquals(bestPlan) && accepted(candidate)) {
+          adopted += index
+          onRemovedLayout = removedLayoutSites
+          bestPlan = candidate
+          true
+        } else {
+          false
+        }
       }
+      sites.toSeq.sorted.foreach { index =>
+        adopt(index, onRemovedLayout) || adopt(index, onRemovedLayout + index)
+      }
+      if (!bestPlan.fastEquals(plan)) {
+        bestPlan
+      } else {
+        // Reached when the replay adopts nothing: a plan whose input already fails the whole-plan
+        // check, which no single-site adoption can rescue, or one where no child offers the
+        // layout a site removes. The retry re-derives the input in both, and stays as the
+        // fallback the rule has without keyed targets.
+        retryOnRemovedLayouts()
+      }
+    } else {
+      retryOnRemovedLayouts()
     }
   }
 
@@ -282,9 +337,9 @@ case class PushDownShuffleExchangeThroughUnion(
      * grouped and its grouped form when it is not, the form `EnsureRequirements` plans. A child
      * offering nothing takes a shuffle.
      *
-     * A kept marked leg is still subject to the union's concatenation: beside another marked leg,
-     * it has to declare the same key list in the same order and still route by hash. One that
-     * fails those makes the candidate fail its final check, and the plan is left as it was.
+     * A marked leg is offered only when the union can merge it: it has to declare the target's
+     * key list in the same order and still route by hash. One that fails those is laid out like
+     * any other child.
      */
     lazy val layouts: Seq[Seq[Partitioning with Expression]] = {
       val union = pushable.union
@@ -316,11 +371,12 @@ case class PushDownShuffleExchangeThroughUnion(
       val candidates = candidateTargets(
         layouts, pushable.union.children, required, minPartitions, maxPartitions, stagedIndices)
       val limited = if (policy.preferRemovedLayout) {
-        // The whole-plan check failed. Retry on the layout of the exchange this rewrite removes:
-        // every ancestor was planned against it. Keys that a look-through operator renames match
-        // nothing here, so that site stays unchanged. A keyed exchange `EnsureRequirements` creates
-        // carries HASH_ROUTING, so a keyed candidate matches it only when a child reports the same
-        // marked layout: same keys, same order.
+        // Restricted to the layout of the exchange this rewrite removes, which every ancestor
+        // was planned against: the whole-plan retry uses it when a proposal breaks an ancestor,
+        // and the replay offers it to a site the whole plan rejects. Keys that a look-through
+        // operator renames match nothing here, so that site stays unchanged. A keyed exchange
+        // `EnsureRequirements` creates carries HASH_ROUTING, so a keyed candidate matches it only
+        // when a child reports the same marked layout: same keys, same order.
         candidates.filter { case (target, _) => target.semanticEquals(removedLayout) }
       } else {
         candidates
@@ -443,8 +499,8 @@ case class PushDownShuffleExchangeThroughUnion(
     // The plan at each child position as the pass runs. A rewritten child replaces its own entry;
     // a child not reached yet keeps the one it came with.
     val newChildren = new Array[SparkPlan](children.length)
-    // Whether every target adopted by the attempt whose result is used is the layout of the
-    // exchange this rewrite removes. The retry cannot help while this holds.
+    // Whether every target adopted by the attempt whose children are used is the layout of the
+    // exchange this site removes.
     var usedRemovedLayout = true
     def rebuildChildren(joint: Boolean): Boolean = {
       // The joint attempt may have adopted another layout before failing on a sibling; only the
@@ -622,7 +678,8 @@ case class PushDownShuffleExchangeThroughUnion(
    * break ties deterministically.
    *
    * Offers are the children that would keep their layouts (`reportsDomain`): one reporting the
-   * target, or a subset of its keys, keeps it, so it counts for both the staged pin and the
+   * target, or an unmarked one reporting a subset of its keys, keeps it, so it counts for both
+   * the staged pin and the
    * count-based ranking. The set is returned with the target, since that is also how the callers
    * ask how many children move and whether any of them is laid out at all.
    *
@@ -656,9 +713,8 @@ case class PushDownShuffleExchangeThroughUnion(
       target.numPartitions >= minPartitions && target.numPartitions <= maxPartitions
     }.foreach { target =>
       if (!benefits.contains(target)) {
-        val offeredBy = layouts.indices.filter { index =>
-          layouts(index).exists(reportsDomain(_, target, kept = true))
-        }.toSet
+        // Admit before counting offers: a declined target would otherwise re-evaluate every
+        // child layout once per occurrence in `layouts`.
         val admitted = target match {
           case keyed: KeyedPartitioning =>
             val targetSpec = KeyedShuffleSpec(keyed, required)
@@ -666,6 +722,9 @@ case class PushDownShuffleExchangeThroughUnion(
           case _ => true
         }
         if (admitted) {
+          val offeredBy = layouts.indices.filter { index =>
+            layouts(index).exists(reportsDomain(_, target, kept = true))
+          }.toSet
           benefits.update(target, CandidateBenefit(
             offeredBy = offeredBy,
             keptBytes = offeredBy.iterator.map(index => sizes(index).getOrElse(BigInt(0))).sum,
@@ -742,10 +801,12 @@ case class PushDownShuffleExchangeThroughUnion(
    * adds one above. Tag added exchanges as free and retargeted ones as counted for cost
    * accounting; retargeting adds no shuffle.
    *
-   * A keyed target keeps the children whose layouts lie on the domain or on part of it, and lays
-   * the others out on it. Such a child may hold rows of a key the domain does not declare, so its
-   * layout records the hash routing that placed them; `UnionExec` concatenates the legs and the
-   * grouping above keeps that key in the group named for the declared key it reached.
+   * A keyed target keeps the children whose layouts lie on the domain, an unmarked child whose
+   * keys are part of it, and a marked child only when it declares the domain's list in the same
+   * order and still routes by hash; the others are laid out on it. A child may hold rows of a key
+   * the domain does not declare, so its layout records the hash routing that placed them;
+   * `UnionExec` concatenates the legs and the grouping above keeps that key in the group named
+   * for the declared key it reached.
    */
   private def rebuildUnion(
       union: UnionExec,
@@ -793,7 +854,8 @@ case class PushDownShuffleExchangeThroughUnion(
     // Origin inheritance can tag a zero-move candidate, so it must not reuse the input union.
     val rebuilt = union.copy(children = newChildren)
     rebuilt.copyTagsFrom(union)
-    val grouped = rebuilt.outputPartitioning match {
+    // Derived once: a union re-derives it from every child on each call.
+    val (grouped, grouping) = rebuilt.outputPartitioning match {
       case keyed: KeyedPartitioning if !keyed.isGrouped =>
         // Grouping merges the partitions that share a key. That loses granularity only for a
         // collapsed layout, which the planner gates behind the V2 subset permission; ask the same
@@ -802,12 +864,13 @@ case class PushDownShuffleExchangeThroughUnion(
         if (!keyed.mayGroupToSatisfy(required)) {
           return None
         }
-        GroupPartitionsExec(rebuilt)
-      case _ => rebuilt
+        val grouped = GroupPartitionsExec(rebuilt)
+        (grouped, grouped.outputPartitioning)
+      case partitioning => (rebuilt, partitioning)
     }
     // The last word on a candidate: the union has to report the target's key domain. The grouping
     // above sorts the keys, so the order of the target is not part of that check.
-    Option.when(PartitioningCollection.flatten(grouped.outputPartitioning)
+    Option.when(PartitioningCollection.flatten(grouping)
       .exists(reportsDomain(_, target, kept = false)))(grouped)
   }
 

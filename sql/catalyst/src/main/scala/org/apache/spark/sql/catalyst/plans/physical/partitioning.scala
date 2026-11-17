@@ -582,9 +582,9 @@ case class KeyLayout(
 
   /**
    * Whether every key of this layout is one of `other`'s. The types are asked; the order and how
-   * often a key repeats are not. Callers ask this beside `describesSameLayoutState`, and only
-   * where a later node merges the key lists: the rows are already in the partitions `other` names
-   * for their keys, and the layouts declaring the remaining keys supply the rest.
+   * often a key repeats are not. A caller reads this only where a grouping node settles the order
+   * afterwards: a subset's rows need not sit in the partitions `other` names for them, and the
+   * grouping regroups every leg it merges.
    */
   def describesSubsetOfKeys(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && {
@@ -600,8 +600,9 @@ case class KeyLayout(
    * A call site may read a domain this way only when a merge and a sort have already settled the
    * key order: the caller compares such a result against the layout it was built for. A pairing
    * and a concatenation keep the order they are given, so they ask `describesSameKeys`. Callers ask
-   * this beside `describesSameLayoutState`, which makes the repeats harmless: equal grouping state
-   * means both lists hold unique keys, so the set says the same as the multiset.
+   * this beside `describesSameLayoutState`, which makes the repeats harmless while one side is
+   * grouped: a grouped layout holds unique keys, so the set says the same as the multiset. Two
+   * ungrouped layouts can agree on both and still repeat their keys differently.
    */
   def describesSameKeySet(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && partitionKeys.toSet == other.partitionKeys.toSet

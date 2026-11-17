@@ -1206,7 +1206,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("KeyLayout: the key set ignores order and the layout state does not") {
+  test("KeyLayout: the key set and the layout state ignore the key order") {
     val a = $"a".long
     def layout(keys: Long*): KeyLayout =
       KeyedPartitioning(Seq(a), keys.map(InternalRow(_))).layout
