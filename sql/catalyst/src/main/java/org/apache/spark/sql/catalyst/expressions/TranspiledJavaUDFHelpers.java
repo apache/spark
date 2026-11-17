@@ -28,9 +28,8 @@ import org.apache.spark.unsafe.types.UTF8String;
  * lives here; generated code calls these by FQCN.
  *
  * <ul>
- *   <li>A NULL value makes arithmetic NULL (SQL, same as the Catalyst target;
- *   interpreted Python raises TypeError on None) and raises in ordering (so
- *   `if x > 0` cannot quietly take the false branch).</li>
+ *   <li>A NULL operand raises in arithmetic, concatenation, repetition and ordering,
+ *   matching Python's TypeError on None.</li>
  *   <li>Overflow raises (ANSI / `Math.*Exact`). Python `int` is arbitrary
  *   precision; that is the same documented divergence Catalyst has.</li>
  *   <li>Division by zero raises for both int and float. Java would give
@@ -45,6 +44,7 @@ public final class TranspiledJavaUDFHelpers {
   // Beyond this a long is no longer exactly representable as a double, so a conversion to double
   // stops being lossless and `divideLong` has to take its slow path.
   private static final long EXACT_DOUBLE_BOUND = 1L << 53;
+  private static final MathContext LONG_DIVISION_CONTEXT = new MathContext(64);
 
   // ---------------------------------------------------------------------------------------------
   // Integral arithmetic (Python `int`, lowered to `Long`)
@@ -52,22 +52,27 @@ public final class TranspiledJavaUDFHelpers {
 
   // MathUtils, not Math.*Exact: same [ARITHMETIC_OVERFLOW] as the Catalyst target.
   public static Long addLong(Long a, Long b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("+");
     return MathUtils.addExact(a.longValue(), b.longValue());
   }
 
   public static Long subtractLong(Long a, Long b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("-");
     return MathUtils.subtractExact(a.longValue(), b.longValue());
   }
 
   public static Long multiplyLong(Long a, Long b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("*");
     return MathUtils.multiplyExact(a.longValue(), b.longValue());
   }
 
+  public static Long positiveLong(Long a) {
+    if (a == null) throw TranspiledJavaUDFErrors.nullOperand("unary +");
+    return a;
+  }
+
   public static Long negateLong(Long a) {
-    if (a == null) return null;
+    if (a == null) throw TranspiledJavaUDFErrors.nullOperand("unary -");
     return MathUtils.negateExact(a.longValue());
   }
 
@@ -76,7 +81,7 @@ public final class TranspiledJavaUDFHelpers {
    * (`-7 // 3 == -3`; Java `/` gives -2).
    */
   public static Long floorDivideLong(Long a, Long b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("//");
     // Before MathUtils.floorDiv, which reports every ArithmeticException as overflow.
     if (b == 0L) throw TranspiledJavaUDFErrors.divideByZero();
     // `Math.floorDiv(Long.MIN_VALUE, -1)` returns MIN_VALUE rather than throwing.
@@ -89,7 +94,7 @@ public final class TranspiledJavaUDFHelpers {
    * Catalyst reaches this with `sign(b) * pmod(sign(b) * a, abs(b))`.
    */
   public static Long modLong(Long a, Long b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("%");
     if (b == 0L) throw TranspiledJavaUDFErrors.remainderByZero();
     return MathUtils.floorMod(a.longValue(), b.longValue());
   }
@@ -100,7 +105,7 @@ public final class TranspiledJavaUDFHelpers {
    * (`9007199254740993 / 3` is 3002399751580331.0 vs 3002399751580330.5).
    */
   public static Double divideLong(Long a, Long b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("/");
     if (b == 0L) throw TranspiledJavaUDFErrors.divideByZero();
     long x = a, y = b;
     // `Math.abs(Long.MIN_VALUE)` is negative, so MIN_VALUE passes this
@@ -112,17 +117,9 @@ public final class TranspiledJavaUDFHelpers {
     }
     // BigDecimal has no negative zero; CPython's `0 / -9007199254740993` is -0.0.
     if (x == 0L) return Math.copySign(0.0d, (double) y);
-    // Exact first. A tie is dyadic so the exact divide succeeds; whatever
-    // reaches the fallback cannot be a tie. But not-tied is not enough: the
-    // gap to the nearest tie can be as small as 1/(y*2^53) relative -- under
-    // 2^-116 for y near 2^63, finer than DECIMAL128's 34 digits -- so rounding
-    // twice can still flip the last bit (2525447105329283886 /
-    // 1152921504606846997). 40 digits clear the worst case for |y| < 2^64.
-    try {
-      return new BigDecimal(x).divide(new BigDecimal(y)).doubleValue();
-    } catch (ArithmeticException nonTerminating) {
-      return new BigDecimal(x).divide(new BigDecimal(y), new MathContext(40)).doubleValue();
-    }
+    // 64 digits keep every dyadic quotient of two longs exact, including binary ties.
+    // Non-terminating quotients need at most 40 digits to stay clear of a binary tie.
+    return new BigDecimal(x).divide(new BigDecimal(y), LONG_DIVISION_CONTEXT).doubleValue();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -133,27 +130,32 @@ public final class TranspiledJavaUDFHelpers {
   // plain operators already agree.
 
   public static Double addDouble(Double a, Double b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("+");
     return a + b;
   }
 
   public static Double subtractDouble(Double a, Double b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("-");
     return a - b;
   }
 
   public static Double multiplyDouble(Double a, Double b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("*");
     return a * b;
   }
 
+  public static Double positiveDouble(Double a) {
+    if (a == null) throw TranspiledJavaUDFErrors.nullOperand("unary +");
+    return a;
+  }
+
   public static Double negateDouble(Double a) {
-    if (a == null) return null;
+    if (a == null) throw TranspiledJavaUDFErrors.nullOperand("unary -");
     return -a;
   }
 
   public static Double divideDouble(Double a, Double b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("/");
     // Java would return Infinity or NaN; Python raises ZeroDivisionError.
     if (b == 0.0d) throw TranspiledJavaUDFErrors.divideByZero();
     return a / b;
@@ -164,7 +166,7 @@ public final class TranspiledJavaUDFHelpers {
    * that is off by one on inexact quotients and wrong for inf. See {@code divmod}.
    */
   public static Double floorDivideDouble(Double a, Double b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("//");
     if (b == 0.0d) throw TranspiledJavaUDFErrors.divideByZero();
     return divmod(a, b)[0];
   }
@@ -174,7 +176,7 @@ public final class TranspiledJavaUDFHelpers {
    * `a - b * floor(a / b)` is 0.0 for `5.5 % 1.1`. See {@code divmod}.
    */
   public static Double modDouble(Double a, Double b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("%");
     if (b == 0.0d) throw TranspiledJavaUDFErrors.remainderByZero();
     return divmod(a, b)[1];
   }
@@ -217,9 +219,9 @@ public final class TranspiledJavaUDFHelpers {
   // Text (Python `str`, lowered to `UTF8String`)
   // ---------------------------------------------------------------------------------------------
 
-  /** Python's `+` on text. `UTF8String.concat` already returns null for a null input. */
+  /** Python's `+` on text, with the same NULL error as numeric addition. */
   public static UTF8String concat(UTF8String a, UTF8String b) {
-    if (a == null || b == null) return null;
+    if (a == null || b == null) throw TranspiledJavaUDFErrors.nullOperand("+");
     return UTF8String.concat(a, b);
   }
 
@@ -228,7 +230,7 @@ public final class TranspiledJavaUDFHelpers {
    * rather than truncated.
    */
   public static UTF8String repeat(UTF8String a, Long times) {
-    if (a == null || times == null) return null;
+    if (a == null || times == null) throw TranspiledJavaUDFErrors.nullOperand("*");
     if (times <= 0L) return UTF8String.EMPTY_UTF8;
     // CPython returns '' for `'' * n` regardless of how large `n` is -- there's no product
     // to overflow -- so this has to be checked before the `times` bound below would otherwise
@@ -334,11 +336,15 @@ public final class TranspiledJavaUDFHelpers {
   // comparison takes this path.
 
   private static int compareLongDouble(long a, double b) {
+    if (Math.abs(a) <= EXACT_DOUBLE_BOUND) {
+      double av = a;
+      return av < b ? -1 : (av > b ? 1 : 0);
+    }
     return new BigDecimal(a).compareTo(new BigDecimal(b));
   }
 
   private static int compareDoubleLong(double a, long b) {
-    return new BigDecimal(a).compareTo(new BigDecimal(b));
+    return -compareLongDouble(b, a);
   }
 
   public static Boolean equalsLongDouble(Long a, Double b) {

@@ -47,6 +47,15 @@ object TranspiledJavaUDFErrors {
             "`is not None` guard or filter NULLs upstream.")))
   }
 
+  def nullOperand(op: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "USER_RAISED_EXCEPTION",
+      messageParameters = Map(
+        "errorMessage" ->
+          (s"Python UDF transpiler: cannot use NULL with operator `$op`; " +
+            "Python would raise TypeError here.")))
+  }
+
   // Empty context: `QueryExecutionErrors.divideByZeroError` wraps `Array(context)`,
   // which is `Array(null)` here and later dies as `NoneType has no attribute contextType`.
   def divideByZero(): ArithmeticException = zeroDivisor("DIVIDE_BY_ZERO")

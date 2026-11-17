@@ -93,7 +93,7 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     assert(H.divideLong(1L << 53, 2L) === 4503599627370496.0d)
     // A quotient sitting exactly on a tie, which needs a dyadic value and so a terminating
     // expansion: rounding to 34 digits and then to a double rounds twice and lands 1 ULP out, so
-    // the exact divide has to be tried first. Compared as bits, because the two candidates are
+    // the decimal context must retain the tie. Compared as bits, because the two candidates are
     // adjacent doubles and `===` on the wrong one would still read as "close enough". CPython's
     // answer for this pair, and for 22k others swept alongside it.
     assert(java.lang.Double.doubleToRawLongBits(
@@ -102,6 +102,14 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     // intermediate onto the tie and the result lands a ulp down; 40 do not.
     // CPython's answer.
     assert(H.divideLong(2525447105329283886L, 1152921504606846997L) === 2.1904761904761907d)
+    val recurring = Seq(
+      (Long.MaxValue, 3600L, 0x43223456789abcdfL),
+      (Long.MinValue, 3600L, 0xc3223456789abcdfL),
+      (Long.MaxValue, 3L, 0x43c5555555555555L),
+      (Long.MinValue, -3L, 0x43c5555555555555L))
+    recurring.foreach { case (a, b, expected) =>
+      assert(java.lang.Double.doubleToRawLongBits(H.divideLong(a, b)) === expected)
+    }
   }
 
   test("/ on ints keeps the sign of a zero quotient, as CPython does") {
@@ -157,17 +165,44 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     assert(H.multiplyDouble(1.0e308d, 10.0d) === Double.PositiveInfinity)
   }
 
-  test("null propagates through arithmetic") {
-    assert(H.addLong(null, 1L) === null)
-    assert(H.addLong(1L, null) === null)
-    assert(H.multiplyDouble(null, 1.0d) === null)
-    assert(H.concat(null, utf8("a")) === null)
-    assert(H.repeat(utf8("a"), null) === null)
-    assert(H.negateLong(null) === null)
+  test("NULL operands raise for every arithmetic and text operator") {
+    val binary: Seq[(String, () => Any, () => Any)] = Seq(
+      ("+", () => H.addLong(null, 1L), () => H.addLong(1L, null)),
+      ("-", () => H.subtractLong(null, 1L), () => H.subtractLong(1L, null)),
+      ("*", () => H.multiplyLong(null, 1L), () => H.multiplyLong(1L, null)),
+      ("/", () => H.divideLong(null, 1L), () => H.divideLong(1L, null)),
+      ("//", () => H.floorDivideLong(null, 1L), () => H.floorDivideLong(1L, null)),
+      ("%", () => H.modLong(null, 1L), () => H.modLong(1L, null)),
+      ("+", () => H.addDouble(null, 1.0d), () => H.addDouble(1.0d, null)),
+      ("-", () => H.subtractDouble(null, 1.0d), () => H.subtractDouble(1.0d, null)),
+      ("*", () => H.multiplyDouble(null, 1.0d), () => H.multiplyDouble(1.0d, null)),
+      ("/", () => H.divideDouble(null, 1.0d), () => H.divideDouble(1.0d, null)),
+      ("//", () => H.floorDivideDouble(null, 1.0d), () => H.floorDivideDouble(1.0d, null)),
+      ("%", () => H.modDouble(null, 1.0d), () => H.modDouble(1.0d, null)),
+      ("+", () => H.concat(null, utf8("a")), () => H.concat(utf8("a"), null)),
+      ("*", () => H.repeat(null, 1L), () => H.repeat(utf8("a"), null)),
+      ("*", () => H.repeatCountFirst(null, utf8("a")), () => H.repeatCountFirst(1L, null)))
+    val unary: Seq[(String, () => Any)] = Seq(
+      ("unary +", () => H.positiveLong(null)),
+      ("unary +", () => H.positiveDouble(null)),
+      ("unary -", () => H.negateLong(null)),
+      ("unary -", () => H.negateDouble(null)))
+    val cases = binary.flatMap { case (op, left, right) => Seq((op, left), (op, right)) }
+    (cases ++ unary).foreach { case (op, run) =>
+      val error = intercept[SparkRuntimeException](run())
+      assert(error.getCondition === "USER_RAISED_EXCEPTION")
+      assert(error.getMessage.contains(s"cannot use NULL with operator `$op`"))
+    }
+  }
+
+  test("numeric coercion preserves NULL and unary plus preserves signed zero") {
     assert(H.toDouble(null) === null)
     // The promotion itself rounds, like Python's float(int): past 2^53 the double
     // is the nearest, not the exact, long.
     assert(H.toDouble(9007199254740993L) === 9007199254740992.0d)
+    assert(H.positiveLong(Long.MinValue) === Long.MinValue)
+    assert(java.lang.Double.doubleToRawLongBits(H.positiveDouble(-0.0d)) ===
+      java.lang.Double.doubleToRawLongBits(-0.0d))
   }
 
   test("equality is null-safe, because Python's is") {
@@ -272,8 +307,6 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     assert(H.repeatCountFirst(0L, utf8("ab")) === utf8(""))
     assert(H.repeatCountFirst(-1L, utf8("ab")) === utf8(""))
     assert(H.repeatCountFirst(5L, utf8("")) === utf8(""))
-    assert(H.repeatCountFirst(null, utf8("ab")) === null)
-    assert(H.repeatCountFirst(2L, null) === null)
     intercept[ArithmeticException](H.repeatCountFirst(Int.MaxValue.toLong + 1L, utf8("ab")))
     // A count no Java array could hold raises rather than silently truncating to an int; the
     // error class it carries is pinned separately.
@@ -326,6 +359,35 @@ class TranspiledJavaUDFHelpersSuite extends SparkFunSuite {
     assert(H.greaterThanLongDouble(1L, Double.NegativeInfinity) === true)
     assert(H.lessThanDoubleLong(Double.NegativeInfinity, 1L) === true)
     assert(H.greaterThanDoubleLong(Double.PositiveInfinity, 1L) === true)
+  }
+
+  test("finite mixed comparisons keep exact boundaries and zero equality") {
+    val bound = 1L << 53
+    val cases = Seq(
+      (0L, 0.0d, 0),
+      (0L, -0.0d, 0),
+      (0L, java.lang.Double.MIN_VALUE, -1),
+      (0L, -java.lang.Double.MIN_VALUE, 1),
+      (1L, 0.5d, 1),
+      (-1L, -0.5d, -1),
+      (bound, Math.nextDown(bound.toDouble), 1),
+      (bound, Math.nextUp(bound.toDouble), -1),
+      (bound + 1L, bound.toDouble, 1),
+      (Long.MinValue, Long.MinValue.toDouble, 0),
+      (Long.MinValue, Math.nextDown(Long.MinValue.toDouble), 1),
+      (Long.MinValue, Math.nextUp(Long.MinValue.toDouble), -1))
+    cases.foreach { case (a, b, sign) =>
+      assert(H.equalsLongDouble(a, b) === (sign == 0))
+      assert(H.lessThanLongDouble(a, b) === (sign < 0))
+      assert(H.lessThanOrEqualLongDouble(a, b) === (sign <= 0))
+      assert(H.greaterThanLongDouble(a, b) === (sign > 0))
+      assert(H.greaterThanOrEqualLongDouble(a, b) === (sign >= 0))
+      assert(H.equalsDoubleLong(b, a) === (sign == 0))
+      assert(H.lessThanDoubleLong(b, a) === (sign > 0))
+      assert(H.lessThanOrEqualDoubleLong(b, a) === (sign >= 0))
+      assert(H.greaterThanDoubleLong(b, a) === (sign < 0))
+      assert(H.greaterThanOrEqualDoubleLong(b, a) === (sign <= 0))
+    }
   }
 
   test("mixed int/float comparison raises on null like the same-category ones") {

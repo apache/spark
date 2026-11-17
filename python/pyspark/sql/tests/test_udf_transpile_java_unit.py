@@ -107,6 +107,15 @@ class JavaTranspileLoweringTests(unittest.TestCase):
         self.assertIn("TranspiledJavaUDFHelpers.addLong(_udf_arg_0", lowered)
         self.assertNotIn("_udf_arg_0 +", lowered)
 
+    def test_unary_plus_uses_null_checking_helpers(self):
+        for category, return_type, helper in [
+            ("integral", LongType(), "positiveLong"),
+            ("fractional", DoubleType(), "positiveDouble"),
+        ]:
+            with self.subTest(category=category):
+                lowered = _lower("def f(x):\n    return +x", return_type, {0: category})
+                self.assertIn(f"TranspiledJavaUDFHelpers.{helper}(_udf_arg_0)", lowered)
+
     def test_floor_divide_and_mod_use_the_floor_helpers(self):
         floor_div = _lower("def f(x):\n    return x // 3", LongType(), {0: "integral"})
         self.assertIn("floorDivideLong", floor_div)
@@ -677,18 +686,97 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
                 2, df.select(UserDefinedFunction(modulo, LongType())(col("a"))).first()[0]
             )
 
-    def test_null_propagates_like_the_catalyst_target(self):
-        # An unguarded body over a NULL gives NULL on both transpiled targets, where
-        # interpreted Python raises TypeError. Documented, and the same on both, so which
-        # backend fired is not observable from the result.
-        def unguarded(x):
-            return x + 1
+    def test_null_operators_raise_in_java_only_bodies(self):
+        def is_six(x):
+            y = x + 1
+            return y == 6
 
-        df = self.spark.createDataFrame([(None,), (1,)], "a bigint")
-        with self.sql_conf(_JAVA_ONLY):
-            udf = UserDefinedFunction(unguarded, LongType())
-            self.assertTrue(udf.transpiled)
-            self.assertEqual([None, 2], [r[0] for r in df.select(udf(col("a"))).collect()])
+        def positive(x):
+            y = +x
+            return y
+
+        def negative(x):
+            y = -x
+            return y
+
+        def constant_none(x):
+            y = x + None
+            return y
+
+        def mixed(x):
+            y = x + 0.5
+            return y
+
+        def concatenate(s):
+            y = s + "x"
+            return y
+
+        def repeat(s, n):
+            y = s * n
+            return y
+
+        cases = [
+            (is_six, BooleanType(), "x bigint", [(None,)], (5,), "+"),
+            (is_six, BooleanType(), "x double", [(None,)], (5.0,), "+"),
+            (positive, LongType(), "x bigint", [(None,)], (5,), "unary +"),
+            (positive, DoubleType(), "x double", [(None,)], (-0.0,), "unary +"),
+            (negative, LongType(), "x bigint", [(None,)], (5,), "unary -"),
+            (negative, DoubleType(), "x double", [(None,)], (5.0,), "unary -"),
+            (constant_none, LongType(), "x bigint", [(1,)], None, "+"),
+            (mixed, DoubleType(), "x bigint", [(None,)], (5,), "+"),
+            (concatenate, StringType(), "s string", [(None,)], ("ab",), "+"),
+            (repeat, StringType(), "s string, n bigint", [(None, 2), ("ab", None)], ("ab", 2), "*"),
+        ]
+        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
+            conf = {**_CATALYST_THEN_JAVA, "spark.sql.codegen.factoryMode": factory_mode}
+            for func, return_type, schema, bad_rows, good_row, op in cases:
+                with self.subTest(factory_mode=factory_mode, func=func.__name__, schema=schema):
+                    with self.sql_conf(conf):
+                        udf = UserDefinedFunction(func, return_type)
+                        for row in bad_rows:
+                            with self.assertRaises(TypeError):
+                                func(*row)
+                            df = self.spark.createDataFrame([row], schema)
+                            result = df.select(udf(*df.columns))
+                            self.assertIn("TranspiledJavaUDF", self._plan(result))
+                            with self.assertRaises(Exception) as caught:
+                                result.collect()
+                            self.assertIn("USER_RAISED_EXCEPTION", str(caught.exception))
+                            self.assertIn(
+                                f"cannot use NULL with operator `{op}`", str(caught.exception)
+                            )
+                        if good_row is not None:
+                            df = self.spark.createDataFrame([good_row], schema)
+                            actual = df.select(udf(*df.columns)).first()[0]
+                            self.assertEqual(func(*good_row), actual)
+
+    def test_null_guards_and_none_results_remain_native(self):
+        def guarded(x):
+            if x is None:
+                return None
+            y = x + 1
+            return y
+
+        def conditional(x):
+            y = None if x is None else x
+            return y
+
+        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
+            conf = {**_CATALYST_THEN_JAVA, "spark.sql.codegen.factoryMode": factory_mode}
+            for schema, return_type, value in [
+                ("x bigint", LongType(), 5),
+                ("x double", DoubleType(), 5.0),
+            ]:
+                for func in (guarded, conditional):
+                    with self.subTest(factory_mode=factory_mode, func=func.__name__, schema=schema):
+                        with self.sql_conf(conf):
+                            df = self.spark.createDataFrame([(None,), (value,)], schema)
+                            udf = UserDefinedFunction(func, return_type)
+                            result = df.select(udf("x"))
+                            self.assertIn("TranspiledJavaUDF", self._plan(result))
+                            self.assertEqual(
+                                [func(None), func(value)], [row[0] for row in result.collect()]
+                            )
 
     def test_equality_over_null_is_null_safe_like_python(self):
         # Python's `==` is not three-valued: `None == None` is True and `None == 1` is False, never

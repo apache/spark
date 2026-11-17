@@ -36,8 +36,8 @@ evaluates it once (the thing SPARK-58626 is about for Catalyst). The flip side:
 unread arguments are still evaluated, matching the interpreted UDF and not a
 Catalyst lowering.
 
-Arithmetic propagates null (``None + 1`` is NULL, same as Catalyst). Ordering
-raises on null (same as Catalyst). ``NaN`` uses raw IEEE, which is CPython's
+Arithmetic, concatenation, repetition and ordering raise on a null operand,
+matching Python's TypeError on None. ``NaN`` uses raw IEEE, which is CPython's
 and not Spark's normalised ``NaN == NaN``.
 
 Numeric parameters are ``"integral"`` (Long) or ``"fractional"`` (Double); Catalyst's
@@ -462,9 +462,9 @@ class JavaTranspiler(AbstractTranspiler):
                         "unary `+`/`-` is only lowered for numbers; Python raises TypeError "
                         f"for a {lowered.category} operand"
                     )
-                if isinstance(op, ast.UAdd):
-                    return lowered
-                helper = "negateLong" if lowered.category == "integral" else "negateDouble"
+                prefix = "positive" if isinstance(op, ast.UAdd) else "negate"
+                suffix = "Long" if lowered.category == "integral" else "Double"
+                helper = prefix + suffix
                 return _JavaValue(f"{_HELPERS}.{helper}({lowered.code})", lowered.category)
             case ast.BinOp(left=left, op=op, right=right):
                 return self._lower_binop(left, op, right)
