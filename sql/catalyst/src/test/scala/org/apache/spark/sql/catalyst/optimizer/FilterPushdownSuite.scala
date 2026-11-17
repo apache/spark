@@ -189,18 +189,20 @@ class FilterPushdownSuite extends PlanTest {
     "non-deterministic one") {
     // `i` can fail as the cast does, and `j` as it reads `i`, also through the sample, the
     // projection and the filter above them. A condition over either stays above, while one over
-    // the non-deterministic `r`, which is computed on every row, is combined.
+    // the non-deterministic `r`, which is computed on every row, or over `w`, an alias that can
+    // not fail, is combined.
     val projected = testStringRelation
-      .select($"a", Cast($"e", IntegerType, evalMode = EvalMode.ANSI).as("i"), Rand(1).as("r"))
+      .select($"a", Cast($"e", IntegerType, evalMode = EvalMode.ANSI).as("i"),
+        Cast($"a", LongType).as("w"), Rand(1).as("r"))
       .sample(0.0, 0.5, withReplacement = false, 1L)
-      .select($"a", $"i", IsNull($"i").as("j"), $"r")
+      .select($"a", $"i", IsNull($"i").as("j"), $"w", $"r")
     val originalQuery = projected
       .where($"a" > 0)
       .where($"a" > 1)
-      .where(Rand(0) > 0.1 && $"i" > 0 && $"j" && $"r" > 0.5)
+      .where(Rand(0) > 0.1 && $"i" > 0 && $"j" && $"w" > 0 && $"r" > 0.5)
 
     val correctAnswer = projected
-      .where($"a" > 0 && $"a" > 1 && $"r" > 0.5)
+      .where($"a" > 0 && $"a" > 1 && $"w" > 0 && $"r" > 0.5)
       .where(Rand(0) > 0.1 && $"i" > 0 && $"j")
       .analyze
 
