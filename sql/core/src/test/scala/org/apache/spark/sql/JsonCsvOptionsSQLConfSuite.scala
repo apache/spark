@@ -265,6 +265,32 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("cached CSV custom quote interaction preserves distinct captured null markers") {
+    val key = SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key
+    val query = """SELECT to_csv(named_struct('n', CAST(NULL AS STRING), 'id', CAST(id AS STRING)),
+                  |map('nullValue', 'NN', 'quote', 'N')) AS value FROM range(1, 3)""".stripMargin
+    def analyzed(value: Boolean): DataFrame = withSQLConf(key -> value.toString) {
+      val df = sql(query)
+      df.queryExecution.analyzed
+      df
+    }
+    withSQLConf(captureKey -> "true") {
+      val quoted = analyzed(true)
+      val unquoted = analyzed(false)
+      withSQLConf(key -> "false") {
+        quoted.cache()
+        try {
+          quoted.count()
+          val quotedPrefix = """N\N\NN,"""
+          checkAnswer(quoted, (1 to 2).map(id => Row(quotedPrefix + id)))
+          checkAnswer(unquoted, (1 to 2).map(id => Row(s"NN,$id")))
+        } finally {
+          quoted.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
   for (conversion <- Seq("from_json", "to_csv", "to_json_array", "to_json_map",
       "to_json_struct", "to_json_variant", "to_json_struct_key")) {
     test(s"saved functions share $conversion when captured defaults are ineffective") {

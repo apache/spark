@@ -252,6 +252,30 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("CSV custom quote interaction keeps result-sensitive null marker identities") {
+    val input = CreateNamedStruct(Seq(Literal("n"), Literal.create(null, StringType),
+      Literal("x"), BoundReference(0, StringType, nullable = false)))
+    val options = Map("nullValue" -> "NN", "quote" -> "N")
+    // A marker bracketed by the quote character is treated differently from a literal string.
+    val literalMarker = """N\N\NN,x"""
+    val actualNull = "NN,x"
+    for (reader <- Seq(true, false)) {
+      withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key ->
+          reader.toString) {
+        val quoted = StructsToCsv(options, input, Some("UTC"),
+          nullValueWrittenAsQuotedEmptyString = true)
+        val unquoted = quoted.copy(nullValueWrittenAsQuotedEmptyString = false)
+        val rollback = quoted.copy(useCapturedOptionDefaults = false)
+        checkEvaluation(quoted, literalMarker, create_row("x"))
+        checkEvaluation(unquoted, actualNull, create_row("x"))
+        checkEvaluation(rollback, if (reader) literalMarker else actualNull, create_row("x"))
+        assert(!quoted.semanticEquals(unquoted))
+        assert(!quoted.semanticEquals(rollback))
+        assert(!unquoted.semanticEquals(rollback))
+      }
+    }
+  }
+
   test("CSV conversions share when every top-level field is nonnullable") {
     val schemas = Seq(new StructType().add("id", LongType, nullable = false),
       new StructType().add("nested", ArrayType(IntegerType), nullable = false))
