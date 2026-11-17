@@ -481,10 +481,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case _: StringType => JDBCValueGetter.StringGetter
     case TimestampType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeGetter
-    case TimestampType if options.exists(_.timestampCalendarTimeZone.isDefined) =>
-      JDBCValueGetter.TimestampWithCalendarGetter(
-        Calendar.getInstance(options.get.timestampCalendarTimeZone.get), dialect)
-    case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
+    case TimestampType =>
+      JDBCValueGetter.TimestampGetter(
+        dialect, options.flatMap(_.timestampCalendarTimeZone).map(tz => Calendar.getInstance(tz)))
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
     case TimestampNTZType if options.exists(_.timestampNTZAsWallClock) =>

@@ -158,21 +158,10 @@ private[jdbc] object JDBCValueGetter {
         rs.getTime(pos + 1), t => Math.multiplyExact(t.getTime, MICROS_PER_MILLIS)))
   }
 
-  final case class TimestampGetter(dialect: JdbcDialect) extends JDBCValueGetter {
-    def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
-      val t = rs.getTimestamp(pos + 1)
-      if (t != null) {
-        row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
-      } else {
-        row.update(pos, null)
-      }
-    }
-  }
-
-  final case class TimestampWithCalendarGetter(calendar: Calendar, dialect: JdbcDialect)
+  final case class TimestampGetter(dialect: JdbcDialect, calendar: Option[Calendar] = None)
       extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
-      val t = rs.getTimestamp(pos + 1, calendar)
+      val t = calendar.fold(rs.getTimestamp(pos + 1))(rs.getTimestamp(pos + 1, _))
       if (t != null) {
         row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
       } else {
