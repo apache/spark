@@ -1650,7 +1650,9 @@ class BasePythonDataSourceTestsMixin:
             [("a", v) for v in [1, None, 2]], "key string, value int"
         ).repartition(3)
         cases = [
-            # Without an explicit null ordering, nulls go last for a descending sort.
+            # Without an explicit null ordering, nulls go first for an ascending sort and last
+            # for a descending one.
+            ("write_req_nulls_default_asc", SortOrder(("value",)), [None, 1, 2]),
             (
                 "write_req_nulls_default",
                 SortOrder(("value",), SortDirection.DESCENDING),
@@ -1791,15 +1793,20 @@ class BasePythonDataSourceTestsMixin:
             self._register_write_requirements_source(
                 "write_req_ordered_dist",
                 d,
-                distribution=OrderedDistribution((SortOrder(("key",)),)),
+                distribution=OrderedDistribution((SortOrder(("value",)),)),
             )
+            df = self.spark.createDataFrame(
+                [("a", v) for v in range(16)], "key string, value int"
+            ).repartition(4)
             with self.sql_conf(self._write_conf()):
-                self._write_df().write.format("write_req_ordered_dist").mode("append").save()
+                df.write.format("write_req_ordered_dist").mode("append").save()
             tasks = self._read_tasks(d)
-            # A range partitioning by `key` also co-locates equal keys.
-            for rows in tasks:
-                self.assertEqual(len({key for key, _ in rows}), 1)
-            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+            # Range partitioning by `value`: each task holds a contiguous range of values, and
+            # the ranges increase with the partition id. Hash clustering would interleave them.
+            self.assertGreater(len(tasks), 1)
+            for prev, cur in zip(tasks, tasks[1:]):
+                self.assertLess(max(v for _, v in prev), min(v for _, v in cur))
+            self.assertEqual(sorted(v for rows in tasks for _, v in rows), list(range(16)))
 
     def test_write_unspecified_distribution_with_ordering(self):
         with tempfile.TemporaryDirectory(prefix="write_req_unspec") as d:
