@@ -48,8 +48,11 @@ in a later operand from firing on rows Python never reaches. Two folds do that:
   ``or``, ``WHEN v1 THEN true``), for the links of a chain and for ``and`` /
   ``or`` in a body that holds a chain or a comparison over a non-basic operand
   (see ``_needs_atomic_boolops``). Each later operand sits in a branch that runs
-  only once the earlier ones have not decided the result. Every comparison link
-  is total, so no condition is NULL.
+  only once the earlier ones have not decided the result. Under strict null
+  strictness (the default) every comparison link is total, so no condition is
+  NULL. Under ``transpileNullStrictness=loose`` an ordering link is NULL for a
+  NULL operand and a CASE WHEN would skip it, so loose always takes ``&`` /
+  ``|``, whose three-valued logic propagates the NULL.
 
 The CASE WHEN is atomic to the optimizer: ``splitConjunctivePredicates`` matches
 only ``And``, ``BooleanSimplification``'s patterns match ``And`` / ``Or``, and
@@ -231,7 +234,8 @@ def _wider_numeric(lc: str, rc: str) -> str:
 _MAX_COMPARISON_OPS = 64
 
 # Bound on the Catalyst tree one application of a UDF builds, summed over its
-# options (see `_materialized_weight`). Lowerings reference operand Columns more
+# options (see `_materialized_weight`), for bodies whose expansion compounds
+# (see `_expansion_compounds`). Lowerings reference operand Columns more
 # than once and `ColumnNodeToExpressionConverter` does not memoize, so the shared
 # Column DAG expands into a tree for every option each time the UDF is applied --
 # outside `_transpile_func`'s fallback `except`. `(x < 0) < ((x < 0) < ...)` is
@@ -264,6 +268,9 @@ class AbstractTranspiler(object):
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
     # to enable this transpiler.
     variety: str = ""
+    # Whether the last `_transpile_from_ast` lowered a NULL guard that raises at
+    # runtime; `_transpile_func` warns about the guards of the options it keeps.
+    _null_guard_emitted: bool = False
 
     @classmethod
     def register(cls) -> None:
@@ -288,6 +295,41 @@ class AbstractTranspiler(object):
         also the list ``param_categories`` is keyed by.
         """
         pass
+
+
+def _multi_read_operands(node: ast.AST) -> List[ast.AST]:
+    """The operands whose Column the lowering of ``node`` reads more than once."""
+    match node:
+        case ast.Compare(left=left, ops=ops, comparators=comps):
+            nodes = [left, *comps]
+            return [
+                operand
+                for i, op in enumerate(ops)
+                if _OPERAND_READS.get(type(op), 2) > 1
+                for operand in nodes[i : i + 2]
+            ]
+        case ast.BinOp(op=ast.Mod(), right=right):
+            return [right]
+        case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+            return [arg]
+        case _:
+            return []
+
+
+def _expansion_compounds(body: ast.AST) -> bool:
+    """Return True when an operand that a lowering reads more than once itself
+    holds such a lowering, so the materialized size multiplies per nesting level.
+
+    Otherwise each lowering adds a constant per term and the size stays
+    proportional to the source, however many options the body keeps; such a flat
+    body is not bounded by ``_MAX_MATERIALIZED_WEIGHT``.
+    """
+    return any(
+        _multi_read_operands(inner)
+        for node in ast.walk(body)
+        for operand in _multi_read_operands(node)
+        for inner in ast.walk(operand)
+    )
 
 
 def _materialized_weight(node: ast.AST) -> int:
@@ -392,8 +434,10 @@ def _is_never_null_boolean(node: ast.AST) -> bool:
             # A literal None is "boolean" for coalesce purposes but IS NULL.
             return isinstance(v, bool)
         case ast.Compare():
-            # Every comparison lowering is total (see ``_lower_compare_pair``),
-            # so only the operand shapes still need checking.
+            # Under strict null strictness every comparison lowering is total
+            # (see ``_lower_compare_pair``), so only the operand shapes still
+            # need checking. Under loose an ordering comparison can be NULL,
+            # which is that setting's documented difference from Python.
             return _is_definitely_boolean(node)
         case ast.UnaryOp(op=ast.Not()):
             # Lowered as ``coalesce(~operand, lit(True))``, which is total.
@@ -430,7 +474,9 @@ def _short_circuit(operands: List[Column], stop_on: bool) -> Column:
     earlier one differs from ``stop_on``, which is then the result:
     ``CASE WHEN NOT o1 THEN false ... ELSE oN END`` for ``stop_on=False``
     (``and``, chain links) and ``CASE WHEN o1 THEN true ... ELSE oN END`` for
-    ``stop_on=True`` (``or``). Every operand before the last must be non-NULL.
+    ``stop_on=True`` (``or``). Every operand before the last must be non-NULL: a
+    NULL condition takes no branch, so the fold would skip it. That holds only
+    under strict null strictness (see ``CatalystTranspiler._fold_boolean``).
     """
     *earlier, last = operands
     if not earlier:
@@ -796,6 +842,22 @@ class CatalystTranspiler(AbstractTranspiler):
         self._null_guard_emitted = True
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
+    def _fold_boolean(self, operands: List[Column], is_or: bool, atomic: bool) -> Column:
+        """Fold the lowered operands of an ``and`` / ``or``, or the links of a
+        chain (``is_or=False``): the sequential CASE WHEN when ``atomic``,
+        otherwise ``&`` / ``|`` (see the module docstring).
+
+        The CASE WHEN needs every operand before the last non-NULL, which
+        comparison links are only under strict null strictness. Under loose an
+        ordering link is NULL for a NULL operand, and a CASE WHEN would skip it
+        and answer from the later operands, so loose always folds with ``&`` /
+        ``|``: their three-valued logic propagates the NULL, and no ordering
+        ``raise_error`` guard is left for the optimizer to move.
+        """
+        if atomic and self._null_strictness != "loose":
+            return _short_circuit(operands, stop_on=is_or)
+        return functools.reduce(operator.or_ if is_or else operator.and_, operands)
+
     def _lower_compare_pair(
         self,
         params: List[str],
@@ -808,7 +870,9 @@ class CatalystTranspiler(AbstractTranspiler):
         """Lower ONE adjacent comparison of a (possibly chained) ``ast.Compare``,
         given its operands' lowered Columns.
 
-        Callers rely on the result never being NULL: ``is`` / ``is not`` emit
+        Under strict null strictness the result is never NULL, which callers
+        rely on (under loose, ``_lower_value_compare`` returns NULL for a NULL
+        operand and ``_fold_boolean`` folds accordingly): ``is`` / ``is not`` emit
         ``isNull`` / ``isNotNull``, ``_lower_eq`` answers every NULL combination
         with a boolean literal, and ``_lower_value_compare`` raises rather than
         returning NULL. Its non-NULL branch cannot yield NULL either, because
@@ -817,7 +881,7 @@ class CatalystTranspiler(AbstractTranspiler):
         (non-decimal ``NumericType`` for "numeric", UTF8_BINARY ``StringType``
         for "string") leave numeric widening as the only coercion Catalyst
         inserts, and under ANSI a failing cast raises. That is what lets the
-        chain fold wrap each link in ``NOT link`` with no ``coalesce``.
+        strict chain fold wrap each link in ``NOT link`` with no ``coalesce``.
         """
         match op:
             case ast.Is() | ast.IsNot():
@@ -1082,10 +1146,7 @@ class CatalystTranspiler(AbstractTranspiler):
                         "to interpreted Python"
                     )
                 cols = [self._convert_chunk(params, v) for v in values]
-                is_or = isinstance(op, ast.Or)
-                if self._atomic_boolops:
-                    return _short_circuit(cols, stop_on=is_or)
-                return functools.reduce(operator.or_ if is_or else operator.and_, cols)
+                return self._fold_boolean(cols, isinstance(op, ast.Or), self._atomic_boolops)
             case ast.IfExp(test=test, body=body_expr, orelse=orelse_expr):
                 # Ternary `body if test else orelse` -- shares the
                 # NULL-as-falsy lowering with the if-statement case.
@@ -1143,19 +1204,20 @@ class CatalystTranspiler(AbstractTranspiler):
                 # `50 < x < 60` over `rand(7) * 100` was ~30% true where Python is
                 # ~10%).
                 #
-                # The links fold to a sequential CASE WHEN rather than `&` (see
-                # the module docstring); every link is total, so no condition is
-                # NULL.
+                # Under strict null strictness the links fold to a sequential
+                # CASE WHEN rather than `&` (see the module docstring): every
+                # link is total there, so no condition is NULL.
                 nodes = [left, *comps]
                 cols = [self._convert_chunk(params, n) for n in nodes]
-                return _short_circuit(
+                return self._fold_boolean(
                     [
                         self._lower_compare_pair(
                             params, op, nodes[i], nodes[i + 1], cols[i], cols[i + 1]
                         )
                         for i, op in enumerate(ops)
                     ],
-                    stop_on=False,
+                    is_or=False,
+                    atomic=True,
                 )
             case ast.BinOp(left=left, op=op, right=right):
                 # Operator selection is driven by the operand *categories* under
@@ -1380,15 +1442,6 @@ class CatalystTranspiler(AbstractTranspiler):
                     "interpreted Python"
                 )
         converted = self._convert_chunk(params, function_body[0])
-        if self._null_guard_emitted:
-            warnings.warn(
-                "Python UDF transpiler: the transpiled UDF includes a NULL guard "
-                "that raises at runtime when a NULL input is encountered. Add an "
-                "`if x is not None` guard around comparisons, or filter NULLs "
-                "upstream, to avoid this.",
-                UserWarning,
-                stacklevel=2,
-            )
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
         # sees an UnresolvedFunction tree and reports VOID, which fails
@@ -1864,7 +1917,11 @@ def _transpile_func(
         combos = _param_category_combos(function_ast, public_params)
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
-        weight = _materialized_weight(function_ast)
+        # A flat body's size stays proportional to its source, so only one whose
+        # expansion compounds is weighed (see `_expansion_compounds`).
+        compounds = _expansion_compounds(function_ast)
+        weight = _materialized_weight(function_ast) if compounds else 0
+        guarded = False
 
         def too_heavy(options: int) -> Optional[str]:
             if options * weight <= _MAX_MATERIALIZED_WEIGHT:
@@ -1888,6 +1945,7 @@ def _transpile_func(
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)
+                        guarded = guarded or transpiler._null_guard_emitted
                         input_categories.append(
                             [combo.get(i, "numeric") for i in range(len(public_params))]
                         )
@@ -1897,6 +1955,16 @@ def _transpile_func(
         # prunes them to the one matching the bound types, so bound their sum.
         if refusal := too_heavy(len(transpiled)):
             return ([], [refusal], [], [], [])
+        # Only now, so that the warning describes an option that is kept.
+        if guarded:
+            warnings.warn(
+                "Python UDF transpiler: the transpiled UDF includes a NULL guard "
+                "that raises at runtime when a NULL input is encountered. Add an "
+                "`if x is not None` guard around comparisons, or filter NULLs "
+                "upstream, to avoid this.",
+                UserWarning,
+                stacklevel=2,
+            )
         return (
             transpiled,
             errors,
