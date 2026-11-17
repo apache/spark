@@ -19,7 +19,7 @@ package org.apache.spark.graph
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.graph.GraphErrors.{EDGE_PROPERTIES, EDGES, VERTEX_PROPERTIES, VERTICES}
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, Resolver}
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteIdentifier
 import org.apache.spark.sql.functions.{array, col, countDistinct, explode, expr}
@@ -42,14 +42,14 @@ import org.apache.spark.storage.StorageLevel
  * free.
  *
  * Required vertex columns:
- *   - "id", the vertex ID. See [[GraphFrame.ID]]
+ *   - "id", the vertex ID. See `GraphFrame.ID`
  *
  * Required edge columns:
- *   - "src", the source vertex ID. See [[GraphFrame.SRC]]
- *   - "dst", the destination vertex ID. See [[GraphFrame.DST]]
+ *   - "src", the source vertex ID. See `GraphFrame.SRC`
+ *   - "dst", the destination vertex ID. See `GraphFrame.DST`
  *
  * Optional edge columns:
- *   - "weight", the edge weight. See [[GraphFrame.WEIGHT]]
+ *   - "weight", the edge weight. See `GraphFrame.WEIGHT`
  *
  * All other columns are vertex or edge properties. Avoid using the reserved column names for
  * properties: this is not checked, but such columns may conflict with columns produced by graph
@@ -284,6 +284,7 @@ class GraphFrame private (
    * @group transformations
    * @since 5.0.0
    */
+  @throws[AnalysisException]
   def joinVertices(properties: DataFrame): GraphFrame = {
     checkProperties(properties, Seq(ID), vertices, VERTEX_PROPERTIES, VERTICES)
     GraphFrame(vertices.join(properties, Seq(ID), "left"), edges)
@@ -311,6 +312,7 @@ class GraphFrame private (
    * @group transformations
    * @since 5.0.0
    */
+  @throws[AnalysisException]
   def joinEdges(properties: DataFrame): GraphFrame = {
     checkProperties(properties, Seq(SRC, DST), edges, EDGE_PROPERTIES, EDGES)
     GraphFrame(vertices, edges.join(properties, Seq(SRC, DST), "left"))
@@ -491,6 +493,7 @@ object GraphFrame extends Serializable {
    *
    * @since 5.0.0
    */
+  @throws[AnalysisException]
   def apply(vertices: DataFrame, edges: DataFrame): GraphFrame = {
     if (vertices == null) {
       throw GraphErrors.nullDataFrameError(VERTICES)
