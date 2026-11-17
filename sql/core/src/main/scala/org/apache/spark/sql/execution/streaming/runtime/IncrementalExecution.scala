@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic, WidenStatefulOperatorAttributeNullability}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId, KllAggregateResolution, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId, ExternalUserDefinedFunction, KllAggregateResolution, NamedExpression, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -183,7 +183,7 @@ class IncrementalExecution(
     val optimizerInput = if (legacySharing && (kllChanged || originalBindings.nonEmpty ||
         adjusted.containsPattern(KLL_CHECKPOINT_ALTERNATIVE))) {
       // Undo only compiler bindings exposed by the KLL metadata change. Restore the original
-      // expressions, rather than canonical-merging their aliases: separate IN predicates acquire
+      // expressions before matching historical UDF bindings: separate IN predicates acquire
       // separate existence attributes during rewriting, while equal scalar SUMs historically share.
       def restoreInput(
           input: LogicalPlan,
@@ -200,6 +200,7 @@ class IncrementalExecution(
         def visit(plan: LogicalPlan): LogicalPlan = plan match {
           case project: Project =>
             val child = visit(project.child)
+            val udfBindings = MutableMap.empty[Expression, Attribute]
             val retained = project.projectList.flatMap {
               case a: Attribute if bindings.contains(a.exprId) => None
               case original =>
@@ -210,6 +211,23 @@ class IncrementalExecution(
                       (!independentOnly || alias.child.references.isEmpty) =>
                     bindings(alias.exprId) = alias.child
                     None
+                  case alias: Alias if alias.isNondeterministicSubqueryBinding &&
+                      (alias.child.isInstanceOf[UserDefinedExpression] ||
+                        alias.child.isInstanceOf[ExternalUserDefinedFunction]) &&
+                      !alias.child.exists(e =>
+                        e.isInstanceOf[SubqueryExpression] && !e.deterministic) =>
+                    // Restoring deterministic scalar inputs can make UDF bindings canonically
+                    // equal again. Retain one evaluation, as historical extraction did. Random
+                    // inputs remain attributes, and independent random subqueries stay distinct.
+                    val key = alias.child.canonicalized
+                    udfBindings.get(key) match {
+                      case Some(attribute) =>
+                        bindings(alias.exprId) = attribute
+                        None
+                      case None =>
+                        udfBindings(key) = alias.toAttribute
+                        Some(alias)
+                    }
                   case other => Some(other)
                 }
             }

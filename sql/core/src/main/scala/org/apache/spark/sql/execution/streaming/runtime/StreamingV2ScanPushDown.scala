@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, InferFiltersFromConstraints, InferFiltersFromGenerate, ReplaceExpressions}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Filter, Join, LateralJoin, LeafNode, LogicalPlan, Project, SetOperation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CTERelationDef, Filter, Join, LateralJoin, LeafNode, LogicalPlan, OpaqueLogicalPlan, Project, SetOperation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
@@ -967,10 +967,12 @@ private[sql] object StreamingV2ScanPushDown
    * Stands for `plan`, a subtree without a streaming relation, in the plan that is optimized when
    * the query starts, which is never executed. It keeps `plan` canonicalized, which is not a child,
    * so that the placeholders of different plans differ, while those of the same plan do not, as
-   * the plans do in the micro-batches.
+   * the plans do in the micro-batches. It preserves the determinism of `plan` so that a static
+   * subquery cannot fold away columns that a micro-batch still needs.
    */
   private case class BatchRelation(output: Seq[Attribute], plan: LogicalPlan)
-    extends LeafNode with MultiInstanceRelation {
+    extends LeafNode with MultiInstanceRelation with OpaqueLogicalPlan {
+    override def hiddenPlan: LogicalPlan = plan
     override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
     override def computeStats(): Statistics = Statistics(sizeInBytes = conf.defaultSizeInBytes)
     override def simpleString(maxFields: Int): String =

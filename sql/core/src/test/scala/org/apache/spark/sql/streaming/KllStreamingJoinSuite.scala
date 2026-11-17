@@ -184,29 +184,34 @@ class KllStreamingJoinSuite extends StreamTest {
             val right = MemoryStream[Int]
             val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v))
                 |FROM VALUES (0), (1), (2) AS t(v))""".stripMargin
+            val secondScalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v))
+                |FROM VALUES (0), (1), (2), (3), (4) AS t(v))""".stripMargin
             def query(analysisLegacy: Boolean): DataFrame =
               withSQLConf(rollback -> analysisLegacy.toString) {
                 def input(stream: MemoryStream[Int], staged: Boolean): DataFrame = {
                   val data = stream.toDF()
-                  if (userAlias && staged) data.selectExpr("value", s"$scalar AS s") else data
+                  if (userAlias && staged) {
+                    data.selectExpr("value", s"$scalar AS s", s"$secondScalar AS t")
+                  } else data
                 }
                 val value = if (userAlias) (if (stageLeft) "l.s" else "r.s") else scalar
-                val condition = if (stageLeft) s"l.value + $value = r.value"
-                  else s"l.value = r.value + $value"
+                val second = if (userAlias) (if (stageLeft) "l.t" else "r.t") else secondScalar
+                val condition = if (stageLeft) s"l.value + $value - $second = r.value"
+                  else s"l.value = r.value + $value - $second"
                 input(left, stageLeft).as("l").join(input(right, !stageLeft).as("r"),
                   expr(condition)).selectExpr("l.value", "r.value")
               }
             // Rollback construction independently recreates the historical unstaged layout.
             val initial = query(analysisLegacy = legacy)
             val current = query(analysisLegacy = analysisLegacy)
-            val l = if (stageLeft) 0 else 3
-            val r = if (stageLeft) 3 else 0
+            val l = if (stageLeft) 0 else -2
+            val r = if (stageLeft) -2 else 0
             def checkPayload: AssertOnQuery = AssertOnQuery { query =>
               val join = query.lastExecution.executedPlan.collectFirst {
                 case j: StreamingSymmetricHashJoinExec => j
               }.get
               val staged = if (stageLeft) join.left else join.right
-              staged.output.size == (if (userAlias || !legacy) 2 else 1)
+              staged.output.size == (if (userAlias || !legacy) 3 else 1)
             }
             testStream(initial)(
               StartStream(checkpointLocation = checkpoint.getAbsolutePath,

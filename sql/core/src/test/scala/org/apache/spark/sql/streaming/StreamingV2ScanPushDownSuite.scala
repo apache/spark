@@ -31,6 +31,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
+import org.apache.spark.sql.catalyst.analysis.ValidateSubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayContains, AttributeReference, AttributeSet, BoundReference, Cast, Divide, EqualTo, EvalMode, Expression, GetArrayItem, GetStructField, GreaterThan, IsNotNull, LeafExpression, LessThan, Literal, Or, Pow, Predicate => CatalystPredicate, Rand, RLike, ScalarSubquery, ScalaUDF, TypeOf}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, InferFiltersFromConstraints, InferFiltersFromGenerate, PruneFilters}
@@ -878,6 +879,34 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("KLL startup scalar placeholders preserve corrected micro-batch column dependencies") {
+    withSourceTable() {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false") {
+        // Counts agree regardless of the serialized sketches, while their metadata must keep
+        // the comparison from folding away the dependency on id when the query starts.
+        val scalar = "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3))"
+        val query = spark.readStream.table(tbl)
+          .selectExpr(s"CASE WHEN $scalar <=> $scalar THEN 1L ELSE id END AS n")
+        assert(requiredColumns(query).values.map(_.map(_.name).toSet).toSeq === Seq(Set("id")))
+        testStream(query)(
+          StartStream(),
+          ProcessAllAvailable(),
+          CheckLastBatch(1L, 1L),
+          assertReadSchema("id"),
+          insert("(3, 'c', 30)"),
+          ProcessAllAvailable(),
+          CheckLastBatch(1L),
+          StopStream,
+          StartStream(),
+          insert("(4, 'd', 40)"),
+          ProcessAllAvailable(),
+          CheckLastBatch(1L),
+          assertReadSchema("id"),
+          StopStream)
+      }
+    }
+  }
+
   test("read the columns of a condition on a subquery, whatever its plan is") {
     withSourceTable() {
       withTempView("s") {
@@ -1371,6 +1400,28 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
       // those of the same plan do not, as the plans in the micro-batches.
       assert(placeholders(0) !== placeholders(1))
       assert(placeholders(0) === placeholders(2))
+    }
+  }
+
+  Seq(false, true).foreach { legacy =>
+    test(s"KLL startup static scalar placeholders preserve determinism: legacy=$legacy") {
+      withSourceTable() {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+          val df = spark.readStream.table(tbl).selectExpr(
+            "(SELECT kll_sketch_agg_bigint(id) FROM range(3)) AS kll",
+            "(SELECT max(id) FROM range(3)) AS maximum",
+            "(SELECT rand(0)) AS random",
+            "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) + rand(0) " +
+              "FROM range(3)) AS mixed")
+          val analyzed = df.queryExecution.analyzed
+          Seq(analyzed, StreamingV2ScanPushDown.forStartup(analyzed)).foreach { plan =>
+            val scalars = plan.expressions.flatMap(_.collect { case s: ScalarSubquery => s })
+            assert(scalars.map(_.deterministic) === Seq(legacy, true, false, false))
+            assert(scalars.map(ValidateSubqueryExpression.isIndependentKllScalar) ===
+              Seq(!legacy, false, false, false))
+          }
+        }
+      }
     }
   }
 

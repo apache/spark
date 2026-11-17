@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 
@@ -55,6 +56,13 @@ object NondeterministicExpressionCollection {
     if (bindings.isEmpty && !stripFilterGuards) expression else expression match {
       case guard: KllFilteredAggregateInput if stripFilterGuards && guard.deterministic =>
         restoreBindingReferences(guard.input, bindings, stripFilterGuards)
+      case count: Count if stripFilterGuards =>
+        val inputs = count.children.map(restoreBindingReferences(_, bindings, stripFilterGuards))
+        inputs match {
+          case Seq(input: KllCountAggregateInput) =>
+            count.copy(children = input.children)
+          case _ => count.copy(children = inputs)
+        }
       case attribute: Attribute => bindings.getOrElse(attribute.exprId, attribute)
       // Values are expanded child-first. Returning a bound value directly avoids revisiting it
       // once for every reference, and preserves its evaluation identity.
@@ -160,7 +168,8 @@ object NondeterministicExpressionCollection {
       return false
     }
     expression match {
-      case _: ConditionalExpression | _: And | _: Or | _: KllFilteredAggregateInput => true
+      case _: ConditionalExpression | _: And | _: Or | _: TryEval |
+          _: KllFilteredAggregateInput | _: KllCountAggregateInput => true
       case udf: ScalaUDF if udf.inputPrimitives.contains(true) => true
       case other => orderedNullGuard(other)
     }

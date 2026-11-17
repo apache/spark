@@ -30,6 +30,7 @@ import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationExce
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
@@ -298,6 +299,87 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         StartStream(checkpointLocation = checkpoint.getAbsolutePath,
           additionalConfs = Map(sharing -> "false")),
         AddData(input, 3), CheckLastBatch(Row(3L, 9L, 9L)), StopStream)
+    }
+  }
+
+  testWithAllStateVersions("KLL legacy checkpoints restore split nondeterministic UDF keys") {
+    withTempDir { checkpoint =>
+      val input = MemoryStream[Int]
+      val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+          |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+      val identity = udf((n: java.lang.Long) => n).asNondeterministic()
+      def query(legacy: Boolean): DataFrame = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val result = input.toDF().groupBy(identity(expr(scalar)).as("a"),
+          identity(expr(scalar)).as("b")).count()
+        result.queryExecution.assertAnalyzed()
+        result
+      }
+      val historical = query(legacy = true)
+      val current = query(legacy = false)
+      val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+      val oneKey = AssertOnQuery { q =>
+        q.lastExecution.executedPlan.collectFirst {
+          case save: StateStoreSaveExec => save.keyExpressions.size
+        }.contains(1)
+      }
+      testStream(historical, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "true")),
+        AddData(input, 1, 2), CheckLastBatch(Row(3L, 3L, 2L)), oneKey, StopStream)
+      testStream(current, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "false")),
+        AddData(input, 3), CheckLastBatch(Row(3L, 3L, 3L)), oneKey, StopStream)
+    }
+  }
+
+  testWithAllStateVersions("KLL UDF checkpoint bindings preserve distinct inputs and randomness") {
+    for (legacySharing <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Int]
+        def scalar(size: Int): String =
+          s"(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range($size))"
+        val identity = udf((n: java.lang.Long) => n).asNondeterministic()
+        def query(legacy: Boolean): DataFrame = withSQLConf(
+            SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+          val random = rand(17L)
+          val result = input.toDF().groupBy(
+            identity(expr(scalar(3))).as("a"), identity(expr(scalar(3))).as("b"),
+            identity(expr(scalar(5))).as("c"), random.as("r"), random.as("r_again"),
+            rand(23L).as("other_random")).count()
+          result.queryExecution.assertAnalyzed()
+          result
+        }
+        val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+        val bindings = AssertOnQuery { q =>
+          val keys = q.lastExecution.executedPlan.collectFirst {
+            case save: StateStoreSaveExec => save.keyExpressions.size
+          }
+          assert(keys.contains(if (legacySharing) 4 else 5), q.lastExecution.toString)
+          val randoms = q.lastExecution.normalized.flatMap(_.expressions.flatMap(_.collect {
+            case random: Rand => random
+          }))
+          assert(randoms.size == 2, q.lastExecution.normalized.toString)
+          assert(randoms.map(_.seedExpression).distinct.size == 2)
+          true
+        }
+        def checkRows(total: Long): CheckAnswerRowsByFunc = CheckLastBatch { rows: Seq[Row] =>
+          assert(rows.map(_.getLong(6)).sum == total)
+          rows.foreach { row =>
+            assert(row.getLong(0) == 3L && row.getLong(1) == 3L && row.getLong(2) == 5L)
+            assert(row.getDouble(3) == row.getDouble(4), row.toString)
+          }
+        }
+        testStream(query(legacy = legacySharing), Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> legacySharing.toString)),
+          AddData(input, 1, 2), checkRows(2L), bindings, StopStream)
+        testStream(query(legacy = false), Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> (!legacySharing).toString)),
+          AddData(input, 3), checkRows(3L), bindings, StopStream)
+      }
     }
   }
 

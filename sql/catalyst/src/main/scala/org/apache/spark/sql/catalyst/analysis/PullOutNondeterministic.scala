@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, KLL_CHECKPOINT_ALTERNATIVE, RUNTIME_REPLACEABLE, SCALAR_SUBQUERY, TreePattern}
+import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
  * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
@@ -46,7 +47,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       }) => a
 
     case a: Aggregate =>
-      val guarded = guardFilteredInputs(a)
+      val guarded = guardAggregateInputs(a)
       val expressionsToExtract =
         guarded.groupingExpressions ++ nondeterministicSubqueriesInInputs(guarded)
       if (expressionsToExtract.forall(_.deterministic)) a else {
@@ -294,7 +295,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       .filter(e => !e.deterministic && deterministic(e))
   }
 
-  private def guardFilteredInputs(aggregate: Aggregate): Aggregate = {
+  private def guardAggregateInputs(aggregate: Aggregate): Aggregate = {
     if (!aggregate.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
       return aggregate
     }
@@ -303,22 +304,34 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     val filters = mutable.LinkedHashMap.empty[
       NondeterministicExpressionCollection.ExpressionKey, Alias]
     val guard: PartialFunction[Expression, Expression] = {
-      case expression: AggregateExpression if expression.filter.exists(deterministic.apply) =>
-        val function = expression.aggregateFunction
+      case expression: AggregateExpression =>
         def needsGuard(input: Expression): Boolean = !input.deterministic && deterministic(input)
-        if (!function.children.exists(needsGuard)) expression else {
+        val function = expression.aggregateFunction match {
+          // Count tests only nullable arguments, in order, and skips the rest after the first
+          // NULL. Stage those checks together rather than evaluating its arguments eagerly.
+          // DISTINCT still needs the original argument values for its distinct keys.
+          case count: Count if !expression.isDistinct && count.children.exists(needsGuard) &&
+              count.children.forall(deterministic.apply) =>
+            Count(KllCountAggregateInput(count.children))
+          case other => other
+        }
+        val prepared = if (function eq expression.aggregateFunction) expression else {
+          expression.copy(aggregateFunction = function)
+        }
+        if (!expression.filter.exists(deterministic.apply) ||
+            !function.children.exists(needsGuard)) {
+          prepared
+        } else {
           val filter = expression.filter.get
-          // A predicate inherited from a randomized subquery must be evaluated once. Both the
-          // argument guard and the aggregate's FILTER consume this same lower binding.
-          val predicate = if (filter.deterministic) filter else {
-            filters.getOrElseUpdate(keys(filter),
-              Alias(filter, "_aggregate_filter")().asNondeterministicSubqueryBinding).toAttribute
-          }
+          // Both the argument guard and FILTER consume this lower binding. Deterministic
+          // predicates can also be expensive, so do not duplicate their evaluation.
+          val predicate = filters.getOrElseUpdate(keys(filter),
+            Alias(filter, "_aggregate_filter")().asNondeterministicSubqueryBinding).toAttribute
           val inputs = function.children.map {
             case input if needsGuard(input) => KllFilteredAggregateInput(predicate, input)
             case input => input
           }
-          expression.copy(
+          prepared.copy(
             aggregateFunction = function.withNewChildren(inputs).asInstanceOf[AggregateFunction],
             filter = Some(predicate))
         }
@@ -354,4 +367,22 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     }
     expressions.foreach(validate)
   }
+}
+
+/** Keeps Count's input checks intact until NULL handling for primitive UDFs has run. */
+private[analysis] case class KllCountAggregateInput(override val children: Seq[Expression])
+  extends RuntimeReplaceable {
+  // Be conservative before HandleNullInputsForUDF: it can make an argument nullable later.
+  override def nullable: Boolean = true
+  override def dataType: DataType = LongType
+  override lazy val replacement: Expression = {
+    val nullableInputs = children.filter(_.nullable)
+    if (nullableInputs.isEmpty) Literal(1L) else {
+      If(nullableInputs.map(IsNull).reduceLeft(Or), Literal.create(null, LongType), Literal(1L))
+    }
+  }
+  override val nodePatterns: Seq[TreePattern] =
+    Seq(RUNTIME_REPLACEABLE, KLL_CHECKPOINT_ALTERNATIVE)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = copy(children = newChildren)
 }

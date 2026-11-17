@@ -2806,6 +2806,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY) &&
         ExprUtils.isDeterministicAfterSubqueryExtraction(alias.child) =>
       def retainedAggregate(plan: LogicalPlan): Boolean = plan.exists {
+        case opaque: OpaqueLogicalPlan => retainedAggregate(opaque.hiddenPlan)
         case aggregate: Aggregate if aggregate.aggregateExpressions.exists(_.exists {
               case expression: AggregateExpression => !expression.deterministic
               case _ => false
@@ -2833,6 +2834,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case f @ Filter(condition, project @ Project(fields, grandChild))
         if fields.exists(!_.deterministic) &&
+          fields.forall(e => e.deterministic || e.containsAnyPattern(
+            SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) &&
           canPushThroughCondition(grandChild, condition) =>
       lazy val aliases = AttributeMap(getAliasMap(project).filter(_._2.deterministic))
       val classified = splitConjunctivePredicates(condition).map { predicate =>

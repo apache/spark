@@ -411,8 +411,13 @@ object ValidateSubqueryExpression
       if (value.deterministic) return value
       val cached = plans.get(value)
       if (cached != null) return cached
-      val result = value.mapChildrenWithReferenceEquality(plan)
-        .mapExpressionsWithReferenceEquality(expression)
+      // This copy is only a determinism proof. Opaque startup placeholders keep their real
+      // plans hidden from optimization, but must expose the source of KLL nondeterminism here.
+      val result = value match {
+        case opaque: OpaqueLogicalPlan => plan(opaque.hiddenPlan)
+        case other => other.mapChildrenWithReferenceEquality(plan)
+          .mapExpressionsWithReferenceEquality(expression)
+      }
       plans.put(value, result)
       result
     }

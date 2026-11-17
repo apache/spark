@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.{FileSourceScanExec, ProjectExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
@@ -31,6 +32,77 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+
+  Seq(false, true).foreach { filtered =>
+    test(s"KLL Count input extraction preserves skipped inputs: filtered=$filtered") {
+      withTempView("kll_nullable_count") {
+        spark.sparkContext.parallelize(Seq((Option.empty[Long], Some(1L))), 1)
+          .toDF("a", "b").createOrReplaceTempView("kll_nullable_count")
+        val malformed = """kll_sketch_get_n_bigint(substring(
+            |(SELECT kll_sketch_agg_bigint(id) FROM range(1)), 1, 1))""".stripMargin
+        val count = if (filtered) s"count(coalesce($malformed, 0L)) FILTER (WHERE b > 0)"
+          else s"count(a, $malformed + b)"
+        for (legacy <- Seq(true, false)) {
+          withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+              SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+              SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+            checkAnswer(sql(s"SELECT $count FROM kll_nullable_count"),
+              Row(if (filtered) 1L else 0L))
+          }
+        }
+      }
+    }
+  }
+
+  test("KLL extraction retains the interval TRY exception catcher") {
+    val one = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+        |FROM range(1))""".stripMargin
+    for (legacy <- Seq(true, false)) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(sql(s"""SELECT count(*)
+            |FROM range(2) GROUP BY try_divide(INTERVAL '1' DAY, $one - 1)""".stripMargin),
+          Row(2L))
+      }
+    }
+  }
+
+  test("KLL all-outer aggregates resolve their HAVING subquery references") {
+    for (legacy <- Seq(true, false)) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+        checkAnswer(sql("""SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t.id))
+            |FROM range(10) t HAVING EXISTS
+            |(SELECT 1 WHERE kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t.id)) > 0)
+            |""".stripMargin), Row(10L))
+      }
+    }
+  }
+
+  test("KLL guarded inputs evaluate deterministic aggregate FILTER predicates once") {
+    val evaluations = spark.sparkContext.longAccumulator("kll-deterministic-filter")
+    withUserDefinedFunction("kll_counted_filter" -> true) {
+      spark.udf.register("kll_counted_filter", (n: Long) => {
+        evaluations.add(1L)
+        n % 2 == 0
+      })
+      for (legacy <- Seq(true, false)) {
+        evaluations.reset()
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          val result = sql(s"""SELECT sum($scalar + id)
+              |FILTER (WHERE kll_counted_filter(id)), count(*) FROM range(0, 4, 1, 1)
+              |""".stripMargin).collect().toSeq
+          assert(result == Seq(Row(8L, 4L)))
+          assert(evaluations.value == 4L, s"legacy=$legacy evaluations=${evaluations.value}")
+        }
+      }
+    }
+  }
 
   test("KLL HAVING and ordering resolve checkpoint alternatives once in both analyzers") {
     for (singlePass <- Seq(false, true); legacy <- Seq(false, true)) {
@@ -47,6 +119,33 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
         QueryTest.checkAnswer(
           sql(s"SELECT count(*) FROM VALUES (0L), (1L), (2L) AS t(id) HAVING $scalar > 0"),
           Seq(Row(3L)), checkToRDD = false)
+      }
+    }
+  }
+
+  test("KLL batch HAVING and ordering retain the selected sharing alternative") {
+    for (singlePass <- Seq(false, true); legacy <- Seq(false, true);
+        clause <- Seq("HAVING", "ORDER BY")) {
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val getter = "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))"
+        val tail = if (clause == "HAVING") s"HAVING $getter > 0" else s"ORDER BY $getter"
+        val query = sql(s"""SELECT id % 2 AS g, $getter AS n
+            |FROM VALUES (0L), (1L), (2L), (3L), (4L) AS t(id)
+            |GROUP BY id % 2 $tail""".stripMargin)
+        val functions = query.queryExecution.optimizedPlan.collect {
+          case aggregate: org.apache.spark.sql.catalyst.plans.logical.Aggregate =>
+            aggregate.aggregateExpressions.flatMap(_.collect {
+              case expression: AggregateExpression => expression
+            }).size
+        }
+        assert(functions == Seq(if (legacy) 1 else 2),
+          s"singlePass=$singlePass legacy=$legacy clause=$clause ${query.queryExecution}")
+        val expected = if (clause == "ORDER BY") Seq(Row(1L, 2L), Row(0L, 3L))
+          else Seq(Row(0L, 3L), Row(1L, 2L))
+        QueryTest.checkAnswer(query, expected, checkToRDD = false)
       }
     }
   }
@@ -392,15 +491,20 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
         .createOrReplaceTempView("guarded_kll_left")
       spark.sparkContext.parallelize(Seq(0L), 1).toDF("id")
         .createOrReplaceTempView("guarded_kll_right")
-      val invalid = """kll_sketch_get_n_bigint((SELECT
-          |substring(kll_sketch_agg_bigint(id, 8), 1, 1) FROM range(10)))""".stripMargin
+      val invalidBuffers = Seq(
+        """kll_sketch_get_n_bigint((SELECT
+          |substring(kll_sketch_agg_bigint(id, 8), 1, 1) FROM range(10)))""".stripMargin,
+        """kll_sketch_get_n_bigint((SELECT
+          |kll_sketch_agg_float(CAST(id AS FLOAT)) FROM range(1)))""".stripMargin)
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
           SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        val query = sql(s"""SELECT l.id, r.id FROM guarded_kll_left l
-            |JOIN guarded_kll_right r ON l.id = r.id AND
-            |CASE WHEN l.id + r.id < 0 THEN $invalid > 0 ELSE true END""".stripMargin)
-        checkAnswer(query, Row(0L, 0L))
+        invalidBuffers.foreach { invalid =>
+          val query = sql(s"""SELECT l.id, r.id FROM guarded_kll_left l
+              |JOIN guarded_kll_right r ON l.id = r.id AND
+              |CASE WHEN l.id + r.id < 0 THEN $invalid > 0 ELSE true END""".stripMargin)
+          checkAnswer(query, Row(0L, 0L))
+        }
       }
     }
   }
