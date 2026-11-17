@@ -148,8 +148,8 @@ class StreamingJoinRangeEvictionSuite extends StreamTest {
     }
   }
 
-  // In state format 4, the extra conjunct gives the left side a value-eviction predicate on its
-  // event time, so that the range scan of the right joiner solves the bound that shifts by a
+  // In state format 4, the extra conjunct gives the right side a value-eviction predicate on
+  // rightTime, so that the range scan of the right joiner solves the bound that shifts by a
   // column of the other input.
   for {
     bound <- Seq("leftTime > rightTime + rightDelay",

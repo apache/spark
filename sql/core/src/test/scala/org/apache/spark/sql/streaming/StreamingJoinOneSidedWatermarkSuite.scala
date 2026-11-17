@@ -163,4 +163,39 @@ class StreamingJoinOneSidedWatermarkSuite extends StreamTest {
       }
     }
   }
+
+  for (version <- Seq(2, 3, 4)) {
+    test(s"one-sided bound that adds the two event times gives no cutoff, V$version") {
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("lk", "ms")
+          .select($"lk", timestamp_millis($"ms").as("lt"))
+        val right = rightInput.toDF().toDF("rk", "ms")
+          .select($"rk", timestamp_millis($"ms").as("rt"))
+          .withWatermark("rt", "0 seconds")
+        def joined(joinType: String): DataFrame = left.join(right,
+          expr("lk = rk AND CAST(lt AS DOUBLE) + CAST(rt AS DOUBLE) > 100"), joinType)
+          .select($"lk", expr("unix_millis(lt)"), expr("unix_millis(rt)"))
+        testStream(joined("inner"))(
+          MultiAddData(leftInput, (1, 40000L))(rightInput, (9, 50000L)),
+          CheckNewAnswer(),
+          AddData(rightInput, (8, 50100L)),
+          CheckNewAnswer(),
+          // 61 s is above the 50.1 s watermark and 40 + 61 > 100: a later right row can match
+          // every stored left row, however high the watermark is.
+          AddData(rightInput, (1, 61000L)),
+          CheckNewAnswer(Row(1, 40000L, 61000L)))
+        val e = intercept[AnalysisException] {
+          joined("left_outer").writeStream
+            .format("memory").queryName("negativeWatermarkTermOuterJoin").start()
+        }
+        assert(e.getMessage.contains("requires a watermark on the right input"))
+        assert(!e.getMessage.contains("through an interval of a day or more"))
+      }
+    }
+  }
 }

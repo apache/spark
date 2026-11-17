@@ -160,6 +160,11 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       ("timestampadd(MILLISECOND, -2500, eventTime)", Some(7499L), Some(12499L)),
       ("timestampadd(MINUTE, 2, eventTime)", Some(129999L), Some(-110001L)),
       ("timestampadd(MINUTE, -2, eventTime)", Some(-110001L), Some(129999L)),
+      // An amount of a day or more in a sub-day unit stays exact, not counted as whole days.
+      ("timestampadd(HOUR, 48, eventTime)", Some(172809999L), Some(-172790001L)),
+      ("timestampadd(HOUR, -48, eventTime)", Some(-172790001L), Some(172809999L)),
+      ("timestampadd(MINUTE, 1440, eventTime)", Some(86409999L), Some(-86390001L)),
+      ("timestampadd(MINUTE, -1440, eventTime)", Some(-86390001L), Some(86409999L)),
       // Keys that the watermark does not bound.
       ("other + INTERVAL 2 SECONDS", None, None),
       ("other + INTERVAL 1 SECOND * 2", None, None),
@@ -179,6 +184,17 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           keys, Seq(eventTime, other)) === keyWatermark.map(_ => 0))
       }
     }
+  }
+
+  test("event time lag lowers the cutoffs by the lag rounded up to a millisecond") {
+    Seq(0L -> 10000L, 500L -> 9999L, 1000L -> 9999L, 1500L -> 9998L, 2000L -> 9998L)
+      .foreach { case (micros, cutoff) =>
+        withClue(s"$micros microseconds") {
+          val lag = EventTimeLag(micros, unrelated = false, unbounded = false)
+          assert(lag.keyWatermark(10000L) === Some(cutoff))
+          assert(lag.rangeWatermark(10000L) === Some(cutoff))
+        }
+      }
   }
 
   test("equality key watermark with whole days or months does not depend on the time zone") {
@@ -345,6 +361,38 @@ class StreamingJoinHelperSuite extends AnalysisTest {
           }
         }
     }
+  }
+
+  test("a watermark term with the sign of an unwatermarked column gives it no cutoff") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val leftEventTime = AttributeReference("leftEventTime", TimestampType, metadata = watermark)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+
+    case class DummyLeafNode() extends LeafNode {
+      override def output: Seq[Attribute] = Seq(leftTime, leftEventTime, rightTime)
+      override def computeStats(): Statistics = Statistics(sizeInBytes = BigInt(0))
+    }
+
+    def cutoff(conditionStr: String, column: Attribute): Option[Long] = {
+      val plan = Filter(CatalystSqlParser.parseExpression(conditionStr), DummyLeafNode())
+      val condition = SimpleTestOptimizer.execute(SimpleAnalyzer.execute(plan))
+        .asInstanceOf[Filter].condition
+      StreamingJoinHelper.getStateValueWatermarkForLags(AttributeSet(Seq(column)),
+        Seq(rightTime), Some(condition), Some(100000L), None, exactForUnwatermarkedColumns = true)
+    }
+
+    assert(cutoff("CAST(leftTime AS DOUBLE) + CAST(rightTime AS DOUBLE) > 100", leftTime)
+      === None)
+    assert(cutoff("CAST(leftTime AS DOUBLE) > 100 - CAST(rightTime AS DOUBLE)", leftTime)
+      === None)
+    // TODO(SPARK-61350): a column with its own watermark still takes such a cutoff.
+    assert(cutoff("CAST(leftEventTime AS DOUBLE) + CAST(rightTime AS DOUBLE) > 100",
+      leftEventTime) === Some(0L))
+    // A watermark term with the opposite sign still bounds the column.
+    assert(cutoff("leftTime >= rightTime - INTERVAL 5 SECONDS", leftTime) === Some(94999L))
+    assert(cutoff("rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR", leftTime)
+      === Some(100000L - 3600000L - 1))
   }
 
   test("extract watermark from time condition") {

@@ -31,7 +31,8 @@ class StreamingJoinSelectedEventTimeSuite extends StreamTest {
   import testImplicits._
 
   for (version <- Seq(2, 3)) {
-    test(s"only the first marked input time can bound opposite join state, V$version") {
+    test(s"a later marked input time that the upstream join relates to the first only through " +
+        s"other columns gives no bound, V$version") {
       withSQLConf(
           SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false",
           SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
