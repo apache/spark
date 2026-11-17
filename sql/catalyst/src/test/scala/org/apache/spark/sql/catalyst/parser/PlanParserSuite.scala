@@ -3868,7 +3868,10 @@ class PlanParserSuite extends AnalysisTest {
           "SELECT * FROM (SELECT INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR) s",
           "SELECT extract(DAY FROM INTERVAL '1 2' DAY TO HOUR '3 4' DAY TO HOUR)"
         ).foreach { query =>
-          assert(parseException(query).getCondition == "_LEGACY_ERROR_TEMP_0024", query)
+          assert(
+            parseException(query).getCondition ==
+              "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
+            query)
         }
       }
     }
