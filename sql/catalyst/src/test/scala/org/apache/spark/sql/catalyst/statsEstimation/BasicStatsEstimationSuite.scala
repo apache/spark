@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftSingle, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
@@ -398,6 +398,18 @@ test("range with invalid long value") {
       JoinHint.NONE)
     checkStats(join, Statistics(
       sizeInBytes = 2 * 10 * (8 + 4 + 1),
+      rowCount = Some(10),
+      attributeStats = AttributeMap(Seq(attribute -> colStat))))
+  }
+
+  test("SPARK-61891: a left single join is estimated from its left side") {
+    // It outputs each of the 10 rows of `plan` once, with the column of `other` added.
+    val otherKey = attr("other")
+    val other = StatsTestPlan(outputList = Seq(otherKey), rowCount = 1000,
+      attributeStats = AttributeMap(Seq(otherKey -> colStat)), size = Some(1000 * (8 + 4)))
+    val join = Join(plan, other, LeftSingle, Some(attribute === otherKey), JoinHint.NONE)
+    checkStats(join, Statistics(
+      sizeInBytes = 10 * (8 + 4 + 4),
       rowCount = Some(10),
       attributeStats = AttributeMap(Seq(attribute -> colStat))))
   }
