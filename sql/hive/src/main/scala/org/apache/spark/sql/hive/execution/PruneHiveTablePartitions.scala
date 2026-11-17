@@ -22,7 +22,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, PredicateHelper, PythonUDF, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, ColumnarUDF, Expression, ExpressionSet, PredicateHelper, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
@@ -56,8 +56,9 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       filters.filter { f =>
         f.deterministic &&
           !SubqueryExpression.hasSubquery(f) &&
-          // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
-          !f.exists(_.isInstanceOf[PythonUDF])
+          // Python and columnar UDFs might exist because this rule is applied before the rules
+          // that extract them.
+          !f.exists(e => e.isInstanceOf[PythonUDF] || e.isInstanceOf[ColumnarUDF])
       }, relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
     ExpressionSet(

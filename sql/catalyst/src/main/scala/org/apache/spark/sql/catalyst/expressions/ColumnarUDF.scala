@@ -50,11 +50,15 @@ case class ColumnarUDF(
     udfDeterministic: Boolean = true,
     udfNullable: Boolean = true,
     resultId: ExprId = NamedExpression.newExprId)
-  extends Expression with Unevaluable with ImplicitCastInputTypes {
+  extends Expression with Unevaluable with ImplicitCastInputTypes with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = udfNullable
+
+  // A call runs user code, so the optimizer does not move a filter below the projection that
+  // computes it, which would evaluate the call a second time.
+  override def expensive: Boolean = true
 
   override lazy val canonicalized: Expression = {
     // `resultId` does not affect the result, so that equal calls of a deterministic function

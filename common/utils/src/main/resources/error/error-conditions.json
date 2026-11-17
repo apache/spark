@@ -1248,6 +1248,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "COLUMNAR_UDF_RESULT_IS_ARGUMENT" : {
+    "message" : [
+      "The columnar function <name> returned one of its argument columns. It must return a vector of its own, which Spark closes."
+    ],
+    "sqlState" : "39000"
+  },
   "COLUMNAR_UDF_RESULT_TYPE_MISMATCH" : {
     "message" : [
       "The columnar function <name> returned a vector of the type <actualType>, but its return type is <expectedType>."
@@ -9606,9 +9612,9 @@
           "Collated strings for keys of maps"
         ]
       },
-      "COLUMNAR_UDF_IN_ON_CLAUSE" : {
+      "COLUMNAR_UDF_IN_JOIN_CONDITION" : {
         "message" : [
-          "Columnar UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+          "Columnar UDF over columns of both sides in the condition of a <joinType> join. The condition is the ON clause of the join, or the correlated predicate of an EXISTS or IN subquery, which is evaluated as such a join."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {

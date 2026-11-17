@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSeq, AttributeSet,
-  BinaryComparison, CurrentBatchTimestamp, EqualNullSafe, EqualTo, Expression, ExprId, ExprUtils,
-  ExternalUserDefinedFunction, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual,
-  Literal, NamedExpression, PythonUDF, SubqueryExpression}
+  BinaryComparison, ColumnarUDF, CurrentBatchTimestamp, EqualNullSafe, EqualTo, Expression,
+  ExprId, ExprUtils, ExternalUserDefinedFunction, GreaterThan, GreaterThanOrEqual, LessThan,
+  LessThanOrEqual, Literal, NamedExpression, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   QueryPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, EXTERNAL_LOOKUP_HINT,
@@ -226,9 +226,9 @@ object ExternalLookupJoinShapes {
 
   /**
    * Whether a lookup-side projection or filter can evaluate `expression` on the lookup results,
-   * inside the join. Python and external UDFs and subqueries are planned as separate operators,
-   * which a lookup-side stage cannot contain. A non-deterministic expression is not allowed
-   * either: the join evaluates a stage on each returned row, so one stored row could get
+   * inside the join. Python, columnar and external UDFs and subqueries are planned as separate
+   * operators, which a lookup-side stage cannot contain. A non-deterministic expression is not
+   * allowed either: the join evaluates a stage on each returned row, so one stored row could get
    * different values for different stream rows, which a read of the table never does. The current
    * time of a micro-batch is allowed, as on a static side: MicroBatchExecution writes
    * `current_timestamp()` and `current_date()` as a `CurrentBatchTimestamp`, which is constant
@@ -238,7 +238,8 @@ object ExternalLookupJoinShapes {
     expression.transform {
       case batchTimestamp: CurrentBatchTimestamp => Literal(null, batchTimestamp.dataType)
     }.deterministic && !expression.exists {
-      case _: PythonUDF | _: ExternalUserDefinedFunction | _: SubqueryExpression => true
+      case _: PythonUDF | _: ColumnarUDF | _: ExternalUserDefinedFunction |
+           _: SubqueryExpression => true
       case _ => false
     }
 

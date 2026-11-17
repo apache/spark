@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassExcep
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
-import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ParseMode}
@@ -3111,9 +3111,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def useColumnarUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
+    // The join can also come from a correlated EXISTS or IN subquery, as a semi, anti or
+    // existence join. An existence join has no SQL form.
+    val joinTypeName = joinType match {
+      case _: ExistenceJoin => "EXISTENCE"
+      case other => other.sql
+    }
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_ON_CLAUSE",
-      messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
+      errorClass = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
+      messageParameters = Map("joinType" -> toSQLStmt(joinTypeName)))
   }
 
   def useExternalUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {

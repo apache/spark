@@ -21,12 +21,18 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.analysis.StoredExpressionFunctions
+import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.plans.NormalizePlan
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.columnar.{ColumnarScalarFunction, ColumnarUDFImplementation, ColumnarUserDefinedFunction}
 import org.apache.spark.sql.execution.{RowToColumnarExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.MarkSingleTaskExecution
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.{col, count, lit, sum}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -109,6 +115,11 @@ class CounterFunction extends ColumnarScalarFunction {
     }
     out
   }
+}
+
+/** Returns its argument column, which a function must not do. */
+class ReturnArgumentFunction extends ColumnarScalarFunction {
+  override def eval(args: ColumnarBatch): ColumnVector = args.column(0)
 }
 
 class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -255,8 +266,123 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       exception = intercept[AnalysisException] {
         a.join(b, condition, "left_outer").collect()
       },
-      condition = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_ON_CLAUSE",
+      condition = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
       parameters = Map("joinType" -> "LEFT OUTER"))
+  }
+
+  test("a call in a correlated subquery that reads both sides") {
+    withFunctions(add) {
+      withTempView("a", "b") {
+        spark.range(5).toDF("x").createOrReplaceTempView("a")
+        spark.range(5).toDF("y").createOrReplaceTempView("b")
+        val exists = "EXISTS (SELECT 1 FROM b WHERE add(a.x, b.y) = 1)"
+        // The subquery becomes a semi join, or an existence join below a disjunction.
+        Seq(s"SELECT * FROM a WHERE $exists" -> "LEFT SEMI",
+          s"SELECT * FROM a WHERE a.x > 3 OR $exists" -> "EXISTENCE").foreach {
+          case (query, joinType) =>
+            checkError(
+              exception = intercept[AnalysisException](sql(query).collect()),
+              condition = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
+              parameters = Map("joinType" -> joinType))
+        }
+        // A call that reads one side is evaluated below the join.
+        checkAnswer(
+          sql("SELECT * FROM a WHERE EXISTS (SELECT 1 FROM b WHERE add(b.y, b.y) = a.x)"),
+          Seq(Row(0L), Row(2L), Row(4L)))
+      }
+    }
+  }
+
+  test("a call in an equality between the sides of a join is a join key") {
+    withFunctions(addOne) {
+      withTempView("a", "b") {
+        spark.range(5).toDF("x").createOrReplaceTempView("a")
+        spark.range(5).toDF("y").createOrReplaceTempView("b")
+        val df = sql("SELECT * FROM a, b WHERE add_one(a.x) = b.y")
+        checkAnswer(df, (0 until 4).map(i => Row(i.toLong, i + 1L)))
+        val joins = df.queryExecution.optimizedPlan.collect { case j: Join => j }
+        assert(joins.length == 1 && joins.head.condition.isDefined)
+      }
+    }
+  }
+
+  test("a filter over the result of a call does not evaluate the call again") {
+    val df = spark.range(10).select(addOne(col("id")).as("r")).filter(col("r") > 5)
+    checkAnswer(df, (6 to 10).map(i => Row(i.toLong)))
+    assert(evalNodes(df.queryExecution.executedPlan).length == 1)
+  }
+
+  test("a call in a filter over a partition column") {
+    withTempPath { path =>
+      spark.range(20).selectExpr("id", "id % 4 as p")
+        .write.partitionBy("p").parquet(path.getCanonicalPath)
+      // With the file source of both DSv1 and DSv2.
+      Seq("parquet", "").foreach { useV1SourceList =>
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
+          val df = spark.read.parquet(path.getCanonicalPath)
+            .filter(addOne(col("p")) === 2 && col("id") > 1)
+          checkAnswer(df, Seq(5, 9, 13, 17).map(i => Row(i.toLong, 1L)))
+          assert(evalNodes(df.queryExecution.executedPlan).length == 1)
+        }
+      }
+    }
+  }
+
+  test("a call in the creation side of a runtime bloom filter") {
+    withFunctions(addOne) {
+      withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1") {
+        withTempPath { path =>
+          val big = s"${path.getCanonicalPath}/big"
+          val small = s"${path.getCanonicalPath}/small"
+          spark.range(1000).selectExpr("id % 100 as k").write.parquet(big)
+          spark.range(100).selectExpr("id as k", "id as v").write.parquet(small)
+          withTempView("big", "small") {
+            spark.read.parquet(big).createOrReplaceTempView("big")
+            spark.read.parquet(small).createOrReplaceTempView("small")
+            def query(filter: String): DataFrame =
+              sql(s"SELECT count(*) FROM big JOIN small ON big.k = small.k WHERE $filter")
+            def hasBloomFilter(df: DataFrame): Boolean = df.queryExecution.optimizedPlan.exists {
+              _.expressions.exists(_.exists(_.isInstanceOf[BloomFilterMightContain]))
+            }
+            // The subquery of a bloom filter is planned on its own, after the calls of the
+            // query are extracted, so a creation side with a call gets no bloom filter.
+            assert(hasBloomFilter(query("small.v + 1 = 5")))
+            val df = query("add_one(small.v) = 5")
+            assert(!hasBloomFilter(df))
+            checkAnswer(df, Row(10L))
+          }
+        }
+      }
+    }
+  }
+
+  test("a function that is not deterministic in grouping and sort keys") {
+    val counter = ColumnarUserDefinedFunction(
+      "counter", Seq(LongType), LongType, Some(new CounterFunction), deterministic = false)
+    val grouped = spark.range(0, 10, 1, 1).groupBy(counter(col("id"))).count()
+    checkAnswer(grouped, (1 to 10).map(i => Row(i.toLong, 1L)))
+    val sorted = spark.range(0, 10, 1, 1).orderBy(counter(col("id")).desc)
+    assert(sorted.collect().toSeq == (0 until 10).reverse)
+  }
+
+  test("a call is a call of a user-defined function") {
+    val call = addOne(col("id")).expr
+    assert(call.isInstanceOf[UserDefinedExpression])
+    // A CHECK constraint or a generated column cannot store it.
+    val found = StoredExpressionFunctions.findUserDefinedFunctionCall(
+      spark.range(1).select(addOne(col("id"))).queryExecution.analyzed.expressions.head)
+    assert(found.map(_._2) == Some("`add_one`"))
+    // Single-task execution leaves a query that runs user code alone.
+    val optimized = spark.range(1).select(addOne(col("id"))).queryExecution.optimizedPlan
+    assert(optimized.containsAnyPattern(MarkSingleTaskExecution.unsupportedPatterns: _*))
+  }
+
+  test("plans with equal calls are equal once their expression ids are normalized") {
+    def plan: LogicalPlan = spark.range(5).select(addOne(col("id"))).queryExecution.analyzed
+    assert(plan != plan)
+    assert(NormalizePlan.normalizeExprIds(plan) == NormalizePlan.normalizeExprIds(plan))
   }
 
   test("a call in a lambda function is not supported") {
@@ -321,6 +447,21 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       exception = intercept[SparkUnsupportedOperationException](df.collect()),
       condition = "COLUMNAR_UDF_NOT_EXECUTABLE",
       parameters = Map("name" -> "engine_only", "kinds" -> "[some-engine]"))
+  }
+
+  test("a function that returns one of its arguments fails") {
+    val identity = ColumnarUserDefinedFunction(
+      "identity", Seq(LongType), LongType, Some(new ReturnArgumentFunction))
+    withTempPath { path =>
+      spark.range(10).write.parquet(path.getCanonicalPath)
+      // Over a columnar scan, and over a row-based child.
+      Seq(spark.read.parquet(path.getCanonicalPath), spark.range(10).toDF()).foreach { input =>
+        checkError(
+          exception = intercept[SparkRuntimeException](input.select(identity(col("id"))).collect()),
+          condition = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
+          parameters = Map("name" -> "identity"))
+      }
+    }
   }
 
   test("a function that returns a vector of another type fails") {

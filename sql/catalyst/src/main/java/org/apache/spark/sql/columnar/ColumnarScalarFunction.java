@@ -49,7 +49,9 @@ public interface ColumnarScalarFunction extends Serializable {
    *             types. The function must neither close the batch or its columns, nor use them
    *             after it returns.
    * @return a vector of the declared result type that holds at least {@code args.numRows()}
-   *         values. Spark closes it once it is done with the batch.
+   *         values. It must be a vector of the function's own, and not one of the argument
+   *         columns: Spark closes it once it is done with the batch. A function that returns
+   *         an argument as it is copies it into a new vector.
    */
   ColumnVector eval(ColumnarBatch args);
 }

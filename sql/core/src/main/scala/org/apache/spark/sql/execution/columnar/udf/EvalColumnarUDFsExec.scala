@@ -113,6 +113,15 @@ case class EvalColumnarUDFsExec(
 
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeResults()))
 
+        private def isInputColumn(batch: ColumnarBatch, vector: ColumnVector): Boolean = {
+          var i = 0
+          while (i < numInputColumns) {
+            if (batch.column(i) eq vector) return true
+            i += 1
+          }
+          false
+        }
+
         override def hasNext: Boolean = {
           val more = batches.hasNext
           if (!more) closeResults()
@@ -136,6 +145,14 @@ case class EvalColumnarUDFsExec(
           while (i < functions.length) {
             val args = new ColumnarBatch(argOrdinals(i).map(batch.column), numRows)
             val result = functions(i).eval(args)
+            // This node closes the results, and the child still owns its columns: it can use
+            // them again for its next batch. So a result that is a column of the child is not
+            // kept as a result, and is rejected.
+            if (result != null && isInputColumn(batch, result)) {
+              throw new SparkRuntimeException(
+                errorClass = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
+                messageParameters = Map("name" -> names(i)))
+            }
             // Set before the check, so that a vector of the wrong type is closed as well.
             newResults(i) = result
             if (result == null ||
