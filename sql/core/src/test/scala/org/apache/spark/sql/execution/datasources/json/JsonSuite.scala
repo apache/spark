@@ -4498,6 +4498,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("timeZone"))
     assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
     assert(JSONOptions.isValidOption("singleVariantColumn"))
+    assert(JSONOptions.isValidOption("alternateVariantEncoding"))
     assert(JSONOptions.isValidOption("explodeEmbeddedArray"))
     assert(JSONOptions.isValidOption("useUnsafeRow"))
     assert(JSONOptions.isValidOption("enableStreamingTopLevelArray"))
