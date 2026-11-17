@@ -691,7 +691,10 @@ class ConstantPropagationSuite extends PlanTest {
         ($"id" < 7L && tenDividedBy($"x") > 1.0) || ($"id" > 7L && tenDividedBy($"x") > 2.0),
         // Also where it is NULL, which a filter takes as FALSE.
         CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x"))) > 1.0,
-        If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType))
+        If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType)),
+        // Also where it takes `SimplifyConditionals` twice.
+        If(If($"id" > 7L, $"x" > 1L, Literal(false)) || $"id" > 7L, tenDividedBy($"x"),
+          Literal(0.0)) > 1.0
       ).foreach { conjunct =>
         comparePlans(Optimize.execute(projected.where(
           tenDividedBy($"x" - $"i".cast(LongType)) > 0.0 && conjunct && $"i" === 1 &&
@@ -699,11 +702,14 @@ class ConstantPropagationSuite extends PlanTest {
           projected.where(false).analyze)
       }
       // Also with a constant that a later iteration folds, e.g. of `id = 7` for a BIGINT `id`.
-      comparePlans(Optimize.execute(projected.where(
-        tenDividedBy($"x" - $"i".cast(LongType)) > 0.0 &&
-          CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x")), Literal(0.0)) > 1.0 &&
-          $"i" === 1 && $"id" === Literal(7).cast(LongType)).analyze),
-        projected.where(false).analyze)
+      Seq($"id" === Literal(7).cast(LongType), Literal(7).cast(LongType) === $"id").foreach {
+        equality =>
+          comparePlans(Optimize.execute(projected.where(
+            tenDividedBy($"x" - $"i".cast(LongType)) > 0.0 &&
+              CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x")), Literal(0.0)) > 1.0 &&
+              $"i" === 1 && equality).analyze),
+            projected.where(false).analyze)
+      }
       // But a NULL under a `NOT` is not FALSE. With `s` not nullable, `upper(s)` is not either,
       // so `u = 'A'` is propagated there.
       val notNull = LocalRelation($"s".string.notNull, $"id".long.notNull, $"x".long.notNull)
@@ -727,6 +733,10 @@ class ConstantPropagationSuite extends PlanTest {
       val randomPlusOne = random.select($"id", ($"r" + 1.0).as("r1"))
       checkOrdered(randomPlusOne, $"r1" > 0.0 && tenDividedBy($"id") > 0.0 && $"r1" === 1.5,
         $"r1" === 1.5 && tenDividedBy($"id") > 0.0)
+      // And one that a projection below an operator other than a filter or a sample computes, for
+      // every row that operator gets.
+      val limited = stringIds.select($"id", castS.as("i")).limit(5).select($"id", $"i")
+      checkOrdered(limited, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
       // And one that stands for a cast that can not fail.
       val widened = stringIds.select($"s", $"id", $"x", $"id".cast(DoubleType).as("k"))
       checkOrdered(widened, $"k" > 0.0 && tenDividedBy($"x") > 0.0 && $"k" === 3.0,

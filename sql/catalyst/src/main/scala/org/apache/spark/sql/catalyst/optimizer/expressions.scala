@@ -652,6 +652,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     val unmasksFailable = firstRewritten >= 0 && (columns.reads(conjuncts(firstRewritten)) ||
       conjuncts.drop(firstRewritten + 1).exists(!columns.canEvaluateUnconditionally(_)))
     if ((keepsFailable || unmasksFailable) && reordered != conjuncts) {
+      // TODO(SPARK-61438): An equality that is NULL on a row does not stop it from reaching the
+      // conjuncts after it, e.g. those that its constant rewrote, in an AND under an OR.
       reordered.reduce(And)
     } else {
       condition
