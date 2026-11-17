@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-The Arrow usage guide is now archived on [this page](https://spark.apache.org/docs/latest/api/python/user_guide/sql/arrow_pandas.html).
+The Arrow usage guide is now archived on [this page](https://spark.apache.org/docs/latest/api/python/tutorial/sql/arrow_pandas.html).
 
 For opt-in execution inside the executor JVM, see the
 [in-process Python UDF guide](sql-pyspark-inprocess-udf.html), including its native

@@ -134,7 +134,7 @@ options for deployment:
   * [Kubernetes](running-on-kubernetes.html): deploy Spark apps on top of Kubernetes directly
   * [Amazon EC2](https://github.com/amplab/spark-ec2): scripts that let you launch a cluster on EC2 in about 5 minutes
 * [Spark Kubernetes Operator](https://github.com/apache/spark-kubernetes-operator):
-  * [SparkApp](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/pyspark-pi.yaml): deploy Spark apps on top of Kubernetes via [operator patterns](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+  * [SparkApp](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/pi-python.yaml): deploy Spark apps on top of Kubernetes via [operator patterns](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
   * [SparkCluster](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/cluster-with-template.yaml): deploy Spark clusters on top of Kubernetes via [operator patterns](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
 
 **Other Documents:**
