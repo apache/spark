@@ -52,14 +52,19 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
   }
 
   test("ordinary micro-batch normalization skips the KLL adjustment walk") {
-    for (batch <- 0L to 2L; legacy <- Seq(false, true); aggregate <- Seq(false, true)) {
+    for (batch <- 0L to 2L; legacy <- Seq(false, true); aggregate <- Seq(false, true);
+        subquery <- Seq(false, true)) {
       withSQLConf(legacySharingKey -> legacy.toString) {
         def work(incremental: Boolean): Int = {
           val visits = new AtomicInteger
           val value = AttributeReference("value", LongType)()
-          val expression = (1 to 64).foldLeft[Expression](value) { (child, _) =>
+          val counted = (1 to 64).foldLeft[Expression](value) { (child, _) =>
             NormalizationCounted(child, visits)
           }
+          val expression = if (subquery) If(ScalarSubquery(Project(
+            Seq(Alias(Literal.TrueLiteral, "b")()),
+            org.apache.spark.sql.catalyst.plans.logical.OneRowRelation())), counted, Literal(0L))
+          else counted
           val plan = if (aggregate) Aggregate(Nil,
             Seq(Alias(Sum(expression).toAggregateExpression(), "total")()), LocalRelation(value))
           else Project(Seq(Alias(expression, "mapped")()), LocalRelation(value))

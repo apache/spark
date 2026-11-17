@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic, WidenStatefulOperatorAttributeNullability}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId, KllLegacyAggregateOutput, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -177,7 +177,8 @@ class IncrementalExecution(
     val originalBindings = if (legacySharing) {
       NondeterministicExpressionCollection.extractedBindingIds(logicalPlan)
     } else Set.empty[ExprId]
-    val optimizerInput = if (legacySharing && (kllChanged || originalBindings.nonEmpty)) {
+    val optimizerInput = if (legacySharing && (kllChanged || originalBindings.nonEmpty ||
+        adjusted.containsPattern(KLL_CHECKPOINT_ALTERNATIVE))) {
       // Undo only compiler bindings exposed by the KLL metadata change. Restore the original
       // expressions, rather than canonical-merging their aliases: separate IN predicates acquire
       // separate existence attributes during rewriting, while equal scalar SUMs historically share.
@@ -186,7 +187,8 @@ class IncrementalExecution(
           independentOnly: Boolean): (LogicalPlan, MutableMap[ExprId, Expression]) = {
         val bindings = MutableMap.empty[ExprId, Expression]
         def restore(expression: Expression): Expression = {
-          NondeterministicExpressionCollection.restoreBindingReferences(expression, bindings)
+          NondeterministicExpressionCollection.restoreBindingReferences(
+            expression, bindings, stripFilterGuards = true)
         }
         def visit(plan: LogicalPlan): LogicalPlan = plan match {
           case project: Project =>
@@ -227,7 +229,8 @@ class IncrementalExecution(
           val bindings = leftBindings
           if (bindings.isEmpty) join else {
             def restore(expression: Expression): Expression =
-              NondeterministicExpressionCollection.restoreBindingReferences(expression, bindings)
+              NondeterministicExpressionCollection.restoreBindingReferences(
+                expression, bindings, stripFilterGuards = true)
             val restored = join.copy(left = left, right = right,
               condition = join.condition.map(restore))
             Project(join.output.map { attribute =>
@@ -239,16 +242,50 @@ class IncrementalExecution(
           }
         case aggregate: Aggregate =>
           val (child, bindings) = restoreInput(aggregate.child, independentOnly = false)
-          if (bindings.isEmpty) aggregate else {
+          if (bindings.isEmpty && !aggregate.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) {
+            aggregate
+          } else {
             def restore(expression: Expression): Expression =
-              NondeterministicExpressionCollection.restoreBindingReferences(expression, bindings)
-            aggregate.copy(
+              NondeterministicExpressionCollection.restoreBindingReferences(
+                expression, bindings, stripFilterGuards = true)
+            val restored = aggregate.copy(
               groupingExpressions = aggregate.groupingExpressions.map(restore),
               aggregateExpressions = aggregate.aggregateExpressions.map {
                 case a: Attribute if bindings.contains(a.exprId) =>
                   Alias(restore(a), a.name)(a.exprId, a.qualifier, Some(a.metadata))
                 case other => restore(other).asInstanceOf[NamedExpression]
               }, child = child)
+            if (!restored.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) restored else {
+              val candidates = scala.collection.mutable.HashMap.empty[Expression, Expression]
+              def trim(expression: Expression): Expression = expression match {
+                case alias: Alias => trim(alias.child)
+                case other if other.containsPattern(ALIAS) =>
+                  other.mapChildrenWithReferenceEquality(trim)
+                case other => other
+              }
+              def remember(expression: Expression): Unit = {
+                val value = expression match {
+                  case alias: Alias => alias.child
+                  case other => other
+                }
+                if (value.containsPattern(KLL_AGGREGATE) && value.deterministic) {
+                  candidates.getOrElseUpdate(trim(value).canonicalized, value)
+                }
+              }
+              restored.aggregateExpressions.filterNot(
+                _.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)).foreach(remember)
+              val outputs = restored.aggregateExpressions.map { expression =>
+                val output = expression.transformDownWithReferenceEquality {
+                  case alternative: KllLegacyAggregateOutput if alternative.child.deterministic =>
+                    candidates.getOrElse(alternative.child.canonicalized, alternative.child)
+                  case alternative: KllLegacyAggregateOutput => alternative.child
+                }.asInstanceOf[NamedExpression]
+                // Earlier compiler-added HAVING outputs were also reused by the old analyzer.
+                remember(output)
+                output
+              }
+              restored.copy(aggregateExpressions = outputs)
+            }
           }
       }
     } else if (needsExtraction) {

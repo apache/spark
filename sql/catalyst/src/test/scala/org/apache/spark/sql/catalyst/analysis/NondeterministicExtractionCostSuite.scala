@@ -41,6 +41,112 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       copy(child = newChild)
   }
 
+  test("generated FILTER inputs do not erase an equal user conditional during legacy restoration") {
+    val predicate = $"p".boolean
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+    val generated = KllFilteredAggregateInput(predicate, scalar)
+    val written = If(predicate, scalar, Literal.create(null, scalar.dataType))
+    val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(
+      Seq(generated, written))
+    // Their evaluated values agree, but only the compiler-inserted guard can be removed when
+    // restoring an aggregate input under legacy checkpoint semantics.
+    assert(bindings.size == 2, s"compiler and user guards shared one binding: $bindings")
+    val values = bindings.values().toArray.toSeq.map(_.asInstanceOf[Alias].child)
+    assert(values.exists(_.isInstanceOf[KllFilteredAggregateInput]))
+    assert(values.exists(_.isInstanceOf[If]))
+  }
+
+  test("equal join reference memberships reuse completed destination walks") {
+    def work(width: Int): Int = {
+      val visits = new AtomicInteger
+      val value = $"value".double
+      val target = $"target".double
+      val input = (1 to 16).foldLeft[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](
+        LocalRelation(value)) { (left, i) =>
+        val right = new LocalRelation(Seq($"side".double)) {
+          override def outputSet: AttributeSet = {
+            visits.incrementAndGet()
+            super.outputSet
+          }
+        }
+        Join(left, right, Inner, None, JoinHint.NONE)
+      }
+      val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+      val condition = (1 to width).map { i =>
+        EqualTo(Add(Add(value, scalar), Literal(i.toDouble)), target)
+      }.reduceLeft[Expression](And)
+      val plan = Join(input, LocalRelation(target), Inner, Some(condition), JoinHint.NONE)
+      plan.resolved
+      plan.treePatternBits
+      plan.foreach(_.outputSet)
+      condition.foreach { e => e.references; e.deterministic; e.canonicalized }
+      visits.set(0)
+      PullOutNondeterministic.applyLocally(plan)
+      visits.get
+    }
+    val small = work(1)
+    val large = work(32)
+    assert(large <= small * 4, s"one operand=$small walks, equal memberships=$large")
+  }
+
+  test("KLL determinism probes bound comparisons through expressions and nested plans") {
+    for (depth <- Seq(32, 64); nested <- Seq(false, true)) {
+      val comparisons = new AtomicInteger
+      val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+      val expression = (1 to depth).foldLeft[Expression](aggregate) { (child, _) =>
+        EqualityCounted(child, comparisons)
+      }
+      val query = OneRowRelation().groupBy()(expression.as("s"))
+      val tested = if (nested) ScalarSubquery(query) else expression
+      tested.treePatternBits
+      tested.deterministic
+      comparisons.set(0)
+      assert(ValidateSubqueryExpression.deterministicWithoutKllRandomness(tested))
+      assert(!tested.deterministic)
+      assert(comparisons.get <= depth * 8,
+        s"nested=$nested depth=$depth comparisons=${comparisons.get}")
+      comparisons.set(0)
+      assert(ValidateSubqueryExpression.isIndependentKllScalar(ScalarSubquery(query)))
+      assert(comparisons.get <= depth * 8,
+        s"plan probe depth=$depth comparisons=${comparisons.get}")
+    }
+  }
+
+  test("identity summaries skip query-free sibling expression arms") {
+    val visits = new AtomicInteger
+    val argument = (1 to 64).foldLeft[Expression](Literal(1D)) { (child, _) =>
+      Counted(child, visits)
+    }
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+    val udf = ScalaUDF((a: Double, n: Long) => a + n, DoubleType, Seq(argument, scalar))
+    udf.treePatternBits
+    udf.deterministic
+    udf.canonicalized
+    visits.set(0)
+    val key = new NondeterministicExpressionCollection.ExpressionKeys()(udf)
+    assert(key._2.ids == Vector(scalar.exprId))
+    assert(visits.get == 0, s"ordinary summary arm visits=${visits.get}")
+  }
+
+  test("random projections skip subquery pushdown classification") {
+    for (branching <- Seq(false, true)) {
+      val visits = new AtomicInteger
+      val random = (1 to 64).foldLeft[Expression](Rand(0)) { (child, _) =>
+        Counted(if (branching) Add(child, Rand(1)) else child, visits)
+      }
+      val project = OneRowRelation().select(random.as("random"))
+      val plan = org.apache.spark.sql.catalyst.plans.logical.Filter(Literal.TrueLiteral, project)
+      plan.treePatternBits
+      plan.deterministic
+      visits.set(0)
+      val result = org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin(plan)
+      assert(result eq plan)
+      assert(visits.get == 0, s"branching=$branching classification visits=${visits.get}")
+    }
+  }
+
   test("dependency staging skips deterministic argument prefixes") {
     val visits = new AtomicInteger
     val argument = (1 to 64).foldLeft[Expression](Literal(1D)) { (child, _) =>

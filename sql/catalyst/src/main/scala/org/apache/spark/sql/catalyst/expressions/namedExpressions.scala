@@ -165,7 +165,9 @@ case class Alias(child: Expression, name: String)(
     this(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys, None)
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ALIAS)
+  final override val nodePatterns: Seq[TreePattern] =
+    if (isNondeterministicSubqueryBinding) Seq(ALIAS, NONDETERMINISTIC_SUBQUERY_BINDING)
+    else Seq(ALIAS)
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =

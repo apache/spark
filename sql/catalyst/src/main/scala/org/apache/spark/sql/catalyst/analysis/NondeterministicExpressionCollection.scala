@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 object NondeterministicExpressionCollection {
   /** Snapshot structurally owned compiler bindings before normalization and cache substitution. */
   private[sql] def extractedBindingIds(source: LogicalPlan): Set[ExprId] = {
-    if (!source.containsPattern(PLAN_EXPRESSION)) return Set.empty
+    if (!source.containsPattern(NONDETERMINISTIC_SUBQUERY_BINDING)) return Set.empty
     source.collectWithSubqueries {
       case project: Project => project.projectList.collect {
         case alias: Alias if alias.isNondeterministicSubqueryBinding => alias.exprId
@@ -50,12 +50,16 @@ object NondeterministicExpressionCollection {
   /** Substitute compiler bindings whose values have already been expanded in dependency order. */
   private[sql] def restoreBindingReferences(
       expression: Expression,
-      bindings: scala.collection.Map[ExprId, Expression]): Expression = {
-    if (bindings.isEmpty) expression else expression match {
+      bindings: scala.collection.Map[ExprId, Expression],
+      stripFilterGuards: Boolean = false): Expression = {
+    if (bindings.isEmpty && !stripFilterGuards) expression else expression match {
+      case guard: KllFilteredAggregateInput if stripFilterGuards && guard.deterministic =>
+        restoreBindingReferences(guard.input, bindings, stripFilterGuards)
       case attribute: Attribute => bindings.getOrElse(attribute.exprId, attribute)
       // Values are expanded child-first. Returning a bound value directly avoids revisiting it
       // once for every reference, and preserves its evaluation identity.
-      case other => other.mapChildrenWithReferenceEquality(restoreBindingReferences(_, bindings))
+      case other => other.mapChildrenWithReferenceEquality(
+        restoreBindingReferences(_, bindings, stripFilterGuards))
     }
   }
 
@@ -93,6 +97,7 @@ object NondeterministicExpressionCollection {
     private val stagingRequirements = new IdentityHashMap[Expression, java.lang.Boolean]
 
     private def subqueryIds(expression: Expression): SubqueryIdentities = {
+      if (!expression.containsPattern(PLAN_EXPRESSION)) return SubqueryIdentities.empty
       val cached = summaries.get(expression)
       if (cached != null) return cached
       // Persistent vectors share prefixes when successive wrappers add another subquery.
@@ -155,7 +160,7 @@ object NondeterministicExpressionCollection {
       return false
     }
     expression match {
-      case _: ConditionalExpression | _: And | _: Or => true
+      case _: ConditionalExpression | _: And | _: Or | _: KllFilteredAggregateInput => true
       case udf: ScalaUDF if udf.inputPrimitives.contains(true) => true
       case other => orderedNullGuard(other)
     }

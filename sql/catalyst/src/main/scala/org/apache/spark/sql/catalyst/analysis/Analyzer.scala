@@ -3320,7 +3320,14 @@ class Analyzer(
             val resultAlias = aggExprMap.computeIfAbsent(
               if (agg.isStreaming && cleaned.containsPattern(KLL_AGGREGATE)) cleaned
                 else cleaned.canonicalized,
-              _ => Alias(cleaned, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
+              _ => {
+                val output = if (agg.isStreaming && cleaned.containsPattern(KLL_AGGREGATE)) {
+                  // Keep the written occurrence until checkpoint mode can restore the analyzer's
+                  // historical semantic reuse, which did not depend on raw expression height.
+                  KllLegacyAggregateOutput(cleaned)
+                } else cleaned
+                Alias(output, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
+              }
             )
             resultAlias.toAttribute
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>

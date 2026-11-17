@@ -130,6 +130,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val destinations = new java.util.IdentityHashMap[LogicalPlan, java.lang.Integer]
       val completedDestinations = new java.util.IdentityHashMap[
         LogicalPlan, java.util.IdentityHashMap[AttributeSet, java.lang.Integer]]
+      val membershipDestinations = new java.util.IdentityHashMap[
+        LogicalPlan, mutable.Map[AttributeSet, Int]]
       val forwarding = new java.util.IdentityHashMap[Project, java.lang.Boolean]
       def forwardsAttributes(project: Project): Boolean = {
         val cached = forwarding.get(project)
@@ -161,7 +163,11 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       def cachedDestination(child: LogicalPlan, references: AttributeSet): Int = {
         val completed = completedDestinations.computeIfAbsent(child,
           _ => new java.util.IdentityHashMap[AttributeSet, java.lang.Integer])
-        completed.computeIfAbsent(references, _ => destination(child, references)).intValue()
+        completed.computeIfAbsent(references, _ => {
+          val memberships = membershipDestinations.computeIfAbsent(child,
+            _ => mutable.HashMap.empty[AttributeSet, Int])
+          memberships.getOrElseUpdate(references, destination(child, references))
+        }).intValue()
       }
       // References to one scalar can belong to different relations within the same join input.
       // Share an alias at its actual destination, keeping each selective join edge independent.
@@ -299,20 +305,34 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       return aggregate
     }
     val deterministic = new ExprUtils.SubqueryExtractionDeterminism
-    aggregate.mapExpressionsWithReferenceEquality(_.transformDownWithPruning(
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    val filters = mutable.LinkedHashMap.empty[
+      NondeterministicExpressionCollection.ExpressionKey, Alias]
+    val guarded = aggregate.mapExpressionsWithReferenceEquality(_.transformDownWithPruning(
       _.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
       case expression: AggregateExpression if expression.filter.exists(deterministic.apply) =>
         val function = expression.aggregateFunction
-        val inputs = function.children.map {
-          case input if !input.deterministic && deterministic(input) =>
-            // Aggregate FILTER checks precede argument evaluation. A lower Project must retain
-            // that guard, including UNKNOWN, while other aggregates still consume every row.
-            If(expression.filter.get, input, Literal.create(null, input.dataType))
-          case input => input
+        def needsGuard(input: Expression): Boolean = !input.deterministic && deterministic(input)
+        if (!function.children.exists(needsGuard)) expression else {
+          val filter = expression.filter.get
+          // A predicate inherited from a randomized subquery must be evaluated once. Both the
+          // argument guard and the aggregate's FILTER consume this same lower binding.
+          val predicate = if (filter.deterministic) filter else {
+            filters.getOrElseUpdate(keys(filter),
+              Alias(filter, "_aggregate_filter")().asNondeterministicSubqueryBinding).toAttribute
+          }
+          val inputs = function.children.map {
+            case input if needsGuard(input) => KllFilteredAggregateInput(predicate, input)
+            case input => input
+          }
+          expression.copy(
+            aggregateFunction = function.withNewChildren(inputs).asInstanceOf[AggregateFunction],
+            filter = Some(predicate))
         }
-        expression.copy(
-          aggregateFunction = function.withNewChildren(inputs).asInstanceOf[AggregateFunction])
     }).asInstanceOf[Aggregate]
+    if (filters.isEmpty) guarded else {
+      guarded.copy(child = Project(guarded.child.output ++ filters.values.toSeq, guarded.child))
+    }
   }
 
   private def validateNondeterministicSubqueries(

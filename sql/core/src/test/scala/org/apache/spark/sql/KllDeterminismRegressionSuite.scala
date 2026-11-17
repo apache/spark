@@ -32,6 +32,48 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("aggregate FILTER stages one predicate evaluation for its guarded inputs") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+        SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
+      val query = sql(s"""SELECT sum($scalar) FILTER (WHERE id IN
+          |(SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(id, 8), 0.5D)
+          |FROM range(256))) FROM range(256)""".stripMargin)
+      val joins = query.queryExecution.optimizedPlan.collect {
+        case join: org.apache.spark.sql.catalyst.plans.logical.Join
+            if join.joinType.isInstanceOf[org.apache.spark.sql.catalyst.plans.ExistenceJoin] => join
+      }
+      assert(joins.size == 1, query.queryExecution.toString)
+      checkAnswer(query, Row(3L))
+    }
+  }
+
+  test("KLL window scalars retain independent partition pruning") {
+    for (source <- Seq("parquet", "")) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> source) {
+        withTempPath { path =>
+          spark.range(8).selectExpr("id", "CAST(id % 2 AS INT) AS p")
+            .write.partitionBy("p").parquet(path.getAbsolutePath)
+          withTempView("kll_window_partitions") {
+            spark.read.parquet(path.getAbsolutePath)
+              .createOrReplaceTempView("kll_window_partitions")
+            val window = """(SELECT kll_sketch_agg_bigint(id, 8) OVER ()
+                |FROM range(3) LIMIT 1)""".stripMargin
+            val query = sql(s"""SELECT id, n FROM (SELECT id, p,
+                |kll_sketch_get_n_bigint($window) AS n FROM kll_window_partitions) q
+                |WHERE p = 1""".stripMargin)
+            val scans = query.queryExecution.sparkPlan.collect {
+              case scan: FileSourceScanExec => scan.partitionFilters
+              case scan: BatchScanExec => scan.scan.asInstanceOf[FileScan].partitionFilters
+            }
+            assert(scans.size == 1 && scans.head.nonEmpty, query.queryExecution.toString)
+            checkAnswer(query, Seq(1L, 3L, 5L, 7L).map(id => Row(id, 3L)))
+          }
+        }
+      }
+    }
+  }
+
   test("KLL aggregate arguments retain their FILTER evaluation domain") {
     for (legacy <- Seq(true, false); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
       withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,

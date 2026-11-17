@@ -289,19 +289,29 @@ object ValidateSubqueryExpression
     case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
   }
 
+  private def legacyKllExpression(expression: Expression): Expression = {
+    if (expression.deterministic) expression else expression.transformDownWithReferenceEquality {
+      case query: SubqueryExpression => query.withNewPlan(legacyKllPlan(query.plan))
+      case other if legacyKll.isDefinedAt(other) => legacyKll(other)
+    }
+  }
+
+  private def legacyKllPlan(plan: LogicalPlan): LogicalPlan = {
+    if (plan.deterministic) plan else {
+      plan.mapChildrenWithReferenceEquality(legacyKllPlan)
+        .mapExpressionsWithReferenceEquality(legacyKllExpression)
+    }
+  }
+
   private[sql] def deterministicWithoutKllRandomness(expression: Expression): Boolean = {
     expression.deterministic || AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      expression.transformDown {
-        case query: SubqueryExpression => query.withNewPlan(
-          query.plan.transformAllExpressionsWithSubqueries(legacyKll))
-        case other if legacyKll.isDefinedAt(other) => legacyKll(other)
-      }.deterministic
+      legacyKllExpression(expression).deterministic
     }
   }
 
   private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      plan.transformAllExpressionsWithSubqueries(legacyKll).deterministic
+      legacyKllPlan(plan).deterministic
     }
   }
 

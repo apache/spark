@@ -63,6 +63,97 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
+  testWithAllStateVersions("KLL legacy SELECT HAVING restores height-independent reuse") {
+    for (havingOnly <- Seq(false, true); analysisLegacy <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        withTempView("kll_having_heights") {
+          val input = MemoryStream[(Long, Long, Long, Long)]
+          input.toDF().toDF("a", "b", "c", "d").createOrReplaceTempView("kll_having_heights")
+          val left = "kll_sketch_agg_bigint(((a + b) + c) + d, 8)"
+          val right = "kll_sketch_agg_bigint((a + b) + (c + d), 8)"
+          val historical = if (havingOnly) {
+            sql(s"SELECT count(*) AS n, $left AS s FROM kll_having_heights")
+              .filter("s IS NOT NULL").select("n")
+          } else {
+            sql(s"SELECT $left AS s FROM kll_having_heights")
+              .filter("s IS NOT NULL").selectExpr("kll_sketch_get_n_bigint(s)")
+          }
+          val current = withSQLConf(
+              SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString) {
+            val result = if (havingOnly) {
+              sql(s"""SELECT count(*) AS n FROM kll_having_heights
+                  |HAVING $left IS NOT NULL AND $right IS NOT NULL""".stripMargin)
+            } else {
+              sql(s"""SELECT $left AS s FROM kll_having_heights
+                  |HAVING $right IS NOT NULL""".stripMargin)
+                .selectExpr("kll_sketch_get_n_bigint(s)")
+            }
+            result.queryExecution.assertAnalyzed()
+            result
+          }
+          def checkBuffers: AssertOnQuery = AssertOnQuery { query =>
+            val aggregates = query.lastExecution.executedPlan.collect {
+              case a: BaseAggregateExec if a.aggregateExpressions.exists(
+                  _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) => a
+            }
+            aggregates.nonEmpty && aggregates.forall(_.aggregateExpressions.count(
+              _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) == 1)
+          }
+          val mode = Map(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "true")
+          testStream(historical, Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, (1L, 2L, 3L, 4L)), CheckLastBatch(Row(1L)), checkBuffers, StopStream)
+          testStream(current, Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, (2L, 3L, 4L, 5L)), CheckLastBatch(Row(2L)), checkBuffers, StopStream)
+        }
+      }
+    }
+  }
+
+  for (shape <- Seq("split", "collapse")) {
+    testWithAllStateVersions(s"KLL legacy FILTER input guards preserve $shape buffer layouts") {
+      withTempDir { checkpoint =>
+        withTempView("kll_filter_heights") {
+          val input = MemoryStream[Long]
+          input.toDF().createOrReplaceTempView("kll_filter_heights")
+          val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+              |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin
+          val first = if (shape == "split") s"IF(TRUE, value, $scalar)"
+            else s"((value + $scalar) + value) + value"
+          val second = if (shape == "split") "value" else s"(value + $scalar) + (value + value)"
+          val filter = "abs(abs(value)) > 0"
+          def query(legacy: Boolean): DataFrame = withSQLConf(
+              SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+            val result = sql(s"""SELECT sum($first) FILTER (WHERE $filter) AS x, count(*) AS n,
+                |sum($second) FILTER (WHERE $filter) AS y FROM kll_filter_heights""".stripMargin)
+            result.queryExecution.assertAnalyzed()
+            result
+          }
+          def checkBuffers: AssertOnQuery = AssertOnQuery { query =>
+            val aggregates = query.lastExecution.executedPlan.collect {
+              case a: BaseAggregateExec if a.aggregateExpressions.exists(
+                  _.aggregateFunction.prettyName == "sum") => a
+            }
+            aggregates.nonEmpty && aggregates.forall(_.aggregateExpressions.count(
+              _.aggregateFunction.prettyName == "sum") == (if (shape == "split") 1 else 2))
+          }
+          val mode = Map(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "true")
+          testStream(query(legacy = true), Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, 1L, 2L),
+            CheckLastBatch(if (shape == "split") Row(3L, 2L, 3L) else Row(15L, 2L, 15L)),
+            checkBuffers, StopStream)
+          testStream(query(legacy = false), Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, 3L),
+            CheckLastBatch(if (shape == "split") Row(6L, 3L, 6L) else Row(27L, 3L, 27L)),
+            checkBuffers, StopStream)
+        }
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL corrected checkpoint identities survive a rollback-mode cache") {
     withTempDir { checkpoint =>
       val rollback = SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key

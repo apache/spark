@@ -4408,6 +4408,14 @@ class DataFrameAggregateSuite extends SharedSparkSession
       checkAnswer(analyzed(s"""SELECT l.id FROM VALUES (0), (1) AS l(id)
           |JOIN VALUES (0), (1) AS r(id) ON l.id = r.id AND $exists""".stripMargin),
         Seq(Row(0), Row(1)))
+      val absent = s"EXISTS ($query HAVING count(*) < 0)"
+      checkAnswer(analyzed(s"""SELECT $absent, count(*)
+          |FROM VALUES (0), (1) AS o(id) GROUP BY 1""".stripMargin), Row(false, 2L))
+      checkAnswer(analyzed(s"""SELECT sum(CAST($absent AS INT)),
+          |count(*) FILTER (WHERE $absent) FROM VALUES (0), (1) AS o(id)""".stripMargin),
+        Row(0L, 0L))
+      checkAnswer(analyzed(s"""SELECT l.id FROM VALUES (0), (1) AS l(id)
+          |JOIN VALUES (0), (1) AS r(id) ON l.id = r.id AND $absent""".stripMargin), Seq.empty)
       val set = s"$query UNION ALL SELECT CAST(NULL AS BIGINT)"
       checkAnswer(analyzed(s"""SELECT count(*) FROM VALUES (3), (4), (NULL) AS o(id)
           |GROUP BY id IN ($set)""".stripMargin), Seq(Row(1L), Row(2L)))
