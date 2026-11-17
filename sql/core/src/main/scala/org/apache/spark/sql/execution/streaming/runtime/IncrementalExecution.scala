@@ -31,6 +31,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{EventTimeLags, StreamingJoinHelper, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, SessionWindow, TimeWindow}
+import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -678,9 +679,11 @@ class IncrementalExecution(
      * Find, for each stateful operator that applies its input watermark to an event-time column,
      * which stream-stream join inputs' event times that column carries. The walk follows the
      * column down through nodes that pass it on unchanged, to the same position in every input
-     * of a union, and through windows built from it, which end after it. It stops at a join, at
-     * another operator that writes state or sets an event time, and at any node it does not
-     * recognize; a join that no traced column reaches holds back for both inputs.
+     * of a union, through windows built from it, which end after it, and into the one input of
+     * a node with several inputs, such as a stream-static join, that outputs it. It stops at a
+     * stream-stream join, at another operator that writes state or sets an event time, and at
+     * any node it does not recognize; a join that no traced column reaches holds back for both
+     * inputs.
      */
     private def joinWatermarkConsumers(plan: SparkPlan): Seq[JoinWatermarkConsumer] = {
       def eventTime(output: Seq[Attribute]): Option[Attribute] =
@@ -743,6 +746,14 @@ class IncrementalExecution(
             Nil
           case u: UnaryExecNode if u.output.exists(_.exprId == attribute.exprId) =>
             passThrough(u.child, attribute)
+          // A node with several inputs outputs a column of one input unchanged, or as NULL on
+          // rows that it pads, under that column's expression ID. A static input never outputs
+          // a streaming column.
+          case n if n.children.size > 1 && n.output.exists(_.exprId == attribute.exprId) =>
+            n.children.filter(_.output.exists(_.exprId == attribute.exprId)) match {
+              case Seq(child) => passThrough(child, attribute)
+              case _ => Nil
+            }
           case _ => Nil
         }
       }
@@ -953,12 +964,13 @@ class IncrementalExecution(
             _.metadata.contains(EventTimeWatermark.delayKey))
           if (columns.isEmpty) "none" else columns.map(_.name).mkString(", ")
         }
-        // A join's output watermark reaches every stateful operator above it. One that uses its
-        // input watermark reads the inputs that the tracer names, or both inputs when it cannot
-        // be traced. An operator uses it when an input carries an event-time column, when it
-        // fires event-time timeouts, or when it passes the watermark to user code, as
-        // transformWithState does in every time mode. The join's output watermark changes
-        // nothing for any other operator, such as an update-mode count on a key.
+        // In the default mode, a join's output watermark reaches every stateful operator above
+        // it. One that uses its input watermark reads the inputs that the tracer names, or both
+        // inputs when it cannot be traced. An operator uses it when an input carries an
+        // event-time column, when it fires event-time timeouts, or when it passes the watermark
+        // to user code, as transformWithState does in every time mode. The join's output
+        // watermark changes nothing for any other operator, such as an update-mode count on a
+        // key.
         def usesInputWatermark(operator: StatefulOperator): Boolean = operator match {
           case _: TransformWithStateExec | _: TransformWithStateInPySparkExec => true
           case f: FlatMapGroupsWithStateExec if f.timeoutConf == EventTimeTimeout => true
@@ -973,10 +985,16 @@ class IncrementalExecution(
         }.flatten.toSet
         val tracedSides = joinWatermarkConsumers(planWithStateOpId)
           .groupMap(_.joinOperatorId)(_.side)
+        // The inputs whose state watermark reaches an operator through the join's output
+        // watermark. With a single global watermark, the propagator never reads the join's
+        // output watermark, and a left semi join's output watermark reads only its left input.
         def consumedSides(j: StreamingSymmetricHashJoinExec): Set[JoinSide] =
           j.stateInfo.map(_.operatorId) match {
-            case Some(id) if joinsBelowStatefulOperators.contains(id) =>
-              tracedSides.get(id).map(_.toSet).getOrElse(Set(LeftSide, RightSide))
+            case Some(id)
+                if allowMultipleStatefulOperators && joinsBelowStatefulOperators.contains(id) =>
+              val sides: Set[JoinSide] =
+                tracedSides.get(id).map(_.toSet).getOrElse(Set(LeftSide, RightSide))
+              if (j.joinType == LeftSemi) sides - RightSide else sides
             case _ => Set.empty
           }
         planWithStateOpId.foreach {
