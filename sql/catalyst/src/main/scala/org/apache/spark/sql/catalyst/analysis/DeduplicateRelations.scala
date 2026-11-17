@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, DynamicPruningSubquery, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -258,7 +258,17 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         case subquery: SubqueryExpression =>
           val (renewed, changed) = renewDuplicatedRelations(existingRelations, subquery.plan)
           if (changed) planChanged = true
-          subquery.withNewPlan(renewed)
+          subquery match {
+            case d: DynamicPruningSubquery if changed =>
+              // DPP build keys refer to the subquery's output, not to the enclosing plan.
+              // Renew them with the subquery so they do not retain stale expression IDs.
+              val attrMap = AttributeMap(d.plan.output.zip(renewed.output))
+              val newBuildKeys = d.buildKeys.map(_.transform {
+                case a: AttributeReference => attrMap.getOrElse(a, a)
+              })
+              d.copy(buildQuery = renewed, buildKeys = newBuildKeys)(d.broadcastValueProjection)
+            case _ => subquery.withNewPlan(renewed)
+          }
       }
 
       if (planChanged) {
