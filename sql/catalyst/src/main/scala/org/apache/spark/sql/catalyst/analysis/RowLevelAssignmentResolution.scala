@@ -166,7 +166,13 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
   }
 }
 
-/** An assigned value that a row-level rewrite shares with omitted generated columns. */
+/**
+ * An assigned value that a row-level rewrite shares with omitted generated columns.
+ *
+ * For g GENERATED ALWAYS AS (a * 2), UPDATE t SET a = b + 1, b = 100 uses markers with the
+ * same ID around old.b + 1 in both a's assignment and g's expression. The rewrite projects
+ * old.b + 1 once as v and replaces both markers with v, so a = v and g = v * 2.
+ */
 private[sql] case class SharedAssignmentValue(child: Expression, id: ExprId)
   extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
