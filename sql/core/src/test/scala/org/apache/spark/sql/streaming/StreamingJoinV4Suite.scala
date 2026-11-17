@@ -665,6 +665,84 @@ class StreamingInnerJoinV4Suite
     }
   }
 
+  // The first run has a watermark only on the right input, so the left state has no ordering
+  // column. Adding a watermark on leftTime orders new left rows by it, and a right row then reads
+  // left rows from its rightOther on. Left rows stored before the restart are not ordered by
+  // leftTime, so a right row must read every left row of its key.
+  test("matching scans read every stored row after a restart changes a side's ordering") {
+    withTempDir { checkpointDir =>
+      val checkpoint = checkpointDir.getCanonicalPath
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long, Long)]
+      val leftRows = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+      val right = rightInput.toDF().toDF("rightKey", "time", "other")
+        .select($"rightKey", timestamp_seconds($"time").as("rightTime"),
+          timestamp_seconds($"other").as("rightOther"))
+        .withWatermark("rightTime", "10 seconds")
+      def joined(left: DataFrame): DataFrame =
+        left.join(right, expr("leftKey = rightKey AND leftTime >= rightOther"))
+          .select($"leftKey", $"leftTime".cast("long"), $"rightOther".cast("long"))
+      val withLeftWatermark = joined(leftRows.withWatermark("leftTime", "10 seconds"))
+
+      testStream(joined(leftRows))(
+        StartStream(checkpointLocation = checkpoint),
+        AddData(leftInput, (1, 100L)),
+        CheckNewAnswer(),
+        StopStream)
+      testStream(withLeftWatermark)(
+        StartStream(checkpointLocation = checkpoint),
+        AddData(rightInput, (1, 100L, 50L)),
+        CheckNewAnswer((1, 100L, 50L)),
+        AddData(leftInput, (1, 200L)),
+        CheckNewAnswer((1, 200L, 50L)),
+        AddData(rightInput, (1, 100L, 60L)),
+        CheckNewAnswer((1, 100L, 60L), (1, 200L, 60L)),
+        Execute { query =>
+          assert(joinExec(query).matchingScanWindow(RightSide).isEmpty)
+        },
+        StopStream)
+      // The record that the left state holds rows of another ordering stays.
+      testStream(withLeftWatermark)(
+        StartStream(checkpointLocation = checkpoint),
+        AddData(rightInput, (1, 100L, 70L)),
+        CheckNewAnswer((1, 100L, 70L), (1, 200L, 70L)),
+        Execute { query =>
+          assert(joinExec(query).matchingScanWindow(RightSide).isEmpty)
+        })
+    }
+  }
+
+  test("matching scans keep their windows after a restart with the same ordering") {
+    withTempDir { checkpointDir =>
+      val checkpoint = checkpointDir.getCanonicalPath
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        .withWatermark("leftTime", "1 hour")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "1 hour")
+      val joined = left.join(right,
+        expr("leftKey = rightKey AND rightTime <= leftTime + INTERVAL 10 SECONDS"))
+        .select($"leftTime".cast("long"), $"rightTime".cast("long"))
+
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpoint),
+        AddData(leftInput, (1, 100L)),
+        CheckNewAnswer(),
+        StopStream,
+        StartStream(checkpointLocation = checkpoint),
+        AddData(rightInput, (1, 105L)),
+        CheckNewAnswer((100L, 105L)),
+        Execute { query =>
+          assert(joinExec(query).matchingScanWindow(RightSide).isDefined)
+          assert(joinExec(query).matchingScanWindow(LeftSide).isDefined)
+        })
+    }
+  }
+
   test("matching scans read every row of a key ordered by an equality key") {
     val leftInput = MemoryStream[(Int, Long)]
     val rightInput = MemoryStream[(Int, Long)]

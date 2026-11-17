@@ -787,6 +787,10 @@ class SymmetricHashJoinStateManagerV4(
       // rangeScanWithMultiValues needs an exclusive end key, and maxTs + 1 would overflow at
       // Long.MaxValue. A range open at the top therefore scans up to Long.MaxValue and then
       // reads the values at Long.MaxValue by key.
+      // TODO: this costs every probe of a window open at the top, such as each q9 bid probe,
+      //   one more state store read than a single scan. A state store range scan with an
+      //   inclusive end would remove it; build it if a q9 measurement with unique auction ids
+      //   shows that the read matters.
       val readsMaxTsByKey = useRangeScan && maxTs == Long.MaxValue
 
       new NextIterator[GetValuesResult] {

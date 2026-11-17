@@ -367,11 +367,14 @@ class IncrementalExecution(
   private def writeStateMetadata(
       stateStoreWriter: StateStoreWriter,
       metadata: OperatorStateMetadata): Unit = {
+    // A stream-stream join records the ordering of its V4 state, so the run that can commit
+    // this batch replaces a record that an earlier, failed attempt at it wrote.
     val metadataWriter = OperatorStateMetadataWriter.createWriter(
       new Path(checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString),
       hadoopConf,
       metadata.version,
-      Some(currentBatchId))
+      Some(currentBatchId),
+      overwrite = stateStoreWriter.isInstanceOf[StreamingSymmetricHashJoinExec])
     metadataWriter.write(metadata)
   }
 

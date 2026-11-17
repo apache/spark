@@ -19,9 +19,13 @@ package org.apache.spark.sql.execution.streaming.operators.stateful.join
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.LogKeys.ERROR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
@@ -256,13 +260,15 @@ case class StreamingSymmetricHashJoinExec(
    * [leftTime, expiry], and a right row reads left rows with expiry at or above rightTime.
    */
   private[sql] def matchingScanWindow(joinSide: JoinSide): Option[MatchingScanWindow] = {
-    val (inputAttributes, otherAttributes, otherKeyOrdinal, otherPredicate) = joinSide match {
-      case LeftSide =>
-        (left.output, right.output, stateKeyOrdinalsForLookup._2, stateWatermarkPredicates.right)
-      case RightSide =>
-        (right.output, left.output, stateKeyOrdinalsForLookup._1, stateWatermarkPredicates.left)
-    }
-    if (stateFormatVersion < 4 || otherKeyOrdinal.isDefined) {
+    val (inputAttributes, otherAttributes, otherKeyOrdinal, otherPredicate, otherMixed) =
+      joinSide match {
+        case LeftSide => (left.output, right.output, stateKeyOrdinalsForLookup._2,
+          stateWatermarkPredicates.right, mixedStateOrderings._2)
+        case RightSide => (right.output, left.output, stateKeyOrdinalsForLookup._1,
+          stateWatermarkPredicates.left, mixedStateOrderings._1)
+      }
+    // Rows that an earlier run stored under another ordering lie outside the window.
+    if (stateFormatVersion < 4 || otherKeyOrdinal.isDefined || otherMixed) {
       None
     } else {
       SymmetricHashJoinStateManager.valueTimestampColumnOrdinal(otherAttributes,
@@ -271,6 +277,76 @@ case class StreamingSymmetricHashJoinExec(
       }
     }
   }
+
+  /**
+   * How V4 orders a side's state under the current plan: by the timestamp of an equality key at
+   * an ordinal, by that of a value column at an ordinal, or by none. The checkpoint keeps each
+   * stored row under the ordering of the run that stored it.
+   */
+  private def v4StateOrdering(side: JoinSide, predicates: JoinStateWatermarkPredicates): String = {
+    val (attributes, keys, otherAttributes, otherKeys, predicate) = side match {
+      case LeftSide => (left.output, leftKeys, right.output, rightKeys, predicates.left)
+      case RightSide => (right.output, rightKeys, left.output, leftKeys, predicates.right)
+    }
+    getStateKeyOrdinalForLookup(attributes, keys, otherAttributes, otherKeys, predicate)
+      .map(ordinal => s"key:$ordinal").getOrElse {
+        SymmetricHashJoinStateManager.valueTimestampColumnOrdinal(attributes,
+          stateValueWatermarkColumnOrdinal(predicate, attributes)).map { ordinal =>
+          s"value:$ordinal:${attributes(ordinal).dataType.catalogString}"
+        }.getOrElse("none")
+      }
+  }
+
+  // The operator metadata is written while planning the first batch of a run, before the
+  // eviction watermark and predicates are set, so this derives the predicates as that batch
+  // would. Which columns they constrain does not depend on the watermark's value.
+  private lazy val v4StateOrderings: Option[(String, String)] =
+    if (stateFormatVersion >= 4) {
+      val predicates = if (eventTimeWatermarkForEviction.isDefined) {
+        stateWatermarkPredicates
+      } else {
+        getStateWatermarkPredicates(left.output, right.output, leftKeys, rightKeys,
+          condition.full, Some(0L), None, useFirstEventTimeColumn = !allowMultipleStatefulOperators)
+      }
+      Some((v4StateOrdering(LeftSide, predicates), v4StateOrdering(RightSide, predicates)))
+    } else {
+      None
+    }
+
+  /**
+   * Whether each side's V4 state may hold rows stored under another ordering than the current
+   * plan's, as the operator metadata of an earlier batch records: a run recorded another
+   * ordering, or recorded such rows. A probe then reads every row of that side for its key, as
+   * before scan windows. The flag stays for the life of the checkpoint. A checkpoint without the
+   * record, from an earlier version, counts as ordered by the current plan.
+   */
+  private[sql] lazy val mixedStateOrderings: (Boolean, Boolean) =
+    (v4StateOrderings, previousJoinProperties.flatMap(p =>
+      p.stateOrderings.map(_ -> p.mixedOrderings))) match {
+      case (Some((left, right)), Some(((previousLeft, previousRight), (leftMixed, rightMixed)))) =>
+        (leftMixed || previousLeft != left, rightMixed || previousRight != right)
+      case _ => (false, false)
+    }
+
+  // The join properties recorded at or before the previous batch: by the first batch of this
+  // run, or by an earlier run when this is the first batch.
+  private lazy val previousJoinProperties: Option[StreamingJoinOperatorProperties] =
+    stateInfo.filter(info => useVirtualColumnFamilies && info.storeVersion > 0).flatMap { info =>
+      try {
+        OperatorStateMetadataReader.createReader(
+          new Path(info.checkpointLocation, info.operatorId.toString),
+          hadoopConfBcast.value.value, _operatorStateMetadataVersion, info.storeVersion - 1,
+          createMetadataDir = false).read().collect {
+          case m: OperatorStateMetadataV2 =>
+            StreamingJoinOperatorProperties.fromJson(m.operatorPropertiesJson)
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Cannot read the join's operator metadata; treating its state as " +
+            log"ordered by the current plan: ${MDC(ERROR, e.getMessage)}")
+          None
+      }
+    }
 
   // The column that a side's value-eviction predicate constrains: the event-time column or
   // another timestamp column.
@@ -337,7 +413,8 @@ case class StreamingSymmetricHashJoinExec(
         case (storeName, schemaPath) =>
           StateStoreMetadataV2(storeName, 0, info.numPartitions, schemaPath)
       }.toArray
-      val properties = StreamingJoinOperatorProperties(useVirtualColumnFamilies)
+      val properties = StreamingJoinOperatorProperties(
+        useVirtualColumnFamilies, v4StateOrderings, mixedStateOrderings)
       OperatorStateMetadataV2(operatorInfo, stateStoreInfo, properties.json)
     } else {
       val stateStoreInfo =
@@ -415,6 +492,7 @@ case class StreamingSymmetricHashJoinExec(
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
     metrics // initialize metrics
     stateKeyOrdinalsForLookup // computed here, so tasks do not compute it again
+    mixedStateOrderings // read from the checkpoint here, on the driver
     left.execute().stateStoreAwareZipPartitions(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
   }

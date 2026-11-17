@@ -25,8 +25,8 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, Path, PathFilter}
-import org.json4s.{Formats, JBool, JObject, NoTypeHints}
-import org.json4s.jackson.JsonMethods.{compact, render}
+import org.json4s.{Formats, JBool, JObject, JString, NoTypeHints}
+import org.json4s.jackson.JsonMethods.{compact, parse, render}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -221,7 +221,8 @@ object OperatorStateMetadataWriter {
       stateCheckpointPath: Path,
       hadoopConf: Configuration,
       version: Int,
-      currentBatchId: Option[Long] = None): OperatorStateMetadataWriter = {
+      currentBatchId: Option[Long] = None,
+      overwrite: Boolean = false): OperatorStateMetadataWriter = {
     version match {
       case 1 =>
         new OperatorStateMetadataV1Writer(stateCheckpointPath, hadoopConf)
@@ -229,7 +230,8 @@ object OperatorStateMetadataWriter {
         if (currentBatchId.isEmpty) {
           throw new IllegalArgumentException("currentBatchId is required for version 2")
         }
-        new OperatorStateMetadataV2Writer(stateCheckpointPath, hadoopConf, currentBatchId.get)
+        new OperatorStateMetadataV2Writer(
+          stateCheckpointPath, hadoopConf, currentBatchId.get, overwrite)
       case _ =>
           throw new IllegalArgumentException(s"Failed to create writer for operator metadata " +
           s"with version=$version")
@@ -302,7 +304,8 @@ class OperatorStateMetadataV1Reader(
 class OperatorStateMetadataV2Writer(
     stateCheckpointPath: Path,
     hadoopConf: Configuration,
-    currentBatchId: Long) extends OperatorStateMetadataWriter {
+    currentBatchId: Long,
+    overwrite: Boolean = false) extends OperatorStateMetadataWriter {
 
   private val metadataFilePath = OperatorStateMetadataV2.metadataFilePath(
     stateCheckpointPath, currentBatchId)
@@ -312,10 +315,10 @@ class OperatorStateMetadataV2Writer(
   override def version: Int = 2
 
   override def write(operatorMetadata: OperatorStateMetadata): Unit = {
-    if (fm.exists(metadataFilePath)) return
+    if (!overwrite && fm.exists(metadataFilePath)) return
 
     fm.mkdirs(metadataFilePath.getParent)
-    val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = false)
+    val outputStream = fm.createAtomic(metadataFilePath, overwriteIfPossible = overwrite)
     OperatorStateMetadataUtils.writeMetadata(outputStream, operatorMetadata, metadataFilePath)
   }
 }
@@ -506,13 +509,43 @@ class OperatorStateMetadataV2FileManager(
 
 /**
  * Case class used to store additional properties for join operation.
- * This is only used for unit tests, which verify that the properties in
- * the corresponding OperatorStateMetadataV2 result are non-empty.
+ * With state format 4, `stateOrderings` records how the plan of the run that wrote it orders
+ * each side's state, left then right, and `mixedOrderings` whether a side may also hold rows
+ * stored under another ordering by an earlier run. A probe reads only a window of the other
+ * side's rows when that side holds rows of a single ordering, the current plan's.
  */
-case class StreamingJoinOperatorProperties(useVirtualColumnFamilies: Boolean) {
+case class StreamingJoinOperatorProperties(
+    useVirtualColumnFamilies: Boolean,
+    stateOrderings: Option[(String, String)] = None,
+    mixedOrderings: (Boolean, Boolean) = (false, false)) {
   def json: String = {
-    val json =
-      JObject("useVirtualColumnFamilies" -> JBool(useVirtualColumnFamilies))
-    compact(render(json))
+    val orderings = stateOrderings.toList.flatMap { case (left, right) =>
+      List("leftStateOrdering" -> JString(left), "rightStateOrdering" -> JString(right),
+        "leftMixedOrdering" -> JBool(mixedOrderings._1),
+        "rightMixedOrdering" -> JBool(mixedOrderings._2))
+    }
+    compact(render(JObject(("useVirtualColumnFamilies" -> JBool(useVirtualColumnFamilies)) ::
+      orderings)))
+  }
+}
+
+object StreamingJoinOperatorProperties {
+  /** The properties in `json`, without orderings when an earlier version wrote it. */
+  def fromJson(json: String): StreamingJoinOperatorProperties = {
+    val parsed = parse(json)
+    def string(name: String): Option[String] = parsed \ name match {
+      case JString(value) => Some(value)
+      case _ => None
+    }
+    def bool(name: String): Boolean = parsed \ name match {
+      case JBool(value) => value
+      case _ => false
+    }
+    val orderings = for {
+      left <- string("leftStateOrdering")
+      right <- string("rightStateOrdering")
+    } yield (left, right)
+    StreamingJoinOperatorProperties(bool("useVirtualColumnFamilies"), orderings,
+      (bool("leftMixedOrdering"), bool("rightMixedOrdering")))
   }
 }
