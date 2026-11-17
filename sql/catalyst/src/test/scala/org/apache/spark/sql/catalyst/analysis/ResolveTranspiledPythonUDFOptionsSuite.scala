@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{
@@ -213,8 +215,8 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     assert(pruned.transpiledOptions == List(floatOpt))
   }
 
-  test("keeps the timestamp option for a timestamp column and drops the numeric one") {
-    val a = $"a".timestamp
+  test("keeps the timestamp option for a TIMESTAMP_NTZ column and drops the numeric one") {
+    val a = $"a".timestampNTZ
     val tsOpt = a
     val numOpt = Add(a, Literal(1L))
     val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(tsOpt, numOpt),
@@ -255,6 +257,33 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions.isEmpty)
     assert(pruned.optionInputCategories.isEmpty)
+  }
+
+  test("drops the timestamp option for TIMESTAMP and DATE, logging why only for TIMESTAMP") {
+    // Python sees a TIMESTAMP in the worker's zone, Catalyst in the session zone; TIMESTAMP_NTZ
+    // is the one type the two agree on. That is the fallback reason when it is the only one.
+    val n = $"n".long
+    def warningsFor(a: AttributeReference, categories: List[String]): Seq[String] = {
+      val appender = new LogAppender("transpiled option time-zone fallback")
+      withLogAppender(appender,
+          // Logging names an object's logger without the trailing `$`.
+          loggerNames = Seq(ResolveTranspiledPythonUDFOptions.getClass.getName.stripSuffix("$")),
+          level = Some(Level.WARN)) {
+        val node = TranspiledPythonUDF("tz_udf", pyUDF(Seq(a, n)), List(a), List(categories))
+        val pruned = prune(node, LocalRelation(a, n))
+        assert(pruned.transpiledOptions.isEmpty, s"kept $categories over ${a.dataType}")
+      }
+      appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("tz_udf")).toSeq
+    }
+    val reasons = warningsFor($"a".timestamp, List("timestamp", "integer"))
+    assert(reasons.length == 1, reasons)
+    val reason = reasons.head
+    assert(reason.contains("argument(s) 0 are TIMESTAMP"), reason)
+    assert(reason.contains("TIMESTAMP_NTZ only"), reason)
+    // A DATE column, and a TIMESTAMP whose other argument misses too, are ordinary misses.
+    assert(warningsFor($"a".date, List("timestamp", "integer")).isEmpty)
+    assert(warningsFor($"a".timestamp, List("timestamp", "string")).isEmpty)
   }
 
   test("map and array options are dropped against the wrong container or a scalar") {
