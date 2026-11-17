@@ -2299,11 +2299,16 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
   private def inferFilters(
       plan: LogicalPlan, acrossAsOfJoins: Boolean): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
+    // The new filters go ahead of the condition, so one over a column that can fail (see
+    // `failableOutput`) would compute that column on rows a conjunct of the condition drops.
     case filter @ Filter(condition, child) =>
       val canAdd: Expression => Boolean =
         if (filter.getTagValue(asOfInputFilterTag).isDefined) canBeAsOfFilter else canBeFilter
+      lazy val failable = failableOutput(child)
       val newFilters = (filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter(canAdd)
+        (child.constraints ++ splitConjunctivePredicates(condition))).toSeq.filter { c =>
+          canAdd(c) && !c.references.exists(failable.contains)
+        }
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
