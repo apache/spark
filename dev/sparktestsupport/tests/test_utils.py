@@ -16,7 +16,11 @@
 #
 
 import os
+import subprocess
+import tempfile
 import unittest
+from contextlib import chdir
+from pathlib import Path
 from unittest import mock
 
 from sparktestsupport import modules
@@ -39,15 +43,44 @@ class DetermineModulesForFilesTests(unittest.TestCase):
 
 
 class IdentifyChangedFilesFromGitHistoryTests(unittest.TestCase):
+    _GIT_IDENTITY = (
+        "-c",
+        "user.email=spark-test@example.com",
+        "-c",
+        "user.name=Spark Test",
+        "-c",
+        "commit.gpgsign=false",
+    )
+
     def changed_modules(self, patch_sha, target_ref):
         changed_files = identify_changed_files_from_git_commits(patch_sha, target_ref=target_ref)
         return determine_modules_for_files(changed_files)
+
+    def changed_files_for_rename(self, old_path, new_path):
+        with tempfile.TemporaryDirectory() as tmp, chdir(tmp):
+
+            def git(*args):
+                return subprocess.check_output(["git", *args], text=True)
+
+            git("init", "-b", "main")
+            Path(old_path).write_text("unchanged\n")
+            git("add", old_path)
+            git(*self._GIT_IDENTITY, "commit", "-m", "add")
+            base = git("rev-parse", "HEAD").strip()
+            git("mv", old_path, new_path)
+            git(*self._GIT_IDENTITY, "commit", "-m", "rename")
+            head = git("rev-parse", "HEAD").strip()
+            return identify_changed_files_from_git_commits(head, target_ref=base)
 
     def test_graphx_commit_selects_graphx_module(self):
         self.assertEqual(self.changed_modules("fc0a1475ef", "5da21f07"), {modules.graphx})
 
     def test_unmatched_commit_selects_root_module(self):
         self.assertIn(modules.root, self.changed_modules("50a0496a43", "6765ef9"))
+
+    def test_rename_of_unchanged_file_lists_both_paths(self):
+        changed_files = self.changed_files_for_rename("old.txt", "new.txt")
+        self.assertCountEqual(changed_files, ["old.txt", "new.txt"])
 
 
 class DetermineModulesToTestTests(unittest.TestCase):
