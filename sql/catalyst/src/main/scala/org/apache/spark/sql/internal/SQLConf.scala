@@ -730,8 +730,11 @@ object SQLConf {
     .doc("Controls how the Python UDF transpiler handles null/None semantics for ordering " +
       "comparisons (``<``, ``<=``, ``>``, ``>=``). Under ``strict`` (the default) a NULL " +
       "operand causes the expression to raise an error, matching Python's TypeError. Under " +
-      "``loose`` a NULL operand silently propagates as NULL instead of raising, which allows " +
-      "more UDFs to be transpiled at the cost of minor semantic divergence on NULL inputs.")
+      "``loose`` a NULL operand silently propagates as NULL instead of raising, at the cost of " +
+      "minor semantic divergence on NULL inputs. ``loose`` also changes how chained " +
+      "comparisons and ``and`` / ``or`` are lowered: a body that holds a chained or nested " +
+      "comparison together with a call or arithmetic falls back to interpreted Python, so " +
+      "``loose`` does not always transpile more UDFs than ``strict``.")
     .version("4.4.0")
     .stringConf
     .checkValue(

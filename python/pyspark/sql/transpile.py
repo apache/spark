@@ -44,8 +44,8 @@ in a later operand from firing on rows Python never reaches. Two folds do that:
   ``doGenCode``. A NULL left operand still evaluates the right, so every operand
   before the last must be a provably non-NULL boolean (see
   ``_is_never_null_boolean``).
-* A sequential CASE WHEN (``CASE WHEN NOT v1 THEN false ... ELSE vN END``; for
-  ``or``, ``WHEN v1 THEN true``), for the links of a chain and for ``and`` /
+* A sequential CASE WHEN (``CASE WHEN NOT v1 THEN v1 ... ELSE vN END``; for
+  ``or``, ``WHEN v1 THEN v1``), for the links of a chain and for ``and`` /
   ``or`` in a body that holds a chain or a comparison over a non-basic operand
   (see ``_needs_atomic_boolops``). Each later operand sits in a branch that runs
   only once the earlier ones have not decided the result. Under strict null
@@ -57,11 +57,17 @@ in a later operand from firing on rows Python never reaches. Two folds do that:
   below), so an atomic loose fold in a body holding either falls
   back to interpreted Python.
 
-The CASE WHEN is atomic to the optimizer: ``splitConjunctivePredicates`` matches
-only ``And``, ``BooleanSimplification``'s patterns match ``And`` / ``Or``, and
-subexpression elimination takes a CASE WHEN's first condition plus what every
-condition (or every value) shares, which is already in the first condition. So
-no rule can move a later guard ahead of the operands that gate it. The price is
+The CASE WHEN is not split or reordered by the optimizer:
+``splitConjunctivePredicates`` matches only ``And``, ``BooleanSimplification``'s
+patterns match ``And`` / ``Or``, and subexpression elimination takes a CASE
+WHEN's first condition plus what every condition (or every value) shares, which
+is already in the first condition. So no rule can move a later guard ahead of
+the operands that gate it. ``SimplifyConditionals`` does replace a CASE WHEN
+whose values all equal its ELSE with that value, dropping the conditions and
+their guards, so each branch returns its own operand (which is the stop value
+there) rather than a literal that a last operand such as ``... and False`` could
+equal, and an if/ternary whose branches may lower to one expression falls back
+in a body that takes this fold. The price is
 pushdown: the predicate moves only as a whole, and over nullable operands its
 guards make it throwable, so it stays above a join (SPARK-60903).
 
@@ -98,7 +104,8 @@ reaching for a conf to prove a theory: on the common-factor repro, each of
 ``skipForShortcutExpr=true``, ``subexpressionElimination.enabled=false`` and
 excluding ``BooleanSimplification`` still raises on its own. Both need a common
 subexpression inside an ``&`` / ``|``, which a user-written ``and`` / ``or``
-that repeats an operand (``a < b and b < c``) hands them.
+that repeats a guarded operand (``(a < b and b < c) or (d < b and b < c)``)
+hands them.
 
 ``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
 Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
@@ -246,6 +253,10 @@ _MAX_COMPARISON_OPS = 64
 # its operands' trees too, so one option's size also bounds the lowering itself.
 _MAX_MATERIALIZED_WEIGHT = 1 << 16
 
+# A subtree whose estimated weight passes this many times its AST node count
+# marks its body as compounding (see `_expansion_compounds`).
+_COMPOUND_RATIO = 32
+
 # Nodes a lowering adds around its operands (`when` / raise_error, NULL guard, ...).
 _NODE_OVERHEAD = 4
 
@@ -300,61 +311,50 @@ class AbstractTranspiler(object):
         pass
 
 
-def _multi_read_operands(node: ast.AST) -> List[ast.AST]:
-    """The operands whose Column the lowering of ``node`` reads more than once."""
-    match node:
-        case ast.Compare(left=left, ops=ops, comparators=comps):
-            nodes = [left, *comps]
-            return [
-                operand
-                for i, op in enumerate(ops)
-                if _OPERAND_READS.get(type(op), 2) > 1
-                for operand in nodes[i : i + 2]
-            ]
-        case ast.BinOp(op=ast.Mod(), right=right):
-            return [right]
-        case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
-            return [arg]
-        case _:
-            return []
+def _expansion_compounds(body: ast.AST, atomic: bool) -> bool:
+    """Return True when some subtree of ``body`` weighs more than
+    ``_COMPOUND_RATIO`` times its AST node count.
 
-
-def _expansion_compounds(body: ast.AST) -> bool:
-    """Return True when an operand that a lowering reads more than once itself
-    holds such a lowering, so the materialized size multiplies per nesting level.
-
-    Otherwise each lowering adds a constant per term and the size stays
-    proportional to the source, however many options the body keeps; such a flat
-    body is not bounded by ``_MAX_MATERIALIZED_WEIGHT``.
+    References that multiply per nesting level make a subtree's weight outgrow
+    its node count geometrically, whereas a flat run of terms keeps the ratio of
+    one term however many there are, so its size stays proportional to the
+    source; such a flat body is not bounded by ``_MAX_MATERIALIZED_WEIGHT``. A
+    single term that nests two multi-read lowerings, such as
+    ``x % (y % z) == 0``, already passes the ratio and counts as compounding.
     """
     return any(
-        _multi_read_operands(inner)
+        _materialized_weight(node, atomic) > _COMPOUND_RATIO * sum(1 for _ in ast.walk(node))
         for node in ast.walk(body)
-        for operand in _multi_read_operands(node)
-        for inner in ast.walk(operand)
     )
 
 
-def _materialized_weight(node: ast.AST) -> int:
+def _materialized_weight(node: ast.AST, atomic: bool = False) -> int:
     """Rough size of the Catalyst tree ``_convert_chunk`` emits for ``node``.
 
     A child is charged once per reference its parent's lowering makes, since the
-    JVM expands every reference.
+    JVM expands every reference. ``atomic`` says that the body's ``and`` / ``or``
+    take the CASE WHEN fold (see ``_needs_atomic_boolops``).
     """
+    weigh = functools.partial(_materialized_weight, atomic=atomic)
     match node:
         case ast.Compare(left=left, ops=ops, comparators=comps):
-            weights = [_materialized_weight(n) for n in [left, *comps]]
-            return sum(
+            weights = [weigh(n) for n in [left, *comps]]
+            links = [
                 _OPERAND_READS.get(type(op), 2) * (lhs + rhs) + _NODE_OVERHEAD
                 for op, lhs, rhs in zip(ops, weights, weights[1:])
-            )
+            ]
+            # `_short_circuit` reads every link before the last twice.
+            return 2 * sum(links) - links[-1]
+        case ast.BoolOp(values=values) if atomic:
+            weights = [weigh(v) for v in values]
+            return 1 + 2 * sum(weights) - weights[-1]
         case ast.BinOp(left=left, op=ast.Mod(), right=right):
             # `sb * pmod(sb * a, abs(b))` with `sb` reading `b` twice.
-            return _materialized_weight(left) + 5 * _materialized_weight(right) + 2 * _NODE_OVERHEAD
+            return weigh(left) + 5 * weigh(right) + 2 * _NODE_OVERHEAD
         case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
-            return 2 * _materialized_weight(arg) + _NODE_OVERHEAD
+            return 2 * weigh(arg) + _NODE_OVERHEAD
         case _:
-            return 1 + sum(map(_materialized_weight, ast.iter_child_nodes(node)))
+            return 1 + sum(map(weigh, ast.iter_child_nodes(node)))
 
 
 def _is_definitely_basic_type(node: ast.AST) -> bool:
@@ -484,20 +484,44 @@ def _holds_raising_lowering(body: ast.AST) -> bool:
 def _short_circuit(operands: List[Column], stop_on: bool) -> Column:
     """Fold boolean ``operands`` so that each is evaluated only when every
     earlier one differs from ``stop_on``, which is then the result:
-    ``CASE WHEN NOT o1 THEN false ... ELSE oN END`` for ``stop_on=False``
-    (``and``, chain links) and ``CASE WHEN o1 THEN true ... ELSE oN END`` for
+    ``CASE WHEN NOT o1 THEN o1 ... ELSE oN END`` for ``stop_on=False``
+    (``and``, chain links) and ``CASE WHEN o1 THEN o1 ... ELSE oN END`` for
     ``stop_on=True`` (``or``). Every operand before the last must be non-NULL: a
     NULL condition takes no branch, so the fold would skip it. That holds only
     under strict null strictness (see ``CatalystTranspiler._fold_boolean``).
+
+    A branch returns its operand, which equals ``stop_on`` there, and not the
+    literal: ``SimplifyConditionals`` replaces a CASE WHEN whose values all equal
+    its ELSE, and a last operand that is or folds to ``stop_on`` (``... and
+    False``) would make every literal branch do so, deleting the earlier
+    operands' NULL guards.
     """
-    *earlier, last = operands
-    if not earlier:
-        return last
-    conditions = earlier if stop_on else [~o for o in earlier]
-    fold = when(conditions[0], lit(stop_on))
-    for condition in conditions[1:]:
-        fold = fold.when(condition, lit(stop_on))
-    return fold.otherwise(last)
+    first, *rest = operands
+    if not rest:
+        return first
+    fold = when(first if stop_on else ~first, first)
+    for operand in rest[:-1]:
+        fold = fold.when(operand if stop_on else ~operand, operand)
+    return fold.otherwise(rest[-1])
+
+
+def _branches_may_coincide(body: Optional[ast.AST], orelse: Optional[ast.AST]) -> bool:
+    """Return True when the branches of an if/ternary could lower to the same
+    expression: identical source, constants that compare equal, or parameter-free
+    expressions that are not both constants.
+
+    TODO (SPARK-54783): branches that only the bound columns' nullability makes
+    equal, such as ``(x is not None) if ... else True`` over a non-nullable ``x``.
+    """
+    body = body.value if isinstance(body, ast.Return) else body
+    orelse = orelse.value if isinstance(orelse, ast.Return) else orelse
+    if body is None or orelse is None:
+        return False
+    if isinstance(body, ast.Constant) and isinstance(orelse, ast.Constant):
+        return bool(body.value == orelse.value)
+    return ast.dump(body) == ast.dump(orelse) or not any(
+        isinstance(n, ast.Name) for branch in (body, orelse) for n in ast.walk(branch)
+    )
 
 
 def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
@@ -682,6 +706,15 @@ class CatalystTranspiler(AbstractTranspiler):
         #    constant): lower using Python's type-specific truthiness
         #    rules (0/""/None are falsy, everything else truthy) based on
         #    the operand's inferred category.
+        if self._atomic_boolops and _branches_may_coincide(body_node, else_node):
+            # `SimplifyConditionals` would replace the CASE WHEN with the shared
+            # value and drop the test, with the NULL guards that only bodies
+            # taking the CASE WHEN fold can hold there.
+            raise UnsupportedOperationException(
+                "the branches of this if/ternary may lower to the same expression, "
+                "which would let the optimizer drop its test and the errors the "
+                "test raises, so the UDF falls back to interpreted Python"
+            )
         if _is_definitely_boolean(test_node):
             safe_test = coalesce(test_col, lit(False))
         else:
@@ -831,8 +864,9 @@ class CatalystTranspiler(AbstractTranspiler):
         ``spark.sql.experimental.optimizer.transpileNullStrictness`` controls
         this guard. Under ``strict`` (the default) a NULL operand raises,
         matching Python's TypeError. Under ``loose`` the guard is skipped and
-        NULL propagates as NULL, allowing more UDFs to transpile at the cost of
-        that semantic difference on NULL inputs.
+        NULL propagates as NULL, at the cost of that semantic difference on NULL
+        inputs. Loose also changes how chains and ``and`` / ``or`` fold, and
+        makes some of those bodies fall back (see ``_fold_boolean``).
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
@@ -1947,8 +1981,9 @@ def _transpile_func(
         transpilers = _get_transpilers(session)
         # A flat body's size stays proportional to its source, so only one whose
         # expansion compounds is weighed (see `_expansion_compounds`).
-        compounds = _expansion_compounds(function_ast)
-        weight = _materialized_weight(function_ast) if compounds else 0
+        atomic = _needs_atomic_boolops(function_ast)
+        compounds = _expansion_compounds(function_ast, atomic)
+        weight = _materialized_weight(function_ast, atomic) if compounds else 0
         guarded = False
 
         def too_heavy(options: int) -> Optional[str]:
