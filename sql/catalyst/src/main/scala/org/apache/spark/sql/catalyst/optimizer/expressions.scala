@@ -326,8 +326,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       FalseLiteral
     } else if (folded.exists {
         case (_, _, FailsToFold) => true
-        // A replacement with an untagged part that failed in a conditional branch would fail
-        // once `ConstantFolding` folds it in the plan.
+        // A replacement with an untagged part that failed in a conditional branch fails once
+        // `ConstantFolding` folds it in the plan, if another rule took the part out of the branch.
         case (_, FailsToFold, FoldsTo(_, untagged)) => untagged
         case _ => false
       }) {
