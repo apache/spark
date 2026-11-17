@@ -154,5 +154,4 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions == List(floatOpt))
   }
-
 }

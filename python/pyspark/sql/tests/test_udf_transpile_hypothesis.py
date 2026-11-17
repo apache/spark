@@ -533,9 +533,9 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 interpreted_value = _SENTINEL_RAISED
                 interpreted_error = e
 
-        # Asymmetric on purpose. If the transpiled path raises, the interpreted path
-        # must raise too -- that is the dangerous direction. The reverse is allowed:
-        # interpreted Python may raise where the transpiled form returns a value.
+        # If the transpiled path raises an exception we also need the interpreted path to raise one,
+        # however if the Python code (that in the interpreted path) raises an exception, the transpiled
+        # path may return a valid value.
         if transpiled_error is not None:
             self.assertIsNotNone(
                 interpreted_error,
@@ -560,14 +560,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         return self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
 
     def _three_long_arg_df(self, x, y, z):
-        schema = StructType(
-            [
-                StructField("a", LongType(), nullable=True),
-                StructField("b", LongType(), nullable=True),
-                StructField("c", LongType(), nullable=True),
-            ]
-        )
-        return self.spark.createDataFrame([Row(a=x, b=y, c=z)], schema=schema)
+        return self.spark.createDataFrame([(x, y, z)], "a long, b long, c long")
 
     if _have_hypothesis:
 
