@@ -33,6 +33,89 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL membership preserves Coalesce demand") {
+    withTempView("kll_coalesce_input") {
+      spark.sparkContext.parallelize(Seq((Some(true), Some(1L))), 1).toDF("flag", "id")
+        .createOrReplaceTempView("kll_coalesce_input")
+      for (legacy <- Seq(true, false); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.ANSI_ENABLED.key -> "true", SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val member = s"id IN (SELECT $scalar)"
+          val danger = s"IF(id / 0L > 0, $member, false)"
+          checkAnswer(sql(s"SELECT coalesce(flag, $danger) FROM kll_coalesce_input"), Row(true))
+          checkAnswer(sql(s"SELECT coalesce(CAST(NULL AS BOOLEAN), flag, $danger) " +
+            "FROM kll_coalesce_input"), Row(true))
+          checkAnswer(sql(s"SELECT coalesce($member, $danger) FROM kll_coalesce_input"),
+            Row(false))
+          checkAnswer(sql(s"SELECT coalesce(flag, $member, $danger) FROM kll_coalesce_input"),
+            Row(true))
+          checkAnswer(sql(s"SELECT IF($member, false, true) FROM kll_coalesce_input"), Row(true))
+          val error = intercept[Exception] {
+            sql(s"SELECT coalesce(CAST(NULL AS BOOLEAN), $danger) " +
+              "FROM kll_coalesce_input").collect()
+          }
+          assert(error.toString.contains("DIVIDE_BY_ZERO"))
+        }
+      }
+    }
+  }
+
+  test("KLL membership preserves positive arms and nullable Boolean guards") {
+    withTempView("kll_boolean_input") {
+      spark.sparkContext.parallelize(Seq((Option.empty[Boolean], Some(3L))), 1)
+        .toDF("flag", "id").createOrReplaceTempView("kll_boolean_input")
+      for (legacy <- Seq(true, false); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY");
+          polarity <- Seq("IN", "NOT IN")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val invalid = "kll_sketch_get_n_bigint(unhex(lpad(CAST(id AS STRING), 2, '0')))"
+          val danger = s"$invalid $polarity (SELECT $scalar)"
+          for (guard <- Seq(s"IF(id < 0, $danger, true)",
+              s"CASE WHEN id < 0 THEN $danger ELSE true END")) {
+            checkAnswer(sql(s"SELECT $guard FROM kll_boolean_input"), Row(true))
+          }
+          for (guard <- Seq(s"IF(id > 0, $danger, true)",
+              s"CASE WHEN id > 0 THEN $danger ELSE true END", s"flag OR $danger",
+              s"flag AND $danger")) {
+            val error = intercept[Exception] {
+              sql(s"SELECT $guard FROM kll_boolean_input").collect()
+            }
+            assert(error.toString.contains("KLL_INVALID_INPUT_SKETCH_BUFFER"))
+          }
+          checkAnswer(sql(s"SELECT false AND $danger, true OR $danger " +
+            "FROM kll_boolean_input"), Row(false, true))
+          for (offset <- Seq(0, 1)) {
+            val member = s"(id + $offset) $polarity (SELECT $scalar)"
+            val matches = (offset == 0) == (polarity == "IN")
+            checkAnswer(sql(s"SELECT flag AND ($member), flag OR ($member) " +
+              "FROM kll_boolean_input"),
+              Row(if (matches) null else false, if (matches) true else null))
+          }
+        }
+      }
+    }
+  }
+
+  test("strict single-pass HAVING keeps independent outer KLL identities") {
+    for (legacy <- Seq(false, true); singlePass <- Seq(true, false)) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val call = "kll_sketch_agg_bigint(t.id)"
+        val source = "FROM VALUES (1L), (2L), (3L) t(id)"
+        for (having <- Seq(s"EXISTS (SELECT 1 WHERE $call = $call)",
+            s"EXISTS (SELECT 1 WHERE $call = s) AND EXISTS (SELECT 1 WHERE $call = s)")) {
+          val plan = sql(s"SELECT $call AS s $source HAVING $having").queryExecution.optimizedPlan
+          val aggregates = plan.collect {
+            case a: org.apache.spark.sql.catalyst.plans.logical.Aggregate => a
+          }.head.aggregateExpressions.flatMap(_.collect { case a: AggregateExpression => a })
+          assert(aggregates.map(_.resultId).distinct.size == (if (legacy) 1 else 3), plan)
+        }
+      }
+    }
+  }
+
   test("KLL exported HAVING aggregates retain their bound output identity") {
     for (legacy <- Seq(true, false)) {
       withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
@@ -378,6 +461,18 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
           }
           assert(scans.size == 1, query.queryExecution.toString)
           assert(scans.head.metrics("numPartitions").value == 1, query.queryExecution.toString)
+          val multipleKeys = sql("""SELECT /*+ BROADCAST(d) */ f.id,
+              |kll_sketch_get_n_bigint(d.s) FROM kll_dpp_fact f JOIN
+              |(SELECT k, kll_sketch_agg_bigint(v) AS s
+              |FROM kll_dpp_dim WHERE v > 0 GROUP BY k) d
+              |ON f.id = kll_sketch_get_n_bigint(d.s) AND f.p = d.k""".stripMargin)
+          QueryTest.checkAnswer(multipleKeys, Seq(Row(1L, 1L)), checkToRDD = false)
+          val multipleScans = multipleKeys.queryExecution.executedPlan.collect {
+            case scan: FileSourceScanExec if scan.output.exists(_.name == "id") => scan
+          }
+          assert(multipleScans.size == 1, multipleKeys.queryExecution.toString)
+          assert(multipleScans.head.metrics("numPartitions").value == 1,
+            multipleKeys.queryExecution.toString)
         }
       }
     }

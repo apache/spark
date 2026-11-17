@@ -342,6 +342,7 @@ object ValidateSubqueryExpression
         val checked = new java.util.IdentityHashMap[Expression, Expression]
         val independent = new KllSubqueryIndependence
         def rewritten(expression: Expression): Expression = {
+          if (expression.deterministic) return expression
           val cached = checked.get(expression)
           if (cached != null) return cached
           val children = expression.mapChildrenWithReferenceEquality(rewritten)
@@ -373,10 +374,13 @@ object ValidateSubqueryExpression
 
   private[sql] final class KllSubqueryIndependence {
     private val plans = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
+    private lazy val legacy = new LegacyKllDeterminism
 
     def apply(query: SubqueryExpression): Boolean = {
       !query.deterministic && !query.isCorrelated && plans.computeIfAbsent(query.plan,
-        plan => deterministicWithoutKllRandomness(plan)).booleanValue()
+        plan => AnalysisHelper.allowInvokingTransformsInAnalyzer {
+          legacy.plan(plan).deterministic
+        }).booleanValue()
     }
   }
 

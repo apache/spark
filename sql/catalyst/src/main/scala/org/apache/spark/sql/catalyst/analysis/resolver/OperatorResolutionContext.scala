@@ -22,9 +22,10 @@ import java.util.{ArrayDeque, ArrayList, LinkedHashMap}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedHaving
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedHaving, ValidateSubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE
 
 /**
  * Operator resolution context used to store information required for resolution of currently
@@ -68,32 +69,38 @@ class OperatorResolutionContext(
    */
   private lazy val subqueryOuterAggregateExpressionsAliased: LinkedHashMap[Expression, Alias] =
     new LinkedHashMap[Expression, Alias]
+  private lazy val legacyKeys = new ValidateSubqueryExpression.LegacyKllDeterminism
+
+  private def aggregateKey(expression: Expression, sharing: Option[Boolean]): Expression = {
+    if (!expression.containsPattern(KLL_AGGREGATE)) expression.canonicalized
+    else if (sharing.contains(true)) legacyKeys.expression(expression).canonicalized
+    else if (sharing.contains(false) || !expression.deterministic) expression
+    else expression.canonicalized
+  }
 
   /**
    * Adds an aggregate expression from a subquery to be pushed down to the nearest outer
    * [[Aggregate]].
    */
-  def addSubqueryAggregateExpression(alias: Alias): Unit = {
-    subqueryOuterAggregateExpressionsAliased.putIfAbsent(alias.child.canonicalized, alias)
+  def addSubqueryAggregateExpression(alias: Alias, sharing: Option[Boolean] = None): Unit = {
+    subqueryOuterAggregateExpressionsAliased.putIfAbsent(aggregateKey(alias.child, sharing), alias)
   }
 
   /**
    * Gets an aliased aggregate expression from a subquery that has already been extracted, if such
    * exists.
    */
-  def getSubqueryAggregateExpression(expression: Expression): Option[Alias] = {
-    if (subqueryOuterAggregateExpressionsAliased.containsKey(expression.canonicalized)) {
-      Some(subqueryOuterAggregateExpressionsAliased.get(expression.canonicalized))
-    } else {
-      None
-    }
+  def getSubqueryAggregateExpression(
+      expression: Expression,
+      sharing: Option[Boolean] = None): Option[Alias] = {
+    Option(subqueryOuterAggregateExpressionsAliased.get(aggregateKey(expression, sharing)))
   }
 
   /**
    * Returns aliases of all aggregate expressions from subqueries that have been extracted.
    */
   def getAllSubqueryAggregateExpressions: Seq[Alias] =
-    subqueryOuterAggregateExpressionsAliased.values().asScala.toSeq
+    subqueryOuterAggregateExpressionsAliased.values().asScala.toSeq.distinctBy(_.exprId)
 }
 
 /**

@@ -25,6 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedHaving
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Window}
+import org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE
 
 /**
  * Resolves [[UnresolvedHaving]] node and its condition.
@@ -335,9 +336,13 @@ class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
 
     val aggregateExpressionsExtractedFromSubquery = new LinkedHashMap[Expression, Alias]()
     resolver.getOperatorResolutionContextStack.current.getAllSubqueryAggregateExpressions.foreach {
-      case alias: Alias if !groupingAndAggregateExpressionsExtractor.exists(alias.child) =>
+      case alias: Alias if (if (alias.child.containsPattern(KLL_AGGREGATE)) {
+          !aggregate.outputSet.contains(alias.toAttribute)
+        } else !groupingAndAggregateExpressionsExtractor.exists(alias.child)) =>
         val mappedAlias = expressionIdAssigner.mapExpression(alias)
-        aggregateExpressionsExtractedFromSubquery.put(mappedAlias.child.canonicalized, mappedAlias)
+        val key = if (mappedAlias.child.containsPattern(KLL_AGGREGATE)) mappedAlias.child
+          else mappedAlias.child.canonicalized
+        aggregateExpressionsExtractedFromSubquery.put(key, mappedAlias)
         mappedAlias
       case _ =>
     }
@@ -373,8 +378,12 @@ class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
 
     val resolvedCondition = condition.transformDown {
       case expression
-          if aggregateExpressionsExtractedFromSubquery.containsKey(expression.canonicalized) =>
-        aggregateExpressionsExtractedFromSubquery.get(expression.canonicalized).toAttribute
+          if aggregateExpressionsExtractedFromSubquery.containsKey(
+            if (expression.containsPattern(KLL_AGGREGATE)) expression
+            else expression.canonicalized) =>
+        val key = if (expression.containsPattern(KLL_AGGREGATE)) expression
+          else expression.canonicalized
+        aggregateExpressionsExtractedFromSubquery.get(key).toAttribute
       case expression =>
         groupingAndAggregateExpressionsExtractor
           .extractReferencedGroupingAndAggregateExpressions(

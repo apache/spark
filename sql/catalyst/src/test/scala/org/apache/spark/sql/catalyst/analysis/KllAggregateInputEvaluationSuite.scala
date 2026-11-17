@@ -97,6 +97,17 @@ class KllAggregateInputEvaluationSuite extends PlanTest {
     assert(evaluateCount(aggregate, InternalRow(1L, 0L)) == 0L)
   }
 
+  test("filtered Count preserves nullable input demand") {
+    val division = DivideDTInterval(day, Subtract(Add(scalar, b), Literal(2L)))
+    assert(division.nullable)
+    val aggregate = prepare(countPlan(Seq(division), Some(GreaterThan(a, Literal(0L)))))
+    assert(evaluateCount(aggregate, InternalRow(0L, 1L)) == 0L)
+    assert(evaluateCount(aggregate, InternalRow(1L, 2L)) == 1L)
+    intercept[SparkArithmeticException] {
+      evaluateCount(aggregate, InternalRow(1L, 1L))
+    }
+  }
+
   test("Count observes NULL guards added later for nonnullable primitive UDFs") {
     val argument = ScalaUDF((n: Long) => n, LongType, Seq(Add(a, scalar)),
       inputEncoders = Seq(Some(ExpressionEncoder[Long]().resolveAndBind())), nullable = false)

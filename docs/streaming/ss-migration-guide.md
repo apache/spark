@@ -38,6 +38,13 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   The analysis and batch rollback setting `spark.sql.legacy.kllAggregateDeterministic.enabled`
   does not override the micro-batch checkpoint's mode. This checkpoint policy is specific to
   micro-batch execution; continuous execution does not record or restore this setting.
+  Do not resume a checkpoint created in corrected mode (`false`) with an older Spark binary:
+  older binaries ignore this setting and may assign the same binary state fields to different
+  KLL outputs even when the state schema is accepted. If rollback to an older binary is needed,
+  select legacy sharing (`true`) before creating the checkpoint, subject to the usual
+  cross-version compatibility requirements, or plan a replay with a fresh checkpoint.
+  Changing the session setting after checkpoint creation does not make a corrected checkpoint
+  safe for an older binary.
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial

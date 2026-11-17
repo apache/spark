@@ -30,6 +30,112 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, J
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
+  test("guarded staging skips reuse traversal when no ordinary bindings are live") {
+    val visits = new AtomicInteger
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+        .toAggregateExpression()).as("n")))
+    val common = (1 to 64).foldLeft[Expression](scalar) { (child, _) =>
+      Counted(child, visits)
+    }
+    val value = $"value".long
+    val roots = (1 to 32).map(i => If(EqualTo(value, Literal(i.toLong)), common, Literal(0L)))
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(roots, keys)
+    assert(keys.liveOrdinaryBindings.isEmpty)
+    visits.set(0)
+    val projected = NondeterministicExpressionCollection.project(
+      LocalRelation(value), bindings, keys)
+    assert(projected.output.size == roots.size + 1)
+    // One shared-prefix classification is needed; reuse must not walk it for each root.
+    assert(visits.get <= 64, s"unused reuse traversal visits=${visits.get}")
+  }
+
+  test("CASE membership continuation checks grow linearly") {
+    for (width <- Seq(16, 64)) {
+      val query = ListQuery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+        KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+          .toAggregateExpression()).as("n")), numCols = 1)
+      val branches = (1 to width).map(i =>
+        (GreaterThan(Rand(i), Literal(1D)): Expression, Literal.FalseLiteral: Expression))
+      val membership = InSubquery(Seq(Literal(1L)), query)
+      val expression = CaseWhen(branches, Some(membership))
+      val plan = OneRowRelation().select(expression.as("value"))
+      val rewritten = org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery(plan)
+      val checks = rewritten.collect { case p: Project =>
+        p.projectList.collect { case alias: Alias =>
+          alias.child.collect { case _: And => 1 }.sum
+        }.sum
+      }.sum
+      assert(checks <= width * 4, s"width=$width continuation checks=$checks")
+      rewritten.foreach { p => assert(p.missingInput.isEmpty, p) }
+    }
+  }
+
+  test("ASOF proofs skip deterministic expression descendants") {
+    val visits = new AtomicInteger
+    val deterministic = (1 to 128).foldLeft[Expression](Literal.TrueLiteral) { (child, _) =>
+      Counted(child, visits)
+    }
+    val query = OneRowRelation().groupBy()(KllSketchAggBigint(Literal(1L),
+      legacyDeterministic = false).toAggregateExpression().as("s"))
+    val condition = And(deterministic, Exists(query))
+    val join = org.apache.spark.sql.catalyst.plans.logical.AsOfJoin(
+      OneRowRelation(), OneRowRelation(), Literal.TrueLiteral, Some(condition), Inner,
+      None, org.apache.spark.sql.catalyst.plans.Backward)
+    join.treePatternBits
+    deterministic.deterministic
+    visits.set(0)
+    assert(ValidateSubqueryExpression.allowsNondeterministicJoinSubqueries(join))
+    assert(visits.get == 0, s"deterministic descendants revisited=${visits.get}")
+  }
+
+  test("independence proofs share expression prefixes across distinct plans") {
+    val copies = new AtomicInteger
+    val expression = (1 to 64).foldLeft[Expression](
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false).toAggregateExpression()) {
+      (child, _) => ProofCopyCounted(child, copies)
+    }
+    val queries = (1 to 32).map { i =>
+      ScalarSubquery(OneRowRelation().groupBy()(expression.as(s"s$i")))
+    }
+    queries.foreach(_.deterministic)
+    copies.set(0)
+    val proof = new ValidateSubqueryExpression.KllSubqueryIndependence
+    assert(queries.forall(proof.apply))
+    assert(copies.get <= 64, s"shared prefix copies=${copies.get}")
+  }
+
+  test("KLL aggregate resolution consumes List alternatives sequentially") {
+    val visits = new AtomicInteger
+    val values = (1 to 128).map(_ => KllSketchAggBigint(Literal(1L),
+      legacyDeterministic = false).toAggregateExpression(): Expression).toList
+    val counted = new scala.collection.immutable.AbstractSeq[Expression] {
+      override def length: Int = values.length
+      override def iterator: Iterator[Expression] = values.iterator
+      override def apply(index: Int): Expression = {
+        visits.addAndGet(index + 1)
+        values(index)
+      }
+      override def map[B](f: Expression => B): Seq[B] = {
+        val mapped = values.map(f)
+        new scala.collection.immutable.AbstractSeq[B] {
+          override def length: Int = mapped.length
+          override def iterator: Iterator[B] = mapped.iterator
+          override def apply(index: Int): B = {
+            visits.addAndGet(index + 1)
+            mapped(index)
+          }
+        }
+      }
+    }
+    val aggregate = Aggregate(Nil, Nil, OneRowRelation())
+    val (_, resolved) = SimpleAnalyzer.ResolveAggregateFunctions
+      .resolveExprsWithAggregate(counted, aggregate)
+    assert(resolved.size == values.size)
+    assert(visits.get <= values.size * 8, s"List element visits=${visits.get}")
+  }
+
   test("KLL-free aggregate determinism checks avoid traversing random wrapper chains") {
     val visits = new AtomicInteger
     val expression = (1 to 64).foldLeft[Expression](Rand(0)) { (child, _) =>

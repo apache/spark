@@ -39,6 +39,40 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
 
+  test("outer HAVING exports retain both checkpoint sharing choices") {
+    for (singlePass <- Seq(false, true); analysisLegacy <- Seq(false, true)) {
+      val original = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        spark.sql("""SELECT kll_sketch_agg_bigint(t.id) AS s
+            |FROM VALUES (1L), (2L) t(id) HAVING EXISTS (SELECT 1 WHERE
+            |kll_sketch_agg_bigint(t.id) = kll_sketch_agg_bigint(t.id))""".stripMargin)
+          .queryExecution.analyzed
+      }
+      for (legacy <- Seq(false, true)) {
+        val selected = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+          original, original, legacy)
+        val aggregates = selected.collect { case a: Aggregate => a }.head
+        val functions = org.apache.spark.sql.catalyst.planning.PhysicalAggregation
+          .unapply(aggregates).get._2
+        assert(functions.size == (if (legacy) 1 else 3), selected.treeString)
+        assert(aggregates.aggregateExpressions.size == (if (legacy) 1 else 3),
+          selected.treeString)
+        assert(functions.forall(_.deterministic == legacy), selected.treeString)
+        assert(!selected.containsPattern(
+          org.apache.spark.sql.catalyst.trees.TreePattern.KLL_CHECKPOINT_ALTERNATIVE))
+        val subqueries = selected.flatMap(_.expressions).flatMap(_.collect {
+          case s: SubqueryExpression => s
+        })
+        subqueries.foreach { query =>
+          assert(query.children.forall(_.references.subsetOf(aggregates.outputSet)), selected)
+        }
+      }
+    }
+  }
+
   test("corrected checkpoint policy recovers independently written static HAVING calls") {
     val logical = withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "true") {
       val input = MemoryStream[Long](spark).toDF()

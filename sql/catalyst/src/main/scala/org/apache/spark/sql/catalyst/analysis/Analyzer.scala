@@ -3315,8 +3315,8 @@ class Analyzer(
         val (correctedOutputs, corrected) = resolve(Some(false))
         val (legacyOutputs, legacy) = resolve(Some(true))
         val outputs = (batchOutputs ++ correctedOutputs ++ legacyOutputs).distinctBy(_.exprId)
-        (outputs, batch.indices.map { i =>
-          KllAggregateResolution(batch(i), corrected(i), legacy(i))
+        (outputs, batch.zip(corrected).zip(legacy).map { case ((batch, corrected), legacy) =>
+          KllAggregateResolution(batch, corrected, legacy)
         })
       }
     }

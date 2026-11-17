@@ -64,18 +64,21 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
         if (agg.aggregateExpressions.forall(_.deterministic) ||
-            (!agg.groupingExpressions.exists(e =>
-              NormalizeFloatingNumbers.needNormalize(e.dataType)) &&
-              agg.aggregateExpressions.forall(
-                ValidateSubqueryExpression.deterministicWithoutKllRandomness))) &&
+            agg.aggregateExpressions.forall(
+              ValidateSubqueryExpression.deterministicWithoutKllRandomness)) &&
           agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
           canPushThroughCondition(agg.children, joinCond, rightOp) &&
           canPlanAsBroadcastHashJoin(join, conf) =>
       val aliasMap = getAliasMap(agg)
+      val deterministic = agg.aggregateExpressions.forall(_.deterministic)
+      val normalizedKeys = agg.groupingExpressions.filter(e =>
+        NormalizeFloatingNumbers.needNormalize(e.dataType))
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&
+          (deterministic || !replaced.exists(e =>
+            normalizedKeys.exists(_.semanticEquals(e)))) &&
           replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
       }
       val makeJoinCondition = (predicates: Seq[Expression]) => {

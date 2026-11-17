@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.runtime
 import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
 
 import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExprId, ExternalUserDefinedFunction, KllAggregateResolution, NamedExpression, SubqueryExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Exists, Expression, ExprId, ExternalUserDefinedFunction, KllAggregateResolution, LateralSubquery, ListQuery, NamedExpression, ScalarSubquery, SubExprUtils, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -43,6 +43,11 @@ private[sql] object KllCheckpointPreparation {
       case resolution: KllAggregateResolution =>
         val chosen = if (legacySharing) resolution.legacy else resolution.corrected
         unchosen ++= (resolution.references -- chosen.references).map(_.exprId)
+        if (resolution.containsPattern(OUTER_REFERENCE)) {
+          val outer = AttributeSet(SubExprUtils.getOuterReferences(resolution))
+          val chosenOuter = AttributeSet(SubExprUtils.getOuterReferences(chosen))
+          unchosen ++= (outer -- chosenOuter).map(_.exprId)
+        }
         chosen
       case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>
         kllChanged = true
@@ -205,10 +210,23 @@ private[sql] object KllCheckpointPreparation {
       val current = trimmed.mapExpressionsWithReferenceEquality { expression =>
         expression.transformDownWithReferenceEquality {
           case query: SubqueryExpression =>
-            query.withNewPlan(visit(query.plan, query.plan.outputSet))
+            val nested = visit(query.plan, query.plan.outputSet)
+            val updated = query.withNewPlan(nested)
+            query match {
+              case _: ScalarSubquery | _: Exists | _: ListQuery | _: LateralSubquery
+                  if query.references.exists(a => candidates.contains(a.exprId)) =>
+                val referenced = AttributeSet(SubExprUtils.getOuterReferences(nested))
+                val outer = query.getOuterAttrs.filterNot {
+                  case attribute: Attribute => candidates.contains(attribute.exprId) &&
+                    !referenced.contains(attribute)
+                  case _ => false
+                }
+                updated.withNewOuterAttrs(outer)
+              case _ => updated
+            }
         }
       }
-      val needed = current.references ++ required.intersect(current.inputSet)
+      val needed = current.references ++ current.inputSet.intersect(required)
       current.mapChildren(child => visit(child, needed))
     }
     visit(plan, plan.outputSet)

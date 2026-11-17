@@ -413,15 +413,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }).booleanValue()
     def guardedMemberships(expression: Expression, domain: Expression): Expression = {
       if (!hasKllMembership(expression)) return expression
-      def condition(value: Expression): Attribute = {
-        val rewritten = guardedMemberships(value, domain)
-        val guarded = if (domain == Literal.TrueLiteral) rewritten else {
-          If(domain, rewritten, Literal.create(null, BooleanType))
-        }
-        val alias = Alias(guarded, "_subquery_guard")()
+      def bind(value: Expression): Attribute = {
+        val alias = Alias(value, "_subquery_guard")()
         newPlan = Project(newPlan.output :+ alias, newPlan)
         introducedAttrs += alias.toAttribute
         alias.toAttribute
+      }
+      def condition(value: Expression): Attribute = {
+        val rewritten = guardedMemberships(value, domain)
+        bind(if (domain == Literal.TrueLiteral) rewritten else {
+          If(domain, rewritten, Literal.create(null, value.dataType))
+        })
       }
       def when(value: Expression): Expression = And(domain, value)
       expression match {
@@ -440,10 +442,19 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             introducedAttrs += alias.toAttribute
             val isTrue = EqualNullSafe(alias.toAttribute, Literal.TrueLiteral)
             val result = guardedMemberships(value, And(remaining, isTrue))
-            remaining = And(remaining, Not(isTrue))
+            remaining = bind(And(remaining, Not(isTrue)))
             (alias.toAttribute: Expression, result)
           }
           CaseWhen(guarded, otherwise.map(guardedMemberships(_, remaining)))
+        case Coalesce(children) =>
+          var remaining = domain
+          val predecessors = children.dropRight(1).map { child =>
+            val rewritten = guardedMemberships(child, remaining)
+            val reference = bind(If(remaining, rewritten, Literal.create(null, child.dataType)))
+            remaining = bind(And(remaining, IsNull(reference)))
+            reference
+          }
+          Coalesce(predecessors :+ guardedMemberships(children.last, remaining))
         case And(left, right) =>
           val leftRef = condition(left)
           And(leftRef, guardedMemberships(right,

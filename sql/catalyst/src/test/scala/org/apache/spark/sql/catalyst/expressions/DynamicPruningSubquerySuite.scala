@@ -53,6 +53,16 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
     val filtered = pruning.withNewPlan(org.apache.spark.sql.catalyst.plans.logical.Filter(
       GreaterThan(KllSketchGetNBigint(sketch.toAttribute), Literal(0L)), build))
     assert(!filtered.deterministic)
+    val multiple = pruning.copy(buildKeys = Seq(KllSketchGetNBigint(sketch.toAttribute), key),
+      broadcastKeyIndices = Seq(1))(None)
+    assert(multiple.resolved)
+    assert(multiple.deterministic)
+    assert(!multiple.copy(broadcastKeyIndices = Seq(0))(None).deterministic)
+    for (indices <- Seq(Seq.empty[Int], Seq(0, 1), Seq(-1), Seq(2))) {
+      val unresolved = multiple.copy(broadcastKeyIndices = indices)(None)
+      assert(!unresolved.resolved)
+      assert(!unresolved.deterministic)
+    }
   }
 
   test("pruningKey data type matches single buildKey") {

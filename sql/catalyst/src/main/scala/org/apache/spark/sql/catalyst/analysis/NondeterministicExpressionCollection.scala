@@ -344,7 +344,9 @@ object NondeterministicExpressionCollection {
                   case other => other.mapChildrenWithReferenceEquality(reuseLive)
                 }
               }
-              expression.mapChildrenWithReferenceEquality(reuseLive)
+              if (keys.liveOrdinaryBindings.isEmpty) expression else {
+                expression.mapChildrenWithReferenceEquality(reuseLive)
+              }
             // NOT IN must reach the existing NULL-aware predicate-subquery rewrite as a whole.
             // Only stage its operands; extraction must not turn it into NOT of an IN binding.
             case not @ Not(in: InSubquery) =>

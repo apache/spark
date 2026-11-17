@@ -4324,6 +4324,18 @@ class DataFrameAggregateSuite extends SharedSparkSession
             checkAnswer(result, Seq(Row(0), Row(1)))
           } else {
             checkAnswer(result, Row(2L))
+            for (predicate <- Seq(s"$scalar > 3", s"nullif($scalar, 3) > 0")) {
+              val rejecting = withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString,
+                  SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+                  SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+                  SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+                val df = sql(s"SELECT count(*) FILTER (WHERE $predicate) " +
+                  "FROM VALUES (0), (1) AS o(id)")
+                df.queryExecution.assertAnalyzed()
+                df
+              }
+              checkAnswer(rejecting, Row(0L))
+            }
           }
         }
       }
@@ -4503,7 +4515,8 @@ class DataFrameAggregateSuite extends SharedSparkSession
     val query = """SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS n
         |FROM VALUES (0), (1), (2) AS i(id)""".stripMargin
     Seq(s"SELECT n + rand() FROM ($query)",
-      s"SELECT n + rand() FROM ($query) WHERE n = o.id").foreach { lateral =>
+      s"SELECT n + rand() FROM ($query) WHERE n = o.id",
+      s"SELECT n FROM ($query) WHERE n = o.id").foreach { lateral =>
       val error = intercept[AnalysisException] {
         sql(s"SELECT * FROM VALUES (0), (1) AS o(id), LATERAL ($lateral) l")
       }
@@ -4511,7 +4524,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
         "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES")
     }
     checkAnswer(sql(s"""SELECT * FROM VALUES (3), (9) AS o(id),
-        |LATERAL (SELECT n FROM ($query) WHERE n = o.id) l""".stripMargin), Row(3, 3L))
+        |LATERAL ($query) l""".stripMargin), Seq(Row(3, 3L), Row(9, 3L)))
   }
 
   test("kll scalar extraction retains direct randomness restrictions") {

@@ -63,10 +63,12 @@ case class DynamicPruningSubquery(
   override def plan: LogicalPlan = buildQuery
 
   override lazy val deterministic: Boolean = children.forall(_.deterministic) &&
-    (buildQuery.deterministic || (buildQuery.containsPattern(KLL_AGGREGATE) && {
+    (buildQuery.deterministic || (buildQuery.containsPattern(KLL_AGGREGATE) &&
+        broadcastKeyIndices.size == 1 && broadcastKeyIndices.forall(i =>
+          i >= 0 && i < buildKeys.size) && {
       // Membership depends on the selected keys. A live sketch payload used by the join
       // must not make this key-only dependency inherit its compaction randomness.
-      val keys = buildKeys.map(key => Alias(key, "_pruning_key")())
+      val keys = broadcastKeyIndices.map(i => Alias(buildKeys(i), "_pruning_key")())
       ColumnPruning(Project(keys, buildQuery)).deterministic
     }))
 

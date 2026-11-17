@@ -198,6 +198,14 @@ class GroupingAndAggregateExpressionsExtractor(
     }
   }
 
+  def collectOuterAggregateExpression(
+      expression: Expression,
+      sharing: Option[Boolean]): (Option[Expression], Option[Alias]) = sharing match {
+    case Some(false) => correctedExtractor.collectFirstAggregateExpression(expression)
+    case Some(true) => legacyExtractor.collectFirstAggregateExpression(expression)
+    case None => collectFirstAggregateExpression(expression)
+  }
+
   /**
    * Returns true if the provided expression is semantically equal to any of the aggregate
    * expressions' child.
