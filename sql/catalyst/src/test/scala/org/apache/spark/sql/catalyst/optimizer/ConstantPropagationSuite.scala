@@ -441,7 +441,7 @@ class ConstantPropagationSuite extends PlanTest {
   test("SPARK-61437: Do not propagate a zero in place where its sign can matter") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       // A row with `d` = -0.0 passes `d = 0.0`, but `CAST(d * y AS STRING)` keeps the sign, so `d`
-      // is kept there, as since SPARK-60983, although the equality is not moved.
+      // is kept there, as `replaceConstants` keeps it, although the equality is not moved.
       val doubles = stringIds.select($"x".cast(DoubleType).as("y"), $"s".cast(DoubleType).as("d"))
       val withE = doubles.select($"y", $"d", ($"d" * 2.0).as("e"))
       def signed(e: Expression): Expression = Cast(e, StringType) === "-0.0"
@@ -449,40 +449,44 @@ class ConstantPropagationSuite extends PlanTest {
         $"d" === 0.0 && signed($"d" * $"y"),
         $"d" === -0.0 && signed($"d" * $"y"),
         signed($"d" * $"y") && $"d" === 0.0,
-        // `pow(-0.0, -1.0)` is -Infinity, and `pow(0.0, -1.0)` is Infinity.
-        Pow($"d", Literal(-1.0)) < 0.0 && $"d" === 0.0,
+        // `pow(-0.0, y)` and `pow(0.0, y)` differ for a negative `y`.
         Pow($"d", $"y") < 0.0 && $"d" === 0.0,
         // Also below arithmetic, under an operator that keeps the sign.
-        signed(Divide($"d", $"y")) && $"d" === 0.0,
-        // Also with two zeros, which only together give -0.0 as their sum.
-        signed($"d" + $"e") && $"d" === 0.0 && $"e" === 0.0
+        signed(Divide($"d", $"y")) && $"d" === 0.0
       ).foreach(condition => checkOrdered(withE, condition, condition))
       Seq(
-        // Where the comparison folds to the same value with either zero, it is replaced.
-        (Pow($"d", Literal(2.0)) < 1.0 && tenDividedBy($"y") > 0.0 && $"d" === 0.0) ->
+        // But where all of the attributes under such an operator get a constant, they are
+        // replaced, as `replaceConstants` folds the operator then, although `pow(-0.0, -1.0)` is
+        // -Infinity and `pow(0.0, -1.0)` is Infinity.
+        (Pow($"d", Literal(-1.0)) < 0.0 && $"d" === 0.0) -> Literal(false),
+        (Cast($"d", StringType) === "0.0" && tenDividedBy($"y") > 0.0 && $"d" === 0.0) ->
           (tenDividedBy($"y") > 0.0 && $"d" === 0.0),
+        (signed($"d" + $"e") && $"d" === 0.0 && $"e" === 0.0) -> Literal(false),
+        // Also where the constant of another one is put in by `replaceConstants`.
+        (signed($"d" * $"y") && $"d" === 0.0 && $"y" === 1.0) -> Literal(false),
         // And so it is under an operator that gives equal results for equal values, also under
         // arithmetic that can fail, as a division by either zero fails.
         ($"d" + $"y" > 1.0 && $"d" === 0.0) -> (Literal(0.0) + $"y" > 1.0 && $"d" === 0.0),
         (Divide(Literal(10.0), $"d" - $"y") > 0.0 && $"d" === 0.0) ->
           (Divide(Literal(10.0), Literal(0.0) - $"y") > 0.0 && $"d" === 0.0),
         // Any other value is equal only to itself.
-        (signed($"d" * $"y") && $"d" === 1.0) -> (signed(Literal(1.0) * $"y") && $"d" === 1.0),
-        // Two zeros whose sum is 0.0 with either sign of each.
-        (Pow($"d" + $"e", Literal(2.0)) < 1.0 && tenDividedBy($"y") > 0.0 && $"d" === 0.0 &&
-          $"e" === 0.0) -> (tenDividedBy($"y") > 0.0 && $"d" === 0.0 && $"e" === 0.0)
+        (signed($"d" * $"y") && $"d" === 1.0) -> (signed(Literal(1.0) * $"y") && $"d" === 1.0)
       ).foreach { case (condition, expected) => checkOrdered(withE, condition, expected) }
       // Also a FLOAT.
       val floats = stringIds.select($"x".cast(FloatType).as("y"), $"s".cast(FloatType).as("f"))
       val signedFloat = floats.where($"f" === 0.0f && signed($"f" * $"y")).analyze
       comparePlans(Optimize.execute(signedFloat), signedFloat)
-      // Nor into a struct with a DOUBLE in it, whose fields the check does not look at.
-      val structs = stringIds.select(
+      // And a struct with a DOUBLE in it, whose fields the check does not look at, but which is
+      // replaced where it is the only attribute under such an operator.
+      val structs = stringIds.select($"x".cast(DoubleType).as("y"),
         CreateNamedStruct(Seq(Literal("a"), $"s".cast(DoubleType))).as("t"))
       val oneStruct = Literal.create(InternalRow(1.0), new StructType().add("a", DoubleType))
       val signedStruct = structs.where($"t" === oneStruct &&
-        Cast($"t", StringType) === "{-0.0}").analyze
+        Cast(CreateNamedStruct(Seq(Literal("a"), $"t", Literal("b"), $"y")), StringType) ===
+          "{{-0.0}, 1.0}").analyze
       comparePlans(Optimize.execute(signedStruct), signedStruct)
+      checkOrdered(structs, $"t" === oneStruct && Cast($"t", StringType) === "{-0.0}",
+        Literal(false))
     }
   }
 
@@ -643,6 +647,37 @@ class ConstantPropagationSuite extends PlanTest {
         If($"x" > 0L || $"id" > 0L, FailingObject, Literal(false)) && $"i" === 0 &&
         $"id" === 7L).analyze)
       assert(!FailingObject.containsTag(ConstantFolding.FAILED_TO_EVALUATE))
+      // A part that the copy of a conjunct that can not be copied leaves untagged is not put into
+      // the plan, where `ConstantFolding` would fold it outside of its branch, so the equalities
+      // are handled as since SPARK-60983 there.
+      val untagged = conjuncts(Optimize.execute(projected.where($"x" < -100L &&
+        NotCopyable($"x")() + ($"id" > 0L || tenDividedBy($"i") > 1.0).cast(LongType) >
+          If($"id" > 5L || NotCopyable($"x")() > 0L, tenDividedBy($"i").cast(LongType),
+            Literal(0L)) && $"i" === 0 && $"id" === 7L).analyze))
+      assert(untagged.take(2) == Seq("(i = 0)", "(id = 7L)"), untagged)
+      // It folds a conditional branch before `SimplifyConditionals` takes it out, as in the batch.
+      checkOrdered(projected, If($"x" > 0L, tenDividedBy($"i") > 1.0, tenDividedBy($"i") > 1.0) &&
+        $"i" === 0,
+        If($"x" > 0L, tenDividedBy(Literal(0)) > 1.0, tenDividedBy(Literal(0)) > 1.0) && $"i" === 0)
+      // And runs `OptimizeRand` before `ConstantFolding`, which makes `rand(1) > 1.0` FALSE, so
+      // that the division by zero after it is not folded, as in the batch, unless it is excluded.
+      object OptimizeWithRand extends RuleExecutor[LogicalPlan] {
+        val batches = Batch("ConstantPropagation", FixedPoint(10),
+          ConstantPropagation, OptimizeRand, ConstantFolding, BooleanSimplification) :: Nil
+      }
+      val withDd = stringIds.select($"s", $"id", $"s".cast(DoubleType).as("dd"))
+      val dividedByZero = Divide(Literal(10.0), $"dd" * $"dd" - 1.0) > 1.0
+      val guardedByRand = ((Rand(1L) > $"dd" && dividedByZero) || $"id" > 0L) && $"dd" === 1.0
+      Seq(
+        "" -> ($"id" > 0L && $"dd" === 1.0),
+        OptimizeRand.ruleName ->
+          ($"dd" === 1.0 && ((Rand(1L) > $"dd" && dividedByZero) || $"id" > 0L))
+      ).foreach { case (excluded, expected) =>
+        withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excluded) {
+          val optimized = OptimizeWithRand.execute(withDd.where(guardedByRand).analyze)
+          comparePlans(optimized, withDd.where(expected).analyze)
+        }
+      }
       checkOrdered(projected,
         tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) &&
           $"i" === 0 && $"id" === 7L,
