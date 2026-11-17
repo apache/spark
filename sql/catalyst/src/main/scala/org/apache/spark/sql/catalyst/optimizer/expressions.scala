@@ -596,6 +596,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   private def replaceOperands(e: Expression, f: Expression => Expression): Expression = {
     val (newChildren, _) = e.children.foldRight((List.empty[Expression], false)) {
       case (child, (laterChildren, laterCanFail)) =>
+        // TODO(SPARK-61861): An operand that its constant would make end `e`, e.g. `id > 0` in
+        // `(id > 0 OR 10 / x > 1) AND id = 7`, is kept, so the operands after it still run, and
+        // the filter keeps the conjunct, also once it is pushed below a projection.
         val newChild = if (laterCanFail) child else f(child)
         (newChild :: laterChildren,
           laterCanFail || !ExprUtils.canEvaluateUnconditionally(newChild))
