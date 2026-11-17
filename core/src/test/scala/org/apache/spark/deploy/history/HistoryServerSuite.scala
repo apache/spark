@@ -354,6 +354,25 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     holdStatus._3 should be (Some("Hold status not available through the history server."))
   }
 
+  test("SPARK-61841: app UI action endpoints are not attached at global paths") {
+    // Start with no app loaded, so that the codes below come from the history server itself.
+    stop()
+    init()
+
+    // The paths the UI's forms post to. The trailing slash matters: without it, a handler
+    // attached at the path only redirects to add the slash, which hides the leak.
+    val actionPaths = Seq("/jobs/job/kill/", "/stages/stage/kill/", "/jobs/hold/", "/jobs/resume/")
+    def postCodes(): Seq[Int] = actionPaths.map { path =>
+      TestUtils.httpResponseCode(new URI(s"http://$localhost:$port$path").toURL, "POST")
+    }
+    val codesWithoutApp = postCodes()
+
+    // Loading an app attaches its UI handlers to the history server.
+    HistoryServerSuite.getUrl(
+      new URI(s"http://$localhost:$port/history/local-1422981780767/jobs/").toURL)
+    assert(postCodes() === codesWithoutApp)
+  }
+
   test("automatically retrieve uiRoot from request through Knox") {
     assert(sys.props.get("spark.ui.proxyBase").isEmpty,
       "spark.ui.proxyBase is defined but it should not for this UT")
