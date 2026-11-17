@@ -142,12 +142,12 @@ class SqlQueryOriginSuite extends PipelineTest with SharedSparkSession {
     ).map(_.queryOrigin)
     assert(sqlQueryOrigins == Seq(
       QueryOrigin(
-        sqlText = Option("CREATE MATERIALIZED VIEW mv AS SELECT 1"),
-        filePath = Option("file.sql"),
-        language = Option(Language.Sql()),
+        sqlText = Some("CREATE MATERIALIZED VIEW mv AS SELECT 1"),
+        filePath = Some("file.sql"),
+        language = Some(Sql),
         // 1 newline, "-- " (3), emoji (2 UTF-16 units), 1 newline
-        startPosition = Option(7),
-        line = Option(3)
+        startPosition = Some(7),
+        line = Some(3)
       )
     ))
   }
