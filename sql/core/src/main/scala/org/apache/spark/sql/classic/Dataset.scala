@@ -862,17 +862,24 @@ class Dataset[T] private[sql](
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
 
+    // Moves each column of a key from its Dataset's plan onto the same column of its join input.
+    // In a self join, the right input gets new attributes, also for metadata columns.
+    def moveToJoinInput(key: Expression, plan: LogicalPlan, joinInput: LogicalPlan): Expression = {
+      val metadataOutput = plan.metadataOutput
+      key.transformUp {
+        case a: AttributeReference if plan.outputSet.contains(a) =>
+          val index = plan.output.indexWhere(_.exprId == a.exprId)
+          joinInput.output(index)
+        case a: AttributeReference if metadataOutput.exists(_.exprId == a.exprId) =>
+          // Only when the names match, so a different column list never gives a wrong column.
+          val index = metadataOutput.indexWhere(_.exprId == a.exprId)
+          joinInput.metadataOutput.lift(index).filter(_.name == a.name).getOrElse(a)
+      }
+    }
+
     def createAsOfJoinPlan(joinPlan: Join): AsOfJoin = {
-      val leftAsOfExpr = leftAsOf.expr.transformUp {
-        case a: AttributeReference if logicalPlan.outputSet.contains(a) =>
-          val index = logicalPlan.output.indexWhere(_.exprId == a.exprId)
-          joinPlan.left.output(index)
-      }
-      val rightAsOfExpr = rightAsOf.expr.transformUp {
-        case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
-          val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
-          joinPlan.right.output(index)
-      }
+      val leftAsOfExpr = moveToJoinInput(leftAsOf.expr, logicalPlan, joinPlan.left)
+      val rightAsOfExpr = moveToJoinInput(rightAsOf.expr, other.logicalPlan, joinPlan.right)
       val asOfJoin = AsOfJoin(
         joinPlan.left, joinPlan.right,
         leftAsOfExpr, rightAsOfExpr,

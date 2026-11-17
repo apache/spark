@@ -29,8 +29,10 @@ import org.apache.spark.sql.execution.datasources.PreprocessTableCreation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.ArrayImplicits._
 
+@DataSourceV2Test
 class V2CommandsCaseSensitivitySuite
   extends SharedSparkSession
   with AnalysisTest

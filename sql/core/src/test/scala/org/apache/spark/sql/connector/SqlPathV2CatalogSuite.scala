@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, Unbound
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * End-to-end coverage of [[SQLConf.PATH_ENABLED]] resolution through non-session V2 catalogs.
@@ -38,6 +39,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  *   - the negative case where the unqualified name only lives in a catalog
  *     that is NOT on the path.
  */
+@DataSourceV2Test
 class SqlPathV2CatalogSuite extends SharedSparkSession {
 
   private val emptyProps: java.util.Map[String, String] = Collections.emptyMap()

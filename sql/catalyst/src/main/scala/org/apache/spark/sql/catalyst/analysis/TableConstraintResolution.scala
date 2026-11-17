@@ -22,11 +22,9 @@ import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, Equ
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, RowLevelWrite, V2WriteCommand}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
-import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpression}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 /** Builds check and generated-column invariants for a write to a resolved V2 table. */
@@ -94,13 +92,14 @@ private[sql] class TableConstraintResolution(
 
     // Use V2 columns from the table to access both V2 expressions and SQL strings.
     r.table.columns().flatMap { col =>
-      Option(col.columnGenerationExpression())
+      GeneratedColumn.columnGenerationExpression(col)
         .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
         .map { genExpr =>
-          val catalystExpr = buildGenerationCatalystExpression(r, col.name, genExpr)
+          val reader = new GeneratedColumn.ExpressionReader(r, col.name, genExpr)
+          val catalystExpr = reader.toCatalyst()
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
-          val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
+          val genExprSql = reader.sql
           // Compare with the value an auto-fill stores, which store assignment casts to the column
           // type. Otherwise, the comparison can cast the provided value to the expression type.
           val colType = CharVarcharUtils.replaceCharVarcharWithString(col.dataType())
@@ -112,37 +111,13 @@ private[sql] class TableConstraintResolution(
             s"${col.name} <=> $genExprSql")
           // Analyze the check under the settings an auto-filled value is analyzed under, so that a
           // row Spark auto-filled passes it when a later write carries it.
-          StoredExpressionText.analyze(
+          reader.analyze(
             check(catalystExpr),
-            check(Option(genExpr.getSql).map(StoredExpressionText.parseWithSessionAnsi)
-              .getOrElse(catalystExpr)),
+            check(reader.toCatalyst(StoredExpressionText.parseWithSessionAnsi)),
             v2Write.query.output,
             analyze)
         }
     }.toSeq
-  }
-
-  /**
-   * Convert a V2 GenerationExpression to a Catalyst expression. Read the SQL string first, as an
-   * auto-filled value does, and fall back to the V2 expression.
-   */
-  private def buildGenerationCatalystExpression(
-      r: DataSourceV2Relation,
-      colName: String,
-      genExpr: GenerationExpression): Expression = {
-    Option(genExpr.getSql)
-      .map(StoredExpressionText.parse)
-      .orElse(Option(genExpr.getExpression).flatMap(V2ExpressionUtils.toCatalyst))
-      .getOrElse {
-        val operation = s"a value for the generated column ${toSQLId(colName)}, because " +
-          s"Spark cannot convert its expression ${genExpr.getExpression}"
-        // A relation of a TableProvider has no catalog and no identifier.
-        throw ((r.catalog, r.identifier) match {
-          case (Some(catalog), Some(ident)) =>
-            QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, operation)
-          case _ => QueryCompilationErrors.unsupportedTableOperationError(r.table, operation)
-        })
-      }
   }
 
   private def buildColumnExtractors(
