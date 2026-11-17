@@ -1980,6 +1980,64 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
+  for (dppEnabled <- Seq(false, true); localRelationLimit <- Seq(0, 100)) {
+    test(s"SPARK-61255: DPP in a recursive step, enabled: $dppEnabled, " +
+        s"local relation limit: $localRelationLimit") {
+      withSQLConf(
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> dppEnabled.toString,
+          SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION.key ->
+            localRelationLimit.toString) {
+        withTable("recursive_items", "recursive_purchases") {
+          sql(s"CREATE TABLE recursive_items (id BIGINT, name STRING) USING $tableFormat")
+          sql("INSERT INTO recursive_items VALUES (1, 'aa'), (2, 'bb'), (3, 'cc')")
+          sql(s"""CREATE TABLE recursive_purchases (price FLOAT, item_id BIGINT)
+                 |USING $tableFormat PARTITIONED BY (item_id)""".stripMargin)
+          sql("INSERT INTO recursive_purchases VALUES (42.0, 1), (19.5, 3)")
+
+          val df = sql(
+            """WITH RECURSIVE r(id, lvl) AS (
+              |  SELECT id, 0 FROM recursive_items
+              |  UNION ALL
+              |  SELECT r.id, r.lvl + 1 FROM r
+              |  JOIN recursive_purchases p ON r.id = p.item_id
+              |  WHERE r.lvl < 3
+              |)
+              |SELECT id, lvl, count(*) FROM r GROUP BY id, lvl""".stripMargin)
+          val hasPruning = df.queryExecution.optimizedPlan.flatMap(_.expressions).exists {
+            _.exists(_.isInstanceOf[DynamicPruningSubquery])
+          }
+          assert(hasPruning == dppEnabled)
+          val expected = Seq(Row(1L, 0, 1L), Row(2L, 0, 1L), Row(3L, 0, 1L)) ++
+            (1 to 3).flatMap(level => Seq(Row(1L, level, 1L), Row(3L, level, 1L)))
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-61255: DPP in the anchor of a recursive CTE") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      withTable("recursive_items", "recursive_purchases") {
+        sql(s"CREATE TABLE recursive_items (id BIGINT, name STRING) USING $tableFormat")
+        sql("INSERT INTO recursive_items VALUES (1, 'aa'), (2, 'bb'), (3, 'cc')")
+        sql(s"""CREATE TABLE recursive_purchases (price FLOAT, item_id BIGINT)
+               |USING $tableFormat PARTITIONED BY (item_id)""".stripMargin)
+        sql("INSERT INTO recursive_purchases VALUES (42.0, 1), (19.5, 3)")
+
+        val df = sql(
+          """WITH RECURSIVE r(id, lvl) AS (
+            |  SELECT i.id, 0 FROM recursive_items i
+            |  JOIN recursive_purchases p ON i.id = p.item_id
+            |  WHERE i.name = 'aa'
+            |  UNION ALL
+            |  SELECT id, lvl + 1 FROM r WHERE lvl < 3
+            |)
+            |SELECT id, lvl FROM r""".stripMargin)
+        checkAnswer(df, (0 to 3).map(level => Row(1L, level)))
+      }
+    }
+  }
+
   test("SPARK-39217: Makes DPP support the pruning side has Union") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       val df = sql(
