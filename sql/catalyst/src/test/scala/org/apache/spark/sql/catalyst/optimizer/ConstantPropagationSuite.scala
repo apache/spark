@@ -623,6 +623,11 @@ class ConstantPropagationSuite extends PlanTest {
             $"id" === 7L && $"i" === 0 && $"x" < -100L && taken(folded)
           })
       }
+      // Nor does it tag a part that a copy shares, e.g. an object.
+      ConstantPropagation(projected.where($"x" < -100L &&
+        If($"x" > 0L || $"id" > 0L, FailingObject, Literal(false)) && $"i" === 0 &&
+        $"id" === 7L).analyze)
+      assert(!FailingObject.containsTag(ConstantFolding.FAILED_TO_EVALUATE))
       checkOrdered(projected,
         tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) &&
           $"i" === 0 && $"id" === 7L,
@@ -835,4 +840,12 @@ private case class NotCopyable(child: Expression)(val unused: Int = 0)
   override def eval(input: InternalRow): Any = child.eval(input)
   override protected def withNewChildInternal(newChild: Expression): NotCopyable =
     NotCopyable(newChild)(unused)
+}
+
+/** A foldable object that fails to evaluate, which `TreeNode.clone` returns as it is. */
+private case object FailingObject extends LeafExpression with CodegenFallback {
+  override def dataType: DataType = BooleanType
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def eval(input: InternalRow): Any = throw new ArithmeticException("fails")
 }
