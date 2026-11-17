@@ -32,7 +32,8 @@ untyped parameter is transpiled into one option per input-type category
 types -- falling back to interpreted Python when none fit. Annotating the
 UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category --
 numeric, string, bool, binary, or map/array for dict/list annotations --
-and keeps the option matrix small; prefer doing so. To bound plan growth,
+and keeps the option matrix small; prefer doing so. A ``Sequence``
+annotation is tried as both array and string, since a ``str`` is one too. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
@@ -1223,33 +1224,45 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     ]
 
 
-def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
-    """Map a parameter's type annotation to a category, or ``None`` when absent
-    or unrecognised (the caller then tries all numeric and string variants).
+def _annotation_name(annotation: Optional[ast.AST]) -> Optional[str]:
+    """The bare type name a parameter annotation spells, or ``None`` when the
+    annotation is absent or not a plain name.
 
-    Returns one of ``"integer"``, ``"float"``, ``"string"``, ``"bool"``,
-    ``"binary"``, ``"map"``, or ``"array"``. Numeric annotations select the
-    variant whose NaN semantics match the bound column type."""
+    Peels a subscript (``dict[str, str]`` -> ``dict``) and a ``typing.``
+    qualifier (``typing.Dict`` -> ``Dict``, but not ``torch.float``), and reads
+    a quoted annotation like its unquoted spelling."""
     if isinstance(annotation, ast.Subscript):
         annotation = annotation.value  # dict[str, str] -> dict
-    name: Optional[str] = None
     if isinstance(annotation, ast.Name):
-        name = annotation.id
-    elif (
+        return annotation.id
+    if (
         isinstance(annotation, ast.Attribute)
         and isinstance(annotation.value, ast.Name)
         and annotation.value.id == "typing"
     ):
-        name = annotation.attr  # typing.Dict -> Dict, but not torch.float
-    elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        return annotation.attr  # typing.Dict -> Dict, but not torch.float
+    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
         # Parse quoted subscripted and typing-qualified forms like their
         # unquoted spellings. Anything unparseable falls out as untyped.
         try:
             with _syntax_warnings_suppressed():
                 parsed = ast.parse(annotation.value, mode="eval").body
-            return _annotation_category(parsed)
+            return _annotation_name(parsed)
         except (SyntaxError, ValueError):
             return None
+    return None
+
+
+def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
+    """Map a parameter's type annotation to the single category it pins, or
+    ``None`` when absent, unrecognised, or not specific enough to pin one.
+
+    Returns one of ``"integer"``, ``"float"``, ``"string"``, ``"bool"``,
+    ``"binary"``, ``"map"``, or ``"array"``. Numeric annotations select the
+    variant whose NaN semantics match the bound column type. ``Sequence`` pins
+    nothing, since it admits more than one category: see
+    ``_annotation_candidates``."""
+    name = _annotation_name(annotation)
     if name == "str":
         return "string"
     if name == "int":
@@ -1262,9 +1275,24 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
         return "binary"
     if name in ("dict", "Dict", "Mapping"):
         return "map"
-    if name in ("list", "List", "Sequence"):
+    if name in ("list", "List"):
         return "array"
     return None
+
+
+def _annotation_candidates(annotation: Optional[ast.AST]) -> List[str]:
+    """The categories to try for a parameter with this annotation.
+
+    A pinning annotation yields its one category. ``Sequence`` yields both
+    ``"array"`` and ``"string"``: a ``str`` is a ``Sequence`` too, so pinning
+    it to ``"array"`` alone would drop the option a string column matches.
+    Anything else is untyped and is tried as each numeric and string variant."""
+    cat = _annotation_category(annotation)
+    if cat is not None:
+        return [cat]
+    if _annotation_name(annotation) == "Sequence":
+        return ["array", "string"]
+    return ["integer", "float", "string"]
 
 
 def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
@@ -1275,26 +1303,20 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     ``"map"``/``"array"``); an
     untyped param is tried as ``"integer"``, ``"float"``, and ``"string"``
     separately so the JVM can select the variant that matches the bound column
-    type and apply the right NaN semantics. To cap plan growth, when more than
-    three params are untyped we collapse the untyped ones to one variant per
-    base category (encourage typing inputs to keep the matrix small) while
-    keeping every typed param pinned.
+    type and apply the right NaN semantics. A ``Sequence`` param is tried as
+    ``"array"`` and ``"string"``. To cap plan growth, when more than three
+    params are unpinned (untyped or ``Sequence``) we collapse them to one
+    variant per base category (encourage typing inputs to keep the matrix
+    small) while keeping every typed param pinned.
     """
     n = len(public_params)
     all_args = _positional_args(function_ast)
     public_args = all_args[len(all_args) - n :]
-    candidates: List[List[str]] = []
-    untyped = 0
-    for arg in public_args:
-        cat = _annotation_category(arg.annotation)
-        if cat is None:
-            candidates.append(["integer", "float", "string"])
-            untyped += 1
-        else:
-            candidates.append([cat])
-    if untyped > 3:
-        # Cap the 3**untyped blow-up; collapse untyped params to one variant
-        # per base fill while keeping typed params pinned.
+    candidates = [_annotation_candidates(arg.annotation) for arg in public_args]
+    unpinned = sum(1 for c in candidates if len(c) > 1)
+    if unpinned > 3:
+        # Cap the blow-up of the product; collapse unpinned params to one
+        # variant per base fill while keeping typed params pinned.
         return [
             {i: c[0] if len(c) == 1 else fill for i, c in enumerate(candidates)}
             for fill in ("integer", "float", "string")
