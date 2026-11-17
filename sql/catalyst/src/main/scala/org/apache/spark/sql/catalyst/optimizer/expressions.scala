@@ -304,12 +304,17 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       nullIsFalse: Boolean,
       columns: FailableColumns): Expression = {
     val equalityPredicates = AttributeMap(failable.toSeq ++ movable.toSeq)
-    val inPlace = replaceConstantsInPlace(condition, failable)
-    val rewritten = replaceConstants(inPlace, movable, failable)
+    // `replaceConstants` goes first, on the condition as written, so that it reaches and folds
+    // what it does for a column that can not fail. `inPlace` has only the constants of
+    // `failable` in, which `moveEqualitiesFirst` compares the rewritten condition with.
+    val inPlace = replaceConstantsInPlace(
+      replaceConstants(condition, AttributeMap.empty, failable), failable)
+    val rewritten =
+      replaceConstantsInPlace(replaceConstants(condition, movable, failable), failable)
     val unfolded = unfoldedEqualities(condition, equalityPredicates, nullIsFalse)
     val allEqualities = AttributeMap(equalityPredicates.toSeq ++ unfolded)
-    val all = replaceConstants(replaceConstantsInPlace(condition, allEqualities),
-      AttributeMap.empty, allEqualities)
+    val all = replaceConstantsInPlace(
+      replaceConstants(condition, AttributeMap.empty, allEqualities), allEqualities)
     val folded = splitConjunctivePredicates(condition)
       .zip(splitConjunctivePredicates(rewritten))
       .zip(splitConjunctivePredicates(all))
@@ -446,9 +451,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * subquery in a comparison is replaced. Unlike before SPARK-60983, an attribute that
    * [[hasSignedZero]] marks is kept under an operator that can tell -0.0 from 0.0, which are
    * equal, i.e. one that [[keepsEqualValues]] rejects, e.g. in `CAST(x * y AS STRING)` for
-   * `x = 0.0`, as [[replaceConstants]] keeps it there. [[replaceConstants]] then folds such an
-   * operator where it reaches it and all of its attributes get a constant, as it does on master,
-   * e.g. `CAST(x AS STRING)` (see its `foldOnly`).
+   * `x = 0.0`, as [[replaceConstants]] keeps it there. [[replaceConstants]], run first, folds such
+   * an operator where it reaches it and all of its attributes get a constant, as it does for a
+   * column that can not fail, e.g. `CAST(x AS STRING)` (see its `foldOnly`).
    */
   private def replaceConstantsInPlace(
       condition: Expression,

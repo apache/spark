@@ -482,6 +482,12 @@ class ConstantPropagationSuite extends PlanTest {
         // Any other value is equal only to itself.
         (signed($"d" * $"y") && $"d" === 1.0) -> (signed(Literal(1.0) * $"y") && $"d" === 1.0)
       ).foreach { case (condition, expected) => checkOrdered(withE, condition, expected) }
+      // It folds where `replaceConstants` reaches on the condition as written, also where the
+      // constant of another column that can fail makes the operand after it one that can not
+      // fail, so this is FALSE.
+      val withD = projected.select($"s", $"id", $"x", $"i", $"s".cast(DoubleType).as("d"))
+      checkOrdered(withD, (signed($"d") || tenDividedBy($"i") > 100.0) && $"d" === 0.0 &&
+        $"i" === 1, Literal(false))
       // Also a FLOAT.
       val floats = stringIds.select($"x".cast(FloatType).as("y"), $"s".cast(FloatType).as("f"))
       val signedFloat = floats.where($"f" === 0.0f && signed($"f" * $"y")).analyze

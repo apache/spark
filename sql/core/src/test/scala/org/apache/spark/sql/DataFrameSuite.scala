@@ -3264,10 +3264,18 @@ class DataFrameSuite extends SharedSparkSession
       check(doubles, d, $"d" === 0.0 && ($"d" * $"y").cast("string") === "-0.0",
         Seq(Row("-0.0", true)))
       check(doubles, d, $"d" === 0.0 && pow($"d", $"y") < 0, Seq(Row("-0.00", true)))
-      // Nor in an operand that guards another one, where `replaceConstants` does not go.
+      // `d` is also kept in an operand that guards another one, where `replaceConstants` does not
+      // go, but not where the constant of another column that can fail makes the one after it an
+      // operand that can not fail, also once the filter is pushed below the projection.
       check(Seq(("-0.0", 100.0), ("0.0", 100.0)).toDF("s", "y"), d,
         ($"d".cast("string") === "-0.0" || lit(10) / $"y" > 1) && $"d" === 0.0,
         Seq(Row("-0.0", true)))
+      Seq(false, true).foreach { pushed =>
+        check(Seq(("0.0", "1", 1.0), ("x", "1", 1.0)).toDF("s", "t", "y"),
+          d :+ $"t".cast("int").as("i"),
+          ($"d".cast("string") === "-0.0" || lit(10) / $"i" > 100) && $"d" === 0.0 && $"i" === 1,
+          Seq.empty, pushed)
+      }
       // But not where `d` is the only column under such an operator, as `replaceConstants` folds
       // it then, nor under arithmetic, which gives the same value, or fails, with either zero, so
       // that `d` is not computed on the row ("x", 1.0) or ("x", -1.0).
