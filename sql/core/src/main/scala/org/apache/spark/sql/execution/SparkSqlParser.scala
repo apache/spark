@@ -856,7 +856,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
       }
 
-      withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
+      val plan = withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
         val viewName = normalizeTempViewIdentifier(ident, ctx)
         val tableIdentifier = TableIdentifier(viewName)
 
@@ -872,6 +872,11 @@ class SparkSqlAstBuilder extends AstBuilder {
           ctx.REPLACE != null,
           viewType = viewType)
       })
+      // With an IDENTIFIER clause, the view command is built only after the analysis of the query.
+      if (!plan.isInstanceOf[DefinesView]) {
+        plan.setTagValue(DefinesView.BUILDER_TAG, ())
+      }
+      plan
     }
   }
 

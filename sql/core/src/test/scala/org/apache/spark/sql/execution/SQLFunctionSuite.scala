@@ -144,7 +144,7 @@ class SQLFunctionSuite extends SharedSparkSession {
 
   test("SPARK-61494: the body of a SQL function does not reference the query around the " +
     "subquery that calls the function") {
-    withUserDefinedFunction("outer_name_fn" -> true) {
+    withUserDefinedFunction("outer_name_fn" -> true, "outer_col_fn" -> true) {
       sql("DECLARE OR REPLACE VARIABLE outer_name INT DEFAULT 100")
       try {
         sql("CREATE TEMPORARY FUNCTION outer_name_fn() RETURNS INT RETURN outer_name")
@@ -153,12 +153,25 @@ class SQLFunctionSuite extends SharedSparkSession {
         val inSubquery = "SELECT (SELECT outer_name_fn()) FROM VALUES (5) AS t(outer_name)"
         checkAnswer(sql(inSubquery), Row(100))
         // The legacy conf restores the column of the calling query, also for a function that was
-        // created before it was set, unless optional references are enabled.
+        // created before it was set, and also while optional references are enabled.
         withSQLConf(
           SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES.key -> "true") {
           checkAnswer(sql(inSubquery), Row(5))
           withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
-            checkAnswer(sql(inSubquery), Row(100))
+            checkAnswer(sql(inSubquery), Row(5))
+          }
+        }
+        // So does an optional reference in the body, whose analysis replaces it like that of a
+        // function called outside of a subquery.
+        withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+          sql("CREATE TEMPORARY FUNCTION outer_col_fn() RETURNS INT RETURN coalesce(outer_col?, 0)")
+          val optionalInSubquery = "SELECT (SELECT outer_col_fn()) FROM VALUES (5) AS t(outer_col)"
+          checkAnswer(sql(optionalInSubquery), Row(0))
+          withSQLConf(
+            SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES.key -> "true") {
+            checkAnswer(sql(optionalInSubquery), Row(5))
+            checkAnswer(sql("SELECT (SELECT outer_col_fn()) FROM VALUES (5) AS t(other_col)"),
+              Row(0))
           }
         }
       } finally {

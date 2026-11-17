@@ -99,6 +99,11 @@ object OptionalReferences {
    * in the analyzed operations of a MERGE source. The optional references of the body of a view
    * or SQL function that the plan reads do not count: that body is analyzed in an analysis
    * context of its own.
+   *
+   * A later analysis keeps the mark, because its rules copy the tags of a node to the node that
+   * replaces it. A rewrite outside of the analyzer that replaces an analyzed plan, such as the
+   * union flattening and the self-join rewrite of `Dataset`, must keep the mark of the plan that
+   * it replaces, see [[withResolvedNullReferenceOf]].
    */
   val RESOLVED_NULL_REFERENCE: TreeNodeTag[Origin] =
     TreeNodeTag[Origin]("optionalReferenceResolvedNull")
@@ -232,15 +237,31 @@ object OptionalReferences {
   /**
    * Marks `analyzed`, the plan that an analysis of `plan` returned, with
    * [[RESOLVED_NULL_REFERENCE]] if the analysis resolved an optional reference of `plan` to a
-   * [[nullReference]]. The analysis rebuilt the plan to replace the reference, so `plan` itself,
-   * which can be analyzed again later, e.g. from a plan cache, is never marked.
+   * [[nullReference]] and built `analyzed`. A node of `plan` is never marked: `plan` can be
+   * analyzed again later, e.g. from a plan cache, and its analyzed nodes belong to other plans as
+   * well, such as the plan of the Dataset that a drop returns when it drops nothing. The NULL is
+   * not a part of such a node.
    */
   def markResolvedNullReference(plan: LogicalPlan, analyzed: LogicalPlan): Unit = {
     AnalysisContext.get.nullReferenceOrigins.headOption.foreach { origin =>
-      if (analyzed ne plan) {
+      if (!plan.exists(_ eq analyzed)) {
         analyzed.setTagValue(RESOLVED_NULL_REFERENCE, origin)
       }
     }
+  }
+
+  /**
+   * Gives `plan`, which a rewrite outside of the analyzer built to replace the analyzed plans
+   * `replaced`, the first [[RESOLVED_NULL_REFERENCE]] mark of them, unless `plan` has one. Other
+   * tags stay where they are, e.g. the ids of the Datasets that the self-join detection reads.
+   */
+  def withResolvedNullReferenceOf[T <: LogicalPlan](plan: T, replaced: LogicalPlan*): T = {
+    if (resolvedNullReferenceOrigin(plan).isEmpty) {
+      replaced.iterator.flatMap(resolvedNullReferenceOrigin).nextOption().foreach { origin =>
+        plan.setTagValue(RESOLVED_NULL_REFERENCE, origin)
+      }
+    }
+    plan
   }
 
   /** Returns the origin of the [[RESOLVED_NULL_REFERENCE]] mark of `plan`, or None. */

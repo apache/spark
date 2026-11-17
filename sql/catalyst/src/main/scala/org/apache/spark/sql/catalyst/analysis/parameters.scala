@@ -106,6 +106,8 @@ case class PosParameterizedQuery(
     hasOptionalReferences: Boolean)
   extends ParameterizedQuery(child) {
   assert(args.nonEmpty)
+  // The plan string does not show the flag, so that it stays the same without optional references.
+  override protected def stringArgs: Iterator[Any] = Iterator(child, args)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 }
@@ -123,7 +125,8 @@ case class PosParameterizedQuery(
  *                   parameters are treated as positional.
  * @param hasOptionalReferences Whether the statement as written has optional references (`x?`),
  *                              see `OptionalReferences.hasOptionalReferences`. Such a statement
- *                              must not be given more values than it has positional markers.
+ *                              must not be given more values than it has positional markers
+ *                              when it has no named parameter markers.
  */
 case class GeneralParameterizedQuery(
     child: LogicalPlan,
@@ -135,6 +138,8 @@ case class GeneralParameterizedQuery(
   assert(paramNames.length == args.length,
     s"paramNames must be same length as args. " +
     s"paramNames.length=${paramNames.length}, args.length=${args.length}")
+  // The plan string does not show the flag, so that it stays the same without optional references.
+  override protected def stringArgs: Iterator[Any] = Iterator(child, args, paramNames)
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)
 }

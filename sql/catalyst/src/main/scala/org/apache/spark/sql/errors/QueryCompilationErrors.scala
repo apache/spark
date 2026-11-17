@@ -4644,6 +4644,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = origin)
   }
 
+  def optionalReferenceInDdlNotSupportedError(clause: String, origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL",
+      messageParameters = Map("context" -> toSQLStmt(clause)),
+      origin = origin)
+  }
+
   def unusedSqlParameterValuesError(numMarkers: Int, numValues: Int): Throwable = {
     new AnalysisException(
       errorClass = "UNUSED_SQL_PARAMETER_VALUES",

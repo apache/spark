@@ -116,13 +116,23 @@ class VariableResolution(
       if (numInnerFields != 0) {
         val nestedFields = nameParts.takeRight(numInnerFields)
         if (optionalNamePartIndices.nonEmpty) {
-          OptionalReferences.extractNestedFields(
+          val extracted = OptionalReferences.extractNestedFields(
             base = variable,
             nestedFields = nestedFields,
             firstNestedFieldIndex = nameParts.length - numInnerFields,
             optionalNamePartIndices = optionalNamePartIndices,
             resolver = conf.resolver,
             voidBaseIsNull = false)
+          // The NULL of a missing optional field no longer mentions the variable, which a view or
+          // a SQL function that is being created still depends on, like a variable that an
+          // IDENTIFIER clause reads.
+          variable match {
+            case reference: VariableReference if OptionalReferences.isNullReference(extracted) =>
+              AnalysisContext.get.referredTempVariableNamesUnderIdentifier +=
+                reference.originalNameParts
+            case _ =>
+          }
+          extracted
         } else {
           nestedFields.foldLeft(variable: Expression) { (e, name) =>
             ExtractValue(e, Literal(name), conf.resolver)

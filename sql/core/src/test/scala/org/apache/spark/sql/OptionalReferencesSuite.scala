@@ -28,15 +28,17 @@ import org.apache.spark.sql.metricview.serde.{
   DimensionExpression,
   MeasureExpression,
   MetricView,
-  MetricViewFactory
+  MetricViewFactory,
+  Source,
+  SQLSource
 }
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Tests of optional references (`x?`) that the golden file `optional-references.sql`, which covers
  * the queries, cannot express: a second analysis of the same unresolved plan, a query that only the
- * fixed-point analyzer resolves, an error whose context is relative to text that is parsed apart
- * from the statement, and the definition of a metric view.
+ * fixed-point analyzer resolves, and errors whose context is relative to text that is parsed apart
+ * from the statement, such as the parameter list of a SQL function and a metric view definition.
  */
 class OptionalReferencesSuite extends QueryTest with SharedSparkSession {
 
@@ -87,37 +89,41 @@ class OptionalReferencesSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-61494: a metric view resolves optional references like on every read") {
+  test("SPARK-61494: a metric view definition rejects optional references") {
     withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
       withTable("mv_source") {
-        withView("mv_optional", "mv_label") {
-          sql("CREATE TABLE mv_source USING parquet AS SELECT * FROM VALUES ('a', 1), ('a', 2) " +
-            "AS t(region, count)")
-          def createMetricView(name: String, dimension: String): String = {
-            val yaml = MetricViewFactory.toYAML(MetricView(
-              "0.1",
-              AssetSource("mv_source"),
-              None,
-              Seq(
-                MetricViewColumn("region", DimensionExpression("region"), 0),
-                MetricViewColumn("d", DimensionExpression(dimension), 1),
-                MetricViewColumn("count_sum", MeasureExpression("sum(count)"), 2))))
-            s"CREATE VIEW $name WITH METRICS LANGUAGE YAML AS $$$$\n$yaml\n$$$$"
-          }
-          // A missing column of the source is NULL.
-          sql(createMetricView("mv_optional", "missing?"))
-          checkAnswer(
-            sql("SELECT region, d, measure(count_sum) FROM mv_optional GROUP BY region, d"),
-            Row("a", null, 3))
-          // Every read analyzes the definition as a view, where a label of a SQL script does not
-          // qualify names, so a definition that only resolves with the label fails when created,
-          // like CREATE VIEW.
-          val e = intercept[AnalysisException] {
-            sql(s"BEGIN lbl: BEGIN ${createMetricView("mv_label", "lbl.missing?")}; END; END")
-          }
-          assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION", e.getMessage)
-          assert(e.getMessageParameters.get("objectName") == "`lbl`.`missing`", e.getMessage)
-          assert(!spark.catalog.tableExists("mv_label"))
+        sql("CREATE TABLE mv_source USING parquet AS SELECT * FROM VALUES ('a', 1), ('a', 2) " +
+          "AS t(region, count)")
+        def createMetricView(
+            source: Source = AssetSource("mv_source"),
+            where: Option[String] = None,
+            dimension: String = "region",
+            measure: String = "sum(count)"): String = {
+          val yaml = MetricViewFactory.toYAML(MetricView(
+            "0.1",
+            source,
+            where,
+            Seq(
+              MetricViewColumn("d", DimensionExpression(dimension), 0),
+              MetricViewColumn("m", MeasureExpression(measure), 1))))
+          s"CREATE VIEW mv WITH METRICS LANGUAGE YAML AS $$$$\n$yaml\n$$$$"
+        }
+        // The definition is resolved as a part of each query that reads the metric view, so a
+        // missing reference could resolve differently for each reader.
+        Seq(
+          createMetricView(dimension = "missing?") -> "missing?",
+          createMetricView(measure = "sum(missing?)") -> "missing?",
+          createMetricView(where = Some("missing? IS NULL")) -> "missing?",
+          createMetricView(source = SQLSource("SELECT region, count, missing? FROM mv_source")) ->
+            "missing?",
+          s"BEGIN lbl: BEGIN ${createMetricView(dimension = "lbl.missing?")}; END; END" ->
+            "lbl.missing?"
+        ).foreach { case (sqlText, reference) =>
+          val e = intercept[AnalysisException](sql(sqlText))
+          assert(e.getCondition == "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DDL", e.getMessage)
+          assert(e.getMessageParameters.get("context") == "METRIC VIEW", e.getMessage)
+          assert(e.getQueryContext.map(_.fragment).toSeq == Seq(reference), e.getMessage)
+          assert(!spark.catalog.tableExists("mv"))
         }
       }
     }

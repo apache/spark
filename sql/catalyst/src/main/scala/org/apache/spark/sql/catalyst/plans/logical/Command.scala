@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, TreePattern}
 
 /**
@@ -72,10 +72,17 @@ trait AnalysisOnlyCommand extends Command {
 /**
  * A command that defines a view: it stores the text of a query, which is analyzed again whenever
  * the view is read. CREATE VIEW, ALTER VIEW ... AS, and CACHE TABLE ... AS SELECT define views.
- * CREATE VIEW ... WITH METRICS analyzes its definition separately, with the placeholder of the
- * metric view, see `AnalysisContext.definesView` and `AnalysisContext.isViewDefinition`.
+ * See `AnalysisContext.isViewDefinition`.
  */
 trait DefinesView extends Command
+
+object DefinesView {
+  /**
+   * Marks a plan that builds a [[DefinesView]] command only after the analysis of its children,
+   * such as that of `CREATE TEMPORARY VIEW IDENTIFIER('v') AS ...`, whose query is its child.
+   */
+  val BUILDER_TAG: TreeNodeTag[Unit] = TreeNodeTag[Unit]("definesView")
+}
 
 /**
  * A logical node that does not expose its sub-nodes as children, but rather supervises them

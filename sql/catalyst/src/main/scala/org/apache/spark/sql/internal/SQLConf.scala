@@ -8569,8 +8569,8 @@ object SQLConf {
         "the identifier, the reference evaluates to a NULL of type VOID instead of raising a " +
         "not-found error. Ambiguous references and type errors are still raised. UPDATE, " +
         "DELETE, MERGE, the REPLACE condition of INSERT, AUTO CDC flows, partition " +
-        "specifications, and the DEFAULT, GENERATED ALWAYS AS, CHECK, and OPTIONS clauses of " +
-        "table and function definitions reject optional references.")
+        "specifications, metric view definitions, and the DEFAULT, GENERATED ALWAYS AS, CHECK, " +
+        "and OPTIONS clauses of table and function definitions reject optional references.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -8582,8 +8582,7 @@ object SQLConf {
       .doc("When true (legacy behavior), the body of a SQL function that is called in a " +
         "subquery resolves names that are neither its parameters nor its own columns as " +
         "columns of the query around the subquery, before session variables. When false (the " +
-        "default), the body does not reference the calling query, like the body of a view. " +
-        s"This conf has no effect while ${OPTIONAL_REFERENCES_ENABLED.key} is true.")
+        "default), the body does not reference the calling query, like the body of a view.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

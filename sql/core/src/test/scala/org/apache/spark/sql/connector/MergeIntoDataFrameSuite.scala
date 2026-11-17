@@ -457,6 +457,13 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
           }
           val inlineTable = "SELECT * FROM VALUES (1, flag?) AS t(pk, archived)"
           checkMergeFails(spark.sql(inlineTable).as("s"), inlineTable, "flag?")
+          // The single-pass resolver records the NULL on the plan that it returns as well.
+          val ifItem = "IF(is_active?, true, false) AS archived"
+          val singlePassSource =
+            withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+              spark.table("source").selectExpr("pk", ifItem)
+            }
+          checkMergeFails(singlePassSource.as("s"), ifItem, "is_active?")
           sql("CREATE TEMPORARY FUNCTION flag_rows(flag BOOLEAN) " +
             "RETURNS TABLE (archived BOOLEAN) RETURN SELECT flag")
           val lateralCall = "SELECT pk, f.archived FROM source, LATERAL flag_rows(archived?) f"
@@ -495,6 +502,92 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
         checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
       }
+    }
+  }
+
+  test("merge into fails if a Dataset operation rebuilt an analyzed operation of the source " +
+      "that has an optional reference") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+      val target = tableNameAsString
+
+      def checkMergeFails(source: => DataFrame, sqlText: String): Unit = {
+        checkError(
+          exception = intercept[AnalysisException] {
+            source.as("s")
+              .mergeInto(target, $"s.pk" === col(target + ".pk"))
+              .whenMatched(expr("s.archived IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(
+            fragment = "attrs?",
+            start = sqlText.indexOf("attrs?"),
+            stop = sqlText.indexOf("attrs?") + 5))
+      }
+
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        // The union of Datasets flattens the analyzed Union of the query into a new one.
+        val unionAll = "SELECT pk, attrs?['active'] AS archived FROM source " +
+          "UNION ALL SELECT pk + 1 AS pk, attrs?['active'] AS archived FROM source"
+        val other = spark.table("source").selectExpr("pk + 2 AS pk", "true AS archived")
+        checkMergeFails(spark.sql(unionAll).union(other), unionAll)
+        checkMergeFails(spark.sql(unionAll).unionAll(other), unionAll)
+        checkMergeFails(spark.sql(unionAll).unionByName(other), unionAll)
+
+        // A join of Datasets with a condition, `joinWith`, and `joinAsOf` rebuild the analyzed
+        // Join whose condition has the reference.
+        val left = spark.table("source").as("l")
+        val right = spark.table("source").as("r")
+        val condition = "l.pk = r.pk AND attrs?['active'] IS NULL"
+        checkMergeFails(
+          left.join(right, expr(condition)).selectExpr("l.pk", "true AS archived"), condition)
+        Seq("inner", "left_outer").foreach { joinType =>
+          checkMergeFails(
+            left.joinWith(right, expr(condition), joinType)
+              .selectExpr("_1.pk AS pk", "true AS archived"),
+            condition)
+        }
+        checkMergeFails(
+          left
+            .joinAsOf(right, left("pk"), right("pk"), expr(condition), "inner",
+              tolerance = null, allowExactMatches = true, direction = "backward")
+            .selectExpr("l.pk", "true AS archived"),
+          condition)
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
+  test("merge into uses a source that a drop of a missing optional field left unchanged") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 200, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+        val source = spark.table("source")
+          .selectExpr("pk", "salary", "named_struct('name', dep) AS info")
+        // The drop drops nothing, so its analysis returns the analyzed plan of `source`, which
+        // the NULL of `info.missing?` is not a part of.
+        val dropped = source.drop(expr("info.missing?"))
+        assert(dropped.columns === source.columns)
+        source.as("s")
+          .mergeInto(tableNameAsString, $"s.pk" === col(tableNameAsString + ".pk"))
+          .whenMatched()
+          .update(Map("salary" -> col("s.salary")))
+          .merge()
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 200, "hr")))
     }
   }
 

@@ -244,9 +244,9 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
 
   /**
    * Returns the attributes that the name resolution of `operator` can match a multipart name
-   * against: the output of its children, the attributes that `Sort`, `Filter`, HAVING, and
-   * QUALIFY can reference from below their child, the output of the subquery of a lateral join,
-   * and the attributes of the outer query of a subquery.
+   * against: the output of its children, the attributes that `Sort`, `Filter`, HAVING,
+   * DISTRIBUTE BY, and QUALIFY can reference from below their child, the output of the subquery
+   * of a lateral join, and the attributes of the outer query of a subquery.
    */
   private def visibleAttributes(operator: LogicalPlan): Seq[Attribute] = {
     val localAttributes = operator.children.flatMap(namedAttributes)
@@ -273,8 +273,9 @@ class ResolveOptionalReferences(resolveAgain: LogicalPlan => LogicalPlan)
     plan.output ++ plan.metadataOutput
 
   /**
-   * Returns the attributes below `plan` that a `Sort` or a `Filter` on top of `plan` can reference
-   * as missing attributes, mirroring `ColumnResolutionHelper.resolveExprsAndAddMissingAttrs`.
+   * Returns the attributes below `plan` that a `Sort`, a `Filter`, DISTRIBUTE BY, or QUALIFY on
+   * top of `plan` can reference as missing attributes, mirroring
+   * `ColumnResolutionHelper.resolveExprsAndAddMissingAttrs`.
    */
   private def attributesForMissingReferences(plan: LogicalPlan): Seq[Attribute] = plan match {
     case unary: UnaryNode
@@ -318,7 +319,7 @@ object ResolveOptionalReferences {
     })
   }
 
-  private def isPlanOfSubquery: Boolean = AnalysisContext.get.outerPlan.isDefined
+  private def isPlanOfSubquery: Boolean = AnalysisContext.get.isSubqueryPlan
 
   /**
    * Returns true if `plan` is the plan of a subquery expression that the analyzer is resolving on

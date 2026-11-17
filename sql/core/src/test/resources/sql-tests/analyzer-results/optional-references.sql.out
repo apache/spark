@@ -1488,6 +1488,47 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+CREATE TEMPORARY VIEW known_struct_v AS SELECT known_struct.b? AS b
+-- !query analysis
+CreateViewCommand `known_struct_v`, SELECT known_struct.b? AS b, false, false, LocalTempView, UNSUPPORTED, true, [[known_struct]]
+   +- Project [null AS b#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM known_struct_v
+-- !query analysis
+Project [b#x]
++- SubqueryAlias known_struct_v
+   +- View (`known_struct_v`, [b#x])
+      +- Project [cast(b#x as void) AS b#x]
+         +- Project [null AS b#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW known_struct_v
+-- !query analysis
+DropTempViewCommand known_struct_v, false
+
+
+-- !query
+CREATE VIEW known_struct_pv AS SELECT known_struct.b? AS b
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`default`.`known_struct_pv`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`known_struct`"
+  }
+}
+
+
+-- !query
 DECLARE OR REPLACE VARIABLE void_var DEFAULT NULL
 -- !query analysis
 CreateVariable default(null, sql='NULL'), true
@@ -1733,6 +1774,24 @@ DropTempViewCommand lbl_v, false
 -- !query
 BEGIN
   lbl: BEGIN
+    DECLARE s STRUCT<a: INT> DEFAULT named_struct('a', 1);
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.s.missing? AS m;
+    SELECT * FROM lbl_v;
+  END;
+END
+-- !query analysis
+LocalRelation [m#x]
+
+
+-- !query
+DROP VIEW lbl_v
+-- !query analysis
+DropTempViewCommand lbl_v, false
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
     DECLARE y INT DEFAULT 1;
     CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.missing? AS m;
   END;
@@ -1803,6 +1862,106 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "lbl.missing?"
   } ]
 }
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW IDENTIFIER('lbl_iv') AS SELECT lbl.missing? AS m;
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 106,
+    "stopIndex" : 117,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY FUNCTION lbl_fn() RETURNS INT RETURN lbl.missing?;
+    CREATE TEMPORARY FUNCTION lbl_table_fn() RETURNS TABLE (m INT) RETURN SELECT lbl.missing?;
+    SELECT lbl_fn() AS m, (SELECT m FROM lbl_table_fn()) AS t;
+  END;
+END
+-- !query analysis
+LocalRelation [m#x, t#x]
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_fv AS SELECT lbl_fn() AS m;
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 92,
+    "stopIndex" : 99,
+    "fragment" : "lbl_fn()"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_fv AS SELECT * FROM lbl_table_fn();
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`lbl`.`missing`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lbl.missing?"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION lbl_fn
+-- !query analysis
+DropFunctionCommand lbl_fn, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION lbl_table_fn
+-- !query analysis
+DropFunctionCommand lbl_table_fn, false, true
 
 
 -- !query
@@ -2540,12 +2699,23 @@ SetCommand (spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences,Some(true))
 -- !query
 SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable)
 -- !query analysis
-Project [scalar-subquery#x [] AS r#x]
+Project [scalar-subquery#x [fn_variable#x] AS r#x]
 :  +- Project [variable_fn() AS variable_fn()#x]
 :     +- Project
 :        +- OneRowRelation
 +- SubqueryAlias t
    +- LocalRelation [fn_variable#x]
+
+
+-- !query
+SELECT (SELECT optional_fn(1)) AS r FROM VALUES (5) AS t(b)
+-- !query analysis
+Project [scalar-subquery#x [b#x] AS r#x]
+:  +- Project [optional_fn(a#x) AS optional_fn(1)#x]
+:     +- Project [cast(1 as int) AS a#x]
+:        +- OneRowRelation
++- SubqueryAlias t
+   +- LocalRelation [b#x]
 
 
 -- !query

@@ -166,8 +166,10 @@ case class AnalysisContext(
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    // Like `referredTempFunctionNames`, this is populated only by fixed-point analysis (by
-    // `ResolveIdentifierClause`, the sole writer). A temporary view, temporary ALTER VIEW, or
+    // The temporary variables that the analyzed plan does not mention: those that an IDENTIFIER
+    // clause reads, which `ResolveIdentifierClause` records only in fixed-point analysis, like
+    // `referredTempFunctionNames`, and those whose missing optional field (`v.missing?`) resolved
+    // to NULL, which `VariableResolution` records. A temporary view, temporary ALTER VIEW, or
     // CACHE TABLE AS SELECT stores the names in its metadata so they resolve when the stored view
     // text is analyzed again. A persisted CREATE/ALTER VIEW instead rejects them -- usually in
     // `ResolveIdentifierClause` while resolving the body, and otherwise (e.g. an IDENTIFIER nested
@@ -177,8 +179,8 @@ case class AnalysisContext(
     // the persisted paths simply discard the set. SQL function creation consumes it the same way
     // (SPARK-59970): a persistent function rejects the names, or discards them under the legacy
     // flag, and a temporary function stores them as informational metadata in its
-    // `referredTempVariableNames` property. The single-pass resolver has no IDENTIFIER-clause
-    // resolution of its own, so there is no second writer to keep in sync. LinkedHashSet keeps
+    // `referredTempVariableNames` property. The single-pass resolver analyzes none of the commands
+    // that consume the set. LinkedHashSet keeps
     // insertion order so the recorded names (and any error naming them) are deterministic when more
     // than one variable is read via an IDENTIFIER clause.
     referredTempVariableNamesUnderIdentifier: mutable.Set[Seq[String]] =
@@ -191,13 +193,18 @@ case class AnalysisContext(
     // attributing it to the new function would reject or record it there. See SPARK-59970.
     shareIdentifierVariablesWithNestedSQLFunctions: Boolean = true,
     outerPlan: Option[LogicalPlan] = None,
+    // Whether the plan under analysis is the plan of a subquery expression, see `withOuterPlan`.
+    // The analysis of the query around the subquery resolves its optional references (`x?`), see
+    // `ResolveOptionalReferences`. The body of a SQL function that the subquery calls is not such
+    // a plan, also when it resolves names against `outerPlan`.
+    isSubqueryPlan: Boolean = false,
     collation: Option[String] = None,
     // Whether the plan under analysis defines a view, i.e. stores the text of a query that is
-    // analyzed again when the view is read: CREATE VIEW, ALTER VIEW ... AS, CACHE TABLE ... AS
-    // SELECT, and CREATE VIEW ... WITH METRICS, see `AnalysisContext.definesView`. Optional
-    // references (`x?`) resolve the query the way the stored text will resolve, so that a
-    // definition that cannot be read fails when the view is created. Only set while optional
-    // references are enabled, as nothing else reads it.
+    // analyzed again when the view is read: CREATE VIEW, ALTER VIEW ... AS, and CACHE TABLE ...
+    // AS SELECT, see `AnalysisContext.definesView`. Optional references (`x?`) resolve the query,
+    // including the bodies of the SQL functions that it calls, the way the stored text will
+    // resolve, so that a definition that cannot be read fails when the view is created. Only set
+    // while optional references are enabled, as nothing else reads it.
     isViewDefinition: Boolean = false,
     // The origins of the optional references (`x?`) of the plan under analysis that this analysis
     // resolved to NULL, in the order of `OptionalReferences.nullReference`. The contexts of
@@ -326,16 +333,15 @@ object AnalysisContext {
           mutable.LinkedHashSet.empty
         },
       // The body of a SQL function is not a part of the query that calls it. If the call is in a
-      // subquery, the body must not resolve its names as outer references of that query. The
-      // legacy conf restores that, except while optional references are enabled, because their
-      // resolution tells the plan of a subquery from other plans by the outer plan.
+      // subquery, the body must not resolve its names as outer references of that query, unless
+      // the legacy conf restores that. Either way, the body is not the plan of the subquery.
       outerPlan = if (
-        SQLConf.get.getConf(SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES) &&
-        !SQLConf.get.getConf(SQLConf.OPTIONAL_REFERENCES_ENABLED)) {
+        SQLConf.get.getConf(SQLConf.LEGACY_SQL_FUNCTION_BODY_RESOLVES_OUTER_REFERENCES)) {
         originContext.outerPlan
       } else {
         None
       },
+      isSubqueryPlan = false,
       collation = function.collation,
       nullReferenceOrigins = mutable.ArrayBuffer.empty)
     set(context)
@@ -351,20 +357,21 @@ object AnalysisContext {
 
   def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(isDefault = false, outerPlan = Some(outerPlan))
+    val context =
+      originContext.copy(isDefault = false, outerPlan = Some(outerPlan), isSubqueryPlan = true)
     set(context)
     try f finally { set(originContext) }
   }
 
   /**
    * Returns true if `plan` defines a view, see `AnalysisContext.isViewDefinition`: if it has a
-   * [[DefinesView]] command or the placeholder of a metric view that is being created.
+   * [[DefinesView]] command or a plan that builds one, see [[DefinesView.BUILDER_TAG]].
    */
-  def definesView(plan: LogicalPlan): Boolean = plan.exists {
-    case _: DefinesView => true
-    case placeholder: MetricViewPlaceholder => placeholder.isCreate
-    case _ => false
-  }
+  def definesView(plan: LogicalPlan): Boolean =
+    plan.containsAnyPattern(COMMAND, PLAN_WITH_UNRESOLVED_IDENTIFIER) && plan.exists {
+      case _: DefinesView => true
+      case other => other.getTagValue(DefinesView.BUILDER_TAG).isDefined
+    }
 
   /** Runs `f`, the analysis of a plan that defines a view, with `isViewDefinition` set. */
   def withViewDefinition[A](f: => A): A = {
@@ -589,7 +596,11 @@ class Analyzer(
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.withNewAnalysisContext {
-      val analyzed = executeSameContextAsDefinition(plan)
+      val analyzed = if (conf.optionalReferencesEnabled && AnalysisContext.definesView(plan)) {
+        AnalysisContext.withViewDefinition(executeSameContext(plan))
+      } else {
+        executeSameContext(plan)
+      }
       OptionalReferences.markResolvedNullReference(plan, analyzed)
       analyzed
     }
@@ -597,18 +608,6 @@ class Analyzer(
 
   private def executeSameContext(plan: LogicalPlan): LogicalPlan =
     runWithSessionConf(super.execute(plan))
-
-  /**
-   * Like [[executeSameContext]], but analyzes a plan that defines a view, see
-   * `AnalysisContext.definesView`, as such a definition while optional references are enabled.
-   */
-  private def executeSameContextAsDefinition(plan: LogicalPlan): LogicalPlan = {
-    if (conf.optionalReferencesEnabled && AnalysisContext.definesView(plan)) {
-      AnalysisContext.withViewDefinition(executeSameContext(plan))
-    } else {
-      executeSameContext(plan)
-    }
-  }
 
   /**
    * Like [[executeAndCheck]], but also returns the temporary variables recorded via IDENTIFIER
@@ -638,7 +637,7 @@ class Analyzer(
     } else {
       def analyze(): (LogicalPlan, Seq[Seq[String]]) = AnalysisHelper.markInAnalyzer {
         val analyzed = QueryPlanningTracker.withTracker(tracker) {
-          executeSameContextAsDefinition(plan)
+          executeSameContext(plan)
         }
         // Read the accumulator before the surrounding context is reset / restored below.
         val referredTempVariablesUnderIdentifier =

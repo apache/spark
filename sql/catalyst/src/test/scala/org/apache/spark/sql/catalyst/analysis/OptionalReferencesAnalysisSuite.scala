@@ -20,30 +20,48 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeReference,
   InSubquery,
-  ListQuery
+  IsNull,
+  ListQuery,
+  Literal
 }
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{
+  Assignment,
   DeleteFromTable,
   Filter,
   LeafNode,
   LocalRelation,
-  LogicalPlan
+  LogicalPlan,
+  MergeIntoTable,
+  UpdateTable
 }
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.types.IntegerType
 
 class OptionalReferencesAnalysisSuite extends SparkFunSuite {
 
-  /** A relation that counts how often a search for optional references visits it. */
+  /**
+   * A relation that counts how often a search for optional references visits it: the search for
+   * unresolved references through `innerChildren`, and the search of the DML check for the NULLs
+   * of analyzed operations through the lookup of the mark of such an analysis.
+   */
   private case class CountingRelation(output: Seq[Attribute]) extends LeafNode {
     var visits = 0
+    var markLookups = 0
     override def innerChildren: Seq[QueryPlan[_]] = {
       visits += 1
       Nil
+    }
+    override def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
+      if (tag == OptionalReferences.RESOLVED_NULL_REFERENCE) {
+        markLookups += 1
+      }
+      super.getTagValue(tag)
     }
   }
 
@@ -72,10 +90,43 @@ class OptionalReferencesAnalysisSuite extends SparkFunSuite {
     assert(!OptionalReferences.hasOptionalReferences(plan))
     assert(relations.map(_.visits).toSet == Set(1))
 
+    // Each search of the DML check, in a condition and in the source of a MERGE.
     relations.clear()
     val condition = InSubquery(Seq(AttributeReference("a", IntegerType)()),
       ListQuery(nestedSubqueries(depth = 20, relations)))
     CheckOptionalReferencesInDml(DeleteFromTable(LocalRelation(), condition))
     assert(relations.map(_.visits).toSet == Set(1))
+    assert(relations.map(_.markLookups).toSet == Set(1))
+
+    relations.clear()
+    CheckOptionalReferencesInDml(MergeIntoTable(
+      targetTable = LocalRelation(),
+      sourceTable = nestedSubqueries(depth = 20, relations),
+      mergeCondition = Literal(true),
+      matchedActions = Nil,
+      notMatchedActions = Nil,
+      notMatchedBySourceActions = Nil,
+      withSchemaEvolution = false))
+    assert(relations.map(_.visits).toSet == Set(1))
+    assert(relations.map(_.markLookups).toSet == Set(1))
+  }
+
+  test("an UPDATE that was built without the parser rejects optional references") {
+    val a = AttributeReference("a", IntegerType)()
+    def missing: UnresolvedAttribute = {
+      val attribute = UnresolvedAttribute("missing")
+      OptionalReferences.markNamePartsOptional(attribute, Set(0))
+      attribute
+    }
+    Seq(
+      UpdateTable(LocalRelation(a), Seq(Assignment(a, missing)), None),
+      UpdateTable(LocalRelation(a), Seq(Assignment(a, Literal(1))), Some(IsNull(missing)))
+    ).foreach { update =>
+      checkError(
+        exception = intercept[AnalysisException](CheckOptionalReferencesInDml(update)),
+        condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+        sqlState = "0A000",
+        parameters = Map("context" -> "UPDATE"))
+    }
   }
 }

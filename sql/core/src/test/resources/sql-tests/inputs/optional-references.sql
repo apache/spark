@@ -171,6 +171,12 @@ SELECT session?, system.session?;
 SELECT known_struct.b;
 -- The name of a missing field of a variable is not a lateral column alias either.
 SELECT known_struct.b?, b + 1;
+-- A view depends on the variable of a missing field, which its NULL does not mention: a
+-- temporary view keeps the variable, and a persistent view cannot reference it.
+CREATE TEMPORARY VIEW known_struct_v AS SELECT known_struct.b? AS b;
+SELECT * FROM known_struct_v;
+DROP VIEW known_struct_v;
+CREATE VIEW known_struct_pv AS SELECT known_struct.b? AS b;
 -- The fields of a variable of type VOID are an error, like without `?`, unlike those of a column.
 DECLARE OR REPLACE VARIABLE void_var DEFAULT NULL;
 SELECT void_var.a;
@@ -240,15 +246,26 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 -- A view resolves the label-qualified variables of the script that it referenced when it was
--- created, and no others, so a label does not qualify an optional reference in the query of a
--- view. A definition that depends on the label fails when the view is created, instead of when it
--- is read: also in a subquery, in a persistent view, for the variable of a FOR statement, in
--- ALTER VIEW ... AS, and in CACHE TABLE ... AS SELECT.
+-- created, with or without `?`. In the query of a view, a label never turns a name that matches
+-- no captured variable into NULL, so such a definition fails when the view is created instead of
+-- when it is read: also in a subquery, in a persistent view, in a view named by an IDENTIFIER
+-- clause, for the variable of a FOR statement, in ALTER VIEW ... AS, and in CACHE TABLE ... AS
+-- SELECT.
 --QUERY-DELIMITER-START
 BEGIN
   lbl: BEGIN
     DECLARE y INT DEFAULT 1;
     CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.y AS y, missing? AS m;
+    SELECT * FROM lbl_v;
+  END;
+END;
+--QUERY-DELIMITER-END
+DROP VIEW lbl_v;
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE s STRUCT<a: INT> DEFAULT named_struct('a', 1);
+    CREATE TEMPORARY VIEW lbl_v AS SELECT lbl.s.missing? AS m;
     SELECT * FROM lbl_v;
   END;
 END;
@@ -278,6 +295,43 @@ BEGIN
   END;
 END;
 --QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW IDENTIFIER('lbl_iv') AS SELECT lbl.missing? AS m;
+  END;
+END;
+--QUERY-DELIMITER-END
+-- The same holds for the body of a SQL function that the query of a view calls.
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY FUNCTION lbl_fn() RETURNS INT RETURN lbl.missing?;
+    CREATE TEMPORARY FUNCTION lbl_table_fn() RETURNS TABLE (m INT) RETURN SELECT lbl.missing?;
+    SELECT lbl_fn() AS m, (SELECT m FROM lbl_table_fn()) AS t;
+  END;
+END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_fv AS SELECT lbl_fn() AS m;
+  END;
+END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE y INT DEFAULT 1;
+    CREATE TEMPORARY VIEW lbl_fv AS SELECT * FROM lbl_table_fn();
+  END;
+END;
+--QUERY-DELIMITER-END
+DROP TEMPORARY FUNCTION lbl_fn;
+DROP TEMPORARY FUNCTION lbl_table_fn;
 --QUERY-DELIMITER-START
 BEGIN
   FOR r AS SELECT id FROM people DO
@@ -385,9 +439,11 @@ SELECT p.id, f.x, f.y FROM people p, LATERAL optional_table_fn(p.id) f ORDER BY 
 DECLARE OR REPLACE VARIABLE fn_variable INT DEFAULT 100;
 CREATE TEMPORARY FUNCTION variable_fn() RETURNS INT RETURN fn_variable;
 SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable);
--- The legacy conf has no effect while optional references are enabled.
+-- The legacy conf restores the resolution against the query around the subquery, with or without
+-- `?`.
 SET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences=true;
 SELECT (SELECT variable_fn()) AS r FROM VALUES (5) AS t(fn_variable);
+SELECT (SELECT optional_fn(1)) AS r FROM VALUES (5) AS t(b);
 RESET spark.sql.legacy.sqlFunctionBodyResolvesOuterReferences;
 DROP TEMPORARY FUNCTION optional_fn;
 DROP TEMPORARY FUNCTION optional_qualified_fn;

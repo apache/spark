@@ -7046,7 +7046,7 @@
     "subClass" : {
       "IN_DDL" : {
         "message" : [
-          "Column and parameter defaults, generation expressions, CHECK constraints, and table options must not contain optional references."
+          "Column and parameter defaults, generation expressions, CHECK constraints, table options, and metric view definitions must not contain optional references."
         ]
       },
       "IN_DML" : {

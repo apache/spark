@@ -1522,6 +1522,19 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("the plan string of a parameterized query does not show the optional references flag") {
+    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
+      Seq(
+        spark.sql("SELECT ? AS a", Array(1)).queryExecution.logical ->
+          "'PosParameterizedQuery [1]",
+        spark.parseParameterizedPlan("SELECT :a AS a", Array(1), Array("a")) ->
+          "'GeneralParameterizedQuery [1], [a]"
+      ).foreach { case (plan, expected) =>
+        assert(plan.simpleString(maxFields = 10) === expected)
+      }
+    }
+  }
+
   test("optional named parameter marker after a supplementary character") {
     withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
       // A code point of two UTF-16 units before the marker: the lookahead that decides whether

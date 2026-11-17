@@ -101,62 +101,50 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
   /**
    * Returns the origin of the first optional reference of `plan` that an analysis of an operation
    * of `plan` resolved to NULL, or None: of a NULL that is still there, see
-   * [[OptionalReferences.isNullReference]], or else of a mark of such an analysis, see
+   * [[OptionalReferences.isNullReference]], or else of the first mark of such an analysis, see
    * [[OptionalReferences.RESOLVED_NULL_REFERENCE]]. A NULL that is still there is the more precise
    * position, as for `missing?:a`, where the mark keeps `missing?`, the first NULL that the
-   * analysis created.
+   * analysis created. Views and SQL functions resolve their own optional references, so the
+   * search does not enter a view, a SQL table function, or the body of a SQL scalar function.
    */
-  private def resolvedNullReference(plan: LogicalPlan): Option[Origin] =
-    resolvedNullReference(plan, marks = false).orElse(resolvedNullReference(plan, marks = true))
+  private def resolvedNullReference(plan: LogicalPlan): Option[Origin] = {
+    val search = new ResolvedNullReferenceSearch
+    search.inPlan(plan).orElse(search.firstMark)
+  }
 
   /** Like [[resolvedNullReference]] for a plan, in `expression` and its subquery plans. */
   private def resolvedNullReference(expression: Expression): Option[Origin] = {
-    resolvedNullReference(expression, marks = false)
-      .orElse(resolvedNullReference(expression, marks = true))
+    val search = new ResolvedNullReferenceSearch
+    search.inExpression(expression).orElse(search.firstMark)
   }
 
   /**
-   * Returns the origin of the first NULL that an optional reference of `plan` resolved to, or with
-   * `marks`, of the first mark, or None. Views and SQL functions resolve their own optional
-   * references, so the search does not enter a view, a SQL table function, or the body of a SQL
-   * scalar function.
+   * One search of [[resolvedNullReference]]. It visits every plan and expression at most once,
+   * returns the first NULL, and remembers the first mark on the way.
    */
-  private def resolvedNullReference(plan: LogicalPlan, marks: Boolean): Option[Origin] = {
-    plan match {
+  private class ResolvedNullReferenceSearch {
+    var firstMark: Option[Origin] = None
+
+    def inPlan(plan: LogicalPlan): Option[Origin] = plan match {
       case _: View | _: SQLFunctionNode =>
         None
       case _ =>
-        val mark = if (marks) OptionalReferences.resolvedNullReferenceOrigin(plan) else None
-        mark
-          .orElse {
-            plan.expressions.iterator
-              .flatMap(expression => resolvedNullReference(expression, marks))
-              .nextOption()
-          }
-          .orElse {
-            plan.children.iterator
-              .flatMap(child => resolvedNullReference(child, marks))
-              .nextOption()
-          }
+        firstMark = firstMark.orElse(OptionalReferences.resolvedNullReferenceOrigin(plan))
+        plan.expressions.iterator
+          .flatMap(inExpression)
+          .nextOption()
+          .orElse(plan.children.iterator.flatMap(inPlan).nextOption())
     }
-  }
 
-  private def resolvedNullReference(expression: Expression, marks: Boolean): Option[Origin] = {
-    expression match {
-      case _ if !marks && OptionalReferences.isNullReference(expression) =>
+    def inExpression(expression: Expression): Option[Origin] = expression match {
+      case _ if OptionalReferences.isNullReference(expression) =>
         Some(expression.origin)
       case _: SQLScalarFunction =>
         None
       case subquery: SubqueryExpression =>
-        resolvedNullReference(subquery.plan, marks).orElse {
-          subquery.children.iterator
-            .flatMap(child => resolvedNullReference(child, marks))
-            .nextOption()
-        }
+        inPlan(subquery.plan).orElse(subquery.children.iterator.flatMap(inExpression).nextOption())
       case _ =>
-        expression.children.iterator
-          .flatMap(child => resolvedNullReference(child, marks))
-          .nextOption()
+        expression.children.iterator.flatMap(inExpression).nextOption()
     }
   }
 
