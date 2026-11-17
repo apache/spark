@@ -785,7 +785,7 @@ class ExpressionParserSuite extends AnalysisTest {
       exception = parseException("INTERVAL '1 year 2 second'"),
       condition = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
       sqlState = "22006",
-      parameters = Map("input" -> "INTERVAL '1 year 2 second'"),
+      parameters = Map("input" -> "1 year 2 second"),
       context = ExpectedContext(
         fragment = "INTERVAL '1 year 2 second'",
         start = 0,
@@ -1239,7 +1239,7 @@ class ExpressionParserSuite extends AnalysisTest {
             exception = parseException(s"interval $intervalStr"),
             condition = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
             sqlState = "22006",
-            parameters = Map("input" -> "interval 3 monThs 4 dayS 22 sEcond 1 millisecond"),
+            parameters = Map("input" -> "3 monThs 4 dayS 22 sEcond 1 millisecond"),
             context = ExpectedContext(
               fragment = s"interval $intervalStr",
               start = 0,

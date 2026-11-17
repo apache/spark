@@ -1504,6 +1504,18 @@ class DDLParserSuite extends AnalysisTest {
         start = 0,
         stop = 54))
 
+    // NOT NULL not supported in hive style ALTER COLUMN.
+    val sqlNotNull = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT NOT NULL"
+    checkError(
+      exception = parseException(sqlNotNull),
+      condition = "UNSUPPORTED_CHANGE_COLUMN.NOT_NULL",
+      sqlState = "0A000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = sqlNotNull,
+        start = 0,
+        stop = 56))
+
     // ALTER COLUMN for a partition is not supported.
     val sql5 = "ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT"
     checkError(

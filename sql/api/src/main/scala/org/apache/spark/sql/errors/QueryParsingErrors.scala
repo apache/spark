@@ -321,10 +321,12 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def invalidByteLengthLiteralError(bytesStr: String, ctx: SampleByBytesContext): Throwable = {
+  def invalidByteLengthLiteralError(
+      sampleMethod: String,
+      ctx: SampleByBytesContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLESAMPLE_METHOD",
-      messageParameters = Map("sampleMethod" -> bytesStr),
+      messageParameters = Map("sampleMethod" -> sampleMethod),
       ctx)
   }
 
@@ -443,8 +445,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def moreThanOneFromToUnitInIntervalLiteralError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS", ctx)
+  def fromToIntervalWithOtherUnitsError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS", ctx)
   }
 
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
@@ -478,10 +480,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def mixedIntervalUnitsError(literal: String, ctx: ParserRuleContext): Throwable = {
+  def mixedIntervalUnitsError(input: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
-      messageParameters = Map("input" -> literal),
+      messageParameters = Map("input" -> input),
       ctx)
   }
 

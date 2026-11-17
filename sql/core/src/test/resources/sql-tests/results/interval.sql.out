@@ -17,7 +17,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "interval 4 month 2 weeks 3 microseconds"
+    "input" : "4 month 2 weeks 3 microseconds"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -546,7 +546,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "interval '-1 month 1 day -1 second'"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -584,7 +584,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "interval -1 month 1 day -1 second"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -622,7 +622,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "interval '-1 month 1 day -1 second'"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -660,7 +660,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "interval -1 month 1 day -1 second"
+    "input" : "-1 month 1 day -1 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1132,7 +1132,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond"
+    "input" : "1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1178,7 +1178,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
   "sqlState" : "22006",
   "messageParameters" : {
-    "input" : "interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second"
+    "input" : "30 year 25 month -100 day 40 hour 80 minute 299.889987299 second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1625,7 +1625,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1644,7 +1644,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1663,7 +1663,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1682,7 +1682,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1701,7 +1701,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1720,7 +1720,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
@@ -1739,7 +1739,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTIPLE_FROM_TO_INTERVAL_UNITS",
+  "errorClass" : "INVALID_SQL_SYNTAX.FROM_TO_INTERVAL_WITH_OTHER_UNITS",
   "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",

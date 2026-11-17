@@ -5762,7 +5762,7 @@
       },
       "CREATE_TEMP_TABLE_WITHOUT_PROVIDER" : {
         "message" : [
-          "CREATE TEMPORARY TABLE requires a USING clause that specifies the data source."
+          "CREATE TEMPORARY TABLE without a USING clause is not supported. Use CREATE TEMPORARY VIEW ... USING ... instead."
         ]
       },
       "CREATE_TEMP_VIEW_WITH_IF_NOT_EXISTS" : {
@@ -5798,6 +5798,11 @@
       "EMPTY_TABLESAMPLE" : {
         "message" : [
           "TABLESAMPLE requires a sampling method, for example TABLESAMPLE (10 PERCENT)."
+        ]
+      },
+      "FROM_TO_INTERVAL_WITH_OTHER_UNITS" : {
+        "message" : [
+          "A from-to unit range, such as '1-2' YEAR TO MONTH, must be the only unit specification in an interval literal. Write the interval either as one from-to unit range or in multi-unit syntax, for example INTERVAL 1 YEAR 2 MONTHS."
         ]
       },
       "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
@@ -5848,11 +5853,6 @@
       "LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC" : {
         "message" : [
           "LATERAL can only be used with subquery and table-valued functions."
-        ]
-      },
-      "MULTIPLE_FROM_TO_INTERVAL_UNITS" : {
-        "message" : [
-          "An interval literal can contain only one from-to unit range, such as YEAR TO MONTH."
         ]
       },
       "MULTI_PART_NAME" : {

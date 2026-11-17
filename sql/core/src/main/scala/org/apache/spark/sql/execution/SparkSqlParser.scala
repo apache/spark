@@ -1294,7 +1294,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
-      // TODO: what does this message mean?
       throw QueryParsingErrors.useDefinedRecordReaderOrWriterClassesError(ctx)
     }
 

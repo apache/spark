@@ -2875,7 +2875,7 @@ class AstBuilder extends DataTypeAstBuilder
         if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError("BYTES", ctx)
         } else {
-          throw QueryParsingErrors.invalidByteLengthLiteralError(bytesStr, ctx)
+          throw QueryParsingErrors.invalidByteLengthLiteralError(source(ctx.bytes), ctx)
         }
 
       case ctx: SampleByBucketContext if ctx.ON() != null =>
@@ -4960,7 +4960,7 @@ class AstBuilder extends DataTypeAstBuilder
             .split("\\s")
             .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
             .filter(s => s != "interval" && s.matches("[a-z]+"))
-          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq)
+          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq, value)
         } else {
           Literal(interval, CalendarIntervalType)
         }
@@ -5267,11 +5267,13 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Construct an [[Literal]] from [[CalendarInterval]] and
    * units represented as a [[Seq]] of [[String]].
+   * `intervalString` is the interval text without the INTERVAL keyword, used in errors.
    */
   private def constructMultiUnitsIntervalLiteral(
       ctx: ParserRuleContext,
       calendarInterval: CalendarInterval,
-      units: Seq[String]): Literal = {
+      units: Seq[String],
+      intervalString: => String): Literal = {
     val yearMonthFields = mutable.Set.empty[Byte]
     val dayTimeFields = mutable.Set.empty[Byte]
     for (unit <- units) {
@@ -5288,8 +5290,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
     if (yearMonthFields.nonEmpty) {
       if (dayTimeFields.nonEmpty) {
-        val literalStr = source(ctx)
-        throw QueryParsingErrors.mixedIntervalUnitsError(literalStr, ctx)
+        throw QueryParsingErrors.mixedIntervalUnitsError(intervalString, ctx)
       }
       Literal(
         calendarInterval.months,
@@ -5330,10 +5331,10 @@ class AstBuilder extends DataTypeAstBuilder
         Literal(micros, DayTimeIntervalType(start, end))
       }
     } else if (ctx.errorCapturingMultiUnitsInterval != null && !conf.legacyIntervalEnabled) {
-      val units =
-        ctx.errorCapturingMultiUnitsInterval.body.unit.asScala.map(
-          _.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
-      constructMultiUnitsIntervalLiteral(ctx, calendarInterval, units)
+      val body = ctx.errorCapturingMultiUnitsInterval.body
+      val units = body.unit.asScala.map(_.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
+      constructMultiUnitsIntervalLiteral(
+        ctx, calendarInterval, units, multiUnitsIntervalString(body).trim)
     } else {
       Literal(calendarInterval, CalendarIntervalType)
     }
@@ -5346,8 +5347,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (ctx.errorCapturingMultiUnitsInterval != null) {
       val innerCtx = ctx.errorCapturingMultiUnitsInterval
       if (innerCtx.unitToUnitInterval != null) {
-        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(
-          innerCtx.unitToUnitInterval)
+        throw QueryParsingErrors.fromToIntervalWithOtherUnitsError(innerCtx.unitToUnitInterval)
       }
       visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
     } else {
@@ -5355,10 +5355,43 @@ class AstBuilder extends DataTypeAstBuilder
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
         val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
-        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(errorCtx)
+        throw QueryParsingErrors.fromToIntervalWithOtherUnitsError(errorCtx)
       }
       visitUnitToUnitInterval(innerCtx.body)
     }
+  }
+
+  /**
+   * Returns the interval string of multiple unit value pairs, e.g. " 1 YEAR -2 DAYS" for
+   * INTERVAL 1 YEAR '-2' DAYS.
+   */
+  private def multiUnitsIntervalString(ctx: MultiUnitsIntervalContext): String = {
+    val units = ctx.unit.asScala
+    val values = ctx.intervalValue().asScala
+    assert(units.length == values.length)
+    units.indices.map { i =>
+      val u = units(i).getText
+      val v = if (values(i).stringLit() != null) {
+        val value = string(visitStringLit(values(i).stringLit()))
+        // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
+        // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
+        // units and become valid ones, e.g. '1 day 2 hour'.
+        // Ideally, we only ensure the value parts don't contain any units here.
+        if (value.exists(Character.isLetter)) {
+          throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
+        }
+        if (values(i).MINUS() == null) {
+          value
+        } else if (value.startsWith("-")) {
+          value.replaceFirst("-", "")
+        } else {
+          s"-$value"
+        }
+      } else {
+        values(i).getText
+      }
+      " " + v + " " + u
+    }.mkString
   }
 
   /**
@@ -5366,34 +5399,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.unit.asScala
-      val values = ctx.intervalValue().asScala
       try {
-        assert(units.length == values.length)
-        val kvs = units.indices.map { i =>
-          val u = units(i).getText
-          val v = if (values(i).stringLit() != null) {
-            val value = string(visitStringLit(values(i).stringLit()))
-            // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
-            // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
-            // units and become valid ones, e.g. '1 day 2 hour'.
-            // Ideally, we only ensure the value parts don't contain any units here.
-            if (value.exists(Character.isLetter)) {
-              throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
-            }
-            if (values(i).MINUS() == null) {
-              value
-            } else if (value.startsWith("-")) {
-              value.replaceFirst("-", "")
-            } else {
-              s"-$value"
-            }
-          } else {
-            values(i).getText
-          }
-          UTF8String.fromString(" " + v + " " + u)
-        }
-        IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
+        IntervalUtils.stringToInterval(UTF8String.fromString(multiUnitsIntervalString(ctx)))
       } catch {
         case st: SparkThrowable => throw st
         case i: IllegalArgumentException =>

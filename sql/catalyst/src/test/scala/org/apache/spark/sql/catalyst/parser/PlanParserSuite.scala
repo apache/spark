@@ -1520,6 +1520,17 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment4,
         start = 25,
         stop = 65))
+
+    val sql5 = "SELECT * FROM t TABLESAMPLE(CAST(1 AS INT))"
+    checkError(
+      exception = parseException(sql5),
+      condition = "INVALID_SQL_SYNTAX.INVALID_TABLESAMPLE_METHOD",
+      sqlState = "42000",
+      parameters = Map("sampleMethod" -> "CAST(1 AS INT)"),
+      context = ExpectedContext(
+        fragment = "TABLESAMPLE(CAST(1 AS INT))",
+        start = 16,
+        stop = 42))
   }
 
   test("SPARK-55978: TABLESAMPLE SYSTEM and BERNOULLI - basic parsing") {
