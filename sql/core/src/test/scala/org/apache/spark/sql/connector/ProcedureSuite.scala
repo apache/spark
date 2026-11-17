@@ -494,6 +494,17 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     assert(explain.contains("Call cat.ns.sum(5, 5)"), explain)
   }
 
+  test("SPARK-61889: CALL with an aggregate or window function in an argument") {
+    // The optimizer folds these arguments away, so the procedure must not be invoked.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    val call = "CALL cat.ns.sum(IF(true OR max(1) > 0, 1, 2), 2)"
+    checkError(
+      exception = intercept[AnalysisException](sql(call)),
+      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      parameters = Map("operator" -> "Call", "invalidExprSqls" -> "\"max(1)\""),
+      context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+  }
+
   test("void procedure") {
     catalog.createProcedure(Identifier.of(Array("ns"), "proc"), UnboundVoidProcedure)
     checkAnswer(sql("CALL cat.ns.proc('A', 'B')"), Nil)
