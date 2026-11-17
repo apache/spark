@@ -3239,11 +3239,11 @@ class DataFrameSuite extends SharedSparkSession
         checkAnswer(df, expected)
       }
       // `d = 0.0` passes a row where `d` is -0.0, on which the sign of the zero can matter.
-      val doubles = Seq(("-0.0", 1.0), ("-0.0", -1.0)).toDF("s", "y")
+      val doubles = Seq(("-0.0", 1.0), ("-0.00", -1.0)).toDF("s", "y")
       val d = Seq($"s", $"y", $"s".cast("double").as("d"))
       check(doubles, d, $"d" === 0.0 && ($"d" * $"y").cast("string") === "-0.0",
         Seq(Row("-0.0", true)))
-      check(doubles, d, $"d" === 0.0 && pow($"d", $"y") < 0, Seq(Row("-0.0", true)))
+      check(doubles, d, $"d" === 0.0 && pow($"d", $"y") < 0, Seq(Row("-0.00", true)))
       // But not where the comparison is the same with either zero, which the constant then
       // folds, so that `d` is not computed on the row ("x", 1.0).
       check(Seq(("0.0", 1.0), ("x", 1.0)).toDF("s", "y"), d,
