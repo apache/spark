@@ -212,7 +212,7 @@ class GroupedLimitIterator(
   // both branches group them the same way WindowExec does. The bytes are checked first,
   // so a key spelled like its group's first row costs one byte comparison and only keys
   // whose bytes differ pay the ordering comparison.
-  private val groupEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
+  private val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
     UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType), checkBytesFirst = true)
 
   // Manage the stream and the grouping.
@@ -228,12 +228,12 @@ class GroupedLimitIterator(
   // flag rather than row identity, because the input iterator and the grouping projection
   // reuse their row objects. It is cleared whenever the input advances or the current
   // group changes; an answer that outlives either would merge two groups and drop rows.
-  private var groupEqualityKnown = false
-  private var groupEqualityResult = false
+  private var groupKeyEqualityKnown = false
+  private var groupKeyEqualityResult = false
 
   protected[this] def fetchNextRow(): Unit = {
     nextRowAvailable = input.hasNext
-    groupEqualityKnown = false
+    groupKeyEqualityKnown = false
     if (nextRowAvailable) {
       nextRow = input.next().asInstanceOf[UnsafeRow]
       nextGroup = grouping(nextRow)
@@ -267,11 +267,11 @@ class GroupedLimitIterator(
     var currentGroup = nextGroup.copy()
 
     def hasNext: Boolean = nextRowAvailable && {
-      if (!groupEqualityKnown) {
-        groupEqualityKnown = true
-        groupEqualityResult = groupEqualityCheck(nextGroup, currentGroup)
+      if (!groupKeyEqualityKnown) {
+        groupKeyEqualityKnown = true
+        groupKeyEqualityResult = groupKeyEqualityCheck(nextGroup, currentGroup)
       }
-      groupEqualityResult
+      groupKeyEqualityResult
     }
 
     def next(): InternalRow = {
@@ -291,7 +291,7 @@ class GroupedLimitIterator(
       if (nextRowAvailable) {
         currentGroup = nextGroup.copy()
         // The remembered answer was computed against the previous group.
-        groupEqualityKnown = false
+        groupKeyEqualityKnown = false
       }
     }
   }

@@ -261,7 +261,7 @@ class ArrowWindowPythonEvaluatorFactory(
       // The bytes are checked first, so a key spelled like its group's first row costs
       // one byte comparison and only keys whose bytes differ pay the ordering comparison;
       // most checks here compare a row against the first row of the group it belongs to.
-      val groupEqualityCheck = UnsafeRowUtils.rowEqualityChecker(
+      val groupKeyEqualityCheck = UnsafeRowUtils.rowEqualityChecker(
         partitionSpec.map(_.dataType), checkBytesFirst = true)
 
       // The queue used to buffer input rows so we can drain it to
@@ -324,7 +324,7 @@ class ArrowWindowPythonEvaluatorFactory(
           // clear last partition
           buffer.clear()
 
-          while (nextRowAvailable && groupEqualityCheck(nextGroup, currentGroup)) {
+          while (nextRowAvailable && groupKeyEqualityCheck(nextGroup, currentGroup)) {
             buffer.add(nextRow)
             fetchNextRow()
           }

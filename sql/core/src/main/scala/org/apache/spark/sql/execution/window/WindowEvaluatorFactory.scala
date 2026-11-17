@@ -68,7 +68,7 @@ class WindowEvaluatorFactory(
         // measured: it would answer each check of a key spelled like the partition's
         // first row with one byte comparison, but add a failed byte comparison to every
         // check whose bytes differ, including the check that ends each partition.
-        val groupEqualityCheck =
+        val groupKeyEqualityCheck =
           UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType), checkBytesFirst = false)
 
         // Manage the stream and the grouping.
@@ -110,7 +110,7 @@ class WindowEvaluatorFactory(
           // clear last partition
           buffer.clear()
 
-          while (nextRowAvailable && groupEqualityCheck(nextGroup, currentGroup)) {
+          while (nextRowAvailable && groupKeyEqualityCheck(nextGroup, currentGroup)) {
             buffer.add(nextRow)
             fetchNextRow()
           }
