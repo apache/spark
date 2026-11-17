@@ -160,6 +160,23 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  for (wrapped <- Seq(false, true); mode <- Seq(true, false)) {
+    test(s"to_json rejects malformed explicit options: wrapped=$wrapped, capture=$mode") {
+      val entries = Map("IgNoReNuLlFiElDs" -> "invalid")
+      val options = if (wrapped) CaseInsensitiveMap(entries) else entries
+      for (ignoreNulls <- Seq(true, false)) {
+        val expression = StructsToJson(options, struct, Some("UTC"),
+          ignoreNullFields = ignoreNulls, useCapturedOptionDefaults = mode)
+        withSQLConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> (!ignoreNulls).toString) {
+          val error = intercept[IllegalArgumentException] {
+            expression.replacement.eval(create_row(1L))
+          }
+          assert(error.getMessage.contains("invalid"))
+        }
+      }
+    }
+  }
+
   test("ineffective from_json defaults preserve conversion sharing") {
     val input = BoundReference(0, StringType, nullable = false)
     val schema = new StructType().add("ts", TimestampType)
