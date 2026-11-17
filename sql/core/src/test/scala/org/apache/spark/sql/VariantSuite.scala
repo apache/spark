@@ -1777,6 +1777,9 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         if (condition.endsWith("CAST_VARIANT_TO_NON_NULLABLE_TARGET")) {
           assert(e.getMessageParameters.get("config") ==
             s"\"${SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET.key}\"")
+        } else {
+          assert(!e.getMessage.contains(SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET.key),
+            e.getMessage)
         }
       }
       Seq("true", "false").foreach { ansi =>
@@ -1797,6 +1800,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
             // reasons as well, so it reports the generic error.
             assertRejected(sql(s"SELECT $castFn(named_struct('v', payload) AS " +
               "STRUCT<v: STRUCT<user_id: BIGINT NOT NULL>>) FROM events"),
+              "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+            // VARIANT cannot be cast to a map with an INT key at all, so a non-nullable slot does
+            // not select the dedicated error and the legacy conf is not named.
+            assertRejected(sql(s"SELECT $castFn(payload AS STRUCT<m: MAP<INT, BIGINT> NOT NULL>) " +
+              "FROM events"), "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+          }
+          val intKeyMap = MapType(IntegerType, LongType, valueContainsNull = false)
+          Seq(intKeyMap, StructType(Seq(StructField("m", intKeyMap)))).foreach { t =>
+            assertRejected(sql("SELECT payload FROM events").select(col("payload").cast(t)),
               "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
           }
           // Non-nullable array elements and map values: [1, null] and {"a": null}.
