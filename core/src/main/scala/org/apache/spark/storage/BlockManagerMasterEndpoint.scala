@@ -166,8 +166,6 @@ class BlockManagerMasterEndpoint(
 
   logInfo("BlockManagerMasterEndpoint up")
 
-  private val externalShuffleServiceRemoveShuffleEnabled: Boolean =
-    externalBlockStoreClient.isDefined && conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED)
   private val externalShuffleServiceRddFetchEnabled: Boolean =
     externalBlockStoreClient.isDefined && conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
@@ -495,10 +493,10 @@ class BlockManagerMasterEndpoint(
       shuffleId: Int,
       mapOutputLocations: Seq[(BlockManagerId, Long)],
       shuffleMergerLocations: Seq[BlockManagerId]): Future[Seq[Boolean]] = {
-    // Find all shuffle blocks on executors that are no longer running. No gate on
-    // externalShuffleServiceRemoveShuffleEnabled here: the caller applies that gate when deciding
-    // whether to gather the snapshot, so re-deriving it would just be a second copy of the
-    // condition that could disagree with the first and silently skip the removal.
+    // Find all shuffle blocks on executors that are no longer running. Not gated on
+    // spark.shuffle.service.removeShuffle here: BlockManagerMaster.removeShuffle applies that gate
+    // when deciding whether to gather the snapshot, and a second copy of the condition here could
+    // disagree with the first and silently skip the removal.
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
     mapOutputLocations.foreach { case (location, mapId) =>

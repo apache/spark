@@ -44,12 +44,15 @@ class BlockManagerMaster(
   private val waitBlockRemovalTimeout =
     RpcTimeout(conf, CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key, "120s")
 
-  // Mirrors BlockManagerMasterEndpoint.externalShuffleServiceRemoveShuffleEnabled: the endpoint
-  // gates on its external block store client being defined, which is exactly when the shuffle
-  // service is enabled.
+  // removeShuffle only needs a shuffle's output locations when there is an external shuffle
+  // service to send them to: the endpoint has no client to ask otherwise.
+  private val shuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
+
+  // Whether removeShuffle also asks the external shuffle service to delete the blocks it still
+  // serves for executors that have gone away. The endpoint needs no gate of its own: with this off
+  // it is handed no map output locations.
   private val removeShuffleFromExternalServiceEnabled =
-    conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
-      conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED)
+    shuffleServiceEnabled && conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String): Unit = {
@@ -269,8 +272,8 @@ class BlockManagerMaster(
    * `updateMapOutput`. Snapshotting before the RPC also means the caller is free to unregister the
    * shuffle as soon as `removeShuffle` returns.
    *
-   * Both gates mirror the endpoint's own, so nothing is gathered that it would not use, and both
-   * are empty off the driver or before the `SparkEnv` exists.
+   * Each is gathered only when the endpoint can act on it, so nothing is read that it would not
+   * use, and both are empty off the driver or before the `SparkEnv` exists.
    */
   private def shuffleOutputLocations(
       shuffleId: Int): (Seq[(BlockManagerId, Long)], Seq[BlockManagerId]) = {
@@ -283,11 +286,12 @@ class BlockManagerMaster(
       } else {
         Seq.empty
       }
-      val shuffleMergerLocations = if (Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
-        mapOutputTracker.getShufflePushMergerLocations(shuffleId)
-      } else {
-        Seq.empty
-      }
+      val shuffleMergerLocations =
+        if (shuffleServiceEnabled && Utils.isPushBasedShuffleEnabled(conf, isDriver)) {
+          mapOutputTracker.getShufflePushMergerLocations(shuffleId)
+        } else {
+          Seq.empty
+        }
       (mapOutputLocations, shuffleMergerLocations)
     }.getOrElse((Seq.empty, Seq.empty))
   }
