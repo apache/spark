@@ -28,6 +28,7 @@ import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinitio
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
+import org.apache.logging.log4j.Level
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{doAnswer, never, verify, when}
 import org.mockito.invocation.InvocationOnMock
@@ -423,6 +424,30 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(events.last === "remove gate")
   }
 
+  test("SPARK-38079: a Spark gate on the template is dropped when the gate is off") {
+    kconf = driverConf(gate = false)
+    useSpec(specWithPod(
+      withGates(BUILT_DRIVER_POD, TEMPLATE_GATE, DRIVER_RESOURCES_SCHEDULING_GATE)))
+
+    newClient().run()
+
+    assert(gateNames(createdPodArgumentCaptor.getValue) === Seq(TEMPLATE_GATE))
+    assert(events.toSeq === submissionEvents(gateRemoved = false))
+  }
+
+  test("SPARK-38079: a Spark gate on a template that sets nodeName is dropped") {
+    val pinnedPod = withGates(new PodBuilder(BUILT_DRIVER_POD)
+      .editSpec().withNodeName("some-node").endSpec().build(), DRIVER_RESOURCES_SCHEDULING_GATE)
+    useSpec(specWithPod(pinnedPod))
+
+    newClient().run()
+
+    val created = createdPodArgumentCaptor.getValue
+    assert(gateNames(created) === Nil)
+    assert(created.getSpec.getNodeName === "some-node")
+    assert(events.toSeq === submissionEvents(gateRemoved = false))
+  }
+
   test("SPARK-38079: the gate is off by default, so the previous flow needs no patch") {
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
@@ -550,6 +575,29 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podTargets.map(_._1).toSeq === Seq("remove gate", "delete pod"))
     assert(podTargets.map(_._2.getMetadata.getUid).toSet === Set(DRIVER_POD_UID))
     verify(namedPods, never()).watch(loggingPodStatusWatcher)
+  }
+
+  // The hint names the verb the account lacks, so it must appear for a 403 and for nothing else.
+  private def gatePatchHint(failure: Throwable): Seq[String] = {
+    failGatePatch(failure)
+    val logAppender = new LogAppender("the hint for a rejected gate patch")
+    withLogAppender(logAppender, level = Some(Level.ERROR)) {
+      intercept[Throwable](newClient().run())
+    }
+    logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("can-i patch pod")).toSeq
+  }
+
+  test("SPARK-38079: a forbidden gate patch logs the hint that names the config") {
+    val hints = gatePatchHint(new KubernetesClientException("forbidden", 403, null))
+
+    assert(hints.size === 1)
+    assert(hints.head.contains(USE_DRIVER_SCHEDULING_GATE.key))
+  }
+
+  test("SPARK-38079: a gate patch that fails for another reason does not log the hint") {
+    assert(gatePatchHint(new RuntimeException("patch failed")).isEmpty)
+    assert(gatePatchHint(new KubernetesClientException("conflict", 409, null)).isEmpty)
   }
 
   test("SPARK-38079: a failure removing the gate is not hidden by a failure deleting the pod") {

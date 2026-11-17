@@ -2323,8 +2323,10 @@ See the below table for the full list of pod specifications that will be overwri
     <code>nodeName</code> or <code>spark.kubernetes.submission.useDriverSchedulingGate</code> is
     <code>false</code></td>
   <td>
-    Gates the template names are kept. Spark removes only its own gate, once the resources
-    <code>spark-submit</code> creates for the driver exist.
+    Gates the template names are kept. A gate named <code>spark.apache.org/driver-resources</code>
+    in the template is always dropped, whether or not Spark gates the pod. When Spark gates the
+    pod, it removes that gate once the resources <code>spark-submit</code> creates for the driver
+    exist.
   </td>
 </tr>
 <tr>

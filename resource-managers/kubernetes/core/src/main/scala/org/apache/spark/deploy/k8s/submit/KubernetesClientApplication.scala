@@ -33,7 +33,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, SUBMISSION_ID}
+import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, CONFIG, SUBMISSION_ID}
 import org.apache.spark.util.Utils
 
 /**
@@ -141,17 +141,23 @@ private[spark] class Client(
     // The check cannot see a nodeName that an admission webhook sets after this point.
     val gateDriverPod = conf.get(USE_DRIVER_SCHEDULING_GATE) &&
       Option(resolvedDriverPod.getSpec.getNodeName).forall(_.isEmpty)
+    // A gate of Spark's name that the pod already carries, for example from a template copied
+    // from a gated driver pod, is never left on it. Nothing would remove it if the pod is not
+    // gated, and it would be rejected as a duplicate if the pod is.
+    val ungatedDriverPod = new PodBuilder(resolvedDriverPod)
+      .editSpec()
+        .removeMatchingFromSchedulingGates(_.getName == DRIVER_RESOURCES_SCHEDULING_GATE)
+        .endSpec()
+      .build()
     val podToCreate =
       if (gateDriverPod) {
-        // A gate of the same name would be rejected as a duplicate, and the patch clears it.
-        new PodBuilder(resolvedDriverPod)
+        new PodBuilder(ungatedDriverPod)
           .editSpec()
-            .removeMatchingFromSchedulingGates(_.getName == DRIVER_RESOURCES_SCHEDULING_GATE)
             .addNewSchedulingGate(DRIVER_RESOURCES_SCHEDULING_GATE)
             .endSpec()
           .build()
       } else {
-        resolvedDriverPod
+        ungatedDriverPod
       }
 
     // setup resources before pod creation
@@ -215,8 +221,9 @@ private[spark] class Client(
         case NonFatal(e) =>
           e match {
             case ke: KubernetesClientException if ke.getCode == 403 =>
-              logError("Please check \"kubectl auth can-i patch pod\" first. It should be yes." +
-                s" Or set ${USE_DRIVER_SCHEDULING_GATE.key} to false.")
+              logError(
+                log"""Please check "kubectl auth can-i patch pod" first. It should be yes.""" +
+                log" Or set ${MDC(CONFIG, USE_DRIVER_SCHEDULING_GATE.key)} to false.")
             case _ =>
           }
           Utils.tryLogNonFatalError {
