@@ -201,7 +201,8 @@ object UnsupportedOperationChecker extends Logging {
       if (SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
         EventTimeLags.none
       } else {
-        StreamingJoinHelper.findEventTimeLags(plan, planned = false)
+        StreamingJoinHelper.findEventTimeLags(plan, planned = false,
+          StreamingJoinHelper.findUnwatermarkedUnionColumns(plan))
       }
 
     /** Collect all the streaming aggregates in a sub plan */
