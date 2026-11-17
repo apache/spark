@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.LinkedHashMap
+import java.util.{IdentityHashMap, LinkedHashMap}
+
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 
@@ -27,19 +31,45 @@ object NondeterministicExpressionCollection {
   private[sql] val EXTRACTED_SUBQUERY = TreeNodeTag[Unit]("extracted-nondeterministic-subquery")
 
   private[analysis] def getExpressionKey(expression: Expression): (Expression, Seq[ExprId]) = {
-    // Canonicalization removes subquery IDs, but separate nondeterministic subqueries must
-    // retain independent evaluations, including when they are children of a collected UDF.
-    val subqueryIds = if (expression.containsAnyPattern(
-        SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
-      expression.collect { case subquery: SubqueryExpression if !subquery.deterministic =>
-        subquery.exprId
-      }
-    } else Seq.empty
-    (expression.canonicalized, subqueryIds)
+    new ExpressionKeys().apply(expression)
   }
 
-  def getNondeterministicToAttributes(
-      expressions: Seq[Expression]): LinkedHashMap[(Expression, Seq[ExprId]), NamedExpression] = {
+  private[analysis] class ExpressionKeys {
+    private val summaries = new IdentityHashMap[Expression, List[ExprId]]
+
+    private def subqueryIds(expression: Expression): List[ExprId] = {
+      val cached = summaries.get(expression)
+      if (cached != null) return cached
+      val children = expression.children.foldRight(List.empty[ExprId]) { (child, ids) =>
+        subqueryIds(child) ::: ids
+      }
+      val ids = expression match {
+        case subquery: SubqueryExpression if !subquery.deterministic =>
+          subquery.exprId :: children
+        case _ => children
+      }
+      summaries.put(expression, ids)
+      ids
+    }
+
+    def apply(expression: Expression): (Expression, Seq[ExprId]) = {
+      // Preserve analyzer bindings, including subqueries inside a collected UDF. This does not
+      // define physical reuse equivalence: physical subquery/exchange canonicalization can still
+      // merge independent KLL evaluations, as it did before the aggregate metadata correction.
+      // TODO: Carry evaluation domains through ordinary and adaptive physical reuse separately,
+      // preserving the opposite requirement that references to one retained CTE remain shared.
+      val ids = if (expression.containsAnyPattern(
+        SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+        subqueryIds(expression)
+      } else Seq.empty
+      (expression.canonicalized, ids)
+    }
+  }
+
+  private[analysis] def getNondeterministicToAttributes(
+      expressions: Seq[Expression],
+      keys: ExpressionKeys = new ExpressionKeys)
+    : LinkedHashMap[(Expression, Seq[ExprId]), NamedExpression] = {
     val nonDeterministicToAttributes =
       new LinkedHashMap[(Expression, Seq[ExprId]), NamedExpression]
 
@@ -64,11 +94,56 @@ object NondeterministicExpressionCollection {
               SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
             namedExpression.setTagValue(EXTRACTED_SUBQUERY, ())
           }
-          nonDeterministicToAttributes.put(getExpressionKey(nondeterministicExpr), namedExpression)
+          val key = keys(nondeterministicExpr)
+          if (!nonDeterministicToAttributes.containsKey(key)) {
+            nonDeterministicToAttributes.put(key, namedExpression)
+          }
         }
       }
     }
 
     nonDeterministicToAttributes
+  }
+
+  private[analysis] def project(
+      child: LogicalPlan,
+      bindings: LinkedHashMap[(Expression, Seq[ExprId]), NamedExpression],
+      keys: ExpressionKeys): LogicalPlan = {
+    val levels = mutable.HashMap.empty[ExprId, Int]
+    val rewritten = mutable.HashMap.empty[ExprId, NamedExpression]
+
+    def stage(binding: NamedExpression): Int = levels.getOrElseUpdate(binding.exprId, {
+      var level = 0
+      def replace(expression: Expression): Expression = expression.transformDown {
+        case e if bindings.containsKey(keys(e)) =>
+          val dependency = bindings.get(keys(e))
+          level = math.max(level, stage(dependency) + 1)
+          dependency.toAttribute
+      }
+      // Replacing only the children of the bound root keeps its own evaluation. Its
+      // dependencies must be computed on the original input rows in a lower Project.
+      val replacement = binding match {
+        case alias: Alias =>
+          val child = alias.child match {
+            // NOT IN must reach predicate-subquery rewriting as a whole so that NULLs on
+            // either side retain their three-valued semantics. Only stage its operands.
+            case not @ Not(in: InSubquery) => not.copy(child = in.mapChildren(replace))
+            case other => other.mapChildren(replace)
+          }
+          alias.copy(child = child)(alias.exprId, alias.qualifier, alias.explicitMetadata,
+            alias.nonInheritableMetadataKeys)
+        case other => other.mapChildren(replace).asInstanceOf[NamedExpression]
+      }
+      replacement.copyTagsFrom(binding)
+      rewritten(binding.exprId) = replacement
+      level
+    })
+
+    val ordered = bindings.values.asScala.toSeq
+    ordered.foreach(stage)
+    ordered.groupBy(binding => levels(binding.exprId)).toSeq.sortBy(_._1).foldLeft(child) {
+      case (input, (_, expressions)) =>
+        Project(input.output ++ expressions.map(e => rewritten(e.exprId)), input)
+    }
   }
 }

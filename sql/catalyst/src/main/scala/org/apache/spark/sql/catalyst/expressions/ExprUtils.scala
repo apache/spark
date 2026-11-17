@@ -195,15 +195,23 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   private[sql] def isDeterministicAfterSubqueryExtraction(
       expression: Expression): Boolean = {
     // Function resolution and the single-pass analyzer validate before the post hoc extraction.
-    // Use placeholders only to check what remains; the original expression is retained.
-    expression.deterministic || expression.transformDown {
-      case scalar: ScalarSubquery if !scalar.deterministic =>
-        Literal.create(null, scalar.dataType)
-      case exists: Exists if !exists.deterministic => Literal.TrueLiteral
-      case in: InSubquery if !in.query.deterministic &&
-          in.values.forall(isDeterministicAfterSubqueryExtraction) =>
-        Literal.TrueLiteral
-    }.deterministic
+    // Cache completed checks by object identity within this validation, including rejected IN
+    // operands that the unchanged transform subsequently visits again.
+    val checked = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
+    def deterministic(expr: Expression): Boolean = {
+      val cached = checked.get(expr)
+      if (cached != null) return cached.booleanValue()
+      val result = expr.deterministic || expr.transformDown {
+        case scalar: ScalarSubquery if !scalar.deterministic =>
+          Literal.create(null, scalar.dataType)
+        case exists: Exists if !exists.deterministic => Literal.TrueLiteral
+        case in: InSubquery if !in.query.deterministic && in.values.forall(deterministic) =>
+          Literal.TrueLiteral
+      }.deterministic
+      checked.put(expr, result)
+      result
+    }
+    deterministic(expression)
   }
 
   private[sql] def isDeterministicAfterPredicateSubqueryRewrite(expression: Expression): Boolean = {

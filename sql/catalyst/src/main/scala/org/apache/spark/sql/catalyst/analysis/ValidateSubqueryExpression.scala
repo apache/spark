@@ -246,6 +246,10 @@ object ValidateSubqueryExpression
 
   // An independent KLL relation was accepted before its implicit randomness was exposed.
   // Inspect copies only; direct row randomness and crossing lateral references retain the guard.
+  private[sql] def isIndependentKllScalar(scalar: ScalarSubquery): Boolean = {
+    !scalar.deterministic && !scalar.isCorrelated && deterministicWithoutKllRandomness(scalar.plan)
+  }
+
   private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
       plan.transformAllExpressionsWithSubqueries {

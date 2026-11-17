@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, LocalRelation}
-import org.apache.spark.sql.types.{DataType, LongType}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, LocalRelation, OneRowRelation}
+import org.apache.spark.sql.types.DataType
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
   private case class Counted(child: Expression, visits: AtomicInteger)
@@ -32,7 +33,7 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       visits.incrementAndGet()
       Seq(child)
     }
-    override def dataType: DataType = LongType
+    override def dataType: DataType = child.dataType
     override def nullable: Boolean = false
     override lazy val deterministic: Boolean = child.deterministic
     override lazy val canonicalized: Expression = this
@@ -66,6 +67,38 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       visits.set(0)
       getAnalyzer.checkAnalysis(plan)
       assert(visits.get <= depth * 20, s"depth=$depth visits=${visits.get}")
+    }
+  }
+
+  test("subquery-containing extraction keys do not rescan every wrapper suffix") {
+    Seq(64, 128).foreach { depth =>
+      val visits = new AtomicInteger
+      val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("value")))
+      val expression = (1 to depth).foldLeft[Expression](scalar) { (child, _) =>
+        Counted(child, visits)
+      }
+      val value = $"value".long
+      val plan = LocalRelation(value).groupBy(expression)(count(Literal(1)).as("n"))
+      plan.treePatternBits
+      visits.set(0)
+      PullOutNondeterministic(plan)
+      assert(visits.get <= depth * 30, s"depth=$depth visits=${visits.get}")
+    }
+  }
+
+  test("nested IN operand validation does not repeat completed checks exponentially") {
+    Seq(8, 12).foreach { depth =>
+      val visits = new AtomicInteger
+      val query = ListQuery(OneRowRelation().select((Rand(0) > Literal(0.5)).as("b")),
+        numCols = 1)
+      val expression = (1 to depth).foldLeft[Expression](Rand(0) > Literal(0.5)) {
+        (child, _) => Counted(InSubquery(Seq(child), query), visits)
+      }
+      expression.deterministic
+      expression.treePatternBits
+      visits.set(0)
+      assert(!ExprUtils.isDeterministicAfterSubqueryExtraction(expression))
+      assert(visits.get <= depth * 100, s"depth=$depth visits=${visits.get}")
     }
   }
 }

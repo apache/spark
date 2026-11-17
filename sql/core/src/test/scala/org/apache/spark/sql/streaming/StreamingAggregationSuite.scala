@@ -207,40 +207,64 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("KLL checkpoint layouts override batch rollback") {
     val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
     val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
-    for (legacy <- Seq(false, true)) {
+    for (legacy <- Seq(false, true); dataType <- Seq("bigint", "float", "double");
+        merge <- Seq(false, true)) {
       withTempDir { checkpoint =>
-        val input = MemoryStream[Int]
-        val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
-            |FROM VALUES (0), (1), (2) AS i(id))""".stripMargin
+        val input = MemoryStream[(Long, Array[Byte])]
+        def record(value: Long): (Long, Array[Byte]) = {
+          val bytes = dataType match {
+            case "bigint" =>
+              val sketch = KllLongsSketch.newHeapInstance(8)
+              sketch.update(value)
+              sketch.toByteArray
+            case "float" =>
+              val sketch = KllFloatsSketch.newHeapInstance(8)
+              sketch.update(value.toFloat)
+              sketch.toByteArray
+            case "double" =>
+              val sketch = KllDoublesSketch.newHeapInstance(8)
+              sketch.update(value.toDouble)
+              sketch.toByteArray
+          }
+          (value, bytes)
+        }
+        val function = if (merge) s"kll_merge_agg_$dataType" else s"kll_sketch_agg_$dataType"
+        val argument = if (merge) "_2" else s"CAST(_1 AS $dataType)"
+        val values = "VALUES (0), (1), (2) AS i(id)"
+        val sketch = s"kll_sketch_agg_$dataType(CAST(id AS $dataType), 8)"
+        val source = if (merge) s"(SELECT $sketch AS s FROM $values GROUP BY id)" else values
+        val scalarArgument = if (merge) "s" else s"CAST(id AS $dataType)"
+        val scalar = s"(SELECT kll_sketch_get_n_$dataType($function($scalarArgument)) " +
+          s"FROM $source)"
         val result = withSQLConf(rollback -> "true") {
           input.toDF().agg(
-            expr("kll_sketch_agg_bigint(value, 8)").as("a"),
-            expr("kll_sketch_agg_bigint(value, 8)").as("b"),
+            expr(s"$function($argument, 8)").as("a"),
+            expr(s"$function($argument, 8)").as("b"),
             sum(expr(scalar)).as("x"), sum(expr(scalar)).as("y"), count("*").as("n"))
-            .selectExpr("kll_sketch_get_n_bigint(a)", "kll_sketch_get_n_bigint(b)",
+            .selectExpr(s"kll_sketch_get_n_$dataType(a)", s"kll_sketch_get_n_$dataType(b)",
               "x", "y", "n")
         }
         assert(result.queryExecution.analyzed.deterministic)
         def checkBuffers: AssertOnQuery = AssertOnQuery { query =>
           val aggregates = query.lastExecution.executedPlan.collect {
             case a: BaseAggregateExec if a.aggregateExpressions.exists(
-                _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) => a
+                _.aggregateFunction.prettyName == function) => a
           }
           aggregates.nonEmpty && aggregates.forall { a =>
             val expected = if (legacy) 1 else 2
             a.aggregateExpressions.count(
-              _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) == expected &&
+              _.aggregateFunction.prettyName == function) == expected &&
               a.aggregateExpressions.count(_.aggregateFunction.prettyName == "sum") == expected
           }
         }
         testStream(result, Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(sharing -> legacy.toString, rollback -> "false")),
-          AddData(input, 1, 2), CheckLastBatch(Row(2L, 2L, 6L, 6L, 2L)),
+          AddData(input, record(1L), record(2L)), CheckLastBatch(Row(2L, 2L, 6L, 6L, 2L)),
           checkBuffers, StopStream,
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(sharing -> (!legacy).toString, rollback -> "true")),
-          AddData(input, 3), CheckLastBatch(Row(3L, 3L, 9L, 9L, 3L)),
+          AddData(input, record(3L)), CheckLastBatch(Row(3L, 3L, 9L, 9L, 3L)),
           checkBuffers, StopStream)
       }
     }

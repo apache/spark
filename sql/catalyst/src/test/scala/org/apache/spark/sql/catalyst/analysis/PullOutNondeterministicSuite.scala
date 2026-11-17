@@ -104,6 +104,21 @@ class PullOutNondeterministicSuite extends AnalysisTest {
     assert(pulled.groupingExpressions.distinct.size == 2)
   }
 
+  test("wrapper keys preserve every subquery identity and its order") {
+    val query = OneRowRelation().select(Rand(10).as("value"))
+    val first = ScalarSubquery(query)
+    val second = ScalarSubquery(query)
+    val third = ScalarSubquery(query)
+    def wrapper(left: ScalarSubquery, right: ScalarSubquery): Expression =
+      ScalaUDF((a: Double, b: Double) => a + b, DoubleType, Seq(left, right))
+    val expressions = Seq(wrapper(first, second), wrapper(first, third),
+      wrapper(second, first), wrapper(first, first), wrapper(first, second))
+    val plan = r.groupBy(expressions: _*)(count(Literal(1)).as("count"))
+    val pulled = PullOutNondeterministic(plan).asInstanceOf[Aggregate]
+    assert(pulled.groupingExpressions.distinct.size == 4)
+    assert(pulled.groupingExpressions.head == pulled.groupingExpressions.last)
+  }
+
   test("pull out scalar KLL subqueries from aggregate arguments") {
     val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
     val scalar = ScalarSubquery(OneRowRelation().groupBy()(

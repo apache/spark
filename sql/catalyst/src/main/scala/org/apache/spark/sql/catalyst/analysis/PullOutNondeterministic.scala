@@ -43,11 +43,13 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
       val expressionsToExtract = a.groupingExpressions ++ nondeterministicSubqueriesInInputs(a)
       if (expressionsToExtract.forall(_.deterministic)) a else {
         validateNondeterministicSubqueries(a, expressionsToExtract)
+        val keys = new NondeterministicExpressionCollection.ExpressionKeys
         val nondeterToAttr =
-          NondeterministicExpressionCollection.getNondeterministicToAttributes(expressionsToExtract)
-        val newChild = Project(a.child.output ++ nondeterToAttr.values.asScala.toSeq, a.child)
+          NondeterministicExpressionCollection.getNondeterministicToAttributes(
+            expressionsToExtract, keys)
+        val newChild = NondeterministicExpressionCollection.project(a.child, nondeterToAttr, keys)
         val deterministicAggregate = a.transformExpressions { case e =>
-          Option(nondeterToAttr.get(NondeterministicExpressionCollection.getExpressionKey(e)))
+          Option(nondeterToAttr.get(keys(e)))
             .map(_.toAttribute).getOrElse(e)
         }.copy(child = newChild)
 
@@ -62,6 +64,27 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
         deterministicAggregate
       }
 
+    case join: LateralJoin if join.condition.exists(_.exists {
+        case scalar: ScalarSubquery =>
+          ValidateSubqueryExpression.isIndependentKllScalar(scalar)
+        case _ => false
+      }) =>
+      val scalars = join.condition.toSeq.flatMap(_.collect {
+        case scalar: ScalarSubquery
+            if ValidateSubqueryExpression.isIndependentKllScalar(scalar) => scalar
+      })
+      validateNondeterministicSubqueries(join, scalars)
+      val keys = new NondeterministicExpressionCollection.ExpressionKeys
+      val bindings =
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
+      val condition = join.condition.map(_.transformDown {
+        case scalar: ScalarSubquery if bindings.containsKey(keys(scalar)) =>
+          bindings.get(keys(scalar)).toAttribute
+      })
+      Project(join.output, join.copy(
+        left = NondeterministicExpressionCollection.project(join.left, bindings, keys),
+        condition = condition))
+
     case join: Join if join.condition.exists(_.exists {
         case scalar: ScalarSubquery => !scalar.deterministic && !scalar.isCorrelated
         case _ => false
@@ -70,22 +93,34 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
       val scalars = join.condition.toSeq.flatMap(_.collect {
         case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated => scalar
       })
+      val keys = new NondeterministicExpressionCollection.ExpressionKeys
       val nondeterToAttr =
-        NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars)
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
       val condition = join.condition.map(_.transform {
         case scalar: ScalarSubquery =>
-          Option(nondeterToAttr.get(NondeterministicExpressionCollection.getExpressionKey(scalar)))
+          Option(nondeterToAttr.get(keys(scalar)))
             .map(_.toAttribute).getOrElse(scalar)
       })
       // An uncorrelated scalar does not depend on either input. Preserve the join's original
       // output, including outer-join nullability and semi/anti-join column visibility.
       val uses = mutable.HashMap.empty[ExprId, AttributeSet]
       join.condition.toSeq.flatMap(splitConjunctivePredicates).foreach { conjunct =>
-        val references = conjunct.references
-        conjunct.foreach {
-          case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated =>
-            uses(scalar.exprId) = uses.getOrElse(scalar.exprId, AttributeSet.empty) ++ references
-          case _ =>
+        // A scalar inside a comparison operand belongs with that operand's attributes. Using
+        // the whole equality would move a right-side join key onto the left input, hiding the
+        // equi-join from planning (and making stream-stream joins unsupported).
+        val contexts = conjunct match {
+          case comparison: BinaryComparison => Seq(comparison.left, comparison.right)
+          case other => Seq(other)
+        }
+        contexts.foreach { context =>
+          val references = if (context.references.nonEmpty) context.references
+            else conjunct.references
+          context.foreach {
+            case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated =>
+              uses(scalar.exprId) = uses.get(scalar.exprId).map(_ ++ references)
+                .getOrElse(references)
+            case _ =>
+          }
         }
       }
       val (rightScalars, leftScalars) = nondeterToAttr.values.asScala.toSeq.partition {
@@ -111,13 +146,14 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
     // schema with its child.
     case p: UnaryNode if p.output == p.child.output && p.expressions.exists(!_.deterministic) =>
       validateNondeterministicSubqueries(p, p.expressions)
+      val keys = new NondeterministicExpressionCollection.ExpressionKeys
       val nondeterToAttr =
-        NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions)
+        NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions, keys)
       val newPlan = p.transformExpressions { case e =>
-        Option(nondeterToAttr.get(NondeterministicExpressionCollection.getExpressionKey(e)))
+        Option(nondeterToAttr.get(keys(e)))
           .map(_.toAttribute).getOrElse(e)
       }
-      val newChild = Project(p.child.output ++ nondeterToAttr.values.asScala.toSeq, p.child)
+      val newChild = NondeterministicExpressionCollection.project(p.child, nondeterToAttr, keys)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
   }
 
@@ -128,6 +164,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
     aggregate.aggregateExpressions
       .flatMap(_.collect { case expression: AggregateExpression => expression })
       .flatMap(expression => expression.aggregateFunction.children ++ expression.filter.toSeq)
+      // Retain invalid direct-random arguments verbatim for the original error rendering.
+      .filter(ExprUtils.isDeterministicAfterSubqueryExtraction)
       .flatMap(_.collect {
         case scalar: ScalarSubquery if !scalar.deterministic => scalar
         case exists: Exists if !exists.deterministic => exists

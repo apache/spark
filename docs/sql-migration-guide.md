@@ -31,8 +31,12 @@ license: |
 
 - Since Spark 4.4, `kll_sketch_agg_bigint/float/double` and
   `kll_merge_agg_bigint/float/double` are nondeterministic because their compaction is randomized.
-  A reused CTE containing these aggregates shares its computed results, while independent
-  aggregate calls may compute separate sketches. Query plans, resource use, and approximate
+  Reused CTEs containing these aggregates are normally retained instead of inlined; explicitly
+  `NOT MATERIALIZED` and correlated definitions can still be inlined. Retention does not itself
+  guarantee a single execution: physical sharing still depends on exchange reuse. Physical
+  subquery reuse can also share independent scalar queries. This change corrects aggregate
+  determinism metadata and analyzer handling; it does not change those physical reuse policies.
+  Query plans, resource use, and approximate
   results can therefore change. Queries that depend on treating independent randomized scalar
   subqueries as the same grouping value can now fail analysis; compute the value once and reuse
   its alias instead. To restore the previous analysis and batch optimizer behavior, set

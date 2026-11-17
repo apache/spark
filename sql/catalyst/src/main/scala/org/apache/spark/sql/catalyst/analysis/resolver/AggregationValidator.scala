@@ -37,11 +37,11 @@ object AggregationValidator {
    * Applies [[ExprUtils.assertValidAggregation]] on a given [[Aggregate]].
    */
   def apply(aggregate: Aggregate): Unit = {
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
     ExprUtils.assertValidAggregation(
       aggregate,
       (groupingExpression, checkedExpression) =>
-        NondeterministicExpressionCollection.getExpressionKey(groupingExpression) ==
-          NondeterministicExpressionCollection.getExpressionKey(checkedExpression),
+        keys(groupingExpression) == keys(checkedExpression),
       aggregateArgumentIsDeterministic = ExprUtils.isDeterministicAfterSubqueryExtraction
     )
   }

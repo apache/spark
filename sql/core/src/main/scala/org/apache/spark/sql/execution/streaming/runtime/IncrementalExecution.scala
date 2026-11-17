@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic, WidenStatefulOperatorAttributeNullability}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -175,7 +175,58 @@ class IncrementalExecution(
     val optimizerInput = if (legacySharing) {
       // Analysis may already have separated identical scalar inputs into generated aliases.
       // Restore only those bindings; user-authored aliases retain their historical identities.
-      adjusted.transformUp {
+      adjusted.transformUpWithSubqueries {
+        case join: Join =>
+          // Compiler-staged independent scalars were absent from historical join payloads.
+          // Restore their expressions before the state schema sees either input's output.
+          def restoreInput(
+              input: LogicalPlan): (LogicalPlan, Map[ExprId, Expression]) = input match {
+            case project: Project =>
+              val (child, inherited) = restoreInput(project.child)
+              val bindings = MutableMap.empty[ExprId, Expression] ++ inherited
+              val retained = project.projectList.filterNot {
+                case a: Attribute => bindings.contains(a.exprId)
+                case _ => false
+              }.flatMap { original =>
+                val expression = original.transformDown {
+                  case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
+                }.asInstanceOf[NamedExpression]
+                expression match {
+                  case alias: Alias if alias.containsTag(
+                      NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
+                      alias.child.deterministic && alias.child.references.isEmpty =>
+                    bindings(alias.exprId) = alias.child
+                    None
+                  case other => Some(other)
+                }
+              }
+              (project.copy(projectList = retained, child = child), bindings.toMap)
+            case unary: UnaryNode if unary.output == unary.child.output =>
+              val (child, bindings) = restoreInput(unary.child)
+              val restored = unary.withNewChildren(Seq(child)).transformExpressionsDown {
+                case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
+              }
+              (restored, bindings)
+            case _ => (input, Map.empty)
+          }
+          val (left, leftBindings) = restoreInput(join.left)
+          val (right, rightBindings) = restoreInput(join.right)
+          val bindings = leftBindings ++ rightBindings
+          if (bindings.isEmpty) join else {
+            def restore(expression: Expression): Expression = expression.transformDown {
+              case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
+            }
+            val restored = join.copy(left = left, right = right,
+              condition = join.condition.map(restore))
+            // Preserve the parent-facing output even if another internal operator uses a
+            // binding. Its deterministic scalar can be evaluated above the persisted join.
+            Project(join.output.map { attribute =>
+              if (bindings.contains(attribute.exprId)) {
+                Alias(restore(attribute), attribute.name)(attribute.exprId,
+                  attribute.qualifier, Some(attribute.metadata))
+              } else attribute
+            }, restored)
+          }
         case aggregate: Aggregate if aggregate.child.isInstanceOf[Project] =>
           val seen = MutableMap.empty[Expression, Attribute]
           val replacements = MutableMap.empty[ExprId, Attribute]

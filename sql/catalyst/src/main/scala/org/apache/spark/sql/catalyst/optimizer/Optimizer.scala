@@ -2636,7 +2636,38 @@ object PushDownPredicates extends Rule[LogicalPlan] {
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
+  private def isAggregateScalarBinding(expression: NamedExpression): Boolean = expression match {
+    case alias @ Alias(scalar: ScalarSubquery, _)
+        if alias.containsTag(NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
+          ValidateSubqueryExpression.isIndependentKllScalar(scalar) =>
+      // A retained global aggregate scalar is evaluated independently of the input rows. Check
+      // the current plan, not just alias provenance: a one-row rand scalar can be inlined into
+      // row-stateful evaluation and must keep the usual nondeterministic-Project barrier.
+      scalar.plan.exists {
+        case aggregate: Aggregate if aggregate.groupingExpressions.isEmpty =>
+          aggregate.aggregateExpressions.exists(_.exists {
+            case expression: AggregateExpression => !expression.deterministic
+            case _ => false
+          })
+        case _ => false
+      }
+    case _ => false
+  }
+
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case f @ Filter(condition, project @ Project(fields, grandChild))
+        if fields.exists(!_.deterministic) &&
+          fields.forall(e => e.deterministic || isAggregateScalarBinding(e)) &&
+          canPushThroughCondition(grandChild, condition) =>
+      val (push, stay) = splitConjunctivePredicates(condition).partition { predicate =>
+        predicate.deterministic && !predicate.throwable &&
+          predicate.references.subsetOf(grandChild.outputSet)
+      }
+      if (push.isEmpty) f else {
+        val filtered = project.copy(child = Filter(push.reduceLeft(And), grandChild))
+        stay.reduceLeftOption(And).map(Filter(_, filtered)).getOrElse(filtered)
+      }
+
     // Projections are a special case because the filter _may_ contain references to fields added in
     // the projection that we wish to copy. We shouldn't blindly copy everything
     // since double evaluation all operations can be expensive (unless the broken behavior is
