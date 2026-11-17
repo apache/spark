@@ -23,8 +23,9 @@ license: |
 {:toc}
 
 This page takes you from an empty machine to a running [Spark Declarative Pipelines (SDP)](declarative-pipelines-programming-guide.html)
-pipeline on your laptop. You install PySpark, generate a pipeline project, run it, query its
-output tables, and then add a streaming table and a materialized view that depends on it.
+pipeline on your laptop. You install PySpark, start a Spark Connect server, generate a pipeline
+project, run it, query its output tables, and then add a streaming table and a materialized view
+that depends on it.
 
 ## Prerequisites
 
@@ -45,6 +46,35 @@ pip install "pyspark[pipelines]"
 The quotes around `pyspark[pipelines]` are required in shells such as zsh, which otherwise treat
 the brackets as a glob pattern.
 
+## Start a Spark Connect server
+
+Pipelines run on a Spark Connect server: `spark-pipelines` sends the pipeline definition to the
+server, and the server runs the flows and holds the output tables and their metadata. Start one
+before you create the project.
+
+The `pyspark` package ships the server scripts in its `sbin/` directory, which `pip` does not add
+to the `PATH`, so locate the package first:
+
+```bash
+SPARK_HOME=$(python -c "import pyspark, os; print(os.path.dirname(pyspark.__file__))")
+"$SPARK_HOME"/sbin/start-connect-server.sh --conf spark.sql.catalogImplementation=hive
+```
+
+The script prints the path of the server log and returns. The server keeps running in the
+background and listens on `localhost:15002`.
+
+`spark.sql.catalogImplementation=hive` keeps table metadata in a local Hive metastore, so tables
+survive a restart of the server. Without it, the server uses its default in-memory catalog, which
+keeps table metadata only while the server runs: after a restart the tables are gone, and the next
+run fails with `LOCATION_ALREADY_EXISTS` because their data is still in `spark-warehouse/`.
+
+The server writes two directories into the directory you started it from: `spark-warehouse/` holds
+the table data and `metastore_db/` holds the metastore (together with a `derby.log` file). It runs
+until you stop it with `sbin/stop-connect-server.sh` from the same directory, as shown in
+[Stop the server](#stop-the-server) at the end of this page. See
+[Starting a Spark Connect server](spark-connect-setup.html#starting-a-spark-connect-server) for the
+server's options.
+
 ## Create a pipeline project
 
 ```bash
@@ -63,11 +93,19 @@ hello_pipeline/
     `-- example_sql_materialized_view.sql
 ```
 
-`spark-pipeline.yml` is the pipeline spec. It names the pipeline, points `libraries` at the source
-files under `transformations/`, sets `storage` to the directory that holds streaming checkpoints,
-and sets `spark.sql.catalogImplementation: hive` so that table metadata is kept in a local Hive
-metastore and survives across runs. See [Pipeline Projects](declarative-pipelines-programming-guide.html#pipeline-projects)
-for all fields.
+`spark-pipeline.yml` is the pipeline spec:
+
+```yaml
+name: hello_pipeline
+storage: file:///path/to/hello_pipeline/pipeline-storage
+libraries:
+  - glob:
+      include: transformations/**
+```
+
+`name` names the pipeline, `storage` is the absolute URI of the directory that holds streaming
+checkpoints, and `libraries` points at the source files under `transformations/`. See
+[Pipeline Projects](declarative-pipelines-programming-guide.html#pipeline-projects) for all fields.
 
 The two example files define one materialized view each. The Python file:
 
@@ -90,8 +128,11 @@ WHERE id % 2 = 0
 
 ## Run the pipeline
 
+Run the pipeline from the project directory, where `spark-pipelines` finds `spark-pipeline.yml`.
+`--remote` points it at the server:
+
 ```bash
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 ```
 
 SDP analyzes the dependencies between the datasets, runs
@@ -105,30 +146,32 @@ ends with:
 ... Run is COMPLETED.
 ```
 
-The run writes table data to `spark-warehouse/` and table metadata to `metastore_db/`, both in the
-current directory.
+The run writes each table as Parquet files under the server's `spark-warehouse/`, and the table
+metadata to the server's catalog.
 
 ## Query the output tables
 
-From the project directory, query the tables with the `spark-sql` command installed with PySpark:
+Query the tables through the same server. Start the PySpark shell with `--remote`:
 
 ```bash
-spark-sql -e "SELECT * FROM example_sql_materialized_view ORDER BY id"
+pyspark --remote sc://localhost:15002
 ```
 
-```
-0
-2
-4
-6
-8
+```python
+>>> spark.sql("SELECT * FROM example_sql_materialized_view ORDER BY id").show()
++---+
+| id|
++---+
+|  0|
+|  2|
+|  4|
+|  6|
+|  8|
++---+
 ```
 
-You can also start the PySpark shell with `pyspark` from the same directory and run
-`spark.table("example_sql_materialized_view").show()`.
-
-Run `spark-pipelines`, `spark-sql` and `pyspark` from the project directory: the local Hive
-metastore lives in `metastore_db/` under the current directory.
+Keep this shell open in a second terminal; the next sections run their queries in it. `spark-sql`
+and a plain `pyspark` without `--remote` start their own Spark and do not see the server's tables.
 
 ## Add a streaming table and a materialized view
 
@@ -180,16 +223,20 @@ GROUP BY customer
 EOF
 ```
 
-Run the pipeline and query the result:
+Run the pipeline and query the result in the PySpark shell:
 
 ```bash
-spark-pipelines run
-spark-sql -e "SELECT * FROM revenue_by_customer ORDER BY customer"
+spark-pipelines run --remote sc://localhost:15002
 ```
 
-```
-alice	1	20.0
-bob	1	35.5
+```python
+>>> spark.sql("SELECT * FROM revenue_by_customer ORDER BY customer").show()
++--------+----------+-------+
+|customer|num_orders|revenue|
++--------+----------+-------+
+|   alice|         1|   20.0|
+|     bob|         1|   35.5|
++--------+----------+-------+
 ```
 
 Add a second batch and run again:
@@ -198,13 +245,17 @@ Add a second batch and run again:
 cat > data/orders/batch-2.json <<'EOF'
 {"order_id": 3, "customer": "alice", "amount": 12.5}
 EOF
-spark-pipelines run
-spark-sql -e "SELECT * FROM revenue_by_customer ORDER BY customer"
+spark-pipelines run --remote sc://localhost:15002
 ```
 
-```
-alice	2	32.5
-bob	1	35.5
+```python
+>>> spark.sql("SELECT * FROM revenue_by_customer ORDER BY customer").show()
++--------+----------+-------+
+|customer|num_orders|revenue|
++--------+----------+-------+
+|   alice|         2|   32.5|
+|     bob|         1|   35.5|
++--------+----------+-------+
 ```
 
 The second run read only `batch-2.json` into `orders`, and recomputed `revenue_by_customer`.
@@ -215,7 +266,7 @@ The second run read only `batch-2.json` into `orders`, and recomputed `revenue_b
 table or column that does not exist, without reading or writing data:
 
 ```bash
-spark-pipelines dry-run
+spark-pipelines dry-run --remote sc://localhost:15002
 ```
 
 ## Start over
@@ -223,10 +274,29 @@ spark-pipelines dry-run
 To recompute every dataset from scratch, discarding the existing data and streaming checkpoints:
 
 ```bash
-spark-pipelines run --full-refresh-all
+spark-pipelines run --full-refresh-all --remote sc://localhost:15002
 ```
 
-To remove all pipeline state, delete `spark-warehouse/`, `metastore_db/` and `pipeline-storage/`.
+To remove all pipeline state, stop the server, delete its `spark-warehouse/` and `metastore_db/`
+and the project's `pipeline-storage/`, and start the server again. With the directories this page
+uses:
+
+```bash
+"$SPARK_HOME"/sbin/stop-connect-server.sh
+rm -r ../spark-warehouse ../metastore_db pipeline-storage
+"$SPARK_HOME"/sbin/start-connect-server.sh --conf spark.sql.catalogImplementation=hive
+```
+
+Restart the PySpark shell as well: a shell connected to the old server cannot reuse its session.
+
+## Stop the server
+
+```bash
+"$SPARK_HOME"/sbin/stop-connect-server.sh
+```
+
+The tables stay in `spark-warehouse/` and `metastore_db/`. Start the server again with the command
+from [Start a Spark Connect server](#start-a-spark-connect-server) to query them again.
 
 ## Next steps
 
