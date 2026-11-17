@@ -2200,19 +2200,17 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-61543: compileValue formats an Instant like the equivalent Timestamp") {
+  test("SPARK-61543: compileValue formats an Instant in the JVM time zone") {
     val instant = Instant.parse("2026-06-26T05:00:00Z")
-    val timestamp = DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(instant))
     // The suite's JVM zone is America/Los_Angeles; the session zone must differ from it.
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Chicago") {
+      // No trailing ".0": Teradata TIMESTAMP(0) columns reject it.
       Seq("jdbc:", "jdbc:postgresql:", "jdbc:mysql:", "jdbc:db2:", "jdbc:h2:", "jdbc:derby:",
-          "jdbc:oracle:").foreach { url =>
-        val dialect = JdbcDialects.get(url)
-        assert(dialect.compileValue(instant) === dialect.compileValue(timestamp), url)
+          "jdbc:teradata:").foreach { url =>
+        assert(JdbcDialects.get(url).compileValue(instant) === "'2026-06-25 22:00:00'", url)
       }
-      assert(JdbcDialects.get("jdbc:").compileValue(instant) === "'2026-06-25 22:00:00.0'")
       assert(JdbcDialects.get("jdbc:oracle:").compileValue(instant) ===
-        "{ts '2026-06-25 22:00:00.0'}")
+        "{ts '2026-06-25 22:00:00'}")
       val nanosInstant = Instant.parse("2026-06-26T05:00:00.123456789Z")
       assert(JdbcDialects.get("jdbc:").compileValue(nanosInstant) ===
         "'2026-06-25 22:00:00.123456789'")

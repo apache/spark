@@ -7643,8 +7643,8 @@ object SQLConf {
         s"${DATETIME_JAVA8API_ENABLED.key}=true is written as wall-clock time in the session " +
         "time zone (the legacy behavior), and the Oracle dialect leaves it unformatted. When " +
         "false, it is written in the JVM default time zone, the same as with " +
-        s"${DATETIME_JAVA8API_ENABLED.key}=false. The SQL Server dialect always uses the " +
-        "session time zone.")
+        s"${DATETIME_JAVA8API_ENABLED.key}=false. The SQL Server dialect writes such a " +
+        "literal in the session time zone either way.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

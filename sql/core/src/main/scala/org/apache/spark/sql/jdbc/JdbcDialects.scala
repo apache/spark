@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import java.util
 import java.util.Locale
 import java.util.ServiceLoader
@@ -402,11 +402,8 @@ abstract class JdbcDialect extends Serializable with Logging {
     case timestampValue: Instant if SQLConf.get.legacyJdbcSessionZoneTimestampLiteral =>
       compileInstantInSessionZone(timestampValue)
     case timestampValue: Instant =>
-      // Same text as the Timestamp a non-java8 API session would pass: JVM-zone wall clock.
-      // setNanos keeps the TIMESTAMP_LTZ(7-9) digits that instantToMicros drops.
-      val ts = DateTimeUtils.toJavaTimestamp(DateTimeUtils.instantToMicros(timestampValue))
-      ts.setNanos(timestampValue.getNano)
-      compileValue(ts)
+      // JVM-zone wall clock, the zone JDBC drivers use for zoneless values (as java8API off).
+      compileInstant(timestampValue, ZoneId.systemDefault())
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
@@ -414,11 +411,11 @@ abstract class JdbcDialect extends Serializable with Logging {
     case _ => value
   }
 
-  private[jdbc] def compileInstantInSessionZone(value: Instant): String = {
-    val timestampFormatter = TimestampFormatter.getFractionFormatter(
-      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-    s"'${timestampFormatter.format(value)}'"
-  }
+  private[jdbc] def compileInstantInSessionZone(value: Instant): String =
+    compileInstant(value, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+
+  private def compileInstant(value: Instant, zoneId: ZoneId): String =
+    s"'${TimestampFormatter.getFractionFormatter(zoneId).format(value)}'"
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     // SPARK-53454: Produce portable SQL for AlwaysTrue/AlwaysFalse predicates.
