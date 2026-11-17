@@ -202,17 +202,25 @@ class QuantileSummaries(
         val otherSample = other.sampled(otherIdx)
 
         // Detect next sample
-        val (nextSample, additionalDelta) = if (
+        val nextSample = if (
           SQLOrderingUtil.compareDoubles(selfSample.value, otherSample.value) < 0) {
           selfIdx += 1
-          (selfSample, if (otherIdx > 0) additionalSelfDelta else 0)
+          if (otherIdx > 0) {
+            selfSample.copy(delta = selfSample.delta + additionalSelfDelta)
+          } else {
+            selfSample
+          }
         } else {
           otherIdx += 1
-          (otherSample, if (selfIdx > 0) additionalOtherDelta else 0)
+          if (selfIdx > 0) {
+            otherSample.copy(delta = otherSample.delta + additionalOtherDelta)
+          } else {
+            otherSample
+          }
         }
 
         // Insert it
-        mergedSampled += nextSample.copy(delta = nextSample.delta + additionalDelta)
+        mergedSampled += nextSample
       }
 
       // Copy the remaining samples from the other list

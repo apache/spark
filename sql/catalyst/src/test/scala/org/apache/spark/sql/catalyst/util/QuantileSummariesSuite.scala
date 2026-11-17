@@ -133,6 +133,47 @@ class QuantileSummariesSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-61530: reuse unchanged samples when merging NaN summaries") {
+    val values = (1 to 8).map(_.toDouble)
+    val finite = buildSummary(values, 0.0001, 100)
+    for (nanFirst <- Seq(false, true)) {
+      var summary = finite
+      for (nanCount <- 1 to 3) {
+        val nan = buildSummary(Seq(Double.NaN), 0.0001, 100)
+        summary = if (nanFirst) nan.merge(summary) else summary.merge(nan)
+        val expected = values ++ Seq.fill(nanCount)(Double.NaN)
+        assert(summary.count == expected.size)
+        assert(summary.sampled.length == expected.size)
+        summary.sampled.zip(expected).foreach { case (sample, value) =>
+          assert(SQLOrderingUtil.compareDoubles(sample.value, value) == 0)
+          assert(sample.g == 1)
+          assert(sample.delta == 0)
+        }
+        finite.sampled.zip(summary.sampled).foreach { case (original, merged) =>
+          assert(original eq merged, "An unchanged finite sample should be reused")
+        }
+        val quantiles = summary.query(Seq(0.0, 0.5, 1.0)).get
+        val expectedQuantiles = Seq(values.head, expected((expected.size - 1) / 2), Double.NaN)
+        assert(quantiles.zip(expectedQuantiles).forall { case (actual, value) =>
+          SQLOrderingUtil.compareDoubles(actual, value) == 0
+        })
+      }
+    }
+  }
+
+  test("SPARK-61530: retain delta adjustments when merging overlapping summaries") {
+    import QuantileSummaries.Stats
+
+    val left = buildSummary(Seq(-10.0, 10.0), 0.25, 100)
+    val right = buildSummary(Seq(0.0, 20.0), 0.25, 100)
+    for (summary <- Seq(left.merge(right), right.merge(left))) {
+      assert(summary.count == 4)
+      assert(summary.sampled.toSeq == Seq(
+        Stats(-10.0, 1, 0), Stats(0.0, 1, 1), Stats(10.0, 1, 1), Stats(20.0, 1, 0)))
+      assert(summary.query(Seq(0.0, 1.0)).get == Seq(-10.0, 20.0))
+    }
+  }
+
   for {
     (seq_name, data) <- Seq(increasing, decreasing, random)
     epsi <- Seq(0.1, 0.0001) // With a significant value and with full precision
