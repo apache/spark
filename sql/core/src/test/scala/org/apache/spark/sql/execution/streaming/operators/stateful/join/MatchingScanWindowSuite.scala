@@ -100,7 +100,7 @@ class MatchingScanWindowSuite extends SparkFunSuite {
       Some((seconds(300), Long.MaxValue)))
   }
 
-  test("days and months give no bound on the indexed side but are exact on the probing side") {
+  test("days in a daylight saving time zone and months give no bound on the indexed side") {
     val zone = "America/Los_Angeles"
     val oneDay = Literal(MICROS_PER_DAY, DayTimeIntervalType())
     val condition = rightTime >= leftTime && rightTime <= plus(leftTime, oneDay, Some(zone))
@@ -116,41 +116,64 @@ class MatchingScanWindowSuite extends SparkFunSuite {
     val month = Literal(new CalendarInterval(1, 0, 0), CalendarIntervalType)
     val yearMonth = Literal(1, YearMonthIntervalType())
     Seq(calendarDay, month).foreach { interval =>
-      assert(window(plus(leftTime, interval) >= rightTime, rightInput, leftTime,
+      assert(window(plus(leftTime, interval, Some(zone)) >= rightTime, rightInput, leftTime,
         rightRow(start)) === None)
     }
+    // Months have no fixed length in any zone.
+    assert(window(plus(leftTime, month) >= rightTime, rightInput, leftTime,
+      rightRow(start)) === None)
     assert(window(TimestampAddYMInterval(leftTime, yearMonth, utc) >= rightTime, rightInput,
       leftTime, rightRow(start)) === None)
-    assert(window(TimestampAdd("DAY", Literal(1), leftTime, utc) >= rightTime, rightInput,
-      leftTime, rightRow(start)) === None)
+    Seq("DAY", "WEEK").foreach { unit =>
+      assert(window(TimestampAdd(unit, Literal(1), leftTime, Some(zone)) >= rightTime,
+        rightInput, leftTime, rightRow(start)) === None, unit)
+    }
   }
 
-  test("casts to BIGINT bound whole seconds on either side") {
-    // floor(rightTime) >= floor(leftTime) + 60 and <= floor(leftTime) + 120
-    val condition = long(rightTime) >= long(leftTime) + 60L &&
-      long(rightTime) <= long(leftTime) + 120L
-    // A left row at 100.6 seconds matches right rows from 160 seconds to just below 221.
-    assert(window(condition, leftInput, rightTime, leftRow(seconds(100.6))) ===
-      Some((seconds(160), seconds(221) - 1)))
-    // A right row at 160.2 seconds matches left rows from 40 seconds to just below 101.
-    assert(window(condition, rightInput, leftTime, rightRow(seconds(160.2))) ===
-      Some((seconds(40), seconds(101) - 1)))
-    // A cast of a shifted time.
-    val shifted = long(rightTime) >= long(plus(leftTime, minutes(1)))
-    assert(window(shifted, rightInput, leftTime, rightRow(seconds(160.2))) ===
-      Some((Long.MinValue, seconds(101) - 1)))
-    // A difference of casts.
-    val difference = long(leftTime) - long(rightTime) > 2L
-    assert(window(difference, leftInput, rightTime, leftRow(seconds(10.5))) ===
-      Some((Long.MinValue, seconds(9) - 1)))
-    assert(window(difference, rightInput, leftTime, rightRow(seconds(10.5))) ===
-      Some((seconds(12), Long.MaxValue)))
+  test("days in a fixed-offset time zone are inverted as 24 hours") {
+    val day = MICROS_PER_DAY
+    Seq("UTC", "+09:00").foreach { zone =>
+      withClue(zone) {
+        def shift(t: Expression, interval: Expression): Expression =
+          plus(t, interval, Some(zone))
+        val oneDay = Literal(day, DayTimeIntervalType())
+        val condition = rightTime >= leftTime && rightTime <= shift(leftTime, oneDay)
+        // Both probe directions get the exact window.
+        assert(window(condition, leftInput, rightTime, leftRow(seconds(0))) ===
+          Some((seconds(0), day)))
+        assert(window(condition, rightInput, leftTime, rightRow(2 * day)) ===
+          Some((day, 2 * day)))
+        // Day-time intervals of 24 hours or more, calendar days with a time part, and
+        // timestampadd in days or weeks.
+        val hours48 = Literal(2 * day, DayTimeIntervalType())
+        val calendar = Literal(new CalendarInterval(0, 1, MICROS_PER_SECOND),
+          CalendarIntervalType)
+        Seq[(Expression, Long)](
+          shift(leftTime, hours48) -> 2 * day,
+          shift(leftTime, calendar) -> (day + MICROS_PER_SECOND),
+          TimestampAdd("DAY", Literal(3), leftTime, Some(zone)) -> 3 * day,
+          TimestampAdd("WEEK", Literal(1), leftTime, Some(zone)) -> 7 * day
+        ).foreach { case (shifted, micros) =>
+          assert(window(shifted >= rightTime, rightInput, leftTime, rightRow(10 * day)) ===
+            Some((10 * day - micros, Long.MaxValue)), shifted.sql)
+        }
+        // A shift whose inverse overflows leaves that end open.
+        assert(window(rightTime <= shift(leftTime, Literal(-day, DayTimeIntervalType())),
+          rightInput, leftTime, rightRow(Long.MaxValue - 1)) === None)
+      }
+    }
   }
 
   test("other casts and functions of the indexed column give no bound") {
     val row = rightRow(seconds(10))
     Seq[Expression](
+      // A cast to a number, alone or in arithmetic with the column in either operand.
+      long(leftTime) >= long(rightTime),
+      long(leftTime) + 10L >= long(rightTime),
+      Add(Literal(10L), long(leftTime), EvalMode.ANSI) >= long(rightTime),
+      long(rightTime) - long(leftTime) <= 10L,
       Cast(leftTime, DoubleType, utc) >= Cast(rightTime, DoubleType, utc),
+      Cast(leftTime, DecimalType(20, 6), utc) >= Cast(rightTime, DecimalType(20, 6), utc),
       Cast(leftTime, IntegerType, utc) >= Cast(rightTime, IntegerType, utc),
       Cast(leftTime, DateType, utc) >= Cast(rightTime, DateType, utc),
       Cast(Cast(long(leftTime), TimestampType, utc), TimestampType, utc) >= rightTime,
@@ -176,34 +199,13 @@ class MatchingScanWindowSuite extends SparkFunSuite {
       Some((seconds(1), Long.MaxValue)))
     assert(window(condition, leftInput, rightTime, leftRow(null, null)) === None)
 
-    val divideByZero = long(rightTime) >= IntegralDivide(leftValue, Literal(0L), EvalMode.ANSI)
+    val divideByZero =
+      rightTime >= SecondsToTimestamp(IntegralDivide(leftValue, Literal(0L), EvalMode.ANSI))
     assert(window(divideByZero && rightTime <= expiry, leftInput, rightTime,
       leftRow(seconds(1), seconds(2), 5L)) === Some((Long.MinValue, seconds(2))))
 
-    // Seconds beyond the microsecond range, and a bound shifted past it.
-    assert(window(long(rightTime) >= leftValue, leftInput, rightTime,
-      leftRow(seconds(1), null, Long.MaxValue / 10)) === None)
+    // A bound shifted past the microsecond range.
     assert(window(rightTime <= plus(leftTime, minutes(-1)), rightInput, leftTime,
       rightRow(Long.MaxValue - 1)) === None)
-    // The rewritten integral bound overflows.
-    assert(window(Add(long(rightTime), leftValue, EvalMode.ANSI) >= Long.MinValue, leftInput,
-      rightTime, leftRow(seconds(1), null, 1L)) === None)
-  }
-
-  test("integral sums are inverted only when they cannot wrap around") {
-    def sum(x: Expression, y: Expression, mode: EvalMode.Value): Expression = Add(x, y, mode)
-    val row = leftRow(seconds(100))
-    Seq(EvalMode.ANSI, EvalMode.TRY, EvalMode.LEGACY).foreach { mode =>
-      // The cast's seconds and a small constant cannot overflow, in any mode.
-      assert(window(sum(long(rightTime), Literal(10L), mode) >= long(leftTime), leftInput,
-        rightTime, row) === Some((seconds(90), Long.MaxValue)), mode)
-    }
-    // A column of this input has no known magnitude, so the legacy mode gives no bound.
-    assert(window(sum(long(rightTime), leftValue, EvalMode.LEGACY) >= long(leftTime), leftInput,
-      rightTime, leftRow(seconds(100), null, 10L)) === None)
-    assert(window(sum(long(rightTime), leftValue, EvalMode.ANSI) >= long(leftTime), leftInput,
-      rightTime, leftRow(seconds(100), null, 10L)) === Some((seconds(90), Long.MaxValue)))
-    assert(window(sum(long(rightTime), Literal(Long.MaxValue), EvalMode.LEGACY) >= 0L,
-      leftInput, rightTime, row) === None)
   }
 }

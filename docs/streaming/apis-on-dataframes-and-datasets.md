@@ -3647,6 +3647,8 @@ the effect of the change is not well-defined. For all of them:
   - *Stream-stream join*: For example, `sdf1.join(sdf2, ...)` (i.e. both inputs are generated with `sparkSession.readStream`). Changes
     in the schema or equi-joining columns are not allowed. Changes in join type (outer or inner) are not allowed. Other changes in the join condition are ill-defined. In particular, the join condition and the watermarks decide
     which column Spark uses to find rows to remove from the state, so changing either can remove rows that could still match.
+    They can also decide which stored rows a new row reads, so changing either can skip stored rows
+    that would match.
 
   - *Arbitrary stateful operation*: For example, `sdf.groupByKey(...).mapGroupsWithState(...)` or `sdf.groupByKey(...).flatMapGroupsWithState(...)`.
     Any change to the schema of the user-defined state and the type of timeout is not allowed.

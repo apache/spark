@@ -1290,6 +1290,33 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
     }
   }
 
+  test("StreamingJoinStateManager V4 - getJoinedRowsAndRemoveMatched with a timestamp range") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+      Seq(10, 20, 20, 30, 40).foreach(append(40, _))
+      append(50, 20)
+
+      val dummyRow = new GenericInternalRow(0)
+      val removed = manager.getJoinedRowsAndRemoveMatched(
+        toJoinKeyRow(40),
+        row => new JoinedRow(row, dummyRow),
+        jr => jr.getInt(1) != 30,
+        timestampRange = Some((15L, 30L))
+      ).map(_.getInt(1)).toSeq
+      // Rows outside the range are neither returned nor removed, although they match.
+      assert(removed.sorted === Seq(20, 20))
+      assert(get(40) === Seq(10, 30, 40))
+      assert(get(50) === Seq(20))
+
+      // The timestamp index keeps only the rows that remain.
+      val evictByTs = manager.asInstanceOf[SupportsEvictByTimestamp]
+      assert(evictByTs.evictByTimestamp(35) === 3)
+      assert(get(40) === Seq(40))
+      assert(get(50) === Seq.empty)
+    }
+  }
+
   test("StreamingJoinStateManager V4 - evictByTimestamp boundary edge cases") {
     withJoinStateManager(
       inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>

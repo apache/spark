@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -39,9 +40,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * condition on every row in the window. A bound that cannot be computed exactly is left out:
  * - Only deterministic conjuncts give bounds. Spark checks each of them on every joined row,
  *   either before the row is stored or after the rows are joined.
- * - A comparison gives a bound when one side reaches the column through steps the bound can be
- *   inverted through exactly, and the other side reads only this input. A strict comparison
- *   gives an inclusive bound.
+ * - A comparison gives a bound when one side is the column, shifted only by intervals the bound
+ *   can be inverted through exactly, and the other side reads only this input. A strict
+ *   comparison gives an inclusive bound. A cast of the column to a number gives no bound.
  * - A NULL bound, or one that fails to evaluate or overflows, leaves its end of the window open.
  *   A NULL makes the comparison unknown, so the row matches nothing, but an open end is enough.
  */
@@ -135,82 +136,32 @@ private[sql] object MatchingScanWindow extends PredicateHelper {
       isLower: Boolean,
       input: AttributeSet,
       column: Attribute): Option[(Boolean, ColumnBound)] = {
-    def readsOnlyInput(e: Expression): Boolean =
-      e.deterministic && e.references.subsetOf(input) && !SubqueryExpression.hasSubquery(e)
-    def holdsColumn(e: Expression): Boolean = e.references.contains(column)
-    // An integral sum is inverted by moving the other term to the bound. ANSI mode fails and
-    // TRY mode returns NULL on overflow, so a matching row always has the exact sum. The legacy
-    // mode wraps around, so the inversion holds only if no overflow can happen.
-    def exactSum(context: NumericEvalContext, x: Expression, y: Expression): Boolean =
-      context.evalMode != EvalMode.LEGACY || (for (a <- maxMagnitude(x); b <- maxMagnitude(y))
-        yield a + b <= BigInt(Long.MaxValue)).getOrElse(false)
-    // The rewritten bound fails on overflow; the evaluator then leaves the end open.
-    side match {
-      case _ if !readsOnlyInput(value) => None
-      case Add(x, y, context) if side.dataType == LongType && exactSum(context, x, y) =>
-        if (holdsColumn(x) && readsOnlyInput(y)) {
-          solve(x, Subtract(value, y, EvalMode.ANSI), isLower, input, column)
-        } else if (holdsColumn(y) && readsOnlyInput(x)) {
-          solve(y, Subtract(value, x, EvalMode.ANSI), isLower, input, column)
-        } else {
-          None
-        }
-      case Subtract(x, y, context) if side.dataType == LongType && exactSum(context, x, y) =>
-        if (holdsColumn(x) && readsOnlyInput(y)) {
-          solve(x, Add(value, y, EvalMode.ANSI), isLower, input, column)
-        } else if (holdsColumn(y) && readsOnlyInput(x)) {
-          // x - y >= v means y <= x - v.
-          solve(y, Subtract(x, value, EvalMode.ANSI), !isLower, input, column)
-        } else {
-          None
-        }
-      case _ =>
-        toColumnBound(side, isLower, column).map(f => (isLower, ColumnBound(value, f)))
+    val readsOnlyInput = value.deterministic && value.references.subsetOf(input) &&
+      !SubqueryExpression.hasSubquery(value)
+    if (readsOnlyInput) {
+      toColumnBound(side, column).map(f => (isLower, ColumnBound(value, f)))
+    } else {
+      None
     }
   }
 
   /**
-   * The largest absolute value of an integral expression, if it is known: a timestamp cast to
-   * BIGINT holds whole seconds of a 64-bit microsecond count.
-   */
-  private def maxMagnitude(e: Expression): Option[BigInt] = e match {
-    case Cast(child, LongType, _, _) if child.dataType == TimestampType =>
-      Some(BigInt(Long.MaxValue / MICROS_PER_SECOND + 1))
-    case Literal(v: Long, LongType) => Some(BigInt(v).abs)
-    case Literal(v: Int, IntegerType) => Some(BigInt(v).abs)
-    case Cast(child, LongType, _, _) if child.dataType == IntegerType => maxMagnitude(child)
-    case Add(x, y, _) => for (a <- maxMagnitude(x); b <- maxMagnitude(y)) yield a + b
-    case Subtract(x, y, _) => for (a <- maxMagnitude(x); b <- maxMagnitude(y)) yield a + b
-    case _ => None
-  }
-
-  /**
    * How a bound on `side` maps to a bound on the column itself, if `side` is the column, cast
-   * to TIMESTAMP or to BIGINT, or shifted by an interval with no days or months.
+   * to TIMESTAMP, or shifted by an interval that adds an exact duration.
    */
-  private def toColumnBound(
-      side: Expression,
-      isLower: Boolean,
-      column: Attribute): Option[Long => Option[Long]] = {
+  private def toColumnBound(side: Expression, column: Attribute): Option[Long => Option[Long]] = {
     def shifted(start: Expression, shift: Option[Long]): Option[Long => Option[Long]] =
-      for (micros <- shift; inner <- toColumnBound(start, isLower, column))
+      for (micros <- shift; inner <- toColumnBound(start, column))
         yield (bound: Long) => subtract(bound, micros).flatMap(inner)
     side match {
       case a: Attribute if a.semanticEquals(column) => Some(Some(_))
       case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
-        toColumnBound(child, isLower, column)
-      // A cast to BIGINT floors to seconds: floor(t) >= s means t >= s seconds, and
-      // floor(t) <= s means t is below s + 1 seconds.
-      case Cast(child, LongType, _, _) if child.dataType == TimestampType =>
-        toColumnBound(child, isLower, column).map { inner => (seconds: Long) =>
-          multiply(seconds, MICROS_PER_SECOND)
-            .flatMap(micros => if (isLower) Some(micros) else add(micros, MICROS_PER_SECOND - 1))
-            .flatMap(inner)
-        }
-      case TimestampAddInterval(start, interval, _) => shifted(start, exactShift(interval))
-      case DatetimeSub(_, _, replacement) => toColumnBound(replacement, isLower, column)
-      case TimestampAdd(unit, quantity, start, _) =>
-        val micros = exactUnitMicros(unit).flatMap { unitMicros =>
+        toColumnBound(child, column)
+      case TimestampAddInterval(start, interval, zone) =>
+        shifted(start, exactShift(interval, addsDaysExactly(zone)))
+      case DatetimeSub(_, _, replacement) => toColumnBound(replacement, column)
+      case TimestampAdd(unit, quantity, start, zone) =>
+        val micros = exactUnitMicros(unit, addsDaysExactly(zone)).flatMap { unitMicros =>
           foldableValue(quantity).collect { case n: Number => n.longValue() }
             .flatMap(multiply(_, unitMicros))
         }
@@ -220,28 +171,39 @@ private[sql] object MatchingScanWindow extends PredicateHelper {
   }
 
   /**
-   * The microseconds of a constant interval without days or months. Spark adds whole days and
-   * months in the session time zone, where a day can be 23 or 25 hours long, so they have no
-   * exact inverse.
+   * Whether a shift in the time zone `zone` adds each day as exactly 24 hours. Spark adds whole
+   * days in that zone, where a day can be 23 or 25 hours long unless its offset is fixed.
    */
-  private def exactShift(interval: Expression): Option[Long] =
+  private def addsDaysExactly(zone: Option[String]): Boolean =
+    zone.exists(z => DateTimeUtils.getZoneId(z).getRules.isFixedOffset)
+
+  /**
+   * The microseconds of a constant interval without months, and without days unless
+   * `addsDaysExactly`. Months have no fixed length.
+   */
+  private def exactShift(interval: Expression, addsDaysExactly: Boolean): Option[Long] =
     (interval.dataType, foldableValue(interval)) match {
       case (_: DayTimeIntervalType, Some(micros: Long))
-          if -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY => Some(micros)
-      case (CalendarIntervalType, Some(i: CalendarInterval)) if i.months == 0 && i.days == 0 =>
-        Some(i.microseconds)
+          if addsDaysExactly || -MICROS_PER_DAY < micros && micros < MICROS_PER_DAY =>
+        Some(micros)
+      case (CalendarIntervalType, Some(i: CalendarInterval))
+          if i.months == 0 && (i.days == 0 || addsDaysExactly) =>
+        multiply(i.days, MICROS_PER_DAY).flatMap(add(_, i.microseconds))
       case _ => None
     }
 
   /** Microseconds per timestampadd unit that adds an exact duration. */
-  private def exactUnitMicros(unit: String): Option[Long] = unit.toUpperCase(Locale.ROOT) match {
-    case "MICROSECOND" => Some(1L)
-    case "MILLISECOND" => Some(MICROS_PER_MILLIS)
-    case "SECOND" => Some(MICROS_PER_SECOND)
-    case "MINUTE" => Some(MICROS_PER_MINUTE)
-    case "HOUR" => Some(MICROS_PER_HOUR)
-    case _ => None
-  }
+  private def exactUnitMicros(unit: String, addsDaysExactly: Boolean): Option[Long] =
+    unit.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" => Some(1L)
+      case "MILLISECOND" => Some(MICROS_PER_MILLIS)
+      case "SECOND" => Some(MICROS_PER_SECOND)
+      case "MINUTE" => Some(MICROS_PER_MINUTE)
+      case "HOUR" => Some(MICROS_PER_HOUR)
+      case "DAY" | "DAYOFYEAR" if addsDaysExactly => Some(MICROS_PER_DAY)
+      case "WEEK" if addsDaysExactly => Some(DAYS_PER_WEEK * MICROS_PER_DAY)
+      case _ => None
+    }
 
   private def foldableValue(e: Expression): Option[Any] =
     if (e.foldable) {

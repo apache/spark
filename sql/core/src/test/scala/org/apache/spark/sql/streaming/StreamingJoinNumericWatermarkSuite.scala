@@ -381,8 +381,8 @@ class StreamingJoinNumericWatermarkSuite extends StreamTest {
     }
   }
 
-  // Both directions give a cutoff, so V4 would compute range-scan offsets, which read the event
-  // time as a long. A time-window event time must not use them.
+  // Both directions give a cutoff, so V4 orders each side's state by its time window. The scan
+  // window bounds only a TIMESTAMP ordering column, so neither probe range-scans by window.
   test("V4 two-sided whole-window bound does not range-scan by window") {
     withJoinConf(4) {
       val leftInput = MemoryStream[(Int, Long)]

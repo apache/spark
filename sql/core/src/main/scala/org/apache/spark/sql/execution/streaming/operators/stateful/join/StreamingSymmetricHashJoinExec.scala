@@ -904,7 +904,8 @@ case class StreamingSymmetricHashJoinExec(
             otherSideJoiner.joinStateManager.getJoinedRowsAndRemoveMatched(
               key,
               thatRow => generateJoinedRow(thisRow, thatRow),
-              postJoinFilter).map { row =>
+              postJoinFilter,
+              timestampRange = computeTimestampRange(thisRow)).map { row =>
               numRemovedFromOtherSideDuringJoinCount += 1
               row
             }

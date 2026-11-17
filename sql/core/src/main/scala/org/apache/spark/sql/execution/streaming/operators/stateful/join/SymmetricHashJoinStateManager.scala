@@ -106,11 +106,15 @@ trait SymmetricHashJoinStateManager {
    * removing such rows would reduce state size further, but we need to weigh the value of applying
    * this optimization. This can be also impacted by the query changes during restart, as we
    * mentioned in NOTE in above, we do not define expected behavior for such changes.
+   *
+   * @param timestampRange The same optimization hint as in [[getJoinedRows]]. Rows outside it
+   *   are neither returned nor removed.
    */
   def getJoinedRowsAndRemoveMatched(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow]
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow]
 
   /**
    * Provide all key-value pairs in the state manager.
@@ -541,7 +545,8 @@ class SymmetricHashJoinStateManagerV4(
   override def getJoinedRowsAndRemoveMatched(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
     def getJoinedRowsFromTsAndValues(
         ts: Long,
         valuesAndMatched: Array[ValueAndMatchPair]): Iterator[JoinedRow] = {
@@ -601,7 +606,8 @@ class SymmetricHashJoinStateManagerV4(
         getJoinedRowsFromTsAndValues(ts, valuesAndMatchedIter.toArray)
 
       case _ =>
-        keyWithTsToValues.getValues(key).flatMap { result =>
+        val (minTs, maxTs) = timestampRange.getOrElse((Long.MinValue, Long.MaxValue))
+        keyWithTsToValues.getValuesInRange(key, minTs, maxTs).flatMap { result =>
           val ts = result.timestamp
           val valuesAndMatched = result.values.toArray
           getJoinedRowsFromTsAndValues(ts, valuesAndMatched)
@@ -1224,7 +1230,8 @@ abstract class SymmetricHashJoinStateManagerBase(
   override def getJoinedRowsAndRemoveMatched(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
     new NextIterator[JoinedRow] {
       private var numValues: Long = keyToNumValues.get(key)
       private var index: Long = 0L

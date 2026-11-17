@@ -105,11 +105,9 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       conditions.foreach { condition =>
         withClue(condition.sql) {
           // Both conditions reach the references check through eviction's range path, which
-          // passes one watermarked column of the opposite input at a time, and through the V4
-          // range scan, which passes just the two event times and runs only for a side with a
-          // value-eviction predicate on its own event time. The left semi exact cutoff keeps
-          // only conjuncts shifted by literal intervals, so neither condition reaches the
-          // solver there.
+          // passes one watermarked column of the opposite input at a time. The left semi exact
+          // cutoff keeps only conjuncts shifted by literal intervals, so neither condition
+          // reaches the solver there.
           assert(StreamingJoinHelper.getStateValueWatermark(
             AttributeSet(Seq(leftTime)), AttributeSet(Seq(rightTime)),
             Some(condition), Some(10000L)) === None)

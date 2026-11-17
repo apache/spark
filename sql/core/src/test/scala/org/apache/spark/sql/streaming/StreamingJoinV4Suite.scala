@@ -630,6 +630,41 @@ class StreamingInnerJoinV4Suite
       })
   }
 
+  test("matching scans invert whole days in a fixed-offset time zone") {
+    val day = 24L * 3600 * 1000
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val leftInput = MemoryStream[(Int, Long)]
+      val rightInput = MemoryStream[(Int, Long)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_millis($"time").as("leftTime"))
+        .withWatermark("leftTime", "3 days")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_millis($"time").as("rightTime"))
+        .withWatermark("rightTime", "3 days")
+      val joined = left.join(right, expr("leftKey = rightKey AND " +
+          "rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 DAY"))
+        .select(unix_millis($"leftTime"), unix_millis($"rightTime"))
+
+      testStream(joined)(
+        AddData(rightInput, (1, 10 * day - 1), (1, 10 * day), (1, 11 * day), (1, 11 * day + 1)),
+        CheckNewAnswer(),
+        // A left row reads right rows up to one day after it.
+        AddData(leftInput, (1, 10 * day)),
+        CheckNewAnswer((10 * day, 10 * day), (10 * day, 11 * day)),
+        // A right row reads left rows from one day before it.
+        AddData(rightInput, (1, 10 * day + 1)),
+        CheckNewAnswer((10 * day, 10 * day + 1)),
+        Execute { query =>
+          val join = joinExec(query)
+          val micros = day * 1000
+          assert(join.matchingScanWindow(LeftSide).flatMap(_.rangeFor(InternalRow(1, 0L))) ===
+            Some((0L, micros)))
+          assert(join.matchingScanWindow(RightSide).flatMap(_.rangeFor(InternalRow(1, 0L))) ===
+            Some((-micros, 0L)))
+        })
+    }
+  }
+
   test("matching scans read every row of a key ordered by an equality key") {
     val leftInput = MemoryStream[(Int, Long)]
     val rightInput = MemoryStream[(Int, Long)]
