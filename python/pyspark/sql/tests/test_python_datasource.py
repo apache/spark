@@ -1730,6 +1730,64 @@ class BasePythonDataSourceTestsMixin:
             self.assertEqual(len(tasks), 2)
             self.assertEqual(sum(len(rows) for rows in tasks), 6)
 
+    def test_write_requirements_planned_once(self):
+        # Spark reads each requirement separately, but asks the Python writer only once per write.
+        with tempfile.TemporaryDirectory(prefix="write_req_once") as d:
+            calls = os.path.join(d, "calls")
+
+            def record(method):
+                with open(calls, "a") as f:
+                    f.write(method + "\n")
+
+            class CountingWriter(DataSourceWriter):
+                def write(self, iterator):
+                    return WriterCommitMessage()
+
+                def requiredDistribution(self):
+                    record("requiredDistribution")
+                    return ClusteredDistribution((("key",),))
+
+                def distributionStrictlyRequired(self):
+                    record("distributionStrictlyRequired")
+                    return True
+
+                def requiredNumPartitions(self):
+                    record("requiredNumPartitions")
+                    return 0
+
+                def advisoryPartitionSizeInBytes(self):
+                    record("advisoryPartitionSizeInBytes")
+                    return 0
+
+                def requiredOrdering(self):
+                    record("requiredOrdering")
+                    return [SortOrder(("value",))]
+
+            class CountingDataSource(DataSource):
+                @classmethod
+                def name(cls):
+                    return "write_req_once"
+
+                def writer(self, schema, overwrite):
+                    return CountingWriter()
+
+            self.spark.dataSource.register(CountingDataSource)
+            with self.sql_conf(self._write_conf()):
+                self._write_df().write.format("write_req_once").mode("append").save()
+            with open(calls) as f:
+                recorded = f.read().split()
+            # Each requirement was evaluated exactly once.
+            self.assertEqual(
+                sorted(recorded),
+                [
+                    "advisoryPartitionSizeInBytes",
+                    "distributionStrictlyRequired",
+                    "requiredDistribution",
+                    "requiredNumPartitions",
+                    "requiredOrdering",
+                ],
+            )
+
     def test_write_non_strict_distribution(self):
         # A single key spread over several input partitions, with a tiny advisory size, so that
         # adaptive execution splits its skewed shuffle partition whenever it is allowed to.

@@ -1088,17 +1088,22 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
           |        raise AssertionError("should not be called")""".stripMargin))
     spark.dataSource.registerPython(dataSourceName, dataSource)
 
+    def check(): Unit = withTempDir { dir =>
+      val df = spark.range(0, 10, 1, 3).toDF("id")
+      val writes = executedPlans {
+        df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+      }.flatMap(_.collect { case a: AppendDataExec => a.write })
+      // The planner's requirement handling is skipped entirely, not just given no requirements.
+      assert(writes.nonEmpty)
+      assert(writes.forall(!_.isInstanceOf[RequiresDistributionAndOrdering]), writes)
+      checkAnswer(spark.read.json(dir.getAbsolutePath), df)
+    }
+
+    // Off by default, and when disabled explicitly.
+    assert(!spark.conf.contains(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key))
+    check()
     withSQLConf(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "false") {
-      withTempDir { dir =>
-        val df = spark.range(0, 10, 1, 3).toDF("id")
-        val writes = executedPlans {
-          df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
-        }.flatMap(_.collect { case a: AppendDataExec => a.write })
-        // The planner's requirement handling is skipped entirely, not just given no requirements.
-        assert(writes.nonEmpty)
-        assert(writes.forall(!_.isInstanceOf[RequiresDistributionAndOrdering]), writes)
-        checkAnswer(spark.read.json(dir.getAbsolutePath), df)
-      }
+      check()
     }
   }
 
