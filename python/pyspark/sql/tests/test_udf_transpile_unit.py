@@ -3105,31 +3105,52 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             return 1 if (a if c else b) is None else 0
 
         with self.sql_conf(_TRANSPILE_ON):
-            for func, schema, rows, expected in (
+            for func, return_type, schema, rows, expected in (
                 (
                     array_null,
+                    BooleanType(),
                     "a array<string>, b array<string>, c boolean",
                     [(["x"], ["y"], True), (None, ["y"], True)],
-                    [None, None],
+                    [False, True],
                 ),
                 (
                     array_null,
+                    BooleanType(),
                     "a array<int>, b array<binary>, c boolean",
                     [([1], [bytearray(b"x")], True)],
-                    [None],
+                    [False],
                 ),
                 (
                     map_null,
+                    LongType(),
                     "a map<string,string>, b map<string,int>, c boolean",
                     [({"x": "y"}, {"x": 1}, True), (None, {"x": 1}, True)],
                     [0, 1],
                 ),
             ):
                 with self.subTest(schema=schema):
-                    u, reasons = self._fallback_reason(func, LongType())
+                    u, reasons = self._fallback_reason(func, return_type)
                     self.assertIn("if/else branches have a `map`/`array` operand", reasons)
                     df = self.spark.createDataFrame(rows, schema)
                     self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+
+    def test_udf_transpile_ternary_comparison_is_boolean(self):
+        # A comparison on a ternary is a bool. Classified numeric, it passed the
+        # return-type check for LongType and lowered to cast(bool as bigint) = 0/1,
+        # where the interpreted UDF returns NULL for a bool result.
+        def ternary_is_none(a: int, b: int, c: bool):
+            return (a if c else b) is None
+
+        rows = [(1, 2, True), (None, 2, True), (1, None, False)]
+        with self.sql_conf(_TRANSPILE_ON):
+            u, reasons = self._fallback_reason(ternary_is_none, LongType())
+            self.assertIn("a bool-typed lowering does not match", reasons)
+            df = self.spark.createDataFrame(rows, "a long, b long, c boolean")
+            self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], [None] * 3)
+        self.assertEqual(
+            self._vals(ternary_is_none, BooleanType(), "a long, b long, c boolean", rows),
+            [False, True, True],
+        )
 
     def test_quoted_container_annotation_suppresses_syntax_warnings(self):
         import ast

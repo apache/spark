@@ -271,6 +271,12 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
         case ast.Call(func=ast.Name(id="len"), args=[_], keywords=[]):
             # len() always returns an int: CPython raises if __len__ returns anything else.
             return True
+        case ast.IfExp(body=body, orelse=orelse):
+            # A ternary yields one of its branches. Without this, a comparison on
+            # one (`(a if c else b) is None`) was not seen as boolean and fell to
+            # `_category`'s numeric catch-all, so a bool body passed the
+            # return-type check for a numeric return type.
+            return _is_definitely_basic_type(body) and _is_definitely_basic_type(orelse)
         case _:
             return False
 
