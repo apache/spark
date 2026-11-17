@@ -3264,9 +3264,13 @@ class DataFrameSuite extends SharedSparkSession
       check(doubles, d, $"d" === 0.0 && ($"d" * $"y").cast("string") === "-0.0",
         Seq(Row("-0.0", true)))
       check(doubles, d, $"d" === 0.0 && pow($"d", $"y") < 0, Seq(Row("-0.00", true)))
-      // But not where `d` is the only column under such an operator, as master folds it then, nor
-      // under arithmetic, which gives the same value, or fails, with either zero, so that `d` is
-      // not computed on the row ("x", 1.0) or ("x", -1.0).
+      // Nor in an operand that guards another one, where `replaceConstants` does not go.
+      check(Seq(("-0.0", 100.0), ("0.0", 100.0)).toDF("s", "y"), d,
+        ($"d".cast("string") === "-0.0" || lit(10) / $"y" > 1) && $"d" === 0.0,
+        Seq(Row("-0.0", true)))
+      // But not where `d` is the only column under such an operator, as `replaceConstants` folds
+      // it then, nor under arithmetic, which gives the same value, or fails, with either zero, so
+      // that `d` is not computed on the row ("x", 1.0) or ("x", -1.0).
       val notNumber = Seq(("0.0", 1.0), ("x", 1.0)).toDF("s", "y")
       check(notNumber, d, $"y" > 0 && pow($"d", 2) > 100 && $"d" === 0.0, Seq.empty)
       check(notNumber, d, lit(10.0) / ($"d" - $"y") > 0 && $"d" === 0.0, Seq.empty)

@@ -452,7 +452,15 @@ class ConstantPropagationSuite extends PlanTest {
         // `pow(-0.0, y)` and `pow(0.0, y)` differ for a negative `y`.
         Pow($"d", $"y") < 0.0 && $"d" === 0.0,
         // Also below arithmetic, under an operator that keeps the sign.
-        signed(Divide($"d", $"y")) && $"d" === 0.0
+        signed(Divide($"d", $"y")) && $"d" === 0.0,
+        // And where `replaceConstants` would not fold the operator, as it does not reach it: in an
+        // operand that guards another one, under a `CASE WHEN` that reads another column, or
+        // under another operator that does.
+        (Cast($"d", StringType) === "-0.0" || tenDividedBy($"y") > 1.0) && $"d" === 0.0,
+        If($"y" > 0.0, Cast($"d", StringType), Literal("a")) === "-0.0" && $"d" === 0.0,
+        If($"y" > 0.0, signed($"d"), Literal(false)) && $"d" === 0.0,
+        Concat(Seq(Cast($"d", StringType), Cast($"y", StringType))) === "-0.01.0" &&
+          $"d" === 0.0
       ).foreach(condition => checkOrdered(withE, condition, condition))
       Seq(
         // But where all of the attributes under such an operator get a constant, they are

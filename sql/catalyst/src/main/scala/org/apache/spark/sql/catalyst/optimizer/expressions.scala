@@ -304,10 +304,12 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       nullIsFalse: Boolean,
       columns: FailableColumns): Expression = {
     val equalityPredicates = AttributeMap(failable.toSeq ++ movable.toSeq)
-    val inPlace = replaceConstantsInPlace(condition, failable, movable)
-    val rewritten = if (movable.isEmpty) inPlace else replaceConstants(inPlace, movable)
+    val inPlace = replaceConstantsInPlace(condition, failable)
+    val rewritten = replaceConstants(inPlace, movable, failable)
     val unfolded = unfoldedEqualities(condition, equalityPredicates, nullIsFalse)
-    val all = replaceConstantsInPlace(condition, AttributeMap(equalityPredicates.toSeq ++ unfolded))
+    val allEqualities = AttributeMap(equalityPredicates.toSeq ++ unfolded)
+    val all = replaceConstants(replaceConstantsInPlace(condition, allEqualities),
+      AttributeMap.empty, allEqualities)
     val folded = splitConjunctivePredicates(condition)
       .zip(splitConjunctivePredicates(rewritten))
       .zip(splitConjunctivePredicates(all))
@@ -444,34 +446,25 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * subquery in a comparison is replaced. Unlike before SPARK-60983, an attribute that
    * [[hasSignedZero]] marks is kept under an operator that can tell -0.0 from 0.0, which are
    * equal, i.e. one that [[keepsEqualValues]] rejects, e.g. in `CAST(x * y AS STRING)` for
-   * `x = 0.0`, as [[replaceConstants]] keeps it there, unless all of the attributes under that
-   * operator get a constant, here or from `others`, which [[replaceConstants]] puts in, e.g. in
-   * `CAST(x AS STRING)`, which [[replaceConstants]] folds.
+   * `x = 0.0`, as [[replaceConstants]] keeps it there. [[replaceConstants]] then folds such an
+   * operator where it reaches it and all of its attributes get a constant, as it does on master,
+   * e.g. `CAST(x AS STRING)` (see its `foldOnly`).
    */
   private def replaceConstantsInPlace(
       condition: Expression,
-      equalityPredicates: AttributeMap[(Literal, BinaryComparison)],
-      others: AttributeMap[(Literal, BinaryComparison)] = AttributeMap.empty)
-    : Expression = {
-    def constants(equalities: AttributeMap[(Literal, BinaryComparison)]) =
-      AttributeMap(equalities.map { case (attr, (lit, _)) => attr -> lit })
-    val constantsMap = constants(equalityPredicates)
-    val otherConstants = constants(others)
+      equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
+    val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
     def replaceInComparison(b: BinaryComparison): Expression = {
       val canReplace = replaceableIn(b, constantsMap)
-      val canReplaceOther = replaceableIn(b, otherConstants)
       val signed = AttributeSet(b.references.filter(a => canReplace(a) &&
         hasSignedZero(constantsMap(a))))
       // Replaces the attributes, but keeps those of `signed` under an operator that can tell
-      // -0.0 from 0.0, unless all of the attributes under that operator get a constant.
+      // -0.0 from 0.0.
       def replace(e: Expression, keepsEqual: Boolean): Expression = e match {
         case a: AttributeReference if canReplace(a) && (keepsEqual || !signed.contains(a)) =>
           constantsMap(a)
-        case _ =>
-          val allReplaced = e.references.nonEmpty &&
-            e.references.forall(a => canReplace(a) || canReplaceOther(a))
-          e.mapChildren(replace(_, (keepsEqual && keepsEqualValues(e)) || allReplaced))
+        case _ => e.mapChildren(replace(_, keepsEqual && keepsEqualValues(e)))
       }
       replace(b, keepsEqual = true)
     }
@@ -617,21 +610,27 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * `condition` itself are rewritten regardless, and [[moveEqualitiesFirst]] orders them. A column
    * of the projection below that can fail (see [[FailableColumns]]) counts as one that can not
    * fail here, and [[moveEqualitiesFirst]] can then move the equalities ahead of a conjunct over
-   * it.
+   * it. The constants of `foldOnly`, which [[replaceConstantsInPlace]] has put in elsewhere, go
+   * only into such a whole expression that folds.
    */
   private def replaceConstants(
       condition: Expression,
-      equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
-    val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
-    val predicates = equalityPredicates.values.map(_._2).toSet
+      equalityPredicates: AttributeMap[(Literal, BinaryComparison)],
+      foldOnly: AttributeMap[(Literal, BinaryComparison)] = AttributeMap.empty): Expression = {
+    def constants(equalities: AttributeMap[(Literal, BinaryComparison)]) =
+      AttributeMap(equalities.map { case (attr, (lit, _)) => attr -> lit })
+    val constantsMap = constants(equalityPredicates)
+    val foldConstants = constants(AttributeMap(foldOnly.toSeq ++ equalityPredicates.toSeq))
+    val predicates = (equalityPredicates.values ++ foldOnly.values).map(_._2).toSet
     def replaceInComparison(b: BinaryComparison): Expression = {
       val canReplace = replaceableIn(b, constantsMap)
+      val canFold = replaceableIn(b, foldConstants)
       def replace(e: Expression): Expression = e match {
         case a: AttributeReference if canReplace(a) => constantsMap(a)
         case _: And | _: Or | _: Coalesce | _: In => replaceOperands(e, replace)
         case _ if ExprUtils.isTotalOperator(e) => e.mapChildren(replace)
-        case _ if e.references.nonEmpty && e.references.forall(canReplace) =>
-          fold(e.transform { case a: AttributeReference if canReplace(a) => constantsMap(a) })
+        case _ if e.references.nonEmpty && e.references.forall(canFold) =>
+          fold(e.transform { case a: AttributeReference if canFold(a) => foldConstants(a) })
             .getOrElse(e)
         case _ => e
       }
