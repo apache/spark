@@ -52,9 +52,9 @@ in a later operand from firing on rows Python never reaches. Two folds do that:
   strictness (the default) every comparison link is total, so no condition is
   NULL. Under ``transpileNullStrictness=loose`` an ordering link is NULL for a
   NULL operand and a CASE WHEN would skip it, so loose takes ``&`` / ``|``,
-  whose three-valued logic propagates the NULL. ``len()`` and ``%`` still raise
+  whose three-valued logic propagates the NULL. Calls and arithmetic can still raise
   under loose and the optimizer can drop or hoist an ``&`` / ``|`` operand (see
-  below), so a loose body that would take the CASE WHEN and holds either falls
+  below), so an atomic loose fold in a body holding either falls
   back to interpreted Python.
 
 The CASE WHEN is atomic to the optimizer: ``splitConjunctivePredicates`` matches
@@ -84,7 +84,7 @@ on that fold, not reasoned about:
   b < c) or (d < b and b < c)`` on ``(5, 1, None, 7)`` raises where Python
   returns False. Absorption (``(a && b) || b => b``) drops a guard instead:
   ``(a < b and b < c) or (b < c)`` on ``(None, 0, 1)`` returns True where Python
-  raises TypeError -- a silently wrong answer, not a spurious error.
+  would raise TypeError -- a silently wrong answer, not a spurious error.
 * Subexpression elimination -- OPEN. ``spark.sql.subexpressionElimination.enabled``
   defaults true while ``...skipForShortcutExpr`` defaults FALSE, so a conjunct
   living only in a short-circuited position is hoisted and evaluated
@@ -473,11 +473,10 @@ def _needs_atomic_boolops(body: ast.AST) -> bool:
 
 
 def _holds_raising_lowering(body: ast.AST) -> bool:
-    """Return True when ``body`` holds a ``len()`` or ``%``, the lowerings that
-    can raise under loose null strictness too (a NULL argument, a zero divisor).
-    """
+    """Conservatively flag calls and arithmetic that can raise under loose too."""
     return any(
-        isinstance(n, ast.Mod) or (isinstance(n, ast.Name) and n.id == "len")
+        isinstance(n, (ast.Call, ast.BinOp))
+        or (isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)))
         for n in ast.walk(body)
     )
 
@@ -866,10 +865,10 @@ class CatalystTranspiler(AbstractTranspiler):
         ordering link is NULL for a NULL operand, and a CASE WHEN would skip it
         and answer from the later operands, so loose folds with ``&`` / ``|``:
         their three-valued logic propagates the NULL, and no ordering
-        ``raise_error`` guard is left for the optimizer to move. ``len()`` and
-        ``%`` still raise under loose, though, and BooleanSimplification,
+        ``raise_error`` guard is left for the optimizer to move. Calls and
+        arithmetic can still raise under loose, though, and BooleanSimplification,
         subexpression elimination and partition pruning can drop or hoist an
-        ``&`` / ``|`` operand, so a body holding either falls back.
+        ``&`` / ``|`` operand, so an atomic fold in such a body falls back.
         TODO (SPARK-54783): take the CASE WHEN there when every operand before
         the last is never NULL under loose.
         """
@@ -881,7 +880,7 @@ class CatalystTranspiler(AbstractTranspiler):
             raise UnsupportedOperationException(
                 "under transpileNullStrictness=loose a chained or nested comparison "
                 "folds with `&` / `|`, which the optimizer may reorder around the "
-                "`len()` or `%` in this body, so the UDF falls back to interpreted "
+                "calls or arithmetic in this body, so the UDF falls back to interpreted "
                 "Python"
             )
         return functools.reduce(operator.or_ if is_or else operator.and_, operands)

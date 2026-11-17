@@ -1662,6 +1662,107 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     if spelled is not None:
                         self.assertEqual(self._vals(spelled, return_type, schema, rows), expected)
 
+    def test_loose_atomic_folds_with_throwing_operands_fall_back(self):
+        def length(a: int, b: int, s: str):
+            return (a is not None and 0 < len(s) < 10) or (b is not None and 0 < len(s) < 10)
+
+        def modulo(a: int, b: int, n: int, d: int):
+            return (a is not None and 0 < n % d < 10) or (b is not None and 0 < n % d < 10)
+
+        def length_absorption(s: str, x: int):
+            return (0 < len(s) < 10 and x > 0) or x > 0
+
+        def length_skip(s: str):
+            return s is not None and 0 < len(s) < 10
+
+        def modulo_absorption(n: int, d: int, z: int):
+            return (0 < n % d < 3 and z > 0) or z > 0
+
+        def modulo_skip(n: int, d: int):
+            return d != 0 and 0 < n % d < 3
+
+        def addition_skip(a: int, b: int):
+            return (a is not None and 0 < b + 1 < 10) or (a is not None and 0 < b + 1 < 10)
+
+        cases = [
+            (
+                length,
+                "a bigint, b bigint, s string",
+                [(None, None, None), (0, None, "abc"), (None, 0, ""), (None, 0, "abcdefghijk")],
+                (0, None, None),
+                "TypeError",
+            ),
+            (
+                modulo,
+                "a bigint, b bigint, n bigint, d bigint",
+                [(None, None, 1, 0), (0, None, -1, 3), (None, 0, 1, -3), (0, None, 0, 3)],
+                (0, None, 1, 0),
+                "ZeroDivisionError",
+            ),
+            (
+                length_absorption,
+                "s string, x bigint",
+                [("abc", 5), ("", 5), ("abc", -1)],
+                (None, 5),
+                "TypeError",
+            ),
+            (length_skip, "s string", [(None,), ("",), ("abc",)], None, None),
+            (
+                modulo_absorption,
+                "n bigint, d bigint, z bigint",
+                [(1, 3, 5), (3, 3, 5), (1, 3, -1)],
+                (1, 0, 5),
+                "ZeroDivisionError",
+            ),
+            (modulo_skip, "n bigint, d bigint", [(1, 0), (1, 3), (3, 3)], None, None),
+            (
+                addition_skip,
+                "a bigint, b bigint",
+                [(None, 2**63 - 1), (0, 5), (0, 10)],
+                None,
+                None,
+            ),
+        ]
+        for func, schema, rows, bad_row, error in cases:
+            with self.subTest(func=func.__name__):
+                for strictness in ("strict", "loose"):
+                    conf = {
+                        **_TRANSPILE_ON,
+                        "spark.sql.experimental.optimizer.transpileNullStrictness": strictness,
+                    }
+                    with self.sql_conf(conf):
+                        pudf = UserDefinedFunction(func, BooleanType())
+                        df = self.spark.createDataFrame(rows, schema)
+                        projected = df.select(pudf(*df.columns))
+                        if strictness == "strict":
+                            self.assertTrue(pudf.transpiled)
+                            self.assertEqual(0, self._eval_python_count(projected))
+                        else:
+                            self.assertEqual([], pudf.transpiled)
+                            self.assertGreater(self._eval_python_count(projected), 0)
+                        self.assertEqual(
+                            [func(*r) for r in rows], [r[0] for r in projected.collect()]
+                        )
+                        self.assertEqual(
+                            sum(bool(func(*r)) for r in rows), df.filter(pudf(*df.columns)).count()
+                        )
+                        if strictness == "loose" and bad_row is not None:
+                            bad = self.spark.createDataFrame([bad_row], schema)
+                            with self.assertRaises(Exception) as raised:
+                                bad.select(pudf(*bad.columns)).collect()
+                            self.assertIn(error, str(raised.exception))
+
+        def standalone_len(s: str):
+            return len(s) > 0
+
+        with self.sql_conf(
+            {**_TRANSPILE_ON, "spark.sql.experimental.optimizer.transpileNullStrictness": "loose"}
+        ):
+            self.assertEqual(
+                [False, True],
+                self._vals(standalone_len, BooleanType(), "s string", [("",), ("abc",)]),
+            )
+
     def test_udf_transpile_falls_back_for_uncastable_return_type(self):
         # The lowered expression is cast to the declared return type; a return
         # type no atomic lowering can be cast to (arrays, maps, datetimes, ...)
