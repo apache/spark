@@ -24,8 +24,10 @@ import org.scalatest.PrivateMethodTester
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.execution.datasources.WriteJobDescription
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.SerializableConfiguration
 
+@DataSourceV2Test
 class FileWriterFactorySuite extends SparkFunSuite with PrivateMethodTester {
 
   test("SPARK-48484: V2Write uses different TaskAttemptIds for different task attempts") {

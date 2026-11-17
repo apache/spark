@@ -31,12 +31,14 @@ import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests for metadata-only delete optimization using second-pass
  * PartitionPredicate (see SPARK-55596), and for the second pass in the scan of a
  * group-based UPDATE or MERGE (GroupBasedRowLevelOperationScanPlanning).
  */
+@DataSourceV2Test
 class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 

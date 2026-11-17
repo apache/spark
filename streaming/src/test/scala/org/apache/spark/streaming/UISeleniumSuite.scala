@@ -99,7 +99,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with T
 
       val sparkUI = ssc.sparkContext.ui.get
 
-      sparkUI.getDelegatingHandlers.count(_.getContextPath().contains("/streaming")) should be (5)
+      sparkUI.getDelegatingHandlers.count(_.getContextPath().contains("/streaming")) should be (4)
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))

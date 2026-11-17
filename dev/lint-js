@@ -24,7 +24,6 @@ SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 LINT_JS_REPORT_FILE_NAME="$SPARK_ROOT_DIR/dev/lint-js-report.log"
 LINT_TARGET_FILES=(
   "$SPARK_ROOT_DIR/core/src/main/resources/org/apache/spark/ui/static/"
-  "$SPARK_ROOT_DIR/sql/core/src/main/resources/org/apache/spark/sql/execution/ui/static/"
   "$SPARK_ROOT_DIR/docs/js"
   "$SPARK_ROOT_DIR/ui-test/tests/"
 )

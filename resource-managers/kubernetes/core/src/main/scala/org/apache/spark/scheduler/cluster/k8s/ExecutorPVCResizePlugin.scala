@@ -31,7 +31,7 @@ import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext,
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CURRENT_DISK_SIZE, MAX_SIZE, ORIGINAL_DISK_SIZE, PVC_METADATA_NAME}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CURRENT_DISK_SIZE, EXECUTOR_ID, MAX_SIZE, ORIGINAL_DISK_SIZE, PVC_METADATA_NAME, RATIO, REPORT_DETAILS, THRESHOLD}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -141,7 +141,7 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
 
         // Drop reports of executors without a pod so that latestReports does not grow unbounded.
         latestReports.keySet().retainAll(podByExecId.keySet.asJava)
-        logInfo(s"Latest PVC usage reports: $latestReports")
+        logInfo(log"Latest PVC usage reports: ${MDC(REPORT_DETAILS, latestReports)}")
 
         latestReports.values().asScala.foreach { report =>
           podByExecId.get(report.executorId).foreach { pod =>
@@ -175,8 +175,9 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
 
   private def tryResize(
       client: KubernetesClient, pvcName: String, ratio: Double, execId: String): Unit = {
-    logInfo(s"Try to resize executor $execId PVC $pvcName with ratio $ratio " +
-      s"(threshold $threshold).")
+    logInfo(log"Try to resize executor ${MDC(EXECUTOR_ID, execId)} PVC " +
+      log"${MDC(PVC_METADATA_NAME, pvcName)} with ratio ${MDC(RATIO, ratio)} " +
+      log"(threshold ${MDC(THRESHOLD, threshold)}).")
     if (ratio <= threshold) return
     try {
       val pvc = client.persistentVolumeClaims()
@@ -192,8 +193,9 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
         .map(q => Quantity.getAmountInBytes(q).longValue())
         .getOrElse(current)
       if (current > capacity) {
-        logInfo(s"PVC $pvcName resize is in progress or failed " +
-          s"(spec=$current, status=$capacity); skip.")
+        logInfo(log"PVC ${MDC(PVC_METADATA_NAME, pvcName)} resize is in progress or failed " +
+          log"(spec=${MDC(CURRENT_DISK_SIZE, current)}, " +
+          log"status=${MDC(ORIGINAL_DISK_SIZE, capacity)}); skip.")
         return
       }
       if (current >= maxStorage) {
@@ -272,7 +274,8 @@ class ExecutorPVCResizeExecutorPlugin extends ExecutorPlugin with Logging {
       } catch { case _: Throwable => None }
     }.maxOption
     maxRatio.foreach { ratio =>
-      logInfo(s"Reporting max PVC disk usage ratio for executor ${env.executorId}: $ratio")
+      logInfo(log"Reporting max PVC disk usage ratio for executor " +
+        log"${MDC(EXECUTOR_ID, env.executorId)}: ${MDC(RATIO, ratio)}")
       pluginContext.send(PVCDiskUsageReport(env.executorId, ratio))
     }
   }

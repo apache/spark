@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeSet, Expression, ExpressionSet, If, Literal, NamedExpression, Or, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.TableCapability
@@ -669,7 +669,9 @@ class PlanMerger(
               }
           }
 
-        case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
+        // Existence joins have the same join type once their `exists` attributes are normalized.
+        case (np: Join, cp: Join)
+            if np.joinType.canonicalized == cp.joinType.canonicalized && np.hint == cp.hint =>
           tryMergePlans(np.left, cp.left, context.copy(filterAboveScan = false)).flatMap {
             case TryMergeResult(mergedLeft, leftNPMapping, leftNPFilter, leftCPFilter, _,
                 leftDsv2Merged) =>
@@ -690,7 +692,13 @@ class PlanMerger(
                            filterSafeForJoin(fromLeft = true, cp.joinType)) &&
                        (rightNPFilter.isEmpty && rightCPFilter.isEmpty ||
                            filterSafeForJoin(fromLeft = false, cp.joinType)) =>
-                  val npMapping = leftNPMapping ++ rightNPMapping
+                  // The merged join keeps `cp.joinType`, so the new plan's `exists` is now `cp`'s.
+                  val existsMapping = (np.joinType, cp.joinType) match {
+                    case (ExistenceJoin(npExists), ExistenceJoin(cpExists)) =>
+                      AttributeMap(Seq[(Attribute, Attribute)](npExists -> cpExists))
+                    case _ => AttributeMap.empty[Attribute]
+                  }
+                  val npMapping = leftNPMapping ++ rightNPMapping ++ existsMapping
                   val mappedNPCondition = np.condition.map(mapAttributes(_, npMapping))
                   // Comparing the canonicalized form is required to ignore different forms of the
                   // same expression and `AttributeReference.qualifier`s in `cp.condition`.

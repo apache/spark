@@ -34,6 +34,7 @@ jobs:
   docs:
     name: Build and deploy documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       id-token: write
       pages: write

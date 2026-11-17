@@ -18,12 +18,20 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, CaseWhen, Cast, Coalesce, Divide, EvalMode, Exists, Expression, GetMapValue, GetStructField, If, InSubquery, ListQuery, Literal, Lower, Not, NumericEvalContext, Or, Rand, Round, Substring}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet, Count, Sum}
+import org.apache.spark.sql.catalyst.expressions.{
+  Add, Ascending, AttributeReference, CaseWhen, Cast, Coalesce, Divide, EvalMode, Exists,
+  Expression, GetMapValue, GetStructField, If, InSubquery, ListQuery, Literal, Lower, Not,
+  NumericEvalContext, Or, Rand, Round, SortOrder, Substring
+}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{
+  AggregateExpression, CollectSet, Count, ListAgg, Sum
+}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  DoubleType, IntegerType, MapType, StringType, StructField, StructType
+}
 
 class RewriteDistinctAggregatesSuite extends PlanTest {
   val nullInt = Literal(null, IntegerType)
@@ -127,6 +135,38 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60124: listagg with distinct and filter") {
+    val relation = LocalRelation($"s".string, $"keep".int)
+    val input = relation
+      .select(
+        ListAgg(
+          child = $"s",
+          delimiter = Literal("|"),
+          orderExpressions = Seq(SortOrder($"s", Ascending))
+        ).toAggregateExpression(
+          isDistinct = true,
+          filter = Some($"keep" === 1)
+        ).as("rendered")
+      ).analyze
+    val rewrite = RewriteDistinctAggregates(input)
+    assert(rewrite.resolved)
+  }
+
+  test("SPARK-60124: regular listagg alongside distinct aggregates") {
+    val relation = LocalRelation($"a".int, $"b".int, $"s".string)
+    val input = relation
+      .groupBy($"a")(
+        countDistinct($"b").as("agg1"),
+        countDistinct($"a").as("agg2"),
+        ListAgg(
+          child = $"s",
+          delimiter = Literal("|"),
+          orderExpressions = Seq(SortOrder($"s", Ascending))
+        ).toAggregateExpression(isDistinct = false).as("rendered")
+      ).analyze
+    val rewrite = RewriteDistinctAggregates(input)
+    assert(rewrite.resolved)
+  }
   // ---------------------------------------------------------------------------
   // COUNT(DISTINCT IF/CASE) canonicalization (SPARK-56898)
   // ---------------------------------------------------------------------------
@@ -840,3 +880,4 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       }
   }
 }
+

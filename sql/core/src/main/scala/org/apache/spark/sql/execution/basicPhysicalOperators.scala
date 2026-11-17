@@ -205,6 +205,41 @@ trait GeneratePredicateHelper extends PredicateHelper {
   }
 
   /**
+   * Generates the states of the common subexpressions analyzed in `equivalentExpressions` to
+   * eliminate, for `generatePredicateCode`, with the code of the input columns hidden so no state
+   * carries a column's code. Generating a state reads the columns it needs from `ctx.currentVars`,
+   * taking their code into the state's own code (or, when the states are split into functions,
+   * into `exprCodesNeedEvaluate`). If it took a column's code, `generatePredicateCode` could no
+   * longer load the column itself: a conjunct before the first state that references the column
+   * would read it undeclared, and two states reading the same column would declare it twice.
+   *
+   * So the states are generated with `ctx.currentVars` swapped for copies whose code is blank;
+   * `input` keeps its code, and the states read only the columns' variables.
+   * `exprCodesNeedEvaluate`, which only the split fills, is then empty, as asserted, and is not
+   * emitted, unlike in `ProjectExec` and `ExpandExec`, which evaluate their states up front:
+   * `generatePredicateCode` loads each column, and a split state takes the columns it reads as
+   * parameters. Copies that keep the code would not do: kept inline, a state would declare a
+   * column that `generatePredicateCode` declares too, and split, the column's code would reach
+   * `exprCodesNeedEvaluate`. This hiding is the precondition `generatePredicateCode` documents
+   * for `subExprStates`, done here so a caller need not repeat it.
+   */
+  protected def subExprStatesToEliminate(
+      ctx: CodegenContext,
+      equivalentExpressions: EquivalentExpressions,
+      input: Seq[ExprCode]): Map[ExpressionEquals, SubExprEliminationState] = {
+    val savedVars = ctx.currentVars
+    ctx.currentVars = input.map(_.copy(code = EmptyBlock)).toIndexedSeq
+    try {
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(equivalentExpressions)
+      assert(subExprs.exprCodesNeedEvaluate.isEmpty,
+        "the states must not carry the code of an input column, see subExprStatesToEliminate")
+      subExprs.states
+    } finally {
+      ctx.currentVars = savedVars
+    }
+  }
+
+  /**
    * Generates the check that drops the row when the conjunct evaluated into `ev` is FALSE, or
    * when it is NULL and `nullFlag` is None. With `nullFlag`, a NULL conjunct sets the flag.
    */
@@ -283,7 +318,10 @@ trait GeneratePredicateHelper extends PredicateHelper {
    * The caller binds `otherPreds` against the output with the checked columns, those of
    * `nonNullAttrExprIds`, tightened to non-nullable, in `boundOtherPreds`. `subExprStates` holds
    * the states of the common subexpressions to eliminate from `boundOtherPreds`, if any. The
-   * caller must have evaluated the input variables they read before this code.
+   * caller must have generated them with the code of the input columns hidden (see
+   * `subExprStatesToEliminate`), so no state carries a column's code; this code then loads each
+   * column itself, before the first check or conjunct that reads it, and a state after the loads
+   * of the conjunct that first references it (4).
    *
    * The conjuncts are generated one by one, loading a column only when it is needed, so that a
    * FALSE conjunct skips the rest. This is very perf sensitive. The invariants:
@@ -506,28 +544,24 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // Eliminate the common subexpressions of `otherPreds` only when one of them is not cheap,
-    // per `CollapseProject.isCheap`. Elimination has a cost: the input columns of `otherPreds`
-    // are all evaluated at the top of the row loop, below, while without it each column is
-    // loaded lazily, just before the first conjunct that needs it, and not at all on a row that
-    // an earlier conjunct drops. Sharing a cheap subexpression, such as the struct field of
-    // `s.x > 5 AND s.x < 100`, does not pay for that. A column that conjuncts share is never a
-    // common subexpression, as `EquivalentExpressions` skips leaf expressions.
-    // `subexpressionElimination.filterExec.enabled` turns this off independently of
-    // subexpression elimination elsewhere.
+    // per `CollapseProject.isCheap`. Kept inline, a state computes the repeated expression once,
+    // before the first conjunct that references it, instead of at each occurrence, so it adds no
+    // local variable, but when the code of the states together exceeds `methodSplitThreshold`
+    // and the parameters of each fit in a Java method, each common subexpression becomes a
+    // method with up to two mutable fields, which is known only once the states are generated,
+    // after this gate. Sharing a cheap subexpression, such as the struct field of
+    // `s.x > 5 AND s.x < 100`, does not pay for that, since computing it again is a slot read.
+    // A column that conjuncts share is never a common subexpression, as `EquivalentExpressions`
+    // skips leaf expressions. `subexpressionElimination.filterExec.enabled` turns this off
+    // independently of subexpression elimination elsewhere.
     val eliminateSubExprs = conf.subexpressionEliminationEnabled &&
       conf.subexpressionEliminationFilterExecEnabled && otherPreds.nonEmpty &&
       otherPredsEquivalentExpressions.getCommonSubexpressions.exists(!CollapseProject.isCheap(_))
 
-    val (inputVarsEvalCode, subExprStates) = if (eliminateSubExprs) {
-      // Evaluate the input variables before the states are generated: generating a state takes
-      // the code of the input variables it reads, and the conjuncts read the same variables.
-      val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
-      val evalCode = evaluateRequiredVariables(child.output, input, otherPredInputAttrs)
-      val subExprs =
-        ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
-      (evalCode, subExprs.states)
+    val subExprStates = if (eliminateSubExprs) {
+      subExprStatesToEliminate(ctx, otherPredsEquivalentExpressions, input)
     } else {
-      ("", Map.empty[ExpressionEquals, SubExprEliminationState])
+      Map.empty[ExpressionEquals, SubExprEliminationState]
     }
 
     val predicateCode = generatePredicateCode(
@@ -546,7 +580,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $inputVarsEvalCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
@@ -999,7 +1032,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * child with no member left reports `UnknownPartitioning`. A partitioning that references no
    * attribute, such as `SinglePartition`, passes through.
    */
-  private def prepareOutputPartitioning(): Seq[Partitioning] = {
+  private[execution] def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Map every child's partitioning attributes to this union's output attributes, so all
     // partitionings are expressed in the same attribute space before comparison. A child's
     // `outputPartitioning` may reference attributes that differ from its own `output` in any
@@ -1079,10 +1112,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   // Whether the output of a child repeats an `ExprId`. Fixed for the given children, so it is
   // derived once rather than on every read of the partitioning.
-  @transient private lazy val childOutputRepeatsExprId: Boolean = children.exists { child =>
-    val exprIds = child.output.map(_.exprId)
-    exprIds.distinct.size < exprIds.size
-  }
+  @transient private[execution] lazy val childOutputRepeatsExprId: Boolean =
+    children.exists { child =>
+      val exprIds = child.output.map(_.exprId)
+      exprIds.distinct.size < exprIds.size
+    }
 
   /**
    * The SPARK-52921 candidate partitioning derived from the children, which `outputPartitioning`
@@ -1208,11 +1242,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    *
    * `UNION_OUTPUT_PARTITIONING` is taken from `recordPreparationConf`, recorded before
    * `EnsureRequirements`, so the value the exchanges are planned against is the value execution
-   * uses. Reading it live here would leave one rule between the two: `conf` is live, and another
-   * thread setting it in that window would let a parent drop an exchange over a concrete
-   * partitioning and then have the stamp freeze plain concatenation under it. A node created after
-   * that pass carries no record of its own and takes the same preparation's value when it is
-   * stamped; only a union no barrier reached at all falls back to the live conf.
+   * uses. Reading it live here would let a later read see a different value: `conf` is live, and
+   * another thread setting it between `EnsureRequirements` and the stamp would let a parent drop
+   * an exchange over a concrete partitioning and then have the stamp freeze plain concatenation
+   * under it. A node created after that pass carries no record of its own and takes the same
+   * preparation's value when stamped; only a union no barrier reached falls back to the live conf.
    *
    * A read before `StampUnionDecisions` answers from the children as they are then, and does not
    * write, so observing an unprepared plan cannot decide anything for the prepared one.
@@ -1257,12 +1291,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   /**
    * Fixes this node's decisions for the rest of the plan's life. Called by `StampUnionDecisions`,
-   * first right after `EnsureRequirements`, so what the exchanges around this union were planned
-   * against is what execution uses; the confs come from one read per preparation. Nothing else
-   * writes this tag on an existing node, and the nodes the rule writes are freshly planned and not
-   * yet published, so no reader can be looking at one; `metrics` and the codegen gate read it
-   * later, and a node that already carries it keeps it, which is how the copy in the codegen shell
-   * stays in step with the gate.
+   * first after `EnsureRequirements` and, in the AQE list, after shuffle push-down. Execution uses
+   * the decision the exchanges were planned against; the confs come from one read per preparation.
+   * Nothing else writes this tag on an existing node, and freshly planned nodes are not yet
+   * published, so no reader can be looking at one. Metrics and the codegen gate read it later;
+   * nodes already carrying it keep it, including the copy in the codegen shell.
    */
   private[execution] def stampDecisions(snapshot: UnionConfSnapshot): Unit =
     if (stampedDecisions.isEmpty) {
