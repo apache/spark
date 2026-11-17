@@ -384,7 +384,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
             existingBlock.release(blockManager)
           }
         } else {
-          logWarning(s"Cache artifact with hash $hash already exists in this session, skipping.")
+          logWarning(log"Cache artifact with hash ${MDC(LogKeys.ARTIFACT_ID, hash)} already " +
+            log"exists in this session, skipping.")
         }
       }(finallyBlock = { tmpFile.delete() })
     } else if (normalizedRemoteRelativePath.startsWith(s"classes${File.separator}")) {

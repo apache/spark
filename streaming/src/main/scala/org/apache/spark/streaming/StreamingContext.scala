@@ -635,7 +635,8 @@ class StreamingContext private[streaming] (
         val listeners = Utils.loadExtensions(classOf[StreamingListener], classNames, conf)
         listeners.foreach { listener =>
           addStreamingListener(listener)
-          logInfo(s"Registered streaming listener ${listener.getClass().getName()}")
+          logInfo(log"Registered streaming listener " +
+            log"${MDC(LogKeys.CLASS_NAME, listener.getClass().getName())}")
         }
       }
     } catch {
