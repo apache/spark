@@ -453,9 +453,9 @@ class ConstantPropagationSuite extends PlanTest {
         Pow($"d", $"y") < 0.0 && $"d" === 0.0,
         // Also below arithmetic, under an operator that keeps the sign.
         signed(Divide($"d", $"y")) && $"d" === 0.0,
-        // And where `replaceConstants` would not fold the operator, as it does not reach it: in an
-        // operand that guards another one, under a `CASE WHEN` that reads another column, or
-        // under another operator that does.
+        // And where `replaceConstants` would not fold the operator: in an operand that guards
+        // another one, under an `IF` that reads another column or that is a conjunct, or under
+        // another operator that reads another column.
         (Cast($"d", StringType) === "-0.0" || tenDividedBy($"y") > 1.0) && $"d" === 0.0,
         If($"y" > 0.0, Cast($"d", StringType), Literal("a")) === "-0.0" && $"d" === 0.0,
         If($"y" > 0.0, signed($"d"), Literal(false)) && $"d" === 0.0,
