@@ -109,6 +109,8 @@ The `spark-pipelines` command line interface (CLI) is the primary way to manage 
 
 `spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
 
+Pipelines run against a Spark Connect server, which holds the output tables and their metadata: pass `--remote sc://host:port` to point `spark-pipelines` at one. The [Quick Start](declarative-pipelines-quick-start.html#start-a-spark-connect-server) shows how to start a local server from the `pyspark` package.
+
 ### `spark-pipelines init`
 
 `spark-pipelines init --name my_pipeline` generates a simple pipeline project, inside a directory named `my_pipeline`, including a spec file and example transformation definitions.
