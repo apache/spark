@@ -317,6 +317,23 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
           sqlState = "0A000",
           parameters = Map("context" -> "MERGE"),
           context = ExpectedContext(fragment = "bonus?", start = 12, stop = 17))
+        // Also in a subquery built from a Dataset, whose plan is analyzed when it is built.
+        val maxBonus = "coalesce(max(bonus?[0]), 0)"
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source")
+              .mergeInto(tableNameAsString, $"source.pk" === col(tableNameAsString + ".pk"))
+              .whenMatched()
+              .update(Map("salary" -> spark.table("source").selectExpr(maxBonus).scalar()))
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(
+            fragment = "bonus?",
+            start = maxBonus.indexOf("bonus?"),
+            stop = maxBonus.indexOf("bonus?") + 5))
       }
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq(Row(1, 100, "hr")))
@@ -375,7 +392,8 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   test("merge into fails if an analyzed operation of the source has an optional reference") {
     withTempView("source", "source_v") {
-      withUserDefinedFunction("archived_flag" -> true, "source_rows" -> true) {
+      withUserDefinedFunction(
+          "archived_flag" -> true, "source_rows" -> true, "flag_rows" -> true) {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }
             |""".stripMargin)
@@ -388,6 +406,18 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
             .whenMatched(expr("s.archived = true"))
             .delete()
             .merge()
+        }
+
+        def checkMergeFails(source: => DataFrame, sqlText: String, reference: String): Unit = {
+          checkError(
+            exception = intercept[AnalysisException](merge(source)),
+            condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+            sqlState = "0A000",
+            parameters = Map("context" -> "MERGE"),
+            context = ExpectedContext(
+              fragment = reference,
+              start = sqlText.indexOf(reference),
+              stop = sqlText.indexOf(reference) + reference.length - 1))
         }
 
         withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
@@ -412,6 +442,26 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
             sqlState = "0A000",
             parameters = Map("context" -> "MERGE"),
             context = ExpectedContext(fragment = "missing?:a", start = 5, stop = 14))
+          // The rest of the analysis of the operation can replace the NULL that the reference
+          // resolved to: an extraction from it, an IF over it, and a row of an inline table are
+          // folded, and an argument of a SQL table function is a part of the plan of the function.
+          Seq(
+            "attrs?['active']" -> "attrs?",
+            "tags?[0]" -> "tags?",
+            "items?[0].sku" -> "items?",
+            "IF(is_active?, true, false)" -> "is_active?"
+          ).foreach { case (expression, reference) =>
+            val selectItem = s"$expression AS archived"
+            checkMergeFails(
+              spark.table("source").selectExpr("pk", selectItem).as("s"), selectItem, reference)
+          }
+          val inlineTable = "SELECT * FROM VALUES (1, flag?) AS t(pk, archived)"
+          checkMergeFails(spark.sql(inlineTable).as("s"), inlineTable, "flag?")
+          sql("CREATE TEMPORARY FUNCTION flag_rows(flag BOOLEAN) " +
+            "RETURNS TABLE (archived BOOLEAN) RETURN SELECT flag")
+          val lateralCall = "SELECT pk, f.archived FROM source, LATERAL flag_rows(archived?) f"
+          checkMergeFails(spark.sql(lateralCall).as("s"), lateralCall, "archived?")
+
           // The common table expressions of an unanalyzed source are not children of its plan.
           val withCte = "WITH s AS (SELECT pk, archived? AS archived FROM source) SELECT * FROM s"
           checkError(
@@ -435,6 +485,13 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
           merge(spark.table("source").selectExpr("pk", "archived_flag() AS archived").as("s"))
           merge(spark.sql("SELECT * FROM source_rows()").as("s"))
         }
+
+        // The analyzed operations of a source DataFrame keep their NULLs when optional references
+        // are disabled before the MERGE.
+        val builtWhileEnabled = withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true") {
+          spark.table("source").selectExpr("pk", "attrs?['active'] AS archived")
+        }
+        checkMergeFails(builtWhileEnabled.as("s"), "attrs?['active'] AS archived", "attrs?")
 
         checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
       }

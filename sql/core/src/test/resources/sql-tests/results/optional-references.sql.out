@@ -707,6 +707,14 @@ NULL	NULL
 
 
 -- !query
+SELECT n.a?, a + 1 FROM VALUES (NULL) AS t(n)
+-- !query schema
+struct<a:void,(lateralAliasReference(a) + 1):int>
+-- !query output
+NULL	NULL
+
+
+-- !query
 SELECT struct(id?, missing?) AS s FROM orgs
 -- !query schema
 struct<s:struct<id:int,missing:void>>
@@ -1363,6 +1371,14 @@ struct<>
 
 -- !query
 DROP TEMPORARY VARIABLE known_struct
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE void_var
 -- !query schema
 struct<>
 -- !query output
@@ -3497,6 +3513,23 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+CREATE TEMPORARY FUNCTION captured_fn() RETURNS INT RETURN coalesce(missing?, 10)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION captured_table_fn() RETURNS TABLE (x INT)
+  RETURN SELECT coalesce(missing?, 10)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SET spark.sql.optionalReferences.enabled=false
 -- !query schema
 struct<key:string,value:string>
@@ -3608,6 +3641,52 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+SELECT captured_fn()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "captured_fn()"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM captured_table_fn()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "captured_table_fn()"
+  } ]
+}
+
+
+-- !query
 RESET spark.sql.optionalReferences.enabled
 -- !query schema
 struct<>
@@ -3638,3 +3717,35 @@ struct<id:int,addr:struct<city:string,zip:string>,deleted_at:void>
 -- !query output
 1	{"city":"SF","zip":"94105"}	NULL
 2	{"city":"NYC","zip":"10001"}	NULL
+
+
+-- !query
+SELECT captured_fn()
+-- !query schema
+struct<captured_fn():int>
+-- !query output
+10
+
+
+-- !query
+SELECT * FROM captured_table_fn()
+-- !query schema
+struct<x:int>
+-- !query output
+10
+
+
+-- !query
+DROP TEMPORARY FUNCTION captured_fn
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION captured_table_fn
+-- !query schema
+struct<>
+-- !query output
+

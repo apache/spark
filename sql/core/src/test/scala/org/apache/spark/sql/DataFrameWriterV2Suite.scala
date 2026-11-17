@@ -307,6 +307,17 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
         sqlState = "0A000",
         parameters = Map("context" -> "INSERT ... REPLACE"),
         context = ExpectedContext(fragment = "deleted?", start = 0, stop = 7))
+      // Also in a subquery built from a Dataset, which is analyzed when it is built, also where
+      // the rest of that analysis folded the NULL away.
+      checkError(
+        exception = intercept[AnalysisException] {
+          val deleted = spark.table("source").where("tags?[0] IS NULL").select("id")
+          spark.table("source2").writeTo("testcat.table_name").overwrite(col("id").isin(deleted))
+        },
+        condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+        sqlState = "0A000",
+        parameters = Map("context" -> "INSERT ... REPLACE"),
+        context = ExpectedContext(fragment = "tags?", start = 0, stop = 4))
     }
 
     checkAnswer(

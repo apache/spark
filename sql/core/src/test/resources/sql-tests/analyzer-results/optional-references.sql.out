@@ -935,6 +935,15 @@ Project [null AS a#x, null AS a#x]
 
 
 -- !query
+SELECT n.a?, a + 1 FROM VALUES (NULL) AS t(n)
+-- !query analysis
+Project [a#x, (cast(a#x as int) + 1) AS (lateralAliasReference(a) + 1)#x]
++- Project [n#x, null AS a#x]
+   +- SubqueryAlias t
+      +- LocalRelation [n#x]
+
+
+-- !query
 SELECT struct(id?, missing?) AS s FROM orgs
 -- !query analysis
 Project [struct(id, id#x, missing, null) AS s#x]
@@ -1619,6 +1628,13 @@ DROP TEMPORARY VARIABLE known_struct
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.known_struct
+
+
+-- !query
+DROP TEMPORARY VARIABLE void_var
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.void_var
 
 
 -- !query
@@ -3986,6 +4002,19 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+CREATE TEMPORARY FUNCTION captured_fn() RETURNS INT RETURN coalesce(missing?, 10)
+-- !query analysis
+CreateSQLFunctionCommand captured_fn, INT, coalesce(missing?, 10), false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION captured_table_fn() RETURNS TABLE (x INT)
+  RETURN SELECT coalesce(missing?, 10)
+-- !query analysis
+CreateSQLFunctionCommand captured_table_fn, x INT, SELECT coalesce(missing?, 10), true, true, false, false
+
+
+-- !query
 SET spark.sql.optionalReferences.enabled=false
 -- !query analysis
 SetCommand (spark.sql.optionalReferences.enabled,Some(false))
@@ -4091,6 +4120,48 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+SELECT captured_fn()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "captured_fn()"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM captured_table_fn()
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'?'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "captured_table_fn()"
+  } ]
+}
+
+
+-- !query
 RESET spark.sql.optionalReferences.enabled
 -- !query analysis
 ResetCommand spark.sql.optionalReferences.enabled
@@ -4125,3 +4196,34 @@ Sort [id#x ASC NULLS FIRST], true
                         +- Project [id#x, addr#x]
                            +- SubqueryAlias t
                               +- LocalRelation [id#x, addr#x]
+
+
+-- !query
+SELECT captured_fn()
+-- !query analysis
+Project [captured_fn() AS captured_fn()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM captured_table_fn()
+-- !query analysis
+Project [x#x]
++- SQLFunctionNode captured_table_fn
+   +- SubqueryAlias captured_table_fn
+      +- Project [cast(coalesce(NULL, 10)#x as int) AS x#x]
+         +- Project [coalesce(cast(null as int), 10) AS coalesce(NULL, 10)#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION captured_fn
+-- !query analysis
+DropFunctionCommand captured_fn, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION captured_table_fn
+-- !query analysis
+DropFunctionCommand captured_table_fn, false, true

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   View
 }
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -40,12 +41,22 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * `Dataset.mergeInto` and the Spark Connect MERGE command put the plan of the source DataFrame
  * there, in which only the last operation is sure to be unanalyzed: a Dataset operation builds on
  * the analyzed plan of the one before, and Spark Connect analyzes some relations, such as
- * `withColumns`, when it plans them. In an analyzed operation, an optional reference that matched
- * nothing is the NULL that it resolved to, which is rejected as well.
+ * `withColumns`, when it plans them. An analyzed operation whose analysis resolved an optional
+ * reference to NULL is rejected as well. Its analysis marked the plan that it returned, see
+ * `OptionalReferences.RESOLVED_NULL_REFERENCE`, because the rest of the analysis can have
+ * replaced the NULL itself, as for `attrs?['active']`.
+ *
+ * The same holds for a subquery of the statement that was built from a Dataset, such as
+ * `Dataset.exists` in the condition of `DataFrameWriterV2.overwrite`, which holds the analyzed
+ * plan of that Dataset.
+ *
+ * The rule runs whether or not optional references are enabled: a source DataFrame that was built
+ * while they were enabled keeps the NULLs of its analyzed operations, also in a MERGE that runs
+ * after they are disabled.
  *
  * {{{
  *   df.writeTo("t").overwrite(expr("deleted_at? IS NULL"))
- *   spark.table("s").selectExpr("pk", "archived? AS archived").as("s").mergeInto("t", ...)
+ *   spark.table("s").selectExpr("pk", "attrs?['active'] AS active").as("s").mergeInto("t", ...)
  * }}}
  */
 object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
@@ -58,13 +69,17 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
         }
         operator match {
           case merge: MergeIntoTable =>
+            // TODO: An unbound named parameter marker `:p?` in the SQL text of a source DataFrame
+            // is not rejected: by default, `SubstituteParamsParser` replaces it with the text NULL
+            // before the text is parsed, which leaves nothing in the plan for this check to find.
             OptionalReferences
               .unresolvedOptionalReference(merge.sourceTable)
-              .orElse(firstNullReference(merge.sourceTable))
-              .foreach { reference =>
+              .map(_.origin)
+              .orElse(resolvedNullReference(merge.sourceTable))
+              .foreach { origin =>
                 throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(
                   "MERGE",
-                  reference.origin
+                  origin
                 )
               }
           case _ =>
@@ -84,39 +99,76 @@ object CheckOptionalReferencesInDml extends Rule[LogicalPlan] {
   }
 
   /**
-   * Returns the first NULL that an optional reference of `plan` resolved to in an analysis of an
-   * operation of `plan`, see [[OptionalReferences.isNullReference]], or None. Views and SQL
-   * functions resolve their own optional references, so the search does not enter a view, a SQL
-   * table function, or the body of a SQL scalar function.
+   * Returns the origin of the first optional reference of `plan` that an analysis of an operation
+   * of `plan` resolved to NULL, or None: of a NULL that is still there, see
+   * [[OptionalReferences.isNullReference]], or else of a mark of such an analysis, see
+   * [[OptionalReferences.RESOLVED_NULL_REFERENCE]]. A NULL that is still there is the more precise
+   * position, as for `missing?:a`, where the mark keeps `missing?`, the first NULL that the
+   * analysis created.
    */
-  private def firstNullReference(plan: LogicalPlan): Option[Expression] = plan match {
-    case _: View | _: SQLFunctionNode =>
-      None
-    case _ =>
-      plan.expressions.iterator
-        .flatMap(expression => firstNullReference(expression))
-        .nextOption()
-        .orElse(plan.children.iterator.flatMap(child => firstNullReference(child)).nextOption())
+  private def resolvedNullReference(plan: LogicalPlan): Option[Origin] =
+    resolvedNullReference(plan, marks = false).orElse(resolvedNullReference(plan, marks = true))
+
+  /** Like [[resolvedNullReference]] for a plan, in `expression` and its subquery plans. */
+  private def resolvedNullReference(expression: Expression): Option[Origin] = {
+    resolvedNullReference(expression, marks = false)
+      .orElse(resolvedNullReference(expression, marks = true))
   }
 
-  private def firstNullReference(expression: Expression): Option[Expression] = expression match {
-    case _ if OptionalReferences.isNullReference(expression) =>
-      Some(expression)
-    case _: SQLScalarFunction =>
-      None
-    case subquery: SubqueryExpression =>
-      firstNullReference(subquery.plan).orElse(
-        subquery.children.iterator.flatMap(child => firstNullReference(child)).nextOption())
-    case _ =>
-      expression.children.iterator.flatMap(child => firstNullReference(child)).nextOption()
+  /**
+   * Returns the origin of the first NULL that an optional reference of `plan` resolved to, or with
+   * `marks`, of the first mark, or None. Views and SQL functions resolve their own optional
+   * references, so the search does not enter a view, a SQL table function, or the body of a SQL
+   * scalar function.
+   */
+  private def resolvedNullReference(plan: LogicalPlan, marks: Boolean): Option[Origin] = {
+    plan match {
+      case _: View | _: SQLFunctionNode =>
+        None
+      case _ =>
+        val mark = if (marks) OptionalReferences.resolvedNullReferenceOrigin(plan) else None
+        mark
+          .orElse {
+            plan.expressions.iterator
+              .flatMap(expression => resolvedNullReference(expression, marks))
+              .nextOption()
+          }
+          .orElse {
+            plan.children.iterator
+              .flatMap(child => resolvedNullReference(child, marks))
+              .nextOption()
+          }
+    }
+  }
+
+  private def resolvedNullReference(expression: Expression, marks: Boolean): Option[Origin] = {
+    expression match {
+      case _ if !marks && OptionalReferences.isNullReference(expression) =>
+        Some(expression.origin)
+      case _: SQLScalarFunction =>
+        None
+      case subquery: SubqueryExpression =>
+        resolvedNullReference(subquery.plan, marks).orElse {
+          subquery.children.iterator
+            .flatMap(child => resolvedNullReference(child, marks))
+            .nextOption()
+        }
+      case _ =>
+        expression.children.iterator
+          .flatMap(child => resolvedNullReference(child, marks))
+          .nextOption()
+    }
   }
 
   private def checkExpression(expression: Expression, statement: String): Unit = {
-    OptionalReferences.unresolvedOptionalReference(expression).foreach { reference =>
-      throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(
-        statement,
-        reference.origin
-      )
-    }
+    OptionalReferences
+      .unresolvedOptionalReference(expression)
+      .map(_.origin)
+      // A subquery that was built from a Dataset, e.g. with `Dataset.exists`, holds its analyzed
+      // plan.
+      .orElse(resolvedNullReference(expression))
+      .foreach { origin =>
+        throw QueryCompilationErrors.optionalReferenceInDmlNotSupportedError(statement, origin)
+      }
   }
 }

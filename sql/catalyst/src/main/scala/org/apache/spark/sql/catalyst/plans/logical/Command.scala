@@ -72,7 +72,8 @@ trait AnalysisOnlyCommand extends Command {
 /**
  * A command that defines a view: it stores the text of a query, which is analyzed again whenever
  * the view is read. CREATE VIEW, ALTER VIEW ... AS, and CACHE TABLE ... AS SELECT define views.
- * See `AnalysisContext.isViewDefinition`.
+ * CREATE VIEW ... WITH METRICS analyzes its definition separately, with the placeholder of the
+ * metric view, see `AnalysisContext.definesView` and `AnalysisContext.isViewDefinition`.
  */
 trait DefinesView extends Command
 

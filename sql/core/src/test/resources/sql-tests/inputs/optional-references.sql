@@ -19,7 +19,8 @@ CREATE TEMPORARY VIEW orders AS SELECT * FROM VALUES
   AS t(id, items);
 
 -- A missing column resolves to NULL and an existing column resolves normally. Either way, the
--- output column keeps the name of the reference.
+-- output column of a reference that is a whole SELECT item keeps the name of the reference, and an
+-- expression over a missing reference is named after NULL.
 SELECT id?, name? FROM people;
 SELECT typeof(id?), typeof(name?) FROM people LIMIT 1;
 SELECT * FROM (SELECT id?, name? FROM people);
@@ -112,11 +113,14 @@ SELECT info.loc.city? FROM orgs;
 SELECT info?.addr.zip FROM orgs;
 SELECT a?.b?.c? FROM orgs;
 SELECT missing?.a.b, info.addr.geo?.x FROM orgs;
--- The fields of a column of type VOID are NULL, like without `?`.
+-- The fields of a column of type VOID are NULL, like without `?`. Such a field is found, so its
+-- name is a lateral column alias.
 SELECT n.a, n.a? FROM VALUES (NULL) AS t(n);
+SELECT n.a?, a + 1 FROM VALUES (NULL) AS t(n);
 SELECT struct(id?, missing?) AS s FROM orgs;
 
--- Errors other than not-found are still raised.
+-- Errors other than not-found are still raised, and so is the not-found error of an ORDER BY
+-- name that matches more than one column of the FROM clause, which is not a missing column.
 SELECT x? FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b;
 SELECT addr.state? FROM people a JOIN people b ON a.id = b.id;
 SELECT id.missing? FROM people;
@@ -183,6 +187,7 @@ EXECUTE IMMEDIATE 'SET VAR known = coalesce(unknown?, ?)' USING 7;
 SELECT known;
 DROP TEMPORARY VARIABLE known;
 DROP TEMPORARY VARIABLE known_struct;
+DROP TEMPORARY VARIABLE void_var;
 
 -- SQL scripting variables resolve as usual.
 --QUERY-DELIMITER-START
@@ -556,9 +561,13 @@ SELECT abs(1)? FROM people;
 SELECT id FROM people?;
 SELECT id?? FROM people;
 
--- While optional references are disabled, `?` after an identifier is a syntax error, including
--- in a view that was created while they were enabled, and `?` after a named parameter marker is a
--- positional parameter marker.
+CREATE TEMPORARY FUNCTION captured_fn() RETURNS INT RETURN coalesce(missing?, 10);
+CREATE TEMPORARY FUNCTION captured_table_fn() RETURNS TABLE (x INT)
+  RETURN SELECT coalesce(missing?, 10);
+
+-- While the session disables optional references, `?` after an identifier is a syntax error, also
+-- in a view or a SQL function that was created while they were enabled, and `?` after a named
+-- parameter marker is a positional parameter marker.
 SET spark.sql.optionalReferences.enabled=false;
 SELECT id? FROM people;
 SELECT addr.city? FROM people;
@@ -567,9 +576,15 @@ SELECT :x?;
 EXECUTE IMMEDIATE 'SELECT :x?' USING 1 AS x;
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE id IN (SELECT ?) ORDER BY id' USING 2;
 SELECT * FROM people_v ORDER BY id;
+SELECT captured_fn();
+SELECT * FROM captured_table_fn();
 
--- A session that does not set the config can still query a view that was created while optional
--- references were enabled, because the view captures the config.
+-- A session that does not set the config can still query a view or call a SQL function that was
+-- created while optional references were enabled, because they capture the config.
 RESET spark.sql.optionalReferences.enabled;
 SELECT id? FROM people;
 SELECT * FROM people_v ORDER BY id;
+SELECT captured_fn();
+SELECT * FROM captured_table_fn();
+DROP TEMPORARY FUNCTION captured_fn;
+DROP TEMPORARY FUNCTION captured_table_fn;

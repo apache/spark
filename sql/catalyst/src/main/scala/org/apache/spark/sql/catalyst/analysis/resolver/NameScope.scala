@@ -794,10 +794,11 @@ class NameScope(
   /**
    * Resolves the optional name `multipartName` that [[tryResolveMultipartNameByOutput]] could not
    * resolve, if it matches columns of the output and none of them has the nested fields of the
-   * name. This mirrors the fixed-point analyzer, for which the error of the same name without `?`
-   * is final in that case, except in ORDER BY: the result is NULL if the field that the only
-   * matching column does not have is optional, and all the matching columns, for the ambiguity
-   * error, if there are several.
+   * name, outside of ORDER BY. The result is NULL if the field that the only matching column does
+   * not have is optional, and all the matching columns, for the ambiguity error, if there are
+   * several. This mirrors the fixed-point analyzer, for which the error of the same name without
+   * `?` is final in that case. In ORDER BY, which falls back from the SELECT list to the columns
+   * of the FROM clause, the method returns None.
    *
    * {{{
    *   -- `t.addr` has no field `zip`, so `addr.zip?` is NULL instead of the field of the alias.

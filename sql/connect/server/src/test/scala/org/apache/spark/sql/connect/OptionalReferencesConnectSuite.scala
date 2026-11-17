@@ -37,18 +37,21 @@ class OptionalReferencesConnectSuite extends SparkConnectServerTest {
         session.sql("INSERT INTO cat.ns1.target VALUES (1, 'hr')").collect()
         session.sql("CREATE OR REPLACE TEMPORARY VIEW source AS SELECT 1 AS pk").collect()
         // The planner analyzes a `withColumns` relation when it plans it, so the optional
-        // reference is already the NULL that it resolved to when the MERGE is analyzed.
-        val exception = intercept[AnalysisException] {
-          session
-            .table("source")
-            .withColumn("archived", expr("archived?"))
-            .mergeInto("cat.ns1.target", col("source.pk") === col("cat.ns1.target.pk"))
-            .whenMatched(expr("archived IS NULL"))
-            .delete()
-            .merge()
+        // reference is already the NULL that it resolved to when the MERGE is analyzed, or a NULL
+        // that the rest of that analysis folded, as for an extraction from it.
+        Seq("archived?", "attrs?['archived']").foreach { column =>
+          val exception = intercept[AnalysisException] {
+            session
+              .table("source")
+              .withColumn("archived", expr(column))
+              .mergeInto("cat.ns1.target", col("source.pk") === col("cat.ns1.target.pk"))
+              .whenMatched(expr("archived IS NULL"))
+              .delete()
+              .merge()
+          }
+          assert(exception.getCondition == "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML")
+          assert(exception.getMessageParameters.get("context") == "MERGE")
         }
-        assert(exception.getCondition == "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML")
-        assert(exception.getMessageParameters.get("context") == "MERGE")
         assert(session.table("cat.ns1.target").collect().length == 1)
       } finally {
         session.sql("DROP TABLE IF EXISTS cat.ns1.target").collect()

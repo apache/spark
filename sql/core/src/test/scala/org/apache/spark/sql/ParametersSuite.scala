@@ -1494,9 +1494,30 @@ class ParametersSuite extends SharedSparkSession {
             parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
           checkAnswer(spark.sql(cteQuery, Array(6)), Row(2, 6))
         }
+        // So are the query of EXPLAIN and DESCRIBE QUERY and the specifications of a WINDOW
+        // clause. EXPLAIN reports the error of the query that it explains.
+        val explained = spark.sql(s"EXPLAIN $query", Array(5, 6)).collect().map(_.getString(0))
+        assert(explained.exists(_.contains("UNUSED_SQL_PARAMETER_VALUES")), explained.mkString)
+        Seq(
+          s"DESCRIBE QUERY $query",
+          "SELECT sum(id) OVER w AS s, ? AS g FROM v WINDOW w AS (PARTITION BY region?)"
+        ).foreach { statement =>
+          checkError(
+            exception = intercept[AnalysisException](spark.sql(statement, Array(5, 6))),
+            condition = "UNUSED_SQL_PARAMETER_VALUES",
+            parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
+        }
         // A statement without optional references ignores the extra values, as before.
         checkAnswer(spark.sql("SELECT ? AS a FROM v", Array(1, 2)), Row(1))
         checkAnswer(spark.sql("EXECUTE IMMEDIATE 'SELECT ? AS a FROM v' USING 1, 2"), Row(1))
+        Seq(
+          "EXPLAIN SELECT ? AS a FROM v",
+          "DESCRIBE QUERY SELECT ? AS a FROM v",
+          "SELECT sum(id) OVER w AS s, ? AS a FROM v WINDOW w AS (PARTITION BY id)"
+        ).foreach { statement =>
+          assert(!spark.sql(statement, Array(1, 2)).collect().map(_.toString)
+            .exists(_.contains("UNUSED_SQL_PARAMETER_VALUES")))
+        }
       }
     }
   }

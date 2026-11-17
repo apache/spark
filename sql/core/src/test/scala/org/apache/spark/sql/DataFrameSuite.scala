@@ -308,6 +308,15 @@ class DataFrameSuite extends SharedSparkSession
       checkAnswer(
         df.where("deleted? IS NULL").orderBy(expr("rank?"), expr("id?").desc).select(expr("id?")),
         Row(2) :: Row(1) :: Nil)
+      // A filter resolves names against the columns below its child too. An optional reference
+      // to such a column, which the filter cannot use through the aggregate, fails like without
+      // `?` instead of being NULL.
+      val aggregated = df.groupBy("id").count().select("id")
+      Seq("name? IS NULL", "name IS NULL").foreach { condition =>
+        val e = intercept[AnalysisException](aggregated.filter(condition))
+        assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION", e.getMessage)
+        assert(e.getMessageParameters.get("objectName") == "`name`", e.getMessage)
+      }
     }
     // Optional references are disabled by default.
     checkError(

@@ -36,14 +36,14 @@ object OptionalReferenceValidation {
    * The boundary is the kind of statement. UPDATE, DELETE, MERGE, and AUTO CDC exist to modify
    * existing rows, so they reject optional references everywhere, including in the source query of
    * MERGE and in common table expressions. INSERT rejects them only in the REPLACE condition, a
-   * predicate on the target table: the query of an INSERT, like that of a CREATE OR REPLACE TABLE
-   * AS SELECT, produces the rows to write, and a missing column in such a query makes the written
-   * rows differ in the same way as in any other query. This holds where the written rows also
-   * decide which existing rows are replaced: an INSERT OVERWRITE with dynamic partition overwrite
-   * replaces the partitions of the written rows, and INSERT ... REPLACE ON or REPLACE USING deletes
-   * the target rows that match them. The arguments of CALL are values, like the arguments of a
-   * function in a query, so they accept optional references; the procedure decides what a NULL
-   * argument means.
+   * predicate on the target table, and in its PARTITION clause, like every partition specification.
+   * The query of an INSERT, like that of a CREATE OR REPLACE TABLE AS SELECT, produces the rows to
+   * write, and a missing column in such a query makes the written rows differ in the same way as in
+   * any other query. This holds where the written rows also decide which existing rows are
+   * replaced: an INSERT OVERWRITE with dynamic partition overwrite replaces the partitions of the
+   * written rows, and INSERT ... REPLACE ON or REPLACE USING deletes the target rows that match
+   * them. The arguments of CALL are values, like the arguments of a function in a query, so they
+   * accept optional references; the procedure decides what a NULL argument means.
    *
    * {{{
    *   UPDATE t SET a = b?;                                  -- IN_DML

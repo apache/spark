@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.optimizer.OptimizeUpdateFields
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, Origin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -193,11 +193,17 @@ case class AnalysisContext(
     outerPlan: Option[LogicalPlan] = None,
     collation: Option[String] = None,
     // Whether the plan under analysis defines a view, i.e. stores the text of a query that is
-    // analyzed again when the view is read: CREATE VIEW, ALTER VIEW ... AS, and CACHE TABLE ... AS
-    // SELECT, see `DefinesView`. Optional references (`x?`) resolve the query the way the stored
-    // text will resolve, so that a definition that cannot be read fails when the view is created.
-    // Only set while optional references are enabled, as nothing else reads it.
+    // analyzed again when the view is read: CREATE VIEW, ALTER VIEW ... AS, CACHE TABLE ... AS
+    // SELECT, and CREATE VIEW ... WITH METRICS, see `AnalysisContext.definesView`. Optional
+    // references (`x?`) resolve the query the way the stored text will resolve, so that a
+    // definition that cannot be read fails when the view is created. Only set while optional
+    // references are enabled, as nothing else reads it.
     isViewDefinition: Boolean = false,
+    // The origins of the optional references (`x?`) of the plan under analysis that this analysis
+    // resolved to NULL, in the order of `OptionalReferences.nullReference`. The contexts of
+    // subqueries share them. A view or SQL function body gets its own, because its optional
+    // references are not a part of the plan that reads it.
+    nullReferenceOrigins: mutable.Buffer[Origin] = mutable.ArrayBuffer.empty,
 
     /**
      * This is a bridge state between this fixed-point [[Analyzer]] and a single-pass [[Resolver]].
@@ -330,7 +336,8 @@ object AnalysisContext {
       } else {
         None
       },
-      collation = function.collation)
+      collation = function.collation,
+      nullReferenceOrigins = mutable.ArrayBuffer.empty)
     set(context)
     try f finally { set(originContext) }
   }
@@ -349,8 +356,15 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  /** Returns true if `plan` defines a view, see `AnalysisContext.isViewDefinition`. */
-  def definesView(plan: LogicalPlan): Boolean = plan.exists(_.isInstanceOf[DefinesView])
+  /**
+   * Returns true if `plan` defines a view, see `AnalysisContext.isViewDefinition`: if it has a
+   * [[DefinesView]] command or the placeholder of a metric view that is being created.
+   */
+  def definesView(plan: LogicalPlan): Boolean = plan.exists {
+    case _: DefinesView => true
+    case placeholder: MetricViewPlaceholder => placeholder.isCreate
+    case _ => false
+  }
 
   /** Runs `f`, the analysis of a plan that defines a view, with `isViewDefinition` set. */
   def withViewDefinition[A](f: => A): A = {
@@ -575,16 +589,26 @@ class Analyzer(
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.withNewAnalysisContext {
-      if (conf.optionalReferencesEnabled && AnalysisContext.definesView(plan)) {
-        AnalysisContext.withViewDefinition(executeSameContext(plan))
-      } else {
-        executeSameContext(plan)
-      }
+      val analyzed = executeSameContextAsDefinition(plan)
+      OptionalReferences.markResolvedNullReference(plan, analyzed)
+      analyzed
     }
   }
 
   private def executeSameContext(plan: LogicalPlan): LogicalPlan =
     runWithSessionConf(super.execute(plan))
+
+  /**
+   * Like [[executeSameContext]], but analyzes a plan that defines a view, see
+   * `AnalysisContext.definesView`, as such a definition while optional references are enabled.
+   */
+  private def executeSameContextAsDefinition(plan: LogicalPlan): LogicalPlan = {
+    if (conf.optionalReferencesEnabled && AnalysisContext.definesView(plan)) {
+      AnalysisContext.withViewDefinition(executeSameContext(plan))
+    } else {
+      executeSameContext(plan)
+    }
+  }
 
   /**
    * Like [[executeAndCheck]], but also returns the temporary variables recorded via IDENTIFIER
@@ -614,7 +638,7 @@ class Analyzer(
     } else {
       def analyze(): (LogicalPlan, Seq[Seq[String]]) = AnalysisHelper.markInAnalyzer {
         val analyzed = QueryPlanningTracker.withTracker(tracker) {
-          executeSameContext(plan)
+          executeSameContextAsDefinition(plan)
         }
         // Read the accumulator before the surrounding context is reset / restored below.
         val referredTempVariablesUnderIdentifier =
