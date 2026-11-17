@@ -3120,7 +3120,7 @@ class DataFrameSuite extends SharedSparkSession
               checkAnswer(df, Row("1", 7L, true))
             }
           }
-          // As on master and 4.3.0, `i = 1` makes the condition FALSE, so the filter is pruned,
+          // As on 4.3.0, `i = 1` makes the condition FALSE, so the filter is pruned,
           // and `i` is not computed for the row ("x", 0).
           Seq(
             $"i" + 1 > 3 && $"i" === 1,
@@ -3170,8 +3170,8 @@ class DataFrameSuite extends SharedSparkSession
               checkAnswer(df, Row("1", 7L, true))
             }
           }
-          // A condition that would fail to fold with the constant is handled as on master, so it
-          // does not fail the query with no row where `i` is 0.
+          // A condition that would fail to fold with the constant is handled as since SPARK-60983,
+          // so it does not fail the query with no row where `i` is 0.
           withTempPath { one =>
             Seq(("1", 7L)).toDF("s", "id").write.parquet(one.toString)
             checkAnswer(spark.read.parquet(one.toString)
@@ -3179,8 +3179,8 @@ class DataFrameSuite extends SharedSparkSession
               .where($"i" === 0 && $"id" > lit(10) / $"i").select($"s", $"id", $"r" >= 0),
               Seq.empty)
           }
-          // `id < 3` decides whether `i > 0` runs. It is rewritten, as on master, and `id = 7`
-          // goes first, ahead of `i > 0`.
+          // `id < 3` decides whether `i > 0` runs. It is rewritten, as since SPARK-61033, and
+          // `id = 7` goes first, ahead of `i > 0`.
           Seq("true", "false").foreach { cse =>
             withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> cse) {
               val df = projected.select($"*", rand(1).as("r"))
@@ -3223,6 +3223,52 @@ class DataFrameSuite extends SharedSparkSession
           }
         }
       }
+    }
+  }
+
+  test("SPARK-61437: ConstantPropagation over a column of the projection below that can fail " +
+    "keeps the rows of the written condition") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      // With `r` read, the filter stays above the projection.
+      def check(rows: DataFrame, columns: Seq[Column], condition: Column, expected: Seq[Row])
+        : Unit = withTempPath { dir =>
+        rows.coalesce(1).write.parquet(dir.getCanonicalPath)
+        val df = spark.read.parquet(dir.getCanonicalPath).select(columns :+ rand(1).as("r"): _*)
+          .where(condition).select($"s", $"r" >= 0)
+        checkAnswer(df, expected)
+      }
+      // `d = 0.0` passes a row where `d` is -0.0, on which the sign of the zero can matter.
+      val doubles = Seq(("-0.0", 1.0), ("-0.0", -1.0)).toDF("s", "y")
+      val d = Seq($"s", $"y", $"s".cast("double").as("d"))
+      check(doubles, d, $"d" === 0.0 && ($"d" * $"y").cast("string") === "-0.0",
+        Seq(Row("-0.0", true)))
+      check(doubles, d, $"d" === 0.0 && pow($"d", $"y") < 0, Seq(Row("-0.0", true)))
+      // But not where the comparison is the same with either zero, which the constant then
+      // folds, so that `d` is not computed on the row ("x", 1.0).
+      check(Seq(("0.0", 1.0), ("x", 1.0)).toDF("s", "y"), d,
+        $"y" > 0 && pow($"d", 2) > 100 && $"d" === 0.0, Seq.empty)
+
+      val ints = Seq($"s", $"id", $"x", $"s".cast("int").as("i"), lit(100).as("total"))
+      val two = Seq(("2", 7, 1)).toDF("s", "id", "x")
+      Seq(
+        // `id = 7` makes the `CASE WHEN` FALSE, as on 4.3.0, although it does not go into it, so
+        // that `10 / (x - 1)` does not run.
+        lit(10) / ($"x" - $"i") > 0 && when($"id" > 10, lit(10) / $"x").otherwise(0) > 1 &&
+          $"i" === 1 && $"id" === 7,
+        lit(10) / ($"x" - $"i") > 0 && when($"id" > 7, $"x" > 1).otherwise(false) &&
+          $"i" === 1 && $"id" === 7,
+        // With all of the constants in, or the foldable `total`, the condition would fail to
+        // fold, so the equalities go first, which filter out the row, as without this change.
+        coalesce(lit(10) / $"i", $"id") > 0 && $"i" === 0 && $"id" === 7,
+        $"id" > $"total" / $"i" && $"i" === 0,
+        lit(10) / ($"id" - 6 - $"i") > 0 && $"i" === 1 && $"id" === 7
+      ).foreach(condition => check(two, ints, condition, Seq.empty))
+      // Then they keep the written order where no conjunct after the one that the constants fold
+      // can fail, so that `x > 0` filters out the row ("x", 0, 0).
+      check(Seq(("0", 7, 1), ("x", 0, 0)).toDF("s", "id", "x"), ints,
+        $"x" > 0 && ($"id" > 5 || lit(10) / $"i" > 1).cast("int") === 1 && $"i" === 0 &&
+          $"id" === 7, Seq(Row("0", true)))
     }
   }
 

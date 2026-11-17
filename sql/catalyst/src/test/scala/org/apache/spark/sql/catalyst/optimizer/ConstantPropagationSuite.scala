@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,7 +26,8 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, StringType,
+  StructType}
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -326,10 +328,15 @@ class ConstantPropagationSuite extends PlanTest {
   }
 
   // SPARK-61437: the columns of the projection below that can fail.
-  private val strings = LocalRelation($"s".string, $"id".long, $"x".long)
+  private val stringIds = LocalRelation($"s".string, $"id".long, $"x".long)
   private def castS: Expression = $"s".cast(IntegerType)
-  private def projected: LogicalPlan = strings.select($"s", $"id", $"x", castS.as("i"))
-  private def divide(e: Expression): Expression = Divide(Literal(10.0), e.cast(DoubleType))
+  private def projected: LogicalPlan = stringIds.select($"s", $"id", $"x", castS.as("i"))
+  private def twoCasts: LogicalPlan = projected.select($"s", $"id", $"x", $"i", castS.as("j"))
+  private def threeCasts: LogicalPlan =
+    twoCasts.select($"s", $"id", $"x", $"i", $"j", castS.as("k"))
+  private def tenDividedBy(e: Expression): Expression = Divide(Literal(10.0), e.cast(DoubleType))
+  /** `e * id`, which can overflow in ANSI mode, so a constant goes into it only in place. */
+  private def timesId(e: Expression): Expression = e.cast(LongType) * $"id"
 
   private def conjuncts(plan: LogicalPlan): Seq[String] = plan match {
     case Filter(condition, _) => splitConjunctivePredicates(condition).map(_.sql)
@@ -350,7 +357,7 @@ class ConstantPropagationSuite extends PlanTest {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       // `i = 1` can fail, as the cast does, so it is not moved ahead of `id > 5`. Its constant is
       // propagated in place, so only `i = 1` reads `i`.
-      val written = $"id" > 5L && $"i".cast(LongType) * $"id" > 0L && $"i" === 1
+      val written = $"id" > 5L && timesId($"i") > 0L && $"i" === 1
       val expected = $"id" > 5L && Literal(1L) * $"id" > 0L && $"i" === 1
       Seq(
         projected,
@@ -365,78 +372,60 @@ class ConstantPropagationSuite extends PlanTest {
   test("SPARK-61437: Propagate an equality over a column that can fail in place") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       // Into every conjunct, also one that can fail, as before SPARK-60983, so that a conjunct
-      // that it rewrites no longer reads `i`.
-      val twoCasts = projected.select($"s", $"id", $"x", $"i", castS.as("j"))
-      val threeCasts = twoCasts.select($"s", $"id", $"x", $"i", $"j", castS.as("k"))
+      // that it rewrites no longer reads `i`. Without the column of the projection below, the
+      // equality would go first, with `i` kept in such a conjunct.
       Seq(
-        ($"id" > 5L && $"i" + 1 > 1 && $"i" === 1) -> ($"id" > 5L && $"i" === 1),
-        (($"id" < 0L || $"i" + 1 > 3) && $"i" === 1) -> ($"id" < 0L && $"i" === 1),
-        (divide($"i") > 1.0 && $"i" === 1) -> ($"i" === 1),
-        ($"id" > 5L && ($"i" <=> 1) && $"i" > 0) -> ($"id" > 5L && ($"i" <=> 1)),
-        ($"id" > 5L && (Literal(1) <=> $"i") && $"i" > 0) -> ($"id" > 5L && (Literal(1) <=> $"i")),
-        (divide($"x") > 0.0 && $"i" > 0 && $"i" === 1) -> (divide($"x") > 0.0 && $"i" === 1),
-        ($"i" + 1 > 1 && $"i" === 1 && divide($"x") > 0.0) -> ($"i" === 1 && divide($"x") > 0.0),
-        ($"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && $"i" === 1) ->
-          ($"id" > 5L && divide($"x") > 0.0 && $"i" === 1),
-        ($"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && Literal(1) === $"i") ->
-          ($"id" > 5L && divide($"x") > 0.0 && Literal(1) === $"i"),
-        ($"id" > 5L && $"i" > 0 && divide($"x") > 0.0 && ($"i" <=> 1)) ->
-          ($"id" > 5L && divide($"x") > 0.0 && ($"i" <=> 1)),
+        (($"id" < 0L || timesId($"i") > 3L) && $"i" === 1) ->
+          (($"id" < 0L || Literal(1L) * $"id" > 3L) && $"i" === 1),
+        (tenDividedBy($"x" - $"i".cast(LongType)) > 1.0 && $"i" === 1) ->
+          (tenDividedBy($"x" - 1L) > 1.0 && $"i" === 1),
+        ($"id" > 5L && ($"i" <=> 1) && timesId($"i") > 0L) ->
+          ($"id" > 5L && ($"i" <=> 1) && Literal(1L) * $"id" > 0L),
+        ($"id" > 5L && (Literal(1) <=> $"i") && timesId($"i") > 0L) ->
+          ($"id" > 5L && (Literal(1) <=> $"i") && Literal(1L) * $"id" > 0L),
+        (tenDividedBy($"x") > 0.0 && timesId($"i") > 0L && $"i" === 1) ->
+          (tenDividedBy($"x") > 0.0 && Literal(1L) * $"id" > 0L && $"i" === 1),
+        (timesId($"i") > 1L && $"i" === 1 && tenDividedBy($"x") > 0.0) ->
+          (Literal(1L) * $"id" > 1L && $"i" === 1 && tenDividedBy($"x") > 0.0),
+        // A conjunct that the constant folds away no longer stops a row before the ones after it.
+        ($"id" > 5L && $"i" > 0 && tenDividedBy($"x") > 0.0 && $"i" === 1) ->
+          ($"id" > 5L && tenDividedBy($"x") > 0.0 && $"i" === 1),
+        ($"id" > 5L && $"i" > 0 && tenDividedBy($"x") > 0.0 && Literal(1) === $"i") ->
+          ($"id" > 5L && tenDividedBy($"x") > 0.0 && Literal(1) === $"i"),
+        ($"id" > 5L && $"i" > 0 && tenDividedBy($"x") > 0.0 && ($"i" <=> 1)) ->
+          ($"id" > 5L && tenDividedBy($"x") > 0.0 && ($"i" <=> 1)),
         // The division reads `i` with the constant, so it does not fail on a row where `id` is
         // 8 and `i` is 8, but does on one where `id` is 1 and `i` is 2, as before SPARK-60983.
-        (divide($"id" - $"i".cast(LongType)) > 0.0 && $"i" === 1) ->
-          (divide($"id" - 1L) > 0.0 && $"i" === 1),
+        (tenDividedBy($"id" - $"i".cast(LongType)) > 0.0 && $"i" === 1) ->
+          (tenDividedBy($"id" - 1L) > 0.0 && $"i" === 1),
         // `id > 0` is rewritten by `id = 7`, which goes first.
-        ($"id" > 0L && divide($"x") > 0.0 && $"i" === 1 && $"i" + 1 > 1 && $"id" === 7L) ->
-          ($"id" === 7L && divide($"x") > 0.0 && $"i" === 1),
+        ($"id" > 0L && tenDividedBy($"x") > 0.0 && $"i" === 1 && $"i" + 1 > 1 &&
+          $"id" === 7L) -> ($"id" === 7L && tenDividedBy($"x") > 0.0 && $"i" === 1),
         // But `id = 7` rewrites nothing here, so it stays, as on 4.3.0.
-        ($"i" + 1 > 1 && divide($"x") > 0.0 && $"i" === 1 && $"id" === 7L) ->
-          (divide($"x") > 0.0 && $"i" === 1 && $"id" === 7L)
+        ($"i" + 1 > 1 && tenDividedBy($"x") > 0.0 && $"i" === 1 && $"id" === 7L) ->
+          (tenDividedBy($"x") > 0.0 && $"i" === 1 && $"id" === 7L)
       ).foreach { case (condition, expected) => checkOrdered(projected, condition, expected) }
       Seq(
-        ($"j" > 0 && $"i" > 0 && $"j" === 2 && divide($"x") > 0.0 && $"i" === 1) ->
-          ($"j" === 2 && divide($"x") > 0.0 && $"i" === 1),
-        ($"i" > 0 && $"k" > 5 && $"i" === 1 && $"j" + 1 > 1 && $"j" === 2) ->
-          ($"k" > 5 && $"i" === 1 && $"j" === 2),
-        // `i + 1` does not overflow on a row where `i` is the largest integer.
-        ($"i" + 1 > 0 && $"k" > 5 && $"i" === 1) -> ($"k" > 5 && $"i" === 1),
-        // `j < 5` no longer stops a row before `i = 2`, as before SPARK-60983.
-        ($"j" < 5 && $"i" > 0 && $"i" === 2 && $"j" === 1) -> ($"i" === 2 && $"j" === 1)
+        ($"j" > 0 && $"i" > 0 && $"j" === 2 && tenDividedBy($"x") > 0.0 && $"i" === 1) ->
+          ($"j" === 2 && tenDividedBy($"x") > 0.0 && $"i" === 1),
+        ($"i" > 0 && $"k" > 5 && $"i" === 1 && timesId($"j") > 1L && $"j" === 2) ->
+          ($"k" > 5 && $"i" === 1 && Literal(2L) * $"id" > 1L && $"j" === 2),
+        // `i + k` no longer reads `i`, so it does not overflow on a row where `i` is the largest
+        // integer and `k` is 1.
+        ($"i" + $"k" > 0 && $"i" === 1) -> (Literal(1) + $"k" > 0 && $"i" === 1),
+        // `j * id < 5` no longer stops a row before `i = 2`, as before SPARK-60983.
+        (timesId($"j") < 5L && $"i" > 0 && $"i" === 2 && $"j" === 1) ->
+          (Literal(1L) * $"id" < 5L && $"i" === 2 && $"j" === 1)
       ).foreach { case (condition, expected) => checkOrdered(threeCasts, condition, expected) }
 
-      // But not where the condition then fails to fold, which would fail the query with no row,
-      // unlike in a conditional branch, which is not folded where it fails. Then the equalities
-      // are handled as since SPARK-60983, and go first.
-      val failsToFold = $"i" === 0 && $"x".cast(DoubleType) > divide($"i")
-      checkOrdered(projected, failsToFold, failsToFold)
-      checkOrdered(projected,
-        $"id" > 5L && $"i" + 1 > 0 && $"x".cast(DoubleType) > divide($"i") && $"i" === 0,
-        $"i" === 0 && $"id" > 5L && $"x".cast(DoubleType) > divide($"i"))
-      // Also where the comparison folds, but the conjunct does not.
-      checkOrdered(projected,
-        $"i" === 0 && ElementAt(CreateArray(Seq(Literal(true))), ($"i" > 0).cast(IntegerType)),
-        $"i" === 0 && ElementAt(Literal.create(Seq(true), ArrayType(BooleanType, false)),
-          ($"i" > 0).cast(IntegerType)))
-      checkOrdered(projected,
-        $"i" === 0 && If($"x" > 0L, divide($"i"), Literal(0.0)) > 0.0,
-        $"i" === 0 && If($"x" > 0L, divide(Literal(0)), Literal(0.0)) > 0.0)
-      checkOrdered(projected,
-        CaseWhen(Seq(($"id" < 0L) -> ($"x".cast(DoubleType) > divide($"i"))), $"s".isNotNull) &&
-          $"i" === 0,
-        CaseWhen(Seq(($"id" < 0L) -> ($"x".cast(DoubleType) > divide(Literal(0)))),
-          $"s".isNotNull) && $"i" === 0)
-      // Trying to fold it leaves no mark on a part that fails in a conditional branch, which
-      // would keep `ConstantFolding` from failing on the same part elsewhere.
-      val byZero = Divide(Literal(10.0), Literal(0.0))
-      val sharesByZero = projected.where($"x".cast(DoubleType) > byZero && $"i" === 0 &&
-        If($"x" > 0L, byZero, Literal(0.0)) > $"i".cast(DoubleType)).analyze
-      intercept[ArithmeticException](Optimize.execute(sharesByZero))
-      intercept[ArithmeticException](Optimize.execute(projected
-        .where($"i" === 0 && If($"x" > 0L, byZero, Literal(0.0)) > $"i".cast(DoubleType))
-        .select($"id", byZero.as("z")).analyze))
-      // Nor does it remove a mark that is there already.
-      byZero.setTagValue(ConstantFolding.FAILED_TO_EVALUATE, ())
-      Optimize.execute(sharesByZero)
+      // As before SPARK-60983, an attribute whose type is not binary stable is replaced only in a
+      // comparison with an attribute of the same type.
+      val collated = LocalRelation(
+        AttributeReference("c", StringType("UTF8_LCASE"))(),
+        AttributeReference("v", StringType("UTF8_LCASE"))()).select($"v", Upper($"c").as("u"))
+      checkOrdered(collated, $"v" === $"u" && $"u" === "a", $"v" === "a" && $"u" === "a")
+      checkOrdered(collated, Length($"u") > 1 && $"u" === "a",
+        Length($"u") > 1 && $"u" === "a")
 
       // Not a string of a trim collation into `length`, as on 4.3.0: a row with `u` = 'A '
       // passes `u = 'A'`.
@@ -447,6 +436,118 @@ class ConstantPropagationSuite extends PlanTest {
     }
   }
 
+  test("SPARK-61437: Do not propagate a zero in place where its sign can matter") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // A row with `d` = -0.0 passes `d = 0.0`, but `CAST(d * y AS STRING)` keeps the sign, so `d`
+      // is kept there, as since SPARK-60983, although the equality is not moved.
+      val doubles = stringIds.select($"x".cast(DoubleType).as("y"), $"s".cast(DoubleType).as("d"))
+      def signed(e: Expression): Expression = Cast(e, StringType) === "-0.0"
+      Seq(
+        $"d" === 0.0 && signed($"d" * $"y"),
+        $"d" === -0.0 && signed($"d" * $"y"),
+        signed($"d" * $"y") && $"d" === 0.0,
+        // `pow(-0.0, -1.0)` is -Infinity, and `pow(0.0, -1.0)` is Infinity.
+        Pow($"d", Literal(-1.0)) < 0.0 && $"d" === 0.0,
+        Pow($"d", $"y") < 0.0 && $"d" === 0.0
+      ).foreach(condition => checkOrdered(doubles, condition, condition))
+      Seq(
+        // Where the comparison folds to the same value with either zero, it is replaced.
+        (Pow($"d", Literal(2.0)) < 1.0 && tenDividedBy($"y") > 0.0 && $"d" === 0.0) ->
+          (tenDividedBy($"y") > 0.0 && $"d" === 0.0),
+        // And so it is under an operator that gives equal results for equal values.
+        ($"d" + $"y" > 1.0 && $"d" === 0.0) -> (Literal(0.0) + $"y" > 1.0 && $"d" === 0.0),
+        // Any other value is equal only to itself.
+        (signed($"d" * $"y") && $"d" === 1.0) -> (signed(Literal(1.0) * $"y") && $"d" === 1.0)
+      ).foreach { case (condition, expected) => checkOrdered(doubles, condition, expected) }
+      // Nor into a struct with a DOUBLE in it, whose fields the check does not look at.
+      val structs = stringIds.select(
+        CreateNamedStruct(Seq(Literal("a"), $"s".cast(DoubleType))).as("t"))
+      val oneStruct = Literal.create(InternalRow(1.0), new StructType().add("a", DoubleType))
+      val signedStruct = structs.where($"t" === oneStruct &&
+        Cast($"t", StringType) === "{-0.0}").analyze
+      comparePlans(Optimize.execute(signedStruct), signedStruct)
+    }
+  }
+
+  test("SPARK-61437: An equality over a column that can fail is handled as before when the " +
+      "condition with all of the constants fails to fold") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // With the constant, the condition would fail to fold, which would fail the query with no
+      // row, unlike in a conditional branch, which is not folded where it fails. Then the
+      // equalities are handled as since SPARK-60983, and go first.
+      val failsToFold = $"i" === 0 && $"x".cast(DoubleType) > tenDividedBy($"i")
+      checkOrdered(projected, failsToFold, failsToFold)
+      checkOrdered(projected,
+        $"id" > 5L && $"i" + 1 > 0 && $"x".cast(DoubleType) > tenDividedBy($"i") && $"i" === 0,
+        $"i" === 0 && $"id" > 5L && $"x".cast(DoubleType) > tenDividedBy($"i"))
+      // Also where the comparison folds, but the conjunct does not.
+      checkOrdered(projected,
+        $"i" === 0 && ElementAt(CreateArray(Seq(Literal(true))), ($"i" > 0).cast(IntegerType)),
+        $"i" === 0 && ElementAt(Literal.create(Seq(true), ArrayType(BooleanType, false)),
+          ($"i" > 0).cast(IntegerType)))
+      // Also where it fails only with the constants of the other equalities in, which `COALESCE`
+      // no longer guards, or which make the division divide by zero.
+      checkOrdered(projected,
+        Coalesce(Seq(tenDividedBy($"i"), $"id".cast(DoubleType))) > 0.0 && $"i" === 0 &&
+          $"id" === 7L,
+        $"i" === 0 && $"id" === 7L &&
+          Coalesce(Seq(tenDividedBy($"i"), Literal(7.0))) > 0.0)
+      checkOrdered(projected,
+        tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0 && $"i" === 1 && $"id" === 7L,
+        $"i" === 1 && $"id" === 7L && tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0)
+      // Or with the foldable columns of the projection below in, which `FoldablePropagation`
+      // puts in, also where they make the condition of a branch constant.
+      val withTotal = projected.select($"s", $"id", $"x", $"i", Literal(100.0).as("total"))
+      checkOrdered(withTotal, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
+        $"i" === 0, $"i" === 0 && $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType))
+      checkOrdered(withTotal, If($"total" > 0.0, tenDividedBy($"i"), Literal(0.0)) > 0.0 &&
+        $"i" === 0, $"i" === 0 && If($"total" > 0.0, tenDividedBy($"i"), Literal(0.0)) > 0.0)
+      // Also through other projections, which pass the column on or rename it.
+      Seq(
+        withTotal.select($"id", $"i", $"total").where($"id" > 0L),
+        withTotal.select($"id", $"i", $"total".as("t")).select($"id", $"i", $"t".as("total"))
+      ).foreach { child =>
+        checkOrdered(child, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
+          $"i" === 0, $"i" === 0 && $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType))
+      }
+      // Then the equalities are also ordered as since SPARK-60983: `i = 0`, after the conjunct
+      // that the constants fold to TRUE, does not count as one that can fail, so the written
+      // order is kept. `10 / zero` makes the condition fail to fold once `zero` is in.
+      val withZero = projected.select($"s", $"id", $"x", $"i", Literal(0.0).as("zero"))
+      checkOrdered(withZero,
+        $"x".cast(DoubleType) > Literal(10.0) / $"zero" && $"x" > 0L &&
+          ($"id" > 5L || tenDividedBy($"i") > 1.0).cast(IntegerType) === 1 && $"i" === 0 &&
+          $"id" === 7L,
+        $"x".cast(DoubleType) > Literal(10.0) / $"zero" && $"x" > 0L && $"i" === 0 &&
+          $"id" === 7L)
+      // Where the condition folds, `id = 7` goes first, as `i = 0`, after the conjunct that it
+      // folds to TRUE, can fail.
+      checkOrdered(projected,
+        $"x" > 0L && ($"id" > 5L || tenDividedBy($"i") > 1.0).cast(IntegerType) === 1 &&
+          $"i" === 0 && $"id" === 7L,
+        $"id" === 7L && $"x" > 0L && $"i" === 0)
+
+      // But not where only a conditional branch would fail, which is not folded.
+      checkOrdered(projected,
+        $"i" === 0 && If($"x" > 0L, tenDividedBy($"i"), Literal(0.0)) > 0.0,
+        $"i" === 0 && If($"x" > 0L, tenDividedBy(Literal(0)), Literal(0.0)) > 0.0)
+      checkOrdered(projected,
+        CaseWhen(Seq(($"id" < 0L) -> ($"x".cast(DoubleType) > tenDividedBy($"i"))),
+          $"s".isNotNull) && $"i" === 0,
+        CaseWhen(Seq(($"id" < 0L) -> ($"x".cast(DoubleType) > tenDividedBy(Literal(0)))),
+          $"s".isNotNull) && $"i" === 0)
+      // Trying to fold it leaves no mark on a part that fails in a conditional branch, which
+      // would keep `ConstantFolding` from failing on the same part elsewhere.
+      val byZero = Divide(Literal(10.0), Literal(0.0))
+      intercept[ArithmeticException](Optimize.execute(projected
+        .where($"x".cast(DoubleType) > byZero && $"i" === 0 &&
+          If($"x" > 0L, byZero, Literal(0.0)) > $"i".cast(DoubleType)).analyze))
+      intercept[ArithmeticException](Optimize.execute(projected
+        .where($"i" === 0 && If($"x" > 0L, byZero, Literal(0.0)) > $"i".cast(DoubleType))
+        .select($"id", byZero.as("z")).analyze))
+    }
+  }
+
   test("SPARK-61437: A conjunct over a column that can fail can fail") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       // `id = 7` folds the guard `id > 0`, so it goes ahead of `i > 0`, which can fail.
@@ -454,7 +555,7 @@ class ConstantPropagationSuite extends PlanTest {
       checkOrdered(projected, $"id" > 0L && $"i" === 1 && $"id" === 7L,
         $"id" === 7L && $"i" === 1)
       // `id < 3` decides whether `i > 0` runs. `i > 0` counts as one that can not fail there, as
-      // on master, so `id < 3` is rewritten, and the equality goes first, ahead of `i > 0`.
+      // since SPARK-61033, so `id < 3` is rewritten, and the equality goes first, ahead of `i > 0`.
       checkOrdered(projected, ($"id" < 3L || $"i" > 0) && $"id" === 5L, $"id" === 5L && $"i" > 0)
       // So `id > 0` is rewritten too, and becomes TRUE, also inside another operator, so the
       // operator folds away and `i` is not read.
@@ -483,9 +584,9 @@ class ConstantPropagationSuite extends PlanTest {
       checkOrdered(notNull, Not($"id" > 0L && $"i" > 0 && $"id" === 7L),
         Not($"id" === 7L) || $"i" <= 0)
       // The cast is marked nullable (`Cast.forceNullable`), so `i = 1` is not propagated under
-      // it, as on master.
+      // it, as for any other nullable column.
       checkOrdered(notNull, Not($"i" + 1 > 3 && $"i" === 1), $"i" + 1 <= 3 || Not($"i" === 1))
-      // `upper` is not, so the condition inside becomes FALSE, as on master.
+      // `upper` is not, so the condition inside becomes FALSE, as for any other column.
       val upperNotNull = notNull.select($"s", Upper($"s").as("u"))
       comparePlans(
         Optimize.execute(upperNotNull.where(Not(Length($"u") > 3 && $"u" === "X")).analyze),
@@ -499,15 +600,13 @@ class ConstantPropagationSuite extends PlanTest {
 
   test("SPARK-61437: A condition that becomes FALSE with the constants is FALSE") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val twoCasts = projected.select($"s", $"id", $"x", $"i", castS.as("j"))
-      val threeCasts = twoCasts.select($"s", $"id", $"x", $"i", $"j", castS.as("k"))
       // Wherever the conjunct that becomes FALSE is.
       Seq(
-        $"i" + 1 > 3 && divide($"x") > 0.0 && $"i" === 1,
-        $"i" === 1 && divide($"x") > 0.0 && $"i" === 2,
-        $"i" > 0 && divide($"x") > 0.0 && $"i" + 1 > 3 && $"i" === 1,
+        $"i" + 1 > 3 && tenDividedBy($"x") > 0.0 && $"i" === 1,
+        $"i" === 1 && tenDividedBy($"x") > 0.0 && $"i" === 2,
+        $"i" > 0 && tenDividedBy($"x") > 0.0 && $"i" + 1 > 3 && $"i" === 1,
         $"i" > 0 && $"j" > 5 && $"i" > 10 && $"i" === 1,
-        $"i" > 0 && divide($"x") > 0.0 && $"i" === 1 && $"i" + 1 > 3
+        $"i" > 0 && tenDividedBy($"x") > 0.0 && $"i" === 1 && $"i" + 1 > 3
       ).foreach { condition =>
         comparePlans(Optimize.execute(twoCasts.where(condition).analyze),
           twoCasts.where(false).analyze)
@@ -529,6 +628,20 @@ class ConstantPropagationSuite extends PlanTest {
         Optimize.execute(
           projected.where(($"id" < 0L || ($"i" + 1 > 3 && $"i" === 1)) && $"id" > 5L).analyze),
         projected.where($"id" < 0L && $"id" > 5L).analyze)
+      // Also where the constant of an equality over another column makes a branch FALSE, which
+      // that constant does not go into, as the branch reads another column. Otherwise `id = 7`
+      // would go first, and the division would run on a row where `i` is not 1.
+      Seq(
+        CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x")), Literal(0.0)) > 1.0,
+        If($"id" > 7L, $"x" > 1L, Literal(false)),
+        // Also where it takes `BooleanSimplification`.
+        ($"id" < 7L && tenDividedBy($"x") > 1.0) || $"id" > 7L
+      ).foreach { conjunct =>
+        comparePlans(Optimize.execute(projected.where(
+          tenDividedBy($"x" - $"i".cast(LongType)) > 0.0 && conjunct && $"i" === 1 &&
+            $"id" === 7L).analyze),
+          projected.where(false).analyze)
+      }
     }
   }
 
@@ -536,20 +649,17 @@ class ConstantPropagationSuite extends PlanTest {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       // A non-deterministic alias is computed on every row the projection gets, so it raises no
       // new error here, and an equality over it is propagated and moved.
-      val random = strings.select($"id", $"x", Rand(1L).as("r"))
-      checkOrdered(random, $"r" > 0.0 && $"r" === 0.5, $"r" === 0.5)
-      checkOrdered(random, $"r" > 0.0 && divide($"x") > 0.0 && $"r" === 0.5,
-        $"r" === 0.5 && divide($"x") > 0.0)
+      val random = stringIds.select($"id", $"x", Rand(1L).as("r"))
+      checkOrdered(random, $"r" > 0.0 && tenDividedBy($"x") > 0.0 && $"r" === 0.5,
+        $"r" === 0.5 && tenDividedBy($"x") > 0.0)
       // So is one over a column that reads it with an expression that can not fail.
       val randomPlusOne = random.select($"id", ($"r" + 1.0).as("r1"))
-      checkOrdered(randomPlusOne, $"r1" > 0.0 && $"r1" === 1.5, $"r1" === 1.5)
-      checkOrdered(randomPlusOne, $"r1" > 0.0 && divide($"id") > 0.0 && $"r1" === 1.5,
-        $"r1" === 1.5 && divide($"id") > 0.0)
+      checkOrdered(randomPlusOne, $"r1" > 0.0 && tenDividedBy($"id") > 0.0 && $"r1" === 1.5,
+        $"r1" === 1.5 && tenDividedBy($"id") > 0.0)
       // And one that stands for a cast that can not fail.
-      val widened = strings.select($"s", $"id", $"x", $"id".cast(DoubleType).as("k"))
-      checkOrdered(widened, $"id" > 5L && $"k" > 0.0 && $"k" === 3.0, $"id" > 5L && $"k" === 3.0)
-      checkOrdered(widened, $"k" > 0.0 && divide($"x") > 0.0 && $"k" === 3.0,
-        $"k" === 3.0 && divide($"x") > 0.0)
+      val widened = stringIds.select($"s", $"id", $"x", $"id".cast(DoubleType).as("k"))
+      checkOrdered(widened, $"k" > 0.0 && tenDividedBy($"x") > 0.0 && $"k" === 3.0,
+        $"k" === 3.0 && tenDividedBy($"x") > 0.0)
     }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -562,17 +672,20 @@ class ConstantPropagationSuite extends PlanTest {
 
       // So an alias of `upper` or `lower` counts as one that can fail in every mode, and an
       // equality over it is not moved, but propagated in place.
-      val cased = strings.select($"s", $"id", Upper($"s").as("u"), Lower($"s").as("l"))
+      val cased = stringIds.select($"s", $"id", Upper($"s").as("u"), Lower($"s").as("l"))
       checkOrdered(cased, Length($"u") > 0 && Length($"l") > 0 && $"u" === "X",
         Length($"l") > 0 && $"u" === "X")
-      checkOrdered(cased, Length($"u") > 0 && divide($"id") > 0.0 && $"u" === "X",
-        divide($"id") > 0.0 && $"u" === "X")
-      // But an operand that decides whether one over it runs is rewritten, as on master.
+      // `length(l) > 0` can fail, so `id = 7`, which folds `id > 0`, goes ahead of it.
+      checkOrdered(cased, $"id" > 0L && Length($"l") > 0 && $"id" === 7L,
+        $"id" === 7L && Length($"l") > 0)
+      checkOrdered(cased, Length($"u") > 0 && tenDividedBy($"id") > 0.0 && $"u" === "X",
+        tenDividedBy($"id") > 0.0 && $"u" === "X")
+      // But an operand that decides whether one over it runs is rewritten, as since SPARK-61033.
       checkOrdered(cased, ($"id" < 3L || $"u" > "A") && $"id" === 7L, $"id" === 7L && $"u" > "A")
 
       // Each projection reads the column below it twice. The check does not expand the column,
       // whose expression would have 2^40 leaves.
-      val chain = (1 to 40).foldLeft(strings.select($"id".as("c"))) { (child, _) =>
+      val chain = (1 to 40).foldLeft(stringIds.select($"id".as("c"))) { (child, _) =>
         child.select(($"c" + $"c").as("c"))
       }
       checkOrdered(chain, $"c" > 0L && $"c" === 2L, $"c" === 2L)

@@ -73,7 +73,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def tryFold(expr: Expression, isConditionalBranch: Boolean): Expression = {
+  private def tryFold(
+      expr: Expression,
+      isConditionalBranch: Boolean,
+      tagFailures: Boolean): Expression = {
     try {
       Literal.create(expr.freshCopyIfContainsStatefulExpression().eval(EmptyRow), expr.dataType)
     } catch {
@@ -81,16 +84,22 @@ object ConstantFolding extends Rule[LogicalPlan] {
         // When doing constant folding inside conditional expressions, we should not fail
         // during expression evaluation, as the branch we are evaluating may not be reached at
         // runtime, and we shouldn't fail the query, to match the original behavior.
-        expr.setTagValue(FAILED_TO_EVALUATE, ())
+        if (tagFailures) expr.setTagValue(FAILED_TO_EVALUATE, ())
         expr
     }
   }
 
+  /**
+   * Folds the parts of `e` that can be statically evaluated. With `tagFailures` off, it does not
+   * tag a part that fails in a conditional branch, which may be shared with a plan, so that a
+   * rule can check whether `e` folds without leaving a mark on it.
+   */
   private[sql] def constantFolding(
       e: Expression,
-      isConditionalBranch: Boolean = false): Expression = e match {
+      isConditionalBranch: Boolean = false,
+      tagFailures: Boolean = true): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
-      c.mapChildren(constantFolding(_, isConditionalBranch = true))
+      c.mapChildren(constantFolding(_, isConditionalBranch = true, tagFailures))
 
     // Skip redundant folding of literals. This rule is technically not necessary. Placing this
     // here avoids running the next rule for Literal values, which would create a new Literal
@@ -106,7 +115,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case e if e.containsTag(FAILED_TO_EVALUATE) => e
 
     // Fold expressions that are foldable.
-    case e if e.foldable => tryFold(e, isConditionalBranch)
+    case e if e.foldable => tryFold(e, isConditionalBranch, tagFailures)
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
     case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
@@ -119,9 +128,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
       Literal(null, s.dataType)
 
     case other =>
-      val newOther = other.mapChildren(constantFolding(_, isConditionalBranch))
+      val newOther = other.mapChildren(constantFolding(_, isConditionalBranch, tagFailures))
       if (newOther.foldable) {
-        tryFold(newOther, isConditionalBranch)
+        tryFold(newOther, isConditionalBranch, tagFailures)
       } else {
         newOther
       }
@@ -147,16 +156,19 @@ object ConstantFolding extends Rule[LogicalPlan] {
  *   in the AND node.
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
-    case f: Filter =>
-      val (newCondition, _) = traverse(
-        f.condition, replaceChildren = true, nullIsFalse = true, new FailableColumns(f.child))
-      if (newCondition.isDefined) {
-        f.copy(condition = newCondition.get)
-      } else {
-        f
-      }
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val childColumns = new java.util.IdentityHashMap[LogicalPlan, ChildColumns]()
+    plan.transformUpWithPruning(
+      _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
+      case f: Filter =>
+        val (newCondition, _) = traverse(f.condition, replaceChildren = true, nullIsFalse = true,
+          new FailableColumns(childColumnsOf(f.child, childColumns)))
+        if (newCondition.isDefined) {
+          f.copy(condition = newCondition.get)
+        } else {
+          f
+        }
+    }
   }
 
   /**
@@ -209,20 +221,13 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
           val (movable, failable) = equalityPredicates.toSeq.partition { case (attr, _) =>
             columns.canEvaluateUnconditionally(attr)
           }
-          val substituted = if (failable.isEmpty) {
-            Some(unreplaced)
+          if (failable.isEmpty) {
+            Some(moveEqualitiesFirst(unreplaced, replaceConstants(unreplaced, equalityPredicates),
+              equalityPredicates, columns))
           } else {
-            replaceConstantsInPlace(unreplaced, AttributeMap(failable))
+            Some(propagateInPlace(
+              unreplaced, AttributeMap(failable), AttributeMap(movable), columns))
           }
-          Some(substituted match {
-            case Some(condition) if movable.isEmpty => condition
-            case Some(condition) => moveEqualitiesFirst(condition,
-              replaceConstants(condition, AttributeMap(movable)), AttributeMap(movable), columns)
-            // The condition fails to fold with them, which failed the query before SPARK-60983,
-            // unless a rule before `ConstantFolding` removed the part that fails.
-            case None => moveEqualitiesFirst(unreplaced,
-              replaceConstants(unreplaced, equalityPredicates), equalityPredicates, columns)
-          })
         } else {
           if (newLeft.isDefined || newRight.isDefined) {
             Some(And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)))
@@ -257,64 +262,178 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     !ar.nullable || nullIsFalse
 
   /**
+   * Propagates the equalities of `condition`, an AND, when some of them, `failable`, are over a
+   * column of the filter's child that can fail (see [[FailableColumns]]), e.g. `i = 1` with `i`
+   * the alias `CAST(s AS INT)`. Such an equality can fail, so it is not moved ahead of the
+   * conjuncts written before it, which would compute the column on rows that they filter out.
+   * Instead, its constant replaces the column in the other comparisons, where they are written,
+   * as before SPARK-60983 (see [[replaceConstantsInPlace]]). The other equalities, `movable`, are
+   * propagated and moved as since SPARK-60983, by [[replaceConstants]] and [[moveEqualitiesFirst]].
+   *
+   * This keeps two results of before SPARK-60983, which put the constants of all of the
+   * equalities, as they are written, into every comparison, and [[FoldablePropagation]] puts the
+   * foldable columns of the child into the condition too:
+   *  - where the condition then fails to fold, outside of a conditional branch, which failed the
+   *    query while it was optimized, the equalities are handled as since SPARK-60983, e.g. with
+   *    `id > 10 / 0` for `i = 0 AND id > 10 / i`, or with `10 / (7 - 6 - 1)` for
+   *    `10 / (id - 6 - i) > 0 AND i = 1 AND id = 7`;
+   *  - where a conjunct then becomes FALSE, the condition is FALSE, e.g. with
+   *    `CASE WHEN 7 > 10 THEN 10 / x ELSE 0 END > 1` for
+   *    `CASE WHEN id > 10 THEN 10 / x ELSE 0 END > 1 AND i = 1 AND id = 7`, as `id = 7` is not
+   *    propagated into a `CASE WHEN` that reads another column.
+   * The check folds the conjuncts that the constants change with [[ConstantFolding]],
+   * [[SimplifyConditionals]] and [[BooleanSimplification]] only, so a conjunct that only other
+   * rules fold away is kept, and one that fails only after other rules is not caught.
+   */
+  private def propagateInPlace(
+      condition: Expression,
+      failable: AttributeMap[(Literal, BinaryComparison)],
+      movable: AttributeMap[(Literal, BinaryComparison)],
+      columns: FailableColumns): Expression = {
+    val equalityPredicates = AttributeMap(failable.toSeq ++ movable.toSeq)
+    val inPlace = replaceConstantsInPlace(condition, failable)
+    // The rewritten condition, and the one with all of the constants in place.
+    val candidates = if (movable.isEmpty) {
+      Seq(inPlace)
+    } else {
+      Seq(replaceConstants(inPlace, movable),
+        replaceConstantsInPlace(condition, equalityPredicates))
+    }
+    checkFolding(condition, candidates.map(columns.replaceFoldables)) match {
+      case Some(true) => FalseLiteral
+      case Some(false) if movable.isEmpty => inPlace
+      case Some(false) => moveEqualitiesFirst(inPlace, candidates.head, movable, columns)
+      case None =>
+        moveEqualitiesFirst(condition, replaceConstants(condition, equalityPredicates),
+          equalityPredicates, FailableColumns.none)
+    }
+  }
+
+  /**
    * Replaces the attributes of `equalityPredicates` with their constants in the comparisons of
-   * `condition` other than those equalities, where they are written, as before SPARK-60983, or
-   * returns None if `condition` would then fail to fold. These are the equalities over a column of
-   * the projection below that can fail (see [[FailableColumns]]), e.g. `i = 1` with `i` the alias
-   * `CAST(s AS INT)`. Such an equality can fail, so it can not go first, as it would compute the
-   * column on rows that the conjuncts before it filter out. A comparison that it rewrites no longer
-   * reads the column, so the conditions read the column in no more places than written. A rewritten
-   * conjunct can fail on a row where the equality does not hold, e.g. `10 / (id - 1)` for
-   * `10 / (id - i) > 0 AND i = 1` on a row where `id` is 1 and `i` is 2, a conjunct after one that
-   * the constant folds away can run on such a row, e.g. `10 / x > 0` for
-   * `i > 0 AND 10 / x > 0 AND i = 1`, and a rewritten conjunct can pass a row on to another such
-   * equality that the written one stops, e.g. `j < 5` for `j < 5 AND i = 2 AND j = 1`, as before
-   * SPARK-60983. A condition that would fail to fold, outside of a conditional branch, e.g. with
-   * `id > 10 / 0` for `i = 0 AND id > 10 / i`, failed the query before SPARK-60983, unless a rule
-   * before [[ConstantFolding]] removed the part that fails, e.g. [[FoldablePropagation]], so the
-   * caller then handles its equalities as since SPARK-60983. As before, an attribute whose type is
-   * not binary stable is replaced only in a comparison with an attribute of the same type (see
-   * [[isSameCollationAttrRefComparison]]), one outside of a comparison, e.g. in `i IN (1, 2)`, is
-   * kept, and one in the correlation of a subquery in a comparison is replaced.
+   * `condition` other than those equalities, wherever they are, as before SPARK-60983. A
+   * comparison that this rewrites no longer reads the column, so the conditions read it in no
+   * more places than written, but a rewritten conjunct can fail on a row where the equality does
+   * not hold, e.g. `10 / (id - 1)` for `10 / (id - i) > 0 AND i = 1` on a row where `id` is 1 and
+   * `i` is 2, a conjunct after one that the constant folds away can run on such a row, e.g.
+   * `10 / x > 0` for `i > 0 AND 10 / x > 0 AND i = 1`, and a rewritten conjunct can pass a row on
+   * to another such equality that the written one stops, e.g. `j < 5` for
+   * `j < 5 AND i = 2 AND j = 1`, as before SPARK-60983.
+   *
+   * As in [[replaceConstants]], an attribute whose type is not binary stable is replaced only in
+   * a comparison with an attribute of the same type (see [[isSameCollationAttrRefComparison]]),
+   * one outside of a comparison, e.g. in `i IN (1, 2)`, is kept, and one in the correlation of a
+   * subquery in a comparison is replaced. Unlike before SPARK-60983, a FLOAT or DOUBLE whose
+   * constant is a zero, or a type with a FLOAT or DOUBLE in it, is kept under an operator that
+   * [[ExprUtils.isTotalOperator]] does not accept, as such an operator can tell -0.0 from 0.0,
+   * which are equal, e.g. `CAST(x * y AS STRING)` for `x = 0.0`, unless the comparison folds to
+   * the same value with each of them, e.g. `pow(x, 2) > 100`.
    */
   private def replaceConstantsInPlace(
       condition: Expression,
-      equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Option[Expression] = {
+      equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
     def replaceInComparison(b: BinaryComparison): Expression = {
       lazy val collationSafeReplacement = isSameCollationAttrRefComparison(b)
-      b transform {
-        case a: AttributeReference
-          if isBinaryStable(a.dataType) || collationSafeReplacement =>
-          constantsMap.getOrElse(a, a)
+      def canReplace(a: AttributeReference): Boolean =
+        constantsMap.contains(a) && (isBinaryStable(a.dataType) || collationSafeReplacement)
+      // Replaces the attributes, but keeps those of `signed` under an operator that is not total.
+      def replace(e: Expression, signed: AttributeSet, total: Boolean): Expression = e match {
+        case a: AttributeReference if canReplace(a) && (total || !signed.contains(a)) =>
+          constantsMap(a)
+        case _ => e.mapChildren(replace(_, signed, total && ExprUtils.isTotalOperator(e)))
+      }
+      val signed = AttributeSet(b.references.collect {
+        case a: AttributeReference if canReplace(a) && hasSignedZero(constantsMap(a)) => a
+      })
+      val kept = replace(b, signed, total = true)
+      val zeros = kept.references.intersect(signed).toSeq
+      val negated = zeros.flatMap(a => negatedZero(constantsMap(a)).map(a -> _))
+      if (zeros.isEmpty || zeros.size > 3 || negated.size < zeros.size) {
+        kept
+      } else {
+        // The comparison with each sign of each zero that it keeps, which is replaced only if it
+        // folds to the same value with each of them.
+        val signs = negated.foldLeft(Seq(AttributeMap.empty[Literal])) { case (maps, (a, n)) =>
+          maps.flatMap { m =>
+            Seq(AttributeMap(m.toSeq :+ (a -> constantsMap(a))), AttributeMap(m.toSeq :+ (a -> n)))
+          }
+        }
+        val values = signs.map { m =>
+          fold(kept.transform { case a: AttributeReference if m.contains(a) => m(a) })
+        }
+        if (values.forall(_.isDefined) && values.distinct.size == 1) {
+          replace(b, AttributeSet.empty, total = true)
+        } else {
+          kept
+        }
       }
     }
-    val rewritten = condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
+    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
       case b: BinaryComparison if !predicates.contains(b) => replaceInComparison(b)
     }
-    Some(rewritten).filter(r => r.fastEquals(condition) || foldsWithoutError(r))
+  }
+
+  /** Whether `l` equals a value that it can be told from, as a zero is equal to the other one. */
+  private def hasSignedZero(l: Literal): Boolean = (l.value, l.dataType) match {
+    case (null, _) => false
+    case (d: Double, DoubleType) => d == 0.0
+    case (f: Float, FloatType) => f == 0.0f
+    case (_, dt) => dt.existsRecursively(t => t == FloatType || t == DoubleType)
+  }
+
+  /** The zero of the other sign than `l`, if it is a zero of a FLOAT or a DOUBLE. */
+  private def negatedZero(l: Literal): Option[Literal] = (l.value, l.dataType) match {
+    case (d: Double, DoubleType) if d == 0.0 => Some(Literal(-d, DoubleType))
+    case (f: Float, FloatType) if f == 0.0f => Some(Literal(-f, FloatType))
+    case _ => None
   }
 
   /**
-   * Whether [[ConstantFolding]] folds `e`, an AND in a filter condition, without an error, which
-   * it raises for a part of `e` that becomes constant and fails, except in a conditional branch.
-   * It tags the parts that fail in one, which can be shared with the plan, so the tags it sets
-   * are removed.
+   * Whether the conjuncts of each of `candidates`, the rewritten `condition`, that the rewrite
+   * changed fold without an error: None if one of them fails to fold outside of a conditional
+   * branch, Some(true) if one of them folds to FALSE, Some(false) otherwise. A conjunct that
+   * [[ExprUtils.canEvaluateUnconditionally]] accepts can neither fail nor be one that the caller
+   * would not fold to FALSE otherwise, so it is skipped.
    */
-  private def foldsWithoutError(e: Expression): Boolean = {
-    val tagged = java.util.Collections.newSetFromMap(
-      new java.util.IdentityHashMap[Expression, java.lang.Boolean]())
-    e.foreach(n => if (n.getTagValue(ConstantFolding.FAILED_TO_EVALUATE).isDefined) tagged.add(n))
-    try {
-      ConstantFolding.constantFolding(e)
-      true
-    } catch {
-      case NonFatal(_) => false
-    } finally {
-      e.foreach { n =>
-        if (!tagged.contains(n)) n.unsetTagValue(ConstantFolding.FAILED_TO_EVALUATE)
+  private def checkFolding(condition: Expression, candidates: Seq[Expression]): Option[Boolean] = {
+    val before = splitConjunctivePredicates(condition)
+    val changed = candidates.flatMap { c =>
+      before.zip(splitConjunctivePredicates(c)).collect {
+        case (b, a) if !a.fastEquals(b) && !ExprUtils.canEvaluateUnconditionally(a) => a
       }
+    }
+    changed.foldLeft(Option(false)) {
+      case (None, _) => None
+      case (Some(isFalse), c) => simplify(c).map(s => isFalse || s == FalseLiteral)
+    }
+  }
+
+  /**
+   * Simplifies `e` with [[ConstantFolding]], without tagging the parts of it that fail in a
+   * conditional branch, [[SimplifyConditionals]] and [[BooleanSimplification]], until it no
+   * longer changes, or returns None if it fails to fold.
+   */
+  private def simplify(e: Expression): Option[Expression] = {
+    def foldOnce(e: Expression): Expression =
+      ConstantFolding.constantFolding(e, tagFailures = false)
+    def simplifyOnce(e: Expression): Expression = {
+      val filter = Filter(e, LocalRelation())
+      foldOnce(BooleanSimplification(SimplifyConditionals(filter)).asInstanceOf[Filter].condition)
+    }
+    try {
+      var current = foldOnce(e)
+      var next = simplifyOnce(current)
+      var iterations = 0
+      while (!next.fastEquals(current) && iterations < 10) {
+        current = next
+        next = simplifyOnce(current)
+        iterations += 1
+      }
+      Some(next)
+    } catch {
+      case NonFatal(_) => None
     }
   }
 
@@ -398,21 +517,20 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Moves the equalities ahead of the other conjuncts of `condition`, the rewritten `original`, if
-   * one that can fail still refers to a propagated attribute. Such a conjunct also runs on rows
-   * where an equality does not hold, with the value of the row, while a guard over the same
-   * attribute may be folded away, e.g. `n / d > 1` for `d <> 0 AND n / d > 1 AND d = 5`. The same
-   * holds for a conjunct that can fail after one that is rewritten, as that one decides whether it
-   * runs, e.g. `10 / x > 0` for `y > 0 AND 10 / x > 0 AND y = 1`. A conjunct over a column of the
-   * projection below that can fail can fail too (see [[FailableColumns]]), e.g. `i > 0`, with `i`
-   * the alias `CAST(s AS INT)`, in ANSI mode. The first rewritten conjunct counts too, not only the
-   * ones after it, if it reads such a column, as [[replaceConstants]] rewrites its operands as if
-   * the column could not fail, e.g. `id < 3` in `(id < 3 OR i > 0) AND id = 7`.
-   * `equalityPredicates` are the equalities over a column that can not fail, which can not fail
-   * themselves, so running them first raises no error. The ones over a column that can fail stay
-   * where they are written (see [[replaceConstantsInPlace]]), and `original` has their constants
-   * already, unless the condition fails to fold with them, where `equalityPredicates` are all of
-   * the equalities, as since SPARK-60983. `keepsFailable` checks the attributes a conjunct reads
+   * Moves `equalityPredicates` ahead of the other conjuncts of `condition`, the rewritten
+   * `original`, if one that can fail still refers to a propagated attribute. Such a conjunct also
+   * runs on rows where an equality does not hold, with the value of the row, while a guard over
+   * the same attribute may be folded away, e.g. `n / d > 1` for `d <> 0 AND n / d > 1 AND d = 5`.
+   * The same holds for a conjunct that can fail after one that is rewritten, as that one decides
+   * whether it runs, e.g. `10 / x > 0` for `y > 0 AND 10 / x > 0 AND y = 1`. An equality between
+   * an attribute and a literal can fail only as the attribute does, so the caller passes only
+   * equalities over columns that `columns` takes as ones that can not fail.
+   *
+   * A conjunct over a column of the projection below that `columns` takes as one that can fail
+   * can fail too, e.g. `i > 0`, with `i` the alias `CAST(s AS INT)`, in ANSI mode. The first
+   * rewritten conjunct counts too, not only the ones after it, if it reads such a column, as
+   * [[replaceConstants]] rewrites its operands as if the column could not fail, e.g. `id < 3` in
+   * `(id < 3 OR i > 0) AND id = 7`. `keepsFailable` checks the attributes a conjunct reads
    * against those of `equalityPredicates`, not those that the expressions of its columns read,
    * which these equalities do not replace.
    */
@@ -441,33 +559,62 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
+   * The columns of a plan that can fail, and the ones that are foldable, which
+   * [[FoldablePropagation]] replaces with their expressions in the conditions above.
+   */
+  private case class ChildColumns(failable: AttributeSet, foldable: AttributeMap[Expression])
+
+  /**
    * The columns of `plan` that can fail, i.e. those that a projection at its top, or below the
    * filters, samples and projections there, computes with a deterministic expression that
    * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads such a column, or passes such a
-   * column through. Under whole-stage codegen, the projection computes a deterministic column for a
-   * row only when a conjunct of the filter above first reads it, unless its subexpression
-   * elimination computes it up front, and `PushPredicateThroughNonJoin` pushes a conjunct below the
-   * projection with the expression of the column substituted. So a conjunct over such a column can
-   * fail as that expression does. A non-deterministic column is computed on every row the
-   * projection gets, and no filter is pushed through a projection with one, so it does not count.
-   * Other operators are not looked through. The columns are collected once per filter, when needed.
+   * column through, and the foldable ones there. Under whole-stage codegen, the projection
+   * computes a deterministic column for a row only when a conjunct of the filter above first
+   * reads it, unless its subexpression elimination computes it up front, and
+   * `PushPredicateThroughNonJoin` pushes a conjunct below the projection with the expression of
+   * the column substituted. So a conjunct over such a column can fail as that expression does. A
+   * non-deterministic column is computed on every row the projection gets, and no filter is
+   * pushed through a projection with one, so it does not count. Other operators are not looked
+   * through. The result for each plan is kept in `cache` for one application of the rule, as the
+   * filters above it look at it too.
    */
-  private class FailableColumns(plan: LogicalPlan) {
-    private lazy val failable: AttributeSet = failableOutput(plan)
-
-    private def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
-      case Project(projectList, child) =>
-        val below = failableOutput(child)
-        AttributeSet(projectList.collect {
-          case a: Alias if a.child.deterministic &&
-              (!ExprUtils.canEvaluateUnconditionally(a.child) ||
-                a.child.references.exists(below.contains)) => a.toAttribute
-          case a: Attribute if below.contains(a) => a
-        })
-      case Filter(_, child) => failableOutput(child)
-      case s: Sample => failableOutput(s.child)
-      case _ => AttributeSet.empty
+  private def childColumnsOf(
+      plan: LogicalPlan,
+      cache: java.util.IdentityHashMap[LogicalPlan, ChildColumns]): ChildColumns = {
+    val cached = cache.get(plan)
+    if (cached != null) {
+      cached
+    } else {
+      val columns = plan match {
+        case Project(projectList, child) =>
+          val below = childColumnsOf(child, cache)
+          val failable = AttributeSet(projectList.collect {
+            case a: Alias if a.child.deterministic &&
+                (!ExprUtils.canEvaluateUnconditionally(a.child) ||
+                  a.child.references.exists(below.failable.contains)) => a.toAttribute
+            case a: Attribute if below.failable.contains(a) => a
+          })
+          val foldable = AttributeMap(projectList.flatMap {
+            case a: Alias if a.child.foldable => Some(a.toAttribute -> a.child)
+            case a @ Alias(b: Attribute, _) if below.foldable.contains(b) =>
+              Some(a.toAttribute -> below.foldable(b))
+            case a: Attribute if below.foldable.contains(a) => Some(a -> below.foldable(a))
+            case _ => None
+          })
+          ChildColumns(failable, foldable)
+        case Filter(_, child) => childColumnsOf(child, cache)
+        case s: Sample => childColumnsOf(s.child, cache)
+        case _ => ChildColumns(AttributeSet.empty, AttributeMap.empty)
+      }
+      cache.put(plan, columns)
+      columns
     }
+  }
+
+  /** The columns of the child of a filter that can fail, and the foldable ones. */
+  private class FailableColumns(childColumns: => ChildColumns) {
+    private lazy val columns = childColumns
+    private lazy val failable: AttributeSet = columns.failable
 
     /**
      * [[ExprUtils.canEvaluateUnconditionally]] of `e`, which must also not read a column that can
@@ -481,7 +628,22 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       ExprUtils.canEvaluateUnconditionally(e) && !reads(e)
 
     /** Whether `e` reads a column that can fail. */
-    def reads(e: Expression): Boolean = e.references.exists(failable.contains)
+    def reads(e: Expression): Boolean = failable.nonEmpty && e.references.exists(failable.contains)
+
+    /** `e` with the foldable columns replaced with their expressions. */
+    def replaceFoldables(e: Expression): Expression = {
+      val foldable = columns.foldable
+      if (foldable.isEmpty) {
+        e
+      } else {
+        e.transform { case a: AttributeReference if foldable.contains(a) => foldable(a) }
+      }
+    }
+  }
+
+  private object FailableColumns {
+    /** No column counts as one that can fail, as before SPARK-61437. */
+    val none = new FailableColumns(ChildColumns(AttributeSet.empty, AttributeMap.empty))
   }
 
   /**
