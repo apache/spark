@@ -157,6 +157,14 @@ class DFGoldenFrameworkTests(unittest.TestCase):
                 with open(path) as f:
                     self.assertEqual(f.read(), old)
 
+    def test_golden_diff_for_new_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "test_new.py.out")
+            rel = "python/pyspark/sql/tests/df_golden/results/test_new.py.out"
+            expected = "--- /dev/null\n+++ b/{}\n@@ -0,0 +1 @@\n+new\n".format(rel)
+            self.assertEqual(_golden_diff(path, "new\n"), expected)
+            self.assertFalse(os.path.exists(path))
+
     def test_golden_diff_preserves_non_newline_separators(self):
         for separator in ("\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", chr(0x2028), chr(0x2029)):
             for in_context in (False, True):
@@ -957,6 +965,26 @@ class DFGoldenTestMixinTests(unittest.TestCase):
                 self.assertEqual(self._read_golden(), old_content)
                 self.assertEqual(self.ran, ["_test_a", "_test_b"])
 
+    def test_filtered_malformed_golden_does_not_produce_partial_diff(self):
+        old_content = "--! name\na\n!-- end\n\n\n--! name\nb\n!-- end\n"
+        self._write_golden(old_content)
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_a(self, spark):
+                pass
+
+            def _test_b(self, spark):
+                pass
+
+        output = io.StringIO()
+        with redirect_stderr(output):
+            result = self._run(Cases, "test_a")
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn("has no expected_", result.failures[0][1])
+        self.assertNotIn("=== BEGIN GOLDEN DIFF ===", output.getvalue())
+        self.assertEqual(self._read_golden(), old_content)
+        self.assertEqual(self.ran, ["_test_a"])
+
     # -- regeneration ------------------------------------------------------
 
     def test_regeneration_writes_the_golden_file_from_the_run(self):
@@ -989,6 +1017,22 @@ class DFGoldenTestMixinTests(unittest.TestCase):
                 Cases.__module__, Cases.__qualname__
             ),
         )
+
+    def test_regeneration_replaces_a_file_that_cannot_be_decoded(self):
+        os.environ["SPARK_GENERATE_GOLDEN_FILES"] = "1"
+        with open(self.golden, "wb") as f:
+            f.write(b"\xff")
+
+        class Cases(DFGoldenTestMixin, self._provider()):
+            def _test_c(self, spark):
+                pass
+
+        output = io.StringIO()
+        with redirect_stderr(output):
+            self._run_passing(Cases)
+        self.assertIn("cannot generate golden diff", output.getvalue())
+        self.assertEqual(self.ran, ["_test_c"])
+        self.assertIn("--! expected_output_schema\nstruct<_test_c:int>", self._read_golden())
 
     def test_regeneration_refuses_a_run_that_skipped_a_case(self):
         os.environ["SPARK_GENERATE_GOLDEN_FILES"] = "1"

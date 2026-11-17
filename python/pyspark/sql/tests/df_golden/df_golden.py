@@ -733,9 +733,8 @@ def _validate_test_file(test_file, header, cases):
     that is silently ignored makes a case assert less than it appears to (or
     nothing at all), so unknown names are errors, not noise.
 
-    Only the golden files being checked go through here: regeneration writes a
-    file from scratch and never reads the old one, so a file this rejects can
-    always be repaired by regenerating it.
+    Only the golden files being checked go through here. Regeneration writes a
+    file from scratch, so a file this rejects can be repaired by regenerating it.
     """
     unknown_header = set(header) - _KNOWN_HEADER_SECTIONS
     assert not unknown_header, "{}: unknown header sections: {}".format(
@@ -1076,7 +1075,17 @@ class DFGoldenTestMixin:
             for name in names
         ]
         header = {"source": cls._golden_source()}
-        diff = _golden_diff(cls._golden_path, serialize_test_file(header, cases))
+        try:
+            diff = _golden_diff(cls._golden_path, serialize_test_file(header, cases))
+        except (OSError, UnicodeError) as error:
+            if not cls._golden_regenerating:
+                raise
+            # Regeneration can replace an unreadable old file even when no diff is possible.
+            print(
+                "{}: cannot generate golden diff: {}".format(cls._golden_path, error),
+                file=sys.stderr,
+            )
+            return
         if diff:
             _print_golden_diff(diff)
 
