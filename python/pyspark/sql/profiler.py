@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import copy
 import cProfile
 import os
 import pstats
@@ -148,6 +149,11 @@ class WorkerSamplingProfiler:
     SamplingProfiler is a profiler for sampling profiling.
     """
 
+    # The most frames kept per sample. Pickling a call tree recurses about twice per level,
+    # which on Python 3.11 counts against the recursion limit (1000 by default), so a much
+    # deeper tree would fail the task when its result is sent.
+    _MAX_STACK_DEPTH = 256
+
     def __init__(
         self,
         task_context: "TaskContext",
@@ -162,6 +168,8 @@ class WorkerSamplingProfiler:
         self._task_context = task_context
         self._sampling_interval = sampling_interval
         self._aggregation = aggregation
+        # Get the key before the UDF runs, so that an unknown level fails the task early.
+        self._task_key = self._get_task_key()
         self._sampling_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -181,7 +189,7 @@ class WorkerSamplingProfiler:
         self._sampling_thread = None
 
     def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
-        accumulator.add({self._get_task_key(): {"sampling": {"callstack": self._callstack_data}}})
+        accumulator.add({self._task_key: {"sampling": {"callstack": self._callstack_data}}})
 
     def _start_sampling_thread(self) -> None:
         if self._sampling_thread is not None:
@@ -200,7 +208,10 @@ class WorkerSamplingProfiler:
             )
             for tid, frame in frames.items():
                 if tid != self_tid:
-                    self._add_sample(self._thread_names.get(tid, str(tid)), frame)
+                    # A thread never listed by threading.enumerate(), e.g. one started with
+                    # _thread.start_new_thread(), has no name. Its id means nothing across
+                    # tasks, so all such threads share one call tree.
+                    self._add_sample(self._thread_names.get(tid, "<unknown thread>"), frame)
 
     def _add_sample(self, thread_name: str, frame: Optional[FrameType]) -> None:
         if thread_name not in self._callstack_data:
@@ -210,9 +221,14 @@ class WorkerSamplingProfiler:
             frames.append(frame)
             frame = frame.f_back
 
+        # Keep the outermost frames of a deeper stack, so that all samples share their roots,
+        # and count the samples that go deeper under one "<truncated>" node.
+        idents = [self._get_ident_from_frame(f) for f in reversed(frames[-self._MAX_STACK_DEPTH :])]
+        if len(frames) > self._MAX_STACK_DEPTH:
+            idents.append("<truncated>")
+
         d = self._callstack_data[thread_name]
-        for f in reversed(frames):
-            ident = self._get_ident_from_frame(f)
+        for ident in idents:
             if ident not in d:
                 d[ident] = {"count": 0}
             d[ident]["count"] += 1
@@ -456,9 +472,12 @@ class ProfilerCollector(ABC):
 
     @property
     def _sampling_profile_results(self) -> Dict[Union[int, str], dict]:
+        # Return copies, since merges change the call trees in place while callers read them
+        # outside the lock. The copy recurses, but the depth of a call tree is bounded by
+        # WorkerSamplingProfiler._MAX_STACK_DEPTH.
         with self._lock:
             return {
-                result_id: result["sampling"]
+                result_id: copy.deepcopy(result["sampling"])
                 for result_id, result in self._profile_results.items()
                 if result.get("sampling", None) is not None
             }
