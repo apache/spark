@@ -17,11 +17,9 @@
 # under the License.
 #
 
-name: "Build / Java17 (branch-4.x, Scala 2.13, Hadoop 3, JDK 17)"
+name: "Build / Java17 (Scala 2.13, Hadoop 3, JDK 17)"
 
 on:
-  schedule:
-    - cron: '0 11 */2 * *'
   workflow_dispatch:
 
 jobs:
