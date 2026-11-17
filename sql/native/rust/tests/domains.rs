@@ -19,6 +19,7 @@ use std::ffi::{c_int, c_void, CStr, CString};
 use std::mem::size_of;
 use std::ops::Bound;
 use std::ptr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use arrow_array::ffi::FFI_ArrowArray;
@@ -170,6 +171,64 @@ fn ranges(low: ArrayRef, high: ArrayRef, inclusive: &[(bool, bool)]) -> StructAr
     ])
 }
 
+/// Observes release independently of the moved-from Arrow structs, without keeping their data.
+struct ReleaseCounts {
+    array: Arc<AtomicUsize>,
+    schema: Arc<AtomicUsize>,
+}
+
+impl ReleaseCounts {
+    fn counts(&self) -> (usize, usize) {
+        (
+            self.array.load(Ordering::Relaxed),
+            self.schema.load(Ordering::Relaxed),
+        )
+    }
+}
+
+struct Release<T> {
+    callback: unsafe extern "C" fn(*mut T),
+    private_data: *mut c_void,
+    count: Arc<AtomicUsize>,
+}
+
+impl<T> Release<T> {
+    fn track(
+        callback: &mut Option<unsafe extern "C" fn(*mut T)>,
+        private_data: &mut *mut c_void,
+        wrapper: unsafe extern "C" fn(*mut T),
+    ) -> Arc<AtomicUsize> {
+        let count = Arc::new(AtomicUsize::new(0));
+        let state = Self {
+            callback: callback.unwrap(),
+            private_data: *private_data,
+            count: count.clone(),
+        };
+        *private_data = Box::into_raw(Box::new(state)).cast();
+        *callback = Some(wrapper);
+        count
+    }
+}
+
+// Restore Arrow's own state before delegating. Assertions stay outside these C callbacks.
+unsafe extern "C" fn release_array(array: *mut FFI_ArrowArray) {
+    let array = unsafe { &mut *array };
+    let state = unsafe { Box::from_raw(array.private_data.cast::<Release<FFI_ArrowArray>>()) };
+    array.private_data = state.private_data;
+    array.release = Some(state.callback);
+    unsafe { (state.callback)(array) };
+    state.count.fetch_add(1, Ordering::Relaxed);
+}
+
+unsafe extern "C" fn release_schema(schema: *mut ArrowSchema) {
+    let schema = unsafe { &mut *schema };
+    let state = unsafe { Box::from_raw(schema.private_data.cast::<Release<ArrowSchema>>()) };
+    schema.private_data = state.private_data;
+    schema.release = Some(state.callback);
+    unsafe { (state.callback)(schema) };
+    state.count.fetch_add(1, Ordering::Relaxed);
+}
+
 /// A domain that Spark passes, with the Arrow structs of its ranges, which Spark releases after
 /// the call unless the library moved them.
 struct Exported {
@@ -194,6 +253,18 @@ impl Exported {
             nan_allowed: false,
             ranges,
             without_schema: false,
+        }
+    }
+
+    fn track_releases(&mut self) -> ReleaseCounts {
+        let (array, schema) = self.ranges.as_mut().unwrap();
+        ReleaseCounts {
+            array: Release::track(&mut array.release, &mut array.private_data, release_array),
+            schema: Release::track(
+                &mut schema.release,
+                &mut schema.private_data,
+                release_schema,
+            ),
         }
     }
 
@@ -288,6 +359,7 @@ fn passes_the_domains_by_the_names_of_their_columns_with_their_values() {
         Exported::new(&[2, 0], false, None),
         Exported::new(&[1], true, Some(labels)),
     ];
+    let releases = [exported[0].track_releases(), exported[2].track_releases()];
     let (used, failure) = push(library, "", &mut exported);
     assert_eq!(failure, None);
     assert_eq!(used, [true, false, true]);
@@ -323,6 +395,41 @@ fn passes_the_domains_by_the_names_of_their_columns_with_their_values() {
     for domain in [&exported[0], &exported[2]] {
         assert!(domain.ranges.as_ref().unwrap().0.is_released());
     }
+    for released in &releases {
+        assert_eq!(released.counts(), (1, 1));
+    }
+    drop(exported);
+    for released in &releases {
+        assert_eq!(released.counts(), (1, 1));
+    }
+}
+
+#[test]
+fn passes_null_only_and_nan_only_domains_with_empty_ranges() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let library = library();
+    // id IS NULL, label IS NOT NULL, and score = NaN. Only the middle domain has no ranges.
+    let ints: ArrayRef = Arc::new(Int64Array::from(Vec::<i64>::new()));
+    let floats: ArrayRef = Arc::new(Float64Array::from(Vec::<f64>::new()));
+    let mut nan = Exported::new(&[3], false, Some(ranges(floats.clone(), floats, &[])));
+    nan.nan_allowed = true;
+    let mut exported = [
+        Exported::new(&[0], true, Some(ranges(ints.clone(), ints, &[]))),
+        Exported::new(&[1], false, None),
+        nan,
+    ];
+    let (used, failure) = push(library, "", &mut exported);
+    assert_eq!(failure, None);
+    assert_eq!(used, [true, false, true]);
+
+    let mut null = Domain::new(vec!["id".into()], Some(vec![]));
+    null.null_allowed = true;
+    let mut nan = Domain::new(vec!["score".into()], Some(vec![]));
+    nan.nan_allowed = true;
+    assert_eq!(
+        *PUSHED.lock().unwrap(),
+        [null, Domain::new(vec!["label".into()], None), nan]
+    );
 }
 
 #[test]
@@ -401,6 +508,31 @@ fn the_default_push_domains_uses_no_domain() {
 }
 
 #[test]
+fn releases_imported_ranges_when_a_later_domain_is_invalid() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let library = library();
+    let ints: ArrayRef = Arc::new(Int64Array::from(vec![3]));
+    let ids = ranges(ints.clone(), ints, &[(true, true)]);
+    let mut exported = [
+        Exported::new(&[0], false, Some(ids.clone())),
+        Exported::new(&[-1], false, Some(ids)),
+    ];
+    let releases = exported.each_mut().map(Exported::track_releases);
+    let (_, failure) = push(library, "", &mut exported);
+    assert_eq!(
+        failure.as_deref(),
+        Some("the path of a domain has a negative index -1")
+    );
+    assert_eq!(releases[0].counts(), (1, 1));
+    // This domain failed before import, so Spark still owns its array and schema.
+    assert_eq!(releases[1].counts(), (0, 0));
+    drop(exported);
+    for released in &releases {
+        assert_eq!(released.counts(), (1, 1));
+    }
+}
+
+#[test]
 fn rejects_invalid_paths_and_a_wrong_number_of_results() {
     let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
     let library = library();
@@ -433,20 +565,44 @@ fn rejects_invalid_paths_and_a_wrong_number_of_results() {
         .data_type(DataType::Utf8);
     let invalid = make_array(unsafe { invalid.build_unchecked() });
     let labels = ranges(invalid.clone(), invalid, &[(true, true)]);
-    let (_, failure) = push(library, "", &mut [Exported::new(&[1], false, Some(labels))]);
+    let mut exported = [Exported::new(&[1], false, Some(labels))];
+    let releases = exported[0].track_releases();
+    let (_, failure) = push(library, "", &mut exported);
     let failure = failure.unwrap_or_default();
     assert!(
         failure.starts_with("the ranges of a domain are not valid Arrow data"),
         "{failure}"
     );
+    assert_eq!(releases.counts(), (1, 1));
+    drop(exported);
+    assert_eq!(releases.counts(), (1, 1));
+
+    let ints: ArrayRef = Arc::new(Int64Array::from(vec![3]));
+    let floats: ArrayRef = Arc::new(Float64Array::from(vec![10.0]));
     let mut exported = [
-        Exported::new(&[0], true, None),
-        Exported::new(&[1], true, None),
+        Exported::new(
+            &[0],
+            false,
+            Some(ranges(ints.clone(), ints, &[(true, true)])),
+        ),
+        Exported::new(
+            &[3],
+            false,
+            Some(ranges(floats.clone(), floats, &[(true, true)])),
+        ),
     ];
+    let releases = exported.each_mut().map(Exported::track_releases);
     let (used, failure) = push(library, "one_result", &mut exported);
     assert_eq!(
         failure.as_deref(),
         Some("ScanBuilder::push_domains returned 1 results for 2 domains")
     );
     assert_eq!(used, [false, false]);
+    for released in &releases {
+        assert_eq!(released.counts(), (1, 1));
+    }
+    drop(exported);
+    for released in &releases {
+        assert_eq!(released.counts(), (1, 1));
+    }
 }
