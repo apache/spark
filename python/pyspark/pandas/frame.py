@@ -3918,13 +3918,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if axis == 1:
             # Column labels live on the driver, so compute the positions with pandas.
-            indexer = self.columns.indexer_between_time(
+            columns = cast(pd.DatetimeIndex, self.columns)  # checked above
+            indexer = columns.indexer_between_time(
                 start_time,
                 end_time,
                 include_start=inclusive in ("both", "left"),
                 include_end=inclusive in ("both", "right"),
             )
-            return self.iloc[:, indexer.tolist()]
+            return cast(DataFrame, self.iloc[:, indexer.tolist()])
 
         psdf = self.copy()
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
@@ -4011,7 +4012,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 raise TypeError("Index must be DatetimeIndex")
             # Column labels live on the driver, so compute the positions with pandas.
             indexer = columns.indexer_at_time(time)
-            return self.iloc[:, indexer.tolist()]
+            return cast(DataFrame, self.iloc[:, indexer.tolist()])
 
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
