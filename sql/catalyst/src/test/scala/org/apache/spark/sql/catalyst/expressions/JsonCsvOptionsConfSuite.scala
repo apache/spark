@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.time.{LocalDate, LocalDateTime}
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -377,6 +378,58 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(canonicalMode.useCapturedOptionDefaults)
     assert(!legacy.useCapturedOptionDefaults)
     assert(canonicalMode.semanticEquals(parser))
+  }
+
+  for (temporalType <- Seq(DateType, TimestampType)) {
+    test(s"metadata-only JSON canonicalization defers nullable schema copies: $temporalType") {
+      val copies = new AtomicInteger
+      val payload = StructType((0 until 128).map { i =>
+        StructField(s"n$i", ArrayType(LongType, containsNull = false), nullable = false)
+      })
+      val fields = Array(StructField("t", temporalType, nullable = false),
+        StructField("payload", ArrayType(payload, containsNull = false), nullable = false))
+      val schema = new StructType(fields) {
+        override private[spark] def asNullable: StructType = {
+          copies.incrementAndGet()
+          super.asNullable
+        }
+      }
+      val parser = JsonToStructs(schema, Map.empty,
+        BoundReference(0, StringType, nullable = false), Some("UTC"),
+        enableDateTimeParsingFallback = None, useCapturedOptionDefaults = true)
+      val enabled = parser.copy(enableDateTimeParsingFallback = Some(true))
+      val disabled = parser.copy(enableDateTimeParsingFallback = Some(false))
+      val explicit = enabled.copy(options = Map("enableDateTimeParsingFallback" -> "false"),
+        useCapturedOptionDefaults = false)
+      val explicitCapture = explicit.copy(useCapturedOptionDefaults = true)
+      Seq(parser, enabled, disabled, explicit, explicitCapture).foreach(_.dataType)
+      val beforeComparison = copies.get()
+
+      assertShared(parser, enabled)
+      assertShared(explicit, explicitCapture)
+      assert(!parser.semanticEquals(disabled))
+      val canonical = parser.canonicalized.asInstanceOf[JsonToStructs]
+      assert(canonical ne parser)
+      assert(copies.get() == beforeComparison)
+      assert(parser.enableDateTimeParsingFallback.isEmpty)
+      assert(canonical.enableDateTimeParsingFallback.contains(true))
+
+      val nullableType = StructType(fields).asNullable
+      assert(canonical.dataType == nullableType)
+      val afterTypeInspection = copies.get()
+      assert(canonical.dataType == nullableType)
+      assert(copies.get() == afterTypeInspection)
+      val executable = parser.copy(schema = StructType(fields))
+      val (input, value) = if (temporalType == DateType) {
+        ("1", 1)
+      } else {
+        ("2024-01-02", DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2024, 1, 2, 0, 0)))
+      }
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+          SQLConf.LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK.key -> "false") {
+        checkEvaluation(executable, create_row(value, null), create_row(s"""{"t":"$input"}"""))
+      }
+    }
   }
 
   test("conversion sharing respects the binding mode only when it can affect results") {

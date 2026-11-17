@@ -2166,7 +2166,7 @@ case class JsonToStructs(
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
   // can generate incorrect files if values are missing in columns declared as non-nullable.
-  private val nullableSchema: DataType = schema.asNullable
+  private lazy val nullableSchema: DataType = schema.asNullable
 
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
