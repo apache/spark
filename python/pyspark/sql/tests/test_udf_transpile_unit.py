@@ -610,7 +610,18 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         absorb_chain = lambda a, b, c: (a < b < c) or (b < c)  # noqa: E731
         absorb_and = lambda a, b: (0 <= a <= 10 and b > 0) or (b > 0)  # noqa: E731
         # (body, schema, row, Python's answer or None where Python raises TypeError)
+        # `SimplifyConditionals` replaces a CASE WHEN whose values all equal its
+        # ELSE: a last operand that is or folds to the fold's stop value must not
+        # delete the earlier operands' guards.
+        and_false = lambda a: (0 < a < 10) and False  # noqa: E731
+        or_true = lambda a, b: (0 < a < b) or True  # noqa: E731
+        constant_link = lambda a: a < 5 < 3  # noqa: E731
+        nested_or_true = lambda a: ((a > 0) or True) == True  # noqa: E731,E712
         cases = [
+            (and_false, "a long", (None,), None),
+            (or_true, "a long, b long", (None, 5), None),
+            (constant_link, "a long", (None,), None),
+            (nested_or_true, "a long", (None,), None),
             (factor_chains, abc + ", d long", (5, 1, None, 7), False),
             (factor_and, "a long, b long", (15, None), False),
             (factor_nested, abc, (None, -1, -1), False),
@@ -646,6 +657,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             filtered = agg.filter(udf("sa", "b", "c"))
             self.assertEqual([], filtered.select("b", "c").collect())
             self.assertEqual(0, self._eval_python_count(filtered), "chain must stay lowered")
+
+            # An if/ternary whose branches lower to one expression would collapse
+            # the same way and drop its test, so it falls back.
+            same_branches = lambda x, y: y if (0 < x < 10) else y  # noqa: E731
+            u, reasons = self._udf_and_warnings(same_branches, LongType())
+            self.assertEqual([], u.transpiled)
+            self.assertIn("same expression", reasons)
 
     def test_udf_transpile_and_or_fold_choice(self):
         # Only a body that holds a chain or a comparison over a non-basic operand
@@ -925,6 +943,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             chain_nested(10),
             *ternary_nests,
             f"({modulo}) > 0",
+            # Both links of an identity chain read its interior operand.
+            "None is (" * 20 + "x" + ") is None" * 20,
         ]
         with self.sql_conf(_TRANSPILE_ON):
             for src in lowers:
@@ -1016,6 +1036,17 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ),
             [True, True, False, False, False],
         )
+        # A flat run of `len()` or `%` terms reads its operand a fixed number of
+        # times per term, so it is flat too: its options sum past the bound and
+        # are all kept. Only built: generated code this long fails to compile,
+        # which is an error in tests.
+        with self.sql_conf(_TRANSPILE_ON):
+            for term, count in (("len(a) == {}", 182), ("a % 251 == {}", 60)):
+                terms = " or ".join("(" + term.format(i) + ")" for i in range(count))
+                flat = self._function_from_source(
+                    f"def f(a, b, c):\n    return ({terms}) and b is not None and c is not None\n"
+                )
+                self.assertGreater(len(self._transpiled_udf(flat, BooleanType()).transpiled), 1)
         # A single option that is past the bound by itself.
         import ast as _ast
 
@@ -1684,7 +1715,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def addition_skip(a: int, b: int):
             return (a is not None and 0 < b + 1 < 10) or (a is not None and 0 < b + 1 < 10)
 
+        def negation_skip(x: int, y: int):
+            return y > 0 and 0 < -x < 10
+
         cases = [
+            (negation_skip, "x bigint, y bigint", [(-(2**63), -1), (-5, 1), (5, 1)], None, None),
             (
                 length,
                 "a bigint, b bigint, s string",
