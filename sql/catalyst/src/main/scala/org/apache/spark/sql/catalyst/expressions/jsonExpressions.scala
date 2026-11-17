@@ -1594,6 +1594,8 @@ case class JsonArray(
     singleElem(0) = value
     var evaluator = elementEvaluators(idx)
     if (evaluator == null) {
+      // TODO: Capture ignoreNullFields for nested values in saved definitions. Keep the existing
+      // lazy default binding here until capture support is extended to JSON_ARRAY.
       evaluator = StructsToJsonEvaluator(
         Map.empty, ArrayType(values(idx).dataType), Some(resolvedZoneId))
       elementEvaluators(idx) = evaluator

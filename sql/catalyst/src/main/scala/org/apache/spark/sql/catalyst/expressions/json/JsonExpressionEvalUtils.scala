@@ -265,6 +265,8 @@ case class JsonObjectEvaluator(
     StructType(fields.result())
   }
 
+  // TODO: Capture ignoreNullFields for nested values in saved definitions. Keep the existing
+  // lazy default binding here until capture support is extended to JSON_OBJECT.
   @transient private lazy val gen =
     new JacksonGenerator(carrierSchema, writer, new JSONOptions(Map.empty, timeZoneId))
 
