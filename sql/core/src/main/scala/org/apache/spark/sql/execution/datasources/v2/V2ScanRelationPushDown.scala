@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, C
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanContext, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, SchemaPruning, VariantInRelation, VariantMetadata}
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
@@ -1020,8 +1020,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def pruneColumns(plan: LogicalPlan, isSubquery: Boolean): LogicalPlan = plan.transform {
     case op @ SchemaPruning.GeneratorsOverScan(segments, generators, sHolder: ScanBuilderHolder)
-        if !hasBlockingPushdown(sHolder) && !sHolder.relation.table.isInstanceOf[OrcTable] =>
-      // ORC is not pruned through generators yet, see `SchemaPruning.GeneratorsOverScan`.
+        if !hasBlockingPushdown(sHolder) && (sHolder.relation.table match {
+          case _: ParquetTable => true
+          // other file tables do not prune nested fields, and ORC is not pruned through
+          // generators yet, see `SchemaPruning.GeneratorsOverScan`
+          case _: FileTable => false
+          case _ => true
+        }) =>
       // Fields read from the generators' elements above them narrow the scan below them. This
       // prunes and builds the holder's builder before the plan above is re-resolved. If that is
       // then rejected, the builder must not be pruned again with a wider schema (a builder may

@@ -98,8 +98,11 @@ object SchemaPruning extends Rule[LogicalPlan] {
    */
   private[sql] object GeneratorsOverScan {
     def unapply(plan: LogicalPlan): Option[(Seq[Segment], Seq[Generate], LogicalPlan)] = {
+      // Under the legacy flag, an element missing all the fields read from it is read as null,
+      // so an outer generator would emit one row for its whole array.
       if (!plan.containsPattern(GENERATE) || !conf.nestedSchemaPruningEnabled ||
-          !conf.nestedSchemaPruningThroughGenerateEnabled) {
+          !conf.nestedSchemaPruningThroughGenerateEnabled ||
+          conf.getConf(SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING)) {
         return None
       }
       @tailrec
@@ -159,14 +162,18 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
   /**
    * The size of an array only needs its length. Returns an array of the same length that reads
-   * as little as possible: the smallest field of an array of structs, like
+   * as little as possible: the smallest atomic field of an array of structs, like
    * [[org.apache.spark.sql.catalyst.optimizer.RewriteSizeOfArrayStruct]] does for scan columns,
    * and of the outer array for a nested field of an array of structs, which has the same length.
    */
   private def lengthOnly(array: Expression): Expression = {
     def smallestField(array: Expression): Option[Expression] = array.dataType match {
       case ArrayType(StructType(fields), containsNull) if fields.length > 1 =>
-        val (field, ordinal) = fields.zipWithIndex.minBy(_._1.dataType.defaultSize)
+        // An atomic field keeps its size when a later run sees the narrowed type, so every run
+        // picks the same one. Without one, the first field stays first, as pruning keeps order.
+        val atomic = fields.zipWithIndex.filter(_._1.dataType.isInstanceOf[AtomicType])
+        val (field, ordinal) =
+          if (atomic.nonEmpty) atomic.minBy(_._1.dataType.defaultSize) else (fields.head, 0)
         Some(GetArrayStructFields(
           array, field, ordinal, fields.length, containsNull || field.nullable))
       case _ => None

@@ -1001,6 +1001,48 @@ abstract class SchemaPruningSuite
     }
   }
 
+  test("SPARK-47230: elements missing every field read keep their rows under the legacy flag") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("select id, array(named_struct('n0', id), named_struct('n0', id), " +
+        "named_struct('n0', id)) as items from range(2)")
+        .write.format(dataSourceName).save(s"$path/p=1")
+      sql("select id, array(named_struct('n0', id, 'n1', id, 'n2', id), " +
+        "named_struct('n0', id, 'n1', id, 'n2', id)) as items from range(2, 4)")
+        .write.format(dataSourceName).save(s"$path/p=2")
+      withSQLConf(SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key -> "true") {
+        withTempView("t") {
+          spark.read.option("mergeSchema", "true").format(dataSourceName).load(path)
+            .createOrReplaceTempView("t")
+          val query = "select id, e.n1, e.n2 from t lateral view outer explode(items) g as e"
+          val expected = withSQLConf(
+              SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED.key -> "false") {
+            sql(query).collect().toSeq
+          }
+          assert(expected.size == 10)
+          checkAnswer(sql(query), expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-47230: size() of nested arrays prunes the same on every run of the rule") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // the batch running the rule checks under testing that a second run changes nothing
+      sql("select array(named_struct('a_s', 'a', 'bs', array(named_struct('b_s', 'b', " +
+        "'cs', array(named_struct('c_s', 'c', 'ds', array(named_struct('d_s', 'd', " +
+        "'es', array(named_struct('e_i', cast(id as int), 'e_j', 1, 'e_s', 'e'))))))))))" +
+        " as as_ from range(3)").write.format(dataSourceName).save(path)
+      withTempView("t") {
+        spark.read.format(dataSourceName).load(path).createOrReplaceTempView("t")
+        val query = "select size(a.bs), size(a.bs[0].cs), size(a.bs[0].cs[0].ds), " +
+          "size(a.bs[0].cs[0].ds[0].es) from t lateral view outer explode(as_) t1 as a"
+        checkAnswer(sql(query), Seq.fill(3)(Row(1, 1, 1, 1)))
+      }
+    }
+  }
+
   testSchemaPruning("select ArrayTransform over nested fields of array of struct") {
     val query = spark.table("contacts")
       .where("p = 1")
