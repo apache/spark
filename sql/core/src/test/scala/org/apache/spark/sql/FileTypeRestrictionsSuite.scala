@@ -169,7 +169,10 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       val schema = spark.table("testcat.t").schema
       Seq(
         "SELECT 1 AS id, named_struct('a', 1) AS s, CAST(NULL AS FILE) AS f" -> "[`f`]",
-        "SELECT 1 AS id, named_struct('a', 1, 'f', CAST(NULL AS FILE)) AS s" -> "[`s`.`f`]"
+        "SELECT 1 AS id, named_struct('a', 1, 'f', CAST(NULL AS FILE)) AS s" -> "[`s`.`f`]",
+        // A new struct column reports the path of its FILE field.
+        "SELECT 1 AS id, named_struct('a', 1) AS s, named_struct('f', CAST(NULL AS FILE)) AS s2" ->
+          "[`s2`.`f`]"
       ).foreach { case (query, colNames) =>
         checkError(
           exception = intercept[AnalysisException] {
@@ -238,6 +241,16 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
             condition = "FILE_TYPE_UNKNOWN_WRITE",
             parameters = Map("colNames" -> "[`f`]"))
         }
+      }
+    }
+    // A FILE in a struct is reported by its path.
+    withTempView("v") {
+      sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, named_struct('f', CAST(NULL AS FILE)) AS s")
+      withTable("t") {
+        checkError(
+          exception = intercept[AnalysisException](sql("CREATE TABLE t LIKE v")),
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> "[`s`.`f`]"))
       }
     }
     // A FILE EXTERNAL can be copied.

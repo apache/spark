@@ -3814,7 +3814,7 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         for dt in [FileType(), FileType.external(), ArrayType(FileType.external())]:
             with self.subTest(dt=dt):
                 self.assertEqual(dt, _parse_datatype_json_string(dt.json()))
-        for json_value in ["file managed", "file external unknown", "files"]:
+        for json_value in ["file other", "file external unknown", "files"]:
             with self.subTest(json_value=json_value):
                 with self.assertRaises(PySparkValueError) as pe:
                     _parse_datatype_json_value(json_value)

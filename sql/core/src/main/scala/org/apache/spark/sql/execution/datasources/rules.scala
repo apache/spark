@@ -269,7 +269,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         val analyzedQuery = query.get
         checkNoUnknownFileTypeWrite(analyzedQuery.schema)
-        checkNoFileTypePartitionOrClusteringColumn(analyzedQuery.schema, tableDesc)
+        checkNoFileTypeInComparableColumns(analyzedQuery.schema, tableDesc)
         val normalizedTable =
           CreateTableHelper.normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
@@ -294,7 +294,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
         checkFileTypeHasQualifier(tableDesc.schema)
-        checkNoFileTypePartitionOrClusteringColumn(tableDesc.schema, tableDesc)
+        checkNoFileTypeInComparableColumns(tableDesc.schema, tableDesc)
         CreateTableHelper.normalizeCreateTableWithoutQuery(c)
       }
 
@@ -309,7 +309,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     }
 
   // FILE is not comparable, so it cannot be a partition, bucket, bucket sort or clustering column.
-  private def checkNoFileTypePartitionOrClusteringColumn(
+  private def checkNoFileTypeInComparableColumns(
       schema: StructType,
       table: CatalogTable): Unit = {
     def check(names: Seq[String], usage: FileTypeColumnUsage): Unit = names.foreach { name =>

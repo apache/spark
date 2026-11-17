@@ -3239,7 +3239,7 @@
   },
   "FILE_TYPE_MISSING_QUALIFIER" : {
     "message" : [
-      "The column <colName> of type <dataType> holds a FILE without a qualifier, which a column definition requires. Use FILE EXTERNAL."
+      "The column <colName> of type <dataType> holds a FILE without a qualifier. A FILE in a column definition requires the EXTERNAL qualifier. Use FILE EXTERNAL."
     ],
     "sqlState" : "42601"
   },
