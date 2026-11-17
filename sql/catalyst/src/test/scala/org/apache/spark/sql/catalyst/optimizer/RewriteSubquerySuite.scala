@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Coalesce, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 
@@ -160,5 +161,35 @@ class RewriteSubquerySuite extends PlanTest {
     val existsOptimized = OptimizeWithPullup.execute(existsQuery.analyze)
     val existsExpected = LocalRelation(existsQuery.analyze.output).analyze
     comparePlans(existsOptimized, existsExpected)
+  }
+
+  test("SPARK-61444: keep the result on zero rows of an Aggregate that fails to evaluate") {
+    def resultOnZeroRows(divisor: Expression): (Aggregate, Expression) = {
+      val agg = LocalRelation($"v".int)
+        .groupBy()((Literal(10) / divisor).as("d"))
+        .analyze.asInstanceOf[Aggregate]
+      (agg, RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(agg)(
+        agg.aggregateExpressions.head.exprId))
+    }
+    // 10 / 0 fails with DIVIDE_BY_ZERO in ANSI mode. The expression is kept without its Alias,
+    // and tagged so that ConstantFolding does not evaluate it again. Only the result is tagged,
+    // not the expression in the Aggregate, also when the result is a constant expression that
+    // the rewrite does not copy.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(Coalesce(Seq(max($"v"), Literal(0))), Literal(0)).foreach { divisor =>
+        val (agg, result) = resultOnZeroRows(divisor)
+        assert(!result.isInstanceOf[Literal], result)
+        assert(result.find(_.isInstanceOf[Alias]).isEmpty, result)
+        assert(result.containsTag(ConstantFolding.FAILED_TO_EVALUATE), result)
+        assert(agg.aggregateExpressions.head.collectFirst {
+          case e if e.containsTag(ConstantFolding.FAILED_TO_EVALUATE) => e
+        }.isEmpty, agg)
+      }
+    }
+    // Without ANSI mode, it evaluates to null.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val (_, result) = resultOnZeroRows(Coalesce(Seq(max($"v"), Literal(0))))
+      assert(result.isInstanceOf[Literal] && result.asInstanceOf[Literal].value == null, result)
+    }
   }
 }

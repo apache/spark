@@ -322,6 +322,55 @@ case class Xxh3128(child: Expression)
 }
 
 /**
+ * Computes the FarmHash Fingerprint64 of its argument, compatible with `FARM_FINGERPRINT` in
+ * BigQuery / GoogleSQL.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns a 64-bit fingerprint of `expr` as a bigint, computed with the
+      FarmHash Fingerprint64 algorithm.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to fingerprint. A string or binary expression. Strings are hashed
+        as their UTF-8 bytes.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       -2743780590904673122
+  """,
+  note = """
+    The result matches `FARM_FINGERPRINT` in BigQuery / GoogleSQL and does not change across
+    Spark versions, so it is safe to persist. It is not a cryptographic hash.
+  """,
+  since = "4.4.0",
+  group = "hash_funcs")
+case class FarmFingerprint(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def dataType: DataType = LongType
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  protected override def nullSafeEval(input: Any): Any =
+    ExpressionImplUtils.farmFingerprint(input.asInstanceOf[Array[Byte]])
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val utils = classOf[ExpressionImplUtils].getName
+    nullSafeCodeGen(ctx, ev, value => s"${ev.value} = $utils.farmFingerprint($value);")
+  }
+
+  override def prettyName: String = "farm_fingerprint"
+
+  override protected def withNewChildInternal(newChild: Expression): FarmFingerprint =
+    copy(child = newChild)
+}
+
+/**
  * A function that calculates hash value for a group of expressions.  Note that the `seed` argument
  * is not exposed to users and should only be set inside spark SQL.
  *

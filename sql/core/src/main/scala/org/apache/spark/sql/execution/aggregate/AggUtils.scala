@@ -655,7 +655,7 @@ object AggUtils {
     finalAndCompleteAggregate :: Nil
   }
 
-  private def mayAppendUpdatingSessionExec(
+  private[execution] def mayAppendUpdatingSessionExec(
       groupingExpressions: Seq[NamedExpression],
       maybeChildPlan: SparkPlan,
       isStreaming: Boolean = false): SparkPlan = {

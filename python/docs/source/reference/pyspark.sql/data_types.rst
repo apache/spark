@@ -34,6 +34,8 @@ Data Types
     TimeType
     DecimalType
     DoubleType
+    FileType
+    FileTypeMode
     FloatType
     GeographyType
     GeometryType

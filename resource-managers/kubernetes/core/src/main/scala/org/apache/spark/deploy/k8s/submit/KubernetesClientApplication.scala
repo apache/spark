@@ -143,7 +143,9 @@ private[spark] class Client(
       case NonFatal(e) =>
         logError("Please check \"kubectl auth can-i create [resource]\" first." +
           " It should be yes. And please also check your feature step implementation.")
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        Utils.tryLogNonFatalError {
+          kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        }
         throw e
     }
 
@@ -154,7 +156,9 @@ private[spark] class Client(
         kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        Utils.tryLogNonFatalError {
+          kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        }
         logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
         throw e
     }
@@ -165,8 +169,12 @@ private[spark] class Client(
       kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().resource(createdDriverPod).delete()
-        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        Utils.tryLogNonFatalError {
+          kubernetesClient.pods().resource(createdDriverPod).delete()
+        }
+        Utils.tryLogNonFatalError {
+          kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        }
         throw e
     }
 
@@ -177,7 +185,9 @@ private[spark] class Client(
       kubernetesClient.resourceList(otherKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().resource(createdDriverPod).delete()
+        Utils.tryLogNonFatalError {
+          kubernetesClient.pods().resource(createdDriverPod).delete()
+        }
         throw e
     }
 
