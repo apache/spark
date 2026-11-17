@@ -44,11 +44,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   `leftTime = rightTime + INTERVAL 1 MONTH - INTERVAL 15 DAYS`, or one truncated from the other
   input's event time, such as `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`, does not
   count, while `timestampadd` in hours, minutes or seconds does, whatever the amount. A bound that
-  uses only constants, or a range condition on a numeric, DATE or TIMESTAMP_NTZ column or on a
-  shorter time window, does not count either. When both inputs have watermarks, a time range
-  condition between the two event times can bound a join whose equality key does not count. Some
-  previously accepted queries now fail if these requirements are not met. Update their watermarks
-  and join conditions using the
+  uses only constants or a sum of both event times, or a range condition on a numeric, DATE or
+  TIMESTAMP_NTZ column or on a shorter time window, does not count either. When both inputs have
+  watermarks, a time range condition between the two event times can bound a join whose equality
+  key does not count. Some previously accepted queries now fail if these requirements are not
+  met. Update their watermarks and join conditions using the
   [join support table](apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries).
   A stateful operator after such a join that uses the other input's event time also needs that
   input bounded: for example, a left outer join followed by an append-mode aggregation over the

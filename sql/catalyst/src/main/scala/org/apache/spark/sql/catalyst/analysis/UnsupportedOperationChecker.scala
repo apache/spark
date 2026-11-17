@@ -723,6 +723,9 @@ object UnsupportedOperationChecker extends Logging {
     val leftKeys = keys.map(_._2).getOrElse(Nil)
     val rightKeys = keys.map(_._3).getOrElse(Nil)
 
+    // Eviction solves the optimized condition, so the check reads the same range bounds.
+    val foldedCondition = join.condition.map(StreamingJoinHelper.withFoldedConstants)
+
     def canEvictState(
         stateInput: LogicalPlan,
         otherInput: LogicalPlan,
@@ -734,7 +737,7 @@ object UnsupportedOperationChecker extends Logging {
       StreamingJoinHelper.getStateKeyWatermarkOrdinal(
         otherKeys, otherInput.output, Some(eventTimeLags)).isDefined ||
         StreamingJoinHelper.getStateValueWatermarkForLags(stateInput.outputSet, otherInput.output,
-          join.condition, Some(1000000), Some(eventTimeLags),
+          foldedCondition, Some(1000000), Some(eventTimeLags),
           exactForUnwatermarkedColumns).isDefined
     }
 

@@ -1483,11 +1483,12 @@ Additional details on supported joins:
   such as `leftWindow > rightWindow`, when the input's windows last at least as long as the
   other input's. For a union of window columns, its shortest windows must last at least as long
   as the other input's longest. A bound that uses only constants, such as
-  `CAST(leftTime AS BIGINT) > 10`, does not qualify, and neither does a range condition on a
-  column of another type: a numeric column, such as `n > CAST(rightTime AS BIGINT)`, a DATE or
-  TIMESTAMP_NTZ column, a time window shorter than the other input's, or a time window column
-  read from a table, from files or under a supplied schema, whose window lengths the query does
-  not know.
+  `CAST(leftTime AS BIGINT) > 10`, or a sum that a later row of the other input can always
+  satisfy, such as `CAST(leftTime AS BIGINT) + CAST(rightTime AS BIGINT) > 100`, does not
+  qualify, and neither does a range condition on a column of another type: a numeric column,
+  such as `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, a time window shorter
+  than the other input's, or a time window column read from a table, from files or under a
+  supplied schema, whose window lengths the query does not know.
 
 - A stream-stream inner join cleans up an input's state only with such a time constraint. For
   example, an inner join whose only time constraint is `leftWindow > rightWindow`, with 10-second

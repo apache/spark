@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -29,8 +29,12 @@ import org.apache.spark.sql.internal.SQLConf
 class StreamingJoinConstantWatermarkSuite extends StreamTest {
   import testImplicits._
 
-  for (version <- Seq(2, 3, 4)) {
-    test(s"static conjunct cannot stall left outer finalization, V$version") {
+  for {
+    version <- Seq(2, 3, 4)
+    // The admission check reads the bound as eviction does after constant folding.
+    interval <- Seq("INTERVAL 5 SECONDS", "INTERVAL 1 SECOND * 5")
+  } {
+    test(s"static conjunct cannot stall left outer finalization, V$version, $interval") {
       withSQLConf(
           SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
@@ -43,7 +47,7 @@ class StreamingJoinConstantWatermarkSuite extends StreamTest {
         val right = rightInput.toDF().toDF("rightKey", "time")
           .select($"rightKey", timestamp_seconds($"time").as("rt"))
           .withWatermark("rt", "1 second")
-        val condition = expr("leftKey = rightKey AND lt > rt - INTERVAL 5 SECONDS AND " +
+        val condition = expr(s"leftKey = rightKey AND lt > rt - $interval AND " +
           "CAST(lt AS BIGINT) > 10")
         val joined = left.join(right, condition, "left_outer")
           .select($"leftKey", $"lt".cast("long"), $"rt".cast("long"))
@@ -66,6 +70,9 @@ class StreamingJoinConstantWatermarkSuite extends StreamTest {
       }
     }
 
+  }
+
+  for (version <- Seq(2, 3, 4)) {
     test(s"static conjunct still caps an inexact bound in a left outer join, V$version") {
       withSQLConf(
           SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString,
@@ -133,5 +140,53 @@ class StreamingJoinConstantWatermarkSuite extends StreamTest {
     }
     assert(appender.loggingEvents.exists(
       _.getMessage.getFormattedMessage.contains("allow unmatched state to be finalized")))
+  }
+
+  // Eviction solves the optimized condition, where constants are folded and a NOT over a
+  // comparison is the opposite comparison, so the admission check reads such bounds too. A bound
+  // that eviction cannot read, through current_timestamp() or an interval whose evaluation fails,
+  // still gives none.
+  test("admission reads range bounds as eviction does after constant folding") {
+    val leftInput = MemoryStream[(Int, Long)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time").as("lt"))
+      .withWatermark("lt", "1 second")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rt"))
+      .withWatermark("rt", "1 second")
+    def starts(bound: String, joinType: String): Boolean = {
+      val condition = s"leftKey = rightKey AND $bound AND CAST(lt AS BIGINT) > 10"
+      try {
+        left.join(right, expr(condition), joinType).writeStream.format("noop").start().stop()
+        true
+      } catch {
+        case e: AnalysisException if e.getMessage.contains("allow unmatched state") => false
+      }
+    }
+
+    Seq(
+      "lt > rt - INTERVAL 1 SECOND * 5",
+      "NOT (lt <= rt - INTERVAL 5 SECONDS)",
+      "NOT (lt <= rt - INTERVAL 5 SECONDS OR lt IS NULL)",
+      "lt > rt - make_dt_interval(0, 0, 0, 5)",
+      "lt > rt - INTERVAL 10 SECONDS / 2",
+      "lt > rt - CAST('5 seconds' AS INTERVAL)",
+      "CAST(lt AS DOUBLE) > CAST(rt AS DOUBLE) - 10 / 2").foreach { bound =>
+      Seq("left_outer", "left_semi").foreach { joinType =>
+        withClue(s"$bound $joinType") {
+          assert(starts(bound, joinType))
+        }
+      }
+    }
+    Seq(
+      "lt > rt - (current_timestamp() - current_timestamp())",
+      "lt > rt - INTERVAL 1 SECOND * 9223372036854775807",
+      // A bound that uses only constants still gives none.
+      "lt > TIMESTAMP '2020-01-01 00:00:00' - INTERVAL 1 SECOND * 5").foreach { bound =>
+      withClue(bound) {
+        assert(!starts(bound, "left_outer"))
+      }
+    }
   }
 }

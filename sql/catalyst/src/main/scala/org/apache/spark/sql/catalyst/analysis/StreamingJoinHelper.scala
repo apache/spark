@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Join, LogicalPlan, Project, UnaryNode, Union}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MILLIS, MICROS_PER_MINUTE, MICROS_PER_SECOND}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -556,7 +557,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // alone and taking the lowest gives the cutoff of all of them at their own watermarks.
     eventTimes.flatMap { case (column, watermark) =>
       getStateValueWatermark(stateAttributes, AttributeSet(Seq(column)), joinCondition,
-        Some(watermark), exactForUnwatermarkedColumns, signedForUnwatermarkedColumns = true)
+        Some(watermark), exactForUnwatermarkedColumns)
     }.minOption
   }
 
@@ -745,6 +746,30 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       }
   }
 
+  /**
+   * The join condition in the form the optimizer gives the planned condition, which state
+   * eviction solves, for the admission check, which solves the analyzed condition: each foldable
+   * expression replaced by a literal of its value, as constant folding does, and each NOT over a
+   * comparison replaced by the opposite comparison, through De Morgan's laws, as boolean
+   * simplification does. Both keep the condition's meaning, including for NULLs. Current-time
+   * functions stay, since streaming execution replaces them per batch with expressions that are
+   * not folded, and so does an expression whose evaluation fails, which then fails at run time.
+   * Unlike [[withIntervalLiterals]], this keeps timestampadd, which eviction does not read in a
+   * range condition.
+   */
+  def withFoldedConstants(condition: Expression): Expression = condition.transformDown {
+    case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
+    case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
+    case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
+    case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+    case Not(Or(l, r)) => And(Not(l), Not(r))
+    case Not(And(l, r)) => Or(Not(l), Not(r))
+    case Not(Not(e)) => e
+    case e if e.foldable && !e.isInstanceOf[Literal] &&
+        !e.containsPattern(TreePattern.CURRENT_LIKE) =>
+      try Literal.create(e.eval(), e.dataType) catch { case NonFatal(_) => e }
+  }
+
   /** Microseconds per unit for the timestampadd units that add an exact duration. */
   private def timestampAddUnitMicros(unit: String): Option[Long] =
     unit.toUpperCase(Locale.ROOT) match {
@@ -811,22 +836,21 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      cutoff from a condition that the solver counts
    *                                      inexactly. State eviction and the admission check set
    *                                      it, so they agree.
-   * @param baseAdmissionRules            whether to skip the check that the bounded column is a
-   *                                      TIMESTAMP column or a time window, which Spark 4.4
-   *                                      added to the solver. It does not skip the inexact
-   *                                      arithmetic check for columns without their own
-   *                                      watermark, which exactForUnwatermarkedColumns alone
-   *                                      controls; leave that false too for the result of
-   *                                      earlier versions. Two callers set it: the admission
-   *                                      rule that stays in force with the finalization check
-   *                                      disabled, and the restart compatibility check's solve
-   *                                      of the bound that older versions derived.
-   * @param signedForUnwatermarkedColumns whether a column without its own watermark gets no
-   *                                      cutoff from a condition whose watermark term has the
-   *                                      column's sign, such as `lt + rt > c`. Such a bound falls
-   *                                      as the watermark grows, so it never finalizes a row.
-   *                                      Earlier versions never evicted such a column, and their
-   *                                      admission rule ignores the sign.
+   * @param baseAdmissionRules            whether to skip the checks that Spark 4.4 added to the
+   *                                      solver: that the bounded column is a TIMESTAMP column or a
+   *                                      time window, that a bound has a term on the other input's
+   *                                      watermarked event time, so a conjunct that uses only
+   *                                      constants, such as `CAST(lt AS BIGINT) > 10`, still gives
+   *                                      a cutoff, and that the term has a sign that bounds the
+   *                                      state, so a negated term, as in `CAST(lt AS BIGINT) > 100
+   *                                      - CAST(rt AS BIGINT)`, still gives a cutoff. It does not
+   *                                      skip the inexact arithmetic check for columns without
+   *                                      their own watermark, which exactForUnwatermarkedColumns
+   *                                      alone controls; leave that false too for the result of
+   *                                      earlier versions. Two callers set it: the admission rule
+   *                                      that stays in force with the finalization check disabled,
+   *                                      and the restart compatibility check's solve of the bound
+   *                                      that older versions derived.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
@@ -835,8 +859,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       joinCondition: Option[Expression],
       eventWatermark: Option[Long],
       exactForUnwatermarkedColumns: Boolean = false,
-      baseAdmissionRules: Boolean = false,
-      signedForUnwatermarkedColumns: Boolean = false): Option[Long] = {
+      baseAdmissionRules: Boolean = false): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -851,7 +874,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       try {
         getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
           attributesWithEventWatermark, eventWatermark, exactForUnwatermarkedColumns,
-          keepConstantOnly, baseAdmissionRules, signedForUnwatermarkedColumns)
+          keepConstantOnly, baseAdmissionRules)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -920,8 +943,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       eventWatermark: Option[Long],
       exactForUnwatermarkedColumns: Boolean,
       keepConstantOnly: Boolean,
-      baseAdmissionRules: Boolean,
-      signedForUnwatermarkedColumns: Boolean): Option[Long] = {
+      baseAdmissionRules: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -995,19 +1017,6 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       logDebug(s"Inexact arithmetic gives an unwatermarked column no cutoff: $allOnLeftExpr")
       return None
     }
-    // A watermark term with the sign of the constraint term, as in `lt + rt > c`, lowers the
-    // solved bound as the watermark grows, so later input can still match any stored row.
-    // TODO(SPARK-61350): a column with its own watermark still takes a cutoff from such a term.
-    val hasNegativeWatermarkTerm = terms.exists { term =>
-      term.isInstanceOf[UnaryMinus] && term.references.exists { a =>
-        attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey)
-      }
-    }
-    if (signedForUnwatermarkedColumns && !stateColumnHasWatermark && hasNegativeWatermarkTerm) {
-      logDebug(s"A negative watermark term gives an unwatermarked column no cutoff: $terms")
-      return None
-    }
-
     // State eviction compares this cutoff in timestamp units against the constrained column, or
     // against its end for a time window; see [[isWindowEvictionSafe]].
     val stateColumn = constraintTerm.collectFirst {
@@ -1026,10 +1035,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     // only constants does not follow the watermark, and gives a cutoff only with
     // keepConstantOnly. The occurrence check above limits each input to one attribute, so there
     // can be at most one such term.
-    // TODO(SPARK-61350): a watermark term with a negative coefficient still passes this check.
     val watermarkTerms = terms.filter(_.references.exists(attributesWithEventWatermark.contains))
     if (!baseAdmissionRules && (watermarkTerms.isEmpty && !keepConstantOnly ||
         !watermarkTerms.headOption.forall(_.references.forall(_.metadata.contains(delayKey))))) {
+      return None
+    }
+
+    // A negative opposite-time term lets later input match old state instead of bounding it.
+    if (!baseAdmissionRules && watermarkTerms.headOption.exists(_.isInstanceOf[UnaryMinus])) {
       return None
     }
 

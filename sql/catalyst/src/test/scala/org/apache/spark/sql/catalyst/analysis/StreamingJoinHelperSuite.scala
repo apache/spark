@@ -447,9 +447,9 @@ class StreamingJoinHelperSuite extends AnalysisTest {
       === None)
     assert(cutoff("CAST(leftTime AS DOUBLE) > 100 - CAST(rightTime AS DOUBLE)", leftTime)
       === None)
-    // TODO(SPARK-61350): a column with its own watermark still takes such a cutoff.
+    // A column with its own watermark gets none either.
     assert(cutoff("CAST(leftEventTime AS DOUBLE) + CAST(rightTime AS DOUBLE) > 100",
-      leftEventTime) === Some(0L))
+      leftEventTime) === None)
     // A watermark term with the opposite sign still bounds the column.
     assert(cutoff("leftTime >= rightTime - INTERVAL 5 SECONDS", leftTime) === Some(94999L))
     assert(cutoff("rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR", leftTime)
@@ -560,6 +560,12 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("CAST(leftTime AS LONG) - 2.0 > CAST(rightTime AS LONG) + 1")
       === Some(13000))
 
+    // A later rightTime can still match an old leftTime when both terms have the same sign.
+    assert(watermarkFrom(
+      "CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100") === None)
+    assert(watermarkFrom(
+      "100 < CAST(rightTime AS LONG) + CAST(leftTime AS LONG)") === None)
+
     // Test multiple conditions, should return minimum watermark
     assert(watermarkFrom(
       "leftTime > rightTime - interval 3 second AND rightTime < leftTime + interval 2 seconds") ===
@@ -585,6 +591,13 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("cast(leftTime AS LONG) > 10") === None)
     assert(watermarkFrom("leftTime > rightTime AND cast(leftTime AS LONG) > 10") === Some(10000))
     assert(watermarkFrom("leftTime > rightTime OR cast(leftTime AS LONG) > 10") === None)
+    assert(watermarkFrom(
+      "cast(leftTime AS LONG) + cast(leftTime AS LONG) > cast(rightTime AS LONG)") === None)
+    assert(watermarkFrom(
+      "cast(leftTime AS LONG) > cast(rightTime AS LONG) + cast(rightTime AS LONG)") === None)
+    assert(watermarkFrom(
+      "leftTime > rightTime AND cast(leftTime AS LONG) + cast(rightTime AS LONG) > 100") ===
+      Some(10000))
 
     // Test non-positive results
     assert(watermarkFrom("CAST(leftTime AS LONG) > CAST(rightTime AS LONG) - 10") === Some(0))
