@@ -57,12 +57,11 @@ jobs:
       (
         github.event_name != 'create' ||
         (
-          github.ref_type == 'branch' &&
-          (github.ref_name == 'master' || startsWith(github.ref_name, 'branch-'))
-        ) ||
-        (
-          github.ref_type == 'tag' &&
-          startsWith(github.ref_name, 'v')
+          !contains(github.ref_name, '/') &&
+          (
+            (github.ref_type == 'branch' && startsWith(github.ref_name, 'branch-')) ||
+            (github.ref_type == 'tag' && startsWith(github.ref_name, 'v'))
+          )
         )
       )
     runs-on: ubuntu-latest
