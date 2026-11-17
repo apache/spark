@@ -27,6 +27,7 @@ import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.Utils
@@ -145,15 +146,24 @@ private[python] case class DiskRowQueue(
     true
   }
 
+  override def finishWrite(): Unit = synchronized {
+    if (out != null) {
+      out.close()
+      out = null
+    }
+  }
+
   def remove(): UnsafeRow = synchronized {
     if (out != null) {
       out.close()
       out = null
-      in = new DataInputStream(serMgr.wrapForEncryption(
-        new NioBufferedFileInputStream(file)))
     }
 
     if (unreadBytes > 0) {
+      if (in == null) {
+        in = new DataInputStream(serMgr.wrapForEncryption(
+          new NioBufferedFileInputStream(file)))
+      }
       val size = in.readInt()
       val bytes = new Array[Byte](size)
       in.readFully(bytes)
@@ -190,8 +200,9 @@ class HybridRowQueue(
     tempDir: File,
     numFields: Int,
     serMgr: SerializerManager,
-    lockFree: Boolean = false)
-  extends HybridQueue[UnsafeRow, RowQueue](memManager, tempDir, serMgr) {
+    lockFree: Boolean = false,
+    maxMemoryBytes: Long = -1L)
+  extends HybridQueue[UnsafeRow, RowQueue](memManager, tempDir, serMgr, maxMemoryBytes) {
 
   override protected def createDiskQueue(): RowQueue = {
     DiskRowQueue(Files.createTempFile(tempDir.toPath, "buffer", "").toFile, numFields, serMgr)
@@ -228,12 +239,18 @@ object HybridRowQueue {
       tempDir: File,
       numFields: Int,
       serMgr: SerializerManager,
-      lockFree: Boolean = false): HybridRowQueue = {
-    new HybridRowQueue(memManager, tempDir, numFields, serMgr, lockFree)
+      lockFree: Boolean = false,
+      maxMemoryBytes: Long = -1L): HybridRowQueue = {
+    new HybridRowQueue(memManager, tempDir, numFields, serMgr, lockFree, maxMemoryBytes)
   }
 
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
-    HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
+    HybridRowQueue(
+      taskMemoryMgr,
+      file,
+      fields,
+      SparkEnv.get.serializerManager,
+      maxMemoryBytes = SQLConf.get.pythonUDFRowQueueMaxMemoryBytes)
   }
 
   def apply(
@@ -241,7 +258,13 @@ object HybridRowQueue {
       file: File,
       fields: Int,
       lockFree: Boolean): HybridRowQueue = {
-    HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager, lockFree)
+    HybridRowQueue(
+      taskMemoryMgr,
+      file,
+      fields,
+      SparkEnv.get.serializerManager,
+      lockFree,
+      SQLConf.get.pythonUDFRowQueueMaxMemoryBytes)
   }
 
   def apply(taskMemoryMgr: TaskMemoryManager, fields: Int): HybridRowQueue = {
