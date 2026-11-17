@@ -152,74 +152,95 @@ class IncrementalExecution(
     val legacySharing = sparkSession.sessionState.conf.getConf(
       SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
     var needsExtraction = false
+    var kllChanged = false
     val adjusted = preOptimized.transformAllExpressionsWithSubqueries {
       case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>
+        kllChanged = true
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
       case k: KllSketchAggFloat if k.legacyDeterministic != legacySharing =>
+        kllChanged = true
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
       case k: KllSketchAggDouble if k.legacyDeterministic != legacySharing =>
+        kllChanged = true
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
       case k: KllMergeAggBigint if k.legacyDeterministic != legacySharing =>
+        kllChanged = true
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
       case k: KllMergeAggFloat if k.legacyDeterministic != legacySharing =>
+        kllChanged = true
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
       case k: KllMergeAggDouble if k.legacyDeterministic != legacySharing =>
+        kllChanged = true
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
     }
-    val optimizerInput = if (legacySharing) {
-      // Analysis may already have separated identical scalar inputs into generated aliases.
-      // Restore only those bindings; user-authored aliases retain their historical identities.
-      adjusted.transformUpWithSubqueries {
-        case join: Join =>
-          // Compiler-staged independent scalars were absent from historical join payloads.
-          // Restore their expressions before the state schema sees either input's output.
-          def restoreInput(
-              input: LogicalPlan): (LogicalPlan, Map[ExprId, Expression]) = input match {
-            case project: Project =>
-              val (child, inherited) = restoreInput(project.child)
-              val bindings = MutableMap.empty[ExprId, Expression] ++ inherited
-              val retained = project.projectList.filterNot {
-                case a: Attribute => bindings.contains(a.exprId)
-                case _ => false
-              }.flatMap { original =>
-                val expression = original.transformDown {
-                  case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
-                }.asInstanceOf[NamedExpression]
+    // Cache substitution can remove the KLL plan before its mode is rebound. The original
+    // compiler binding identities still require legacy restoration in that case.
+    val originalBindings = if (legacySharing) {
+      NondeterministicExpressionCollection.extractedBindingIds(logicalPlan)
+    } else Set.empty[ExprId]
+    val optimizerInput = if (legacySharing && (kllChanged || originalBindings.nonEmpty)) {
+      // Undo only compiler bindings exposed by the KLL metadata change. Restore the original
+      // expressions, rather than canonical-merging their aliases: separate IN predicates acquire
+      // separate existence attributes during rewriting, while equal scalar SUMs historically share.
+      def restoreInput(
+          input: LogicalPlan,
+          independentOnly: Boolean): (LogicalPlan, MutableMap[ExprId, Expression]) = {
+        val bindings = MutableMap.empty[ExprId, Expression]
+        def restore(expression: Expression): Expression = expression.transformDown {
+          case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
+        }
+        def visit(plan: LogicalPlan): LogicalPlan = plan match {
+          case project: Project =>
+            val child = visit(project.child)
+            val retained = project.projectList.flatMap {
+              case a: Attribute if bindings.contains(a.exprId) => None
+              case original =>
+                val expression = restore(original).asInstanceOf[NamedExpression]
                 expression match {
                   case alias: Alias if alias.containsTag(
                       NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
-                      alias.child.deterministic && alias.child.references.isEmpty =>
+                      alias.child.deterministic &&
+                      (!independentOnly || alias.child.references.isEmpty) =>
                     bindings(alias.exprId) = alias.child
                     None
                   case other => Some(other)
                 }
-              }
-              (project.copy(projectList = retained, child = child), bindings.toMap)
-            case unary: UnaryNode if unary.output == unary.child.output =>
-              val (child, bindings) = restoreInput(unary.child)
-              val restored = unary.withNewChildren(Seq(child)).transformExpressionsDown {
+            }
+            project.copy(projectList = retained, child = child)
+          // These operators forward every input attribute. Avoid recursive output comparisons
+          // and keep one mutable binding environment for the entire chain of Projects.
+          case unary: UnaryNode if unary.isInstanceOf[Filter] || unary.isInstanceOf[Sort] ||
+              unary.isInstanceOf[RepartitionOperation] || unary.isInstanceOf[SubqueryAlias] ||
+              unary.isInstanceOf[ResolvedHint] =>
+            val child = visit(unary.child)
+            if (bindings.isEmpty) unary else {
+              unary.withNewChildren(Seq(child)).transformExpressionsDown {
                 case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
               }
-              (restored, bindings)
-            case _ => (input, Map.empty)
-          }
-          val (left, leftBindings) = restoreInput(join.left)
-          val (right, rightBindings) = restoreInput(join.right)
-          val bindings = leftBindings ++ rightBindings
+            }
+          case other => other
+        }
+        (visit(input), bindings)
+      }
+      NondeterministicExpressionCollection.restoreBindingProvenance(originalBindings, adjusted)
+        .transformUpWithSubqueries {
+        case join: Join =>
+          val (left, leftBindings) = restoreInput(join.left, independentOnly = true)
+          val (right, rightBindings) = restoreInput(join.right, independentOnly = true)
+          leftBindings ++= rightBindings
+          val bindings = leftBindings
           if (bindings.isEmpty) join else {
             def restore(expression: Expression): Expression = expression.transformDown {
               case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
             }
             val restored = join.copy(left = left, right = right,
               condition = join.condition.map(restore))
-            // Preserve the parent-facing output even if another internal operator uses a
-            // binding. Its deterministic scalar can be evaluated above the persisted join.
             Project(join.output.map { attribute =>
               if (bindings.contains(attribute.exprId)) {
                 Alias(restore(attribute), attribute.name)(attribute.exprId,
@@ -227,21 +248,19 @@ class IncrementalExecution(
               } else attribute
             }, restored)
           }
-        case aggregate: Aggregate if aggregate.child.isInstanceOf[Project] =>
-          val seen = MutableMap.empty[Expression, Attribute]
-          val replacements = MutableMap.empty[ExprId, Attribute]
-          aggregate.child.asInstanceOf[Project].projectList.foreach {
-            case alias: Alias if alias.containsTag(
-                NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
-                alias.child.deterministic =>
-              seen.get(alias.child.canonicalized) match {
-                case Some(first) => replacements(alias.exprId) = first
-                case _ => seen(alias.child.canonicalized) = alias.toAttribute
-              }
-            case _ =>
-          }
-          if (replacements.isEmpty) aggregate else aggregate.transformExpressions {
-            case a: Attribute if replacements.contains(a.exprId) => replacements(a.exprId)
+        case aggregate: Aggregate =>
+          val (child, bindings) = restoreInput(aggregate.child, independentOnly = false)
+          if (bindings.isEmpty) aggregate else {
+            def restore(expression: Expression): Expression = expression.transformDown {
+              case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
+            }
+            aggregate.copy(
+              groupingExpressions = aggregate.groupingExpressions.map(restore),
+              aggregateExpressions = aggregate.aggregateExpressions.map {
+                case a: Attribute if bindings.contains(a.exprId) =>
+                  Alias(restore(a), a.name)(a.exprId, a.qualifier, Some(a.metadata))
+                case other => restore(other).asInstanceOf[NamedExpression]
+              }, child = child)
           }
       }
     } else if (needsExtraction) {

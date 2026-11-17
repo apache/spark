@@ -195,23 +195,25 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   private[sql] def isDeterministicAfterSubqueryExtraction(
       expression: Expression): Boolean = {
     // Function resolution and the single-pass analyzer validate before the post hoc extraction.
-    // Cache completed checks by object identity within this validation, including rejected IN
-    // operands that the unchanged transform subsequently visits again.
-    val checked = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
-    def deterministic(expr: Expression): Boolean = {
+    // Rewrite each expression once. A recursive transform at each IN operand would walk
+    // rejected descendants again even if their Boolean result had already been memoized.
+    val checked = new java.util.IdentityHashMap[Expression, Expression]
+    def rewritten(expr: Expression): Expression = {
       val cached = checked.get(expr)
-      if (cached != null) return cached.booleanValue()
-      val result = expr.deterministic || expr.transformDown {
-        case scalar: ScalarSubquery if !scalar.deterministic =>
+      if (cached != null) return cached
+      val result = if (expr.deterministic) expr else expr match {
+        case scalar: ScalarSubquery =>
           Literal.create(null, scalar.dataType)
-        case exists: Exists if !exists.deterministic => Literal.TrueLiteral
-        case in: InSubquery if !in.query.deterministic && in.values.forall(deterministic) =>
-          Literal.TrueLiteral
-      }.deterministic
+        case _: Exists => Literal.TrueLiteral
+        case in: InSubquery =>
+          val values = in.values.map(rewritten)
+          if (values.forall(_.deterministic)) Literal.TrueLiteral else in.copy(values = values)
+        case other => other.mapChildren(rewritten)
+      }
       checked.put(expr, result)
       result
     }
-    deterministic(expression)
+    rewritten(expression).deterministic
   }
 
   private[sql] def isDeterministicAfterPredicateSubqueryRewrite(expression: Expression): Boolean = {

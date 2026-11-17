@@ -63,6 +63,63 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
+  testWithAllStateVersions("KLL legacy checkpoints preserve predicate input identities") {
+    for (negation <- Seq("", "NOT ")) {
+      withTempDir { checkpoint =>
+        val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
+        val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+        val input = MemoryStream[Int]
+        val predicate = s"""value ${negation}IN (SELECT
+            |kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+            |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+        def query(legacy: Boolean): DataFrame = withSQLConf(rollback -> legacy.toString) {
+          val result = input.toDF().agg(
+            sum(expr(s"CAST($predicate AS INT)")).as("x"),
+            sum(expr(s"CAST($predicate AS INT)")).as("y"))
+          result.queryExecution.assertAnalyzed()
+          result
+        }
+        val historical = query(legacy = true)
+        val current = query(legacy = false)
+        testStream(historical, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> "true")),
+          AddData(input, 3, 4), CheckLastBatch(Row(1L, 1L)), StopStream)
+        testStream(current, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> "false")),
+          AddData(input, 3, 4), CheckLastBatch(Row(2L, 2L)), StopStream)
+      }
+    }
+  }
+
+  testWithAllStateVersions("KLL legacy checkpoints restore scalars below a grouping UDF") {
+    withTempDir { checkpoint =>
+      val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
+      val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+      val input = MemoryStream[Int]
+      val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+          |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+      val identity = udf((n: Long) => n)
+      def query(legacy: Boolean): DataFrame = withSQLConf(rollback -> legacy.toString) {
+        val result = input.toDF().groupBy(identity(expr(scalar)).as("g"))
+          .agg(sum(expr(scalar)).as("x"), sum(expr(scalar)).as("y"))
+        result.queryExecution.assertAnalyzed()
+        result
+      }
+      val historical = query(legacy = true)
+      val current = query(legacy = false)
+      testStream(historical, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "true")),
+        AddData(input, 1, 2), CheckLastBatch(Row(3L, 6L, 6L)), StopStream)
+      testStream(current, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "false")),
+        AddData(input, 3), CheckLastBatch(Row(3L, 9L, 9L)), StopStream)
+    }
+  }
+
   def executeFuncWithStateVersionSQLConf(
       stateVersion: Int,
       confPairs: Seq[(String, String)],

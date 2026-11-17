@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
@@ -96,43 +95,40 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
       val keys = new NondeterministicExpressionCollection.ExpressionKeys
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
-      val condition = join.condition.map(_.transform {
-        case scalar: ScalarSubquery =>
-          Option(nondeterToAttr.get(keys(scalar)))
-            .map(_.toAttribute).getOrElse(scalar)
-      })
-      // An uncorrelated scalar does not depend on either input. Preserve the join's original
-      // output, including outer-join nullability and semi/anti-join column visibility.
-      val uses = mutable.HashMap.empty[ExprId, AttributeSet]
-      join.condition.toSeq.flatMap(splitConjunctivePredicates).foreach { conjunct =>
-        // A scalar inside a comparison operand belongs with that operand's attributes. Using
-        // the whole equality would move a right-side join key onto the left input, hiding the
-        // equi-join from planning (and making stream-stream joins unsupported).
-        val contexts = conjunct match {
-          case comparison: BinaryComparison => Seq(comparison.left, comparison.right)
-          case other => Seq(other)
-        }
-        contexts.foreach { context =>
-          val references = if (context.references.nonEmpty) context.references
-            else conjunct.references
-          context.foreach {
-            case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated =>
-              uses(scalar.exprId) = uses.get(scalar.exprId).map(_ ++ references)
-                .getOrElse(references)
-            case _ =>
+      val leftBindings = mutable.LinkedHashMap.empty[(Expression, Seq[ExprId]), NamedExpression]
+      val rightBindings = mutable.LinkedHashMap.empty[(Expression, Seq[ExprId]), NamedExpression]
+      val rightOutput = join.right.outputSet
+      def rewrite(expression: Expression, references: AttributeSet): Expression = expression match {
+        case scalar: ScalarSubquery if nondeterToAttr.containsKey(keys(scalar)) =>
+          val key = keys(scalar)
+          val side = if (references.nonEmpty && references.subsetOf(rightOutput)) {
+            rightBindings
+          } else leftBindings
+          side.getOrElseUpdate(key, {
+            // One scalar identity may occur in both equi-key operands. Keep attributes local to
+            // each input while preserving the scalar's original identity and physical reuse policy.
+            val alias = nondeterToAttr.get(key).newInstance()
+            alias.copyTagsFrom(nondeterToAttr.get(key))
+            alias
+          }).toAttribute
+        case comparison: BinaryComparison =>
+          comparison.mapChildren { operand =>
+            val local = operand.references
+            rewrite(operand, if (local.nonEmpty) local else references)
           }
-        }
+        case other => other.mapChildren(rewrite(_, references))
       }
-      val (rightScalars, leftScalars) = nondeterToAttr.values.asScala.toSeq.partition {
-        case Alias(scalar: ScalarSubquery, _) =>
-          val references = uses(scalar.exprId)
-          references.nonEmpty && references.subsetOf(join.right.outputSet)
-        case _ => false
+      // Locate comparisons beneath Boolean and SQL-function wrappers, not only at the conjunct
+      // root. Attribute-free operands use their surrounding predicate as a placement fallback.
+      val condition = join.condition.map { condition =>
+        splitConjunctivePredicates(condition).map { conjunct =>
+          rewrite(conjunct, conjunct.references)
+        }.reduceLeft(And)
       }
-      def project(child: LogicalPlan, scalars: Seq[NamedExpression]): LogicalPlan =
-        if (scalars.isEmpty) child else Project(child.output ++ scalars, child)
-      Project(join.output, join.copy(left = project(join.left, leftScalars),
-        right = project(join.right, rightScalars), condition = condition))
+      def project(child: LogicalPlan, bindings: Iterable[NamedExpression]): LogicalPlan =
+        if (bindings.isEmpty) child else Project(child.output ++ bindings.toSeq, child)
+      Project(join.output, join.copy(left = project(join.left, leftBindings.values),
+        right = project(join.right, rightBindings.values), condition = condition))
 
     // Don't touch collect metrics. Top-level metrics are not supported (check analysis will fail)
     // and we want to retain them inside the aggregate functions.

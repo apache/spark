@@ -40,10 +40,12 @@ license: |
   results can therefore change. Queries that depend on treating independent randomized scalar
   subqueries as the same grouping value can now fail analysis; compute the value once and reuse
   its alias instead. To restore the previous analysis and batch optimizer behavior, set
-  `spark.sql.legacy.kllAggregateDeterministic.enabled` to `true` before constructing the query.
+  `spark.sql.legacy.kllAggregateDeterministic.enabled` to `true` before the query is analyzed.
   This also restores the old assumptions that can duplicate randomized CTE evaluations or share
-  independent aggregates. The default is `false`; existing DataFrames retain the mode selected
-  when their expressions were constructed. Streaming checkpoint compatibility is described in the
+  independent aggregates. The default is `false`; resolved KLL expressions retain their captured
+  mode. Spark Connect can defer server analysis until an action, so constructing a client
+  DataFrame does not capture this setting; keep the intended setting through server analysis.
+  Streaming checkpoint compatibility is described in the
   [Structured Streaming migration guide](streaming/ss-migration-guide.html).
 
 - Since Spark 4.4, when `spark.sql.cbo.enabled` is `true`, the optimizer estimates plans over analyzed `CHAR` columns from their column statistics, as it does for `STRING` columns. Since Spark 3.4, read-side `CHAR` padding (`spark.sql.readSideCharPadding`, `true` by default) hid these statistics, so, for example, a filter on a `CHAR` partition column was estimated to keep every row. The estimate assumes evenly distributed values, so for a skewed partition it can now be smaller than the data, and the pruned relation can become small enough to be broadcast. This also applies to partition pruning when only `spark.sql.cbo.planStats.enabled` is `true`. None of this applies yet when `spark.sql.charVarchar.standardSemantics.enabled` is `true`, under which `CHAR` columns keep their previous estimates.

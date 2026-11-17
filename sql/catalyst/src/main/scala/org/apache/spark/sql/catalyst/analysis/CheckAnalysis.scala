@@ -870,6 +870,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               e.transformDown {
                 case a: AggregateExpression => Literal.default(a.dataType)
                 case a: AggregateFunction => Literal.default(a.dataType)
+                case scalar: ScalarSubquery
+                    if ValidateSubqueryExpression.isIndependentKllScalar(scalar) =>
+                  Literal.default(scalar.dataType)
               }.deterministic
             }
 

@@ -32,6 +32,73 @@ import org.apache.spark.sql.internal.SQLConf
 class KllStreamingJoinSuite extends StreamTest {
   import testImplicits._
 
+  test("KLL legacy join restoration retains provenance across static cache substitution") {
+    withTempView("old_kll_constant", "current_kll_constant") {
+      val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
+      val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+      def constant(name: String, legacy: Boolean): DataFrame =
+        withSQLConf(rollback -> legacy.toString) {
+          val data = spark.sql("""SELECT
+              |kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v)) AS n
+              |FROM VALUES (0), (1), (2) AS t(v)""".stripMargin).cache()
+          data.collect()
+          data.createOrReplaceTempView(name)
+          data
+        }
+      val oldConstant = constant("old_kll_constant", legacy = true)
+      val currentConstant = constant("current_kll_constant", legacy = false)
+      try {
+        withTempDir { checkpoint =>
+          val left = MemoryStream[Int]
+          val right = MemoryStream[Int]
+          def query(table: String, legacy: Boolean): DataFrame =
+            withSQLConf(rollback -> legacy.toString) {
+              left.toDF().as("l").join(right.toDF().as("r"),
+                expr(s"l.value = r.value + (SELECT n FROM $table)"))
+                .selectExpr("l.value", "r.value")
+            }
+          val historical = query("old_kll_constant", legacy = true)
+          val current = query("current_kll_constant", legacy = false)
+          testStream(historical)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+              additionalConfs = Map(sharing -> "true")),
+            AddData(left, 3), AddData(right, 0), CheckLastBatch(Row(3, 0)), StopStream)
+          testStream(current)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+              additionalConfs = Map(sharing -> "false")),
+            AddData(right, 0), CheckLastBatch(Row(3, 0)), StopStream)
+        }
+      } finally {
+        oldConstant.unpersist()
+        currentConstant.unpersist()
+      }
+    }
+  }
+
+  test("KLL scalar comparison wrappers preserve streaming equi keys") {
+    withUserDefinedFunction("stream_kll_equal" -> true) {
+      spark.sql("""CREATE TEMPORARY FUNCTION stream_kll_equal(a INT, b INT, s BIGINT)
+          |RETURNS BOOLEAN RETURN a + s = b + s""".stripMargin)
+      for (legacy <- Seq(false, true); shared <- Seq(false, true)) {
+        val left = MemoryStream[Int]
+        val right = MemoryStream[Int]
+        val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v))
+            |FROM VALUES (0), (1), (2) AS t(v))""".stripMargin
+        val condition = if (shared) s"stream_kll_equal(l.value, r.value, $scalar)"
+          else s"(l.value = r.value + $scalar) OR false"
+        val result = left.toDF().as("l").join(right.toDF().as("r"), expr(condition))
+          .selectExpr("l.value", "r.value")
+        val l = if (shared) 0 else 3
+        testStream(result)(
+          StartStream(additionalConfs = Map(
+            "spark.sql.streaming.aggregation.legacyKllSharing.enabled" -> legacy.toString)),
+          AddData(left, l), AddData(right, 0), CheckLastBatch(Row(l, 0)),
+          AddData(left, l + 1), AddData(right, 1), CheckLastBatch(Row(l + 1, 1)),
+          StopStream)
+      }
+    }
+  }
+
   for (version <- Seq(1, 2); provider <- Seq(
       classOf[HDFSBackedStateStoreProvider].getName,
       classOf[RocksDBStateStoreProvider].getName)) {
@@ -41,7 +108,8 @@ class KllStreamingJoinSuite extends StreamTest {
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider,
           SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
         for (recorded <- Seq(None, Some(true), Some(false));
-            stageLeft <- Seq(false, true); userAlias <- Seq(false, true)) {
+            stageLeft <- Seq(false, true); userAlias <- Seq(false, true);
+            analysisLegacy <- Seq(false, true)) {
           withTempDir { checkpoint =>
             val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
             val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
@@ -64,7 +132,7 @@ class KllStreamingJoinSuite extends StreamTest {
               }
             // Rollback construction independently recreates the historical unstaged layout.
             val initial = query(analysisLegacy = legacy)
-            val current = query(analysisLegacy = false)
+            val current = query(analysisLegacy = analysisLegacy)
             val l = if (stageLeft) 0 else 3
             val r = if (stageLeft) 3 else 0
             def checkPayload: AssertOnQuery = AssertOnQuery { query =>

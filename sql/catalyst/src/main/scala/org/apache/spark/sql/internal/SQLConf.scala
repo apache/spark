@@ -4094,9 +4094,11 @@ object SQLConf {
     buildConf("spark.sql.streaming.aggregation.legacyKllSharing.enabled")
       .internal()
       .doc("Preserve the historical KLL optimizer behavior and ordered aggregation buffers " +
-        "in existing streaming checkpoints. " +
-        "New checkpoints default to separate evaluations of nondeterministic KLL aggregates. " +
-        "The checkpoint restores this setting; changing it requires a new checkpoint.")
+        "in existing micro-batch checkpoints. " +
+        "New micro-batch checkpoints default to nondeterministic logical optimization; " +
+        "physical subquery and exchange reuse policies are unchanged. Micro-batch checkpoints " +
+        "restore this setting; changing it requires a new checkpoint. Continuous execution " +
+        "does not record or restore this setting.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

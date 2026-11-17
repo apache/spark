@@ -25,15 +25,19 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
-- Since Spark 4.4, new streaming checkpoints default to separate evaluations of the randomized
-  `kll_sketch_agg_bigint/float/double` and `kll_merge_agg_bigint/float/double` aggregates.
-  `spark.sql.streaming.aggregation.legacyKllSharing.enabled` records the optimizer sharing mode
-  in the checkpoint. Checkpoints created before this setting existed restore `true`, preserving
-  their historical aggregate buffer count and order; newer checkpoints restore their recorded
-  value even when the session setting changes. Changing the sharing mode requires a new
-  checkpoint. Sketch serialization is unchanged. The query-analysis and batch rollback setting
-  `spark.sql.legacy.kllAggregateDeterministic.enabled` does not override a streaming checkpoint's
-  sharing mode: streaming optimization applies the recorded mode independently.
+- Since Spark 4.4, micro-batch queries classify the randomized
+  `kll_sketch_agg_bigint/float/double` and `kll_merge_agg_bigint/float/double` aggregates as
+  nondeterministic during logical optimization by default. The setting
+  `spark.sql.streaming.aggregation.legacyKllSharing.enabled` controls historical logical sharing
+  and aggregate buffer count and order. New micro-batch checkpoints record its configured value,
+  which defaults to `false`. Checkpoints created before this setting existed restore `true`;
+  newer checkpoints restore their recorded value even when the session setting changes.
+  Changing this mode requires a new checkpoint. It does not force separate physical evaluations
+  or mandatory CTE materialization: the physical reuse policies described in the
+  [SQL migration guide](../sql-migration-guide.html) still apply. Sketch serialization is unchanged.
+  The analysis and batch rollback setting `spark.sql.legacy.kllAggregateDeterministic.enabled`
+  does not override the micro-batch checkpoint's mode. This checkpoint policy is specific to
+  micro-batch execution; continuous execution does not record or restore this setting.
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial

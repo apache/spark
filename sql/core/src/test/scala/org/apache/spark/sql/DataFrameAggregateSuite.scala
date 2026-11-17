@@ -4411,6 +4411,24 @@ class DataFrameAggregateSuite extends SharedSparkSession
       val set = s"$query UNION ALL SELECT CAST(NULL AS BIGINT)"
       checkAnswer(analyzed(s"""SELECT count(*) FROM VALUES (3), (4), (NULL) AS o(id)
           |GROUP BY id IN ($set)""".stripMargin), Seq(Row(1L), Row(2L)))
+      val groupedMembership = s"""SELECT id IN ($set), count(*)
+          |FROM VALUES (3), (4), (NULL) AS o(id) GROUP BY 1""".stripMargin
+      // Grouping retains the existing existential rewrite's values. Check the rollback baseline
+      // separately from the execution path below, where UNKNOWN must remain observable.
+      val legacyMembership = withSQLConf(
+          "spark.sql.legacy.kllAggregateDeterministic.enabled" -> "true") {
+        analyzed(groupedMembership).collect().toSeq
+      }
+      checkAnswer(analyzed(groupedMembership), legacyMembership)
+      for (legacy <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key -> "false",
+            "spark.sql.legacy.kllAggregateDeterministic.enabled" -> legacy.toString) {
+          checkAnswer(analyzed(s"""SELECT l.id, r.id FROM VALUES (3), (4), (NULL) AS l(id)
+              |JOIN VALUES (0), (1) AS r(id) ON (l.id + r.id IN ($set)) IS NULL""".stripMargin),
+            Seq(Row(3, 1), Row(4, 0), Row(4, 1), Row(null, 0), Row(null, 1)))
+        }
+      }
       checkAnswer(analyzed(s"""SELECT count(*) FILTER (WHERE id NOT IN ($set))
           |FROM VALUES (3), (4), (NULL) AS o(id)""".stripMargin), Row(0L))
       checkAnswer(analyzed(s"""SELECT count(*) FILTER (WHERE id IN ($query HAVING count(*) < 0))

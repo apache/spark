@@ -30,6 +30,32 @@ import org.apache.spark.sql.types.{BinaryType, DoubleType}
  */
 class PullOutNondeterministicSuite extends AnalysisTest {
 
+  test("checkpoint preparation reconciles compiler provenance by binding identity") {
+    val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+    val original = PullOutNondeterministic(r.groupBy(scalar)(count(Literal(1)).as("n")))
+    val tagged = original.collect { case project: Project => project.projectList.collect {
+      case alias: Alias if alias.containsTag(
+          NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) => alias
+    }}.flatten
+    assert(tagged.nonEmpty)
+    val generated = tagged.head
+    val user = Alias(generated.child, generated.name)()
+    val prepared = original.transformAllExpressionsWithSubqueries {
+      case alias: Alias => Alias(alias.child, alias.name)(alias.exprId, alias.qualifier,
+        alias.explicitMetadata, alias.nonInheritableMetadataKeys)
+    }
+    val withUser = Project(prepared.output :+ user, prepared)
+    val reconciled =
+      NondeterministicExpressionCollection.restoreBindingProvenance(original, withUser)
+    val aliases = reconciled.collect { case project: Project => project.projectList.collect {
+      case alias: Alias => alias
+    }}.flatten
+    assert(aliases.find(_.exprId == generated.exprId).get.containsTag(
+      NondeterministicExpressionCollection.EXTRACTED_SUBQUERY))
+    assert(!aliases.find(_.exprId == user.exprId).get.containsTag(
+      NondeterministicExpressionCollection.EXTRACTED_SUBQUERY))
+  }
+
   private lazy val a = $"a".int
   private lazy val b = $"b".int
   private lazy val r = LocalRelation(a, b)

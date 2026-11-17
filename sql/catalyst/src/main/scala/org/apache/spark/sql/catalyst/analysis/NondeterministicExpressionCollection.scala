@@ -30,22 +30,58 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 object NondeterministicExpressionCollection {
   private[sql] val EXTRACTED_SUBQUERY = TreeNodeTag[Unit]("extracted-nondeterministic-subquery")
 
+  /**
+   * Extraction owns this annotation until micro-batch state preparation. TreeNode copies and
+   * explicit Alias forwarding preserve it. Reconcile the original analyzed binding identities
+   * after normalization and cache processing, before using provenance to restore state layouts.
+   * A user alias has a different identity and must never acquire provenance by matching its child.
+   */
+  private[sql] def extractedBindingIds(source: LogicalPlan): Set[ExprId] = {
+    if (!source.containsPattern(PLAN_EXPRESSION)) return Set.empty
+    source.collectWithSubqueries {
+      case project: Project => project.projectList.collect {
+        case alias: Alias if alias.containsTag(EXTRACTED_SUBQUERY) => alias.exprId
+      }
+    }.flatten.toSet
+  }
+
+  private[sql] def restoreBindingProvenance(
+      source: LogicalPlan,
+      prepared: LogicalPlan): LogicalPlan = {
+    restoreBindingProvenance(extractedBindingIds(source), prepared)
+  }
+
+  private[sql] def restoreBindingProvenance(
+      bindings: Set[ExprId],
+      prepared: LogicalPlan): LogicalPlan = {
+    if (bindings.isEmpty) prepared else prepared.transformAllExpressionsWithSubqueries {
+      case alias: Alias if bindings.contains(alias.exprId) &&
+          !alias.containsTag(EXTRACTED_SUBQUERY) =>
+        val restored = alias.copy(child = alias.child)(alias.exprId, alias.qualifier,
+          alias.explicitMetadata, alias.nonInheritableMetadataKeys)
+        restored.copyTagsFrom(alias)
+        restored.setTagValue(EXTRACTED_SUBQUERY, ())
+        restored
+    }
+  }
+
   private[analysis] def getExpressionKey(expression: Expression): (Expression, Seq[ExprId]) = {
     new ExpressionKeys().apply(expression)
   }
 
   private[analysis] class ExpressionKeys {
-    private val summaries = new IdentityHashMap[Expression, List[ExprId]]
+    private val summaries = new IdentityHashMap[Expression, Vector[ExprId]]
 
-    private def subqueryIds(expression: Expression): List[ExprId] = {
+    private def subqueryIds(expression: Expression): Vector[ExprId] = {
       val cached = summaries.get(expression)
       if (cached != null) return cached
-      val children = expression.children.foldRight(List.empty[ExprId]) { (child, ids) =>
-        subqueryIds(child) ::: ids
+      // Persistent vectors share prefixes when successive wrappers add another subquery.
+      val children = expression.children.foldLeft(Vector.empty[ExprId]) { (ids, child) =>
+        ids ++ subqueryIds(child)
       }
       val ids = expression match {
         case subquery: SubqueryExpression if !subquery.deterministic =>
-          subquery.exprId :: children
+          subquery.exprId +: children
         case _ => children
       }
       summaries.put(expression, ids)
@@ -114,11 +150,17 @@ object NondeterministicExpressionCollection {
 
     def stage(binding: NamedExpression): Int = levels.getOrElseUpdate(binding.exprId, {
       var level = 0
-      def replace(expression: Expression): Expression = expression.transformDown {
-        case e if bindings.containsKey(keys(e)) =>
-          val dependency = bindings.get(keys(e))
+      def replace(expression: Expression): Expression = {
+        if (bindings.containsKey(keys(expression))) {
+          val dependency = bindings.get(keys(expression))
           level = math.max(level, stage(dependency) + 1)
           dependency.toAttribute
+        } else expression match {
+          // Dependencies in untaken branches must remain inside their conditional evaluation.
+          case conditional: ConditionalExpression =>
+            conditional.withNewAlwaysEvaluatedInputs(conditional.alwaysEvaluatedInputs.map(replace))
+          case other => other.mapChildren(replace)
+        }
       }
       // Replacing only the children of the bound root keeps its own evaluation. Its
       // dependencies must be computed on the original input rows in a lower Project.

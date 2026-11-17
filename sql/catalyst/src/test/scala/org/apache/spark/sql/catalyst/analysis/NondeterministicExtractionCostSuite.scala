@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.management.ManagementFactory
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -87,7 +88,7 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
   }
 
   test("nested IN operand validation does not repeat completed checks exponentially") {
-    Seq(8, 12).foreach { depth =>
+    Seq(32, 64, 128).foreach { depth =>
       val visits = new AtomicInteger
       val query = ListQuery(OneRowRelation().select((Rand(0) > Literal(0.5)).as("b")),
         numCols = 1)
@@ -98,7 +99,34 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       expression.treePatternBits
       visits.set(0)
       assert(!ExprUtils.isDeterministicAfterSubqueryExtraction(expression))
-      assert(visits.get <= depth * 100, s"depth=$depth visits=${visits.get}")
+      assert(visits.get <= depth * 20, s"depth=$depth visits=${visits.get}")
     }
+  }
+
+  test("subquery identity summaries share storage across growing prefixes") {
+    val bean = ManagementFactory.getThreadMXBean
+      .asInstanceOf[com.sun.management.ThreadMXBean]
+    if (!bean.isThreadAllocatedMemorySupported) cancel("Allocation counters unavailable")
+    bean.setThreadAllocatedMemoryEnabled(true)
+    val threadId = Thread.currentThread().threadId()
+    def allocation(width: Int): Long = {
+      val query = OneRowRelation().select(Rand(0).as("n"))
+      val nodes = (1 to width).scanLeft[Expression](Literal(0D)) { (child, _) =>
+        Subtract(child, ScalarSubquery(query))
+      }
+      nodes.last.treePatternBits
+      nodes.foreach(_.canonicalized)
+      nodes.foreach(_.deterministic)
+      val before = bean.getThreadAllocatedBytes(threadId)
+      val keys = new NondeterministicExpressionCollection.ExpressionKeys
+      nodes.foreach(keys.apply)
+      val bytes = bean.getThreadAllocatedBytes(threadId) - before
+      assert(keys(nodes.last)._2.size == width)
+      bytes
+    }
+    allocation(16)
+    val small = Seq.fill(3)(allocation(128)).min
+    val large = Seq.fill(3)(allocation(512)).min
+    assert(large < small * 8, s"128=$small bytes,512=$large bytes")
   }
 }

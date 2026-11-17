@@ -2637,19 +2637,27 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   private def isAggregateScalarBinding(expression: NamedExpression): Boolean = expression match {
-    case alias @ Alias(scalar: ScalarSubquery, _)
-        if alias.containsTag(NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
-          ValidateSubqueryExpression.isIndependentKllScalar(scalar) =>
-      // A retained global aggregate scalar is evaluated independently of the input rows. Check
-      // the current plan, not just alias provenance: a one-row rand scalar can be inlined into
-      // row-stateful evaluation and must keep the usual nondeterministic-Project barrier.
-      scalar.plan.exists {
-        case aggregate: Aggregate if aggregate.groupingExpressions.isEmpty =>
-          aggregate.aggregateExpressions.exists(_.exists {
-            case expression: AggregateExpression => !expression.deterministic
-            case _ => false
-          })
-        case _ => false
+    case alias: Alias if alias.containsTag(
+        NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
+        ExprUtils.isDeterministicAfterSubqueryExtraction(alias.child) =>
+      def retainedAggregate(plan: LogicalPlan): Boolean = plan.exists {
+        case aggregate: Aggregate if aggregate.groupingExpressions.isEmpty &&
+            aggregate.aggregateExpressions.exists(_.exists {
+              case expression: AggregateExpression => !expression.deterministic
+              case _ => false
+            }) => true
+        case node => node.expressions.exists(_.exists {
+          case query: SubqueryExpression => retainedAggregate(query.plan)
+          case _ => false
+        })
+      }
+      // Scalar, EXISTS and IN bindings can all inherit randomness from independent retained
+      // KLL aggregates. Row randomness and correlated queries keep their ordinary barrier.
+      val queries = alias.child.collect {
+        case query: SubqueryExpression if !query.deterministic => query
+      }
+      queries.nonEmpty && queries.forall { query =>
+        ValidateSubqueryExpression.isIndependentKllSubquery(query) && retainedAggregate(query.plan)
       }
     case _ => false
   }
