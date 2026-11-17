@@ -85,13 +85,19 @@ function check_for_tag {
 
 function get_release_info {
   if [ -z "$GIT_BRANCH" ]; then
-    # If no branch is specified, found out the latest branch from the repo.
-    GIT_BRANCH=$(git ls-remote --heads "$ASF_REPO" |
-      grep -v refs/heads/master |
+    # If no branch is specified, find out the latest release branch from the repo.
+    # Only release branches named branch-<major>.<minor> (e.g. branch-4.3) are considered.
+    # This excludes master (preview / next major integration), branch-<N>.x such as
+    # branch-4.x (rolling integration; minors are cut from it as branch-4.N), and any other
+    # branches such as dependabot/*. The versions are sorted numerically by major and then
+    # minor, so that e.g. branch-4.10 is picked over branch-4.9. This uses POSIX sort keys
+    # rather than GNU `sort -V` because it also runs on the host in do-release-docker.sh.
+    GIT_BRANCH=$(git ls-remote --heads "$ASF_REPO" 'refs/heads/branch-*' |
       awk '{print $2}' |
-      sort -r |
-      head -n 1 |
-      cut -d/ -f3)
+      sed -n 's#^refs/heads/branch-\([0-9][0-9]*\.[0-9][0-9]*\)$#\1#p' |
+      sort -t . -k 1,1n -k 2,2n |
+      tail -n 1 |
+      sed 's/^/branch-/')
   fi
 
   export GIT_BRANCH=$(read_config "Branch" "$GIT_BRANCH")
