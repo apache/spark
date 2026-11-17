@@ -154,6 +154,17 @@ case class Alias(child: Expression, name: String)(
     private[sql] val nondeterministicSubqueryOrigin: Option[ExprId] = None)
   extends UnaryExpression with NamedExpression {
 
+  // Preserve the JVM constructor used by already compiled expression plugins.
+  def this(
+      child: Expression,
+      name: String,
+      exprId: ExprId,
+      qualifier: Seq[String],
+      explicitMetadata: Option[Metadata],
+      nonInheritableMetadataKeys: Seq[String]) = {
+    this(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys, None)
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(ALIAS)
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
@@ -290,6 +301,20 @@ case class Alias(child: Expression, name: String)(
   override protected def withNewChildInternal(newChild: Expression): Alias =
     copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys,
       nondeterministicSubqueryOrigin)
+}
+
+object Alias {
+  // A flat parameter list retains the old JVM descriptor without overloading the curried
+  // source constructor's first parameter list, which would make Alias(child, name) ambiguous.
+  def apply(
+      child: Expression,
+      name: String,
+      exprId: ExprId,
+      qualifier: Seq[String],
+      explicitMetadata: Option[Metadata],
+      nonInheritableMetadataKeys: Seq[String]): Alias = {
+    new Alias(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys, None)
+  }
 }
 
 // Singleton tree pattern BitSet for all AttributeReference instances.

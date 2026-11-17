@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
 
 /**
  * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
@@ -40,7 +40,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     case f: Filter => f
 
     // Let ordinary aggregate validation report the original invalid grouping expression.
-    case a: Aggregate if a.groupingExpressions.exists(_.exists {
+    case a: Aggregate if a.groupingExpressions.exists(e => !e.deterministic && e.exists {
         case _: AggregateExpression | _: AggregateFunction => true
         case _ => false
       }) => a
@@ -96,7 +96,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
           condition = condition))
       }
 
-    case join: Join if join.condition.exists(_.exists {
+    case join: Join if join.condition.exists(e => e.containsPattern(SCALAR_SUBQUERY) && e.exists {
         case scalar: ScalarSubquery => !scalar.deterministic && !scalar.isCorrelated
         case _ => false
       }) =>
@@ -125,9 +125,18 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       }
       join.condition.foreach(collect)
       val destinations = new java.util.IdentityHashMap[LogicalPlan, java.lang.Integer]
+      val forwarding = new java.util.IdentityHashMap[Project, java.lang.Boolean]
+      def forwardsAttributes(project: Project): Boolean = {
+        val cached = forwarding.get(project)
+        if (cached != null) cached.booleanValue() else {
+          val result = project.projectList.forall(_.isInstanceOf[Attribute])
+          forwarding.put(project, result)
+          result
+        }
+      }
       def destination(child: LogicalPlan, references: AttributeSet): Int = child match {
         case alias: SubqueryAlias => destination(alias.child, references)
-        case projection: Project if projection.projectList.forall(_.isInstanceOf[Attribute]) =>
+        case projection: Project if forwardsAttributes(projection) =>
           destination(projection.child, references)
         case inner: Join
             if inner.joinType.isInstanceOf[org.apache.spark.sql.catalyst.plans.InnerLike] &&
@@ -199,7 +208,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       def project(child: LogicalPlan, bindings: Iterable[NamedExpression]): LogicalPlan = {
         if (bindings.isEmpty) child else child match {
           case alias: SubqueryAlias => alias.copy(child = project(alias.child, bindings))
-          case projection: Project if projection.projectList.forall(_.isInstanceOf[Attribute]) =>
+          case projection: Project if forwardsAttributes(projection) =>
             projection.copy(projectList = projection.projectList ++ bindings.map(_.toAttribute),
               child = project(projection.child, bindings))
           // Independent scalars can be attached within an unhinted inner component. Keeping
@@ -261,23 +270,18 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
 
   private def nondeterministicSubqueriesInInputs(
       aggregate: Aggregate): Seq[Expression] = {
+    if (!aggregate.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+      return Nil
+    }
     val deterministic = new ExprUtils.SubqueryExtractionDeterminism
-    // Only complete subquery expressions may be extracted. Direct nondeterministic
-    // inputs, such as rand() and nondeterministic UDFs, must retain their validation errors.
+    // Collect eligible input expressions intact so the binding collector can preserve enclosing
+    // CASE, Boolean and NULL guards. Direct randomness must retain its validation errors.
     aggregate.aggregateExpressions
+      .filter(_.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY))
       .flatMap(_.collect { case expression: AggregateExpression => expression })
       .flatMap(expression => expression.aggregateFunction.children ++ expression.filter.toSeq)
       // Retain invalid direct-random arguments verbatim for the original error rendering.
-      .filter(deterministic.apply)
-      .flatMap(_.collect {
-        case scalar: ScalarSubquery if !scalar.deterministic => scalar
-        case exists: Exists if !exists.deterministic => exists
-        case not @ Not(in: InSubquery)
-            if !in.deterministic &&
-              in.values.forall(deterministic.apply) => not
-        case in: InSubquery if !in.deterministic &&
-            in.values.forall(deterministic.apply) => in
-      })
+      .filter(e => !e.deterministic && deterministic(e))
   }
 
   private def validateNondeterministicSubqueries(

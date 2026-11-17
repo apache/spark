@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream, WatermarkPropagator}
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -33,6 +38,47 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
   import testImplicits._
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+
+  private case class NormalizationCounted(child: Expression, visits: AtomicInteger)
+      extends Expression with Unevaluable {
+    override def children: Seq[Expression] = {
+      visits.incrementAndGet()
+      Seq(child)
+    }
+    override def dataType: org.apache.spark.sql.types.DataType = LongType
+    override def nullable: Boolean = false
+    override protected def withNewChildrenInternal(children: IndexedSeq[Expression]): Expression =
+      copy(child = children.head)
+  }
+
+  test("ordinary micro-batch normalization skips the KLL adjustment walk") {
+    for (batch <- 0L to 2L; legacy <- Seq(false, true)) {
+      withSQLConf(legacySharingKey -> legacy.toString) {
+        def work(incremental: Boolean): Int = {
+          val visits = new AtomicInteger
+          val value = AttributeReference("value", LongType)()
+          val expression = (1 to 64).foldLeft[Expression](value) { (child, _) =>
+            NormalizationCounted(child, visits)
+          }
+          val plan = Project(Seq(Alias(expression, "mapped")()), LocalRelation(value))
+          val execution: QueryExecution = if (!incremental) new QueryExecution(spark, plan)
+          else new IncrementalExecution(spark, plan, OutputMode.Append(),
+            "/tmp/unused-kll-normalization-checkpoint", UUID.randomUUID(), UUID.randomUUID(),
+            batch, None, OffsetSeqMetadata(0L, 0L, Map.empty[String, String]),
+            WatermarkPropagator.noop(),
+            isFirstBatch = batch == 0)
+          execution.tableVersionsRefreshed.treePatternBits
+          visits.set(0)
+          execution.normalized
+          visits.get
+        }
+        val baseline = work(incremental = false)
+        val actual = work(incremental = true)
+        assert(actual <= baseline,
+          s"batch=$batch legacy=$legacy baseline visits=$baseline incremental visits=$actual")
+      }
+    }
+  }
 
   private def checkPlan(
       logical: Aggregate,

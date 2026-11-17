@@ -52,6 +52,13 @@ class PullOutNondeterministicSuite extends AnalysisTest {
       case scalar: ScalarSubquery => scalar.exprId
     }) }.flatten
     assert(identities.nonEmpty && identities.forall(_ == scalar.exprId))
+    val bindings = pulled.collect { case project: Project => project.projectList.collect {
+      case alias: Alias if alias.isNondeterministicSubqueryBinding => alias.exprId -> alias.child
+    } }.flatten.toMap
+    val restored = NondeterministicExpressionCollection.restoreBindingReferences(
+      pulled.condition.get, bindings)
+    assert(restored == original.condition.get,
+      s"Join predicate changed during scalar placement: $restored")
   }
 
   test("checkpoint preparation reconciles compiler provenance by binding identity") {
@@ -70,7 +77,8 @@ class PullOutNondeterministicSuite extends AnalysisTest {
     assert(generated.isNondeterministicSubqueryBinding)
     val withUser = Project(prepared.output :+ user, prepared)
     val reconciled =
-      NondeterministicExpressionCollection.restoreBindingProvenance(original, withUser)
+      NondeterministicExpressionCollection.restoreBindingProvenance(
+        NondeterministicExpressionCollection.extractedBindingIds(original), withUser)
     assert(aliases(reconciled).find(_.exprId == generated.exprId).get
       .isNondeterministicSubqueryBinding)
     assert(!aliases(reconciled).find(_.exprId == user.exprId).get

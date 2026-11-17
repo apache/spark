@@ -38,12 +38,6 @@ object NondeterministicExpressionCollection {
   }
 
   private[sql] def restoreBindingProvenance(
-      source: LogicalPlan,
-      prepared: LogicalPlan): LogicalPlan = {
-    restoreBindingProvenance(extractedBindingIds(source), prepared)
-  }
-
-  private[sql] def restoreBindingProvenance(
       bindings: Set[ExprId],
       prepared: LogicalPlan): LogicalPlan = {
     if (bindings.isEmpty) prepared else prepared.transformAllExpressionsWithSubqueries {
@@ -93,10 +87,6 @@ object NondeterministicExpressionCollection {
   }
 
   private[analysis] type ExpressionKey = (Expression, SubqueryIdentities)
-
-  private[analysis] def getExpressionKey(expression: Expression): ExpressionKey = {
-    new ExpressionKeys().apply(expression)
-  }
 
   private[analysis] class ExpressionKeys {
     private val summaries = new IdentityHashMap[Expression, SubqueryIdentities]
@@ -148,14 +138,25 @@ object NondeterministicExpressionCollection {
     }
   }
 
+  private def orderedNullGuard(expression: Expression): Boolean = expression match {
+    // These evaluators stop at the first NULL input, including the six-input form of
+    // SeptenaryExpression. Keep their remaining inputs in the same evaluation domain.
+    case _: BinaryExpression | _: TernaryExpression | _: QuaternaryExpression |
+        _: QuinaryExpression | _: SeptenaryExpression =>
+      expression.children.dropRight(1).exists(_.nullable)
+    case _ => false
+  }
+
   private def guardedSubqueries(expression: Expression): Boolean = {
-    val guarded = expression match {
-      case _: ConditionalExpression | _: And | _: Or => true
-      case binary: BinaryExpression => binary.left.nullable
-      case _ => false
+    // Test cached properties before potentially recursive input nullability checks.
+    if (expression.deterministic || !expression.containsAnyPattern(
+        SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+      return false
     }
-    guarded && !expression.deterministic && expression.containsAnyPattern(
-      SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)
+    expression match {
+      case _: ConditionalExpression | _: And | _: Or => true
+      case other => orderedNullGuard(other)
+    }
   }
 
   private val bindingRoots: PartialFunction[Expression, Expression] = {
@@ -252,8 +253,7 @@ object NondeterministicExpressionCollection {
             conditional.withNewAlwaysEvaluatedInputs(conditional.alwaysEvaluatedInputs.map(replace))
           case And(left, right) => And(replace(left), right)
           case Or(left, right) => Or(replace(left), right)
-          case binary: BinaryExpression if binary.left.nullable =>
-            binary.withNewChildren(Seq(replace(binary.left), binary.right))
+          case other if orderedNullGuard(other) => other
           case other => other.mapChildrenWithReferenceEquality(replace)
         }
       }

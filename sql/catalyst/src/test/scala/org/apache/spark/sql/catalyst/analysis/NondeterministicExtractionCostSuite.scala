@@ -46,14 +46,18 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     val argument = (1 to 64).foldLeft[Expression](Literal(1D)) { (child, _) =>
       CanonicalizationCounted(child, visits)
     }
-    val udf = ScalaUDF((a: Double, b: Double) => a + b, DoubleType,
-      Seq(argument, Rand(0)))
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+    val udf = ScalaUDF((a: Double, b: Double, n: Long) => a + b + n, DoubleType,
+      Seq(argument, Rand(0), scalar))
     val keys = new NondeterministicExpressionCollection.ExpressionKeys
     val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(
       Seq(udf), keys)
     visits.set(0)
-    NondeterministicExpressionCollection.project(OneRowRelation(), bindings, keys)
+    val projected = NondeterministicExpressionCollection.project(OneRowRelation(), bindings, keys)
     assert(visits.get == 0, s"deterministic prefixes canonicalized ${visits.get} times")
+    assert(projected.children.head.isInstanceOf[
+      org.apache.spark.sql.catalyst.plans.logical.Project])
   }
 
   test("dependency staging skips nonbinding nondeterministic arithmetic prefixes") {
@@ -61,13 +65,17 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     val argument = (1 to 64).foldLeft[Expression](Rand(0)) { (child, i) =>
       CanonicalizationCounted(Add(child, Literal(i.toDouble)), visits)
     }
-    val udf = ScalaUDF((value: Double) => value, DoubleType, Seq(argument))
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+    val udf = ScalaUDF((value: Double, n: Long) => value + n, DoubleType, Seq(argument, scalar))
     val keys = new NondeterministicExpressionCollection.ExpressionKeys
     val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(
       Seq(udf), keys)
     visits.set(0)
-    NondeterministicExpressionCollection.project(OneRowRelation(), bindings, keys)
+    val projected = NondeterministicExpressionCollection.project(OneRowRelation(), bindings, keys)
     assert(visits.get == 0, s"nonbinding prefixes canonicalized ${visits.get} times")
+    assert(projected.children.head.isInstanceOf[
+      org.apache.spark.sql.catalyst.plans.logical.Project])
   }
 
   test("aggregate scalar extraction skips unrelated deterministic argument keys") {
@@ -177,6 +185,86 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       copy(child = children.head)
   }
 
+  test("subquery-free aggregates and joins skip extraction searches") {
+    for (join <- Seq(false, true)) {
+      val visits = new AtomicInteger
+      val argument = (1 to 64).foldLeft[Expression](Literal(1D)) { (child, _) =>
+        Counted(child, visits)
+      }
+      val input = OneRowRelation()
+      val plan = if (join) Join(input, input, Inner,
+        Some(EqualTo(argument, Literal(1D))), JoinHint.NONE)
+      else input.groupBy()(Sum(argument).toAggregateExpression().as("s"))
+      plan.resolved
+      plan.treePatternBits
+      plan.expressions.foreach(_.deterministic)
+      visits.set(0)
+      val result = PullOutNondeterministic.applyLocally.applyOrElse(plan,
+        identity[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan])
+      assert(result eq plan)
+      assert(visits.get == 0, s"join=$join unrelated expressions visited ${visits.get} times")
+    }
+  }
+
+  private case class NullabilityCounted(child: Expression, visits: AtomicInteger)
+      extends UnaryExpression with Unevaluable {
+    override def dataType: DataType = child.dataType
+    override def nullable: Boolean = {
+      visits.incrementAndGet()
+      child.nullable
+    }
+    override lazy val canonicalized: Expression = this
+    override protected def withNewChildInternal(newChild: Expression): Expression =
+      copy(child = newChild)
+  }
+
+  test("subquery-free arithmetic guard checks avoid prefix nullability scans") {
+    val visits = new AtomicInteger
+    val expression = (1 to 64).foldLeft[Expression](Rand(0)) { (child, _) =>
+      Subtract(NullabilityCounted(child, visits), Literal(1D))
+    }
+    expression.treePatternBits
+    expression.deterministic
+    visits.set(0)
+    NondeterministicExpressionCollection.getNondeterministicToAttributes(Seq(expression))
+    assert(visits.get <= 128, s"guard nullability visits=${visits.get}")
+  }
+
+  test("join scalar placement classifies forwarding Projects once") {
+    def work(occurrences: Int): Int = {
+      val visits = new AtomicInteger
+      val fields = (1 to 128).map(i => AttributeReference(s"a$i", DoubleType)())
+      val counted = new scala.collection.immutable.AbstractSeq[NamedExpression] {
+        override def length: Int = fields.length
+        override def iterator: Iterator[NamedExpression] = fields.iterator.map { field =>
+          visits.incrementAndGet()
+          field
+        }
+        override def apply(index: Int): NamedExpression = {
+          visits.incrementAndGet()
+          fields(index)
+        }
+      }
+      val input = org.apache.spark.sql.catalyst.plans.logical.Project(
+        counted, LocalRelation(fields))
+      val target = $"target".double
+      val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+      val condition = Seq.fill(occurrences)(EqualTo(Add(fields.head, scalar), target))
+        .reduceLeft[Expression](And)
+      val plan = Join(input, LocalRelation(target), Inner, Some(condition), JoinHint.NONE)
+      plan.resolved
+      plan.treePatternBits
+      input.outputSet
+      condition.foreach { e => e.references; e.deterministic; e.canonicalized }
+      visits.set(0)
+      PullOutNondeterministic(plan)
+      visits.get
+    }
+    val small = work(1)
+    val large = work(32)
+    assert(large <= small * 4, s"one=$small projected fields, repeated=$large")
+  }
+
   test("lateral extraction classifies a repeated scalar plan once") {
     def work(width: Int): Int = {
       val visits = new AtomicInteger
@@ -227,7 +315,8 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       }
       nodes.last.treePatternBits
       visits.set(0)
-      nodes.foreach(NondeterministicExpressionCollection.getExpressionKey)
+      val keys = new NondeterministicExpressionCollection.ExpressionKeys
+      nodes.foreach(keys.apply)
       assert(visits.get <= depth * 4, s"depth=$depth visits=${visits.get}")
     }
   }

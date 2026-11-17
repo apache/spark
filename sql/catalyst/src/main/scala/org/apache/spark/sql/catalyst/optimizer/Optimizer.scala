@@ -2668,8 +2668,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val aliases = fields.collect {
         case alias: Alias if alias.deterministic => alias.exprId -> alias.child
       }.toMap
-      val (push, stay) = splitConjunctivePredicates(condition).partition { predicate =>
-        predicate.deterministic && !predicate.throwable &&
+      val (push, stay) = splitPushableConjuncts(condition) { predicate =>
+        predicate.deterministic &&
           predicate.references.forall { attribute =>
             grandChild.outputSet.contains(attribute) || aliases.get(attribute.exprId).exists {
               expression => !expression.throwable &&

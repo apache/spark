@@ -1459,6 +1459,23 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("throwable KLL-independent predicates agree at startup and in micro-batches") {
+    val input = new FilteringMemoryStream(spark)
+    val table = new FilterStreamTable(input, catalyst = true)
+    val df = Dataset.ofRows(spark, StreamingRelationV2(None, table.name(), table,
+      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+      None)).toDF("id", "payload")
+      .selectExpr("id", "payload", """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(x))
+          |FROM VALUES (0L), (1L) AS t(x)) AS n""".stripMargin)
+      .where("CASE WHEN id < 0 THEN raise_error('negative input') ELSE id >= 0 END")
+      .select("payload", "n")
+    testStream(df)(
+      StartStream(),
+      AddData(input, (0L, "a"), (1L, "b")),
+      CheckAnswer(Row("a", 2L), Row("b", 2L)))
+    assert(table.pushed.nonEmpty)
+  }
+
   Seq(false, true).foreach { catalyst =>
     val kind = if (catalyst) "Catalyst" else "V2"
     test(s"fail a micro-batch whose query no longer applies the filters of a $kind builder") {

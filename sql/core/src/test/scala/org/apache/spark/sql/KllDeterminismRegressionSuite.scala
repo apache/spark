@@ -32,6 +32,69 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL aggregate inputs retain enclosing predicate evaluation guards") {
+    for (legacy <- Seq(true, false); polarity <- Seq("IN", "NOT IN");
+        filter <- Seq(false, true);
+        guard <- Seq("CASE WHEN true THEN true ELSE %s END", "IF(true, true, %s)")) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val predicate = s"kll_sketch_get_n_bigint(unhex('00')) $polarity " +
+          "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(1))"
+        val guarded = guard.format(predicate)
+        val count = if (filter) s"count(*) FILTER (WHERE $guarded)" else s"count($guarded)"
+        checkAnswer(sql(s"SELECT $count FROM range(3)"), Row(3L))
+      }
+    }
+  }
+
+  test("KLL sort extraction preserves ordered NULL evaluation") {
+    withUserDefinedFunction("null_guarded_kll_throw" -> true) {
+      spark.udf.register("null_guarded_kll_throw", (bytes: Array[Byte]) => {
+        require(bytes.isEmpty, "ordered NULL guard was bypassed")
+        1L
+      })
+      val throwing = """null_guarded_kll_throw(
+          |(SELECT kll_sketch_agg_bigint(id) FROM range(1)))""".stripMargin
+      val seconds = s"CAST($throwing AS DECIMAL(16, 6))"
+      val year = "CAST(c AS INT)"
+      val expressions = Seq(
+        s"substring(c, 1, CAST($throwing AS INT))",
+        s"overlay(c, 'x', 1, CAST($throwing AS INT))",
+        s"make_timestamp($year, 1, 1, 0, 0, $seconds)",
+        s"make_timestamp($year, 1, 1, 0, 0, $seconds, 'UTC')",
+        s"CAST(make_interval($year, 0, 0, 0, 0, 0, $seconds) AS STRING)")
+      withTempView("null_guarded_kll_order") {
+        spark.sparkContext.parallelize(Seq(Tuple1(Option.empty[String])), 1).toDF("c")
+          .createOrReplaceTempView("null_guarded_kll_order")
+        for (codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY"); expression <- expressions) {
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+            checkAnswer(sql(s"SELECT c FROM null_guarded_kll_order ORDER BY $expression"),
+              Row(null))
+          }
+        }
+      }
+    }
+  }
+
+  test("throwable partition predicates retain pruning beside KLL scalars") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(8).selectExpr("id", "CAST(id % 2 AS INT) AS p")
+          .write.partitionBy("p").parquet(path.getAbsolutePath)
+        withTempView("throwable_kll_pruning") {
+          spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("throwable_kll_pruning")
+          val query = sql(s"""SELECT id, n FROM
+              |(SELECT id, p, $scalar AS n FROM throwable_kll_pruning) q
+              |WHERE array_contains(sequence(p, p, 1), 1)""".stripMargin)
+          val scans = query.queryExecution.sparkPlan.collect { case s: FileSourceScanExec => s }
+          assert(scans.size == 1)
+          assert(scans.head.selectedPartitions.filePartitionIterator
+            .map(_.values.getInt(0)).toSet == Set(1), query.queryExecution.toString)
+          checkAnswer(query, Seq(1L, 3L, 5L, 7L).map(id => Row(id, 3L)))
+        }
+      }
+    }
+  }
+
   test("nullable arithmetic preserves the evaluation domain of random dependencies") {
     withUserDefinedFunction("boxed_kll_identity" -> true) {
       spark.udf.register("boxed_kll_identity", (value: java.lang.Double) => value)
@@ -196,15 +259,16 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("primitive Scala UDF null guards retain conditional random arguments") {
-    val first = udf((n: Int, xs: Seq[Double]) => n + xs.head)
+    val first = udf((n: Int, xs: Seq[Double], count: java.lang.Long) => n + xs.head)
     withUserDefinedFunction("null_guarded_first" -> true) {
       spark.udf.register("null_guarded_first", first)
       for (codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
         withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
             SQLConf.ANSI_ENABLED.key -> "true") {
-          checkAnswer(sql("""SELECT count(*) FROM range(2) GROUP BY
+          checkAnswer(sql(s"""SELECT count(*) FROM range(2) GROUP BY
               |null_guarded_first(IF(id = 0, CAST(NULL AS INT), 1),
-              |shuffle(array(1D / id, 1D / id)))""".stripMargin), Seq(Row(1L), Row(1L)))
+              |shuffle(array(1D / id, 1D / id)), $scalar)""".stripMargin),
+            Seq(Row(1L), Row(1L)))
         }
       }
     }
@@ -310,7 +374,7 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
 
   test("Boolean short circuiting retains conditional random UDF dependencies") {
     withUserDefinedFunction("bool_identity" -> true) {
-      spark.udf.register("bool_identity", (b: Boolean) => b)
+      spark.udf.register("bool_identity", (b: java.lang.Boolean, n: java.lang.Long) => b)
       for (codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN");
           condition <- Seq(
             "id = 0 OR array_contains(shuffle(array(1D / id, 2D)), 2D)",
@@ -318,7 +382,18 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
         withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
             SQLConf.ANSI_ENABLED.key -> "true") {
           val query = sql(s"""SELECT count(*) FROM range(2)
-              |GROUP BY bool_identity($condition)""".stripMargin)
+              |GROUP BY bool_identity($condition, $scalar)""".stripMargin)
+          val staged = query.queryExecution.analyzed.collect {
+            case project: org.apache.spark.sql.catalyst.plans.logical.Project =>
+              project.projectList.exists(_.exists {
+                case udf: org.apache.spark.sql.catalyst.expressions.ScalaUDF =>
+                  udf.udfName.contains("bool_identity") &&
+                    udf.children.last.isInstanceOf[
+                      org.apache.spark.sql.catalyst.expressions.Attribute]
+                case _ => false
+              })
+          }
+          assert(staged.contains(true), query.queryExecution.toString)
           val expected = if (condition.startsWith("id =")) Seq(Row(2L))
             else Seq(Row(1L), Row(1L))
           checkAnswer(query, expected)
