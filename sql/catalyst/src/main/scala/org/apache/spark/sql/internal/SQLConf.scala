@@ -4242,8 +4242,9 @@ object SQLConf {
       .internal()
       .doc("Checkpoint generation for stream-stream join watermark semantics, persisted in " +
         "the offset log. Older generations are accepted only when the query plan proves that " +
-        "its state and output watermark semantics are unchanged. The generation validates " +
-        "compatibility; it does not select a legacy execution path.")
+        "the saved join state, and every stateful operator after the join that uses the " +
+        "affected event times, keep their meaning. The generation validates compatibility; it " +
+        "does not select a legacy execution path.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf

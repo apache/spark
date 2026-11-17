@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Join, LogicalPlan, Project, UnaryNode, Union}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_DAY, MICROS_PER_HOUR, MICROS_PER_MILLIS, MICROS_PER_MINUTE, MICROS_PER_SECOND}
@@ -188,10 +189,12 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * them on, builds a time or session window from a single column, or, for the key, shifts a
    * timestamp by constant intervals; through any other node with one input that outputs both, as
    * such a node keeps an expression ID only for an unchanged value; into the input of a join that
-   * outputs both; and into every input of a union, at the same positions. A union input that does
-   * not watermark a column that the union, which takes its first input's metadata, watermarks
-   * builds it some other way. Where both reach the same column, the lag is the difference of the
-   * two offsets. Everything else leaves the columns unrelated.
+   * outputs both, or into both inputs of one that outputs each from a different input and equates
+   * them through its condition (see [[lagThroughJoinCondition]]); and into every input of a union,
+   * at the same positions. A union input that does not watermark a column that the union, which
+   * takes its first input's metadata, watermarks builds it some other way, so the lag is
+   * unbounded. Where both reach the same column, the lag is the difference of the two offsets.
+   * Everything else leaves the columns unrelated.
    */
   private def lagBelow(
       plan: LogicalPlan,
@@ -266,12 +269,70 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           }
         case j: Join =>
           j.children.find(outputsBoth).map(lagBelow(_, key, eventTime, keyLow, eventTimeHigh))
-            .getOrElse(EventTimeLag.unrelated)
+            .getOrElse(lagThroughJoinCondition(j, key, eventTime, keyLow, eventTimeHigh))
         case u: UnaryNode if outputsBoth(u.child) =>
           lagBelow(u.child, key, eventTime, keyLow, eventTimeHigh)
         case _ => EventTimeLag.unrelated
       }
     }
+  }
+
+  /**
+   * The lag of `key` below `eventTime` of [[lagBelow]] where `join` outputs them from different
+   * inputs, through an equality `x = y` in its condition between a watermarked column x of the
+   * key's input and a watermarked column y of the event time's input: the key is at most its lag
+   * below x, which equals y, which is at most its lag below the event time, so the lags add up.
+   * That holds on every row that the join outputs with a non-NULL key: all rows of an inner join
+   * satisfy its condition, and so do those of a left or right outer join that pads the key's
+   * input, whose other rows carry a NULL key that no condition matches. The smallest bounded lag
+   * over such equalities wins. Other conjuncts, such as a range or a shifted equality, and other
+   * join types leave the columns unrelated.
+   */
+  private def lagThroughJoinCondition(
+      join: Join,
+      key: ExprId,
+      eventTime: ExprId,
+      keyLow: Option[Long],
+      eventTimeHigh: Option[Long]): EventTimeLag = {
+    def watermarked(p: LogicalPlan): Set[ExprId] =
+      p.output.filter(_.metadata.contains(delayKey)).map(_.exprId).toSet
+    def outputs(p: LogicalPlan, id: ExprId): Boolean = p.output.exists(_.exprId == id)
+    val inputs = if (outputs(join.left, key) && outputs(join.right, eventTime)) {
+      Some((join.left, join.right))
+    } else if (outputs(join.right, key) && outputs(join.left, eventTime)) {
+      Some((join.right, join.left))
+    } else {
+      None
+    }
+    val lags = inputs.filter { case (keyInput, _) =>
+      join.joinType match {
+        case _: InnerLike => true
+        case LeftOuter => keyInput eq join.right
+        case RightOuter => keyInput eq join.left
+        case _ => false
+      }
+    }.toSeq.flatMap { case (keyInput, eventTimeInput) =>
+      val keyColumns = watermarked(keyInput)
+      val eventTimeColumns = watermarked(eventTimeInput)
+      join.condition.toSeq.flatMap(splitConjunctivePredicates).flatMap {
+        case EqualTo(a: Attribute, b: Attribute) => Seq(a.exprId -> b.exprId, b.exprId -> a.exprId)
+        case _ => Nil
+      }.filter { case (x, y) => keyColumns.contains(x) && eventTimeColumns.contains(y) }
+        .map { case (x, y) =>
+          val below = lagBelow(keyInput, key, x, keyLow, Some(0L))
+          val above = lagBelow(eventTimeInput, y, eventTime, Some(0L), eventTimeHigh)
+          if (below.unrelated || above.unrelated) {
+            EventTimeLag.unrelated
+          } else {
+            Try(Math.addExact(below.micros, above.micros)).toOption
+              .filter(_ => !below.unbounded && !above.unbounded)
+              .map(EventTimeLag(_, unrelated = false, unbounded = false))
+              .getOrElse(EventTimeLag.unbounded)
+          }
+        }
+    }
+    lags.filter(lag => !lag.unrelated && !lag.unbounded).sortBy(_.micros).headOption
+      .getOrElse(EventTimeLag.unrelated)
   }
 
   // An offset too large to count in microseconds has no bound.

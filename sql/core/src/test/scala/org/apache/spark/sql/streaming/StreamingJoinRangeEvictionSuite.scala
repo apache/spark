@@ -148,14 +148,20 @@ class StreamingJoinRangeEvictionSuite extends StreamTest {
     }
   }
 
-  for (bound <- Seq("leftTime > rightTime + rightDelay",
-      "CAST(leftTime AS BIGINT) + leftOffset > CAST(rightTime AS BIGINT)")) {
-    test(s"range eviction does not log solver errors for other columns: $bound") {
+  // In state format 4, the extra conjunct gives the left side a value-eviction predicate on its
+  // event time, so that the range scan of the right joiner solves the bound that shifts by a
+  // column of the other input.
+  for {
+    bound <- Seq("leftTime > rightTime + rightDelay",
+      "CAST(leftTime AS BIGINT) + leftOffset > CAST(rightTime AS BIGINT)")
+    version <- Seq(2, 4)
+  } {
+    test(s"range eviction does not log solver errors for other columns: $bound, V$version") {
       val logAppender = new LogAppender("stream-stream join state constraints")
       withLogAppender(logAppender,
           loggerNames = Seq(StreamingJoinHelper.getClass.getName.stripSuffix("$")),
           level = Some(Level.WARN)) {
-        withJoinConf(2) {
+        withJoinConf(version) {
           val leftInput = MemoryStream[(Int, Long, Long)]
           val rightInput = MemoryStream[(Int, Long, Int)]
           val left = leftInput.toDF().toDF("leftKey", "time", "leftOffset")
@@ -165,7 +171,8 @@ class StreamingJoinRangeEvictionSuite extends StreamTest {
             .select($"rightKey", timestamp_seconds($"time").as("rightTime"),
               ($"delay" * expr("INTERVAL 1 SECOND")).as("rightDelay"))
             .withWatermark("rightTime", "0 seconds")
-          val joined = left.join(right, expr(s"leftKey = rightKey AND $bound"))
+          val extra = if (version == 4) " AND leftTime < rightTime + INTERVAL 1 HOUR" else ""
+          val joined = left.join(right, expr(s"leftKey = rightKey AND $bound$extra"))
             .select($"leftKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
           testStream(joined)(
             StreamProgressLockedActions(Seq(

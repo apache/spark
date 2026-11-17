@@ -81,7 +81,7 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
 
   // With multiple stateful operators allowed, the planned input keeps one watermarked column or
   // the query fails at start. Here pruning removes the event time, so the window filters late
-  // rows, and the base branch evicted both inputs at the window end.
+  // rows, and Spark 4.3 evicted both inputs at the window end.
   for {
     joinType <- Seq("left_outer", "left_semi", "full_outer")
     v <- Seq(2, 3, 4)
@@ -205,8 +205,8 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
         CheckNewAnswer(expected(joinType, Row(1, windowRow(0), 1, windowRow(0))): _*),
         MultiAddData(leftInput, (9, 31))(rightInput, (9, 31)),
         CheckNewAnswer(expected(joinType, Row(9, windowRow(30), 9, windowRow(30))): _*),
-        // A later left row at 25 seconds passes late filtering by its window, which ends at 30
-        // seconds, so the right state keeps rows above 20 seconds.
+        // A left row passes late filtering only when its window ends after the 30-second
+        // watermark, so its copy lc is above 20 seconds and the right state keeps rows above that.
         AddData(rightInput, (8, 32)),
         CheckNewAnswer(),
         MultiAddData(leftInput, (7, 41))(rightInput, (7, 41)),
@@ -299,6 +299,103 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
         CheckNewAnswer(),
         AddData(rightInput, (1, 55)),
         CheckNewAnswer(Row(1, 35, 1, 55)))
+    }
+  }
+
+  // The inputs of AB = A.join(B, condition, joinType), followed by a join of AB with C on
+  // ak = ck AND ct BETWEEN bt AND bt + INTERVAL 1 HOUR. In legacy mode AB filters late rows by at,
+  // which the query keeps. Every row of an inner or left outer AB with a non-NULL bt has bt = at,
+  // so C's state can be evicted at the watermark, as Spark 4.3 did.
+  private def chainedRangeJoin(condition: String, joinType: String, secondJoinType: String):
+      (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], MemoryStream[(Int, Int)],
+        DataFrame) = {
+    val a = MemoryStream[(Int, Int)]
+    val b = MemoryStream[(Int, Int)]
+    val c = MemoryStream[(Int, Int)]
+    val ab = eventTimeInput(a, "a").join(eventTimeInput(b, "b"), expr(condition), joinType)
+    val result = ab.join(eventTimeInput(c, "c"),
+        expr("ak = ck AND ct BETWEEN bt AND bt + INTERVAL 1 HOUR"), secondJoinType)
+      .select($"ck", $"ct".cast("int"), $"ak", $"at".cast("int"), $"bt".cast("int"))
+    (a, b, c, result)
+  }
+
+  for {
+    joinType <- Seq("inner", "left_outer")
+    secondJoinType <- Seq("right_outer", "inner")
+    v <- Seq(2, 3)
+  } {
+    test(s"legacy-mode $secondJoinType join with a range on a column that an earlier $joinType " +
+        s"join equates with the event time evicts at the watermark, V$v") {
+      val (a, b, c, result) = chainedRangeJoin("ak = bk AND at = bt", joinType, secondJoinType)
+      val unmatched =
+        if (secondJoinType == "right_outer") Seq(Row(2, 21, null, null, null)) else Nil
+      testJoin(legacyMode, version(v))(result)(
+        MultiAddData((a, Seq((1, 10))), (b, Seq((1, 10))), (c, Seq((1, 20), (2, 21)))),
+        CheckNewAnswer(Row(1, 20, 1, 10, 10)),
+        MultiAddData((a, Seq((3, 50))), (b, Seq((3, 50))), (c, Seq((9, 50)))),
+        CheckNewAnswer(),
+        // The watermark is 49 seconds, so C's rows at 20 and 21 seconds are evicted.
+        AddData(c, (9, 60)),
+        CheckNewAnswer(unmatched: _*),
+        // Both AB rows stay, as a later C row can match them within the hour.
+        assertStateRows(4))
+    }
+  }
+
+  // After a key-only earlier join, a new A row can join an old B row, so bt can be far below at,
+  // and after a full outer join, bt can be on a row without at. Neither bounds C's state.
+  Seq(("ak = bk", "inner"), ("ak = bk AND at = bt", "full_outer")).foreach {
+    case (condition, joinType) =>
+      test(s"legacy-mode right outer join with a range on a column of an earlier $joinType join " +
+          s"on $condition fails analysis") {
+        val (_, _, _, result) = chainedRangeJoin(condition, joinType, "right_outer")
+        withSQLConf(legacyMode) {
+          val error = intercept[AnalysisException] {
+            testStream(result)(StartStream(), CheckNewAnswer())
+          }
+          assert(error.getMessage.contains("allow unmatched state to be finalized"))
+        }
+      }
+  }
+
+  test("legacy-mode inner join with a range on a column of an earlier key-only join keeps rows " +
+      "that can still match") {
+    val (a, b, c, result) = chainedRangeJoin("ak = bk", "inner", "inner")
+    testJoin(legacyMode, version(2))(result)(
+      MultiAddData((a, Seq((2, 30))), (b, Seq((1, 10), (2, 30))), (c, Seq((1, 15), (9, 30)))),
+      CheckNewAnswer(),
+      MultiAddData((a, Seq((3, 60))), (b, Seq((3, 60))), (c, Seq((9, 60)))),
+      CheckNewAnswer(),
+      // The watermark is 59 seconds. The new A row joins the B row at 10 seconds, whose bt
+      // matches the C row at 15 seconds.
+      AddData(a, (1, 100)),
+      CheckNewAnswer(Row(1, 15, 1, 100, 10)))
+  }
+
+  // Legacy mode: rs is the right event time less a whole day in a column that keeps its
+  // watermark. A day can last 23 to 25 hours, so the plan gives rs no bound below rt, and the
+  // range condition on it bounds no left row: evicting the left state at the watermark would lose
+  // the match below, which the join must keep.
+  for (v <- Seq(2, 3)) {
+    test(s"legacy-mode inner join with a range on a column shifted back by a day keeps all " +
+        s"left rows, V$v") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val right = withShifted(eventTimeInput(rightInput, "r"), "r", "- INTERVAL 1 DAY")
+      val result = eventTimeInput(leftInput, "l").join(right,
+        expr("lk = rk AND lt BETWEEN rs AND rs + INTERVAL 1 HOUR"))
+        .select($"lk", $"lt".cast("int"), $"rk", $"rt".cast("int"))
+      testJoin(legacyMode, version(v))(result)(
+        AddData(leftInput, (1, 35)),
+        CheckNewAnswer(),
+        // The watermark is 69999 seconds, far above the left row at 35 seconds.
+        MultiAddData(leftInput, (8, 70000))(rightInput, (9, 80000)),
+        CheckNewAnswer(),
+        AddData(rightInput, (7, 80001)),
+        CheckNewAnswer(),
+        // A later right row at 86435 seconds has rs = 35 seconds, which matches the left row.
+        AddData(rightInput, (1, 86435)),
+        CheckNewAnswer(Row(1, 35, 1, 86435)))
     }
   }
 
