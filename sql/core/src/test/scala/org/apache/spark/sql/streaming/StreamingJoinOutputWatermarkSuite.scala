@@ -22,11 +22,13 @@ import java.sql.Timestamp
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
-import org.apache.spark.sql.functions.{col, count, expr, lit, session_window, timestamp_seconds, window}
+import org.apache.spark.sql.functions.{broadcast, col, count, expr, lit, session_window, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
 
@@ -114,7 +116,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       result: DataFrame,
       expectedRows: Seq[Row],
       expectedSides: Option[Set[JoinSide]],
-      expectedOutputWatermark: Long): Unit = {
+      expectedOutputWatermark: Long,
+      checkPlan: SparkPlan => Unit = _ => ()): Unit = {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       testStream(result, OutputMode.Append())(
         MultiAddData((impressionInput, Seq((1, 5L), (2, 15L), (3, 25L))),
@@ -131,6 +134,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
         ProcessAllAvailable(),
         CheckAnswer(expectedRows: _*),
         Execute { query =>
+          checkPlan(query.lastExecution.executedPlan)
           val j = join(query)
           assert(j.outputWatermarkSides == expectedSides)
           assert(j.produceOutputWatermark(j.eventTimeWatermarkForEviction.get)
@@ -174,7 +178,9 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       impressionRows: Seq[Row],
       clickRows: Seq[Row],
       impressionWatermark: Long = 79999L,
-      confs: Seq[(String, String)] = Nil)(consumer: (DataFrame, String) => DataFrame): Unit = {
+      confs: Seq[(String, String)] = Nil,
+      checkPlan: SparkPlan => Unit = _ => ())(
+      consumer: (DataFrame, String) => DataFrame): Unit = {
     Seq(
       ("impressionTime", impressionRows, LeftSide, impressionWatermark),
       ("clickTime", clickRows, RightSide, 0L)
@@ -187,7 +193,7 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
         withSQLConf((confs :+ checkEnabled): _*) {
           val (impressionInput, clickInput, joined) = oneDirectionalJoin()
           runOneDirectionalJoin(impressionInput, clickInput, consumer(joined, timeColumn), rows,
-            Some(Set(side)), outputWatermark)
+            Some(Set(side)), outputWatermark, checkPlan)
         }
       }
     }
@@ -264,6 +270,35 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       .select($"impressionAdId", $"otherTime".cast("long"))
   }
 
+  // A static input with a row for every ad, so that inner joins keep every joined row.
+  private def ads(): DataFrame = (1 to 9).toDF("staticAdId")
+
+  private def plans[T <: SparkPlan](cls: Class[T]): SparkPlan => Unit = { plan =>
+    assert(plan.exists(cls.isInstance), s"No ${cls.getSimpleName} in $plan")
+  }
+
+  // The static input is the left child here.
+  testTracedConsumer("a broadcast hash stream-static join", impressionWindows, Nil,
+      checkPlan = plans(classOf[BroadcastHashJoinExec])) { (joined, timeColumn) =>
+    windowCounts(broadcast(ads())
+      .join(joined.select($"impressionAdId", col(timeColumn)), $"impressionAdId" === $"staticAdId"),
+      timeColumn)
+  }
+
+  // An outer join, so that the join reads every streaming row in every partition.
+  testTracedConsumer("a sort merge stream-static join", impressionWindows, Nil,
+      checkPlan = plans(classOf[SortMergeJoinExec])) { (joined, timeColumn) =>
+    windowCounts(joined.select($"impressionAdId", col(timeColumn))
+      .join(ads().hint("merge"), $"impressionAdId" === $"staticAdId", "left_outer"), timeColumn)
+  }
+
+  testTracedConsumer("a broadcast nested loop stream-static join", impressionWindows, Nil,
+      checkPlan = plans(classOf[BroadcastNestedLoopJoinExec])) { (joined, timeColumn) =>
+    windowCounts(joined.select($"impressionAdId", col(timeColumn))
+      .join(broadcast(ads()), $"impressionAdId" >= $"staticAdId" &&
+        $"impressionAdId" < $"staticAdId" + 1, "left_outer"), timeColumn)
+  }
+
   testTracedConsumer("flatMapGroupsWithState with event-time timeouts",
       Seq(Row(1, 1L), Row(2, 1L), Row(3, 1L)), Nil) { (joined, timeColumn) =>
     joined.select($"impressionAdId", col(timeColumn)).as[(Int, Timestamp)]
@@ -304,10 +339,14 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
 
   // An append-mode aggregation over the event time of an input that the join cannot bound would
   // never emit, so the query fails at start.
-  // The sub-condition asks for a watermark on the other input when that input has none.
+  // The sub-condition asks for a watermark on the other input when that input has none, and
+  // offers the update output mode only when the query has no stream-stream outer join, which
+  // that mode rejects, even if the optimizer turns the outer join into an inner one.
   private def unboundedEventTimeError(
-      eventTime: String, side: String, otherSide: String, otherHasWatermark: Boolean) = {
-    val subClass = if (otherHasWatermark) "TIME_CONSTRAINT" else "WATERMARK_AND_TIME_CONSTRAINT"
+      eventTime: String, side: String, otherSide: String, otherHasWatermark: Boolean,
+      updateModeAllowed: Boolean) = {
+    val base = if (otherHasWatermark) "TIME_CONSTRAINT" else "WATERMARK_AND_TIME_CONSTRAINT"
+    val subClass = base + (if (updateModeAllowed) "_OR_UPDATE_MODE" else "")
     ExpectFailure[AnalysisException](assertFailure = error => {
       checkError(error.asInstanceOf[AnalysisException],
         condition = s"STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME.$subClass",
@@ -352,13 +391,18 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     "a session window" -> { joined =>
       joined.select($"impressionAdId", $"clickTime")
         .groupBy($"impressionAdId", session_window($"clickTime", "5 seconds")).count()
+    },
+    "a stream-static join" -> { joined =>
+      windowCounts(joined.select($"impressionAdId", $"clickTime")
+        .join(broadcast(ads()), $"impressionAdId" === $"staticAdId", "left_outer"), "clickTime")
     }
   ).foreach { case (path, aggregation) =>
     test(s"reject an append-mode aggregation over the unbounded input through $path") {
       val (impressionInput, clickInput, joined) = oneDirectionalJoin()
       testStream(aggregation(joined), OutputMode.Append())(
         MultiAddData(impressionInput, (1, 5L))(clickInput, (1, 8L)),
-        unboundedEventTimeError("clickTime", "right", "left", otherHasWatermark = true))
+        unboundedEventTimeError("clickTime", "right", "left", otherHasWatermark = true,
+          updateModeAllowed = true))
     }
   }
 
@@ -366,7 +410,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     val (leftInput, rightInput, joined) = oneWatermarkEqualityJoin("inner", watermarkOnLeft = true)
     testStream(windowCounts(joined, "lt"), OutputMode.Append())(
       MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
-      unboundedEventTimeError("lt", "left", "right", otherHasWatermark = false))
+      unboundedEventTimeError("lt", "left", "right", otherHasWatermark = false,
+        updateModeAllowed = true))
   }
 
   test("reject an append-mode aggregation over the unbounded input of an admitted outer join") {
@@ -374,7 +419,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       oneWatermarkEqualityJoin("left_outer", watermarkOnLeft = false)
     testStream(windowCounts(joined, "rt"), OutputMode.Append())(
       MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
-      unboundedEventTimeError("rt", "right", "left", otherHasWatermark = false))
+      unboundedEventTimeError("rt", "right", "left", otherHasWatermark = false,
+        updateModeAllowed = false))
   }
 
   test("run an update-mode aggregation over an event time the join cannot bound") {

@@ -524,7 +524,7 @@ class MultiStatefulOperatorsSuite
         ExpectFailure[AnalysisException](assertFailure = error => {
           checkError(error.asInstanceOf[AnalysisException],
             condition = "STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME." +
-              "WATERMARK_AND_TIME_CONSTRAINT",
+              "WATERMARK_AND_TIME_CONSTRAINT_OR_UPDATE_MODE",
             parameters = Map(
               "eventTime" -> "eventTime1",
               "side" -> "left",
