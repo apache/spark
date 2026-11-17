@@ -873,7 +873,11 @@ class FunctionResolution(
             case pc: ProcedureCatalog =>
               try {
                 val procedure = pc.loadProcedure(ident)
-                return ResolvedProcedure(pc, ident, procedure)
+                // A null means the catalog has no such procedure. Treat it as a miss, so an
+                // unqualified name keeps searching PATH and a qualified one fails as unresolved.
+                if (procedure != null) {
+                  return ResolvedProcedure(pc, ident, procedure)
+                }
               } catch {
                 // ProcedureCatalog has no standard "not found" exception type today. For
                 // unqualified names searched through PATH, treat candidate failures as misses and

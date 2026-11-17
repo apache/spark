@@ -1,0 +1,79 @@
+================================================================================================
+Build HighlyCompressedMapStatus, skewed block sizes
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.4        2294.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.1       19367.0       0.1X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0       24516.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       88957.0       0.3X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0      118071.0       1.0X
+skewed block sizes recorded accurately                1              1           0          0.0      687497.0       0.2X
+
+
+================================================================================================
+Build HighlyCompressedMapStatus, organ pipe block sizes
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.2        5210.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       30788.0       0.2X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0       23805.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0      170209.0       0.1X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0      118752.0       1.0X
+skewed block sizes recorded accurately                1              1           0          0.0     1124995.0       0.1X
+
+
+================================================================================================
+Read block sizes out of HighlyCompressedMapStatus
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+2048 shuffle partitions:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+sum every block size over the map statuses              2              2           0        125.6           8.0       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+50000 shuffle partitions:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+sum every block size over the map statuses             37             37           0        136.6           7.3       1.0X
+
+
+================================================================================================
+Driver heap retained by MapOutputTracker
+================================================================================================
+
+2001 partitions, 10000 map tasks             retained MiB   bytes per task serialized KiB
+------------------------------------------------------------------------------------------
+skewed block sizes not recorded                         1              172             15
+skewed block sizes recorded accurately                  2              308             15
+
+

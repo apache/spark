@@ -56,15 +56,16 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
           (j.copy(condition = newCondition, usingColumns = None), Some((projectList, hiddenList)))
         case _ => (j, None)
       }
-      val leftSet = AttributeSet(left.output ++ left.metadataOutput.filter(_.qualifiedAccessOnly))
-      val rightSet = AttributeSet(
-        right.output ++ right.metadataOutput.filter(_.qualifiedAccessOnly))
       val resolvedJoin = (matchLeft, matchOp, matchRight) match {
         case (Some(leftExpr), Some(operator), Some(rightExpr)) =>
+          // SQL operands match only the output and the hidden join columns. The single-pass
+          // resolver accepts the same columns, so both analyzers agree.
           AsOfJoinMatchConditionResolution.materialize(
             join = joinBase,
-            leftSet = leftSet,
-            rightSet = rightSet,
+            leftSet = AttributeSet(
+              left.output ++ left.metadataOutput.filter(_.qualifiedAccessOnly)),
+            rightSet = AttributeSet(
+              right.output ++ right.metadataOutput.filter(_.qualifiedAccessOnly)),
             leftOperand = leftExpr,
             operator = operator,
             rightOperand = rightExpr
@@ -74,10 +75,12 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
             case None => joinBase
           }
         case (Some(leftExpr), None, Some(rightExpr)) =>
+          // A DataFrame key can use a metadata column, such as a `_metadata` field, that its
+          // input does not output yet. AddMetadataColumns adds it once the join is resolved.
           AsOfJoinMatchConditionResolution.materializeDataFrame(
             join = joinBase,
-            leftSet = leftSet,
-            rightSet = rightSet,
+            leftSet = AttributeSet(left.output ++ left.metadataOutput),
+            rightSet = AttributeSet(right.output ++ right.metadataOutput),
             leftOperand = leftExpr,
             rightOperand = rightExpr
           ).map(_.toJoin(joinBase)).getOrElse(joinBase)

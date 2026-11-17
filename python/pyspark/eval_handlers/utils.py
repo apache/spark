@@ -21,7 +21,13 @@ A leaf module (no pyspark imports), so it is safe to import from both the worker
 and the handlers, on the driver and the executor alike.
 """
 
-from typing import Any, Callable
+import datetime
+import decimal
+import sys
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 
 def extract_key_value_indexes(grouped_arg_offsets: list) -> list:
@@ -115,3 +121,109 @@ def wrap_kwargs_support(
         return func, args_offsets + [kwargs_offsets[key] for key in keys]
     else:
         return f, args_offsets
+
+
+# Python scalar types whose values are immutable; see ``is_immutable_python_value``.
+_IMMUTABLE_PYTHON_SCALAR_TYPES = (
+    type(None),
+    bool,
+    int,
+    float,
+    str,
+    bytes,
+    decimal.Decimal,
+    datetime.date,
+    datetime.time,
+    datetime.timedelta,
+)
+_IMMUTABLE_PYTHON_SCALAR_TYPE_SET = frozenset(_IMMUTABLE_PYTHON_SCALAR_TYPES + (datetime.datetime,))
+
+
+def is_immutable_python_value(value: Any) -> bool:
+    """
+    Whether nothing can update ``value`` in place: ``None``, a ``bool``, ``int``, ``float``,
+    ``str``, ``bytes``, ``Decimal``, date, time or timedelta, or a subclass of one (such as a
+    numpy ``float64``), a numpy scalar other than ``numpy.void``, or a tuple of such values,
+    including a ``Row`` or a namedtuple, whose items are all that Arrow reads of it. A ``list``,
+    ``dict``, set, ``bytearray``, ``numpy.void`` or numpy array (even 0-d) can be updated in place.
+    """
+    if type(value) in _IMMUTABLE_PYTHON_SCALAR_TYPE_SET:
+        return True
+    if isinstance(value, tuple):
+        return all(is_immutable_python_value(v) for v in value)
+    if isinstance(value, _IMMUTABLE_PYTHON_SCALAR_TYPES):
+        return True
+    # A numpy scalar, but not a structured one (``numpy.void``), which can be a view of an array.
+    numpy = sys.modules.get("numpy")
+    return (
+        numpy is not None and isinstance(value, numpy.generic) and not isinstance(value, numpy.void)
+    )
+
+
+# No result yet; see ``WindowAggResults._unchecked``.
+_NO_RESULT = object()
+
+
+class WindowAggResults:
+    """
+    Collects the per-row ``finish`` results of one window aggregate into an Arrow array.
+
+    A result can share state with the buffer that it was finished from, e.g. the list that
+    ``reduce`` appends to, and ``reduce`` may update that buffer in place for later rows. The
+    results are held as Python values and converted in batches: ``flush``, called before
+    ``reduce`` updates the buffer that the pending results were finished from, converts them if
+    one of them may be updated in place (see ``is_immutable_python_value``). A result finished
+    from a buffer just folded from ``zero`` is checked only if such a ``flush`` follows, which a
+    sliding frame mostly skips. Every ``_COMBINE_CHUNKS`` such chunks are combined into one
+    array, so that the per-array overhead of the small chunks stays bounded.
+    """
+
+    _COMBINE_CHUNKS = 1024
+
+    def __init__(self, arrow_type: "pa.DataType") -> None:
+        self._arrow_type = arrow_type
+        self._pending: list[Any] = []
+        self._pending_may_share_state = False
+        # The result finished from a buffer just folded from ``zero``, not checked yet.
+        self._unchecked: Any = _NO_RESULT
+        self._chunks: list["pa.Array"] = []  # each combined from ``_COMBINE_CHUNKS`` small chunks
+        self._small_chunks: list["pa.Array"] = []
+
+    def append(self, result: Any, refolded: bool = False) -> None:
+        """
+        Add the next row's result. ``refolded`` says that ``result`` was finished from a buffer
+        just folded from ``zero``. Nothing updates the buffers of the earlier results any more
+        then, so only ``result`` still needs a check, which ``flush`` makes if it comes.
+        """
+        self._pending.append(result)
+        if refolded:
+            self._pending_may_share_state = False
+            self._unchecked = result
+        elif not self._pending_may_share_state and not is_immutable_python_value(result):
+            self._pending_may_share_state = True
+
+    def flush(self) -> None:
+        """Convert the pending results if one of them may share state with a buffer."""
+        if self._unchecked is not _NO_RESULT:
+            if not self._pending_may_share_state and not is_immutable_python_value(self._unchecked):
+                self._pending_may_share_state = True
+            self._unchecked = _NO_RESULT
+        if not self._pending_may_share_state:
+            return
+        import pyarrow as pa
+
+        self._small_chunks.append(pa.array(self._pending, type=self._arrow_type))
+        self._pending = []
+        self._pending_may_share_state = False
+        if len(self._small_chunks) == self._COMBINE_CHUNKS:
+            self._chunks.append(pa.concat_arrays(self._small_chunks))
+            self._small_chunks = []
+
+    def to_array(self) -> "pa.Array":
+        """All the results, in order, as one array."""
+        import pyarrow as pa
+
+        pending = pa.array(self._pending, type=self._arrow_type)
+        if not self._chunks and not self._small_chunks:
+            return pending
+        return pa.concat_arrays(self._chunks + self._small_chunks + [pending])

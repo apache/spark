@@ -45,6 +45,10 @@ case class SortAggregateExec(
   extends AggregateCodegenSupport
   with OrderPreservingUnaryExecNode {
 
+  override def allAttributes: AttributeSeq =
+    child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
+      aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"))

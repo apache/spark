@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -59,6 +59,7 @@ trait CodegenSupport extends SparkPlan {
     case _: SortMergeJoinExec => "smj"
     // A skewed join is named "SortMergeAsOfJoin(skew=true)", which is not a valid Java name.
     case _: SortMergeAsOfJoinExec => "smaj"
+    case _: BroadcastRangeJoinExec => "brj"
     case _: BroadcastNestedLoopJoinExec => "bnlj"
     case _: RDDScanExec => "rdd"
     case _: OneRowRelationExec => "orr"

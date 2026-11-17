@@ -24,7 +24,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{KLL_AGGREGATE, TreePattern}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -117,6 +117,8 @@ case class KllSketchAggBigint(
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
   override def prettyName: String = "kll_sketch_agg_bigint"
 
   // KLL compaction randomly chooses which values to retain.
@@ -275,6 +277,8 @@ case class KllSketchAggFloat(
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
   override def prettyName: String = "kll_sketch_agg_float"
 
   // KLL compaction randomly chooses which values to retain.
@@ -427,6 +431,8 @@ case class KllSketchAggDouble(
     if (kExpr.isDefined) baseTypes :+ IntegerType else baseTypes
   }
   override def nullable: Boolean = false
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
   override def prettyName: String = "kll_sketch_agg_double"
 
   // KLL compaction randomly chooses which values to retain.
@@ -784,6 +790,9 @@ abstract class KllMergeAggBase[T <: KllSketch]
   // Merging KLL sketches can trigger randomized compaction.
   override lazy val deterministic: Boolean =
     legacyDeterministic && children.forall(_.deterministic)
+
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
