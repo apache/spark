@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
@@ -33,6 +35,7 @@ if should_test_connect and have_yaml:
         load_pipeline_spec,
         register_definitions,
     )
+    from pyspark.pipelines.init_cli import hive_is_available
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
 
@@ -45,7 +48,8 @@ class InitCLITests(ReusedConnectTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             project_name = "test_project"
             with change_dir(Path(temp_dir)):
-                init(project_name)
+                with patch("pyspark.pipelines.init_cli.hive_is_available", return_value=True):
+                    init(project_name)
             with change_dir(Path(temp_dir) / project_name):
                 spec_path = find_pipeline_spec(Path.cwd())
                 spec = load_pipeline_spec(spec_path)
@@ -71,6 +75,39 @@ class InitCLITests(ReusedConnectTestCase):
                     registry.sql_files[0].file_path,
                     Path("transformations") / "example_sql_materialized_view.sql",
                 )
+
+    def test_init_without_hive(self):
+        # SPARK-61826: a Spark installation without Hive cannot start a session with the Hive
+        # catalog setting, so init leaves the configuration section out of the spec there.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_name = "test_project"
+            with change_dir(Path(temp_dir)):
+                with patch("pyspark.pipelines.init_cli.hive_is_available", return_value=False):
+                    init(project_name)
+            spec = load_pipeline_spec(find_pipeline_spec(Path(temp_dir) / project_name))
+            self.assertEqual(spec.name, project_name)
+            self.assertEqual(spec.configuration, {})
+
+    def test_hive_is_available(self):
+        # SPARK-61826: like the launcher, the check looks for a spark-hive_ jar in SPARK_HOME/jars
+        # or, in a source build, in assembly/target/scala-<version>/jars.
+        with tempfile.TemporaryDirectory() as spark_home:
+            with patch.dict(os.environ, {"SPARK_HOME": spark_home, "SPARK_SCALA_VERSION": "2.13"}):
+                self.assertFalse(hive_is_available())
+
+                build_jars_dir = Path(spark_home) / "assembly" / "target" / "scala-2.13" / "jars"
+                build_jars_dir.mkdir(parents=True)
+                (build_jars_dir / "spark-sql_2.13-4.1.0.jar").touch()
+                self.assertFalse(hive_is_available())
+                (build_jars_dir / "spark-hive_2.13-4.1.0.jar").touch()
+                self.assertTrue(hive_is_available())
+
+                # The jars directory of a binary distribution wins over the one of a source build.
+                dist_jars_dir = Path(spark_home) / "jars"
+                dist_jars_dir.mkdir()
+                self.assertFalse(hive_is_available())
+                (dist_jars_dir / "spark-hive_2.13-4.1.0.jar").touch()
+                self.assertTrue(hive_is_available())
 
     def test_init_existing_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
