@@ -250,9 +250,12 @@ object ValidateSubqueryExpression
         ExprUtils.isDeterministicAfterPredicateSubqueryRewrite)
       case join: AsOfJoin =>
         join.copy(condition = None).expressions.forall(_.deterministic) &&
-          join.condition.forall(_.transformDown {
+          join.condition.forall(_.transformDownWithReferenceEquality {
             case scalar: ScalarSubquery if isIndependentKllScalar(scalar) =>
               Literal.default(scalar.dataType)
+            case exists: Exists if isIndependentKllSubquery(exists) => Literal.TrueLiteral
+            case in: InSubquery if isIndependentKllSubquery(in.query) &&
+                in.values.forall(deterministicWithoutKllRandomness) => Literal.TrueLiteral
           }.deterministic)
       case _ => false
     }

@@ -179,8 +179,11 @@ object NondeterministicExpressionCollection {
     def stage(binding: NamedExpression): Int = levels.getOrElseUpdate(binding.exprId, {
       var level = 0
       def replace(expression: Expression): Expression = {
-        if (bindings.containsKey(keys(expression))) {
-          val dependency = bindings.get(keys(expression))
+        // Deterministic arguments cannot contain a collected dependency. In particular, avoid
+        // canonicalizing every prefix of arithmetic expressions in ordinary UDF arguments.
+        if (expression.deterministic) return expression
+        val dependency = bindings.get(keys(expression))
+        if (dependency != null) {
           level = math.max(level, stage(dependency) + 1)
           dependency.toAttribute
         } else expression match {
@@ -189,7 +192,7 @@ object NondeterministicExpressionCollection {
             conditional.withNewAlwaysEvaluatedInputs(conditional.alwaysEvaluatedInputs.map(replace))
           case And(left, right) => And(replace(left), right)
           case Or(left, right) => Or(replace(left), right)
-          case other => other.mapChildren(replace)
+          case other => other.mapChildrenWithReferenceEquality(replace)
         }
       }
       // Replacing only the children of the bound root keeps its own evaluation. Its
@@ -197,14 +200,21 @@ object NondeterministicExpressionCollection {
       val replacement = binding match {
         case alias: Alias =>
           val child = alias.child match {
+            // HandleNullInputsForUDF adds its guard after extraction in iterative analysis.
+            // Keep all arguments under that future guard, including throwable random arguments.
+            case udf: ScalaUDF if udf.inputPrimitives.zip(udf.children).exists {
+                case (primitive, input) => primitive && input.nullable
+              } => udf
             // NOT IN must reach predicate-subquery rewriting as a whole so that NULLs on
             // either side retain their three-valued semantics. Only stage its operands.
-            case not @ Not(in: InSubquery) => not.copy(child = in.mapChildren(replace))
-            case other => other.mapChildren(replace)
+            case not @ Not(in: InSubquery) =>
+              not.copy(child = in.mapChildrenWithReferenceEquality(replace))
+            case other => other.mapChildrenWithReferenceEquality(replace)
           }
           alias.copy(child = child)(alias.exprId, alias.qualifier, alias.explicitMetadata,
             alias.nonInheritableMetadataKeys, alias.nondeterministicSubqueryOrigin)
-        case other => other.mapChildren(replace).asInstanceOf[NamedExpression]
+        case other =>
+          other.mapChildrenWithReferenceEquality(replace).asInstanceOf[NamedExpression]
       }
       replacement.copyTagsFrom(binding)
       rewritten(binding.exprId) = replacement

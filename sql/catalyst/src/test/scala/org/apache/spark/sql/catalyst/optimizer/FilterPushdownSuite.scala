@@ -64,7 +64,7 @@ class FilterPushdownSuite extends PlanTest {
 
   val testArrayStringRelation = LocalRelation($"a".int, $"s_arr".array(StringType))
 
-  test("push only independent filters through compiler-owned aggregate scalar bindings") {
+  test("push only independent filters through independent aggregate scalar bindings") {
     val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
     val scalar = ScalarSubquery(OneRowRelation().groupBy()(
       KllSketchGetNBigint(aggregate).as("n")))
@@ -78,13 +78,13 @@ class FilterPushdownSuite extends PlanTest {
       val condition = attrA > Literal(1)
       val plan = Filter(condition, project)
       val actual = PushPredicateThroughNonJoin(plan)
-      val expected = if (generated && (expression eq scalar)) {
+      val expected = if (expression eq scalar) {
         project.copy(child = Filter(condition, testRelation))
       } else plan
       comparePlans(actual, expected)
       val consuming = Filter(binding.toAttribute > Cast(Literal(1), expression.dataType), project)
       comparePlans(PushPredicateThroughNonJoin(consuming), consuming)
-      if (generated && (expression eq scalar)) {
+      if (expression eq scalar) {
         val throwing = attrA > Literal(5) || IsNull(RaiseError(Literal("boom")))
         assert(throwing.throwable)
         val guarded = Filter(binding.toAttribute < Literal(0L) && throwing, project)

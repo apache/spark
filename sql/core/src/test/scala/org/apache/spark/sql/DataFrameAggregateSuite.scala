@@ -4434,8 +4434,13 @@ class DataFrameAggregateSuite extends SharedSparkSession
       checkAnswer(analyzed(s"""SELECT count(*) FILTER (WHERE id IN ($query HAVING count(*) < 0))
           |FROM VALUES (3), (4), (NULL) AS o(id)""".stripMargin), Row(0L))
       checkAnswer(analyzed(s"""SELECT count(*) FILTER (
-          |WHERE (id, id) NOT IN (SELECT n, n FROM ($query) AS t(n)))
-          |FROM VALUES (3), (4), (NULL) AS o(id)""".stripMargin), Row(1L))
+          |WHERE (a, b) NOT IN (SELECT n, n + 1 FROM ($query) AS t(n)))
+          |FROM VALUES (3, 4), (4, 3), (NULL, 4), (3, NULL), (NULL, 5), (9, NULL)
+          |AS o(a, b)""".stripMargin), Row(3L))
+      checkAnswer(analyzed(s"""SELECT count(*) FILTER (
+          |WHERE (a, b) NOT IN (SELECT n, CAST(NULL AS BIGINT) FROM ($query) AS t(n)))
+          |FROM VALUES (3, 4), (4, 3), (NULL, 4), (3, NULL), (NULL, 5), (9, NULL)
+          |AS o(a, b)""".stripMargin), Row(2L))
       withSQLConf(SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key -> "false") {
         checkAnswer(analyzed(s"""SELECT l.id, r.id FROM VALUES (0), (1) AS l(id)
             |JOIN VALUES (2), (3) AS r(id) ON l.id + r.id IN ($query)""".stripMargin),

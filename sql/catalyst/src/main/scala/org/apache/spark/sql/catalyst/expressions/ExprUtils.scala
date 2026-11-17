@@ -210,7 +210,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         case in: InSubquery =>
           val values = in.values.map(rewritten)
           if (values.forall(_.deterministic)) Literal.TrueLiteral else in.copy(values = values)
-        case other => other.mapChildren(rewritten)
+        case other => other.mapChildrenWithReferenceEquality(rewritten)
       }
       checked.put(expr, result)
       result
@@ -219,7 +219,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   }
 
   private[sql] def isDeterministicAfterPredicateSubqueryRewrite(expression: Expression): Boolean = {
-    expression.deterministic || expression.transformDown {
+    expression.deterministic || expression.transformDownWithReferenceEquality {
       case _: Exists => Literal.TrueLiteral
       case in: InSubquery if in.values.forall(_.deterministic) => Literal.TrueLiteral
     }.deterministic

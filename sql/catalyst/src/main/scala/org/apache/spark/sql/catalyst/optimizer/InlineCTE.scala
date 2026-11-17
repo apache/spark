@@ -93,6 +93,8 @@ case class InlineCTE(
         // `OuterReference`, because:
         // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
         // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
+        // TODO: Reconsider KLL-driven retention after column pruning removes the last randomized
+        // output. A general second inlining pass also changes sharing of other expensive CTEs.
         refCount == 1 ||
           cteDef.deterministic ||
           SubExprUtils.hasOuterReferences(cteDef.child)

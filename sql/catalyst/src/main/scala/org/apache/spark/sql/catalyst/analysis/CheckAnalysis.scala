@@ -867,7 +867,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               // Scalar wrappers inherit aggregate nondeterminism. Check their own behavior with
               // aggregate results replaced by deterministic values, then validate the original
               // aggregate expressions and their inputs in checkMetric below.
-              e.transformDown {
+              e.transformDownWithReferenceEquality {
                 case a: AggregateExpression => Literal.default(a.dataType)
                 case a: AggregateFunction => Literal.default(a.dataType)
                 case scalar: ScalarSubquery

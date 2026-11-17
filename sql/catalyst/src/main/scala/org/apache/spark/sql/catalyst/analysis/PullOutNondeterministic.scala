@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Pulls out nondeterministic expressions from LogicalPlan which is not Project or Filter,
  * put them into an inner Project and finally project them away at the outer Project.
  */
-object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
+object PullOutNondeterministic extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
@@ -95,21 +95,38 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
         case _ => false
       }) =>
       validateNondeterministicSubqueries(join, join.condition.toSeq)
-      val scalars = join.condition.toSeq.flatMap(_.collect {
-        case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated => scalar
-      })
       val keys = new NondeterministicExpressionCollection.ExpressionKeys
-      val nondeterToAttr =
-        NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
+      val nondeterToAttr = new java.util.LinkedHashMap[
+        NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
+      def collect(expression: Expression): Unit = {
+        val candidate = expression match {
+          // Store the consumed count, rather than copying a binary sketch into every input row
+          // and state record. Keep the scalar identity inside the getter for physical reuse.
+          case getter: KllSketchGetNBase if getter.child.isInstanceOf[ScalarSubquery] &&
+              !getter.child.deterministic &&
+              !getter.child.asInstanceOf[ScalarSubquery].isCorrelated => true
+          case scalar: ScalarSubquery => !scalar.deterministic && !scalar.isCorrelated
+          case _ => false
+        }
+        if (candidate) {
+          val key = keys(expression)
+          if (!nondeterToAttr.containsKey(key)) {
+            nondeterToAttr.put(key,
+              Alias(expression, "_nondeterministic")().asNondeterministicSubqueryBinding)
+          }
+        } else expression.children.foreach(collect)
+      }
+      join.condition.foreach(collect)
       val leftBindings = mutable.LinkedHashMap.empty[
         NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
       val rightBindings = mutable.LinkedHashMap.empty[
         NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
-      val uses = mutable.HashMap.empty[ExprId, AttributeSet]
+      val referenceSets = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
       val rightOutput = join.right.outputSet
       def rewrite(expression: Expression, references: AttributeSet): Expression = expression match {
-        case scalar: ScalarSubquery if nondeterToAttr.containsKey(keys(scalar)) =>
-          val key = keys(scalar)
+        case value @ (_: ScalarSubquery | _: KllSketchGetNBase)
+            if nondeterToAttr.containsKey(keys(value)) =>
+          val key = keys(value)
           val side = if (references.nonEmpty && references.subsetOf(rightOutput)) {
             rightBindings
           } else leftBindings
@@ -120,29 +137,41 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
             alias.copyTagsFrom(nondeterToAttr.get(key))
             alias
           })
-          uses.get(binding.exprId) match {
-            case Some(previous) if !(previous eq references) =>
-              uses(binding.exprId) = previous ++ references
-            case None => uses(binding.exprId) = references
-            case _ =>
-          }
+          val sets = referenceSets.getOrElseUpdate(binding.exprId, mutable.ArrayBuffer.empty)
+          if (sets.isEmpty || !(sets.last eq references)) sets += references
           binding.toAttribute
         case comparison: BinaryComparison =>
-          comparison.mapChildren { operand =>
+          comparison.mapChildrenWithReferenceEquality { operand =>
             val local = operand.references
             rewrite(operand, if (local.nonEmpty) local else references)
           }
-        case other => other.mapChildren(rewrite(_, references))
+        case other => other.mapChildrenWithReferenceEquality(rewrite(_, references))
       }
       // Locate comparisons beneath Boolean and SQL-function wrappers, not only at the conjunct
       // root. Attribute-free operands use their surrounding predicate as a placement fallback.
       val condition = join.condition.map { condition =>
-        splitConjunctivePredicates(condition).map { conjunct =>
+        val conjuncts = mutable.ArrayBuffer.empty[Expression]
+        val pending = mutable.Stack[Expression](condition)
+        while (pending.nonEmpty) {
+          pending.pop() match {
+            case And(left, right) => pending.push(right).push(left)
+            case conjunct => conjuncts += conjunct
+          }
+        }
+        conjuncts.map { conjunct =>
           rewrite(conjunct, conjunct.references)
         }.reduceLeft(And)
       }
+      // Union once per binding. Incremental immutable unions repeatedly copied growing prefixes.
+      val uses = referenceSets.iterator.map { case (id, sets) =>
+        id -> AttributeSet.fromAttributeSets(sets.toSeq)
+      }.toMap
       def project(child: LogicalPlan, bindings: Iterable[NamedExpression]): LogicalPlan = {
         if (bindings.isEmpty) child else child match {
+          case alias: SubqueryAlias => alias.copy(child = project(alias.child, bindings))
+          case projection: Project if projection.projectList.forall(_.isInstanceOf[Attribute]) =>
+            projection.copy(projectList = projection.projectList ++ bindings.map(_.toAttribute),
+              child = project(projection.child, bindings))
           // Independent scalars can be attached within an unhinted inner component. Keeping
           // its relations visible lets both join-ordering rules choose selective joins first.
           case inner: Join

@@ -2638,8 +2638,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   private def isAggregateScalarBinding(expression: NamedExpression): Boolean = expression match {
-    case alias: Alias if alias.isNondeterministicSubqueryBinding &&
-        ExprUtils.isDeterministicAfterSubqueryExtraction(alias.child) =>
+    case alias: Alias if ExprUtils.isDeterministicAfterSubqueryExtraction(alias.child) =>
       def retainedAggregate(plan: LogicalPlan): Boolean = plan.exists {
         case aggregate: Aggregate if aggregate.aggregateExpressions.exists(_.exists {
               case expression: AggregateExpression => !expression.deterministic

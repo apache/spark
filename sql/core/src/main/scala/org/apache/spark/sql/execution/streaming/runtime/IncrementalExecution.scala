@@ -245,7 +245,7 @@ class IncrementalExecution(
             Project(join.output.map { attribute =>
               if (bindings.contains(attribute.exprId)) {
                 Alias(restore(attribute), attribute.name)(attribute.exprId,
-                  attribute.qualifier, Some(attribute.metadata))
+                  attribute.qualifier, Some(attribute.metadata)).asNondeterministicSubqueryBinding
               } else attribute
             }, restored)
           }

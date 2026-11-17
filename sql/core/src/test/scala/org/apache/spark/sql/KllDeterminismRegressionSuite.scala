@@ -31,6 +31,99 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("primitive Scala UDF null guards retain conditional random arguments") {
+    val first = udf((n: Int, xs: Seq[Double]) => n + xs.head)
+    withUserDefinedFunction("null_guarded_first" -> true) {
+      spark.udf.register("null_guarded_first", first)
+      for (codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+            SQLConf.ANSI_ENABLED.key -> "true") {
+          checkAnswer(sql("""SELECT count(*) FROM range(2) GROUP BY
+              |null_guarded_first(IF(id = 0, CAST(NULL AS INT), 1),
+              |shuffle(array(1D / id, 1D / id)))""".stripMargin), Seq(Row(1L), Row(1L)))
+        }
+      }
+    }
+  }
+
+  test("KLL ASOF predicate subqueries retain analyzer parity") {
+    for (singlePass <- Seq(false, true); valueType <- Seq("bigint", "float", "double");
+        merge <- Seq(false, true); exists <- Seq(false, true)) {
+      val values = "VALUES (0), (1), (2) AS input(id)"
+      val sketch = s"kll_sketch_agg_$valueType(CAST(id AS $valueType))"
+      val aggregate = if (merge) s"kll_merge_agg_$valueType(s)" else sketch
+      val from = if (merge) s"(SELECT $sketch AS s FROM $values GROUP BY id)" else values
+      val count = s"SELECT kll_sketch_get_n_$valueType($aggregate) FROM $from"
+      val condition = if (exists) s"EXISTS (SELECT * FROM ($count) q)" else s"l.k IN ($count)"
+      withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        QueryTest.checkAnswer(sql(s"""SELECT l.k, r.k FROM VALUES (3), (4) AS l(k)
+            |ASOF JOIN VALUES (0), (1) AS r(k) MATCH_CONDITION (l.k >= r.k)
+            |ON $condition""".stripMargin),
+          if (exists) Seq(Row(3, 1), Row(4, 1)) else Seq(Row(3, 1)), checkToRDD = false)
+      }
+    }
+  }
+
+  test("strict ASOF ON rejects unrelated scalar and direct randomness") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      for (condition <- Seq("l.k = r.k + (SELECT rand())", s"l.k + rand() = r.k + $scalar",
+          "l.k IN (SELECT rand())", "EXISTS (SELECT rand())",
+          s"l.k + rand() IN (SELECT $scalar)")) {
+        val error = intercept[AnalysisException] {
+          sql(s"""SELECT l.k FROM VALUES (3), (4) AS l(k)
+              |ASOF JOIN VALUES (0), (1) AS r(k) MATCH_CONDITION (l.k >= r.k)
+              |ON $condition""".stripMargin)
+        }
+        assert(error.getCondition == "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
+      }
+    }
+  }
+
+  test("user-aliased independent KLL scalars retain partition pruning") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(8).selectExpr("id", "CAST(id % 2 AS INT) AS p")
+          .write.partitionBy("p").parquet(path.getAbsolutePath)
+        withTempView("kll_user_pruning") {
+          spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("kll_user_pruning")
+          val query = sql(s"""SELECT p, n FROM
+              |(SELECT p, $scalar AS n FROM kll_user_pruning) q WHERE p = 1""".stripMargin)
+          val scans = query.queryExecution.sparkPlan.collect {
+            case scan: FileSourceScanExec => scan
+          }
+          assert(scans.size == 1)
+          assert(scans.head.selectedPartitions.filePartitionIterator
+            .map(_.values.getInt(0)).toSet == Set(1), query.queryExecution.toString)
+          checkAnswer(query, Seq.fill(4)(Row(1, 3L)))
+        }
+      }
+    }
+  }
+
+  test("mixed KLL and seeded row randomness retains the pre-filter draw sequence") {
+    withUserDefinedFunction("mixed_kll_bool" -> true) {
+      spark.udf.register("mixed_kll_bool", (b: java.lang.Boolean) => b)
+      val argument = s"mixed_kll_bool(CASE WHEN id % 2 = 0 THEN $scalar > 0 " +
+        "ELSE rand(17) > 0.5 END)"
+      val materialized = spark.range(0, 128, 1, 1)
+        .selectExpr("id % 3 AS p", s"$argument AS b").cache()
+      try {
+        materialized.count()
+        val expected = materialized.where("p = 1").groupBy("p", "b").count().collect().toSeq
+        checkAnswer(sql(s"""SELECT id % 3 AS p, $argument AS b, count(*)
+            |FROM range(0, 128, 1, 1) GROUP BY 1, 2 HAVING p = 1""".stripMargin), expected)
+      } finally {
+        materialized.unpersist()
+      }
+    }
+  }
+
   test("KLL ASOF ON scalars retain analyzer parity") {
     for (singlePass <- Seq(false, true); valueType <- Seq("bigint", "float", "double");
         merge <- Seq(false, true)) {
@@ -181,16 +274,20 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
         withSQLConf(SQLConf.CBO_ENABLED.key -> "true",
             SQLConf.JOIN_REORDER_ENABLED.key -> "true",
             SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-          val query = sql(s"""SELECT a_key, b_id FROM kll_cbo_a
-              |JOIN kll_cbo_b ON a_key = b_key
-              |JOIN kll_cbo_c ON b_id + $scalar = c_key""".stripMargin)
-          assert(query.queryExecution.optimizedPlan.exists {
-            case join: org.apache.spark.sql.catalyst.plans.logical.Join =>
-              val names = join.output.map(_.name).toSet
-              names.contains("b_id") && names.contains("c_key") && !names.contains("a_key")
-            case _ => false
-          }, query.queryExecution.toString)
-          checkAnswer(query, Row(0L, 0L))
+          for (wrapped <- Seq(false, true)) {
+            val component = "kll_cbo_a JOIN kll_cbo_b ON a_key = b_key"
+            val input = if (wrapped) s"(SELECT a_key, b_id, b_key FROM $component) ab"
+              else component
+            val query = sql(s"""SELECT a_key, b_id FROM $input
+                |JOIN kll_cbo_c ON b_id + $scalar = c_key""".stripMargin)
+            assert(query.queryExecution.optimizedPlan.exists {
+              case join: org.apache.spark.sql.catalyst.plans.logical.Join =>
+                val names = join.output.map(_.name).toSet
+                names.contains("b_id") && names.contains("c_key") && !names.contains("a_key")
+              case _ => false
+            }, query.queryExecution.toString)
+            checkAnswer(query, Row(0L, 0L))
+          }
         }
       } finally {
         a.unpersist()

@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.BinaryType
 
 class KllStreamingJoinSuite extends StreamTest {
   import testImplicits._
@@ -95,6 +96,71 @@ class KllStreamingJoinSuite extends StreamTest {
           AddData(left, l), AddData(right, 0), CheckLastBatch(Row(l, 0)),
           AddData(left, l + 1), AddData(right, 1), CheckLastBatch(Row(l + 1, 1)),
           StopStream)
+      }
+    }
+  }
+
+  test("KLL join state retains only the consumed sketch getter value") {
+    for (valueType <- Seq("bigint", "float", "double"); merge <- Seq(false, true)) {
+      val left = MemoryStream[Int]
+      val right = MemoryStream[Int]
+      val sketch = s"kll_sketch_agg_$valueType(CAST(v AS $valueType), 1024)"
+      val values = "VALUES (0), (1), (2) AS t(v)"
+      val aggregate = if (merge) s"kll_merge_agg_$valueType(s)" else sketch
+      val from = if (merge) s"(SELECT $sketch AS s FROM $values GROUP BY v)" else values
+      val scalar = s"kll_sketch_get_n_$valueType((SELECT $aggregate FROM $from))"
+      val result = left.toDF().as("l").join(right.toDF().as("r"),
+        expr(s"l.value + $scalar = r.value")).selectExpr("l.value", "r.value")
+      testStream(result)(
+        StartStream(additionalConfs = Map(
+          "spark.sql.streaming.aggregation.legacyKllSharing.enabled" -> "false")),
+        AddData(left, 0), AddData(right, 3), CheckLastBatch(Row(0, 3)),
+        AssertOnQuery { query =>
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case j: StreamingSymmetricHashJoinExec => j
+          }.get
+          assert((join.left.output ++ join.right.output).forall(_.dataType != BinaryType),
+            query.lastExecution.toString)
+          true
+        }, StopStream)
+    }
+  }
+
+  for (stageLeft <- Seq(false, true)) {
+    test(s"KLL nested historical join restoration: stageLeft=$stageLeft") {
+      withTempDir { checkpoint =>
+        val left = MemoryStream[(Int, Long, String)]
+        val right = MemoryStream[(Int, Long, String)]
+        val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
+        val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+        val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v))
+            |FROM VALUES (0), (1), (2) AS t(v))""".stripMargin
+        def query(legacy: Boolean): DataFrame = withSQLConf(rollback -> legacy.toString) {
+          val static = Seq(0, 1, 3, 4).toDF("static_key")
+          val l = left.toDF().toDF("lk", "lp", "lt")
+          val r = right.toDF().toDF("rk", "rp", "rt")
+          val nestedLeft = if (stageLeft) l.join(static, expr("lk = static_key")) else l
+          val nestedRight = if (!stageLeft) r.join(static, expr("rk = static_key")) else r
+          val condition = if (stageLeft) s"lk + $scalar = rk" else s"lk = rk + $scalar"
+          nestedLeft.join(nestedRight, expr(condition))
+            .selectExpr("lk", "lp", "lt", "rk", "rp", "rt")
+        }
+        val l = if (stageLeft) 0 else 3
+        val r = if (stageLeft) 3 else 0
+        testStream(query(legacy = true))(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> "true")),
+          AddData(left, (l, 100L, "left-old")),
+          AddData(right, (r, 200L, "right-old")),
+          CheckLastBatch(Row(l, 100L, "left-old", r, 200L, "right-old")), StopStream)
+        testStream(query(legacy = false))(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> "false")),
+          AddData(right, (r, 201L, "right-new")),
+          CheckLastBatch(Row(l, 100L, "left-old", r, 201L, "right-new")),
+          AddData(left, (l, 101L, "left-new")),
+          CheckLastBatch(Row(l, 101L, "left-new", r, 200L, "right-old"),
+            Row(l, 101L, "left-new", r, 201L, "right-new")), StopStream)
       }
     }
   }
