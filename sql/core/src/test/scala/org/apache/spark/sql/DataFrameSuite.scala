@@ -3246,8 +3246,10 @@ class DataFrameSuite extends SharedSparkSession
       check(doubles, d, $"d" === 0.0 && pow($"d", $"y") < 0, Seq(Row("-0.00", true)))
       // But not where the comparison is the same with either zero, which the constant then
       // folds, so that `d` is not computed on the row ("x", 1.0).
-      check(Seq(("0.0", 1.0), ("x", 1.0)).toDF("s", "y"), d,
-        $"y" > 0 && pow($"d", 2) > 100 && $"d" === 0.0, Seq.empty)
+      val notNumber = Seq(("0.0", 1.0), ("x", 1.0)).toDF("s", "y")
+      check(notNumber, d, $"y" > 0 && pow($"d", 2) > 100 && $"d" === 0.0, Seq.empty)
+      // Nor for any other value, which is equal only to itself, as on 4.3.0.
+      check(notNumber, d, ($"d" * $"y").cast("string") === "1.0" && $"d" === 2.0, Seq.empty)
 
       val ints = Seq($"s", $"id", $"x", $"s".cast("int").as("i"), lit(100).as("total"))
       val two = Seq(("2", 7, 1)).toDF("s", "id", "x")
