@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatal
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, LongDaysFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction, UnboundIntBucketFunction, UnboundPhysicalDaysFunction}
 import org.apache.spark.sql.connector.expressions.Expressions.{bucket, days, identity}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.{InputAdapter, ProjectExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1022,14 +1022,8 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       val df = join()
       assert(perPartitionSemiJoins(df).size == 1, df.queryExecution.optimizedPlan)
       checkAnswer(df, expectedRows)
-      // The nodes of the codegen stage of `plan`, down to its inputs.
-      def inStage(plan: SparkPlan): Seq[SparkPlan] = plan match {
-        case _: InputAdapter => Nil
-        case _ => plan +: plan.children.flatMap(inStage)
-      }
       val plan = df.queryExecution.executedPlan
-      val partitionKeys = collect(plan) { case stage: WholeStageCodegenExec => stage }
-        .flatMap(stage => inStage(stage.child))
+      val partitionKeys = codegenStageNodes(plan)
         .collect { case p: ProjectExec => p }
         .filter(_.projectList.exists(_.exists(_.isInstanceOf[TransformExpression])))
       assert(partitionKeys.size == 2, plan)
