@@ -98,7 +98,8 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     assignment.key.semanticEquals(assignment.value)
   }
 
-  // the alignment may wrap an assigned value, such as `a` in `SET a = a`, in an Alias
+  // unlike isSelfAssignment, also matches a self-assignment written in the SET clause, such as
+  // `SET a = a`, whose value the alignment wraps in an Alias
   protected def isIdentityAssignment(key: Attribute, value: Expression): Boolean = {
     val valueWithoutAlias = value match {
       case Alias(child, _) => child

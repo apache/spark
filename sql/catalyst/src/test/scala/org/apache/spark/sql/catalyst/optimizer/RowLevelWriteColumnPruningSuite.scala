@@ -21,19 +21,19 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
- * Tests the [[ColumnPruning]] case that, for a [[RowLevelWrite]] whose write relation's column
- * names differ from the table's, prunes the query columns its projections don't read and moves the
- * projections to the ordinals of the pruned query.
+ * Tests the [[ColumnPruning]] case that, for a [[RowLevelWrite]] whose write relation's data
+ * column names differ from the table's, prunes the query columns its projections don't read and
+ * moves the projections to the ordinals of the pruned query.
  */
 class RowLevelWriteColumnPruningSuite extends PlanTest {
 
@@ -284,5 +284,16 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
       val write = ReplaceData(writeRelation, cond(read), query, tableRelation, projections)
       comparePlans(Optimize.execute(write), write, checkAnalysis = false)
     }
+  }
+
+  test("no change when the write declares every data column of a table with metadata columns") {
+    // the output of a table that accepts any schema may include its metadata columns
+    val tableWithMetadata = TestRelation(
+      tableRelation.output :+ MetadataAttribute("_partition", StringType, nullable = false))
+    val query = updateQuery(read)
+    val projections = ReplaceDataProjections(projection(query, dataColumns: _*), None)
+    val writeRelation = TestRelation(tableRelation.output.map(_.newInstance()))
+    val write = ReplaceData(writeRelation, cond(read), query, tableWithMetadata, projections)
+    comparePlans(Optimize.execute(write), write, checkAnalysis = false)
   }
 }

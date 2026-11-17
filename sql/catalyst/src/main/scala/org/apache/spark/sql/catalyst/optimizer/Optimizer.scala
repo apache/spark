@@ -1615,11 +1615,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
-    // prune unused columns from the query of ReplaceData/WriteDelta whose write relation's column
-    // names differ from the table's, which a column update can cause; a column update that
-    // declares every column in table order keeps its query, like a full-width write
+    // prune unused columns from the query of ReplaceData/WriteDelta whose write relation's data
+    // column names differ from the table's, which a column update can cause; a column update that
+    // declares every data column in table order keeps its query, like a full-width write
     case w: RowLevelWrite
-      if !w.table.output.corresponds(w.originalTable.output)(_.name == _.name) &&
+      if RowLevelWrite.dataColumnNames(w.table) != RowLevelWrite.dataColumnNames(w.originalTable) &&
         !w.query.outputSet.subsetOf(w.references) =>
       w.withPrunedQuery(prunedChild(w.query, w.references))
 

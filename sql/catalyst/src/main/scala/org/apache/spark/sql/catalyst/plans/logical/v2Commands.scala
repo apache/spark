@@ -421,6 +421,17 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   }
 }
 
+object RowLevelWrite {
+  /**
+   * The names of the data columns of a write relation or table, in order. The output of a table
+   * that accepts any schema may include its metadata columns, which a row-level write does not
+   * write.
+   */
+  def dataColumnNames(relation: LogicalPlan): Seq[String] = {
+    relation.output.filterNot(attr => MetadataAttribute.isValid(attr.metadata)).map(_.name)
+  }
+}
+
 /**
  * Replace groups of data in an existing table during a row-level operation.
  *

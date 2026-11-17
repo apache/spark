@@ -80,10 +80,7 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * UPDATE, Spark rejects with an analysis exception a name that no column has and that the
    * resolver matches to no column or to several, a column declared more than once, a nested field,
    * a metadata column (declare those through {@link #requiredMetadataAttributes()} instead), and an
-   * array that misses a column reported by {@link RowLevelOperationInfo#updatedColumns()}. When
-   * Spark narrows the write, it also rejects an UPDATE that assigns a new value to a metadata
-   * column, which only a table that accepts any schema allows, because a connector can locate
-   * original rows through metadata columns.
+   * array that misses a column reported by {@link RowLevelOperationInfo#updatedColumns()}.
    * <p>
    * If the returned array is non-empty and this operation also mixes in {@link SupportsDelta} and
    * represents updates as deletes and inserts

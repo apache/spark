@@ -96,21 +96,31 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update: update handles metadata columns correctly") {
-    Seq(
-      "id IN (1, 100)",
-      "id IN (1, 20) AND dep IN (SELECT * FROM updated_dep)"
-    ).foreach { condition =>
+    // the SET clause references the metadata columns so that AddMetadataColumns adds them to the
+    // target table, and lists every column of it, as Spark does not align the assignments for a
+    // table that accepts any schema
+    val acceptAnySchemaProps = tablePropsWith(extraTableProps, "accept-any-schema" -> "true")
+    for {
+      condition <- Seq(
+        "id IN (1, 100)",
+        "id IN (1, 20) AND dep IN (SELECT * FROM updated_dep)")
+      (props, assignments) <- Seq(
+        extraTableProps -> "id = -1",
+        acceptAnySchemaProps ->
+          "pk = pk, id = -1, salary = salary, dep = dep, index = index, _partition = _partition")
+    } {
       withTable(tableNameAsString) {
         withTempView("updated_dep") {
           createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
             """{ "pk": 1, "id": 1, "salary": 100, "dep": "hr" }
               |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
               |{ "pk": 3, "id": 3, "salary": 300, "dep": "hr" }
-              |""".stripMargin)
+              |""".stripMargin,
+            props)
           import testImplicits._
           Seq(Some("hr"), Some("it")).toDF().createOrReplaceTempView("updated_dep")
 
-          sql(s"UPDATE $tableNameAsString SET id = -1 WHERE $condition")
+          sql(s"UPDATE $tableNameAsString SET $assignments WHERE $condition")
 
           checkLastColumnUpdateWriteLog(
             updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(1, "hr", -1)))
@@ -439,20 +449,28 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
   }
 
   test("column-update split: delete and reinsert carry the row ID and preserved metadata") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "hr" }
-        |""".stripMargin,
-      splitTableProps)
+    Seq(
+      splitTableProps -> "id = -1",
+      tablePropsWith(splitTableProps, "accept-any-schema" -> "true") ->
+        "pk = pk, id = -1, dep = dep, index = index, _partition = _partition"
+    ).foreach { case (props, assignments) =>
+      withTable(tableNameAsString) {
+        createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+          """{ "pk": 1, "id": 1, "dep": "hr" }
+            |{ "pk": 2, "id": 2, "dep": "hr" }
+            |""".stripMargin,
+          props)
 
-    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+        sql(s"UPDATE $tableNameAsString SET $assignments WHERE pk = 1")
 
-    checkLastColumnUpdateWriteLog(
-      deleteWriteLogEntry(id = 1, metadata = Row("hr", null)),
-      reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(1, "hr", -1)))
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-      Row(1, -1, "hr") :: Row(2, 2, "hr") :: Nil)
+        checkLastColumnUpdateWriteLog(
+          deleteWriteLogEntry(id = 1, metadata = Row("hr", null)),
+          reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(1, "hr", -1)))
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+          Row(1, -1, "hr") :: Row(2, 2, "hr") :: Nil)
+      }
+    }
   }
 
   test("column-update split: a reinserted row is found by a row-ID column declared in another " +

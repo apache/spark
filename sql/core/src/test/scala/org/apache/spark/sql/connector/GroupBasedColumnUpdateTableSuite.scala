@@ -89,22 +89,32 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
 
   test("column-update ReplaceData: updated and copied rows reach writeColumnUpdate with " +
     "metadata") {
-    Seq(
-      "pk IN (1, 100)",
-      "pk IN (1, 20) AND dep IN (SELECT * FROM updated_dep)"
-    ).foreach { condition =>
+    // the SET clause references the metadata columns so that AddMetadataColumns adds them to the
+    // target table, and lists every column of it, as Spark does not align the assignments for a
+    // table that accepts any schema
+    val acceptAnySchemaProps = tablePropsWith(extraTableProps, "accept-any-schema" -> "true")
+    for {
+      condition <- Seq(
+        "pk IN (1, 100)",
+        "pk IN (1, 20) AND dep IN (SELECT * FROM updated_dep)")
+      (props, assignments) <- Seq(
+        extraTableProps -> "salary = -1",
+        acceptAnySchemaProps ->
+          "pk = pk, salary = -1, bonus = bonus, dep = dep, index = index, _partition = _partition")
+    } {
       withTable(tableNameAsString) {
         withTempView("updated_dep") {
           createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
             """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
               |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
               |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "software" }
-              |""".stripMargin)
+              |""".stripMargin,
+            props)
           import testImplicits._
           Seq(Some("hr"), Some("it")).toDF().createOrReplaceTempView("updated_dep")
 
           val write = executeAndKeepAnalyzedWrite {
-            sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE $condition")
+            sql(s"UPDATE $tableNameAsString SET $assignments WHERE $condition")
           }
 
           assert(write.query.exists(_.isInstanceOf[Union]) == condition.contains("SELECT"))

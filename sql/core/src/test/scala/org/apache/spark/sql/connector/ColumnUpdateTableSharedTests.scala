@@ -207,36 +207,48 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
   }
 
   test("column-update: an operation replaced after the rewrite is rejected") {
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |""".stripMargin)
+    // on a table that accepts any schema, the original relation also outputs the metadata columns
+    // that the UPDATE references, which a full-width operation does not receive as data columns
+    Seq(
+      extraTableProps -> "salary = -1",
+      tablePropsWith(extraTableProps, "accept-any-schema" -> "true") ->
+        "pk = pk, salary = -1, dep = dep, index = index, _partition = _partition"
+    ).foreach { case (props, assignments) =>
+      withTable(tableNameAsString) {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |""".stripMargin,
+          props)
 
-    val write = executeAndKeepAnalyzedWrite {
-      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
-    }
-    val relation = write.table.asInstanceOf[DataSourceV2Relation]
-    val operationTable = relation.table.asInstanceOf[RowLevelOperationTable]
-    val t = operationTable.table.asInstanceOf[InMemoryRowLevelOperationTable]
-    val pkAndDep = Seq(FieldReference("pk"), FieldReference("dep"))
-    val replacements: Seq[(RowLevelOperation, String)] = if (deltaUpdate) {
-      Seq(
-        t.DeltaBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
-        new t.DeltaBasedColumnUpdateOperation(UPDATE, pkAndDep) -> "[pk, dep]")
-    } else {
-      Seq(
-        t.PartitionBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
-        new t.PartitionBasedColumnUpdateOperation(UPDATE, pkAndDep) -> "[pk, dep]")
-    }
-    replacements.foreach { case (operation, expectedNames) =>
-      assert(operation != operationTable.operation)
-      val replaced = write.withNewTable(
-        relation.copy(table = operationTable.copy(operation = operation)))
-      checkError(
-        exception = intercept[SparkException](V2Writes(replaced)),
-        condition = "INTERNAL_ERROR",
-        parameters = Map("message" ->
-          (s"The write relation of operation ${operation.getClass.getName} has columns " +
-            s"[pk, dep, salary], but the operation expects $expectedNames.")))
+        val write = executeAndKeepAnalyzedWrite {
+          sql(s"UPDATE $tableNameAsString SET $assignments WHERE pk = 1")
+        }
+        val relation = write.table.asInstanceOf[DataSourceV2Relation]
+        val operationTable = relation.table.asInstanceOf[RowLevelOperationTable]
+        val t = operationTable.table.asInstanceOf[InMemoryRowLevelOperationTable]
+        val pkAndDep = Seq(FieldReference("pk"), FieldReference("dep"))
+        val replacements: Seq[(RowLevelOperation, String)] = if (deltaUpdate) {
+          Seq(
+            t.DeltaBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
+            new t.DeltaBasedColumnUpdateOperation(UPDATE, pkAndDep) -> "[pk, dep]")
+        } else {
+          Seq(
+            t.PartitionBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) ->
+              "[pk, salary, dep]",
+            new t.PartitionBasedColumnUpdateOperation(UPDATE, pkAndDep) -> "[pk, dep]")
+        }
+        replacements.foreach { case (operation, expectedNames) =>
+          assert(operation != operationTable.operation)
+          val replaced = write.withNewTable(
+            relation.copy(table = operationTable.copy(operation = operation)))
+          checkError(
+            exception = intercept[SparkException](V2Writes(replaced)),
+            condition = "INTERNAL_ERROR",
+            parameters = Map("message" ->
+              (s"The write relation of operation ${operation.getClass.getName} has data columns " +
+                s"[pk, dep, salary], but the operation expects $expectedNames.")))
+        }
+      }
     }
   }
 
@@ -383,30 +395,38 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
       Row(1, -1, 100, "hr") :: Row(2, 2, 200, "software") :: Row(3, 3, 300, "hr") :: Nil)
   }
 
-  test("column-update: a narrow write rejects a new value for a metadata column") {
+  test("column-update: a metadata column assignment ignored under the legacy config is not " +
+    "an updated column") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |""".stripMargin,
       tablePropsWith(extraTableProps, "accept-any-schema" -> "true"))
 
-    val updateStmt = s"UPDATE $tableNameAsString SET pk = pk, salary = -1, dep = dep, " +
-      "index = index, _partition = 'x'"
-    checkError(
-      exception = intercept[AnalysisException](sql(updateStmt)),
-      condition = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
-      parameters = Map(
-        "sqlExpr" -> ("\"pk = pk\", \"salary = -1\", \"dep = dep\", \"index = index\", " +
-          "\"_partition = x\""),
-        "errors" -> "\n- Cannot assign to metadata column '_partition'"))
-    checkAnswer(sql(s"SELECT pk, salary, dep FROM $tableNameAsString"), Row(1, 100, "hr") :: Nil)
-
     withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
-      sql(updateStmt)
+      sql(s"UPDATE $tableNameAsString SET pk = pk, salary = -1, dep = dep, index = index, " +
+        "_partition = 'x'")
     }
 
     checkLastUpdatedColumns("salary")
     checkLastColumnUpdateSchema("pk", "dep", "salary")
     checkAnswer(sql(s"SELECT pk, salary, dep FROM $tableNameAsString"), Row(1, -1, "hr") :: Nil)
+  }
+
+  test("column-update: an empty declaration on a table that accepts any schema passes only " +
+    "data columns") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin,
+      tablePropsWith(reqAttrsTableProps(""), "accept-any-schema" -> "true"))
+
+    // with an empty declaration, an UPDATE that sets a data column is rejected
+    sql(s"UPDATE $tableNameAsString SET pk = pk, salary = salary, dep = dep, index = index, " +
+      "_partition = _partition")
+
+    checkLastUpdatedColumns()
+    checkLastWriteIsFullWidth()
+    assert(table.lastWriteInfo.schema.fieldNames.toSeq == Seq("pk", "salary", "dep"))
+    checkAnswer(sql(s"SELECT pk, salary, dep FROM $tableNameAsString"), Row(1, 100, "hr") :: Nil)
   }
 
   test("column-update: other operations keep a full-width write relation") {

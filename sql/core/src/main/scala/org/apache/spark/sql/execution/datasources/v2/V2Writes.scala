@@ -148,25 +148,25 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Checks that the write relation matches the current operation: a write that delivers narrow
-   * rows must have exactly the declared columns, in declared order, and any other write the full
-   * table columns. A rule that replaces the operation after the rewrite can break this, as can an
-   * operation whose `requiredDataAttributes()` changes between calls, and the connector would then
-   * decode the rows with the wrong layout.
+   * Checks that the data columns of the write relation match the current operation: the declared
+   * columns, in declared order, for a write that delivers narrow rows, and the data columns of the
+   * original relation for any other write. A rule that replaces the operation after the rewrite can
+   * break this, as can an operation whose `requiredDataAttributes()` changes between calls, and
+   * the connector would then decode the rows with the wrong layout.
    */
   private def validateWriteRelation(rowLevelWrite: RowLevelWrite, narrowRows: Boolean): Unit = {
-    val writeNames = rowLevelWrite.table.output.map(_.name)
+    val writeNames = RowLevelWrite.dataColumnNames(rowLevelWrite.table)
     val expectedNames = rowLevelWrite.operation match {
       case op: SupportsColumnUpdates if narrowRows =>
         RewriteRowLevelCommand.resolveRequiredDataAttrs(rowLevelWrite.originalTable, op)
           .map(_.name)
       case _ =>
-        rowLevelWrite.originalTable.output.map(_.name)
+        RowLevelWrite.dataColumnNames(rowLevelWrite.originalTable)
     }
     if (writeNames != expectedNames) {
       throw SparkException.internalError(
         s"The write relation of operation ${rowLevelWrite.operation.getClass.getName} has " +
-          s"columns ${writeNames.mkString("[", ", ", "]")}, but the operation expects " +
+          s"data columns ${writeNames.mkString("[", ", ", "]")}, but the operation expects " +
           s"${expectedNames.mkString("[", ", ", "]")}.")
     }
   }
