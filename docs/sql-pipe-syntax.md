@@ -93,7 +93,7 @@ This works like `SELECT *, new_column` in regular Spark SQL.
 `DROP` removes columns from the input table.<br>
 This is similar to `SELECT * EXCEPT (column)` in regular Spark SQL.
 
-`SET` replaces column values from the input table.<br>
+`SET` replaces column values from the input table, or appends a column that does not exist.<br>
 This is similar to `SELECT * REPLACE (expression AS column)` in regular Spark SQL.
 
 `AS` forwards the input table and introduces a new alias for each row.
@@ -147,7 +147,7 @@ represents a valid query.<br>
 | [FROM](#from-or-table) or [TABLE](#from-or-table) | Returns all the output rows from the source table unmodified.                                                       |
 | [SELECT](#select)                                 | Evaluates the provided expressions over each of the rows of the input table.                                        |
 | [EXTEND](#extend)                                 | Appends new columns to the input table by evaluating the specified expressions over each of the input rows.         |
-| [SET](#set)                                       | Updates columns of the input table by replacing them with the result of evaluating the provided expressions.        |
+| [SET](#set)                                       | Updates or appends columns of the input table with the result of evaluating the provided expressions.               |
 | [DROP](#drop)                                     | Drops columns of the input table by name.                                                                           |
 | [AS](#as)                                         | Retains the same rows and column names of the input table but with a new table alias.                               |
 | [WHERE](#where)                                   | Returns the subset of input rows passing the condition.                                                             |
@@ -264,7 +264,8 @@ VALUES (0), (1) tab(col)
 ```
 
 Updates columns of the input table by replacing them with the result of evaluating the provided
-expressions. Each such column reference must appear in the input table exactly once.
+expressions. Each such column reference must appear in the input table at most once. If a column
+does not appear in the input table, `SET` appends it after the existing columns, as `EXTEND` does.
 
 This is similar to `SELECT * EXCEPT (column), <expression> AS column` in regular Spark SQL.
 
@@ -289,14 +290,14 @@ VALUES (0), (1) tab(col)
 +---+
 
 VALUES (0), (1) tab(col)
-|> SET col = col * 2;
+|> SET col = col * 2, half = col / 2;
 
-+---+
-|col|
-+---+
-|  0|
-|  2|
-+---+
++---+----+
+|col|half|
++---+----+
+|  0| 0.0|
+|  2| 1.0|
++---+----+
 ```
 
 #### DROP

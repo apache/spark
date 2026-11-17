@@ -8519,6 +8519,8 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
     val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
       visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
+    // An assignment to a column that does not exist appends the column, as EXTEND would.
+    val appendMissingColumns = !conf.getConf(SQLConf.LEGACY_PIPE_SET_REQUIRES_EXISTING_COLUMNS)
     var plan = left
     setIdentifiers.zip(setTargets).foreach {
       case (_, _: Alias) =>
@@ -8532,7 +8534,8 @@ class AstBuilder extends DataTypeAstBuilder
           Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)()
         val projectList: Seq[NamedExpression] =
           Seq(UnresolvedStarExceptOrReplace(
-            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement))))
+            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement)),
+            appendMissingReplacements = appendMissingColumns))
         // Add a projection to implement the SET operator using the UnresolvedStarExceptOrReplace
         // expression. We do this once per SET assignment to allow for multiple SET assignments with
         // optional lateral references to previous ones.

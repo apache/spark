@@ -996,6 +996,254 @@ Project [a#x, a#x, z2#x]
 table t
 |> set z = 1
 -- !query analysis
+Project [x#x, y#x, 1 AS z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> set z = x + length(y), x = x * 10, zz = z + x
+-- !query analysis
+Project [x#x, y#x, z#x, (z#x + x#x) AS zz#x]
++- Project [(x#x * 10) AS x#x, y#x, z#x]
+   +- Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> set c = 3, a = 1, b = 2
+-- !query analysis
+Project [x#x, y#x, c#x, a#x, 2 AS b#x]
++- Project [x#x, y#x, c#x, 1 AS a#x]
+   +- Project [x#x, y#x, 3 AS c#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+values (0), (1) tab(col)
+|> set col = col * 2, half = col / 2
+-- !query analysis
+Project [col#x, (cast(col#x as double) / cast(2 as double)) AS half#x]
++- Project [(col#x * 2) AS col#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [col#x]
+
+
+-- !query
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> set duration_s = response_ms / 1000,
+       slow = if(duration_s > 2, 1, 0),
+       uri = lower(uri),
+       is_api = if(uri like '/api/%', 1, 0)
+-- !query analysis
+Project [uri#x, response_ms#x, duration_s#x, slow#x, if (uri#x LIKE /api/%) 1 else 0 AS is_api#x]
++- Project [lower(uri#x) AS uri#x, response_ms#x, duration_s#x, slow#x]
+   +- Project [uri#x, response_ms#x, duration_s#x, if ((duration_s#x > cast(2 as double))) 1 else 0 AS slow#x]
+      +- Project [uri#x, response_ms#x, (cast(response_ms#x as double) / cast(1000 as double)) AS duration_s#x]
+         +- SubqueryAlias web_logs
+            +- LocalRelation [uri#x, response_ms#x]
+
+
+-- !query
+table t
+|> set z = 1, z = z + 1
+-- !query analysis
+Project [x#x, y#x, (z#x + 1) AS z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> set Z = x, z = Z + 1
+-- !query analysis
+Project [x#x, y#x, (Z#x + 1) AS z#x]
++- Project [x#x, y#x, x#x AS Z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+set spark.sql.caseSensitive=true
+-- !query analysis
+SetCommand (spark.sql.caseSensitive,Some(true))
+
+
+-- !query
+table t
+|> set Z = x, z = Z + 1
+-- !query analysis
+Project [x#x, y#x, Z#x, (Z#x + 1) AS z#x]
++- Project [x#x, y#x, x#x AS Z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+set spark.sql.caseSensitive=false
+-- !query analysis
+SetCommand (spark.sql.caseSensitive,Some(false))
+
+
+-- !query
+table t
+|> set z = x + 1
+|> where z > 1
+|> select z
+-- !query analysis
+Project [z#x]
++- Filter (z#x > 1)
+   +- PipeOperator
+      +- Project [x#x, y#x, (x#x + 1) AS z#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> set `x.y z` = x
+-- !query analysis
+Project [x#x, y#x, x#x AS x.y z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select col from st
+|> set i1 = col.i1
+-- !query analysis
+Project [col#x, col#x.i1 AS i1#x]
++- Project [col#x]
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> set m = (select max(a) from other)
+-- !query analysis
+Project [x#x, y#x, scalar-subquery#x [] AS m#x]
+:  +- Aggregate [max(a#x) AS max(a)#x]
+:     +- SubqueryAlias spark_catalog.default.other
+:        +- Relation spark_catalog.default.other[a#x,b#x] json
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> set w = sum(x) over (order by x)
+-- !query analysis
+Project [x#x, y#x, w#xL]
++- Project [x#x, y#x, w#xL, w#xL]
+   +- Window [sum(x#x) windowspecdefinition(x#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS w#xL], [x#x ASC NULLS FIRST]
+      +- Project [x#x, y#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> as v
+|> set z = v.x + 1
+|> select v.x, z
+-- !query analysis
+Project [x#x, z#x]
++- Project [x#x, y#x, (x#x + 1) AS z#x]
+   +- SubqueryAlias v
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> set _metadata = x + 1
+|> select x, _metadata
+-- !query analysis
+Project [x#x, _metadata#x]
++- Project [x#x, y#x, (x#x + 1) AS _metadata#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+create or replace temporary view pipe_set_new_column_view as
+table t
+|> set z = x + 1
+-- !query analysis
+CreateViewCommand `pipe_set_new_column_view`, table t
+|> set z = x + 1, false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x, y#x, (x#x + 1) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select * from pipe_set_new_column_view
+-- !query analysis
+Project [x#x, y#x, z#x]
++- SubqueryAlias pipe_set_new_column_view
+   +- View (`pipe_set_new_column_view`, [x#x, y#x, z#x])
+      +- Project [cast(x#x as int) AS x#x, cast(y#x as string) AS y#x, cast(z#x as int) AS z#x]
+         +- Project [x#x, y#x, (x#x + 1) AS z#x]
+            +- SubqueryAlias spark_catalog.default.t
+               +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+-- !query analysis
+SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(true))
+
+
+-- !query
+select * from pipe_set_new_column_view
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`z`",
+    "proposal" : "`x`, `y`"
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "pipe_set_new_column_view",
+    "startIndex" : 1,
+    "stopIndex" : 24,
+    "fragment" : "table t\n|> set z = x + 1"
+  } ]
+}
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+-- !query analysis
+SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(false))
+
+
+-- !query
+drop view pipe_set_new_column_view
+-- !query analysis
+DropTempViewCommand pipe_set_new_column_view, false
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+-- !query analysis
+SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(true))
+
+
+-- !query
+table t
+|> set z = 1
+-- !query analysis
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
@@ -1010,6 +1258,56 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 1,
     "stopIndex" : 20,
     "fragment" : "table t\n|> set z = 1"
+  } ]
+}
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+-- !query analysis
+SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(false))
+
+
+-- !query
+select 1 as a, 2 as a
+|> set a = 3
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 34,
+    "fragment" : "select 1 as a, 2 as a\n|> set a = 3"
+  } ]
+}
+
+
+-- !query
+table t
+|> set z = sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SET",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 25,
+    "fragment" : "sum(x)"
   } ]
 }
 

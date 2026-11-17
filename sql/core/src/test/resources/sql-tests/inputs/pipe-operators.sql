@@ -361,12 +361,115 @@ values (0), (1) lhs(a)
 |> limit 2
 |> select lhs.a, rhs.a, z2;
 
+-- Setting a column that does not exist in the input relation appends it after the existing
+-- columns, as EXTEND does.
+table t
+|> set z = 1;
+
+-- Existing columns are replaced in place and new columns are appended, and each assignment sees
+-- the result of the preceding ones.
+table t
+|> set z = x + length(y), x = x * 10, zz = z + x;
+
+-- New columns are appended in the order of their assignments.
+table t
+|> set c = 3, a = 1, b = 2;
+
+-- The example from the SET section of the pipe syntax documentation.
+values (0), (1) tab(col)
+|> set col = col * 2, half = col / 2;
+
+-- Normalizing rows with assignments that replace some columns and add others.
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> set duration_s = response_ms / 1000,
+       slow = if(duration_s > 2, 1, 0),
+       uri = lower(uri),
+       is_api = if(uri like '/api/%', 1, 0);
+
+-- Assigning the same new column twice appends it and then replaces it.
+table t
+|> set z = 1, z = z + 1;
+
+-- Names match case-insensitively: Z is appended, and z then replaces it in place.
+table t
+|> set Z = x, z = Z + 1;
+
+-- With case-sensitive matching, z does not match Z, so both columns are appended.
+set spark.sql.caseSensitive=true;
+
+table t
+|> set Z = x, z = Z + 1;
+
+set spark.sql.caseSensitive=false;
+
+-- A column added by SET can be referenced by the following pipe operators.
+table t
+|> set z = x + 1
+|> where z > 1
+|> select z;
+
+-- Adding a column with a backquoted name that contains a dot and a space.
+table t
+|> set `x.y z` = x;
+
+-- Adding columns from a struct field, a scalar subquery, and a window function.
+select col from st
+|> set i1 = col.i1;
+
+table t
+|> set m = (select max(a) from other);
+
+table t
+|> set w = sum(x) over (order by x);
+
+-- The table alias of the input relation remains visible after adding a column.
+table t
+|> as v
+|> set z = v.x + 1
+|> select v.x, z;
+
+-- SET matches only the columns that * expands to, so a hidden metadata column such as _metadata is
+-- not replaced: a new column with that name is appended, and later references resolve to it.
+table t
+|> set _metadata = x + 1
+|> select x, _metadata;
+
+-- A view whose definition adds a column with SET.
+create or replace temporary view pipe_set_new_column_view as
+table t
+|> set z = x + 1;
+
+select * from pipe_set_new_column_view;
+
+-- The view's definition is resolved with the reading session's value of
+-- spark.sql.legacy.pipeSetRequiresExistingColumns, so the view fails to resolve while it is true.
+set spark.sql.legacy.pipeSetRequiresExistingColumns=true;
+
+select * from pipe_set_new_column_view;
+
+set spark.sql.legacy.pipeSetRequiresExistingColumns=false;
+
+drop view pipe_set_new_column_view;
+
 -- SET operators: negative tests.
 ---------------------------------
 
--- SET with a column name that does not exist in the input relation.
+-- SET with a column name that does not exist in the input relation is an error when
+-- spark.sql.legacy.pipeSetRequiresExistingColumns is true.
+set spark.sql.legacy.pipeSetRequiresExistingColumns=true;
+
 table t
 |> set z = 1;
+
+set spark.sql.legacy.pipeSetRequiresExistingColumns=false;
+
+-- SET with a column name that matches more than one column.
+select 1 as a, 2 as a
+|> set a = 3;
+
+-- Aggregate functions are not allowed in a SET assignment, including one that adds a column.
+table t
+|> set z = sum(x);
 
 -- SET with an alias.
 table t

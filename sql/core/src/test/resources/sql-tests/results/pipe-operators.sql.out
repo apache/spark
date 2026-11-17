@@ -913,6 +913,252 @@ struct<a:int,a:int,z2:int>
 table t
 |> set z = 1
 -- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	1
+
+
+-- !query
+table t
+|> set z = x + length(y), x = x * 10, zz = z + x
+-- !query schema
+struct<x:int,y:string,z:int,zz:int>
+-- !query output
+0	abc	3	3
+10	def	4	14
+
+
+-- !query
+table t
+|> set c = 3, a = 1, b = 2
+-- !query schema
+struct<x:int,y:string,c:int,a:int,b:int>
+-- !query output
+0	abc	3	1	2
+1	def	3	1	2
+
+
+-- !query
+values (0), (1) tab(col)
+|> set col = col * 2, half = col / 2
+-- !query schema
+struct<col:int,half:double>
+-- !query output
+0	0.0
+2	1.0
+
+
+-- !query
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> set duration_s = response_ms / 1000,
+       slow = if(duration_s > 2, 1, 0),
+       uri = lower(uri),
+       is_api = if(uri like '/api/%', 1, 0)
+-- !query schema
+struct<uri:string,response_ms:int,duration_s:double,slow:int,is_api:int>
+-- !query output
+/api/v1/users	1200	1.2	0	1
+/home	3500	3.5	1	0
+
+
+-- !query
+table t
+|> set z = 1, z = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	2
+1	def	2
+
+
+-- !query
+table t
+|> set Z = x, z = Z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+set spark.sql.caseSensitive=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.caseSensitive	true
+
+
+-- !query
+table t
+|> set Z = x, z = Z + 1
+-- !query schema
+struct<x:int,y:string,Z:int,z:int>
+-- !query output
+0	abc	0	1
+1	def	1	2
+
+
+-- !query
+set spark.sql.caseSensitive=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.caseSensitive	false
+
+
+-- !query
+table t
+|> set z = x + 1
+|> where z > 1
+|> select z
+-- !query schema
+struct<z:int>
+-- !query output
+2
+
+
+-- !query
+table t
+|> set `x.y z` = x
+-- !query schema
+struct<x:int,y:string,x.y z:int>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+select col from st
+|> set i1 = col.i1
+-- !query schema
+struct<col:struct<i1:int,i2:int>,i1:int>
+-- !query output
+{"i1":2,"i2":3}	2
+
+
+-- !query
+table t
+|> set m = (select max(a) from other)
+-- !query schema
+struct<x:int,y:string,m:int>
+-- !query output
+0	abc	2
+1	def	2
+
+
+-- !query
+table t
+|> set w = sum(x) over (order by x)
+-- !query schema
+struct<x:int,y:string,w:bigint>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+table t
+|> as v
+|> set z = v.x + 1
+|> select v.x, z
+-- !query schema
+struct<x:int,z:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+table t
+|> set _metadata = x + 1
+|> select x, _metadata
+-- !query schema
+struct<x:int,_metadata:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+create or replace temporary view pipe_set_new_column_view as
+table t
+|> set z = x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from pipe_set_new_column_view
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.pipeSetRequiresExistingColumns	true
+
+
+-- !query
+select * from pipe_set_new_column_view
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`z`",
+    "proposal" : "`x`, `y`"
+  },
+  "queryContext" : [ {
+    "objectType" : "VIEW",
+    "objectName" : "pipe_set_new_column_view",
+    "startIndex" : 1,
+    "stopIndex" : 24,
+    "fragment" : "table t\n|> set z = x + 1"
+  } ]
+}
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.pipeSetRequiresExistingColumns	false
+
+
+-- !query
+drop view pipe_set_new_column_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.pipeSetRequiresExistingColumns	true
+
+
+-- !query
+table t
+|> set z = 1
+-- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
@@ -929,6 +1175,62 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 1,
     "stopIndex" : 20,
     "fragment" : "table t\n|> set z = 1"
+  } ]
+}
+
+
+-- !query
+set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.pipeSetRequiresExistingColumns	false
+
+
+-- !query
+select 1 as a, 2 as a
+|> set a = 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 34,
+    "fragment" : "select 1 as a, 2 as a\n|> set a = 3"
+  } ]
+}
+
+
+-- !query
+table t
+|> set z = sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SET",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 25,
+    "fragment" : "sum(x)"
   } ]
 }
 
