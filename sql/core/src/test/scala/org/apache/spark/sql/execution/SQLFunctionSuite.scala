@@ -633,13 +633,14 @@ class SQLFunctionSuite extends SharedSparkSession {
       // The legacy flag re-allows only the forms earlier versions accepted at creation.
       val legacyKey = SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key
       withUserDefinedFunction("perm_legacy" -> false, "perm_legacy_tbl" -> false,
-          "perm_outer" -> false) {
+          "perm_mid" -> false, "perm_outer" -> false) {
         withSQLConf(legacyKey -> "true") {
           Seq("temp_tbl()", "IDENTIFIER('temp_tbl')()").foreach { call =>
             sql("CREATE OR REPLACE FUNCTION perm_legacy_tbl() RETURNS TABLE (a INT) " +
               s"RETURN SELECT * FROM $call")
             checkAnswer(sql("SELECT * FROM perm_legacy_tbl()"), Row(1))
           }
+          sql("CREATE FUNCTION perm_mid() RETURNS INT RETURN (SELECT a FROM temp_tbl())")
           Seq("IDENTIFIER('temp_fn')()", "IDENTIFIER(concat('temp', '_fn'))()").foreach { call =>
             sql(s"CREATE OR REPLACE FUNCTION perm_legacy() RETURNS INT RETURN $call")
             checkAnswer(sql("SELECT perm_legacy()"), Row(1))
@@ -669,6 +670,13 @@ class SQLFunctionSuite extends SharedSparkSession {
         }
         assert(scalar.getCondition == "INVALID_TEMP_OBJ_REFERENCE", scalar.getMessage)
         assert(scalar.getMessageParameters.get("tempObjName") == "`temp_tbl`", scalar.getMessage)
+        // The same through a scalar SQL function, which a separate analyzer rule expands.
+        Seq("RETURNS INT RETURN perm_mid()",
+          "RETURNS TABLE (a INT) RETURN SELECT perm_mid() AS a").foreach { body =>
+          val e = intercept[AnalysisException](sql(s"CREATE FUNCTION perm_outer() $body"))
+          assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
+          assert(e.getMessageParameters.get("tempObjName") == "`temp_tbl`", e.getMessage)
+        }
       }
     }
   }
@@ -735,31 +743,48 @@ class SQLFunctionSuite extends SharedSparkSession {
       Seq(
         "RETURNS TABLE (a INT) RETURN SELECT * FROM tbl_fn(temp_fn())",
         "RETURNS TABLE (a INT) RETURN SELECT * FROM tbl_fn(IDENTIFIER('temp_fn')())",
-        "RETURNS INT RETURN (SELECT a FROM tbl_fn(session.temp_fn()))"
+        "RETURNS INT RETURN (SELECT a FROM tbl_fn(session.temp_fn()))",
+        "RETURNS TABLE (a INT) RETURN SELECT * FROM IDENTIFIER('tbl_fn')(temp_fn())",
+        "RETURNS TABLE (a INT) RETURN SELECT * FROM IDENTIFIER(concat('tbl', '_fn'))" +
+          "(system.session.temp_fn())",
+        "RETURNS INT RETURN (SELECT a FROM IDENTIFIER('tbl_fn')(IDENTIFIER('temp_fn')()))"
       ).foreach { body =>
         val e = intercept[AnalysisException](sql(s"CREATE FUNCTION perm_fn() $body"))
         assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
         assert(e.getMessageParameters.get("tempObjName") == "`temp_fn`", e.getMessage)
       }
+      // Earlier versions accepted a call through an IDENTIFIER-named table function.
+      withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+        sql("CREATE FUNCTION perm_fn() RETURNS TABLE (a INT) " +
+          "RETURN SELECT * FROM IDENTIFIER('tbl_fn')(temp_fn())")
+        checkAnswer(sql("SELECT * FROM perm_fn()"), Row(2))
+      }
     }
   }
 
-  test("SPARK-60805: an IDENTIFIER call is a temp reference only if PATH resolves it to temp") {
+  test("SPARK-60805: an IDENTIFIER-built call is a temp reference only if PATH resolves it so") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       withDatabase("path_shadow_db") {
         withUserDefinedFunction("shadow_fn" -> true, "perm_fn" -> false) {
           sql("CREATE DATABASE path_shadow_db")
           sql("CREATE FUNCTION path_shadow_db.shadow_fn() RETURNS INT RETURN 5")
+          sql("CREATE FUNCTION path_shadow_db.tbl_fn(x INT) RETURNS TABLE (a INT) RETURN SELECT x")
           sql("CREATE TEMPORARY FUNCTION shadow_fn() RETURNS INT RETURN 9")
-          val ddl = "CREATE OR REPLACE FUNCTION default.perm_fn() RETURNS INT " +
-            "RETURN IDENTIFIER('shadow_fn')()"
+          val ddls = Seq("IDENTIFIER('shadow_fn')()",
+            "(SELECT a FROM IDENTIFIER('tbl_fn')(shadow_fn()))").map { body =>
+            s"CREATE OR REPLACE FUNCTION default.perm_fn() RETURNS INT RETURN $body"
+          }
           try {
             sql("SET PATH = spark_catalog.path_shadow_db, system.session, system.builtin")
-            sql(ddl)
-            checkAnswer(sql("SELECT default.perm_fn()"), Row(5))
+            ddls.foreach { ddl =>
+              sql(ddl)
+              checkAnswer(sql("SELECT default.perm_fn()"), Row(5))
+            }
             sql("SET PATH = system.session, spark_catalog.path_shadow_db, system.builtin")
-            val e = intercept[AnalysisException](sql(ddl))
-            assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", e.getMessage)
+            ddls.foreach { ddl =>
+              val e = intercept[AnalysisException](sql(ddl))
+              assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$ddl: ${e.getMessage}")
+            }
           } finally {
             sql("SET PATH = DEFAULT_PATH")
             sql("DROP FUNCTION IF EXISTS path_shadow_db.shadow_fn")
@@ -812,9 +837,14 @@ class SQLFunctionSuite extends SharedSparkSession {
         // By default the temp function owns `session.sf`.
         val e = intercept[AnalysisException](sql(createPerm))
         assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", e.getMessage)
-        // Earlier versions took it to be the persistent function, as the legacy flag does.
+        // Earlier versions took it to be the persistent function, as the legacy flag does, so
+        // the cycle check follows the persistent function too.
         withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
           sql(createPerm)
+          val cycle = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE FUNCTION session.sf() RETURNS INT RETURN session.sf()")
+          }
+          assert(cycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", cycle.getMessage)
         }
         withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
           // The persistent function owns it.
@@ -841,6 +871,17 @@ class SQLFunctionSuite extends SharedSparkSession {
         assert(cycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", cycle.getMessage)
         withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
           sql(createPerm)
+          val legacyCycle = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE FUNCTION session.pt() RETURNS TABLE (a INT) " +
+              "RETURN SELECT * FROM session.pt()")
+          }
+          assert(legacyCycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", legacyCycle.getMessage)
+          // A temp function still follows what resolution binds.
+          val tempCycle = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE TEMPORARY FUNCTION pt() RETURNS TABLE (a INT) " +
+              "RETURN SELECT * FROM session.pt()")
+          }
+          assert(tempCycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", tempCycle.getMessage)
         }
         withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
           sql(createPerm)

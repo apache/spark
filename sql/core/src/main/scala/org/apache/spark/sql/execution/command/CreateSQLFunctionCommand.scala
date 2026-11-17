@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, ExpressionWithUnresolvedIdentifier, IdentifierResolution, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, ExpressionWithUnresolvedIdentifier, FunctionResolution, IdentifierResolution, PlanWithUnresolvedIdentifier, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
@@ -376,17 +376,21 @@ case class CreateSQLFunctionCommand(
       }.distinct
     }
 
-    def collectInExpression(expr: Expression): Seq[String] = expr.flatMap {
-      case e: SubqueryExpression => collectTempFunctions(e.plan)
-      case e: UnresolvedFunction if isTemporaryScalarFunctionName(catalog, e.nameParts) =>
+    // With `followPath`, an unqualified name counts only when the SQL PATH resolves it to the temp
+    // function. Calls that an IDENTIFIER clause builds use it, as earlier versions accepted them.
+    def isTempScalarCall(nameParts: Seq[String], followPath: Boolean): Boolean =
+      isTemporaryScalarFunctionName(catalog, nameParts) &&
+        (!followPath || nameParts.length > 1 ||
+          analyzer.unqualifiedFunctionResolvesToTemp(nameParts.head))
+
+    def collectInExpression(expr: Expression, followPath: Boolean): Seq[String] = expr.flatMap {
+      case e: SubqueryExpression => collectTempFunctions(e.plan, followPath)
+      case e: UnresolvedFunction if isTempScalarCall(e.nameParts, followPath) =>
         Seq(e.nameParts.last)
-      // An IDENTIFIER-clause call: check the call it builds from its constant name. An unqualified
-      // name counts only when the SQL PATH resolves it to the temp function.
+      // An IDENTIFIER-clause call: check the call it builds from its constant name.
       case e: ExpressionWithUnresolvedIdentifier if !legacyTempFunctionCheck =>
         identifierNameParts(analyzer, e.identifierExpr).map(e.exprBuilder(_, e.otherExprs)) match {
-          case Some(f: UnresolvedFunction) if isTemporaryScalarFunctionName(catalog, f.nameParts) &&
-              (f.nameParts.length > 1 ||
-                analyzer.unqualifiedFunctionResolvesToTemp(f.nameParts.head)) =>
+          case Some(f: UnresolvedFunction) if isTempScalarCall(f.nameParts, followPath = true) =>
             Seq(f.nameParts.last)
           case _ => Seq.empty
         }
@@ -400,9 +404,16 @@ case class CreateSQLFunctionCommand(
       case _ => Seq.empty
     }
 
-    def collectTempFunctions(child: LogicalPlan): Seq[String] = {
+    def collectTempFunctions(child: LogicalPlan, followPath: Boolean = false): Seq[String] = {
       child.flatMap {
-        case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
+        case w: UnresolvedWith if !w.resolved =>
+          w.innerChildren.flatMap(collectTempFunctions(_, followPath))
+        // An IDENTIFIER-named table function: its arguments exist only in the plan it builds.
+        case p: PlanWithUnresolvedIdentifier if !legacyTempFunctionCheck =>
+          val name = identifierNameParts(analyzer, p.identifierExpr)
+          collectInExpression(p.identifierExpr, followPath) ++ name.toSeq.flatMap { n =>
+            collectTempFunctions(p.planBuilder(n, p.children), followPath = true)
+          }
         // A qualified temp table function call. Resolution's recorded names cover the others.
         case u: UnresolvedTableValuedFunction =>
           val qualified = if (u.name.length > 1 && isTemporaryTableFunctionName(catalog, u.name)) {
@@ -410,8 +421,8 @@ case class CreateSQLFunctionCommand(
           } else {
             Nil
           }
-          qualified ++ u.functionArgs.flatMap(collectInExpression)
-        case plan if !plan.resolved => plan.expressions.flatMap(collectInExpression)
+          qualified ++ u.functionArgs.flatMap(collectInExpression(_, followPath))
+        case plan if !plan.resolved => plan.expressions.flatMap(collectInExpression(_, followPath))
         case _ => Seq.empty
       }.distinct
     }
@@ -467,11 +478,7 @@ case class CreateSQLFunctionCommand(
       // Check the in-memory registry first: the lookup may probe the metastore.
       case _ =>
         catalog.identifierFromSystemNameParts(nameParts).exists(isTemp) &&
-          functionIdentifierForLookup(catalog, nameParts).exists(_._2) &&
-          // Legacy: earlier versions took a `session.f` call to be the persistent `session.f`
-          // whenever that function existed.
-          !(legacyTempFunctionCheck && nameParts.length == 2 &&
-            persistentFunctionExists(catalog, nameParts.asFunctionIdentifier))
+          functionIdentifierForLookup(catalog, nameParts).exists(_._2)
     }
 
   // Check the registry first: a loaded persistent function needs no metastore call.
@@ -481,8 +488,9 @@ case class CreateSQLFunctionCommand(
     catalog.isRegisteredFunction(ident) || catalog.isPersistentFunction(ident)
 
   // The identifier to look up `nameParts` by, and whether it is in a system namespace. A
-  // `builtin.` / `session.` name follows function resolution's candidate order. None for another
-  // catalog's function.
+  // `builtin.` / `session.` name follows function resolution's candidate order, except that under
+  // the legacy flag a persistent function takes a `session.f` call to an existing persistent
+  // `session.f`, as earlier versions did. None for another catalog's function.
   private def functionIdentifierForLookup(
       catalog: SessionCatalog,
       nameParts: Seq[String]): Option[(FunctionIdentifier, Boolean)] = {
@@ -496,9 +504,11 @@ case class CreateSQLFunctionCommand(
     def systemFunctionExists(ident: FunctionIdentifier): Boolean =
       catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = false).isDefined ||
         catalog.lookupFunctionInfoByIdentifier(ident, tableFunction = true).isDefined
+    def legacySessionCall: Boolean = !isTemp && legacyTempFunctionCheck &&
+      FunctionResolution.sessionNamespaceKind(nameParts).contains(SessionCatalog.Temp)
     catalog.identifierFromSystemNameParts(nameParts) match {
       case Some(ident) if nameParts.length > 2 ||
-          (conf.prioritizeSystemCatalog && systemFunctionExists(ident)) ||
+          (conf.prioritizeSystemCatalog && !legacySessionCall && systemFunctionExists(ident)) ||
           !persistentFunctionExists(catalog, persistentIdent.get) =>
         Some((ident, true))
       case _ => persistentIdent.map((_, false))
