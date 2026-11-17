@@ -1602,7 +1602,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
-  test("SPARK-58372: pushed filters keep the SQL compiled at planning") {
+  test("SPARK-58372: tasks compile pushed filters as pushdown did") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val allRows = Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen"))
       val df = withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
@@ -1614,6 +1614,20 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       // Recompiling in the tasks under the legacy conf would drop TRUNC, so H2 would round.
       withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
         checkAnswer(df, allRows)
+      }
+
+      // `inputFiles` pushes the filter down without planning the scan. Recompiling the filter
+      // without the legacy conf would refuse it, so it would drop out of the WHERE clause.
+      val datetimeDf =
+        withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+          val df = sql("SELECT name FROM h2.test.datetime WHERE CAST(time1 AS BIGINT) < 0")
+          df.inputFiles
+          df
+        }
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
+        // H2 rejects the legacy SQL, so the error shows the filter reached the database.
+        val e = intercept[SparkException](datetimeDf.collect())
+        assert(e.getMessage.contains("TIMESTAMP to BIGINT"))
       }
     }
   }
