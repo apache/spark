@@ -117,4 +117,20 @@ class SchemaMergingUtilsSuite extends SparkFunSuite {
       .add("value", StringType, nullable = true, "new")
       .add("s", new StructType().add("a", IntegerType, nullable = true, "new nested")))
   }
+
+  test("SPARK-59268: mergeSchemasWithDataMetadata matches names exactly under case-sensitive " +
+    "merge") {
+    val currentSchema = new StructType()
+      .add("value", StringType, nullable = true, "old")
+    val desiredSchema = new StructType()
+      .add("Value", StringType, nullable = true, "new")
+
+    val merged = SchemaMergingUtils.mergeSchemasWithDataMetadata(
+      currentSchema, desiredSchema, caseSensitive = true)
+    // `value` and `Value` are distinct columns: the table's `value` keeps its own comment and the
+    // declared `Value` is added with its own, rather than `value` taking the comment of `Value`.
+    assert(merged === new StructType()
+      .add("value", StringType, nullable = true, "old")
+      .add("Value", StringType, nullable = true, "new"))
+  }
 }

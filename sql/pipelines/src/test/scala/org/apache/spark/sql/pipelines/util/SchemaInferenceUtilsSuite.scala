@@ -720,6 +720,26 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
         CatalogV2Util.structTypeToV2Columns(targetSchema, keepIds = false))
   }
 
+  test("SPARK-59268: diffSchemas - comment-only changes under a single array or map level are " +
+    "emitted at the leaf") {
+    def schema(comment: String): StructType = {
+      val arrElement = new StructType().add("a", IntegerType, nullable = true, comment)
+      val mapStruct = new StructType().add("x", IntegerType, nullable = true, comment)
+      new StructType()
+        .add("arr", ArrayType(arrElement))
+        .add("m", MapType(mapStruct, mapStruct))
+    }
+
+    // The array element and the map key and value are structs, not arrays or maps, so the comment
+    // changes on their fields are emitted rather than rejected.
+    val changes = SchemaInferenceUtils.diffSchemas(schema("old"), schema("new"))
+    assert(changes.length === 3, s"changes=$changes")
+    assert(commentUpdatesOf(changes) === Map(
+      Seq("arr", "element", "a") -> "new",
+      Seq("m", "key", "x") -> "new",
+      Seq("m", "value", "x") -> "new"))
+  }
+
   test("diffSchemas - array<array<struct>> throws unsupported error") {
     val innerCurrent =
       ArrayType(new StructType().add("x", IntegerType).add("y", StringType))
@@ -776,6 +796,22 @@ class SchemaInferenceUtilsSuite extends QueryTest with SharedSparkSession {
         SchemaInferenceUtils.diffSchemas(schema("c1"), schema("c2"))),
       condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
       parameters = Map("columnPath" -> "arr.element.element.a"))
+  }
+
+  test("SPARK-59268: diffSchemas - several comment changes under array<array<struct>> are all " +
+    "named in the comment-specific error") {
+    def schema(aComment: String, bComment: String): StructType = new StructType()
+      .add("arr", ArrayType(ArrayType(new StructType()
+        .add("a", IntegerType, nullable = true, aComment)
+        .add("b", IntegerType, nullable = true, bComment))))
+
+    // Both rejected changes are comment changes, so the error lists both fields; a user who
+    // declares one of the comments would otherwise fail again on the other.
+    checkError(
+      intercept[SparkUnsupportedOperationException](
+        SchemaInferenceUtils.diffSchemas(schema("x", "y"), schema("x2", "y2"))),
+      condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
+      parameters = Map("columnPath" -> "arr.element.element.a, arr.element.element.b"))
   }
 
   test("SPARK-59268: diffSchemas - comment change under map<string, array<struct>> throws a " +
