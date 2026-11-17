@@ -2136,8 +2136,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     /**
      * The logic here is consistent with
-     * @see [[org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile(
-     *      org.apache.spark.storage.BlockId, scala.Option)]]
+     * {@code org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile(
+     *      org.apache.spark.storage.BlockId, scala.Option)}
      */
     @VisibleForTesting
     String getFilePath(String filename) {
