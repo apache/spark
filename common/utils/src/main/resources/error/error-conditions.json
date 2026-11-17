@@ -8179,10 +8179,20 @@
     "subClass" : {
       "TIME_CONSTRAINT" : {
         "message" : [
+          "Add a time constraint that limits how late a matching <otherSide> row can arrive, aggregate the event time of an input whose state the join can bound. A bound on the event time comes from an equality key that shifts the other input's event time by an exact interval (under one day, or timestampadd in hours, minutes or seconds), or from a range condition used in place of a shifted equality. To run the query anyway, set <config> to false."
+        ]
+      },
+      "TIME_CONSTRAINT_OR_UPDATE_MODE" : {
+        "message" : [
           "Add a time constraint that limits how late a matching <otherSide> row can arrive, aggregate the event time of an input whose state the join can bound, or use the update output mode. A bound on the event time comes from an equality key that shifts the other input's event time by an exact interval (under one day, or timestampadd in hours, minutes or seconds), or from a range condition used in place of a shifted equality. To run the query anyway, set <config> to false."
         ]
       },
       "WATERMARK_AND_TIME_CONSTRAINT" : {
+        "message" : [
+          "Add a watermark on the <otherSide> input and a time constraint that limits how late a matching <otherSide> row can arrive, aggregate the event time of an input whose state the join can bound. A bound on the event time comes from an equality key that shifts the other input's event time by an exact interval (under one day, or timestampadd in hours, minutes or seconds), or from a range condition used in place of a shifted equality. To run the query anyway, set <config> to false."
+        ]
+      },
+      "WATERMARK_AND_TIME_CONSTRAINT_OR_UPDATE_MODE" : {
         "message" : [
           "Add a watermark on the <otherSide> input and a time constraint that limits how late a matching <otherSide> row can arrive, aggregate the event time of an input whose state the join can bound, or use the update output mode. A bound on the event time comes from an equality key that shifts the other input's event time by an exact interval (under one day, or timestampadd in hours, minutes or seconds), or from a range condition used in place of a shifted equality. To run the query anyway, set <config> to false."
         ]
