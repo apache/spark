@@ -353,6 +353,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def gapFillNotSupportedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.GAP_FILL",
+      messageParameters = Map.empty)
+  }
+
   def restrictedModeFeatureError(feature: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SQL_RESTRICTED_MODE",
@@ -4867,6 +4873,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = s"INVALID_EXTERNAL_LOOKUP_HINT.$errorSubClass",
       messageParameters = messageParameters)
+  }
+
+  def invalidExternalLookupOptionError(
+      option: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    invalidExternalLookupHintError(
+      errorSubClass, Map("option" -> toDSOption(option)) ++ messageParameters)
   }
 
   def unsupportedExternalLookupJoinError(

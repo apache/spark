@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests for enhanced partition filter pushdown with tables whose scan builder handles
@@ -53,6 +54,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * 9. Translated, Partition Filter, 1st Pass Accepted AND Returned (partial pushdown) ->
  *    Pushed Down in 1st pass, NOT re-derived in 2nd pass.
  */
+@DataSourceV2Test
 class DataSourceV2EnhancedPartitionFilterSuite
   extends SharedSparkSession with BeforeAndAfter with PredicateHelper {
 

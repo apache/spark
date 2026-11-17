@@ -45,6 +45,14 @@ class Aggregator(ABC):
     combine partial buffers in any order), and :meth:`zero` must be its identity element -- see
     :meth:`zero` for the identity law that makes the result independent of the partition count.
 
+    Over a window (``udaf(...)(...).over(window)``), :meth:`merge` is not used. A frame that spans
+    the whole partition, as that of a window without ``orderBy``, is folded with :meth:`reduce`
+    from :meth:`zero` once, and its :meth:`finish` value is repeated for every row. Otherwise,
+    each row's frame is folded and finished. While the frame's lower bound stays fixed, as in the
+    default frame of an ordered window, consecutive rows extend one buffer instead of refolding
+    it, so :meth:`finish` is called on a buffer that later rows keep reducing into and must not
+    modify it.
+
     .. versionadded:: 4.4.0
 
     Examples
@@ -116,7 +124,15 @@ class Aggregator(ABC):
 
     @abstractmethod
     def reduce(self, buffer: Tuple[Any, ...], value: Tuple[Any, ...]) -> Tuple[Any, ...]:
-        """Fold a single input row ``value`` into ``buffer`` and return the updated buffer."""
+        """Fold a single input row ``value`` into ``buffer`` and return the updated buffer.
+
+        It may update mutable fields of ``buffer`` (e.g. a list) in place and return it, as long
+        as :meth:`zero` returns a new buffer on each call. It must not update ``value``, or keep
+        a mutable object of ``value`` (e.g. an input list) in ``buffer``: in a grouped
+        aggregation, the aggregators that read the same input column get the same objects, and
+        over a window, a row's objects are passed again for each frame that is folded from
+        :meth:`zero` and includes the row.
+        """
         ...
 
     @abstractmethod
@@ -126,7 +142,12 @@ class Aggregator(ABC):
 
     @abstractmethod
     def finish(self, buffer: Tuple[Any, ...]) -> Any:
-        """Produce the output value from the final merged buffer."""
+        """Produce the output value from ``buffer``: the merged buffer of a group, or the
+        folded buffer of a window frame.
+
+        It must not modify ``buffer``: over a window, later rows can keep reducing into the
+        buffer that it is called on.
+        """
         ...
 
     # The aggregator instance is shipped to the worker as the UDF "function"; making it callable
