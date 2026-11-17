@@ -566,6 +566,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         B = BooleanType()
         chain3 = lambda a, b, c: a < b < c  # noqa: E731
         chain4 = lambda a, b, c, d: a < b < c < d  # noqa: E731
+        chain_or = lambda a, b: (0 < a < 10) or (b > 0)  # noqa: E731
         abc, abcd = "a long, b long, c long", "a long, b long, c long, d long"
         for factory_mode in ("FALLBACK", "NO_CODEGEN"):
             conf = {"spark.sql.codegen.factoryMode": factory_mode}
@@ -580,6 +581,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     self._vals(chain3, B, abc, [(0, 1, None)])
                 with self.assertRaisesRegex(Exception, "cannot compare NULL"):
                     self._vals(chain4, B, abcd, [(1, 2, 3, None)])
+                # The CASE WHEN fold of `or`: a true earlier operand decides the
+                # result and the later operand's NULL guard is never evaluated.
+                self.assertEqual(self._vals(chain_or, B, "a long, b long", [(5, None)]), [True])
 
     def test_udf_transpile_chain_survives_optimizer(self):
         # A chain folds to a sequential CASE WHEN, and so do the `and` / `or` of a
@@ -939,12 +943,14 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # A NaN-guarded `==` reads each operand four times and `len` its
             # argument twice. Each body has annotated parameters, so one option:
             # charged a read less it would weigh under the bound and lower.
-            nan_nest = "x == z"
+            eq_nest, ne_nest = "x == z", "x != z"
             for _ in range(7):
-                nan_nest = f"(x if ({nan_nest}) else y) == z"
+                eq_nest = f"(x if ({eq_nest}) else y) == z"
+                ne_nest = f"(x if ({ne_nest}) else y) != z"
             len_nest = f"len('a' if ({right_nested(9)}) else 'b') > 0"
             for src, params in [
-                (nan_nest, "x: float, y: float, z: float"),
+                (eq_nest, "x: float, y: float, z: float"),
+                (ne_nest, "x: float, y: float, z: float"),
                 (len_nest, "x: int"),
             ]:
                 with self.subTest(src=src[:40]):
@@ -1580,7 +1586,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         negated = lambda x, y: not ((x > 0) and (True if y > 0 else None))  # noqa: E731
         chain_and = lambda x, y: (0 < x < 10) and (True if y > 0 else None)  # noqa: E731
         chain_negated = lambda x, y: not ((0 < x < 10) and (True if y > 0 else None))  # noqa: E731
+        # Earlier operands of each shape the never-NULL gate accepts besides a
+        # comparison: a `not`, a ternary with never-NULL branches, a literal.
+        not_first = lambda x, y: (not (x < 0)) and (True if y > 0 else None)  # noqa: E731
+        ternary_first = lambda x, y: ((x > 0) if x > -5 else (x < -9)) and (x < 9)  # noqa: E731
+        literal_first = lambda x, y: True and (x > 0)  # noqa: E731
         cases = [
+            (not_first, B, rows),
+            (ternary_first, B, rows),
+            (literal_first, B, rows),
             (and_last, B, rows),
             (or_last, B, rows),
             (guarded, B, rows + [(1, None)]),
@@ -1623,6 +1637,22 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             (compared, None, B, [False, False, False, True, True]),
         ]
         loose = {"spark.sql.experimental.optimizer.transpileNullStrictness": "loose"}
+        # `len()` and `%` still raise under loose, and the optimizer can drop or
+        # hoist an `&` / `|` operand, so a chain-holding body with either falls
+        # back; absorption would reduce `absorbed` to `x > 0`.
+        absorbed = lambda s, x: (0 < len(s) < 10 and x > 0) or (x > 0)  # noqa: E731
+        modulo = lambda x, y: y != 0 and 0 < x % y < 3  # noqa: E731
+        with self.sql_conf({**_TRANSPILE_ON, **loose}):
+            for func in (absorbed, modulo):
+                u, reasons = self._udf_and_warnings(func, B)
+                self.assertEqual([], u.transpiled)
+                self.assertIn("transpileNullStrictness=loose", reasons)
+
+            # Without a chain the body keeps the `&` fold it had before chains.
+            def flat(s):
+                return s is not None and len(s) > 3
+
+            self.assertTrue(self._transpiled_udf(flat, B).transpiled)
         for factory_mode in ("FALLBACK", "NO_CODEGEN"):
             conf = {**loose, "spark.sql.codegen.factoryMode": factory_mode}
             for i, (func, spelled, return_type, expected) in enumerate(cases):
