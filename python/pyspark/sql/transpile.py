@@ -161,13 +161,15 @@ interpreted one is lossy, silent, or inconsistent:
   on how rows happen to be batched, and is avoided by
   ``preferIntExtensionDtype=true``.
 
-Two cases run the other way. A fractional body (e.g. ``s * 1.5``) declared with an
+A fractional body (e.g. ``s * 1.5``) declared with an
 integral return type: interpreted, the float64 result fails the Arrow conversion and
 raises; transpiled, the final ``Cast`` to the return type truncates instead. This is
 the general within-numeric return-type cast allowed below, not a special case for
-this UDF type -- see ``test_fractional_result_for_an_integral_return_type``. And the
-``%`` int64 boundaries (``Long.MinValue % -1``): numpy returns the exact remainder, but
-the ``Mod`` lowering's intermediate negate or ``abs`` raises ARITHMETIC_OVERFLOW.
+this UDF type -- see ``test_fractional_result_for_an_integral_return_type``.
+
+Modulo uses the same internal Python/NumPy remainder expression as the pandas API,
+including integral minima and opposite-sign infinite divisors. A Series divisor of zero
+returns NULL; scalar-only modulo subexpressions stay in Python, where zero raises.
 """
 
 import ast
@@ -183,9 +185,6 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple
 from pyspark.errors import UnsupportedOperationException
 from pyspark.sql.column import Column
 from pyspark.sql.functions import (
-    abs as _abs,
-)
-from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
@@ -195,13 +194,13 @@ from pyspark.sql.functions import (
     lit,
     lower,
     nanvl,
-    pmod,
     raise_error,
     repeat,
     startswith,
     upper,
     when,
 )
+from pyspark.sql.internal import InternalFunction
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -566,6 +565,12 @@ def _check_series_semantics(function_ast: ast.FunctionDef, params: List[str]) ->
             ):
                 pass
             case ast.BinOp(left=left, op=op, right=right) if isinstance(op, _SERIES_SAFE_BINOPS):
+                if isinstance(op, ast.Mod) and not any(
+                    isinstance(n, ast.Name) and n.id in params for n in ast.walk(node)
+                ):
+                    raise UnsupportedOperationException(
+                        "a scalar-only modulo inside a Series body must keep Python evaluation"
+                    )
                 visit(left)
                 visit(right)
             case ast.UnaryOp(op=op, operand=operand) if isinstance(op, _SERIES_SAFE_UNARYOPS):
@@ -1319,27 +1324,12 @@ class CatalystTranspiler(AbstractTranspiler):
                             return repeat(right_col, left_col.cast("int"))
                     case ast.Mod():
                         if _is_numeric_cat(lc) and _is_numeric_cat(rc):
-                            # Python's `%` takes the sign of the divisor; Spark's
-                            # takes the dividend's. `sign(b) * pmod(sign(b) * a,
-                            # abs(b))` reproduces Python for every non-zero divisor
-                            # except at the LongType overflow boundaries -- `a =
-                            # Long.MinValue` with `b < 0` (the `sign(b) * a` negate
-                            # overflows) and `b = Long.MinValue` (the `abs(b)`
-                            # overflows) -- where this raises ARITHMETIC_OVERFLOW
-                            # under ANSI while Python returns a value. Unlike the
-                            # `+`/`-`/`*` caveat above, the interpreted side is exact.
-                            # Use a CASE-based integer sign rather than sign() to
-                            # avoid promoting operands to DoubleType, which loses
-                            # precision near LongType boundaries.
-                            sb = (
-                                when(right_col > 0, lit(1))
-                                .when(right_col < 0, lit(-1))
-                                .otherwise(lit(0))
-                            )
-                            result = sb * pmod(sb * left_col, _abs(right_col))
+                            # Retain the previous integer-sign multiplication's type widening.
+                            result = InternalFunction.mod(lit(1) * left_col, right_col)
                             if self._series_semantics:
-                                return when(right_col == 0, lit(None)).otherwise(result)
-                            return result
+                                return result
+                            # Scalar Python raises on zero; retain the ANSI remainder error.
+                            return when(right_col == 0, lit(1) % right_col).otherwise(result)
                     case _:
                         raise UnsupportedOperationException(
                             f"binary operator {type(op).__name__} is not "
