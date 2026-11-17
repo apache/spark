@@ -1174,6 +1174,13 @@ class DataSourceLookupReader(ABC):
     methods make to `self` are visible to :meth:`lookup`. Create connections and other resources
     lazily, in the first :meth:`lookup` call, not in `__init__` or in a planning method.
 
+    A streaming query plans its lookups when it starts and in every micro-batch. While
+    `spark.sql.python.filterPushdown.enabled` and `spark.sql.python.limitPushdown.enabled` are
+    both false, Spark plans a lookup in Python once for the same inputs and reuses that plan,
+    with its reader, for the start and the later micro-batches. Otherwise, it plans in Python
+    each time. In real-time mode, a query runs lookup joins with Python data sources only when
+    `spark.sql.python.externalLookup.realTimeMode.enabled` is true.
+
     For each parameter row, :meth:`lookup` must return every stored row that matches the
     selected predicates and passes the filters that :meth:`pushFilters` reports as pushed,
     under Spark semantics, with no cap on the number of rows and no row lost to paging. Extra

@@ -16,11 +16,15 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
+import com.google.common.cache.{Cache, CacheBuilder}
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.datasources.v2.NamedTableProvider
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -84,6 +88,37 @@ class PythonDataSourceV2 extends NamedTableProvider {
     readInfo
   }
 
+  // The lookups planned in Python, by the inputs of their planning call. A streaming query plans
+  // its lookup joins again in every micro-batch, and once more when it starts, each time on a new
+  // scan builder of the same table. As with the read info of a batch read, a plan is reused only
+  // while filter and limit pushdown are off, which the key holds, so that a change of them plans
+  // again; with either on, each scan plans again in Python, as a batch read does. The key holds
+  // the schema and the candidates too, so that two lookups of one data source never share a plan.
+  // A planning call that fails is not cached, so it fails again.
+  private val lookupPlans: Cache[PythonLookupPlanKey, PythonDataSourceLookupPlan] =
+    CacheBuilder.newBuilder().maximumSize(PythonDataSourceV2.MAX_CACHED_PLANS).build()
+
+  /** Plans a lookup in Python, or reuses the plan of a call with the same inputs. */
+  def getOrCreateLookupPlan(
+      shortName: String,
+      options: CaseInsensitiveStringMap,
+      schema: StructType,
+      filters: Array[Filter],
+      candidates: Array[Predicate]): PythonDataSourceLookupPlan = {
+    val dataSource = getOrCreateDataSourceInPython(shortName, options, Some(schema))
+    val planner = source.lookupPlanner(shortName, dataSource, schema, filters, candidates)
+    if (SQLConf.get.pythonFilterPushDown || SQLConf.get.pythonLimitPushDown) {
+      planner.runInPython()
+    } else {
+      val key = planner.cacheKey
+      Option(lookupPlans.getIfPresent(key)).getOrElse {
+        val plan = planner.runInPython()
+        lookupPlans.put(key, plan)
+        plan
+      }
+    }
+  }
+
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     getOrCreateDataSourceInPython(shortName, options, None).schema
   }
@@ -96,4 +131,10 @@ class PythonDataSourceV2 extends NamedTableProvider {
   }
 
   override def supportsExternalMetadata(): Boolean = true
+}
+
+private object PythonDataSourceV2 {
+  // The number of plans that a data source keeps. A streaming query plans one shape per lookup
+  // join, so a few suffice; the bound keeps a long-lived data source from growing without end.
+  val MAX_CACHED_PLANS = 64
 }

@@ -155,12 +155,25 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       schema: StructType,
       filters: Array[Filter],
       candidates: Array[V2Predicate]): PythonDataSourceLookupPlan = {
+    lookupPlanner(tableName, pythonResult, schema, filters, candidates).runInPython()
+  }
+
+  /**
+   * The runner of [[planLookupInPython]], whose `cacheKey` identifies the inputs of the planning
+   * call before it runs.
+   */
+  private[python] def lookupPlanner(
+      tableName: String,
+      pythonResult: PythonDataSourceCreationResult,
+      schema: StructType,
+      filters: Array[Filter],
+      candidates: Array[V2Predicate]): UserDefinedPythonDataSourceLookupPlanRunner = {
     new UserDefinedPythonDataSourceLookupPlanRunner(
       tableName,
       createPythonFunction(pythonResult.dataSource),
       schema,
       filters.toImmutableArraySeq,
-      candidates.toImmutableArraySeq).runInPython()
+      candidates.toImmutableArraySeq)
   }
 
   /**
@@ -469,6 +482,25 @@ case class PythonFilterPushdownResult(
 )
 
 /**
+ * The inputs of a lookup planning call in Python, which decide its result: the schema, the
+ * filters and the candidate lookup predicates, serialized as the worker receives them, and the
+ * pushdown configurations.
+ */
+private[python] case class PythonLookupPlanKey(
+    schema: String,
+    filters: SerializedFilters,
+    candidates: String,
+    filterPushdown: Boolean,
+    limitPushdown: Boolean)
+
+/**
+ * Filters as a planning worker receives them: the JSON of the ones that Python supports, their
+ * positions among all the filters, to which the worker's answer refers, and the number of all
+ * the filters.
+ */
+private[python] case class SerializedFilters(json: String, positions: Seq[Int], numFilters: Int)
+
+/**
  * Push down filters and optionally a limit to a Python data source.
  *
  * @param dataSource
@@ -674,6 +706,10 @@ private[python] class PythonDataSourceFilters(
 
   def toJson: String = mapper.writeValueAsString(serialized)
 
+  /** The filters as the worker receives them, with the positions that its answer refers to. */
+  def key: SerializedFilters =
+    SerializedFilters(toJson, serialized.map(_.index).toSeq, filters.length)
+
   /** The position in `filters` of the `i`-th serialized filter. */
   def filterIndex(i: Int): Int = serialized(i).index
 }
@@ -713,7 +749,7 @@ case class PythonDataSourceLookupPlan(
  * @param filters the filters to push down to the lookup reader
  * @param candidates the lookup predicates that Spark offers
  */
-private class UserDefinedPythonDataSourceLookupPlanRunner(
+private[python] class UserDefinedPythonDataSourceLookupPlanRunner(
     tableName: String,
     dataSource: PythonFunction,
     schema: StructType,
@@ -741,6 +777,14 @@ private class UserDefinedPythonDataSourceLookupPlanRunner(
 
   // See the logic in `pyspark.sql.worker.plan_data_source_lookup.py`.
   override val workerModule = "pyspark.sql.worker.plan_data_source_lookup"
+
+  /** The inputs of the planning call, which decide its result. */
+  def cacheKey: PythonLookupPlanKey = PythonLookupPlanKey(
+    schema.json,
+    serializedFilters.key,
+    mapper.writeValueAsString(serializedCandidates),
+    filterPushdown = SQLConf.get.pythonFilterPushDown,
+    limitPushdown = SQLConf.get.pythonLimitPushDown)
 
   override protected def runnerConf: Map[String, String] = {
     super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
