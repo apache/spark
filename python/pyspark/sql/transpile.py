@@ -66,10 +66,23 @@ the operands that gate it. ``SimplifyConditionals`` does replace a CASE WHEN
 whose values all equal its ELSE with that value, dropping the conditions and
 their guards, so each branch returns its own operand (which is the stop value
 there) rather than a literal that a last operand such as ``... and False`` could
-equal, and an if/ternary whose branches may lower to one expression falls back
-in a body that takes this fold. The price is
-pushdown: the predicate moves only as a whole, and over nullable operands its
-guards make it throwable, so it stays above a join (SPARK-60903).
+equal. The price is pushdown: the predicate moves only as a whole, and over
+nullable operands its guards make it throwable, so it stays above a join
+(SPARK-60903).
+
+An if/ternary is a CASE WHEN whose values are its branches, so that rule drops
+its test, and the errors the test raises, once both branches are one expression.
+The source cannot rule that out: the call makes any two branches one by binding
+their parameters to one argument, as ``f(x, x, c)`` does for ``a if 0 < c < 10
+else b``. So in a body that takes the CASE WHEN fold, a test that can raise gets
+a third branch: ``CASE WHEN t THEN body WHEN NOT t THEN orelse ELSE
+raise_error(...) END``. ``t`` is never NULL, so the ELSE is never reached, but
+no branch equals it and the test stays. A test that cannot raise keeps two
+branches, since dropping it loses nothing, and the expression stays as
+pushable as its operands. An if/ternary in a body that lowered before chains did
+keeps two branches as well, and with them its plan, which leaves this OPEN
+there: measured, ``a if c > 0 else b`` called as ``f(x, x, c)`` returns ``x`` for
+a NULL ``c`` where Python raises TypeError.
 
 The ``&`` / ``|`` fold keeps per-conjunct pushdown, which is why the ``and`` /
 ``or`` bodies that lowered before chains did keep it. But its short-circuit is an
@@ -348,6 +361,10 @@ def _materialized_weight(node: ast.AST, atomic: bool = False) -> int:
         case ast.BoolOp(values=values) if atomic:
             weights = [weigh(v) for v in values]
             return 1 + 2 * sum(weights) - weights[-1]
+        case ast.IfExp(test=test) | ast.If(test=test) if atomic:
+            # `_convert_if_like` reads a test that can raise twice.
+            branches = sum(weigh(n) for n in ast.iter_child_nodes(node) if n is not test)
+            return 2 * weigh(test) + branches + _NODE_OVERHEAD
         case ast.BinOp(left=left, op=ast.Mod(), right=right):
             # `sb * pmod(sb * a, abs(b))` with `sb` reading `b` twice.
             return weigh(left) + 5 * weigh(right) + 2 * _NODE_OVERHEAD
@@ -473,7 +490,9 @@ def _needs_atomic_boolops(body: ast.AST) -> bool:
 
 
 def _holds_raising_lowering(body: ast.AST) -> bool:
-    """Conservatively flag calls and arithmetic that can raise under loose too."""
+    """Conservatively flag calls and arithmetic, which can raise whatever the
+    null strictness.
+    """
     return any(
         isinstance(n, (ast.Call, ast.BinOp))
         or (isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)))
@@ -503,25 +522,6 @@ def _short_circuit(operands: List[Column], stop_on: bool) -> Column:
     for operand in rest[:-1]:
         fold = fold.when(operand if stop_on else ~operand, operand)
     return fold.otherwise(rest[-1])
-
-
-def _branches_may_coincide(body: Optional[ast.AST], orelse: Optional[ast.AST]) -> bool:
-    """Return True when the branches of an if/ternary could lower to the same
-    expression: identical source, constants that compare equal, or parameter-free
-    expressions that are not both constants.
-
-    TODO (SPARK-54783): branches that only the bound columns' nullability makes
-    equal, such as ``(x is not None) if ... else True`` over a non-nullable ``x``.
-    """
-    body = body.value if isinstance(body, ast.Return) else body
-    orelse = orelse.value if isinstance(orelse, ast.Return) else orelse
-    if body is None or orelse is None:
-        return False
-    if isinstance(body, ast.Constant) and isinstance(orelse, ast.Constant):
-        return bool(body.value == orelse.value)
-    return ast.dump(body) == ast.dump(orelse) or not any(
-        isinstance(n, ast.Name) for branch in (body, orelse) for n in ast.walk(branch)
-    )
 
 
 def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
@@ -625,6 +625,17 @@ class CatalystTranspiler(AbstractTranspiler):
             return lit(None)
         return self._convert_chunk(params, statements[0])
 
+    def _convert_test(self, params: List[str], test: ast.AST) -> Tuple[Column, bool]:
+        """Lower the test of an if/ternary, and say whether evaluating it can
+        raise: it lowered a NULL guard, or it holds a call or arithmetic.
+        """
+        emitted_before = self._null_guard_emitted
+        self._null_guard_emitted = False
+        test_col = self._convert_chunk(params, test)
+        can_raise = self._null_guard_emitted or _holds_raising_lowering(test)
+        self._null_guard_emitted = self._null_guard_emitted or emitted_before
+        return test_col, can_raise
+
     def _is_nonnull_node(self, params: List[str], node: ast.AST) -> bool:
         """Return True when ``node`` is statically known to produce a non-null value.
 
@@ -696,6 +707,7 @@ class CatalystTranspiler(AbstractTranspiler):
         test_node: ast.AST,
         body_node: Optional[ast.AST],
         else_node: Optional[ast.AST],
+        test_can_raise: bool,
     ) -> Column:
         # Determine the boolean guard for the CASE WHEN.
         # Two paths:
@@ -706,15 +718,6 @@ class CatalystTranspiler(AbstractTranspiler):
         #    constant): lower using Python's type-specific truthiness
         #    rules (0/""/None are falsy, everything else truthy) based on
         #    the operand's inferred category.
-        if self._atomic_boolops and _branches_may_coincide(body_node, else_node):
-            # `SimplifyConditionals` would replace the CASE WHEN with the shared
-            # value and drop the test, with the NULL guards that only bodies
-            # taking the CASE WHEN fold can hold there.
-            raise UnsupportedOperationException(
-                "the branches of this if/ternary may lower to the same expression, "
-                "which would let the optimizer drop its test and the errors the "
-                "test raises, so the UDF falls back to interpreted Python"
-            )
         if _is_definitely_boolean(test_node):
             safe_test = coalesce(test_col, lit(False))
         else:
@@ -747,7 +750,17 @@ class CatalystTranspiler(AbstractTranspiler):
                     f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
                     "so the transpiler falls back to interpreted Python"
                 )
-        return when(safe_test, body_col).otherwise(else_col)
+        if not (self._atomic_boolops and test_can_raise):
+            return when(safe_test, body_col).otherwise(else_col)
+        # `SimplifyConditionals` replaces a CASE WHEN whose values all equal its
+        # ELSE, which would drop the test and the errors it raises whenever the
+        # call binds both branches to one argument. No branch equals this ELSE,
+        # and `safe_test` is never NULL, so it is never reached (see the module
+        # docstring).
+        unreachable = raise_error(
+            lit("Python UDF transpiler: internal error, an if/ternary test evaluated to NULL.")
+        )
+        return when(safe_test, body_col).when(~safe_test, else_col).otherwise(unreachable)
 
     def _lower_eq(
         self,
@@ -1211,7 +1224,7 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.IfExp(test=test, body=body_expr, orelse=orelse_expr):
                 # Ternary `body if test else orelse` -- shares the
                 # NULL-as-falsy lowering with the if-statement case.
-                test_col = self._convert_chunk(params, test)
+                test_col, test_can_raise = self._convert_test(params, test)
                 body_nonnull, else_nonnull = _null_narrowed(params, test)
                 saved_nonnull = self._nonnull_params
                 self._nonnull_params = saved_nonnull | body_nonnull
@@ -1220,10 +1233,17 @@ class CatalystTranspiler(AbstractTranspiler):
                 else_col = self._convert_chunk(params, orelse_expr)
                 self._nonnull_params = saved_nonnull
                 return self._convert_if_like(
-                    params, test_col, body_col, else_col, test, body_expr, orelse_expr
+                    params,
+                    test_col,
+                    body_col,
+                    else_col,
+                    test,
+                    body_expr,
+                    orelse_expr,
+                    test_can_raise,
                 )
             case ast.If(test, success, orelse):
-                test_col = self._convert_chunk(params, test)
+                test_col, test_can_raise = self._convert_test(params, test)
                 body_nonnull, else_nonnull = _null_narrowed(params, test)
                 saved_nonnull = self._nonnull_params
                 self._nonnull_params = saved_nonnull | body_nonnull
@@ -1239,6 +1259,7 @@ class CatalystTranspiler(AbstractTranspiler):
                     test,
                     success[0] if success else None,
                     orelse[0] if orelse else None,
+                    test_can_raise,
                 )
             case ast.Compare(left, ops, comps):
                 # `in` / `not in` are container membership rather than value comparisons,

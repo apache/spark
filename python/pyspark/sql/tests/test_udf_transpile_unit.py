@@ -34,6 +34,8 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     StringType,
+    StructField,
+    StructType,
 )
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -658,12 +660,127 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([], filtered.select("b", "c").collect())
             self.assertEqual(0, self._eval_python_count(filtered), "chain must stay lowered")
 
-            # An if/ternary whose branches lower to one expression would collapse
-            # the same way and drop its test, so it falls back.
-            same_branches = lambda x, y: y if (0 < x < 10) else y  # noqa: E731
-            u, reasons = self._udf_and_warnings(same_branches, LongType())
-            self.assertEqual([], u.transpiled)
-            self.assertIn("same expression", reasons)
+    def test_udf_transpile_if_test_survives_equal_branches(self):
+        # `SimplifyConditionals` replaces a CASE WHEN whose values all equal its
+        # ELSE with that value, which for a two-branch if/ternary drops the test
+        # and the errors it raises. The branches need not be one expression in
+        # the source, only once lowered and optimized. In a body that takes the
+        # CASE WHEN fold, a test that can raise gets a never-reached `ELSE
+        # raise_error` that no branch equals, so it stays.
+        from pyspark.sql.functions import col, lit
+
+        # Equal once the call binds both branches' parameters to one argument.
+        pick = lambda a, b, c: a if (0 < c < 10) else b  # noqa: E731
+
+        def pick_stmt(a, b, c):
+            if 0 < c < 10:
+                return a
+            return b
+
+        # No NULL guard, but `%` raises on a zero divisor where Python raises
+        # ZeroDivisionError.
+        pick_mod = lambda a, b, x, y: a if (0 == x % y == 0) else b  # noqa: E731
+        same_source = lambda x, y: y if (0 < x < 10) else y  # noqa: E731
+
+        # NULL either way.
+        def no_else(a, b, c):
+            if a < b < c:
+                return None
+
+        # An identity `+`, a commuted sum, a constant that folds, and a column
+        # that is never NULL.
+        unary_plus = lambda a, c: (+a) if (0 < c < 10) else a  # noqa: E731
+        commuted = lambda a, b, c: (a + b) if (0 < c < 10) else (b + a)  # noqa: E731
+        folded = lambda c: len("abc") if (0 < c < 10) else 3  # noqa: E731
+        never_null = lambda x, c: (x is not None) if (0 < c < 10) else True  # noqa: E731
+        xc = StructType([StructField("x", LongType(), False), StructField("c", LongType())])
+        k, c = col("k"), col("c")
+        L, B = LongType(), BooleanType()
+        kc, kxy, abc = "k long, c long", "k long, x long, y long", "a long, b long, c long"
+        null_guard, zero_divisor = "cannot compare NULL", "REMAINDER_BY_ZERO"
+        # (body, return type, schema, arguments or None for the row's columns,
+        # row, Python's answer or the error standing in for the one Python raises)
+        cases = [
+            (pick, L, kc, (k, k, c), (7, None), null_guard),
+            (pick, L, kc, (k, k, c), (7, 5), 7),
+            (pick, L, kc, (k, k, c), (7, 50), 7),
+            (pick, L, kc, (lit(1), lit(1), c), (7, None), null_guard),
+            (pick_stmt, L, kc, (k, k, c), (7, None), null_guard),
+            (pick_stmt, L, kc, (k, k, c), (7, 50), 7),
+            (pick_mod, L, kxy, (k, k, col("x"), col("y")), (7, 4, 0), zero_divisor),
+            (pick_mod, L, kxy, (k, k, col("x"), col("y")), (7, 4, 2), 7),
+            (same_source, L, kc, (c, k), (7, None), null_guard),
+            (same_source, L, kc, (c, k), (7, 5), 7),
+            (no_else, L, abc, None, (1, 2, None), null_guard),
+            (no_else, L, abc, None, (1, 2, 3), None),
+            (unary_plus, L, "a long, c long", None, (1, None), null_guard),
+            (commuted, L, abc, None, (1, 2, None), null_guard),
+            (folded, L, "c long", None, (None,), null_guard),
+            (never_null, B, xc, None, (1, None), null_guard),
+            (never_null, B, xc, None, (1, 50), True),
+        ]
+        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
+            conf = {**_TRANSPILE_ON, "spark.sql.codegen.factoryMode": factory_mode}
+            for i, (func, return_type, schema, args, row, expected) in enumerate(cases):
+                with self.subTest(factory_mode=factory_mode, case=i), self.sql_conf(conf):
+                    df = self.spark.createDataFrame([row], schema)
+                    udf = self._transpiled_udf(func, return_type)
+                    projected = df.select(udf(*(args or df.columns)))
+                    self.assertEqual(0, self._eval_python_count(projected), "must stay lowered")
+                    if isinstance(expected, str):
+                        with self.assertRaisesRegex(Exception, expected):
+                            projected.collect()
+                    else:
+                        self.assertEqual([expected], [r[0] for r in projected.collect()])
+
+        # A filter reads a NULL as false, which makes these branches equal there
+        # and nowhere else.
+        null_or_false = lambda a, b, c: None if a < b < c else False  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            df = self.spark.createDataFrame([(1, 2, None)], abc)
+            filtered = df.filter(self._transpiled_udf(null_or_false, B)(*df.columns))
+            self.assertEqual(0, self._eval_python_count(filtered), "must stay lowered")
+            with self.assertRaisesRegex(Exception, null_guard):
+                filtered.collect()
+
+        # Only a test that can raise pays for the third branch, whose
+        # `raise_error` makes the expression throwable. One that raises only
+        # through arithmetic pays too, and was not throwable before. A test that
+        # cannot raise keeps two branches: `==` is total, and under loose null
+        # strictness the chain lowers no NULL guard. So does every if/ternary of a
+        # body that lowered before chains did, guarded or not, which keeps its
+        # plan.
+        third_branch = "an if/ternary test evaluated to NULL"
+        arith = lambda a, b, c: a if (c % 2 == 0) == True else b  # noqa: E731,E712
+        total = lambda a, b, c: a if (c == 1) == True else b  # noqa: E731,E712
+        plain = lambda a, b, c: a if c > 0 else b  # noqa: E731
+        plain_mod = lambda a, b, c: a if c % 2 == 0 else b  # noqa: E731
+        loose = {"spark.sql.experimental.optimizer.transpileNullStrictness": "loose"}
+        df = self.spark.createDataFrame([(1, 2, 3)], abc)
+        for func, conf, has_third_branch, throwable in [
+            (pick, {}, True, True),
+            (arith, {}, True, True),
+            (pick, loose, False, False),
+            (total, {}, False, False),
+            (plain, {}, False, True),
+            (plain_mod, {}, False, False),
+        ]:
+            with self.subTest(func=func, conf=conf), self.sql_conf({**_TRANSPILE_ON, **conf}):
+                projected = df.select(self._transpiled_udf(func, L)(*df.columns))
+                self.assertEqual(0, self._eval_python_count(projected), "must stay lowered")
+                plan = self._optimized_plan(projected)
+                self.assertEqual(has_third_branch, third_branch in plan, plan)
+                self.assertEqual(throwable, "raise_error" in plan, plan)
+
+        # What being throwable costs: such a filter stays above a join, where the
+        # same test in a body that lowered before chains did moves below it.
+        left = self.spark.createDataFrame([(1, 1, 2, 4)], "k long, " + abc)
+        right = self.spark.createDataFrame([(1, 9)], "k long, d long")
+        for func, below_join in [(arith, False), (plain_mod, True)]:
+            with self.subTest(func=func), self.sql_conf(_TRANSPILE_ON):
+                keep = self._transpiled_udf(func, L)("a", "b", "c") == 1
+                plan = self._optimized_plan(left.join(right, "k").filter(keep))
+                self.assertEqual(below_join, plan.index("Join") < plan.index("pmod"), plan)
 
     def test_udf_transpile_and_or_fold_choice(self):
         # Only a body that holds a chain or a comparison over a non-basic operand
@@ -911,10 +1028,20 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 src = f"((x < 0) < {src} < (x < 0))"
             return src
 
+        def test_nested(depth):
+            # A ternary as the test of the next. A body holding a chain lowers a
+            # test that can raise to a three-branch CASE WHEN that reads it twice,
+            # so the size doubles per level.
+            src = "(0 < x < 10)"
+            for _ in range(depth):
+                src = f"(True if {src} else False)"
+            return src
+
         lowers = [
             chain(_MAX_COMPARISON_OPS),
             right_nested(2),
             chain_nested(2),
+            test_nested(9),
             # One level over a ternary.
             "(x < 0) < ((x < 1) if x > 0 else (x < 2))",
             # `is None` reads only its subject, so an identity nest stays linear.
@@ -941,6 +1068,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             right_nested(20),
             right_nested(20, "(x == 1)", "=="),
             chain_nested(10),
+            # Charged one read of each test, its two options would weigh 128.
+            test_nested(10),
             *ternary_nests,
             f"({modulo}) > 0",
             # Both links of an identity chain read its interior operand.
