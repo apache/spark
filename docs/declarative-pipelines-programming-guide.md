@@ -568,7 +568,7 @@ By key: `id 1` was inserted as `alice`, then updated to `alicia` at version 2, a
 - The **target's format must support row-level operations.** Auto CDC maintains the target with MERGE, so the table must be backed by a connector implementing the DSv2 `SupportsRowLevelOperations` interface. A target that does not fails at startup with `AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE`. Spark's built-in file formats, including Parquet, do **not** qualify; see [Choosing a Target Format](#choosing-a-target-format).
 - The **target must have exactly one input flow.** An Auto CDC flow cannot share a target with other flows; a target fed by more than one flow, one of which is Auto CDC, fails with `AUTOCDC_MULTIPLE_FLOWS_TO_TARGET`. This rules out the fan-in pattern shown in "Using Multiple Flows to Write to a Single Target" above.
 - The **source must be a streaming source** (read with `spark.readStream` in Python or `STREAM(...)` in SQL). CDC is an incremental operation over newly arriving change events.
-- The **catalog's metadata must survive between runs**, since each incremental run re-resolves the tables an earlier run created. This is a property of the connector, not of setting `spark.sql.catalog.*`. The session catalog with `spark.sql.catalogImplementation: in-memory` keeps metadata only for the life of the session, so a second `spark-pipelines run` against it fails with `LOCATION_ALREADY_EXISTS`; use a catalog whose metastore persists. On Spark builds with Hive support, projects created with `spark-pipelines init` set `spark.sql.catalogImplementation: hive`, which keeps the session catalog's metadata in a local Hive metastore; projects generated on a build without Hive keep the in-memory session catalog.
+- The **catalog's metadata must survive between runs**, since each incremental run re-resolves the tables an earlier run created. This is a property of the connector, not of setting `spark.sql.catalog.*`. A pipeline runs against a Spark Connect server, and the server decides which catalog is in use: its default session catalog, with `spark.sql.catalogImplementation` set to `in-memory`, keeps metadata only while the server runs, so after a server restart the tables are forgotten while their folders remain, and the next `spark-pipelines run` fails with `LOCATION_ALREADY_EXISTS`. Start the server with `--conf spark.sql.catalogImplementation=hive`, or with a connector catalog, to keep tables across runs.
 - The flow must specify **keys** (one or more columns that identify a row) and a **sequencing expression** (used to order events per key).
 
 The sequencing expression may be any SQL expression over the source columns, not just a bare column reference; sequencing by a struct such as `(commit_ts, seq_no)`, or by a cast, is fine. It must satisfy three constraints:
@@ -683,7 +683,7 @@ operations. AutoCDC requires a target backed by a connector that supports MERGE.
 
 Auto CDC needs a table provider that implements row-level operations, configured as a catalog in the pipeline. Lakehouse connectors such as Apache Iceberg are the usual choice; consult the connector's documentation for whether it implements the DSv2 row-level operation interfaces and how to register its catalog. Supporting the `MERGE INTO` SQL statement is not on its own sufficient: a connector can implement MERGE through its own planner extension without implementing the DSv2 interface Auto CDC requires. The catalog must also persist metadata across runs, per [Requirements](#requirements).
 
-The examples below use a catalog named `lakehouse` to stand in for such a connector. Edit the generated `spark-pipeline.yml` to select it, substituting the catalog name and connector class. Keep the `name`, `storage`, and `libraries` values `spark-pipelines init` wrote, and the `configuration` mapping it writes on Spark builds with Hive support. Add `catalog` and `database` as new top-level keys, and add the connector's `spark.sql.catalog.lakehouse` key inside that existing `configuration` mapping, or create the mapping if the generated spec has none. Do not add a second top-level `configuration` block: the spec loader keeps only the last of two top-level keys with the same name, so the other block's settings are dropped without an error. On a build with Hive support the edited spec looks like this:
+The examples below use a catalog named `lakehouse` to stand in for such a connector. Edit the generated `spark-pipeline.yml` to select it, substituting the catalog name and connector class. Keep the `name`, `storage`, and `libraries` values `spark-pipelines init` wrote, add `catalog` and `database` as new top-level keys, and add a `configuration` mapping that holds the connector's `spark.sql.catalog.lakehouse` key. A spec has one `configuration` mapping: the spec loader keeps only the last of two top-level keys with the same name, so settings in a second mapping are dropped without an error. If the spec already has a `configuration` mapping, add the key to it. The edited spec looks like this:
 
 ```yaml
 name: cdc_demo
@@ -692,13 +692,10 @@ libraries:
   - glob:
       include: transformations/**
 configuration:
-  spark.sql.catalogImplementation: hive
   spark.sql.catalog.lakehouse: <your connector's catalog class>
 catalog: lakehouse
 database: cdc_demo
 ```
-
-On a build without Hive support, the generated spec has no `configuration` mapping, so add one that holds only the `spark.sql.catalog.lakehouse` key.
 
 ### End-to-End Example
 
