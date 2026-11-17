@@ -31,6 +31,47 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL join decoders remain inside dynamic conditional guards") {
+    withTempView("guarded_kll_left", "guarded_kll_right") {
+      spark.sparkContext.parallelize(Seq(0L), 1).toDF("id")
+        .createOrReplaceTempView("guarded_kll_left")
+      spark.sparkContext.parallelize(Seq(0L), 1).toDF("id")
+        .createOrReplaceTempView("guarded_kll_right")
+      val invalid = """kll_sketch_get_n_bigint((SELECT
+          |substring(kll_sketch_agg_bigint(id, 8), 1, 1) FROM range(10)))""".stripMargin
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val query = sql(s"""SELECT l.id, r.id FROM guarded_kll_left l
+            |JOIN guarded_kll_right r ON l.id = r.id AND
+            |CASE WHEN l.id + r.id < 0 THEN $invalid > 0 ELSE true END""".stripMargin)
+        checkAnswer(query, Row(0L, 0L))
+      }
+    }
+  }
+
+  test("renamed sibling columns retain KLL-independent partition pruning") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(8).selectExpr("id", "CAST(id % 2 AS INT) AS p")
+          .write.partitionBy("p").parquet(path.getAbsolutePath)
+        withTempView("renamed_kll_pruning") {
+          spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("renamed_kll_pruning")
+          val query = sql(s"""SELECT p2, n FROM
+              |(SELECT p AS p2, $scalar AS n FROM renamed_kll_pruning) q WHERE p2 = 1
+              |""".stripMargin)
+          val scans = query.queryExecution.sparkPlan.collect {
+            case scan: FileSourceScanExec => scan
+          }
+          assert(scans.size == 1)
+          assert(scans.head.selectedPartitions.filePartitionIterator
+            .map(_.values.getInt(0)).toSet == Set(1), query.queryExecution.toString)
+          checkAnswer(query, Seq.fill(4)(Row(1, 3L)))
+        }
+      }
+    }
+  }
+
   test("primitive Scala UDF null guards retain conditional random arguments") {
     val first = udf((n: Int, xs: Seq[Double]) => n + xs.head)
     withUserDefinedFunction("null_guarded_first" -> true) {

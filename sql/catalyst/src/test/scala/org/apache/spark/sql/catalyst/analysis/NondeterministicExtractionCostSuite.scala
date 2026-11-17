@@ -56,6 +56,36 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     assert(visits.get == 0, s"deterministic prefixes canonicalized ${visits.get} times")
   }
 
+  test("dependency staging skips nonbinding nondeterministic arithmetic prefixes") {
+    val visits = new AtomicInteger
+    val argument = (1 to 64).foldLeft[Expression](Rand(0)) { (child, i) =>
+      CanonicalizationCounted(Add(child, Literal(i.toDouble)), visits)
+    }
+    val udf = ScalaUDF((value: Double) => value, DoubleType, Seq(argument))
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(
+      Seq(udf), keys)
+    visits.set(0)
+    NondeterministicExpressionCollection.project(OneRowRelation(), bindings, keys)
+    assert(visits.get == 0, s"nonbinding prefixes canonicalized ${visits.get} times")
+  }
+
+  test("aggregate scalar extraction skips unrelated deterministic argument keys") {
+    val visits = new AtomicInteger
+    val value = $"value".double
+    val argument = (1 to 64).foldLeft[Expression](value) { (child, _) =>
+      CanonicalizationCounted(Add(child, value), visits)
+    }
+    val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(aggregate).as("n")))
+    val plan = LocalRelation(value).groupBy()(
+      Sum(scalar).toAggregateExpression().as("kll"),
+      Sum(argument).toAggregateExpression().as("ordinary"))
+    PullOutNondeterministic(plan)
+    assert(visits.get == 0, s"deterministic sibling prefixes canonicalized ${visits.get} times")
+  }
+
   private case class EqualityCounted(child: Expression, comparisons: AtomicInteger)
       extends Expression with Unevaluable {
     override def children: Seq[Expression] = Seq(child)
@@ -145,6 +175,24 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     override lazy val canonicalized: Expression = this
     override protected def withNewChildrenInternal(children: IndexedSeq[Expression]): Expression =
       copy(child = children.head)
+  }
+
+  test("legacy restoration does not revisit already expanded binding values") {
+    val visits = new AtomicInteger
+    val value = (1 to 64).foldLeft[Expression](Literal(1L)) { (child, _) =>
+      Counted(child, visits)
+    }
+    val attribute = $"binding".long
+    val references = CreateArray(Seq.fill(64)(attribute))
+    value.treePatternBits
+    visits.set(0)
+    val restored = NondeterministicExpressionCollection.restoreBindingReferences(
+      references, Map(attribute.exprId -> value))
+    assert(restored.children.size == 64)
+    assert(restored.children.forall(_ eq value))
+    assert(visits.get == 0, s"expanded binding values revisited ${visits.get} times")
+    assert(NondeterministicExpressionCollection.restoreBindingReferences(
+      references, Map.empty) eq references)
   }
 
   test("scalar-free replacement keys visit expression nodes linearly") {

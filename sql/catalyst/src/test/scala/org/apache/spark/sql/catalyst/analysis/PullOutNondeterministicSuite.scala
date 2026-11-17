@@ -135,6 +135,24 @@ class PullOutNondeterministicSuite extends AnalysisTest {
     val plan = r.groupBy(first, second)(count(Literal(1)).as("count"))
     val pulled = PullOutNondeterministic(plan).asInstanceOf[Aggregate]
     assert(pulled.groupingExpressions.distinct.size == 2)
+    assertScalarDependencies(pulled, Seq(first, second).map(_.children.map {
+      case scalar: ScalarSubquery => scalar.exprId
+    }))
+  }
+
+  private def assertScalarDependencies(
+      aggregate: Aggregate,
+      expected: Seq[Seq[ExprId]]): Unit = {
+    val bindings = aggregate.child.collect { case project: Project =>
+      project.projectList.collect { case alias: Alias => alias.exprId -> alias.child }
+    }.flatten.toMap
+    val actual = aggregate.groupingExpressions.map { expression =>
+      val udf = bindings(expression.asInstanceOf[Attribute].exprId).asInstanceOf[ScalaUDF]
+      udf.children.map { child =>
+        bindings(child.asInstanceOf[Attribute].exprId).asInstanceOf[ScalarSubquery].exprId
+      }
+    }
+    assert(actual == expected)
   }
 
   test("wrapper keys preserve every subquery identity and its order") {
@@ -150,6 +168,10 @@ class PullOutNondeterministicSuite extends AnalysisTest {
     val pulled = PullOutNondeterministic(plan).asInstanceOf[Aggregate]
     assert(pulled.groupingExpressions.distinct.size == 4)
     assert(pulled.groupingExpressions.head == pulled.groupingExpressions.last)
+    assertScalarDependencies(pulled, Seq(
+      Seq(first.exprId, second.exprId), Seq(first.exprId, third.exprId),
+      Seq(second.exprId, first.exprId), Seq(first.exprId, first.exprId),
+      Seq(first.exprId, second.exprId)))
   }
 
   test("pull out scalar KLL subqueries from aggregate arguments") {

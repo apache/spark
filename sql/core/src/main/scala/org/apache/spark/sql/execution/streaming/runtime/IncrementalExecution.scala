@@ -193,9 +193,7 @@ class IncrementalExecution(
           independentOnly: Boolean): (LogicalPlan, MutableMap[ExprId, Expression]) = {
         val bindings = MutableMap.empty[ExprId, Expression]
         def restore(expression: Expression): Expression = {
-          if (bindings.isEmpty) expression else expression.transformDown {
-            case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
-          }
+          NondeterministicExpressionCollection.restoreBindingReferences(expression, bindings)
         }
         def visit(plan: LogicalPlan): LogicalPlan = plan match {
           case project: Project =>
@@ -221,9 +219,7 @@ class IncrementalExecution(
               unary.isInstanceOf[ResolvedHint] =>
             val child = visit(unary.child)
             if (bindings.isEmpty) unary else {
-              unary.withNewChildren(Seq(child)).transformExpressionsDown {
-                case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
-              }
+              unary.withNewChildren(Seq(child)).mapExpressionsWithReferenceEquality(restore)
             }
           case other => other
         }
@@ -237,9 +233,8 @@ class IncrementalExecution(
           leftBindings ++= rightBindings
           val bindings = leftBindings
           if (bindings.isEmpty) join else {
-            def restore(expression: Expression): Expression = expression.transformDown {
-              case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
-            }
+            def restore(expression: Expression): Expression =
+              NondeterministicExpressionCollection.restoreBindingReferences(expression, bindings)
             val restored = join.copy(left = left, right = right,
               condition = join.condition.map(restore))
             Project(join.output.map { attribute =>
@@ -252,9 +247,8 @@ class IncrementalExecution(
         case aggregate: Aggregate =>
           val (child, bindings) = restoreInput(aggregate.child, independentOnly = false)
           if (bindings.isEmpty) aggregate else {
-            def restore(expression: Expression): Expression = expression.transformDown {
-              case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
-            }
+            def restore(expression: Expression): Expression =
+              NondeterministicExpressionCollection.restoreBindingReferences(expression, bindings)
             aggregate.copy(
               groupingExpressions = aggregate.groupingExpressions.map(restore),
               aggregateExpressions = aggregate.aggregateExpressions.map {

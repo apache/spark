@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -53,9 +53,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
           NondeterministicExpressionCollection.getNondeterministicToAttributes(
             expressionsToExtract, keys)
         val newChild = NondeterministicExpressionCollection.project(a.child, nondeterToAttr, keys)
-        val deterministicAggregate = a.transformExpressions { case e =>
-          Option(nondeterToAttr.get(keys(e)))
-            .map(_.toAttribute).getOrElse(e)
+        val deterministicAggregate = a.mapExpressionsWithReferenceEquality { expression =>
+          NondeterministicExpressionCollection.replaceBindings(expression, nondeterToAttr, keys)
         }.copy(child = newChild)
 
         deterministicAggregate.groupingExpressions.foreach(expr => if (!expr.deterministic) {
@@ -102,15 +101,16 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         val candidate = expression match {
           // Store the consumed count, rather than copying a binary sketch into every input row
           // and state record. Keep the scalar identity inside the getter for physical reuse.
-          case getter: KllSketchGetNBase if getter.child.isInstanceOf[ScalarSubquery] &&
-              !getter.child.deterministic &&
-              !getter.child.asInstanceOf[ScalarSubquery].isCorrelated => true
+          case getter: KllSketchGetNBase if safeKllCount(getter) => true
           case scalar: ScalarSubquery => !scalar.deterministic && !scalar.isCorrelated
           case _ => false
         }
         if (candidate) {
           val key = keys(expression)
           if (!nondeterToAttr.containsKey(key)) {
+            // TODO: Avoid materializing binary KLL scalars in input/shuffle/state payloads.
+            // Retaining cached scalars requires join validation, residual placement and identity
+            // handling beyond this metadata fix. Unproven decoders must keep their guards.
             nondeterToAttr.put(key,
               Alias(expression, "_nondeterministic")().asNondeterministicSubqueryBinding)
           }
@@ -204,12 +204,29 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val keys = new NondeterministicExpressionCollection.ExpressionKeys
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(p.expressions, keys)
-      val newPlan = p.transformExpressions { case e =>
-        Option(nondeterToAttr.get(keys(e)))
-          .map(_.toAttribute).getOrElse(e)
+      val newPlan = p.mapExpressionsWithReferenceEquality { expression =>
+        NondeterministicExpressionCollection.replaceBindings(expression, nondeterToAttr, keys)
       }
       val newChild = NondeterministicExpressionCollection.project(p.child, nondeterToAttr, keys)
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+  }
+
+  private def safeKllCount(getter: KllSketchGetNBase): Boolean = getter.child match {
+    case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated =>
+      // Hoisting an arbitrary decoder can expose an invalid buffer in an untaken CASE branch,
+      // or before a join produces any candidate row. Only a matching aggregate's direct result
+      // proves decoding safe; transformed buffers and other getters stay in their original scope.
+      scalar.plan match {
+        case Aggregate(_, Seq(Alias(result: AggregateExpression, _)), _, _) =>
+          (getter, result.aggregateFunction) match {
+            case (_: KllSketchGetNBigint, _: KllSketchAggBigint | _: KllMergeAggBigint) => true
+            case (_: KllSketchGetNFloat, _: KllSketchAggFloat | _: KllMergeAggFloat) => true
+            case (_: KllSketchGetNDouble, _: KllSketchAggDouble | _: KllMergeAggDouble) => true
+            case _ => false
+          }
+        case _ => false
+      }
+    case _ => false
   }
 
   private def nondeterministicSubqueriesInInputs(

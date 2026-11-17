@@ -53,6 +53,18 @@ object NondeterministicExpressionCollection {
     }
   }
 
+  /** Substitute compiler bindings whose values have already been expanded in dependency order. */
+  private[sql] def restoreBindingReferences(
+      expression: Expression,
+      bindings: scala.collection.Map[ExprId, Expression]): Expression = {
+    if (bindings.isEmpty) expression else expression match {
+      case attribute: Attribute => bindings.getOrElse(attribute.exprId, attribute)
+      // Values are expanded child-first. Returning a bound value directly avoids revisiting it
+      // once for every reference, and preserves its evaluation identity.
+      case other => other.mapChildrenWithReferenceEquality(restoreBindingReferences(_, bindings))
+    }
+  }
+
   private[analysis] final class SubqueryIdentities private (
       val ids: Vector[ExprId],
       private val hash: Int,
@@ -119,6 +131,34 @@ object NondeterministicExpressionCollection {
     }
   }
 
+  private val bindingRoots: PartialFunction[Expression, Expression] = {
+    case expression: Nondeterministic => expression
+    case scalar: ScalarSubquery if !scalar.deterministic => scalar
+    case exists: Exists if !exists.deterministic => exists
+    case not @ Not(in: InSubquery) if !in.deterministic => not
+    case in: InSubquery if !in.deterministic => in
+    case udf: UserDefinedExpression if !udf.deterministic => udf
+    case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
+  }
+
+  private def bindingFor(
+      expression: Expression,
+      bindings: LinkedHashMap[ExpressionKey, NamedExpression],
+      keys: ExpressionKeys): NamedExpression = {
+    if (bindingRoots.isDefinedAt(expression)) bindings.get(keys(expression)) else null
+  }
+
+  private[analysis] def replaceBindings(
+      expression: Expression,
+      bindings: LinkedHashMap[ExpressionKey, NamedExpression],
+      keys: ExpressionKeys): Expression = {
+    if (expression.deterministic) return expression
+    val binding = bindingFor(expression, bindings, keys)
+    if (binding != null) binding.toAttribute else {
+      expression.mapChildrenWithReferenceEquality(replaceBindings(_, bindings, keys))
+    }
+  }
+
   private[analysis] def getNondeterministicToAttributes(
       expressions: Seq[Expression],
       keys: ExpressionKeys = new ExpressionKeys)
@@ -129,19 +169,10 @@ object NondeterministicExpressionCollection {
 
     for (expr <- expressions) {
       if (!expr.deterministic) {
-        val select: PartialFunction[Expression, Expression] = {
-          case nondeterministicExpr: Nondeterministic => nondeterministicExpr
-          case scalar: ScalarSubquery if !scalar.deterministic => scalar
-          case exists: Exists if !exists.deterministic => exists
-          case not @ Not(in: InSubquery) if !in.deterministic => not
-          case in: InSubquery if !in.deterministic => in
-          case udf: UserDefinedExpression if !udf.deterministic => udf
-          case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
-        }
         val leafNondeterministic = mutable.ArrayBuffer.empty[Expression]
         def collect(expression: Expression): Unit = {
           if (visited.put(expression, true) == null) {
-            select.lift(expression).foreach(leafNondeterministic += _)
+            bindingRoots.lift(expression).foreach(leafNondeterministic += _)
             expression.children.foreach(collect)
           }
         }
@@ -182,7 +213,7 @@ object NondeterministicExpressionCollection {
         // Deterministic arguments cannot contain a collected dependency. In particular, avoid
         // canonicalizing every prefix of arithmetic expressions in ordinary UDF arguments.
         if (expression.deterministic) return expression
-        val dependency = bindings.get(keys(expression))
+        val dependency = bindingFor(expression, bindings, keys)
         if (dependency != null) {
           level = math.max(level, stage(dependency) + 1)
           dependency.toAttribute

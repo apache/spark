@@ -2665,12 +2665,21 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         if fields.exists(!_.deterministic) &&
           fields.forall(e => e.deterministic || isAggregateScalarBinding(e)) &&
           canPushThroughCondition(grandChild, condition) =>
+      val renames = fields.collect {
+        case alias @ Alias(attribute: Attribute, _) => alias.exprId -> attribute
+      }.toMap
+      def translate(predicate: Expression): Expression = {
+        predicate.transformDownWithReferenceEquality {
+          case attribute: Attribute if renames.contains(attribute.exprId) =>
+            renames(attribute.exprId)
+        }
+      }
       val (push, stay) = splitConjunctivePredicates(condition).partition { predicate =>
         predicate.deterministic && !predicate.throwable &&
-          predicate.references.subsetOf(grandChild.outputSet)
+          translate(predicate).references.subsetOf(grandChild.outputSet)
       }
       if (push.isEmpty) f else {
-        val filtered = project.copy(child = Filter(push.reduceLeft(And), grandChild))
+        val filtered = project.copy(child = Filter(push.map(translate).reduceLeft(And), grandChild))
         stay.reduceLeftOption(And).map(Filter(_, filtered)).getOrElse(filtered)
       }
 
