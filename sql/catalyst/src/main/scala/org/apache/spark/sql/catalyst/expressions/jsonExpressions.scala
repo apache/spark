@@ -2271,7 +2271,7 @@ case class JsonToStructs(
     }
     val canonicalChild = child.canonicalized
     val canonicalMode = !relevant || useCapturedOptionDefaults
-    if ((canonicalChild eq child) && capturedFallback == enableDateTimeParsingFallback &&
+    if (canonicalChild.fastEquals(child) && capturedFallback == enableDateTimeParsingFallback &&
         canonicalMode == useCapturedOptionDefaults) {
       this
     } else {

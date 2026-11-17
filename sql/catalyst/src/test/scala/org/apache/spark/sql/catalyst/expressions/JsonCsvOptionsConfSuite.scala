@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.LocalDateTime
+import java.time.{LocalDate, LocalDateTime}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -348,6 +348,13 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(parser.canonicalized eq parser)
     assert(parser.canonicalized eq parser.canonicalized)
 
+    val equalAttribute = AttributeReference("none", StringType)()
+    assert(equalAttribute.canonicalized ne equalAttribute)
+    assert(equalAttribute.canonicalized.fastEquals(equalAttribute))
+    val equalChild = parser.copy(child = equalAttribute)
+    assert(equalChild.canonicalized eq equalChild)
+    assert(equalChild.child eq equalAttribute)
+
     val attribute = AttributeReference("json", StringType, nullable = false)(exprId = ExprId(42))
     assert(attribute.canonicalized ne attribute)
     val changedChild = parser.copy(child = attribute)
@@ -393,6 +400,34 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     val csvExplicit = csv.copy(options = Map("treatNullAsEmptyString" -> "true"))
     assert(csvExplicit.copy(useCapturedOptionDefaults = true).semanticEquals(
       csvExplicit.copy(useCapturedOptionDefaults = false)))
+  }
+
+  for ((initialPolicy, parserPolicy) <- Seq("CORRECTED" -> "LEGACY", "LEGACY" -> "CORRECTED")) {
+    test(s"captured unset fallback follows lazy parser policy: $initialPolicy to $parserPolicy") {
+      val fallbackKey = SQLConf.LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK.key
+      val policyKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
+      withSQLConf(captureKey -> "true", fallbackKey -> "false", policyKey -> initialPolicy) {
+        SQLConf.get.unsetConf(fallbackKey)
+        val parser = JsonToStructs(new StructType().add("d", DateType).add("ts", TimestampType),
+          Map("dateFormat" -> "yyyy/MM/dd", "timestampFormat" -> "yyyy/MM/dd HH:mm:ss"),
+          BoundReference(0, StringType, nullable = false), Some("UTC"))
+        assert(parser.enableDateTimeParsingFallback.isEmpty)
+        // Initialize this evaluator without initializing its lazy parser.
+        assert(parser.nullSafeEval(null) == null)
+        withSQLConf(policyKey -> parserPolicy, fallbackKey -> "false") {
+          val expected = if (parserPolicy == "LEGACY") {
+            create_row(DateTimeUtils.localDateToDays(LocalDate.of(2024, 1, 2)),
+              DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2024, 1, 2, 0, 0)))
+          } else {
+            create_row(null, null)
+          }
+          val input = create_row("""{"d":"2024-01-02","ts":"2024-01-02"}""")
+          // First assert on the evaluator created before the policy switch, without serialization.
+          checkEvaluationWithoutCodegen(parser, expected, input)
+          checkEvaluation(parser, expected, input)
+        }
+      }
+    }
   }
 
   for (creatorValue <- Seq(true, false)) {
