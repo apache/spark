@@ -169,6 +169,8 @@ _SAMPLES = (
     ("variant", T.VariantType(), "other"),
     ("geography", T.GeographyType(4326), "other"),
     ("geometry", T.GeometryType(4326), "other"),
+    ("file", T.FileType(), "other"),
+    ("file_external", T.FileType.external(), "other"),
 )
 
 # Verdict per RETURN type, pickled eval type, with the body category paired above.
@@ -206,6 +208,8 @@ _EXPECTED_RETURN_VERDICT = {
     "variant": NO_TRANSPILE,
     "geography": NO_TRANSPILE,
     "geometry": NO_TRANSPILE,
+    "file": NO_TRANSPILE,
+    "file_external": NO_TRANSPILE,
 }
 
 # Return types Arrow cannot express, so an Arrow-optimized UDF declaring one fails at
@@ -214,7 +218,9 @@ _EXPECTED_RETURN_VERDICT = {
 # CHAR/VARCHAR are absent even though to_arrow_type rejects them too: UDF construction
 # now refuses them for every eval type (REJECTED_CHAR_VARCHAR) before the Arrow check
 # is reached.
-_ARROW_REJECTED_RETURN_TYPES = frozenset({"year_month_interval", "calendar_interval"})
+_ARROW_REJECTED_RETURN_TYPES = frozenset(
+    {"year_month_interval", "calendar_interval", "file", "file_external"}
+)
 
 # Verdict per RETURN type, scalar pandas eval type: the pickled table, except that the
 # return types Arrow cannot express are rejected.
@@ -258,6 +264,8 @@ _EXPECTED_INPUT_VERDICT = {
     "variant": NO_TRANSPILE,
     "geography": NO_TRANSPILE,
     "geometry": NO_TRANSPILE,
+    "file": NOT_A_COLUMN_TYPE,
+    "file_external": NOT_A_COLUMN_TYPE,
 }
 
 # Verdict per INPUT column type, scalar pandas eval type: currently the pickled table.
