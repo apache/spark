@@ -278,10 +278,13 @@ case class DefaultValueExpression(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 
-  // Convert the default expression to ColumnDefaultValue, which is required by DS v2 APIs.
+  // Convert the default expression to ColumnDefaultValue, which is required by DS v2 APIs. The
+  // V2 expression describes the default rather than a source evaluation, so it keeps its
+  // time-zone-dependent casts and datetime fields (`checkTimeZone = false`).
   def toV2(statement: String, colName: String): ColumnDefaultValue = child match {
     case Literal(value, dataType) =>
-      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      val currentDefault =
+        analyzedChild.flatMap(new V2ExpressionBuilder(_, checkTimeZone = false).build())
       val existsDefault = LiteralValue(value, dataType)
       new ColumnDefaultValue(originalSQL, currentDefault.orNull, existsDefault)
     case _ =>
@@ -291,7 +294,8 @@ case class DefaultValueExpression(
   // Convert the default expression to DefaultValue, which is required by DS v2 APIs.
   def toV2CurrentDefault(statement: String, colName: String): DefaultValue = child match {
     case Literal(_, _) =>
-      val currentDefault = analyzedChild.flatMap(new V2ExpressionBuilder(_).build())
+      val currentDefault =
+        analyzedChild.flatMap(new V2ExpressionBuilder(_, checkTimeZone = false).build())
       new DefaultValue(originalSQL, currentDefault.orNull)
     case _ =>
       throw QueryCompilationErrors.defaultValueNotConstantError(statement, colName, originalSQL)

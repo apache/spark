@@ -205,7 +205,11 @@ case class CheckConstraint(
     val predicate = if (omitPredicate.contains(true)) {
       null
     } else {
-      new V2ExpressionBuilder(child, true).buildPredicate().orNull
+      // The predicate describes the condition rather than a source evaluation, and a write
+      // enforces it with the constants of this session, so it keeps its time-zone-dependent
+      // casts and datetime fields (`checkTimeZone = false`). Without them a write would re-parse
+      // `predicateSql` and read those constants in its own time zone.
+      new V2ExpressionBuilder(child, true, checkTimeZone = false).buildPredicate().orNull
     }
     val enforced = userProvidedCharacteristic.enforced.getOrElse(true)
     val rely = userProvidedCharacteristic.rely.getOrElse(false)
