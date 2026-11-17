@@ -4551,16 +4551,20 @@ class DataFrameAggregateSuite extends SharedSparkSession
         Seq((8, 0), (100, 10), (400, c)) -> 100,
         Seq((50, 0), (8, 0), (1000, c), (16, 3)) -> 1000,
         Seq((400, c), (8, 0)) -> 400,
-        Seq((300, 0), (100, 0)) -> 300)
+        Seq((300, 0), (100, 0)) -> 200)
       // One partition per sketch plus two empty partitions. The final aggregate merges the partial
-      // results in no fixed order, so these cases have the same result in every order.
+      // results in no fixed order, so these cases are picked to have the same result in every
+      // order.
       val anyOrder = Seq(
         Seq((1000, 10), (200, c), (400, 10)) -> 200,
         Seq((400, c), (100, c), (1000, c)) -> 100,
-        Seq((8, 0), (100, 10)) -> 100)
+        Seq((8, 0), (100, 10)) -> 100,
+        Seq((400, c), (8, 0)) -> 400,
+        Seq((300, 0), (100, 0)) -> 200)
 
       val sketchOf = (inOrder ++ anyOrder).flatMap(_._1).distinct.map { case (k, n) =>
         val bytes = kllSketch(sketchType, k, n)
+        // The table assumes that an input compacts iff n > k.
         assert(heapifyKll(sketchType, bytes).isEstimationMode == (n > k))
         (k, n) -> bytes
       }.toMap
@@ -4572,16 +4576,49 @@ class DataFrameAggregateSuite extends SharedSparkSession
         assert(kllMergedKAndN(sketchType, sketches, 1, lowestCompactingK = true) ==
           ((expectedK, n)), inputs)
       }
-      for ((inputs, expectedK) <- anyOrder) {
+      for ((inputs, expectedK) <- anyOrder; ordered <- Seq(inputs, inputs.reverse)) {
         val n = inputs.map(_._2.toLong).sum
-        assert(kllMergedKAndN(sketchType, inputs.map(sketchOf), inputs.size + 2,
-          lowestCompactingK = true) == ((expectedK, n)), inputs)
+        assert(kllMergedKAndN(sketchType, ordered.map(sketchOf), inputs.size + 2,
+          lowestCompactingK = true) == ((expectedK, n)), ordered)
       }
 
-      // An explicit k is kept.
+      // GROUP BY: one group per in-order case. One partition and fewer than 128 groups, so the
+      // object hash aggregate reads each group in order.
+      val rows = for (((inputs, _), g) <- inOrder.zipWithIndex; in <- inputs)
+        yield (g, sketchOf(in))
+      for (on <- Seq(false, true)) {
+        withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> on.toString) {
+          val ks = spark.sparkContext.parallelize(rows, 1).toDF("g", "s").groupBy("g")
+            .agg(expr(s"kll_merge_agg_$sketchType(s)").as("m")).orderBy("g").collect()
+            .map(r => heapifyKll(sketchType, r.getAs[Array[Byte]](1)).getK).toSeq
+          assert(ks == inOrder.map { case (inputs, k) => if (on) k else inputs.head._1 })
+        }
+      }
+
+      // A running window frame reads its rows in order. The first frame has only an empty input.
+      withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> "true") {
+        val window = Window.orderBy("ord").rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        val ks = Seq((8, 0), (1000, 10), (8, 3), (200, c)).map(sketchOf).zipWithIndex
+          .toDF("s", "ord").select(expr(s"kll_merge_agg_$sketchType(s)").over(window)).collect()
+          .map(r => heapifyKll(sketchType, r.getAs[Array[Byte]](0)).getK).toSeq
+        assert(ks == Seq(200, 1000, 1000, 200))
+      }
+
+      // An explicit k is kept, also when the final aggregate merges the partial results.
       val compacted = Seq.fill(2)(sketchOf((100, c)))
-      assert(kllMergedKAndN(sketchType, compacted, 1, lowestCompactingK = true, kArg = ", 400") ==
-        ((400, 2L * c)))
+      for (numPartitions <- Seq(1, 2)) {
+        assert(kllMergedKAndN(sketchType, compacted, numPartitions, lowestCompactingK = true,
+          kArg = ", 400") == ((400, 2L * c)))
+      }
+
+      // The conf is read when the function is resolved.
+      val resolvedOff = withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> "false") {
+        spark.sparkContext.parallelize(Seq(sketchOf((1000, 10)), sketchOf((200, c))), 1)
+          .toDF("s").agg(expr(s"kll_merge_agg_$sketchType(s)"))
+      }
+      withSQLConf(SQLConf.KLL_MERGE_AGG_LOWEST_COMPACTING_K.key -> "true") {
+        assert(heapifyKll(sketchType, resolvedOff.head().getAs[Array[Byte]](0)).getK == 1000)
+      }
     }
   }
 

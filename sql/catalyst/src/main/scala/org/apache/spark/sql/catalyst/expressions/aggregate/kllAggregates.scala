@@ -798,7 +798,13 @@ abstract class KllMergeAggBase[T <: KllSketch]
     } else {
       try {
         val sketchBytes = v.asInstanceOf[Array[Byte]]
-        Some(mergeSketch(sketchOption, wrapSketch(sketchBytes)))
+        val inputSketch = wrapSketch(sketchBytes)
+        // The k rule counts an empty input as absent, like a NULL.
+        if (takesLowestCompactingK && inputSketch.isEmpty()) {
+          sketchOption
+        } else {
+          Some(mergeSketch(sketchOption, inputSketch))
+        }
       } catch {
         case _: Exception =>
           throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -824,19 +830,18 @@ abstract class KllMergeAggBase[T <: KllSketch]
     sketch
   }
 
+  private def takesLowestCompactingK: Boolean = kExpr.isEmpty && lowestCompactingK
+
+  // A compacting input already has the error of its k. An exact input has no error, so its k
+  // counts only when it is the first non-empty input.
   private def rebuildsAtInputK(buffer: T, input: T): Boolean =
-    kExpr.isEmpty && lowestCompactingK && !input.isEmpty() && {
-      // An empty buffer takes the k of the first non-empty input, as in HllUnionAgg.mergeSketch.
-      val firstNonEmptyInput = buffer.isEmpty() && input.getK() != buffer.getK()
-      // A compacting input already has the error of its k. An exact input has no error, so its k
-      // counts only when it is the first non-empty input.
-      val lowerCompactingK = input.isEstimationMode() && input.getK() < buffer.getK()
-      firstNonEmptyInput || lowerCompactingK
-    }
+    takesLowestCompactingK && input.isEstimationMode() && input.getK() < buffer.getK()
 
   /** Merges an input sketch into the current aggregation buffer. */
   override def merge(updateBufferOption: Option[T], inputOption: Option[T]): Option[T] = {
     (updateBufferOption, inputOption) match {
+      // An empty partial result, for example of an empty partition, is absent too.
+      case (_, Some(input)) if takesLowestCompactingK && input.isEmpty() => updateBufferOption
       case (Some(_), Some(input)) =>
         try {
           Some(mergeSketch(updateBufferOption, input))
