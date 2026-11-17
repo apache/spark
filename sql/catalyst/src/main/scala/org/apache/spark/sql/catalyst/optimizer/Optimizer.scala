@@ -1575,7 +1575,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 object ColumnPruning extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val retainJoinEventTime =
+    lazy val retainJoinEventTime =
       conf.getConf(SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS) &&
         plan.isStreaming &&
         !plan.exists {
@@ -1596,9 +1596,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         })
 
     // Retain event time only for one equality join with unambiguous timestamp watermarks.
-    // Other shapes keep legacy pruning until their watermark and state eviction behavior can be
-    // handled together. This includes multiple joins, other stateful operators, CTEs, and joins
-    // with extra predicates.
+    // Multiple joins, other stateful operators, CTEs, and joins with extra predicates keep legacy
+    // pruning. Eligibility determines the stored join row schema. Changing which plans qualify,
+    // including through earlier optimizer rules, requires a separately pinned mode or a state
+    // migration.
     removeProjectBeforeFilter(plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
@@ -1740,7 +1741,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
   private def requiredInputReferences(
       plan: LogicalPlan,
-      retainJoinEventTime: Boolean): AttributeSet = {
+      retainJoinEventTime: => Boolean): AttributeSet = {
     val eventTimeAttributes = plan match {
       case join: Join if join.isStateful && retainJoinEventTime =>
         join.children.flatMap { child =>
@@ -1755,7 +1756,13 @@ object ColumnPruning extends Rule[LogicalPlan] {
         }
       case _ => Nil
     }
-    plan.references ++ AttributeSet(eventTimeAttributes)
+    val references = plan.references
+    val addedEventTimeAttributes = eventTimeAttributes.filterNot(references.contains)
+    if (addedEventTimeAttributes.isEmpty) {
+      references
+    } else {
+      references ++ AttributeSet(addedEventTimeAttributes)
+    }
   }
 
   /** Applies a projection only when the child is producing unnecessary attributes */

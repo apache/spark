@@ -54,6 +54,12 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(!startup.getConf(entry))
   }
 
+  test("SPARK-60850: new checkpoints enable join event-time retention by default") {
+    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+    val metadata = OffsetSeqMetadata(0, 0, spark.conf)
+    assert(metadata.conf.get(entry.key).contains("true"))
+  }
+
   test("SPARK-60850: new checkpoints pin join event-time retention across restarts") {
     val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
     Seq(false, true).foreach { enabled =>
