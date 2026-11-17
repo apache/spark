@@ -817,8 +817,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    *                                      arithmetic check for columns without their own
    *                                      watermark, which exactForUnwatermarkedColumns alone
    *                                      controls; leave that false too for the result of
-   *                                      earlier versions. Only the admission rule that stays
-   *                                      in force with the finalization check disabled sets it.
+   *                                      earlier versions. Two callers set it: the admission
+   *                                      rule that stays in force with the finalization check
+   *                                      disabled, and the restart compatibility check's solve
+   *                                      of the bound that older versions derived.
    * @param signedForUnwatermarkedColumns whether a column without its own watermark gets no
    *                                      cutoff from a condition whose watermark term has the
    *                                      column's sign, such as `lt + rt > c`. Such a bound falls
@@ -1027,17 +1029,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
   /** Whether a column of a join input can take a range cutoff: TIMESTAMP, or a time window. */
   def canTakeRangeCutoff(column: Attribute): Boolean =
-    column.dataType == TimestampType || windowDuration(column).isDefined
+    column.dataType == TimestampType || windowDurationRange(column).isDefined
 
-  /** The length of the windows in a column built by window(), when the column records it. */
-  private def windowDuration(column: Attribute): Option[Long] = {
-    val metadata = column.metadata
-    if (metadata.contains(TimeWindow.marker) && metadata.contains(TimeWindow.durationKey)) {
-      Some(metadata.getLong(TimeWindow.durationKey))
-    } else {
-      None
-    }
-  }
+  /**
+   * The shortest and the longest window length in a column of time windows, when the column
+   * records them: window() in the running query does, and a union does from its children's.
+   */
+  private def windowDurationRange(column: Attribute): Option[(Long, Long)] =
+    Option(column.metadata).filter(_.contains(TimeWindow.marker))
+      .flatMap(TimeWindow.durationRange)
 
   /**
    * Whether evicting `stateWindow` by its end is safe when a range condition compares it, as a
@@ -1047,10 +1047,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * input ends above the watermark, so it starts less than its own duration before it. When the
    * stored windows last at least as long as the other input's, every later window therefore
    * starts after every evicted window and orders above it. Shorter stored windows get no cutoff.
+   * TODO(SPARK-61510): give shorter stored windows a cutoff lowered by the difference of the two
+   *   window lengths. Until then an inner join keeps their state, and an outer or left semi join
+   *   bounded only that way fails analysis.
+   * A column can hold windows of several lengths, as a union of window columns does, so the
+   * shortest stored window must last at least as long as the longest window of the other input.
    */
   private def isWindowEvictionSafe(stateWindow: Attribute, watermarkWindow: Attribute): Boolean =
-    (windowDuration(stateWindow), windowDuration(watermarkWindow)) match {
-      case (Some(stored), Some(other)) => stored >= other
+    (windowDurationRange(stateWindow), windowDurationRange(watermarkWindow)) match {
+      case (Some((shortestStored, _)), Some((_, longestOther))) => shortestStored >= longestOther
       case _ => false
     }
 

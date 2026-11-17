@@ -91,7 +91,9 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   fails at start. Other stateful operators after the join that use them keep their rows in state
   and do not emit results that wait for the watermark, such as event-time timeouts, while
   update-mode aggregations and deduplication still emit rows. Windows that last at least as long
-  as the other input's are still removed.
+  as the other input's are still removed, but only for window columns that `window()` builds in
+  the query: a time window column read from a table, from files or under a supplied schema is
+  kept, since its rows can have any window length.
 
 - Spark 4.4 corrects cases where stream-stream equality joins could discard rows before their
   matches arrived or output unmatched rows too early. Such joins with a watermark on only one

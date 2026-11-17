@@ -324,10 +324,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       condition: Option[Expression],
       eventWatermark: Option[Long],
       eventTimeLags: Option[EventTimeLags]): Option[(Attribute, Long)] = {
-    // TODO(SPARK-61508): an inner or left semi join side that is bounded only through a column
-    //   that is not TIMESTAMP, cast to TIMESTAMP, has no eviction predicate, so it keeps its rows
-    //   for the life of the query until eviction through the cast is supported. Projecting the
-    //   column to TIMESTAMP before the join bounds that state.
+    // TODO(SPARK-61508): an inner or left semi join side, the side of an outer join that the join
+    //   does not finalize, and a finalized side when the finalization check is disabled, that is
+    //   bounded only through a column that is not TIMESTAMP, cast to TIMESTAMP, has no eviction
+    //   predicate, so it keeps its rows for the life of the query until eviction through the cast
+    //   is supported. Projecting the column to TIMESTAMP before the join bounds that state.
     // TODO(SPARK-61349): a conjunct that uses only constants still caps the cutoff, so it can
     //   stop eviction.
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
@@ -509,9 +510,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * older versions never did; that scan must stay. No equality key may use an event time: older
    * versions evicted both sides of such a key at the unshifted watermark, which
    * [[isWatermarkCheckpointCompatible]] accepts only for a forward shift whose shifted input no
-   * later stateful operator reads. Time windows are excluded: this version still derives the
-   * older ordering bound for them, but SPARK-61348 later removes it for windows shorter than the
-   * other input's.
+   * later stateful operator reads. Time windows are excluded: this version derives the older
+   * ordering bound only for stored windows that last at least as long as the other input's, and
+   * none for shorter windows or windows without a recorded length, and this check does not apply
+   * that window-length rule, so it rejects every ordering of whole windows.
    */
   private def isOwnEventTimeIntervalJoin(
       leftAttributes: Seq[Attribute],

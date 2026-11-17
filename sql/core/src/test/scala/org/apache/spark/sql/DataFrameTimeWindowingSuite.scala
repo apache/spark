@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.time.LocalDateTime
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
@@ -638,18 +640,20 @@ class DataFrameTimeWindowingSuite extends SharedSparkSession {
       .select(window($"time", "10 seconds", "5 seconds").as("window"))
     val windowMetadata = df.schema("window").metadata
     assert(windowMetadata.getBoolean(TimeWindow.marker))
-    assert(windowMetadata.getLong(TimeWindow.durationKey) === 10000000L)
+    assert(TimeWindow.durationRange(windowMetadata) === Some((10000000L, 10000000L)))
 
     val withWindowTime = df.select(window_time($"window").as("wt"))
     val windowTimeMetadata = withWindowTime.schema("wt").metadata
     assert(!windowTimeMetadata.contains(TimeWindow.marker))
-    assert(!windowTimeMetadata.contains(TimeWindow.durationKey))
+    assert(!windowTimeMetadata.contains(TimeWindow.minDurationKey))
+    assert(!windowTimeMetadata.contains(TimeWindow.maxDurationKey))
     checkAnswer(withWindowTime.select($"wt".cast("string")),
       Seq(Row("2016-03-27 19:38:19.999999"), Row("2016-03-27 19:38:24.999999")))
   }
 
-  test("union keeps the window duration only when every child records the same one") {
+  test("union records the shortest and longest window length of its children") {
     val time = spark.range(1).select(timestamp_seconds($"id").as("time"))
+    val fiveSeconds = time.select(window($"time", "5 seconds").as("window"))
     val tenSeconds = time.select(window($"time", "10 seconds").as("window"))
     val twentySeconds = time.select(window($"time", "20 seconds", "1 second").as("window"))
     val plainStruct = time.select(struct($"time".as("start"), $"time".as("end")).as("window"))
@@ -657,21 +661,70 @@ class DataFrameTimeWindowingSuite extends SharedSparkSession {
       val physical = df.queryExecution.sparkPlan.collectFirst {
         case u: UnionExec => u.output.head.metadata
       }
-      Seq(df.queryExecution.analyzed.output.head.metadata) ++ physical
+      val metadata = Seq(df.queryExecution.analyzed.output.head.metadata) ++ physical
+      assert(metadata.size == 2)
+      metadata
     }
 
-    Seq(tenSeconds.union(twentySeconds), twentySeconds.union(tenSeconds),
-        tenSeconds.union(plainStruct)).foreach { df =>
-      val metadata = outputMetadata(df)
-      assert(metadata.size == 2)
-      metadata.foreach { m =>
-        assert(m.getBoolean(TimeWindow.marker))
-        assert(!m.contains(TimeWindow.durationKey))
-      }
+    val seconds = 1000000L
+    Seq(
+      tenSeconds.union(twentySeconds) -> Some((10 * seconds, 20 * seconds)),
+      twentySeconds.union(tenSeconds) -> Some((10 * seconds, 20 * seconds)),
+      tenSeconds.union(twentySeconds).union(fiveSeconds) -> Some((5 * seconds, 20 * seconds)),
+      tenSeconds.union(tenSeconds) -> Some((10 * seconds, 10 * seconds)),
+      // A child that records no length leaves the union with none.
+      tenSeconds.union(plainStruct) -> None,
+      plainStruct.union(tenSeconds) -> None).foreach { case (df, range) =>
+      outputMetadata(df).foreach(m => assert(TimeWindow.durationRange(m) === range))
     }
-    val metadata = outputMetadata(tenSeconds.union(tenSeconds))
-    assert(metadata.size == 2)
-    metadata.foreach(m => assert(m.getLong(TimeWindow.durationKey) === 10000000L))
+    // The union keeps its first child's other metadata, including the window marker.
+    outputMetadata(tenSeconds.union(plainStruct)).foreach { m =>
+      assert(m.getBoolean(TimeWindow.marker))
+    }
+  }
+
+  test("window lengths stay with the query whose window() builds the column") {
+    val time = spark.range(1).select(timestamp_seconds($"id").as("time"))
+    val twentySeconds = time.select(window($"time", "20 seconds").as("window"))
+    val tenSeconds = time.select(window($"time", "10 seconds").as("window"))
+    val tenSecondRange = Some((10000000L, 10000000L))
+    def assertNoLength(metadata: Metadata): Unit = {
+      // window_time() and other readers of stored window columns rely on the marker.
+      assert(metadata.getBoolean(TimeWindow.marker))
+      assert(TimeWindow.durationRange(metadata) === None)
+      assert(!metadata.contains(TimeWindow.minDurationKey))
+      assert(!metadata.contains(TimeWindow.maxDurationKey))
+    }
+
+    withTable("windows") {
+      twentySeconds.write.format("parquet").saveAsTable("windows")
+      // The stored schema keeps the length, but rows appended later can have other lengths.
+      tenSeconds.write.format("parquet").mode("append").saveAsTable("windows")
+      assertNoLength(spark.table("windows").schema("window").metadata)
+      checkAnswer(spark.table("windows").select(window_time($"window").cast("long")),
+        Seq(Row(19L), Row(9L)))
+    }
+    withTempPath { path =>
+      tenSeconds.write.parquet(path.getCanonicalPath)
+      assertNoLength(spark.read.parquet(path.getCanonicalPath).schema("window").metadata)
+      assertNoLength(spark.readStream.schema(twentySeconds.schema)
+        .parquet(path.getCanonicalPath).schema("window").metadata)
+    }
+    assertNoLength(spark.createDataFrame(tenSeconds.collect().toList.asJava,
+      twentySeconds.schema).schema("window").metadata)
+    // A window nested in a struct of a supplied schema gives no length either.
+    val nested = time.select(struct(window($"time", "20 seconds").as("w")).as("s"))
+    assertNoLength(spark.createDataFrame(nested.collect().toList.asJava, nested.schema)
+      .select($"s.w").schema("w").metadata)
+    // Dataset.to keeps the column's own length, not the supplied schema's.
+    assert(TimeWindow.durationRange(tenSeconds.to(twentySeconds.schema).schema("window")
+      .metadata) === tenSecondRange)
+    // window() in the running query keeps its length through a view.
+    withTempView("tenSecondWindows") {
+      tenSeconds.createOrReplaceTempView("tenSecondWindows")
+      assert(TimeWindow.durationRange(spark.table("tenSecondWindows").schema("window")
+        .metadata) === tenSecondRange)
+    }
   }
 
   test("2 window_time functions on raw window column") {

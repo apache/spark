@@ -260,7 +260,9 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   override protected def withNewChildInternal(newChild: Expression): GetStructField =
     copy(child = newChild)
 
-  def metadata: Metadata = childSchema(ordinal).metadata
+  // A nested field's window lengths can come from a stored or supplied schema, so they need not
+  // hold for its rows; see TimeWindow.withoutDuration.
+  def metadata: Metadata = TimeWindow.withoutDuration(childSchema(ordinal).metadata)
 }
 
 /**

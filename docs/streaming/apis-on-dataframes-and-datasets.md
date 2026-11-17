@@ -1481,9 +1481,11 @@ Additional details on supported joins:
   time or its time window, or through a range condition on a timestamp column of the input. A
   range condition may also compare the input's time window as a whole with the other input's,
   such as `leftWindow > rightWindow`, when the input's windows last at least as long as the
-  other input's. A range condition on a column of another type does not qualify: a numeric
-  column, such as `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, or a time
-  window shorter than the other input's.
+  other input's. For a union of window columns, its shortest windows must last at least as long
+  as the other input's longest. A range condition on a column of another type does not qualify:
+  a numeric column, such as `n > CAST(rightTime AS BIGINT)`, a DATE or TIMESTAMP_NTZ column, a
+  time window shorter than the other input's, or a time window column read from a table, from
+  files or under a supplied schema, whose window lengths the query does not know.
 
 - A stream-stream inner join cleans up an input's state only with such a time constraint. For
   example, an inner join whose only time constraint is `leftWindow > rightWindow`, with 10-second

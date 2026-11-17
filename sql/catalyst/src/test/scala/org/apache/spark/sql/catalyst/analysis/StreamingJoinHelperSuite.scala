@@ -43,12 +43,18 @@ class StreamingJoinHelperSuite extends AnalysisTest {
 
   test("whole-window bounds need stored windows at least as long as the other input's") {
     val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
-    def window(name: String, durationSeconds: Option[Long], watermark: Boolean): Attribute = {
-      val metadata = new MetadataBuilder().putBoolean(TimeWindow.marker, true)
-      durationSeconds.foreach(s => metadata.putLong(TimeWindow.durationKey, s * 1000000L))
-      if (watermark) metadata.putLong(EventTimeWatermark.delayKey, 0L)
-      AttributeReference(name, windowType, metadata = metadata.build())()
+    // A column records its shortest and longest window length, in seconds here.
+    def windows(name: String, durationSeconds: Option[(Long, Long)], watermark: Boolean)
+        : Attribute = {
+      val marked = new MetadataBuilder().putBoolean(TimeWindow.marker, true)
+      if (watermark) marked.putLong(EventTimeWatermark.delayKey, 0L)
+      val metadata = durationSeconds.map { case (min, max) =>
+        TimeWindow.withDuration(marked.build(), min * 1000000L, max * 1000000L)
+      }.getOrElse(marked.build())
+      AttributeReference(name, windowType, metadata = metadata)()
     }
+    def window(name: String, durationSeconds: Option[Long], watermark: Boolean): Attribute =
+      windows(name, durationSeconds.map(s => (s, s)), watermark)
     def cutoff(stored: Attribute, other: Attribute, condition: Expression): Option[Long] =
       StreamingJoinHelper.getStateValueWatermark(
         AttributeSet(Seq(stored)), AttributeSet(Seq(other)), Some(condition), Some(10000L))
@@ -67,6 +73,17 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(cutoff(unknown, other10, unknown > other10) === None)
     val struct = AttributeReference("ls", windowType)()
     assert(cutoff(struct, other10, struct > other10) === None)
+    // A union of window columns records the range of its children's lengths: its shortest
+    // stored window must last at least as long as the other input's longest.
+    val stored20to30 = windows("lw", Some((20L, 30L)), watermark = false)
+    assert(cutoff(stored20to30, other10, stored20to30 > other10) === Some(10000L))
+    val other5to10 = windows("rw", Some((5L, 10L)), watermark = true)
+    assert(cutoff(stored20, other5to10, stored20 > other5to10) === Some(10000L))
+    assert(cutoff(stored10, other5to10, stored10 > other5to10) === Some(10000L))
+    val other10to30 = windows("rw", Some((10L, 30L)), watermark = true)
+    assert(cutoff(stored20, other10to30, stored20 > other10to30) === None)
+    val stored10to30 = windows("lw", Some((10L, 30L)), watermark = false)
+    assert(cutoff(stored10to30, other20, stored10to30 > other20) === None)
   }
 
   test("state watermark extraction preserves arithmetic term multiplicity") {

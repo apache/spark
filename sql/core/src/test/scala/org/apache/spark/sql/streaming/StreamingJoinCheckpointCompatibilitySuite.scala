@@ -284,8 +284,8 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     assert(!oneSidedCompatible(Seq(leftTime), Set.empty, 2))
 
     // Ordering time windows is excluded even when nothing reads the output watermark: this
-    // version still derives the older bound for whole windows, but SPARK-61348 later removes it
-    // for windows shorter than the other input's.
+    // version derives the older bound only for stored windows that last at least as long as the
+    // other input's, and the check does not apply that window-length rule.
     val windowType = StructType(Seq(
       StructField("start", TimestampType), StructField("end", TimestampType)))
     val leftWindow = AttributeReference("leftWindow", windowType,

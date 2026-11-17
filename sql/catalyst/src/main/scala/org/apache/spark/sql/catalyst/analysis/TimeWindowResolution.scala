@@ -54,11 +54,9 @@ object TimeWindowResolution {
       case _ => Metadata.empty
     }
 
-    val newMetadata = new MetadataBuilder()
-      .withMetadata(metadata)
-      .putBoolean(TimeWindow.marker, true)
-      .putLong(TimeWindow.durationKey, window.windowDuration)
-      .build()
+    val newMetadata = TimeWindow.withDuration(
+      new MetadataBuilder().withMetadata(metadata).putBoolean(TimeWindow.marker, true).build(),
+      window.windowDuration, window.windowDuration)
 
     def getWindow(i: Int, dataType: DataType): Expression = {
       val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
@@ -208,9 +206,8 @@ object TimeWindowResolution {
       }
 
       val newMetadata = new MetadataBuilder()
-        .withMetadata(metadata)
+        .withMetadata(TimeWindow.withoutDuration(metadata))
         .remove(TimeWindow.marker)
-        .remove(TimeWindow.durationKey)
         .remove(SessionWindow.marker)
         .build()
 
