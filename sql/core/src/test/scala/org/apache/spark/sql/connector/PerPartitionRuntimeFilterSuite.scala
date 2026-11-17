@@ -341,6 +341,32 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       }
     }
 
+    test(s"a semi join over another one is judged by its own application side (AQE $adaptive)") {
+      // `rand()` keeps the placeholders of `dim1` and `dim2` above the projection, in one filter.
+      // So the semi join of `dim2` is built over that of `dim1`. Both pair with the joins above.
+      createIdTable("fact1", "v", (0 until 16).map(i => s"($i, ${i * 10})").mkString(", "))
+      createIdTable("fact2", "w", (0 until 16).map(i => s"($i, ${i * 10})").mkString(", "))
+      Seq("dim1", "dim2").foreach { name =>
+        createIdTable(name, "flag", "(1, 1), (2, 0), (3, 1), (5, 1), (6, 0), (9, 1)")
+      }
+      withSQLConf(
+          ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key ->
+            ((creationSideSize("dim1") + 1) / 2).toString) {
+        val df = sql("SELECT t.id, t.v, t.w, t.r < 1 FROM (SELECT f1.id, f1.v, f2.id AS id2, " +
+          "f2.w, rand() AS r FROM testcat.ns.fact1 f1 JOIN testcat.ns.fact2 f2 ON f1.id = f2.id) " +
+          "t JOIN testcat.ns.dim1 d1 ON t.id = d1.id JOIN testcat.ns.dim2 d2 ON t.id2 = d2.id " +
+          "WHERE d1.flag = 1 AND d2.flag = 1")
+        val semiJoins = perPartitionSemiJoins(df)
+        assert(semiJoins.size == 2 &&
+          semiJoins.exists(_.left.exists(perPartitionSemiJoin.isDefinedAt)),
+          s"test setup: one semi join must be over the other:\n${df.queryExecution.optimizedPlan}")
+        checkAnswer(df, Seq(1, 3, 5, 9).map(i => Row(i, i * 10, i * 10, true)))
+        val plan = df.queryExecution.executedPlan
+        assert(executedSemiJoins(plan).size == 2, plan)
+      }
+    }
+
     test(s"with partially clustered distribution, the semi join keeps the application side's " +
         s"splits (AQE $adaptive)") {
       // The creation side's aggregate is the smaller side, so it is the one that repeats, once for

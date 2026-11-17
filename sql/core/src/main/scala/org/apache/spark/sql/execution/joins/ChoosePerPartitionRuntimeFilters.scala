@@ -121,18 +121,22 @@ case class ChoosePerPartitionRuntimeFilters(
     val shuffles: Int = plan.collect { case s: ShuffleExchangeLike => s }.size
 
     private val tasks: Seq[(SparkPlan, Int)] = {
-      def walk(node: SparkPlan, top: SparkPlan): Seq[(SparkPlan, Int)] = {
+      // `topTasks` is the number of partitions of that topmost operator, or None when it is `node`.
+      // So each node is asked for its partitioning once. A union derives it again on each call.
+      def walk(node: SparkPlan, topTasks: Option[Int]): Seq[(SparkPlan, Int)] = {
+        lazy val partitioning = node.outputPartitioning
+        lazy val tasks = topTasks.getOrElse(partitioning.numPartitions)
         if (node.children.isEmpty) {
-          Seq(node -> top.outputPartitioning.numPartitions)
+          Seq(node -> tasks)
         } else {
-          val countsChild = node.isInstanceOf[Exchange] || (node.outputPartitioning match {
+          val countsChild = node.isInstanceOf[Exchange] || (partitioning match {
             case SinglePartition => true
-            case partitioning => partitioning.numPartitions == 0
+            case p => p.numPartitions == 0
           })
-          node.children.flatMap(child => walk(child, if (countsChild) child else top))
+          node.children.flatMap(walk(_, if (countsChild) None else Some(tasks)))
         }
       }
-      walk(plan, plan)
+      walk(plan, None)
     }
 
     def tasksReading(leaf: SparkPlan): Option[Int] =
@@ -145,12 +149,20 @@ case class ChoosePerPartitionRuntimeFilters(
   // a scan are not found, the semi join is taken as not free.
   private def isFree(withIt: Cost, withoutIt: Cost, without: SparkPlan): Boolean =
     withIt.shuffles <= withoutIt.shuffles &&
-      without.collectLeaves().forall { scan =>
+      applicationScans(without).forall { scan =>
         (withIt.tasksReading(scan), withoutIt.tasksReading(scan)) match {
           case (Some(tasks), Some(tasksWithout)) => tasks >= tasksWithout
           case _ => false
         }
       }
+
+  // The leaves of an application side, but not those of the creation side of a semi join in it.
+  // That semi join may still be judged, or may have gone, so the plans of the costs can lack them.
+  private def applicationScans(side: SparkPlan): Seq[SparkPlan] = side match {
+    case PerPartitionSemiJoin(_, join, _) => applicationScans(join.left)
+    case leaf if leaf.children.isEmpty => Seq(leaf)
+    case node => node.children.flatMap(applicationScans)
+  }
 
   // The expected number of items of each bloom filter of the semi join, an even share of the
   // creation side's over its partition keys. None when the creation side has fewer partition keys
