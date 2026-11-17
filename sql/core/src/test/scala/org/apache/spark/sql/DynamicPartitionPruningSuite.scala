@@ -33,10 +33,12 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.columnar.ColumnarUserDefinedFunction
 import org.apache.spark.sql.connector.RotatingLimitDataSourceV2
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryTableCatalog, InMemoryTableCatalystRuntimeFilterCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
+import org.apache.spark.sql.execution.columnar.udf.AddOneFunction
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec,
@@ -48,7 +50,7 @@ import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
@@ -2558,6 +2560,24 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
       }
     } finally {
       conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
+    }
+  }
+
+  test("no standalone DPP subquery for a filtering side with a columnar UDF") {
+    val addOne = ColumnarUserDefinedFunction(
+      "dpp_add_one", Seq(LongType), LongType, Some(new AddOneFunction))
+    withUserDefinedFunction("dpp_add_one" -> true) {
+      spark.udf.registerColumnar(addOne)
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
+        Seq(
+          "f.store_id = s.store_id AND dpp_add_one(s.store_id) = 2",
+          "f.store_id = dpp_add_one(s.store_id) - 1 AND s.store_id = 1").foreach { condition =>
+          val df = sql(
+            s"SELECT f.date_id, f.store_id FROM fact_sk f JOIN dim_store s ON $condition")
+          checkPartitionPruningPredicate(df, false, false)
+          checkAnswer(df, Row(1000, 1) :: Nil)
+        }
+      }
     }
   }
 
