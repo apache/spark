@@ -3287,7 +3287,9 @@ class DataFrameSuite extends SharedSparkSession
       // Also with a BIGINT `id`, whose `id = 7` has its constant only after `ConstantFolding`,
       // and once the filter is pushed below the projection.
       val twoLong = Seq(("2", 7L, 1)).toDF("s", "id", "x")
-      (becomeFalse ++ failToFold).foreach { condition =>
+      val reversed = lit(10) / ($"x" - $"i") > 0 &&
+        when($"id" > 10, lit(10) / $"x").otherwise(0) > 1 && $"i" === 1 && lit(7) === $"id"
+      (becomeFalse ++ failToFold :+ reversed).foreach { condition =>
         Seq(false, true).foreach(pushed => check(twoLong, ints, condition, Seq.empty, pushed))
       }
       // `id = 7` folds the second conjunct, and goes first, as `i = 0` after it can fail, so that
