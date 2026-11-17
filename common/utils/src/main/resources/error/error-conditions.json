@@ -2017,6 +2017,11 @@
           "Cannot drop all fields in struct."
         ]
       },
+      "CAST_VARIANT_TO_NON_NULLABLE_TARGET" : {
+        "message" : [
+          "cannot cast <srcType> to <targetType>, because the target type has a non-nullable struct field, or a non-nullable array element or map value of a type other than \"VARIANT\", and the cast returns NULL there for a missing key or a JSON null. Make that field, element or value nullable in the target type. To restore the previous behavior, set <config> to \"true\"."
+        ]
+      },
       "CAST_WITHOUT_SUGGESTION" : {
         "message" : [
           "cannot cast <srcType> to <targetType>."

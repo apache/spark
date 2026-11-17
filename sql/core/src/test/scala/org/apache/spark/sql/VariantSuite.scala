@@ -1769,9 +1769,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
 
   test("SPARK-61831: cast from variant to a type with a non-nullable nested slot fails analysis") {
     withVariantEvents {
-      def assertRejected(df: => DataFrame): Unit = {
+      def assertRejected(
+          df: => DataFrame,
+          condition: String = "DATATYPE_MISMATCH.CAST_VARIANT_TO_NON_NULLABLE_TARGET"): Unit = {
         val e = intercept[AnalysisException](df.collect())
-        assert(e.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION", e.getMessage)
+        assert(e.getCondition == condition, e.getMessage)
+        if (condition.endsWith("CAST_VARIANT_TO_NON_NULLABLE_TARGET")) {
+          assert(e.getMessageParameters.get("config") ==
+            s"\"${SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET.key}\"")
+        }
       }
       Seq("true", "false").foreach { ansi =>
         withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
@@ -1782,18 +1788,39 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
               "STRUCT<user_id: BIGINT NOT NULL, country: STRING>",
               "STRUCT<user_id: BIGINT, c: STRUCT<x: INT NOT NULL>>",
               "ARRAY<STRUCT<user_id: BIGINT NOT NULL>>",
-              "MAP<STRING, STRUCT<user_id: BIGINT NOT NULL>>").foreach { t =>
+              "MAP<STRING, STRUCT<user_id: BIGINT NOT NULL>>",
+              // A missing key leaves even a VARIANT field NULL.
+              "STRUCT<user_id: VARIANT NOT NULL>").foreach { t =>
               assertRejected(sql(s"SELECT $castFn(payload AS $t) FROM events"))
             }
-            // A VARIANT nested in a struct goes through the same check.
+            // A VARIANT nested in a struct goes through the same check. Its cast can fail for other
+            // reasons as well, so it reports the generic error.
             assertRejected(sql(s"SELECT $castFn(named_struct('v', payload) AS " +
-              "STRUCT<v: STRUCT<user_id: BIGINT NOT NULL>>) FROM events"))
+              "STRUCT<v: STRUCT<user_id: BIGINT NOT NULL>>) FROM events"),
+              "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
           }
           // Non-nullable array elements and map values: [1, null] and {"a": null}.
-          assertRejected(sql("SELECT parse_json('[1, null]') AS v")
-            .select(col("v").cast(ArrayType(LongType, containsNull = false))))
-          assertRejected(sql("""SELECT parse_json('{"a": null}') AS v""")
-            .select(col("v").cast(MapType(StringType, LongType, valueContainsNull = false))))
+          val arrayDf = sql("SELECT parse_json('[1, null]') AS v")
+          val mapDf = sql("""SELECT parse_json('{"a": null}') AS v""")
+          assertRejected(arrayDf.select(col("v").cast(ArrayType(LongType, containsNull = false))))
+          assertRejected(
+            mapDf.select(col("v").cast(MapType(StringType, LongType, valueContainsNull = false))))
+          // An element that is an array is NULL for a JSON null, even if its elements are VARIANT.
+          assertRejected(sql("SELECT parse_json('[[1], null]') AS v").select(col("v").cast(
+            ArrayType(ArrayType(VariantType, containsNull = false), containsNull = false))))
+
+          // A non-nullable VARIANT element or value holds a variant null for a JSON null, so
+          // these casts are accepted.
+          checkAnswer(arrayDf.select(col("v").cast(ArrayType(VariantType, containsNull = false))
+            .as("a")).selectExpr("transform(a, x -> to_json(x))"), Row(Seq("1", "null")))
+          checkAnswer(mapDf.select(col("v")
+            .cast(MapType(StringType, VariantType, valueContainsNull = false)).as("m"))
+            .selectExpr("to_json(m['a'])", "m['a'] IS NULL"), Row("null", false))
+          val nestedVariantArray = StructType(Seq(
+            StructField("a", ArrayType(VariantType, containsNull = false))))
+          checkAnswer(sql("""SELECT parse_json('{"a": [1, null]}') AS v""")
+            .select(col("v").cast(nestedVariantArray).as("s"))
+            .selectExpr("transform(s.a, x -> to_json(x))"), Row(Seq("1", "null")))
 
           // Nullable targets are still accepted, keep the NULLs and keep the genuine 0 (row 4).
           val expected =
