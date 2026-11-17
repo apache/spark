@@ -421,24 +421,32 @@ class ReadwriterV2TestsMixin:
             df.writeTo("test_table").overwrite(lit(True))
 
     def test_write_modes_with_options_and_properties(self):
-        df = self.spark.range(3)
-        with self.table("test_table"):
-            writer = df.writeTo("test_table").using("parquet").option("compression", "snappy")
-            writer.tableProperty("prop", "value").create()
-            self.assertEqual(3, self.spark.table("test_table").count())
-            props = self.spark.sql("SHOW TBLPROPERTIES test_table").collect()
-            self.assertIn(("prop", "value"), [tuple(r) for r in props])
+        with self.sql_conf(
+            {"spark.sql.catalog.testcat": "org.apache.spark.sql.connector.catalog.InMemoryCatalog"}
+        ):
+            tbl = "testcat.pyspark_writer_v2_modes"
+            with self.table(tbl):
+                df = self.spark.range(3)
+                with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_NOT_FOUND"):
+                    df.writeTo(tbl).replace()
 
-            # parquet is not a v2 provider, so replace() and createOrReplace() fail even
-            # without test_table; append() and overwritePartitions() fail because test_table is v1.
-            with self.assertRaisesRegex(AnalysisException, "UNSUPPORTED_FEATURE.TABLE_OPERATION"):
-                df.writeTo("test_table").using("parquet").replace()
-            with self.assertRaisesRegex(AnalysisException, "UNSUPPORTED_FEATURE.TABLE_OPERATION"):
-                df.writeTo("test_table").using("parquet").createOrReplace()
-            with self.assertRaisesRegex(AnalysisException, "Cannot write into v1 table"):
-                df.writeTo("test_table").append()
-            with self.assertRaisesRegex(AnalysisException, "Cannot write into v1 table"):
-                df.writeTo("test_table").overwritePartitions()
+                df.writeTo(tbl).tableProperty("prop", "value").createOrReplace()
+                self.assertEqual(3, self.spark.table(tbl).count())
+                props = self.spark.sql(f"SHOW TBLPROPERTIES {tbl}").collect()
+                self.assertIn(("prop", "value"), [tuple(r) for r in props])
+
+                with self.assertRaisesRegex(AnalysisException, "TABLE_OR_VIEW_ALREADY_EXISTS"):
+                    df.writeTo(tbl).create()
+
+                df.writeTo(tbl).append()
+                self.assertEqual(6, self.spark.table(tbl).count())
+                # The in-memory table fails any write that carries this write option.
+                writer = df.writeTo(tbl).option("spark.sql.test.simulateFailedWrite", "true")
+                with self.assertRaisesRegex(Exception, "Manual write to table failure"):
+                    writer.append()
+                self.assertEqual(6, self.spark.table(tbl).count())
+                self.spark.range(2).writeTo(tbl).overwritePartitions()
+                self.assertEqual(2, self.spark.table(tbl).count())
 
     def test_cluster_by(self):
         data = [
