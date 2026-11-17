@@ -161,8 +161,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // `filterApplicationSidePlan` with the placeholder of a per-partition bloom filter of its key,
   // over the partition transform `creation` of the creation side. The aggregate of its semi join
   // reads the creation side again, apart from the join. So a creation side gives none when:
-  //  - it has a Python UDF or is not deterministic, as for the bloom filter of the whole creation
-  //    side;
+  //  - it has a Python or external UDF, or is not deterministic, as for the bloom filter of the
+  //    whole creation side;
   //  - it reads a V2 scan with a pushed operation that does not work on each row by itself, such as
   //    a limit. Such a scan can return other rows when read again (see `canEvaluateAgain`).
   // A creation side also gives none when it needs more partition keys than a `bucket` transform
@@ -177,7 +177,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     lazy val creationSide = ConstantFolding(ColumnPruning(
       Project(Seq(Alias(filterCreationSide.key, "key")()), filterCreationSide.plan)))
     if (creation.numBucketsOpt.exists(sizing.minPartitionKeys > _ + 1L) ||
-        creationSide.containsPattern(PYTHON_UDF) || !creationSide.deterministic ||
+        creationSide.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF) || !creationSide.deterministic ||
         creationSide.exists {
           case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
           case _ => false
