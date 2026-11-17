@@ -64,6 +64,8 @@ object RealTimeModeAllowlist extends Logging {
     // exchange is a supported member of a pipelined group rather than a materialization barrier.
     "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec",
     "org.apache.spark.sql.execution.joins.BroadcastHashJoinExec",
+    // Stateless, joins rows in its input's task, and keeps its input's determinism level.
+    "org.apache.spark.sql.execution.joins.ExternalLookupJoinExec",
     // Streaming aggregation. A Real-Time Mode batch does not end when its input is exhausted, so
     // an aggregation is planned as the streamline operator, which merges each input row against
     // state and emits an intermediate result per input in Update mode (Append and Complete drain
