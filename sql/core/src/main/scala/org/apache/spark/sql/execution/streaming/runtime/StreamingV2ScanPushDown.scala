@@ -283,7 +283,9 @@ private[sql] object StreamingV2ScanPushDown
       SQLConf.withExistingConf(conf) {
         // The plan of a micro-batch is normalized before it is optimized, see `QueryExecution`.
         val normalized = QueryExecution.normalize(session, plan)
-        val optimized = session.sessionState.optimizer.execute(forStartup(normalized))
+        val prepared = KllCheckpointPreparation(normalized, plan,
+          conf.getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING))
+        val optimized = session.sessionState.optimizer.execute(forStartup(prepared))
         val planned = forPlanning(optimized)
         val occurrences = mutable.ArrayBuffer.empty[(StreamingRelationV2, Reads)]
         // Visits the nodes as the planner plans them: the projections and the filters over a

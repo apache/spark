@@ -33,6 +33,71 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL exported HAVING aggregates retain their bound output identity") {
+    for (legacy <- Seq(true, false)) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+        val query = sql("""SELECT kll_sketch_agg_bigint(t.id) AS s FROM range(10) t
+            |HAVING EXISTS (SELECT 1 WHERE kll_sketch_agg_bigint(t.id) != s)""".stripMargin)
+        val subquery = query.queryExecution.analyzed.flatMap(_.expressions).flatMap(_.collect {
+          case exists: org.apache.spark.sql.catalyst.expressions.Exists => exists
+        }).head
+        val references = subquery.plan.flatMap(_.expressions).flatMap(_.collect {
+          case reference: org.apache.spark.sql.catalyst.expressions.OuterReference =>
+            reference.e.exprId
+        }).distinct
+        assert(references.size == (if (legacy) 1 else 2), query.queryExecution.analyzed)
+      }
+    }
+  }
+
+  test("KLL aggregate inputs retain nested aggregate validation") {
+    for (function <- Seq("sum", "count")) {
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val error = intercept[AnalysisException] {
+          sql(s"SELECT $function(sum(id) + $scalar) FROM range(2)").queryExecution.analyzed
+        }
+        assert(error.getCondition == "NESTED_AGGREGATE_FUNCTION")
+      }
+    }
+  }
+
+  test("KLL aggregate pairwise NULL guards and DISTINCT retain original input values") {
+    withTempView("kll_pairwise_inputs") {
+      spark.sparkContext.parallelize(Seq((Option.empty[Double], 0L), (None, 1L)), 1)
+        .toDF("x", "id").createOrReplaceTempView("kll_pairwise_inputs")
+      for (legacy <- Seq(true, false); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.ANSI_ENABLED.key -> "true", SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+          checkAnswer(sql(s"SELECT regr_count(x, $scalar / 0D) FROM kll_pairwise_inputs"), Row(0L))
+          checkAnswer(sql(s"SELECT count(DISTINCT id + $scalar) FROM kll_pairwise_inputs"), Row(2L))
+        }
+      }
+    }
+  }
+
+  Seq("first", "any_value", "max_by", "min_by").foreach { function =>
+    test(s"KLL aggregate input extraction preserves buffer demand: $function") {
+      val value = s"CASE WHEN id = 0 THEN $scalar " +
+        "ELSE CAST(raise_error('unused aggregate input') AS BIGINT) END"
+      val argument = if (function.endsWith("_by")) {
+        s"$value, CASE WHEN id = 0 THEN 1L ELSE CAST(NULL AS BIGINT) END"
+      } else value
+      for (legacy <- Seq(true, false); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+          checkAnswer(sql(s"SELECT $function($argument) FROM range(0, 2, 1, 1)"), Row(3L))
+        }
+      }
+    }
+  }
+
   Seq(false, true).foreach { filtered =>
     test(s"KLL Count input extraction preserves skipped inputs: filtered=$filtered") {
       withTempView("kll_nullable_count") {
@@ -583,6 +648,23 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
         }
         assert(error.getCondition == "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
       }
+    }
+  }
+
+  test("KLL ASOF tuple IN validates randomness in every operand") {
+    // The strict single-pass analyzer does not yet support this multi-column subquery shape.
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      val error = intercept[AnalysisException] {
+        sql("""SELECT l.k FROM VALUES (3), (4) AS l(k)
+            |ASOF JOIN VALUES (0), (1) AS r(k) MATCH_CONDITION (l.k >= r.k)
+            |ON (CAST(l.k AS DOUBLE), rand(0)) IN
+            |(SELECT CAST(kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS DOUBLE), 0D
+            | FROM range(3))""".stripMargin)
+      }
+      assert(error.getCondition == "INVALID_NON_DETERMINISTIC_EXPRESSIONS")
     }
   }
 

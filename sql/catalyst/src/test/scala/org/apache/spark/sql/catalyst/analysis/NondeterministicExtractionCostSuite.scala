@@ -30,6 +30,27 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, J
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
+  test("nondeterministic aggregate-host lookup skips redundant alias traversal") {
+    val visits = new AtomicInteger
+    val fields = (1 to 16).map { i =>
+      val argument = (1 to 32).foldLeft[Expression](Literal(i.toLong)) { (child, _) =>
+        Counted(child, visits)
+      }
+      Alias(Sum(argument).toAggregateExpression(), s"n$i")()
+    }
+    val aggregate = Aggregate(Nil, fields, OneRowRelation())
+    val random = Rand(0)
+    fields.foreach(_.deterministic)
+    random.resolved
+    visits.set(0)
+    val (extra, expressions) = SimpleAnalyzer.ResolveAggregateFunctions
+      .resolveExprsWithAggregate(Seq(random), aggregate)
+    assert(extra.isEmpty && expressions == Seq(random))
+    // The deterministic seed literal still needs one ordinary lookup. The random root cannot
+    // match any output, so it must not add another traversal of all these deep alias trees.
+    assert(visits.get <= 16 * 32, s"Redundant alias traversal: ${visits.get} visits")
+  }
+
   private case class SemanticHashCounted(child: Expression, hashes: AtomicInteger)
       extends UnaryExpression with Unevaluable {
     override def dataType: DataType = child.dataType

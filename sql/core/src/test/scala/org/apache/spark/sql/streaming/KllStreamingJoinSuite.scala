@@ -198,14 +198,19 @@ class KllStreamingJoinSuite extends StreamTest {
                 val second = if (userAlias) (if (stageLeft) "l.t" else "r.t") else secondScalar
                 val condition = if (stageLeft) s"l.value + $value - $second = r.value"
                   else s"l.value = r.value + $value - $second"
+                val outputs = Seq("l.value", "r.value") ++ (if (userAlias) {
+                  if (stageLeft) Seq("l.s", "l.t") else Seq("r.s", "r.t")
+                } else Nil)
                 input(left, stageLeft).as("l").join(input(right, !stageLeft).as("r"),
-                  expr(condition)).selectExpr("l.value", "r.value")
+                  expr(condition)).selectExpr(outputs: _*)
               }
             // Rollback construction independently recreates the historical unstaged layout.
             val initial = query(analysisLegacy = legacy)
             val current = query(analysisLegacy = analysisLegacy)
             val l = if (stageLeft) 0 else -2
             val r = if (stageLeft) -2 else 0
+            def expected(left: Int, right: Int): Row =
+              if (userAlias) Row(left, right, 3L, 5L) else Row(left, right)
             def checkPayload: AssertOnQuery = AssertOnQuery { query =>
               val join = query.lastExecution.executedPlan.collectFirst {
                 case j: StreamingSymmetricHashJoinExec => j
@@ -216,7 +221,7 @@ class KllStreamingJoinSuite extends StreamTest {
             testStream(initial)(
               StartStream(checkpointLocation = checkpoint.getAbsolutePath,
                 additionalConfs = Map(sharing -> legacy.toString)),
-              AddData(left, l), AddData(right, r), CheckLastBatch(Row(l, r)),
+              AddData(left, l), AddData(right, r), CheckLastBatch(expected(l, r)),
               checkPayload, StopStream)
             val logPath = new File(checkpoint, "offsets").getAbsolutePath
             if (recorded.isEmpty) {
@@ -234,9 +239,9 @@ class KllStreamingJoinSuite extends StreamTest {
             testStream(current)(
               StartStream(checkpointLocation = checkpoint.getAbsolutePath,
                 additionalConfs = Map(sharing -> (!legacy).toString)),
-              AddData(right, r), CheckLastBatch(Row(l, r)),
+              AddData(right, r), CheckLastBatch(expected(l, r)),
               AddData(left, l + 1), CheckLastBatch(),
-              AddData(right, r + 1), CheckLastBatch(Row(l + 1, r + 1)),
+              AddData(right, r + 1), CheckLastBatch(expected(l + 1, r + 1)),
               checkPayload, StopStream)
             assert(new OffsetSeqLog(spark, logPath).getLatest().get._2
               .metadataOpt.get.conf(sharing) == legacy.toString)

@@ -46,6 +46,18 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         case _ => false
       }) => a
 
+    // Preserve nested aggregate diagnostics before a prepared Count input could hide them
+    // inside a child Project. CheckAnalysis must see the original invalid aggregate host.
+    case a: Aggregate if a.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY) &&
+        a.aggregateExpressions.exists(_.exists {
+          case expression: AggregateExpression =>
+            expression.aggregateFunction.children.exists(_.exists {
+              case _: AggregateExpression => true
+              case _ => false
+            })
+          case _ => false
+        }) => a
+
     case a: Aggregate =>
       val guarded = guardAggregateInputs(a)
       val expressionsToExtract =
@@ -285,14 +297,24 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       return Nil
     }
     val deterministic = new ExprUtils.SubqueryExtractionDeterminism
-    // Collect eligible input expressions intact so the binding collector can preserve enclosing
-    // CASE, Boolean and NULL guards. Direct randomness must retain its validation errors.
+    // Count's prepared input encodes its complete ordered NULL demand. Other aggregates can
+    // skip an argument based on their buffer (First, MaxBy, etc.). Leave those arguments inside
+    // their updater and extract only the subqueries, as ordinary subquery planning does.
+    def subqueries(expression: Expression): Seq[Expression] = expression match {
+      case _: SubqueryExpression | _: InSubquery | Not(_: InSubquery) => Seq(expression)
+      case other if other.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY) =>
+        other.children.flatMap(subqueries)
+      case _ => Nil
+    }
     aggregate.aggregateExpressions
       .filter(_.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY))
       .flatMap(_.collect { case expression: AggregateExpression => expression })
-      .flatMap(expression => expression.aggregateFunction.children ++ expression.filter.toSeq)
-      // Retain invalid direct-random arguments verbatim for the original error rendering.
-      .filter(e => !e.deterministic && deterministic(e))
+      .flatMap { expression =>
+        val inputs = (expression.aggregateFunction.children ++ expression.filter.toSeq)
+          // Retain invalid direct-random arguments verbatim for the original error rendering.
+          .filter(e => !e.deterministic && deterministic(e))
+        if (expression.aggregateFunction.isInstanceOf[Count]) inputs else inputs.flatMap(subqueries)
+      }
   }
 
   private def guardAggregateInputs(aggregate: Aggregate): Aggregate = {

@@ -907,6 +907,35 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  Seq(false, true).foreach { legacySharing =>
+    test(s"KLL startup reconciles analysis and checkpoint modes: legacy=$legacySharing") {
+      withSourceTable() {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> (!legacySharing).toString,
+            SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> legacySharing.toString) {
+          val scalar = "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3))"
+          val query = spark.readStream.table(tbl)
+            .selectExpr(s"CASE WHEN $scalar <=> $scalar THEN 1L ELSE id END AS n")
+          val expected = if (legacySharing) Seq(Set.empty[String]) else Seq(Set("id"))
+          assert(requiredColumns(query).values.map(_.map(_.name).toSet).toSeq === expected)
+          val columns = if (legacySharing) Seq.empty[String] else Seq("id")
+          testStream(query)(
+            StartStream(),
+            ProcessAllAvailable(),
+            CheckLastBatch(1L, 1L),
+            assertReadSchema(columns: _*),
+            StopStream,
+            StartStream(additionalConfs = Map(
+              SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> (!legacySharing).toString)),
+            insert("(3, 'c', 30)"),
+            ProcessAllAvailable(),
+            CheckLastBatch(1L),
+            assertReadSchema(columns: _*),
+            StopStream)
+        }
+      }
+    }
+  }
+
   test("read the columns of a condition on a subquery, whatever its plan is") {
     withSourceTable() {
       withTempView("s") {

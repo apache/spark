@@ -2850,7 +2850,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           predicate.references.exists { attribute =>
             aliases.get(attribute).exists(_.child.throwable)
           })
-        (predicate, throwable, independent)
+        (predicate, throwable, independent, direct)
       }
       // Include referenced alias throwability without copying predicates just to classify them.
       val (pushable, retained) = splitPushable(classified)(
@@ -2861,7 +2861,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       else {
         // Let the ordinary deterministic Project path own alias substitution and expensive
         // expression splitting. Avoid translating each predicate once here and once again below.
-        val filtered = if (push.forall(_.references.subsetOf(grandChild.outputSet))) {
+        val filtered = if (pushable.forall(_._4)) {
           project.copy(child = Filter(push.reduceLeft(And), grandChild))
         } else {
           val deterministicAliases = fields.collect { case alias: Alias if alias.deterministic =>
@@ -2995,9 +2995,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // stays up is not pushed, though (see `splitPushable`). This includes a predicate over a
     // throwable alias of the aggregate.
     case filter @ Filter(condition, aggregate: Aggregate)
-      if aggregate.aggregateExpressions.forall(
-          ValidateSubqueryExpression.deterministicWithoutKllRandomness)
-        && aggregate.groupingExpressions.nonEmpty =>
+      if aggregate.groupingExpressions.nonEmpty && aggregate.aggregateExpressions.forall(
+          ValidateSubqueryExpression.deterministicWithoutKllRandomness) =>
       val (pushDown, stayUp) = pushBelowAggregate(splitConjunctivePredicates(condition), aggregate)
 
       if (pushDown.nonEmpty) {

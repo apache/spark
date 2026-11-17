@@ -3336,7 +3336,10 @@ class Analyzer(
         } else left.semanticEquals(right)
       }
       val replacement: Option[NamedExpression] =
-        if (sharing.contains(false) && expr.containsPattern(KLL_AGGREGATE)) None else {
+        if ((!sharing.contains(true) && !expr.deterministic) ||
+            (sharing.contains(false) && expr.containsPattern(KLL_AGGREGATE))) {
+          None
+        } else {
           agg.aggregateExpressions.foldLeft(Option.empty[NamedExpression]) {
             case (None, alias: Alias) if equivalent(expr, trimAliases(alias.child)) => Some(alias)
             case (None | Some(_: Alias), aggExpr) if equivalent(expr, aggExpr) => Some(aggExpr)
@@ -4671,16 +4674,18 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
   private def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
       refExprs: Seq[Expression]): LogicalPlan = {
-    val legacyKeys = new ValidateSubqueryExpression.LegacyKllDeterminism
     plan resolveExpressions {
       case e if e.containsPattern(OUTER_REFERENCE) =>
         val reference = stripOuterReference(e)
         val outerAlias = refExprs.find { alias =>
           val value = stripAlias(alias)
-          // This is an exported outer dependency, whose aggregate was already bound by
-          // subquery resolution. KLL randomness must not prevent replacing that dependency.
-          value.semanticEquals(reference) || (reference.containsPattern(KLL_AGGREGATE) &&
-            legacyKeys.expression(value).semanticEquals(legacyKeys.expression(reference)))
+          // Exported aggregate dependencies are already bound by result identity. Independent
+          // randomized calls may have equal syntax and must not bind to an earlier SELECT alias.
+          (value, reference) match {
+            case (bound: AggregateExpression, exported: AggregateExpression)
+                if bound.resultId == exported.resultId => true
+            case _ => value.semanticEquals(reference)
+          }
         }
         outerAlias match {
           case Some(a: Alias) => OuterReference(a.toAttribute)
