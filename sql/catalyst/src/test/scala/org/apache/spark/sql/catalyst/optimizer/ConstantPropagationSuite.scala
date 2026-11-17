@@ -509,14 +509,6 @@ class ConstantPropagationSuite extends PlanTest {
       checkOrdered(projected,
         tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0 && $"i" === 1 && $"id" === 7L,
         $"i" === 1 && $"id" === 7L && tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0)
-      // Also where it fails only as it is rewritten, as `id = 7` does not go into an operand that
-      // decides whether one that can fail runs, and folds with all of the constants in, but to an
-      // expression that can fail.
-      checkOrdered(projected,
-        (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) && $"i" === 0 &&
-          $"id" === 7L,
-        $"i" === 0 && $"id" === 7L &&
-          (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0))
       // Also with a constant that a later iteration folds, e.g. of `id = 7` for a BIGINT `id`.
       checkOrdered(projected,
         Coalesce(Seq(tenDividedBy($"i"), $"id".cast(DoubleType))) > 0.0 && $"i" === 0 &&
@@ -569,6 +561,22 @@ class ConstantPropagationSuite extends PlanTest {
       checkOrdered(projected,
         (($"id" > 10L && tenDividedBy($"i") > 1.0) || $"x" > 5L) && $"i" === 0 && $"id" === 7L,
         $"id" === 7L && $"x" > 5L && $"i" === 0)
+      // Also where that can fail, after which `id = 7` goes first, so that it runs only on the rows
+      // where `id` is 7, also where no conjunct after it can fail.
+      checkOrdered(projected,
+        (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) && $"i" === 0 &&
+          $"id" === 7L,
+        $"id" === 7L && tenDividedBy($"x") > 5.0 && $"i" === 0)
+      checkOrdered(projected,
+        $"i" === 0 && (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) &&
+          $"id" === 7L,
+        $"id" === 7L && $"i" === 0 && tenDividedBy($"x") > 5.0)
+      // A part that failed in a conditional branch is not folded once another rule takes it out
+      // of the branch, as in the batch, so this does not fall back and move `i = 0` first.
+      val tagged = $"x" < -100L &&
+        If($"x" > 0L || $"id" > 0L, tenDividedBy($"i") > 1.0, Literal(false)) && $"i" === 0 &&
+        $"id" === 7L
+      assert(conjuncts(Optimize.execute(projected.where(tagged).analyze)).head != "(i = 0)")
       checkOrdered(projected,
         tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) &&
           $"i" === 0 && $"id" === 7L,

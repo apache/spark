@@ -3237,7 +3237,8 @@ class DataFrameSuite extends SharedSparkSession
           columns: Seq[Column],
           condition: Column,
           expected: Seq[Row],
-          pushed: Boolean = false): Unit = withTempPath { dir =>
+          pushed: Boolean = false,
+          keepsFilter: Boolean = false): Unit = withTempPath { dir =>
         rows.coalesce(1).write.parquet(dir.getCanonicalPath)
         val df = spark.read.parquet(dir.getCanonicalPath).select(columns :+ rand(1).as("r"): _*)
           .where(condition).select($"s", if (pushed) lit(true) else $"r" >= 0)
@@ -3249,6 +3250,7 @@ class DataFrameSuite extends SharedSparkSession
         } else {
           assert(!withR.exists(_.child.exists(_.isInstanceOf[Filter])))
         }
+        assert(!keepsFilter || df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Filter]))
         checkAnswer(df, expected)
       }
       // `d = 0.0` passes a row where `d` is -0.0, on which the sign of the zero can matter.
@@ -3283,7 +3285,8 @@ class DataFrameSuite extends SharedSparkSession
         coalesce(lit(10) / $"i", $"id") > 0 && $"i" === 0 && $"id" === 7,
         $"id" > $"total" / $"i" && $"i" === 0,
         lit(10) / ($"id" - 6 - $"i") > 0 && $"i" === 1 && $"id" === 7)
-      (becomeFalse ++ failToFold).foreach(condition => check(two, ints, condition, Seq.empty))
+      becomeFalse.foreach(condition => check(two, ints, condition, Seq.empty))
+      failToFold.foreach(condition => check(two, ints, condition, Seq.empty, keepsFilter = true))
       // Also with a BIGINT `id`, whose `id = 7` has its constant only after `ConstantFolding`,
       // and once the filter is pushed below the projection.
       val twoLong = Seq(("2", 7L, 1)).toDF("s", "id", "x")
@@ -3302,10 +3305,26 @@ class DataFrameSuite extends SharedSparkSession
           $"id" === 7
       ).foreach(condition => check(zeroAndX, ints, condition, Seq(Row("0", true))))
       // Also where the conjunct that fails to fold as it is rewritten becomes `x > 5`, which
-      // filters out the row ("x", 7, 0) after `id = 7`.
+      // filters out the row ("x", 7, 0) after `id = 7`, or another one that can fail.
       check(Seq(("0", 7, 6), ("x", 7, 0)).toDF("s", "id", "x"), ints,
         (($"id" > 10 && lit(10) / $"i" > 1) || $"x" > 5) && $"i" === 0 && $"id" === 7,
         Seq(Row("0", true)))
+      check(Seq(("0", 7, 1), ("x", 7, 100)).toDF("s", "id", "x"), ints,
+        (($"id" > 10 && lit(10) / $"i" > 1) || lit(10) / $"x" > 5) && $"i" === 0 && $"id" === 7,
+        Seq(Row("0", true)))
+      check(Seq(("0", 7, 1), ("x", 7, -5)).toDF("s", "id", "x"), ints,
+        ($"id" > 0 || lit(10) / $"i" > 1).cast("int") + $"x" > 0 && $"i" === 0 && $"id" === 7,
+        Seq(Row("0", true)))
+      // A division that fails in a conditional branch is not folded once `id = 7` makes the branch
+      // the one taken, so `x < -100` still filters out the row ("x", 7, 1) first.
+      check(Seq(("x", 7, 1)).toDF("s", "id", "x"), ints,
+        $"x" < -100 && when($"x" > 0 || $"id" > 0, lit(10) / $"i" > 1).otherwise(false) &&
+          $"i" === 0 && $"id" === 7, Seq.empty)
+      // Under a `NOT`, an equality whose constant becomes NULL is not propagated: `j = 3` and
+      // `id <=> 2` hold on the row where `id` is 2, so the condition is NULL there, not FALSE.
+      checkAnswer(spark.range(10).select($"id", ($"id" + 1).as("j"), rand(1).as("r"))
+        .where(!($"j" === 3L && $"id" === when(lit(false), lit(1L)) && ($"id" + 0L) <=> 2L))
+        .select($"id"), (0 until 10).filter(_ != 2).map(i => Row(i.toLong)))
     }
   }
 
