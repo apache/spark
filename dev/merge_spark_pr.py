@@ -127,6 +127,9 @@ MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 # -Phive is not optional: with no -P at all SparkBuild falls back to the `sbt` profile, which
 # puts guava and pmml-model on every compile classpath and turns CI failures into local passes.
 COMPILE_CHECK_CMD = ["build/sbt", "-Phive", ";clean;compile;Test/compile"]
+# Set by --compile-prompt (see build_arg_parser). Off by default: maybe_compile_check then
+# returns without asking, so a backport goes straight to the push prompt.
+COMPILE_PROMPT = False
 # Precise patterns for the 4.2+ ConfigBindingPolicy API. A backport to a pre-4.2 branch
 # that adds either will not compile there (the API arrived in SPARK-55928): the
 # .withBindingPolicy(...) call and the ConfigBindingPolicy import have to be dropped. Nothing
@@ -1211,6 +1214,23 @@ def maybe_compile_check(ref_name: str) -> None:
     and name the remedy (`git add` + `git commit --amend`) since the fix is the commit, not
     the build.
 
+    Only offered with --compile-prompt (COMPILE_PROMPT); without it this returns at once,
+    asking nothing and running neither git nor the build:
+
+    >>> import sys
+    >>> from unittest.mock import patch
+    >>> m = sys.modules[__name__]
+    >>> with (
+    ...     patch("builtins.input", side_effect=AssertionError("should not prompt")),
+    ...     patch.object(git, "run", side_effect=AssertionError("should not run git")),
+    ...     patch("subprocess.call") as run,
+    ... ):
+    ...     maybe_compile_check("PR_TOOL_PICK_PR_1_BRANCH-4.1")
+    >>> run.call_count
+    0
+
+    The examples below all run with it enabled.
+
     Declining runs no build and no git -- the git.run mock raises if a regression moves a
     git call above the prompt, which otherwise would run real git in the committer's repo on
     every startup (doctest.testmod() runs on invocation):
@@ -1219,6 +1239,7 @@ def maybe_compile_check(ref_name: str) -> None:
     >>> from io import StringIO
     >>> from unittest.mock import call, patch
     >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
     ...     patch("builtins.input", return_value=""),
     ...     patch.object(git, "run", side_effect=AssertionError("should not run git")),
     ...     patch("subprocess.call") as run,
@@ -1233,6 +1254,7 @@ def maybe_compile_check(ref_name: str) -> None:
     too -- transposing them or dropping --porcelain would otherwise stay green:
 
     >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
     ...     patch("builtins.input", side_effect=["y"]),
     ...     patch.object(git, "run", side_effect=["/repo\\n", ""]) as grun,
     ...     patch("subprocess.call", return_value=0) as run,
@@ -1256,6 +1278,7 @@ def maybe_compile_check(ref_name: str) -> None:
     (`git add` + `git commit --amend`) alongside the porcelain output:
 
     >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
     ...     patch("builtins.input", side_effect=["y"]),
     ...     patch.object(git, "run", side_effect=["/repo\\n", " M foo.scala\\n"]),
     ...     patch("subprocess.call", return_value=0),
@@ -1272,6 +1295,7 @@ def maybe_compile_check(ref_name: str) -> None:
     The experts-only override continues past a red build:
 
     >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
     ...     patch("builtins.input", side_effect=["y", "y"]),
     ...     patch.object(git, "run", side_effect=["/repo\\n", ""]),
     ...     patch("subprocess.call", return_value=1),
@@ -1285,6 +1309,7 @@ def maybe_compile_check(ref_name: str) -> None:
 
     >>> for boom in (KeyboardInterrupt(), OSError("no build/sbt")):
     ...     with (
+    ...         patch.object(m, "COMPILE_PROMPT", True),
     ...         patch("builtins.input", side_effect=["y", "y"]) as inp,
     ...         patch.object(git, "run", side_effect=["/repo\\n", ""]),
     ...         patch("subprocess.call", side_effect=boom),
@@ -1298,6 +1323,7 @@ def maybe_compile_check(ref_name: str) -> None:
     Declining the override skips just this branch instead of exiting:
 
     >>> with (
+    ...     patch.object(m, "COMPILE_PROMPT", True),
     ...     patch("builtins.input", side_effect=["y", ""]),
     ...     patch.object(
     ...         git, "run", side_effect=["/repo\\n", "", subprocess.CalledProcessError(1, "g")]
@@ -1313,6 +1339,8 @@ def maybe_compile_check(ref_name: str) -> None:
     >>> skipped
     True
     """
+    if not COMPILE_PROMPT:
+        return
     # The command is too long to read inside a prompt, so print it on its own line first.
     # shlex.join quotes the ";clean;..." argument, so the printed line can be copy-pasted
     # into a shell without the semicolons splitting it into four commands.
@@ -3946,7 +3974,7 @@ def check_script_up_to_date():
 
 
 def build_arg_parser():
-    """CLI parser: an optional PR number plus the --dry-run/-n flag.
+    """CLI parser: an optional PR number plus the --dry-run/-n and --compile-prompt flags.
 
     --dry-run defaults to on when the DRY_RUN env var is set to any non-empty value (see the
     DRY_RUN_ENV note near the top of this file), so either the flag or the env var enables a
@@ -3967,12 +3995,19 @@ def build_arg_parser():
         "GitHub PR close/comment, JIRA writes), logging each as a 'DRY-RUN: would ...' line. "
         "Also enabled by setting the DRY_RUN environment variable.",
     )
+    parser.add_argument(
+        "--compile-prompt",
+        action="store_true",
+        help="Before pushing each backport pick, offer an optional clean SBT compile of it "
+        "(see COMPILE_CHECK_CMD). Off by default: no compile is offered.",
+    )
     return parser
 
 
 def main():
-    global git, github, jira_ops, original_head
+    global git, github, jira_ops, original_head, COMPILE_PROMPT
     args = build_arg_parser().parse_args()
+    COMPILE_PROMPT = args.compile_prompt
     if args.dry_run:
         # Swap the outbound clients for their logging-only variants; everything else is unchanged.
         git = DryRunGit()
