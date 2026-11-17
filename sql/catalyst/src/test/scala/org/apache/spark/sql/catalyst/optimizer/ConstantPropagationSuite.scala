@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSingle, PlanTest,
+  RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
@@ -364,6 +365,7 @@ class ConstantPropagationSuite extends PlanTest {
         projected.select($"s", $"id", $"i"),
         projected.where($"id" > 1L).select($"s", $"id", $"i"),
         projected.sample(0.0, 0.5, withReplacement = false, 1L).select($"s", $"id", $"i"),
+        projected.limit(5).select($"s", $"id", $"i"),
         projected.select($"s", $"id", $"i".as("j")).select($"s", $"id", $"j".as("i"))
       ).foreach(child => checkOrdered(child, written, expected))
     }
@@ -553,10 +555,17 @@ class ConstantPropagationSuite extends PlanTest {
       }
       // But not a column that an outer join can make NULL, which it does not put in, so `i = 0` is
       // propagated in place.
+      // Nor from a streaming aggregate or a join of two streams.
+      val streamingIds = stringIds.copy(isStreaming = true)
+      val streamingTotals = LocalRelation(Seq($"k".long), isStreaming = true)
+        .select($"k", Literal(100.0).as("total"))
       Seq(
         stringIds.join(totals, LeftOuter, Some($"x" === $"k")),
+        stringIds.join(totals, LeftSingle, Some($"x" === $"k")),
         totals.join(stringIds, RightOuter, Some($"x" === $"k")),
-        stringIds.join(totals, FullOuter, Some($"x" === $"k"))
+        stringIds.join(totals, FullOuter, Some($"x" === $"k")),
+        streamingIds.groupBy($"s", $"id")($"s", $"id", Literal(100.0).as("total")),
+        streamingIds.join(streamingTotals, Inner, Some($"x" === $"k"))
       ).map(_.select($"id", castS.as("i"), $"total")).foreach { child =>
         checkOrdered(child, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
           $"i" === 0, $"id".cast(DoubleType) > $"total" / Literal(0.0) && $"i" === 0)
@@ -602,6 +611,12 @@ class ConstantPropagationSuite extends PlanTest {
         (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) && $"i" === 0 &&
           $"id" === Literal(7).cast(LongType),
         $"id" === 7L && tenDividedBy($"x") > 5.0 && $"i" === 0)
+      // But not one over a column that can fail, which stays where it is written, and whose
+      // constant goes in place in the next iteration.
+      checkOrdered(projected.select($"s", $"id", $"x", $"i", castS.cast(LongType).as("l")),
+        (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) && $"i" === 0 &&
+          $"id" === 7L && $"l" === Literal(7).cast(LongType),
+        $"id" === 7L && tenDividedBy($"x") > 5.0 && $"i" === 0 && $"l" === 7L)
       // A part that failed in a conditional branch is not folded once another rule rewrites it or
       // takes it out of the branch, as in the batch, so this does not fall back and move `i = 0`
       // first. Also where a part can not be copied, but for one that another rule rewrites.
@@ -731,7 +746,12 @@ class ConstantPropagationSuite extends PlanTest {
         $"i" === 1 && $"i" + 1 > 3,
         $"i" + 1 > 3 && Literal(1) === $"i",
         $"i" === 1 && $"id" > 5L && $"i" === 2,
-        $"i".cast(LongType) + $"id" > 3L && $"i" === 1 && $"id" === 1L
+        $"i".cast(LongType) + $"id" > 3L && $"i" === 1 && $"id" === 1L,
+        // Also where only another rule of the batch makes it FALSE, here `NullPropagation`, after
+        // `SimplifyConditionals` makes the `CASE WHEN` NULL, so that the division does not run on
+        // a row where `i` is not 1.
+        tenDividedBy($"x" - $"i".cast(LongType)) > 0.0 &&
+          CaseWhen(Seq(($"id" > 10L) -> $"x")) + $"x" > 1L && $"i" === 1 && $"id" === 7L
       ).foreach { condition =>
         comparePlans(Optimize.execute(projected.where(condition).analyze),
           projected.where(false).analyze)
@@ -792,10 +812,10 @@ class ConstantPropagationSuite extends PlanTest {
       val randomPlusOne = random.select($"id", ($"r" + 1.0).as("r1"))
       checkOrdered(randomPlusOne, $"r1" > 0.0 && tenDividedBy($"id") > 0.0 && $"r1" === 1.5,
         $"r1" === 1.5 && tenDividedBy($"id") > 0.0)
-      // And one that a projection below an operator other than a filter or a sample computes, for
-      // every row that operator gets.
-      val limited = stringIds.select($"id", castS.as("i")).limit(5).select($"id", $"i")
-      checkOrdered(limited, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
+      // And one that a projection below another operator computes, e.g. for a shuffle, for every
+      // row that operator gets.
+      val shuffled = stringIds.select($"id", castS.as("i")).repartition(2).select($"id", $"i")
+      checkOrdered(shuffled, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
       // And one that stands for a cast that can not fail.
       val widened = stringIds.select($"s", $"id", $"x", $"id".cast(DoubleType).as("k"))
       checkOrdered(widened, $"k" > 0.0 && tenDividedBy($"x") > 0.0 && $"k" === 3.0,

@@ -3119,6 +3119,11 @@ class DataFrameSuite extends SharedSparkSession
               assert(filtersAboveI(df))
               checkAnswer(df, Row("1", 7L, true))
             }
+            // Also above a limit, which passes `i` on as it is where its input has one partition.
+            checkAnswer(spark.read.parquet(dir.getCanonicalPath).repartition(1)
+              .select($"s", $"id", $"s".cast("int").as("i")).limit(5)
+              .select($"*", rand(1).as("r")).where(condition).select($"s", $"id", $"r" >= 0),
+              Row("1", 7L, true))
           }
           // As on 4.3.0, `i = 1` makes the condition FALSE, so the filter is pruned,
           // and `i` is not computed for the row ("x", 0).
@@ -3278,6 +3283,9 @@ class DataFrameSuite extends SharedSparkSession
         lit(10) / ($"x" - $"i") > 0 && when($"id" > 7, $"x" > 1).otherwise(false) &&
           $"i" === 1 && $"id" === 7,
         lit(10) / ($"x" - $"i") > 0 && when($"id" > 10, lit(10) / $"x") > 1 &&
+          $"i" === 1 && $"id" === 7,
+        // Also where `NullPropagation` makes it NULL.
+        lit(10) / ($"x" - $"i") > 0 && when($"id" > 10, $"x") + $"x" > 1 &&
           $"i" === 1 && $"id" === 7)
       // With all of the constants in, or the foldable `total`, the condition would fail to fold,
       // so the equalities go first, which filter out the row, as without this change.
@@ -3317,6 +3325,13 @@ class DataFrameSuite extends SharedSparkSession
         Seq(Row("0", true)))
       check(Seq(("0", 7, 1), ("x", 7, -5)).toDF("s", "id", "x"), ints,
         ($"id" > 0 || lit(10) / $"i" > 1).cast("int") + $"x" > 0 && $"i" === 0 && $"id" === 7,
+        Seq(Row("0", true)))
+      // An equality over another column that can fail, whose constant is not folded yet, stays
+      // where it is written, so that `id = 7` alone goes first.
+      check(Seq(("0", "7", 7, 1), ("x", "x", 7, 100)).toDF("s", "t", "id", "x"),
+        ints :+ $"t".cast("bigint").as("l"),
+        (($"id" > 10 && lit(10) / $"i" > 1) || lit(10) / $"x" > 5) && $"i" === 0 && $"id" === 7 &&
+          $"l" === 7,
         Seq(Row("0", true)))
       // A division that fails in a conditional branch is not folded once `id = 7` makes the branch
       // the one taken, so `x < -100` still filters out the row ("x", 7, 1) first.

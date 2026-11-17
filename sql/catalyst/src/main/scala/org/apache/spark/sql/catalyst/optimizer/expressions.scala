@@ -158,12 +158,13 @@ object ConstantFolding extends Rule[LogicalPlan] {
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val childColumns = new java.util.IdentityHashMap[LogicalPlan, ChildColumns]()
+    val childColumns = new ChildColumns
     plan.transformUpWithPruning(
       _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
       case f: Filter =>
         val (newCondition, _) = traverse(f.condition, replaceChildren = true, nullIsFalse = true,
-          new FailableColumns(childColumnsOf(f.child, childColumns)))
+          new FailableColumns(failableColumnsOf(f.child, childColumns),
+            foldableColumnsOf(f.child, childColumns)))
         if (newCondition.isDefined) {
           f.copy(condition = newCondition.get)
         } else {
@@ -292,9 +293,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    *    `((id > 10 AND 10 / i > 1) OR x > 5) AND i = 0 AND id = 7`. That is its value on the rows
    *    where the equalities hold, and the AND is not TRUE on the others. If such a replacement
    *    can fail, e.g. `10 / x > 5` in place of `x > 5`, the equalities over the other columns,
-   *    also those whose constant is not folded yet, go first, so that it runs only on the rows
-   *    where those hold, or, if one of the latter is over a column that can fail, the equalities
-   *    are handled as since SPARK-60983.
+   *    also those whose constant is not folded yet, but for one over a column that can fail, go
+   *    first, so that it runs only on the rows where those hold.
    */
   private def propagateInPlace(
       condition: Expression,
@@ -338,13 +338,13 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       }
       if (replacements.forall(columns.canEvaluateUnconditionally)) {
         if (movable.isEmpty) replaced else moveEqualitiesFirst(inPlace, replaced, movable, columns)
-      } else if (unfolded.exists { case (a, _) => !columns.canEvaluateUnconditionally(a) }) {
-        moveEqualitiesFirst(condition, replaceConstants(condition, equalityPredicates),
-          equalityPredicates, FailableColumns.none)
       } else {
         // Such a replacement can fail on a row where an equality over a column that can not fail
-        // does not hold, also one whose constant is not folded yet, so those go first.
-        val predicates = (movable.values.map(_._2) ++ unfolded.map(_._2._2)).toSet[Expression]
+        // does not hold, also one whose constant is not folded yet, so those go first. One over a
+        // column that can fail stays, as its constant goes in place in the next iteration.
+        val predicates = (movable.values.map(_._2) ++ unfolded.collect {
+          case (a, (_, b)) if columns.canEvaluateUnconditionally(a) => b
+        }).toSet[Expression]
         val (equalities, others) =
           splitConjunctivePredicates(replaced).partition(predicates.contains)
         (equalities ++ others).reduce(And)
@@ -518,15 +518,15 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     ExprUtils.isTotalOperator(e) || e.isInstanceOf[BinaryArithmetic]
 
   /**
-   * Simplifies `e` with [[ConstantFolding]], [[BooleanSimplification]] and
-   * [[SimplifyConditionals]], in the order of the batch, until it no longer changes, at most
-   * [[MAX_SIMPLIFY_ITERATIONS]] times, or returns None if it fails to fold. Like
-   * [[ConstantFolding]], it does not fold again a part that failed in a conditional branch, also
-   * once another rule rewrites it or takes it out of the branch, or one that an earlier
-   * [[ConstantFolding]] tagged so. It tags the parts of a copy of `e`, which may be shared with a
-   * plan, so that the other rules copy the tag to what they rewrite a part into, as in the batch.
-   * If `e` can not be copied, it keeps the parts that failed in a set of its own instead, which
-   * misses a part once another rule rewrites it.
+   * Simplifies `e` with [[ConstantFolding]] and the other rules of the operator optimization
+   * batch that rewrite the condition of a filter (see [[SIMPLIFY_RULES_AFTER_FOLDING]]), in the
+   * order of the batch, until it no longer changes, at most [[MAX_SIMPLIFY_ITERATIONS]] times,
+   * or returns None if it fails to fold. Like [[ConstantFolding]], it does not fold again a part
+   * that failed in a conditional branch, also once another rule rewrites it or takes it out of
+   * the branch, or one that an earlier [[ConstantFolding]] tagged so. It tags the parts of a copy
+   * of `e`, which may be shared with a plan, so that the other rules copy the tag to what they
+   * rewrite a part into, as in the batch. If `e` can not be copied, it keeps the parts that failed
+   * in a set of its own instead, which misses a part once another rule rewrites it.
    */
   private def simplify(e: Expression): Option[Expression] = {
     val copy = copyWithTags(e)
@@ -537,12 +537,13 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         new java.util.IdentityHashMap[Expression, java.lang.Boolean]())
     }
     def foldOnce(e: Expression): Expression = ConstantFolding.constantFolding(e, failed = failed)
-    def simplifyOnce(e: Expression): Expression = {
-      val filter = Filter(e, LocalRelation())
-      foldOnce(SimplifyConditionals(BooleanSimplification(filter)).asInstanceOf[Filter].condition)
-    }
+    def rewrite(e: Expression, rules: Seq[Rule[LogicalPlan]]): Expression =
+      rules.foldLeft(Filter(e, LocalRelation()): LogicalPlan)((plan, rule) => rule(plan))
+        .asInstanceOf[Filter].condition
+    def simplifyOnce(e: Expression): Expression =
+      foldOnce(rewrite(e, SIMPLIFY_RULES_AFTER_FOLDING ++ SIMPLIFY_RULES_BEFORE_FOLDING))
     try {
-      var current = foldOnce(copy.getOrElse(e))
+      var current = foldOnce(rewrite(copy.getOrElse(e), SIMPLIFY_RULES_BEFORE_FOLDING))
       var next = simplifyOnce(current)
       var iterations = 1
       while (!next.fastEquals(current) && iterations < MAX_SIMPLIFY_ITERATIONS) {
@@ -560,8 +561,34 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   private val MAX_SIMPLIFY_ITERATIONS = 10
 
   /**
+   * The rules of the operator optimization batch that rewrite the condition of a filter, other
+   * than [[ConstantFolding]], which [[simplify]] runs, in the order of the batch: those between
+   * this rule and [[ConstantFolding]], and those after [[ConstantFolding]], up to this rule in the
+   * next iteration. `ReplaceNullWithFalseInPredicate` is left out, as NULL means FALSE only where
+   * the caller says so.
+   */
+  private val SIMPLIFY_RULES_BEFORE_FOLDING: Seq[Rule[LogicalPlan]] = Seq(OptimizeIn, OptimizeRand)
+  private val SIMPLIFY_RULES_AFTER_FOLDING: Seq[Rule[LogicalPlan]] = Seq(
+    ReorderAssociativeOperator,
+    LikeSimplification,
+    BooleanSimplification,
+    SimplifyConditionals,
+    PushFoldableIntoBranches,
+    SimplifyBinaryComparison,
+    SimplifyCasts,
+    SimplifyCaseConversionExpressions,
+    SimplifyDateTimeConversions,
+    UnwrapCastInBinaryComparison,
+    SimplifyExtractValueOps,
+    OptimizeCsvJsonExprs,
+    CombineConcats,
+    NullPropagation,
+    NullDownPropagation)
+
+  /**
    * A copy of `e`, with the tags of its parts, as `clone` makes it, or None if a part
-   * can not be copied, or its copy is the part itself, e.g. for an object.
+   * can not be copied, or its copy is the part itself, e.g. for an object. A part that `e` holds
+   * in more than one place gets a copy for each.
    */
   private def copyWithTags(e: Expression): Option[Expression] = {
     def fresh(from: Expression, to: Expression): Boolean = !(to eq from) &&
@@ -707,75 +734,94 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * The columns of a plan that can fail, and the ones that are foldable, which
-   * [[FoldablePropagation]] replaces with their expressions in the conditions above.
+   * What one application of the rule finds for each plan below a filter, as the filters above it
+   * look at it too: the columns that can fail, and the foldable ones, each only once asked for.
    */
-  private case class ChildColumns(failable: AttributeSet, foldable: AttributeMap[Expression])
+  private class ChildColumns {
+    val failable = new java.util.IdentityHashMap[LogicalPlan, AttributeSet]()
+    val foldable = new java.util.IdentityHashMap[LogicalPlan, AttributeMap[Expression]]()
+  }
+
+  private def cached[T](cache: java.util.IdentityHashMap[LogicalPlan, T], plan: LogicalPlan)(
+      compute: => T): T = {
+    val value = cache.get(plan)
+    if (value != null) {
+      value
+    } else {
+      val computed = compute
+      cache.put(plan, computed)
+      computed
+    }
+  }
 
   /**
    * The columns of `plan` that can fail, i.e. those that a projection at its top, or below the
-   * filters, samples and projections there, computes with a deterministic expression that
+   * filters, samples, limits and projections there, computes with a deterministic expression that
    * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads such a column, or passes such a
-   * column through, and its foldable columns, as [[FoldablePropagation]] finds them through the
-   * projections and the other operators that it looks through.
+   * column through.
    * Under whole-stage codegen, the projection computes a deterministic column for a row only when
    * a conjunct of the filter above first reads it, unless its subexpression elimination computes
    * it up front, and `PushPredicateThroughNonJoin` pushes a conjunct below the projection with the
    * expression of the column substituted. So a conjunct over such a column can fail as that
    * expression does. A non-deterministic column is computed on every row the projection gets, and
-   * no filter is pushed through a projection with one, so it does not count. Other operators are
-   * not looked through for the columns that can fail. The result for each plan is kept in `cache`
-   * for one application of the rule, as the filters above it look at it too.
+   * no filter is pushed through a projection with one, so it does not count. A limit passes the
+   * columns on as they are, in the same stage where its input has one partition. Other operators
+   * are not looked through for the columns that can fail.
    */
-  private def childColumnsOf(
-      plan: LogicalPlan,
-      cache: java.util.IdentityHashMap[LogicalPlan, ChildColumns]): ChildColumns = {
-    val cached = cache.get(plan)
-    if (cached != null) {
-      cached
-    } else {
-      val columns = plan match {
+  private def failableColumnsOf(plan: LogicalPlan, cache: ChildColumns): AttributeSet =
+    cached(cache.failable, plan) {
+      plan match {
         case Project(projectList, child) =>
-          val below = childColumnsOf(child, cache)
-          val failable = AttributeSet(projectList.collect {
+          val below = failableColumnsOf(child, cache)
+          AttributeSet(projectList.collect {
             case a: Alias if a.child.deterministic &&
                 (!ExprUtils.canEvaluateUnconditionally(a.child) ||
-                  a.child.references.exists(below.failable.contains)) => a.toAttribute
-            case a: Attribute if below.failable.contains(a) => a
+                  a.child.references.exists(below.contains)) => a.toAttribute
+            case a: Attribute if below.contains(a) => a
           })
-          ChildColumns(failable, foldablesOf(projectList, below.foldable))
-        case Filter(_, child) => childColumnsOf(child, cache)
-        case s: Sample => childColumnsOf(s.child, cache)
-        // `FoldablePropagation` looks through these too, but the projection below them computes
-        // its columns for every row they get.
-        case u: UnaryNode if FoldablePropagation.canPropagateFoldables(u) =>
-          ChildColumns(AttributeSet.empty, childColumnsOf(u.child, cache).foldable)
-        case a: Aggregate if !a.isStreaming =>
-          val below = childColumnsOf(a.child, cache).foldable
-          ChildColumns(AttributeSet.empty, foldablesOf(a.aggregateExpressions, below))
-        case e: Expand => ChildColumns(AttributeSet.empty, childColumnsOf(e.child, cache).foldable)
-        case j: Join if !j.left.isStreaming || !j.right.isStreaming =>
-          val foldable = j.children.map(childColumnsOf(_, cache).foldable).reduce(_ ++ _)
-          // The columns that the join can make NULL.
-          val nullable = AttributeSet(j.joinType match {
-            case LeftOuter | LeftSingle => j.right.output
-            case RightOuter => j.left.output
-            case FullOuter => j.output
-            case _ => Nil
-          })
-          ChildColumns(AttributeSet.empty,
-            AttributeMap(foldable.toSeq.filterNot { case (a, _) => nullable.contains(a) }))
-        case _ => ChildColumns(AttributeSet.empty, AttributeMap.empty)
+        case Filter(_, child) => failableColumnsOf(child, cache)
+        case s: Sample => failableColumnsOf(s.child, cache)
+        case l: GlobalLimit => failableColumnsOf(l.child, cache)
+        case l: LocalLimit => failableColumnsOf(l.child, cache)
+        case _ => AttributeSet.empty
       }
-      cache.put(plan, columns)
-      columns
+    }
+
+  /**
+   * The foldable columns of `plan`, with their expressions, as [[FoldablePropagation]] finds them
+   * and replaces them in the conditions above. This mirrors `propagateFoldables` there.
+   */
+  private def foldableColumnsOf(
+      plan: LogicalPlan,
+      cache: ChildColumns): AttributeMap[Expression] = cached(cache.foldable, plan) {
+    plan match {
+      case Project(projectList, child) =>
+        foldablesOf(projectList, foldableColumnsOf(child, cache))
+      case u: UnaryNode if FoldablePropagation.canPropagateFoldables(u) =>
+        foldableColumnsOf(u.child, cache)
+      case a: Aggregate if !a.isStreaming =>
+        foldablesOf(a.aggregateExpressions, foldableColumnsOf(a.child, cache))
+      case e: Expand => foldableColumnsOf(e.child, cache)
+      case j: Join if !j.left.isStreaming || !j.right.isStreaming =>
+        val foldable = j.children.map(foldableColumnsOf(_, cache)).reduce(_ ++ _)
+        // The columns that the join can make NULL.
+        val nullable = AttributeSet(j.joinType match {
+          case LeftOuter | LeftSingle => j.right.output
+          case RightOuter => j.left.output
+          case FullOuter => j.output
+          case _ => Nil
+        })
+        AttributeMap(foldable.toSeq.filterNot { case (a, _) => nullable.contains(a) })
+      case _ => AttributeMap.empty
     }
   }
 
   /** The columns of the child of a filter that can fail, and the foldable ones. */
-  private class FailableColumns(childColumns: => ChildColumns) {
-    private lazy val columns = childColumns
-    private lazy val failable: AttributeSet = columns.failable
+  private class FailableColumns(
+      failableColumns: => AttributeSet,
+      foldableColumns: => AttributeMap[Expression]) {
+    private lazy val failable: AttributeSet = failableColumns
+    private lazy val foldable: AttributeMap[Expression] = foldableColumns
 
     /**
      * [[ExprUtils.canEvaluateUnconditionally]] of `e`, which must also not read a column that can
@@ -793,7 +839,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
 
     /** `e` with the foldable columns replaced with their expressions. */
     def replaceFoldables(e: Expression): Expression =
-      ConstantPropagation.replaceFoldables(e, columns.foldable)
+      ConstantPropagation.replaceFoldables(e, foldable)
   }
 
   private def replaceFoldables(e: Expression, foldable: AttributeMap[Expression]): Expression =
@@ -818,7 +864,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
 
   private object FailableColumns {
     /** No column counts as one that can fail, as before SPARK-61437. */
-    val none = new FailableColumns(ChildColumns(AttributeSet.empty, AttributeMap.empty))
+    val none = new FailableColumns(AttributeSet.empty, AttributeMap.empty)
   }
 
   /**
@@ -1759,6 +1805,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     CleanupAliases(propagateFoldables(plan)._1)
   }
 
+  // `ConstantPropagation.foldableColumnsOf` finds the same foldable columns, so keep the two in
+  // sync.
   private def propagateFoldables(plan: LogicalPlan): (LogicalPlan, AttributeMap[Alias]) = {
     plan match {
       case p: Project =>
