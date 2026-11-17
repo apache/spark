@@ -1849,6 +1849,40 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-61831: the dedicated error names the variant source and the full target type") {
+    val config = s"\"${SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET.key}\""
+    withVariantEvents {
+      val structTarget = "STRUCT<user_id: BIGINT NOT NULL, country: STRING>"
+      val castExpr = s"CAST(payload AS $structTarget)"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT $castExpr FROM events").collect()
+        },
+        condition = "DATATYPE_MISMATCH.CAST_VARIANT_TO_NON_NULLABLE_TARGET",
+        sqlState = "42K09",
+        parameters = Map(
+          "sqlExpr" -> "\"payload\"",
+          "srcType" -> "\"VARIANT\"",
+          "targetType" -> s"\"$structTarget\"",
+          "config" -> config),
+        context = ExpectedContext(fragment = castExpr, start = 7, stop = 6 + castExpr.length))
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT parse_json('[1, null]') AS v")
+          .select(col("v").cast(ArrayType(LongType, containsNull = false))).collect()
+      },
+      condition = "DATATYPE_MISMATCH.CAST_VARIANT_TO_NON_NULLABLE_TARGET",
+      sqlState = "42K09",
+      parameters = Map(
+        "sqlExpr" -> "\"v\"",
+        "srcType" -> "\"VARIANT\"",
+        "targetType" -> "\"ARRAY<BIGINT>\"",
+        "config" -> config),
+      context =
+        ExpectedContext(fragment = "cast", callSitePattern = getCurrentClassCallSitePattern))
+  }
+
   test("SPARK-61831: with the legacy conf, a cast from variant to a non-nullable nested slot " +
       "reads a missing value as 0") {
     withVariantEvents {
