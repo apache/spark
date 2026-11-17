@@ -22,11 +22,12 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType}
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -535,6 +536,31 @@ class ConstantPropagationSuite extends PlanTest {
         checkOrdered(child, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
           $"i" === 0, $"i" === 0 && $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType))
       }
+      // And from an aggregate, through an expand, and from either side of a join, as
+      // `FoldablePropagation` does.
+      val totals = LocalRelation($"k".long).select($"k", Literal(100.0).as("total"))
+      val withTotalS = stringIds.select($"s", $"id", $"x", Literal(100.0).as("total"))
+      Seq(
+        stringIds.groupBy($"s", $"id")($"s", $"id", Literal(100.0).as("total")),
+        withTotalS.groupBy($"s", $"id", $"total")($"s", $"id", $"total"),
+        Expand(Seq(withTotalS.output, withTotalS.output), withTotalS.output, withTotalS),
+        stringIds.join(totals, Inner, Some($"x" === $"k")),
+        stringIds.join(totals, RightOuter, Some($"x" === $"k")),
+        totals.join(stringIds, LeftOuter, Some($"x" === $"k"))
+      ).map(_.select($"id", castS.as("i"), $"total")).foreach { child =>
+        checkOrdered(child, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
+          $"i" === 0, $"i" === 0 && $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType))
+      }
+      // But not a column that an outer join can make NULL, which it does not put in, so `i = 0` is
+      // propagated in place.
+      Seq(
+        stringIds.join(totals, LeftOuter, Some($"x" === $"k")),
+        totals.join(stringIds, RightOuter, Some($"x" === $"k")),
+        stringIds.join(totals, FullOuter, Some($"x" === $"k"))
+      ).map(_.select($"id", castS.as("i"), $"total")).foreach { child =>
+        checkOrdered(child, $"id".cast(DoubleType) > $"total" / $"i".cast(DoubleType) &&
+          $"i" === 0, $"id".cast(DoubleType) > $"total" / Literal(0.0) && $"i" === 0)
+      }
       // Then the equalities are also ordered as since SPARK-60983: `i = 0`, after the conjunct
       // that the constants fold to TRUE, does not count as one that can fail, so the written
       // order is kept. `10 / zero` makes the condition fail to fold once `zero` is in.
@@ -576,12 +602,27 @@ class ConstantPropagationSuite extends PlanTest {
         (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) && $"i" === 0 &&
           $"id" === Literal(7).cast(LongType),
         $"id" === 7L && tenDividedBy($"x") > 5.0 && $"i" === 0)
-      // A part that failed in a conditional branch is not folded once another rule takes it out
-      // of the branch, as in the batch, so this does not fall back and move `i = 0` first.
-      val tagged = $"x" < -100L &&
-        If($"x" > 0L || $"id" > 0L, tenDividedBy($"i") > 1.0, Literal(false)) && $"i" === 0 &&
-        $"id" === 7L
-      assert(conjuncts(Optimize.execute(projected.where(tagged).analyze)).head != "(i = 0)")
+      // A part that failed in a conditional branch is not folded once another rule rewrites it or
+      // takes it out of the branch, as in the batch, so this does not fall back and move `i = 0`
+      // first. Also where a part can not be copied, but for one that another rule rewrites.
+      def failsAtZero(i: Expression): Expression = tenDividedBy(i) > 1.0
+      val atZero = Divide(Literal(10.0), Literal(0).cast(DoubleType))
+      Seq(
+        ($"x": Expression, failsAtZero _, atZero > 1.0, true),
+        ($"x", (i: Expression) => Not(failsAtZero(i)), atZero <= 1.0, true),
+        ($"x", (i: Expression) => Not(Not(failsAtZero(i))), atZero > 1.0, true),
+        (NotCopyable($"x")(), failsAtZero _, atZero > 1.0, true),
+        (NotCopyable($"x")(), (i: Expression) => Not(failsAtZero(i)), atZero <= 1.0, false)
+      ).foreach { case (x, branch, folded, kept) =>
+        def taken(b: Expression): Expression = If(x > 0L || $"id" > 0L, b, Literal(false))
+        checkOrdered(projected,
+          $"x" < -100L && taken(branch($"i")) && $"i" === 0 && $"id" === 7L,
+          if (kept) {
+            $"id" === 7L && $"x" < -100L && taken(folded) && $"i" === 0
+          } else {
+            $"id" === 7L && $"i" === 0 && $"x" < -100L && taken(folded)
+          })
+      }
       checkOrdered(projected,
         tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) &&
           $"i" === 0 && $"id" === 7L,
@@ -785,4 +826,13 @@ class ConstantPropagationSuite extends PlanTest {
       checkOrdered(chain, $"c" > 0L && $"c" === 2L, $"c" === 2L)
     }
   }
+}
+
+/** An expression that can not be copied, as `TreeNode.clone` fails for it. */
+private case class NotCopyable(child: Expression)(val unused: Int = 0)
+    extends UnaryExpression with CodegenFallback {
+  override def dataType: DataType = child.dataType
+  override def eval(input: InternalRow): Any = child.eval(input)
+  override protected def withNewChildInternal(newChild: Expression): NotCopyable =
+    NotCopyable(newChild)(unused)
 }
