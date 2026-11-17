@@ -29,8 +29,12 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * replaces Spark's operators can run another implementation of the same function instead, see
  * {@link ColumnarUDFImplementation}.
  * <p>
- * Spark serializes the function to the executors, where each task gets its own instance and
- * calls it from one thread.
+ * Spark serializes the function to the executors. There, each operator that evaluates calls of
+ * the function gets its own instance for each task, and calls it from one thread. The calls
+ * that one operator evaluates, such as two calls in one projection, share that instance.
+ * <p>
+ * An exception that the function throws fails the query with the error condition
+ * {@code FAILED_EXECUTE_UDF}, with the exception as its cause.
  * <p>
  * The result must not depend on how the rows are split into batches, nor on the order of the
  * rows or of the batches. Spark evaluates the function for every row that reaches it, also for
@@ -49,9 +53,9 @@ public interface ColumnarScalarFunction extends Serializable {
    *             types. The function must neither close the batch or its columns, nor use them
    *             after it returns.
    * @return a vector of the declared result type that holds at least {@code args.numRows()}
-   *         values. It must be a vector of the function's own, and not one of the argument
-   *         columns: Spark closes it once it is done with the batch. A function that returns
-   *         an argument as it is copies it into a new vector.
+   *         values. It must be a vector of the function's own, which shares no memory with
+   *         the argument columns: Spark closes it once it is done with the batch. A function
+   *         that returns an argument, or a field of one, as it is copies it into a new vector.
    */
   ColumnVector eval(ColumnarBatch args);
 }

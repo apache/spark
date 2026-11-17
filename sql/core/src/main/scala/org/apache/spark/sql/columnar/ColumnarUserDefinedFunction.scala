@@ -49,14 +49,23 @@ import org.apache.spark.sql.types.DataType
  *   spark.sql("SELECT add_one(id) FROM t")
  * }}}
  *
- * The operator reads the arguments of a call as columns of its child. The call is evaluated
- * without leaving the columnar format when its arguments are columns of a columnar source, of
- * the types that the function declares. Any other argument, including one that is cast to the
- * declared type, is computed first by a row-based projection, and its result is converted
- * back to columns for the call.
+ * The operator reads the arguments of a call as columns of its child, and evaluates together
+ * the calls of one projection or filter. They are evaluated without leaving the columnar
+ * format when the child is columnar and the arguments of all of them are columns of it, of the
+ * types that the functions declare. If one argument of one of these calls is anything else,
+ * including a column that is cast to the declared type, a row-based projection computes it
+ * first, and its output is converted back to columns for all of these calls. A row-based
+ * operator below the calls, such as a filter over the scan, has the same effect.
  *
- * Calls with named arguments, and calls inside the lambda function of a higher-order function,
- * are not supported.
+ * Limitations:
+ *  - Calls with named arguments, and calls inside the lambda function of a higher-order
+ *    function, are not supported.
+ *  - A call that reads columns of both sides of a join is supported in the condition of an
+ *    inner join only. This includes the joins that correlated EXISTS and IN subqueries become.
+ *  - A conditional expression does not guard a call. A call in a branch of CASE, IF or
+ *    COALESCE, or on one side of AND or OR, is evaluated for every row, and so are the
+ *    expressions that compute its arguments, which can then fail for rows that the branch
+ *    would have skipped.
  *
  * @param name the name of the function
  * @param inputTypes the types of the arguments, which the arguments of a call are cast to

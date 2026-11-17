@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COLUMNAR_UDF, LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -615,7 +615,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           // A columnar UDF is evaluated by an operator of its own, over the columns of its
           // child, so it cannot be evaluated for the elements that a lambda function iterates.
           case hof: HigherOrderFunction
-              if hof.resolved && hof.functions.exists(_.exists(_.isInstanceOf[ColumnarUDF])) =>
+              if hof.containsPattern(COLUMNAR_UDF) && hof.resolved &&
+                hof.functions.exists(_.exists(_.isInstanceOf[ColumnarUDF])) =>
             val udf = hof.functions.flatMap(_.collectFirst { case u: ColumnarUDF => u }).head
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_COLUMNAR_UDF",

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar.udf
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,10 +27,12 @@ import org.apache.spark.sql.catalyst.plans.logical.{EvalColumnarUDFs, LogicalPla
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.columnar.ColumnarScalarFunction
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType, UserDefinedType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.util.Utils
 
 /** Plans the evaluation of columnar user-defined functions. */
 object ColumnarUDFEvals extends SparkStrategy {
@@ -75,7 +79,7 @@ case class EvalColumnarUDFsExec(
   }
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val functions: Array[ColumnarScalarFunction] = udfs.map { udf =>
+    val driverFunctions: Array[ColumnarScalarFunction] = udfs.map { udf =>
       udf.function.getOrElse {
         throw new SparkUnsupportedOperationException(
           errorClass = "COLUMNAR_UDF_NOT_EXECUTABLE",
@@ -84,6 +88,11 @@ case class EvalColumnarUDFsExec(
             "kinds" -> udf.engineImplementations.map(_.kind).mkString("[", ", ", "]")))
       }
     }.toArray
+    // The closures of the nodes of a stage are serialized together, so the nodes would share one
+    // instance of a function that several of them call, and an operator between them can read
+    // its child from another thread. The functions are serialized apart here, so that each
+    // partition of this node reads its own instances, which only this node calls.
+    val serializedFunctions: Array[Byte] = Utils.serialize(driverFunctions)
     // The ordinals, in the input batch, of the arguments of each call.
     val argOrdinals: Array[Array[Int]] = udfs.map { udf =>
       udf.children.map { arg =>
@@ -95,14 +104,25 @@ case class EvalColumnarUDFsExec(
       }.toArray
     }.toArray
     val names: Array[String] = udfs.map(_.name).toArray
+    val inputTypeStrings: Array[String] =
+      udfs.map(_.children.map(_.dataType.catalogString).mkString(", ")).toArray
     val resultTypes: Array[DataType] = udfs.map(_.dataType).toArray
+    // A column vector has the SQL type of a user-defined type, so the type of a result is
+    // compared with the declared type after the same replacement.
+    val resultVectorTypes: Array[DataType] = resultTypes.map(_.transformRecursively {
+      case udt: UserDefinedType[_] => udt.sqlType
+    })
     val numOutputRows = longMetric("numOutputRows")
     val numOutputBatches = longMetric("numOutputBatches")
     val evalTime = longMetric("evalTime")
     val numInputColumns = child.output.length
+    val numFunctions = udfs.length
 
     child.executeColumnar().mapPartitionsInternal { batches =>
       new Iterator[ColumnarBatch] {
+        private val functions = Utils.deserialize[Array[ColumnarScalarFunction]](
+          serializedFunctions, Utils.getContextOrSparkClassLoader)
+
         // The results of the current batch, which this node owns.
         private var results: Array[ColumnVector] = Array.empty
 
@@ -113,10 +133,18 @@ case class EvalColumnarUDFsExec(
 
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeResults()))
 
+        // Whether `vector` is `column`, or one of the fields of `column` if it is a struct.
+        private def isPartOf(column: ColumnVector, vector: ColumnVector): Boolean = {
+          (column eq vector) || (column.dataType() match {
+            case s: StructType => s.fields.indices.exists(i => isPartOf(column.getChild(i), vector))
+            case _ => false
+          })
+        }
+
         private def isInputColumn(batch: ColumnarBatch, vector: ColumnVector): Boolean = {
           var i = 0
           while (i < numInputColumns) {
-            if (batch.column(i) eq vector) return true
+            if (isPartOf(batch.column(i), vector)) return true
             i += 1
           }
           false
@@ -132,22 +160,28 @@ case class EvalColumnarUDFsExec(
           closeResults()
           val batch = batches.next()
           val numRows = batch.numRows()
-          val columns = new Array[ColumnVector](numInputColumns + functions.length)
+          val columns = new Array[ColumnVector](numInputColumns + numFunctions)
           var i = 0
           while (i < numInputColumns) {
             columns(i) = batch.column(i)
             i += 1
           }
           val start = System.nanoTime()
-          val newResults = new Array[ColumnVector](functions.length)
+          val newResults = new Array[ColumnVector](numFunctions)
           results = newResults
           i = 0
-          while (i < functions.length) {
+          while (i < numFunctions) {
             val args = new ColumnarBatch(argOrdinals(i).map(batch.column), numRows)
-            val result = functions(i).eval(args)
+            val result = try {
+              functions(i).eval(args)
+            } catch {
+              case NonFatal(e) =>
+                throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
+                  names(i), inputTypeStrings(i), resultTypes(i).catalogString, e)
+            }
             // This node closes the results, and the child still owns its columns: it can use
-            // them again for its next batch. So a result that is a column of the child is not
-            // kept as a result, and is rejected.
+            // them again for its next batch. So a result that is a column of the child, or a
+            // field of one, is not kept as a result, and is rejected.
             if (result != null && isInputColumn(batch, result)) {
               throw new SparkRuntimeException(
                 errorClass = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
@@ -156,7 +190,7 @@ case class EvalColumnarUDFsExec(
             // Set before the check, so that a vector of the wrong type is closed as well.
             newResults(i) = result
             if (result == null ||
-                !DataType.equalsStructurally(result.dataType(), resultTypes(i), true)) {
+                !DataType.equalsStructurally(result.dataType(), resultVectorTypes(i), true)) {
               val actualType = if (result == null) "NULL" else toSQLType(result.dataType())
               throw new SparkRuntimeException(
                 errorClass = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
