@@ -700,8 +700,8 @@ class ConstantPropagationSuite extends PlanTest {
         // Also where it is NULL, which a filter takes as FALSE.
         CaseWhen(Seq(($"id" > 10L) -> tenDividedBy($"x"))) > 1.0,
         If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType)),
-        // Also where it takes `SimplifyConditionals` twice.
-        If(If($"id" > 7L, $"x" > 1L, Literal(false)) || $"id" > 7L, tenDividedBy($"x"),
+        // Also where it takes `SimplifyConditionals` and `BooleanSimplification` twice.
+        If(If($"id" > 7L, $"x" > 1L, Literal(false)) && $"x" > 0L, tenDividedBy($"x"),
           Literal(0.0)) > 1.0
       ).foreach { conjunct =>
         comparePlans(Optimize.execute(projected.where(
