@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
+import numpy as np
 import pandas as pd
 
 from pyspark.errors import PySparkAssertionError
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.utils import (
+    infer_dtype_from_object,
     lazy_property,
     validate_arguments_and_invoke_function,
     validate_bool_kwarg,
@@ -54,6 +56,59 @@ class UtilsTestsMixin:
 
         # Support for **kwargs
         self.to_clipboard(sep=",", index=False)
+
+    def test_infer_dtype_from_object(self):
+        # numpy scalar types, including abstract ones, are returned as they are
+        self.assertIs(infer_dtype_from_object(np.int64), np.int64)
+        self.assertIs(infer_dtype_from_object(np.number), np.number)
+
+        # dtype objects
+        self.assertIs(infer_dtype_from_object(np.dtype("float32")), np.float32)
+        self.assertIs(infer_dtype_from_object(np.dtype("datetime64[ns]")), np.datetime64)
+        self.assertIs(infer_dtype_from_object(pd.Int64Dtype()), np.int64)
+        self.assertIs(infer_dtype_from_object(pd.CategoricalDtype()), pd.CategoricalDtype.type)
+
+        # strings and Python types
+        self.assertIs(infer_dtype_from_object("int64"), np.int64)
+        self.assertIs(infer_dtype_from_object("bool"), np.bool_)
+        self.assertIs(infer_dtype_from_object("object"), np.object_)
+        self.assertIs(infer_dtype_from_object("number"), np.number)
+        self.assertIs(infer_dtype_from_object("datetime"), np.datetime64)
+        self.assertIs(infer_dtype_from_object("timedelta"), np.timedelta64)
+        self.assertIs(infer_dtype_from_object("category"), pd.CategoricalDtype.type)
+        self.assertIs(infer_dtype_from_object("datetimetz"), pd.DatetimeTZDtype.type)
+        self.assertIs(infer_dtype_from_object(float), np.float64)
+
+        with self.assertRaises(NotImplementedError):
+            infer_dtype_from_object("period")
+        with self.assertRaisesRegex(ValueError, "too specific of a frequency"):
+            infer_dtype_from_object(np.dtype("datetime64[s]"))
+        with self.assertRaises(TypeError):
+            infer_dtype_from_object("not-a-dtype")
+
+    def test_select_dtypes(self):
+        pdf = pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+                "b": [True, False, True],
+                "c": [1.0, 2.0, 3.0],
+            }
+        )
+        psdf = self.spark.createDataFrame(pdf).pandas_api()
+
+        self.assert_eq(psdf.select_dtypes(include="int64"), pdf.select_dtypes(include="int64"))
+        self.assert_eq(
+            psdf.select_dtypes(include=["int64", "bool"]),
+            pdf.select_dtypes(include=["int64", "bool"]),
+        )
+        self.assert_eq(
+            psdf.select_dtypes(include=[np.float64]), pdf.select_dtypes(include=[np.float64])
+        )
+        self.assert_eq(psdf.select_dtypes(exclude=[float]), pdf.select_dtypes(exclude=[float]))
+        self.assert_eq(
+            psdf.select_dtypes(include="float64", exclude="int64"),
+            pdf.select_dtypes(include="float64", exclude="int64"),
+        )
 
     def test_validate_arguments_and_invoke_function(self):
         # This should pass and run fine
