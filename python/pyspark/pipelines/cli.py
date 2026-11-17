@@ -26,6 +26,7 @@ import argparse
 import glob
 import importlib.util
 import os
+import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -283,6 +284,83 @@ def change_dir(path: Path) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
+def connects_to_remote_server(configuration: Mapping[str, str]) -> bool:
+    """Returns whether the run connects to a Spark Connect server that is already running.
+
+    `spark-pipelines` hands its `--remote` argument to spark-submit, which passes it to this process
+    as the SPARK_REMOTE environment variable; without `--remote` the value is `local`, and the
+    session starts a server of its own that ends with the command. A spec may also name the server
+    with `spark.remote` in its configuration.
+    """
+    url = configuration.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+    return url is not None and url.startswith("sc://")
+
+
+def apply_configuration_to_remote_session(
+    spark: SparkSession, configuration: Mapping[str, str]
+) -> None:
+    """Sets the spec's configuration on the session of a server that is already running.
+
+    A static SQL setting or a core Spark setting in the spec cannot change such a server, which
+    keeps its own value and refuses the write. Those settings are reported once, with the server's
+    start command as the place for them, and the run goes on. Any other refusal is an error.
+    """
+    refused = []
+    for key, value in configuration.items():
+        if key == "spark.remote":
+            continue
+        try:
+            spark.conf.set(key, value)
+        except PySparkException as e:
+            if e.getCondition() not in ("CANNOT_MODIFY_STATIC_CONFIG", "CANNOT_MODIFY_CONFIG"):
+                raise
+            refused.append((key, value))
+    if refused:
+        lines = [
+            "The following settings of the pipeline spec cannot be applied to a running Spark "
+            "Connect server, which keeps its own values:"
+        ]
+        lines.extend(f"  {key}: {value}" for key, value in refused)
+        key, value = refused[0]
+        lines.append("Pass them to the command that starts the server instead, for example:")
+        lines.append(f"  sbin/start-connect-server.sh --conf {key}={value}")
+        print("\n".join(lines), file=sys.stderr)
+
+
+def warn_if_tables_are_not_kept(spark: SparkSession, catalog: Optional[str], remote: bool) -> None:
+    """Prints a message when the catalog the pipeline writes to keeps its tables only while the
+    Spark Connect server runs.
+
+    That is the session catalog, `spark_catalog`, when the server's `spark.sql.catalogImplementation`
+    is `in-memory`. Both values are read through the session, so the check holds for a server the
+    CLI was given as well as for the local server a run without `--remote` starts for itself.
+    """
+    if (catalog or spark.catalog.currentCatalog()) != "spark_catalog":
+        return
+    if spark.conf.get("spark.sql.catalogImplementation") != "in-memory":
+        return
+    if remote:
+        advice = (
+            "The tables this run creates are kept only while this Spark Connect server runs. To keep "
+            "them across server restarts, start the server with a catalog that keeps metadata, for "
+            "example with --conf spark.sql.catalogImplementation=hive, or with a connector catalog "
+            "under --conf spark.sql.catalog.<name>=<catalog class> and that name as 'catalog' in "
+            "the pipeline spec."
+        )
+    else:
+        advice = (
+            "This command started a local Spark Connect server for the run, so the tables it creates "
+            "are gone when this command ends. Pipelines are meant to run against a Spark Connect "
+            "server: start one, for example with sbin/start-connect-server.sh, and pass "
+            "--remote sc://host:port to spark-pipelines."
+        )
+    print(
+        "The pipeline writes to the session catalog, spark_catalog, and the server keeps that "
+        f"catalog's table metadata in memory (spark.sql.catalogImplementation is in-memory). {advice}",
+        file=sys.stderr,
+    )
+
+
 def run(
     spec_path: Path,
     full_refresh: Sequence[str],
@@ -321,13 +399,23 @@ def run(
     spark_builder = SparkSession.builder.config(
         "spark.sql.connect.serverStacktrace.enabled", "false"
     )
+    remote = connects_to_remote_server(spec.configuration)
     for key, value in spec.configuration.items():
+        # A server that is already running takes the spec's configuration once the session exists,
+        # so that the settings it cannot apply are reported in one place. The local server a run
+        # without --remote starts for itself takes them from the builder, static settings included.
+        if remote and key != "spark.remote":
+            continue
         spark_builder = spark_builder.config(key, value)
 
     spark = spark_builder.getOrCreate()
     # Stop the session even if graph creation, registration, or the run itself fails, so a failure
     # after the session is created does not leak it.
     try:
+        if remote:
+            apply_configuration_to_remote_session(spark, spec.configuration)
+        warn_if_tables_are_not_kept(spark, spec.catalog, remote)
+
         log_with_curr_timestamp("Creating dataflow graph...")
         dataflow_graph_id = create_dataflow_graph(
             spark,
