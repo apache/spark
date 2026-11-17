@@ -23,6 +23,7 @@ import scala.collection.immutable.HashMap
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.types._
 
 object SchemaPruning extends SQLConfHelper {
@@ -100,10 +101,12 @@ object SchemaPruning extends SQLConfHelper {
           if (leftFieldOpt.isDefined) {
             val resolvedLeftStruct = leftFieldOpt.get
             val leftFieldType = resolvedLeftStruct.dataType
-            val rightFieldType = rightStruct(fieldName).dataType
+            val rightField = rightStruct(fieldName)
+            val rightFieldType = rightField.dataType
             val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-            Some(StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable,
-              metadata = resolvedLeftStruct.metadata))
+            val field = StructField(fieldName, sortedLeftFieldType,
+              nullable = resolvedLeftStruct.nullable, metadata = resolvedLeftStruct.metadata)
+            Some(ResolveDefaultColumns.withExistenceDefaultType(field, rightField))
           } else {
             None
           }
