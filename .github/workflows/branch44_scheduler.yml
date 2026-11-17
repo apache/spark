@@ -21,11 +21,11 @@ name: "Branch-4.4 CI Scheduler"
 
 on:
   schedule:
-    - cron: &maven_cron '17 1 2-31/3 * *'
+    - cron: &maven_cron '17 17 2-31/3 * *'
     - cron: &java17_cron '17 2 3-31/3 * *'
     - cron: &java25_cron '17 5 1-28/3 * *'
-    - cron: &java21_cron '17 8 2-31/3 * *'
-    - cron: &maven_java21_cron '17 10 3-31/3 * *'
+    - cron: &java21_cron '17 2 2-31/3 * *'
+    - cron: &maven_java21_cron '17 22 3-31/3 * *'
     - cron: &non_ansi_cron '17 16 2-31/3 * *'
     - cron: &python_3_11_cron '17 18 1-28/3 * *'
     - cron: &python_3_14_cron '17 23 3-31/3 * *'
