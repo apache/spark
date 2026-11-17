@@ -429,7 +429,8 @@ class ReadwriterV2TestsMixin:
             props = self.spark.sql("SHOW TBLPROPERTIES test_table").collect()
             self.assertIn(("prop", "value"), [tuple(r) for r in props])
 
-            # The session catalog only has v1 tables, which reject the other V2 write modes.
+            # parquet is not a v2 provider, so replace() and createOrReplace() fail even
+            # without test_table; append() and overwritePartitions() fail because test_table is v1.
             with self.assertRaisesRegex(AnalysisException, "UNSUPPORTED_FEATURE.TABLE_OPERATION"):
                 df.writeTo("test_table").using("parquet").replace()
             with self.assertRaisesRegex(AnalysisException, "UNSUPPORTED_FEATURE.TABLE_OPERATION"):
