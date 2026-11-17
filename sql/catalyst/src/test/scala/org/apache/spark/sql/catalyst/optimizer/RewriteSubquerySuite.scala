@@ -192,4 +192,17 @@ class RewriteSubquerySuite extends PlanTest {
       assert(result.isInstanceOf[Literal] && result.asInstanceOf[Literal].value == null, result)
     }
   }
+
+  test("SPARK-60473: NOT IN subquery on non-nullable column rewrites without redundant IsNull") {
+    val a = $"a".int.notNull
+    val x = $"x".int.notNull
+    val outer = LocalRelation(a)
+    val inner = LocalRelation(x)
+    val query = outer.where(
+      Not(InSubquery(Seq(a), ListQuery(inner.select(x), numCols = 1)))).analyze
+    val optimized = Optimize.execute(query)
+    val join = optimized.collectFirst { case j: Join => j }.get
+    assert(join.condition.contains(outer.output(0) === inner.output(0)))
+    assert(!join.condition.get.exists(_.isInstanceOf[IsNull]))
+  }
 }

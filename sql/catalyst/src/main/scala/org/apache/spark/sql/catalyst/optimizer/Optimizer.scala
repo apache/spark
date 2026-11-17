@@ -293,6 +293,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       NullPropagation,
+      BooleanSimplification,
       PushPredicateThroughJoin,
       LimitPushDown,
       ColumnPruning,
