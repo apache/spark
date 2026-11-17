@@ -464,6 +464,8 @@ class ConstantPropagationSuite extends PlanTest {
         (signed($"d" + $"e") && $"d" === 0.0 && $"e" === 0.0) -> Literal(false),
         // Also where the constant of another one is put in by `replaceConstants`.
         (signed($"d" * $"y") && $"d" === 0.0 && $"y" === 1.0) -> Literal(false),
+        (Cast($"d" * $"y", StringType) === "0.0" && $"d" === 0.0 && $"y" === 1.0) ->
+          ($"y" === 1.0 && $"d" === 0.0),
         // And so it is under an operator that gives equal results for equal values, also under
         // arithmetic that can fail, as a division by either zero fails.
         ($"d" + $"y" > 1.0 && $"d" === 0.0) -> (Literal(0.0) + $"y" > 1.0 && $"d" === 0.0),
@@ -678,6 +680,13 @@ class ConstantPropagationSuite extends PlanTest {
           comparePlans(optimized, withDd.where(expected).analyze)
         }
       }
+      // It also runs `OptimizeUpdateFields`, so that `SimplifyExtractValueOps` takes the field out of
+      // the nested `UpdateFields`, which makes the condition FALSE.
+      val struct = CreateNamedStruct(Seq(Literal("a"), $"x".cast(DoubleType)))
+      val updated = UpdateFields(UpdateFields(struct, Seq(WithField("a", $"i".cast(DoubleType)))),
+        Seq(WithField("b", $"x".cast(DoubleType))))
+      checkOrdered(projected, GetStructField(updated, 0) > 5.0 && tenDividedBy($"x") > 0.0 &&
+        $"i" === 0, Literal(false))
       // Where `ConstantFolding` is excluded, nothing fails to fold, so the constant goes in place.
       object OptimizeWithoutFolding extends RuleExecutor[LogicalPlan] {
         val batches = Batch("ConstantPropagation", FixedPoint(10),
