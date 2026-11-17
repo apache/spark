@@ -683,14 +683,22 @@ operations. AutoCDC requires a target backed by a connector that supports MERGE.
 
 Auto CDC needs a table provider that implements row-level operations, configured as a catalog in the pipeline. Lakehouse connectors such as Apache Iceberg are the usual choice; consult the connector's documentation for whether it implements the DSv2 row-level operation interfaces and how to register its catalog. Supporting the `MERGE INTO` SQL statement is not on its own sufficient: a connector can implement MERGE through its own planner extension without implementing the DSv2 interface Auto CDC requires. The catalog must also persist metadata across runs, per [Requirements](#requirements).
 
-The examples below use a catalog named `lakehouse` to stand in for such a connector. Add the catalog to the generated `spark-pipeline.yml` - substituting the catalog name and connector class - without disturbing the `name`, `storage`, and `libraries` values `spark-pipelines init` already wrote:
+The examples below use a catalog named `lakehouse` to stand in for such a connector. Edit the generated `spark-pipeline.yml` to select it, substituting the catalog name and connector class. Keep the `name`, `storage`, and `libraries` values `spark-pipelines init` wrote, and the `configuration` mapping it writes on Spark builds with Hive support. Add `catalog` and `database` as new top-level keys, and add the connector's `spark.sql.catalog.lakehouse` key inside that existing `configuration` mapping, or create the mapping if the generated spec has none. Do not add a second top-level `configuration` block: the spec loader keeps only the last of two top-level keys with the same name, so the other block's settings are dropped without an error. On a build with Hive support the edited spec looks like this:
 
 ```yaml
+name: cdc_demo
+storage: file:///path/to/cdc_demo/pipeline-storage
+libraries:
+  - glob:
+      include: transformations/**
+configuration:
+  spark.sql.catalogImplementation: hive
+  spark.sql.catalog.lakehouse: <your connector's catalog class>
 catalog: lakehouse
 database: cdc_demo
-configuration:
-  spark.sql.catalog.lakehouse: <your connector's catalog class>
 ```
+
+On a build without Hive support, the generated spec has no `configuration` mapping, so add one that holds only the `spark.sql.catalog.lakehouse` key.
 
 ### End-to-End Example
 
