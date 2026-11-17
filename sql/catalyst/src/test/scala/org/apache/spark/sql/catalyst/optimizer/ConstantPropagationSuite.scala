@@ -510,11 +510,13 @@ class ConstantPropagationSuite extends PlanTest {
         tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0 && $"i" === 1 && $"id" === 7L,
         $"i" === 1 && $"id" === 7L && tenDividedBy($"id" - 6L - $"i".cast(LongType)) > 0.0)
       // Also where it fails only as it is rewritten, as `id = 7` does not go into an operand that
-      // decides whether one that can fail runs, and folds with all of the constants in, but not
-      // to a literal, as it reads `x`.
+      // decides whether one that can fail runs, and folds with all of the constants in, but to an
+      // expression that can fail.
       checkOrdered(projected,
-        (($"id" > 10L && tenDividedBy($"i") > 1.0) || $"x" > 5L) && $"i" === 0 && $"id" === 7L,
-        $"i" === 0 && $"id" === 7L && (($"id" > 10L && tenDividedBy($"i") > 1.0) || $"x" > 5L))
+        (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) && $"i" === 0 &&
+          $"id" === 7L,
+        $"i" === 0 && $"id" === 7L &&
+          (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0))
       // Also with a constant that a later iteration folds, e.g. of `id = 7` for a BIGINT `id`.
       checkOrdered(projected,
         Coalesce(Seq(tenDividedBy($"i"), $"id".cast(DoubleType))) > 0.0 && $"i" === 0 &&
@@ -558,12 +560,15 @@ class ConstantPropagationSuite extends PlanTest {
           $"i" === 0 && $"id" === 7L,
         $"id" === 7L && $"x" > 0L && $"i" === 0)
 
-      // But a conjunct that fails to fold only as it is rewritten is replaced with the literal it
-      // folds to with all of the constants in, and the equalities are handled as without such a
-      // failure: here `id = 7` goes first, as `i = 0` after that literal can fail.
+      // But a conjunct that fails to fold only as it is rewritten is replaced with what it folds to
+      // with all of the constants in, if that can not fail, and the equalities are handled as
+      // without such a failure: here `id = 7` goes first, as `i = 0` after it can fail.
       checkOrdered(projected,
         $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) && $"i" === 0 && $"id" === 7L,
         $"id" === 7L && $"x" > 0L && $"i" === 0)
+      checkOrdered(projected,
+        (($"id" > 10L && tenDividedBy($"i") > 1.0) || $"x" > 5L) && $"i" === 0 && $"id" === 7L,
+        $"id" === 7L && $"x" > 5L && $"i" === 0)
       checkOrdered(projected,
         tenDividedBy($"x" - $"id") > 0.0 && $"x" > 0L && ($"id" > 0L || tenDividedBy($"i") > 1.0) &&
           $"i" === 0 && $"id" === 7L,

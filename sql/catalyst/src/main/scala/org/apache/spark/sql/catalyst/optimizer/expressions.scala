@@ -280,8 +280,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    *    `CASE WHEN id > 10 THEN 10 / x ELSE 0 END > 1 AND i = 1 AND id = 7`, as [[replaceConstants]]
    *    does not put `id = 7` into a `CASE WHEN` that reads another column;
    *  - where one of them, as rewritten, fails to fold, outside of a conditional branch, but it
-   *    folds to a literal with all of the constants in, it is replaced with that literal, as
-   *    before SPARK-60983, e.g. with TRUE for `x > 0 AND (id > 0 OR 10 / i > 1) AND i = 0 AND
+   *    folds with all of the constants in to an expression that can not fail, it is replaced with
+   *    that, as before SPARK-60983, e.g. with TRUE for `x > 0 AND (id > 0 OR 10 / i > 1) AND
+   *    i = 0 AND id = 7`, or `x > 5` for `((id > 10 AND 10 / i > 1) OR x > 5) AND i = 0 AND
    *    id = 7`, where [[replaceConstants]] does not put `id = 7` into an operand that decides
    *    whether one that can fail runs;
    *  - otherwise, where one of them fails to fold, which fails the query while it is optimized,
@@ -312,15 +313,20 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         }
         (after, afterFolded, withAllFolded)
       }
+    // What a conjunct that fails to fold as rewritten can be replaced with.
+    def replacement(withAll: Folded): Option[Expression] = withAll match {
+      case FoldsTo(e) if columns.canEvaluateUnconditionally(e) => Some(e)
+      case _ => None
+    }
     if (folded.exists { case (_, a, w) => a == FoldsToFalse || w == FoldsToFalse }) {
       FalseLiteral
     } else if (folded.exists { case (_, a, w) =>
-        w == FailsToFold || (a == FailsToFold && !w.isInstanceOf[FoldsToLiteral]) }) {
+        w == FailsToFold || (a == FailsToFold && replacement(w).isEmpty) }) {
       moveEqualitiesFirst(condition, replaceConstants(condition, equalityPredicates),
         equalityPredicates, FailableColumns.none)
     } else {
       val replaced = folded.map {
-        case (_, FailsToFold, FoldsToLiteral(l)) => l
+        case (_, FailsToFold, withAll) => replacement(withAll).get
         case (after, _, _) => after
       }.reduce(And)
       if (movable.isEmpty) replaced else moveEqualitiesFirst(inPlace, replaced, movable, columns)
@@ -361,10 +367,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   private case object FoldsToFalse extends Folded
   /** It fails to fold, outside of a conditional branch. */
   private case object FailsToFold extends Folded
-  /** It folds to another literal. */
-  private case class FoldsToLiteral(literal: Literal) extends Folded
-  /** It folds to an expression that is not a literal. */
-  private case object FoldsToExpression extends Folded
+  /** It folds to `folded`. */
+  private case class FoldsTo(folded: Expression) extends Folded
 
   /**
    * What `after`, the conjunct `before` with constants in, folds to with the foldable columns of
@@ -386,8 +390,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         case None => FailsToFold
         case Some(FalseLiteral) => FoldsToFalse
         case Some(Literal(null, BooleanType)) if nullIsFalse => FoldsToFalse
-        case Some(l: Literal) => FoldsToLiteral(l)
-        case Some(_) => FoldsToExpression
+        case Some(folded) => FoldsTo(folded)
       }
     }
   }

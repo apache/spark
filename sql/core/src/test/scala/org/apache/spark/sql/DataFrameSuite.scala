@@ -3299,6 +3299,11 @@ class DataFrameSuite extends SharedSparkSession
         $"x" > 0 && ($"id" > 5 || lit(10) / $"i" > 1).cast("int") === 1 && $"i" === 0 &&
           $"id" === 7
       ).foreach(condition => check(zeroAndX, ints, condition, Seq(Row("0", true))))
+      // Also where the conjunct that fails to fold as it is rewritten becomes `x > 5`, which
+      // filters out the row ("x", 7, 0) after `id = 7`.
+      check(Seq(("0", 7, 6), ("x", 7, 0)).toDF("s", "id", "x"), ints,
+        (($"id" > 10 && lit(10) / $"i" > 1) || $"x" > 5) && $"i" === 0 && $"id" === 7,
+        Seq(Row("0", true)))
     }
   }
 
