@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.{Locale, Properties}
+import java.time.ZoneId
+import java.util.{Locale, Properties, TimeZone}
 
 import scala.util.matching.Regex
 
@@ -283,13 +284,13 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(dialectTimestampNTZAsWallClock)
 
-  // Time zone the source renders TimestampType values in. When set, reads pass a calendar in this
-  // zone to ResultSet.getTimestamp, so offset-less driver text is not interpreted in the JVM
-  // default time zone.
-  val timestampCalendarTimeZone: Option[java.util.TimeZone] =
+  // Time zone the source renders TimestampType values in. When set, reads and writes pass a
+  // calendar in this zone to ResultSet.getTimestamp and PreparedStatement.setTimestamp, so
+  // offset-less driver values are not interpreted in the JVM default time zone.
+  val timestampCalendarTimeZone: Option[TimeZone] =
     parameters
       .get(JDBC_TIMESTAMP_CALENDAR_TIME_ZONE)
-      .map(id => java.util.TimeZone.getTimeZone(java.time.ZoneId.of(id)))
+      .map(id => TimeZone.getTimeZone(ZoneId.of(id)))
 
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),

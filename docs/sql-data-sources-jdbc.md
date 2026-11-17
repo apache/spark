@@ -402,9 +402,9 @@ logging into the data sources.
     <td><code>timestampCalendarTimeZone</code></td>
     <td>(none)</td>
     <td>
-      The time zone ID (for example <code>UTC</code> or <code>America/Los_Angeles</code>) in which the source renders TIMESTAMP values read as Spark's TimestampType. When set, the value is parsed with <code>ResultSet.getTimestamp</code> and a calendar in this time zone, so a driver that returns timestamps without an offset does not interpret them in the JVM default time zone. An invalid time zone ID fails the read. By default, values are parsed in the JVM default time zone.
+      When set, Spark reads and writes TIMESTAMP values in this time zone instead of the JVM default time zone. Set it to the time zone the database session uses for timestamps, for example <code>UTC</code> or <code>Asia/Kolkata</code>, when the two differ and values come out shifted. Only applies to TIMESTAMP columns, not TIMESTAMP_NTZ. An invalid time zone fails the query. If not set, the JVM default time zone is used.
     </td>
-    <td>read</td>
+    <td>read/write</td>
   </tr>
   <tr>
     <td><code>hint</code></td>

@@ -3504,6 +3504,52 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-61857: timestampCalendarTimeZone writes TimestampType in the given time zone") {
+    val tableName = "test.timestamp_calendar_tz_write"
+    val instant = Instant.parse("2026-10-10T05:33:07.123456Z")
+    try {
+      Seq("true", "false").foreach { java8Api =>
+        withSQLConf(
+            SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString,
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api) {
+          DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+              Seq(instant).toDF("t").write.format("jdbc")
+                .mode("overwrite")
+                .option("url", urlWithUserAndPass)
+                .option("dbtable", tableName)
+                .option("timestampCalendarTimeZone", "Asia/Kolkata")
+                .save()
+
+              val rs = conn.prepareStatement(s"select t from $tableName").executeQuery()
+              assert(rs.next())
+              assert(
+                rs.getObject(1, classOf[LocalDateTime]) ===
+                  LocalDateTime.parse("2026-10-10T11:03:07.123456"),
+                s"java8Api=$java8Api zone=$zoneId")
+              rs.close()
+
+              val readBack = spark.read.format("jdbc")
+                .option("url", urlWithUserAndPass)
+                .option("dbtable", tableName)
+                .option("timestampCalendarTimeZone", "Asia/Kolkata")
+                .load()
+                .head()
+              val readInstant = readBack.get(0) match {
+                case i: Instant => i
+                case ts: Timestamp => ts.toInstant
+              }
+              assert(readInstant === instant, s"java8Api=$java8Api zone=$zoneId")
+            }
+          }
+        }
+      }
+    } finally {
+      conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.commit()
+    }
+  }
+
   test("FAILED_JDBC.CONNECTION") {
     val testUrls = Seq(
       "jdbc:mysql",

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
 import java.util
+import java.util.Calendar
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -482,7 +483,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       JDBCValueGetter.LogicalTimeGetter
     case TimestampType if options.exists(_.timestampCalendarTimeZone.isDefined) =>
       JDBCValueGetter.TimestampWithCalendarGetter(
-        java.util.Calendar.getInstance(options.get.timestampCalendarTimeZone.get), dialect)
+        Calendar.getInstance(options.get.timestampCalendarTimeZone.get), dialect)
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
@@ -547,6 +548,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case BinaryType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
+
+    case TimestampType if options.timestampCalendarTimeZone.isDefined =>
+      val calendar = Calendar.getInstance(options.timestampCalendarTimeZone.get)
+      if (conf.datetimeJava8ApiEnabled) {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setTimestamp(
+            pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))), calendar)
+      } else {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos), calendar)
+      }
 
     case TimestampType =>
       if (conf.datetimeJava8ApiEnabled) {

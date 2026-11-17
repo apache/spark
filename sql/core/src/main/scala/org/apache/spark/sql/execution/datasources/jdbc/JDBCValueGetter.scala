@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, ResultSet, Time, Timestamp}
+import java.util.Calendar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, NANOS_PER_MICROS}
@@ -168,7 +169,7 @@ private[jdbc] object JDBCValueGetter {
     }
   }
 
-  final case class TimestampWithCalendarGetter(calendar: java.util.Calendar, dialect: JdbcDialect)
+  final case class TimestampWithCalendarGetter(calendar: Calendar, dialect: JdbcDialect)
       extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
       val t = rs.getTimestamp(pos + 1, calendar)
