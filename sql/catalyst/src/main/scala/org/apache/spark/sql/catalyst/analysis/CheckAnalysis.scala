@@ -1041,6 +1041,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case c: Call if c.resolved =>
             if (!c.bound) {
+              val invalidExprSqls = c.args.map {
+                case NamedArgumentExpression(_, value) => value
+                case arg => arg
+              }.filter(_.references.nonEmpty).map(toSQLExpr)
+              // A rule such as `TimeWindowing` put an operator under the CALL for these arguments.
+              if (invalidExprSqls.nonEmpty) {
+                c.failAnalysis(
+                  errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+                  messageParameters = Map(
+                    "operator" -> c.nodeName,
+                    "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
+              }
               throw SparkException.internalError(
                 s"CALL is resolved but not bound: ${c.procedure.nodeName}")
             }

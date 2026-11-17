@@ -722,12 +722,10 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     val ident = Identifier.of(Array("ns"), "proc")
     val sum = Call(ResolvedProcedure(catalog, ident, new Sum), Seq(Literal(1), Literal(2)))
     checkAnswer(Dataset.ofRows(spark, sum), Row(3) :: Nil)
-    // `BindProcedures` keeps `execute`, so this CALL is bound but not invoked.
+    // Analysis requires a bound `Call`. `BindProcedures` keeps `execute`, so the procedure is not
+    // invoked.
     val notInvoked = Dataset.ofRows(spark, sum.copy(execute = false)).queryExecution.analyzed
-    notInvoked match {
-      case c: Call => assert(c.bound)
-      case other => fail(s"expected a bound Call: $other")
-    }
+    assert(notInvoked.isInstanceOf[Call], notInvoked)
 
     val ts = Timestamp.valueOf("2026-01-01 00:00:00")
     val procedure = new TimestampProcedure { override def name: String = "proc" }
@@ -748,12 +746,29 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
       parameters = Map("message" -> s"Unsupported procedure: ${neither.getClass.getName}"))
   }
 
+  test("SPARK-61506: a CALL with a time window argument fails analysis") {
+    // `TimeWindowing` and `SessionWindowing` put an operator under the `Call` before it is bound.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    Seq(
+      "window(TIMESTAMP '2026-01-01 00:00:00', '1 hour')" -> "\"window\"",
+      "window(TIMESTAMP '2026-01-01 00:00:00', '1 hour', '30 minutes')" -> "\"window\"",
+      "session_window(TIMESTAMP '2026-01-01 00:00:00', '5 minutes')" -> "\"session_window\""
+    ).foreach { case (window, invalidExprSqls) =>
+      val call = s"CALL cat.ns.sum(in2 => (SELECT 1), in1 => $window)"
+      checkError(
+        exception = intercept[AnalysisException](sql(call)),
+        condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+        parameters = Map("operator" -> "Call", "invalidExprSqls" -> invalidExprSqls),
+        context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+    }
+  }
+
   test("SPARK-61506: a resolved CALL that is not bound fails analysis") {
-    val call = Call(LocalRelation(), Seq(Literal(1)))
+    val call = Call(Project(Nil, LocalRelation()), Seq(Literal(1)))
     checkError(
       exception = intercept[SparkException](Dataset.ofRows(spark, call)),
       condition = "INTERNAL_ERROR",
-      parameters = Map("message" -> "CALL is resolved but not bound: LocalRelation"))
+      parameters = Map("message" -> "CALL is resolved but not bound: Project"))
   }
 
   test("SPARK-51780: Implement DESC PROCEDURE") {

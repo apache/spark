@@ -220,7 +220,8 @@ case class ResolvedFieldName(path: Seq[String], field: StructField) extends Fiel
 case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 
 /**
- * A resolved procedure that a CALL refers to, before or after `BindProcedures` binds it.
+ * A resolved procedure that a CALL or DESCRIBE PROCEDURE refers to. Under a CALL,
+ * `BindProcedures` replaces a [[ResolvedProcedure]] with a [[ResolvedBoundProcedure]].
  */
 sealed trait ProcedureReference extends LeafNodeWithoutStats {
   def catalog: ProcedureCatalog
