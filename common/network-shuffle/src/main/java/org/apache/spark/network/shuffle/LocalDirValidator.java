@@ -96,10 +96,14 @@ class LocalDirValidator {
   private static boolean isStandaloneAppDir(Path root, Path path, String appId) {
     Path relative = root.relativize(path);
     int count = relative.getNameCount();
+    String appLeaf = URLEncoder.encode(appId, StandardCharsets.UTF_8);
+    if (appLeaf.equals(".") || appLeaf.equals("..")) {
+      appLeaf = appLeaf.replace(".", "%2E");
+    }
     return (count == 3 || count == 4) &&
       relative.getName(0).toString().startsWith("spark-") &&
       relative.getName(1).toString().startsWith("executor-") &&
-      relative.getName(2).toString().equals(URLEncoder.encode(appId, StandardCharsets.UTF_8)) &&
+      relative.getName(2).toString().equals(appLeaf) &&
       (count == 3 || relative.getName(3).toString().startsWith("blockmgr-"));
   }
 

@@ -522,7 +522,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     re-validated, so registrations made before the upgrade keep being served across restarts.
     This only affects standalone mode.
   </td>
-  <td>4.4.0</td>
+  <td>4.5.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>

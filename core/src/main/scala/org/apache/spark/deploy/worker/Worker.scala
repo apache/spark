@@ -759,7 +759,13 @@ private[deploy] class Worker(
         // adding a URL-encoded app id leaf for the shuffle service's app-scope check.
         val executorDir = Utils.createDirectory(dir, namePrefix = "executor")
         try {
-          val appDir = new File(executorDir, URLEncoder.encode(appId, StandardCharsets.UTF_8))
+          val encodedAppId = URLEncoder.encode(appId, StandardCharsets.UTF_8)
+          val appLeaf = if (encodedAppId == "." || encodedAppId == "..") {
+            encodedAppId.replace(".", "%2E")
+          } else {
+            encodedAppId
+          }
+          val appDir = new File(executorDir, appLeaf)
           if (!Utils.createDirectory(appDir)) {
             throw new IOException(s"Failed to create directory $appDir")
           }

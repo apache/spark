@@ -59,6 +59,27 @@ public class LocalDirValidatorSuite {
   }
 
   @Test
+  public void acceptsEncodedDotAppLeaves() throws Exception {
+    File root = Files.createTempDirectory("ess-dot-app").toFile();
+    try {
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
+      for (String[] entry : new String[][] { { ".", "%2E" }, { "..", "%2E%2E" } }) {
+        File executor = new File(root, "spark-root/executor-" + entry[1]);
+        File leaf = new File(executor, entry[1]);
+        assertTrue(leaf.mkdirs());
+        validator.validate(new String[] { leaf.getPath() }, entry[0]);
+        assertThrows(IllegalArgumentException.class,
+          () -> validator.validate(new String[] { leaf.getPath() }, "other"));
+        File raw = new File(executor, entry[0]);
+        assertThrows(IllegalArgumentException.class,
+          () -> validator.validate(new String[] { raw.getPath() }, entry[0]));
+      }
+    } finally {
+      JavaUtils.deleteRecursively(root);
+    }
+  }
+
+  @Test
   public void rejectsRootLocalDir() throws Exception {
     assertRejectsLocalDir(new String[] { File.separator });
   }

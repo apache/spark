@@ -926,7 +926,7 @@ package object config {
         "spark.shuffle.service.db.enabled, registrations restored from the local database " +
         "when the service restarts are not re-validated, so registrations made before the " +
         "upgrade keep being served across restarts.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
