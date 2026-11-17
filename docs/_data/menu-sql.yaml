@@ -42,6 +42,8 @@
       url: sql-data-sources-hive-tables.html
     - text: JDBC To Other Databases
       url: sql-data-sources-jdbc.html
+    - text: ADBC To Other Databases
+      url: sql-data-sources-adbc.html
     - text: Avro Files
       url: sql-data-sources-avro.html
     - text: Protobuf data

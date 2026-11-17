@@ -309,6 +309,19 @@
       <artifactId>arrow-compression</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.arrow.adbc</groupId>
+      <artifactId>adbc-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow.adbc</groupId>
+      <artifactId>adbc-driver-manager</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow.adbc</groupId>
+      <artifactId>adbc-driver-jdbc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-udf-worker-proto_${scala.binary.version}</artifactId>
       <version>${project.version}</version>

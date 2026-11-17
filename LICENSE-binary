@@ -301,6 +301,8 @@ joda-time:joda-time
 net.sf.opencsv:opencsv
 net.sf.supercsv:super-csv
 net.sf.jpam:jpam
+org.apache.arrow.adbc:adbc-core
+org.apache.arrow.adbc:adbc-driver-manager
 org.apache.arrow:arrow-c-data
 org.apache.arrow:arrow-compression
 org.apache.arrow:arrow-format

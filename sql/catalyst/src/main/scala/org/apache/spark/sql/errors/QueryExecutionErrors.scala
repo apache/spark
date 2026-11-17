@@ -3655,6 +3655,137 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def adbcMissingOptionError(option: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.MISSING_OPTION",
+      messageParameters = Map("option" -> toDSOption(option)))
+  }
+
+  def adbcEmptyOptionError(option: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.EMPTY_OPTION",
+      messageParameters = Map("option" -> toDSOption(option)))
+  }
+
+  def adbcBothTableAndQueryError(
+      tableOption: String, queryOption: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.BOTH_TABLE_AND_QUERY",
+      messageParameters = Map(
+        "tableOption" -> toDSOption(tableOption),
+        "queryOption" -> toDSOption(queryOption)))
+  }
+
+  def adbcMissingTableOrQueryError(
+      tableOption: String, queryOption: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.MISSING_TABLE_OR_QUERY",
+      messageParameters = Map(
+        "tableOption" -> toDSOption(tableOption),
+        "queryOption" -> toDSOption(queryOption)))
+  }
+
+  def adbcInvalidOptionValueError(
+      option: String, value: String, validValues: Seq[String]): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.INVALID_OPTION_VALUE",
+      messageParameters = Map(
+        "option" -> toDSOption(option),
+        "value" -> toSQLValue(value, StringType),
+        "validValues" -> validValues.map(toSQLValue(_, StringType)).mkString(", ")))
+  }
+
+  def adbcDriverClassNotFoundError(
+      driver: String, cause: Throwable): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.DRIVER_CLASS_NOT_FOUND",
+      messageParameters = Map("driver" -> toSQLValue(driver, StringType)),
+      cause = cause)
+  }
+
+  def adbcInvalidDriverClassError(
+      driver: String, factoryClass: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.INVALID_DRIVER_CLASS",
+      messageParameters = Map(
+        "driver" -> toSQLValue(driver, StringType),
+        "factoryClass" -> factoryClass))
+  }
+
+  def adbcIncompletePartitionOptionsError(options: Seq[String]): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.INCOMPLETE_PARTITION_OPTIONS",
+      messageParameters = Map("options" -> options.map(toDSOption).mkString(", ")))
+  }
+
+  def adbcInvalidPartitionBoundsError(
+      lowerBoundOption: String,
+      lowerBound: Long,
+      upperBoundOption: String,
+      upperBound: Long): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.INVALID_PARTITION_BOUNDS",
+      messageParameters = Map(
+        "lowerBoundOption" -> toDSOption(lowerBoundOption),
+        "lowerBound" -> lowerBound.toString,
+        "upperBoundOption" -> toDSOption(upperBoundOption),
+        "upperBound" -> upperBound.toString))
+  }
+
+  def adbcInvalidPartitionColumnError(column: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.INVALID_PARTITION_COLUMN",
+      messageParameters = Map("column" -> toSQLId(column)))
+  }
+
+  def adbcNotAnIntegerOptionError(option: String, value: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.NOT_AN_INTEGER",
+      messageParameters = Map(
+        "option" -> toDSOption(option), "value" -> toSQLValue(value, StringType)))
+  }
+
+  def adbcNotAPositiveIntegerOptionError(
+      option: String, value: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.NOT_A_POSITIVE_INTEGER",
+      messageParameters = Map(
+        "option" -> toDSOption(option), "value" -> toSQLValue(value, StringType)))
+  }
+
+  def adbcSchemaWithQueryError(
+      schemaOption: String,
+      tableOption: String,
+      queryOption: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.SCHEMA_WITH_QUERY",
+      messageParameters = Map(
+        "schemaOption" -> toDSOption(schemaOption),
+        "tableOption" -> toDSOption(tableOption),
+        "queryOption" -> toDSOption(queryOption)))
+  }
+
+  def adbcDictionaryEncodedError(arrowType: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_ARROWTYPE",
+      messageParameters = Map("typeName" -> s"dictionary-encoded $arrowType"))
+  }
+
+  def adbcWriteWithQueryError(
+      queryOption: String, tableOption: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_ADBC_OPTIONS.WRITE_WITH_QUERY",
+      messageParameters = Map(
+        "queryOption" -> toDSOption(queryOption),
+        "tableOption" -> toDSOption(tableOption)))
+  }
+
+  def adbcSchemaMismatchError(expected: StructType, actual: StructType): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "ADBC_SCHEMA_MISMATCH",
+      messageParameters = Map("expected" -> toSQLType(expected), "actual" -> toSQLType(actual)))
+  }
+
   def notAbsolutePathError(path: Path): SparkException = {
     SparkException.internalError(s"$path is not absolute path.")
   }
