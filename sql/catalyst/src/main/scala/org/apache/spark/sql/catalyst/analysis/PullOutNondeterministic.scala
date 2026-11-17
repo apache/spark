@@ -46,15 +46,18 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       }) => a
 
     case a: Aggregate =>
-      val expressionsToExtract = a.groupingExpressions ++ nondeterministicSubqueriesInInputs(a)
+      val guarded = guardFilteredInputs(a)
+      val expressionsToExtract =
+        guarded.groupingExpressions ++ nondeterministicSubqueriesInInputs(guarded)
       if (expressionsToExtract.forall(_.deterministic)) a else {
         validateNondeterministicSubqueries(a, expressionsToExtract)
         val keys = new NondeterministicExpressionCollection.ExpressionKeys
         val nondeterToAttr =
           NondeterministicExpressionCollection.getNondeterministicToAttributes(
             expressionsToExtract, keys)
-        val newChild = NondeterministicExpressionCollection.project(a.child, nondeterToAttr, keys)
-        val deterministicAggregate = a.mapExpressionsWithReferenceEquality { expression =>
+        val newChild =
+          NondeterministicExpressionCollection.project(guarded.child, nondeterToAttr, keys)
+        val deterministicAggregate = guarded.mapExpressionsWithReferenceEquality { expression =>
           NondeterministicExpressionCollection.replaceBindings(expression, nondeterToAttr, keys)
         }.copy(child = newChild)
 
@@ -125,6 +128,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       }
       join.condition.foreach(collect)
       val destinations = new java.util.IdentityHashMap[LogicalPlan, java.lang.Integer]
+      val completedDestinations = new java.util.IdentityHashMap[
+        LogicalPlan, java.util.IdentityHashMap[AttributeSet, java.lang.Integer]]
       val forwarding = new java.util.IdentityHashMap[Project, java.lang.Boolean]
       def forwardsAttributes(project: Project): Boolean = {
         val cached = forwarding.get(project)
@@ -153,6 +158,11 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
             id
           }
       }
+      def cachedDestination(child: LogicalPlan, references: AttributeSet): Int = {
+        val completed = completedDestinations.computeIfAbsent(child,
+          _ => new java.util.IdentityHashMap[AttributeSet, java.lang.Integer])
+        completed.computeIfAbsent(references, _ => destination(child, references)).intValue()
+      }
       // References to one scalar can belong to different relations within the same join input.
       // Share an alias at its actual destination, keeping each selective join edge independent.
       val leftBindings = mutable.LinkedHashMap.empty[
@@ -169,7 +179,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
             rightBindings
           } else leftBindings
           val input = if (side eq rightBindings) join.right else join.left
-          val binding = side.getOrElseUpdate((key, destination(input, references)), {
+          val binding = side.getOrElseUpdate((key, cachedDestination(input, references)), {
             // One scalar identity may occur in both equi-key operands. Keep attributes local to
             // each input while preserving the scalar's original identity and physical reuse policy.
             val alias = nondeterToAttr.get(key).newInstance()
@@ -282,6 +292,27 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       .flatMap(expression => expression.aggregateFunction.children ++ expression.filter.toSeq)
       // Retain invalid direct-random arguments verbatim for the original error rendering.
       .filter(e => !e.deterministic && deterministic(e))
+  }
+
+  private def guardFilteredInputs(aggregate: Aggregate): Aggregate = {
+    if (!aggregate.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+      return aggregate
+    }
+    val deterministic = new ExprUtils.SubqueryExtractionDeterminism
+    aggregate.mapExpressionsWithReferenceEquality(_.transformDownWithPruning(
+      _.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+      case expression: AggregateExpression if expression.filter.exists(deterministic.apply) =>
+        val function = expression.aggregateFunction
+        val inputs = function.children.map {
+          case input if !input.deterministic && deterministic(input) =>
+            // Aggregate FILTER checks precede argument evaluation. A lower Project must retain
+            // that guard, including UNKNOWN, while other aggregates still consume every row.
+            If(expression.filter.get, input, Literal.create(null, input.dataType))
+          case input => input
+        }
+        expression.copy(
+          aggregateFunction = function.withNewChildren(inputs).asInstanceOf[AggregateFunction])
+    }).asInstanceOf[Aggregate]
   }
 
   private def validateNondeterministicSubqueries(

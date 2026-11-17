@@ -52,7 +52,7 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
   }
 
   test("ordinary micro-batch normalization skips the KLL adjustment walk") {
-    for (batch <- 0L to 2L; legacy <- Seq(false, true)) {
+    for (batch <- 0L to 2L; legacy <- Seq(false, true); aggregate <- Seq(false, true)) {
       withSQLConf(legacySharingKey -> legacy.toString) {
         def work(incremental: Boolean): Int = {
           val visits = new AtomicInteger
@@ -60,7 +60,9 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
           val expression = (1 to 64).foldLeft[Expression](value) { (child, _) =>
             NormalizationCounted(child, visits)
           }
-          val plan = Project(Seq(Alias(expression, "mapped")()), LocalRelation(value))
+          val plan = if (aggregate) Aggregate(Nil,
+            Seq(Alias(Sum(expression).toAggregateExpression(), "total")()), LocalRelation(value))
+          else Project(Seq(Alias(expression, "mapped")()), LocalRelation(value))
           val execution: QueryExecution = if (!incremental) new QueryExecution(spark, plan)
           else new IncrementalExecution(spark, plan, OutputMode.Append(),
             "/tmp/unused-kll-normalization-checkpoint", UUID.randomUUID(), UUID.randomUUID(),
@@ -75,7 +77,8 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
         val baseline = work(incremental = false)
         val actual = work(incremental = true)
         assert(actual <= baseline,
-          s"batch=$batch legacy=$legacy baseline visits=$baseline incremental visits=$actual")
+          s"batch=$batch legacy=$legacy aggregate=$aggregate " +
+            s"baseline visits=$baseline incremental visits=$actual")
       }
     }
   }

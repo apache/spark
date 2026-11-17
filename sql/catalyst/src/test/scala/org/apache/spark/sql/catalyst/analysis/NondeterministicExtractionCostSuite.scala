@@ -218,6 +218,41 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       copy(child = newChild)
   }
 
+  test("KLL arithmetic guards avoid repeated nonnullable prefix scans") {
+    val visits = new AtomicInteger
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+    val expression = (1 to 64).foldLeft[Expression](Coalesce(Seq(scalar, Literal(0L)))) {
+      (child, _) => Subtract(NullabilityCounted(child, visits), Literal(1L))
+    }
+    expression.treePatternBits
+    expression.deterministic
+    visits.set(0)
+    NondeterministicExpressionCollection.getNondeterministicToAttributes(Seq(expression))
+    assert(visits.get <= 128, s"guard nullability visits=${visits.get}")
+  }
+
+  test("dependency Projects do not reconvert already forwarded output attributes") {
+    val visits = new AtomicInteger
+    val value = new AttributeReference("value", org.apache.spark.sql.types.LongType)() {
+      override def toAttribute: Attribute = {
+        visits.incrementAndGet()
+        this
+      }
+    }
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+    val expression = (1 to 32).foldLeft[Expression](scalar) { (child, _) =>
+      ScalaUDF((n: java.lang.Long) => n, org.apache.spark.sql.types.LongType, Seq(child))
+    }
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(
+      Seq(expression), keys)
+    visits.set(0)
+    NondeterministicExpressionCollection.project(LocalRelation(value), bindings, keys)
+    assert(visits.get <= 1, s"forwarded attribute conversions=${visits.get}")
+  }
+
   test("subquery-free arithmetic guard checks avoid prefix nullability scans") {
     val visits = new AtomicInteger
     val expression = (1 to 64).foldLeft[Expression](Rand(0)) { (child, _) =>
@@ -438,8 +473,29 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       expression.deterministic
       expression.canonicalized
       visits.set(0)
-      PullOutNondeterministic(plan)
+      val transformed = PullOutNondeterministic(plan)
       assert(visits.get <= depth * 100, s"depth=$depth visits=${visits.get}")
+      val expanded = scala.collection.mutable.Map.empty[ExprId, Expression]
+      val projects = transformed.collect {
+        case p: org.apache.spark.sql.catalyst.plans.logical.Project => p
+      }
+      assert(projects.nonEmpty)
+      projects.reverse.foreach { project =>
+        assert(project.projectList.forall(_.references.subsetOf(project.child.outputSet)))
+        project.projectList.foreach {
+          case alias: Alias if alias.isNondeterministicSubqueryBinding =>
+            expanded(alias.exprId) = NondeterministicExpressionCollection.restoreBindingReferences(
+              alias.child, expanded)
+          case _ =>
+        }
+      }
+      assert(expanded.size >= depth)
+      val rewritten = transformed.asInstanceOf[
+        org.apache.spark.sql.catalyst.plans.logical.Aggregate]
+      val restored = rewritten.mapExpressions { expression =>
+        NondeterministicExpressionCollection.restoreBindingReferences(expression, expanded)
+      }.copy(child = plan.children.head)
+      comparePlans(restored, plan)
     }
   }
 

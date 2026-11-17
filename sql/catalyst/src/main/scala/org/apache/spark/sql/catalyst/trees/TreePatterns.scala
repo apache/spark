@@ -62,6 +62,7 @@ object TreePattern extends Enumeration  {
   val INSET: Value = Value
   val INVOKE: Value = Value
   val JSON_TO_STRUCT: Value = Value
+  val KLL_AGGREGATE: Value = Value
   val LAMBDA_FUNCTION: Value = Value
   val LAMBDA_VARIABLE: Value = Value
   val LATERAL_COLUMN_ALIAS_REFERENCE: Value = Value

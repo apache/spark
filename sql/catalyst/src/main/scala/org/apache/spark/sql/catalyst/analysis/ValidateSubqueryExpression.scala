@@ -291,7 +291,11 @@ object ValidateSubqueryExpression
 
   private[sql] def deterministicWithoutKllRandomness(expression: Expression): Boolean = {
     expression.deterministic || AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      expression.transformDown(legacyKll).deterministic
+      expression.transformDown {
+        case query: SubqueryExpression => query.withNewPlan(
+          query.plan.transformAllExpressionsWithSubqueries(legacyKll))
+        case other if legacyKll.isDefinedAt(other) => legacyKll(other)
+      }.deterministic
     }
   }
 

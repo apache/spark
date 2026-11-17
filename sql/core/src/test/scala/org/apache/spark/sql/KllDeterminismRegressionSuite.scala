@@ -32,6 +32,87 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL aggregate arguments retain their FILTER evaluation domain") {
+    for (legacy <- Seq(true, false); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen, SQLConf.ANSI_ENABLED.key -> "true") {
+        checkAnswer(sql(s"""SELECT sum($scalar / id) FILTER (WHERE id > 0), count(*)
+            |FROM VALUES (0), (1) AS t(id)""".stripMargin), Row(3D, 2L))
+      }
+    }
+  }
+
+  Seq("primitive UDF", "sequence", "array concat").foreach { host =>
+    test(s"KLL extraction retains future and variable-arity NULL guards: $host") {
+      withUserDefinedFunction("future_null_identity" -> true, "later_kll_throw" -> true) {
+        spark.udf.register("future_null_identity", udf((n: Long) => n).asNonNullable())
+        spark.udf.register("later_kll_throw", (n: java.lang.Long) => {
+          require(n == null, "later NULL-guarded operand was evaluated")
+          1L
+        })
+        withTempView("kll_variable_null_guard") {
+          spark.sparkContext.parallelize(
+            Seq((Option.empty[Long], Option.empty[Seq[Long]])), 1).toDF("c", "a")
+            .createOrReplaceTempView("kll_variable_null_guard")
+          val throwing = s"later_kll_throw($scalar)"
+          val expression = host match {
+            case "primitive UDF" => s"future_null_identity(c) + $throwing"
+            case "sequence" => s"sequence(c, $throwing)"
+            case _ => s"concat(a, array($throwing))"
+          }
+          for (codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+              checkAnswer(sql(s"SELECT c FROM kll_variable_null_guard ORDER BY $expression"),
+                Row(null))
+            }
+          }
+        }
+      }
+    }
+  }
+  test("SELECT-only KLL scalars retain grouping-key HAVING partition pruning") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(8).selectExpr("id", "CAST(id % 2 AS INT) AS p")
+          .write.partitionBy("p").parquet(path.getAbsolutePath)
+        withTempView("kll_having_partitions") {
+          spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("kll_having_partitions")
+          val query = sql(s"""SELECT p, count(*), $scalar AS n FROM kll_having_partitions
+              |GROUP BY p HAVING p = 1""".stripMargin)
+          val scan = query.queryExecution.sparkPlan.collect { case s: FileSourceScanExec => s }
+          assert(scan.size == 1)
+          assert(scan.head.selectedPartitions.filePartitionIterator
+            .map(_.values.getInt(0)).toSet == Set(1), query.queryExecution.toString)
+          checkAnswer(query, Row(1, 4L, 3L))
+        }
+      }
+    }
+  }
+
+  test("throwable sibling aliases retain ordered KLL-independent partition pruning") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(8).selectExpr("id", "CAST(id % 2 AS INT) AS p")
+          .write.partitionBy("p").parquet(path.getAbsolutePath)
+        withTempView("kll_alias_partitions") {
+          spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("kll_alias_partitions")
+          val query = sql(s"""SELECT id, n FROM (SELECT id,
+              |array_contains(sequence(p, p, 1), 1) AS keep, $scalar AS n
+              |FROM kll_alias_partitions) q WHERE keep""".stripMargin)
+          val scan = query.queryExecution.sparkPlan.collect { case s: FileSourceScanExec => s }
+          assert(scan.size == 1)
+          assert(scan.head.selectedPartitions.filePartitionIterator
+            .map(_.values.getInt(0)).toSet == Set(1), query.queryExecution.toString)
+          checkAnswer(query, Seq(1L, 3L, 5L, 7L).map(id => Row(id, 3L)))
+          checkAnswer(sql(s"""SELECT id, n FROM (SELECT id,
+              |CASE WHEN p = 0 THEN raise_error('guarded alias') ELSE true END AS keep,
+              |$scalar AS n FROM kll_alias_partitions) q WHERE n < 0 AND keep""".stripMargin),
+            Seq.empty)
+        }
+      }
+    }
+  }
+
   test("KLL aggregate inputs retain enclosing predicate evaluation guards") {
     for (legacy <- Seq(true, false); polarity <- Seq("IN", "NOT IN");
         filter <- Seq(false, true);
@@ -446,14 +527,17 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("correlated scalars retain independent KLL CTE scopes") {
-    for (legacy <- Seq(true, false);
+    for (legacy <- Seq(true, false); legacyCount <- Seq(false, true);
         (aggregate, having, unmatched, matched) <- Seq(
           ("max(a.n + b.n)", "", null, 12L),
           ("sum(a.n + b.n)", "", null, 12L),
           ("count(*)", "", 0L, 1L),
           ("count(*)", "HAVING count(*) > 0", null, 1L),
           ("count(*)", "HAVING count(*) = 0", 0L, null))) {
-      withSQLConf("spark.sql.legacy.kllAggregateDeterministic.enabled" -> legacy.toString) {
+      withSQLConf("spark.sql.legacy.kllAggregateDeterministic.enabled" -> legacy.toString,
+          SQLConf.DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED.key ->
+            legacyCount.toString,
+          SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> (!legacyCount).toString) {
         checkAnswer(sql(s"""SELECT o.id, (WITH c AS
             |(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS n FROM range(3)),
             |d AS (SELECT a.n + b.n AS n FROM c a CROSS JOIN c b)
@@ -647,12 +731,74 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("random IN operands retain their input-row evaluation boundary") {
-    val kllBooleans = s"SELECT $scalar = 3 AS b UNION ALL SELECT $scalar <> 3 AS b"
+    val kllBooleans = s"SELECT $scalar = 3 AS b"
     for (codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN"); not <- Seq("", "NOT ");
-        values <- Seq("SELECT b FROM VALUES (false), (true) AS t(b)", kllBooleans)) {
+        values <- Seq("SELECT true AS b", kllBooleans)) {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
-        checkAnswer(sql(s"""SELECT count(*) FROM range(1000)
-            |GROUP BY (rand(0) >= 0.5) ${not}IN ($values)""".stripMargin), Row(1000L))
+        val expected = sql(s"""SELECT $not (rand(0) >= 0.5) AS b
+            |FROM range(0, 1000, 1, 2)""".stripMargin).groupBy("b").count()
+          .select("count").collect().toSeq
+        assert(expected.size == 2 && expected.forall(_.getLong(0) > 0))
+        checkAnswer(sql(s"""SELECT count(*) FROM range(0, 1000, 1, 2)
+            |GROUP BY (rand(0) >= 0.5) ${not}IN ($values)""".stripMargin), expected)
+      }
+    }
+  }
+
+  test("nested KLL predicate dependencies retain consumed Boolean results") {
+    val nested = (1 to 4).foldLeft("id = 0") { (child, depth) =>
+      val not = if (depth % 2 == 0) "NOT " else ""
+      s"($child) ${not}IN (SELECT $scalar = 3)"
+    }
+    checkAnswer(sql(s"""SELECT $nested AS b, count(*)
+        |FROM VALUES (0), (1), (2) AS t(id) GROUP BY b""".stripMargin),
+      Seq(Row(true, 1L), Row(false, 2L)))
+    checkAnswer(sql(s"""SELECT count(*) FILTER (WHERE $nested)
+        |FROM VALUES (0), (1), (2) AS t(id)""".stripMargin), Row(1L))
+  }
+
+  test("boxed UDF chains stage transitive dependencies above KLL scalars") {
+    withUserDefinedFunction("kll_inner" -> true, "kll_outer" -> true) {
+      spark.udf.register("kll_inner", (n: java.lang.Long) => java.lang.Long.valueOf(n + 1L))
+      spark.udf.register("kll_outer", (n: java.lang.Long) => java.lang.Long.valueOf(n + 2L))
+      val query = spark.range(3).groupBy(expr(s"kll_outer(kll_inner($scalar))").as("n")).count()
+      val projects = query.queryExecution.analyzed.collect {
+        case project: org.apache.spark.sql.catalyst.plans.logical.Project => project
+      }
+      import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ScalaUDF, ScalarSubquery}
+      val bindings = projects.flatMap(_.projectList.collect {
+        case alias: Alias if alias.isNondeterministicSubqueryBinding => alias
+      })
+      val inner = bindings.find(_.child match {
+        case udf: ScalaUDF => udf.udfName.contains("kll_inner")
+        case _ => false
+      }).get
+      val outer = bindings.find(_.child match {
+        case udf: ScalaUDF => udf.udfName.contains("kll_outer")
+        case _ => false
+      }).get
+      val scalarBinding = bindings.find(_.child.isInstanceOf[ScalarSubquery]).get
+      assert(inner.child.children.head.asInstanceOf[Attribute].exprId == scalarBinding.exprId)
+      assert(outer.child.children.head.asInstanceOf[Attribute].exprId == inner.exprId)
+      assert(projects.forall(p => p.projectList.forall(_.references.subsetOf(p.child.outputSet))))
+      checkAnswer(query, Row(6L, 3L))
+    }
+  }
+
+  test("tuple KLL IN rejects direct randomness in later operands") {
+    for (singlePass <- Seq(false, true); filter <- Seq(false, true); not <- Seq("", "NOT ")) {
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val predicate = s"(CAST($scalar AS DOUBLE), rand(0)) ${not}IN " +
+          s"(SELECT CAST($scalar AS DOUBLE), CAST($scalar AS DOUBLE))"
+        val aggregate = if (filter) s"count(*) FILTER (WHERE $predicate)"
+          else s"sum(CAST($predicate AS INT))"
+        val error = intercept[AnalysisException] {
+          sql(s"SELECT $aggregate FROM VALUES (0), (1) AS t(id)")
+        }
+        assert(error.getCondition == (if (filter) "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC"
+          else "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION"))
       }
     }
   }

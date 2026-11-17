@@ -2665,27 +2665,35 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         if fields.exists(!_.deterministic) &&
           fields.forall(e => e.deterministic || isAggregateScalarBinding(e)) &&
           canPushThroughCondition(grandChild, condition) =>
-      val aliases = fields.collect {
-        case alias: Alias if alias.deterministic => alias.exprId -> alias.child
-      }.toMap
-      val (push, stay) = splitPushableConjuncts(condition) { predicate =>
-        predicate.deterministic &&
+      lazy val aliases = AttributeMap(getAliasMap(project).filter(_._2.deterministic))
+      val classified = splitConjunctivePredicates(condition).map { predicate =>
+        val direct = predicate.references.subsetOf(grandChild.outputSet)
+        val independent = predicate.deterministic && (direct ||
           predicate.references.forall { attribute =>
-            grandChild.outputSet.contains(attribute) || aliases.get(attribute.exprId).exists {
-              expression => !expression.throwable &&
-                expression.references.subsetOf(grandChild.outputSet)
+            grandChild.outputSet.contains(attribute) || aliases.get(attribute).exists {
+              alias => alias.child.references.subsetOf(grandChild.outputSet)
             }
-          }
+          })
+        val throwable = predicate.throwable || (independent && !direct &&
+          predicate.references.exists { attribute =>
+            aliases.get(attribute).exists(_.child.throwable)
+          })
+        (predicate, throwable, independent)
       }
+      // Include referenced alias throwability without copying predicates just to classify them.
+      val (pushable, retained) = splitPushable(classified)(
+        canPush = _._3, throwable = _._2)
+      val push = pushable.map(_._1)
+      val stay = retained.map(_._1)
       if (push.isEmpty) f else {
         // Let the ordinary deterministic Project path own alias substitution and expensive
         // expression splitting. Avoid translating each predicate once here and once again below.
-        val deterministicAliases = fields.collect { case alias: Alias if alias.deterministic =>
-          alias
-        }
         val filtered = if (push.forall(_.references.subsetOf(grandChild.outputSet))) {
           project.copy(child = Filter(push.reduceLeft(And), grandChild))
         } else {
+          val deterministicAliases = fields.collect { case alias: Alias if alias.deterministic =>
+            alias
+          }
           val lower = Project(grandChild.output ++ deterministicAliases, grandChild)
           val outputs = fields.map {
             case alias: Alias if alias.deterministic => alias.toAttribute

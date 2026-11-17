@@ -144,7 +144,7 @@ class IncrementalExecution(
       SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
     var needsExtraction = false
     var kllChanged = false
-    val adjusted = if (!preOptimized.containsAnyPattern(AGGREGATE_EXPRESSION, PLAN_EXPRESSION)) {
+    val adjusted = if (!preOptimized.containsPattern(KLL_AGGREGATE)) {
       preOptimized
     } else preOptimized.transformAllExpressionsWithSubqueries {
       case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>

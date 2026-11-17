@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{KLL_AGGREGATE, TreePattern}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, TypeCollection}
@@ -83,6 +84,8 @@ case class KllSketchAggBigint(
     extends TypedImperativeAggregate[KllLongsSketch]
     with KllSketchAggBase
     with ExpectsInputTypes {
+
+  override val nodePatterns: Seq[TreePattern] = Seq(KLL_AGGREGATE)
   def this(child: Expression) = this(child, None)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
@@ -244,6 +247,8 @@ case class KllSketchAggFloat(
     extends TypedImperativeAggregate[KllFloatsSketch]
         with KllSketchAggBase
         with ExpectsInputTypes {
+
+  override val nodePatterns: Seq[TreePattern] = Seq(KLL_AGGREGATE)
   def this(child: Expression) = this(child, None)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
@@ -394,6 +399,8 @@ case class KllSketchAggDouble(
     extends TypedImperativeAggregate[KllDoublesSketch]
         with KllSketchAggBase
         with ExpectsInputTypes {
+
+  override val nodePatterns: Seq[TreePattern] = Seq(KLL_AGGREGATE)
   def this(child: Expression) = this(child, None)
   def this(child: Expression, kExpr: Expression) = this(child, Some(kExpr))
 
@@ -751,6 +758,8 @@ abstract class KllMergeAggBase[T <: KllSketch]
     extends TypedImperativeAggregate[Option[T]]
     with KllSketchAggBase
     with ExpectsInputTypes {
+
+  override val nodePatterns: Seq[TreePattern] = Seq(KLL_AGGREGATE)
 
   def child: Expression
 

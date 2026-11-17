@@ -139,22 +139,24 @@ object NondeterministicExpressionCollection {
   }
 
   private def orderedNullGuard(expression: Expression): Boolean = expression match {
-    // These evaluators stop at the first NULL input, including the six-input form of
-    // SeptenaryExpression. Keep their remaining inputs in the same evaluation domain.
-    case _: BinaryExpression | _: TernaryExpression | _: QuaternaryExpression |
-        _: QuinaryExpression | _: SeptenaryExpression =>
-      expression.children.dropRight(1).exists(_.nullable)
-    case _ => false
+    // UDF dependency staging and IN's input-row operands have explicit handling below. Other
+    // multi-input evaluators can guard later inputs, including variable-arity expressions.
+    // Conservatively keep them whole even when current nullable metadata says no guard is needed:
+    // HandleNullInputsForUDF can introduce NULLs later, and nullable can rescan whole prefixes.
+    case _: UserDefinedExpression | _: ExternalUserDefinedFunction |
+        _: InSubquery | _: SubqueryExpression => false
+    case other => other.children.sizeCompare(1) > 0
   }
 
   private def guardedSubqueries(expression: Expression): Boolean = {
-    // Test cached properties before potentially recursive input nullability checks.
+    // Test cached properties before inspecting the expression's evaluation domain.
     if (expression.deterministic || !expression.containsAnyPattern(
         SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
       return false
     }
     expression match {
       case _: ConditionalExpression | _: And | _: Or => true
+      case udf: ScalaUDF if udf.inputPrimitives.contains(true) => true
       case other => orderedNullGuard(other)
     }
   }
@@ -253,7 +255,7 @@ object NondeterministicExpressionCollection {
             conditional.withNewAlwaysEvaluatedInputs(conditional.alwaysEvaluatedInputs.map(replace))
           case And(left, right) => And(replace(left), right)
           case Or(left, right) => Or(replace(left), right)
-          case other if orderedNullGuard(other) => other
+          case other if guardedSubqueries(other) => other
           case other => other.mapChildrenWithReferenceEquality(replace)
         }
       }
@@ -266,13 +268,8 @@ object NondeterministicExpressionCollection {
             // layers are needed only for the subqueries introduced by this extraction path.
             case expression if !keys.requiresSubqueryStaging(expression) => expression
             case expression if guardedSubqueries(expression) => expression
-            // HandleNullInputsForUDF adds its guard after extraction in iterative analysis.
-            // Keep all arguments under that future guard, including throwable random arguments.
-            case udf: ScalaUDF if udf.inputPrimitives.zip(udf.children).exists {
-                case (primitive, input) => primitive && input.nullable
-              } => udf
-            // NOT IN must reach predicate-subquery rewriting as a whole so that NULLs on
-            // either side retain their three-valued semantics. Only stage its operands.
+            // NOT IN must reach the existing NULL-aware predicate-subquery rewrite as a whole.
+            // Only stage its operands; extraction must not turn it into NOT of an IN binding.
             case not @ Not(in: InSubquery) =>
               not.copy(child = in.mapChildrenWithReferenceEquality(replace))
             case other => other.mapChildrenWithReferenceEquality(replace)
@@ -289,9 +286,15 @@ object NondeterministicExpressionCollection {
 
     val ordered = bindings.values.asScala.toSeq
     ordered.foreach(stage)
+    var output = child.output
+    // TODO: Prune forwarded bindings after their last use. Full forwarding keeps dependency
+    // construction simple, but logical width accumulates across dependency levels.
     ordered.groupBy(binding => levels(binding.exprId)).toSeq.sortBy(_._1).foldLeft(child) {
       case (input, (_, expressions)) =>
-        Project(input.output ++ expressions.map(e => rewritten(e.exprId)), input)
+        val additions = expressions.map(e => rewritten(e.exprId))
+        val result = Project(output ++ additions, input)
+        output = output ++ additions.map(_.toAttribute)
+        result
     }
   }
 }

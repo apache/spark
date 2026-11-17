@@ -294,6 +294,43 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
+  testWithAllStateVersions("KLL checkpoint sharing precedes SELECT HAVING occurrence reuse") {
+    val rollback = SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key
+    val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+    for (legacy <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        withTempView("kll_checkpoint_having") {
+          val input = MemoryStream[Long]
+          input.toDF().createOrReplaceTempView("kll_checkpoint_having")
+          def query(analysisLegacy: Boolean): DataFrame = {
+            withSQLConf(rollback -> analysisLegacy.toString) {
+              sql("""SELECT kll_sketch_agg_bigint(value, 8) AS sketch
+                  |FROM kll_checkpoint_having
+                  |HAVING kll_sketch_agg_bigint(value, 8) IS NOT NULL""".stripMargin)
+                .selectExpr("kll_sketch_get_n_bigint(sketch)")
+            }
+          }
+          def checkBuffers: AssertOnQuery = AssertOnQuery { query =>
+            val aggregates = query.lastExecution.executedPlan.collect {
+              case a: BaseAggregateExec if a.aggregateExpressions.exists(
+                  _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) => a
+            }
+            aggregates.nonEmpty && aggregates.forall(_.aggregateExpressions.count(
+              _.aggregateFunction.isInstanceOf[KllSketchAggBigint]) == (if (legacy) 1 else 2))
+          }
+          testStream(query(analysisLegacy = false), Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+              additionalConfs = Map(sharing -> legacy.toString)),
+            AddData(input, 1L, 2L), CheckLastBatch(Row(2L)), checkBuffers, StopStream)
+          testStream(query(analysisLegacy = true), Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+              additionalConfs = Map(sharing -> (!legacy).toString)),
+            AddData(input, 3L), CheckLastBatch(Row(3L)), checkBuffers, StopStream)
+        }
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL checkpoint layouts override batch rollback") {
     val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
     val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"

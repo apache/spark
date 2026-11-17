@@ -3301,10 +3301,15 @@ class Analyzer(
       // `agg.aggregateExpressions`. Trim inner aliases from aggregate expressions because of
       // expressions like `spark_grouping_id` that can have inner aliases.
       val replacement: Option[NamedExpression] =
-        agg.aggregateExpressions.foldLeft(Option.empty[NamedExpression]) {
-          case (None, alias: Alias) if expr.semanticEquals(trimAliases(alias.child)) => Some(alias)
-          case (None | Some(_: Alias), aggExpr) if expr.semanticEquals(aggExpr) => Some(aggExpr)
-          case (current, _) => current
+        // Checkpoint sharing is restored after analysis. Do not erase separately written KLL
+        // occurrences here, even when the batch rollback setting currently marks them equal.
+        if (agg.isStreaming && expr.containsPattern(KLL_AGGREGATE)) None else {
+          agg.aggregateExpressions.foldLeft(Option.empty[NamedExpression]) {
+            case (None, alias: Alias) if expr.semanticEquals(trimAliases(alias.child)) =>
+              Some(alias)
+            case (None | Some(_: Alias), aggExpr) if expr.semanticEquals(aggExpr) => Some(aggExpr)
+            case (current, _) => current
+          }
         }
       if (replacement.isDefined) {
         replacement.get.toAttribute
@@ -3313,7 +3318,8 @@ class Analyzer(
           case ae: AggregateExpression =>
             val cleaned = trimTempResolvedColumn(ae)
             val resultAlias = aggExprMap.computeIfAbsent(
-              cleaned.canonicalized,
+              if (agg.isStreaming && cleaned.containsPattern(KLL_AGGREGATE)) cleaned
+                else cleaned.canonicalized,
               _ => Alias(cleaned, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
             )
             resultAlias.toAttribute
