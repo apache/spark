@@ -299,7 +299,11 @@ private[sql] case class JDBCRelation(
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      filters.filter(f => dialect.compileExpression(f.toV2).isEmpty)
+      filters.filter { f =>
+        val predicate = f.toV2
+        JdbcUtils.containsCalendarTimeZoneTimestampLiteral(predicate, jdbcOptions) ||
+          dialect.compileExpression(predicate).isEmpty
+      }
     } else {
       filters
     }
@@ -309,6 +313,7 @@ private[sql] case class JDBCRelation(
     // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
     val pushedPredicates = if (jdbcOptions.pushDownPredicate) {
       filters.map(_.toV2)
+        .filterNot(JdbcUtils.containsCalendarTimeZoneTimestampLiteral(_, jdbcOptions))
     } else {
       Array.empty[Predicate]
     }

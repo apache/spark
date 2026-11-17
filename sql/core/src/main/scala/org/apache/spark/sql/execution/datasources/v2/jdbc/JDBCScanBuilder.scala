@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
 import org.apache.spark.sql.connector.read.{SampleMethod, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
@@ -81,9 +81,13 @@ case class JDBCScanBuilder(
     }
   }
 
+  private def cannotPushDown(expr: Expression): Boolean =
+    containsUnsupportedCharPad(expr) ||
+      JdbcUtils.containsCalendarTimeZoneTimestampLiteral(expr, jdbcOptions)
+
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
-      val (unsupportedCharPad, rest) = predicates.partition(containsUnsupportedCharPad)
+      val (unsupportedCharPad, rest) = predicates.partition(cannotPushDown)
       val (pushed, unSupported) = rest.partition(dialect.compileExpression(_).isDefined)
       this.pushedPredicate = pushed
       unSupported ++ unsupportedCharPad
@@ -112,8 +116,8 @@ case class JDBCScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
-    if (aggregation.aggregateExpressions.exists(containsUnsupportedCharPad) ||
-        aggregation.groupByExpressions.exists(containsUnsupportedCharPad)) {
+    if (aggregation.aggregateExpressions.exists(cannotPushDown) ||
+        aggregation.groupByExpressions.exists(cannotPushDown)) {
       return false
     }
 
@@ -227,7 +231,7 @@ case class JDBCScanBuilder(
       return false
     }
 
-    if (containsUnsupportedCharPad(condition)) {
+    if (cannotPushDown(condition)) {
       return false
     }
 
@@ -343,7 +347,7 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
-      if (orders.exists(containsUnsupportedCharPad)) return false
+      if (orders.exists(cannotPushDown)) return false
       if (!dialect.supportsTopN(orders, pushedAggregation)) return false
       val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false

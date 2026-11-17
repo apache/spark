@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, LiteralValue, NamedReference}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
@@ -450,6 +450,31 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
+   * Whether `expr` has a TimestampType or TimestampLTZNanosType literal, which would be rendered
+   * for the database without `timestampCalendarTimeZone`. Such expressions are not pushed down
+   * when the option is set, so Spark evaluates them on the values read in the option's time zone.
+   */
+  def containsCalendarTimeZoneTimestampLiteral(expr: Expression, options: JDBCOptions): Boolean =
+    options.timestampCalendarTimeZone.isDefined && {
+      def walk(e: Expression): Boolean = e match {
+        case l: LiteralValue[_] =>
+          l.dataType == TimestampType || l.dataType.isInstanceOf[TimestampLTZNanosType]
+        case _ => Option(e.children()).exists(_.exists(walk))
+      }
+      walk(expr)
+    }
+
+  private def calendarFor(options: JDBCOptions): Option[Calendar] =
+    options.timestampCalendarTimeZone.map(tz => Calendar.getInstance(tz))
+
+  private def setTimestamp(
+      stmt: PreparedStatement,
+      pos: Int,
+      ts: java.sql.Timestamp,
+      calendar: Option[Calendar]): Unit =
+    calendar.fold(stmt.setTimestamp(pos + 1, ts))(stmt.setTimestamp(pos + 1, ts, _))
+
+  /**
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
@@ -482,15 +507,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeGetter
     case TimestampType =>
-      JDBCValueGetter.TimestampGetter(
-        dialect, options.flatMap(_.timestampCalendarTimeZone).map(tz => Calendar.getInstance(tz)))
+      JDBCValueGetter.TimestampGetter(dialect, options.flatMap(calendarFor))
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
     case TimestampNTZType if options.exists(_.timestampNTZAsWallClock) =>
       JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
-    case t: TimestampLTZNanosType => JDBCValueGetter.TimestampLTZNanosGetter(dialect, t.precision)
+    case t: TimestampLTZNanosType =>
+      JDBCValueGetter.TimestampLTZNanosGetter(dialect, t.precision, options.flatMap(calendarFor))
     case BinaryType if metadata.contains("binarylong") => JDBCValueGetter.BinaryBitGetter
     case BinaryType => JDBCValueGetter.BytesGetter
     case _: YearMonthIntervalType => JDBCValueGetter.YearMonthIntervalGetter(dialect)
@@ -548,24 +573,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
 
-    case TimestampType if options.timestampCalendarTimeZone.isDefined =>
-      val calendar = Calendar.getInstance(options.timestampCalendarTimeZone.get)
-      if (conf.datetimeJava8ApiEnabled) {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(
-            pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))), calendar)
-      } else {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos), calendar)
-      }
-
     case TimestampType =>
+      val calendar = calendarFor(options)
       if (conf.datetimeJava8ApiEnabled) {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
+          setTimestamp(
+            stmt, pos, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))), calendar)
       } else {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+          setTimestamp(stmt, pos, row.getAs[java.sql.Timestamp](pos), calendar)
       }
 
     case TimestampNTZType if options.timestampNTZAsWallClock =>
@@ -587,11 +603,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
     // LTZ is an absolute instant: go through the micro java.sql.Timestamp path (matching the
     // TimestampType setter), then restore the full nanosecond-of-second the micro path drops.
     case _: TimestampLTZNanosType =>
+      val calendar = calendarFor(options)
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         val instant = row.getAs[Instant](pos)
         val ts = toJavaTimestamp(instantToMicros(instant))
         ts.setNanos(instant.getNano)
-        stmt.setTimestamp(pos + 1, ts)
+        setTimestamp(stmt, pos, ts, calendar)
 
     case DateType =>
       if (conf.datetimeJava8ApiEnabled) {

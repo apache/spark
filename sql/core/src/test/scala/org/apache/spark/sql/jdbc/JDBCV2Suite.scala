@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
+import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -2165,6 +2165,39 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 0]",
       "PushedGroupByExpressions: [DEPT]")
     checkAnswer(df, Seq(Row(10000, 1100.0), Row(12000, 1250.0), Row(12000, 1200.0)))
+  }
+
+  test("SPARK-61857: timestamp predicates are not pushed down with timestampCalendarTimeZone") {
+    withSQLConf(
+        "spark.sql.catalog.h2tz" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2tz.url" -> url,
+        "spark.sql.catalog.h2tz.driver" -> "org.h2.Driver",
+        "spark.sql.catalog.h2tz.timestampCalendarTimeZone" -> "UTC",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+      val query = "SELECT name FROM %s.test.datetime WHERE time1 = TIMESTAMP '2022-05-19 05:30:00'"
+
+      val df = sql(query.format("h2tz"))
+      checkFiltersRemoved(df, removed = false)
+      checkAnswer(df, Seq(Row("amy")))
+
+      val range =
+        sql("SELECT name FROM h2tz.test.datetime WHERE time1 > TIMESTAMP '2022-05-18 05:30:00'")
+      checkFiltersRemoved(range, removed = false)
+      checkAnswer(range, Seq(Row("amy")))
+
+      val nameFilter = sql("SELECT name FROM h2tz.test.datetime WHERE name = 'amy'")
+      checkFiltersRemoved(nameFilter)
+      checkAnswer(nameFilter, Seq(Row("amy")))
+
+      val mixed = sql("SELECT name FROM h2tz.test.datetime " +
+        "WHERE name = 'amy' AND time1 = TIMESTAMP '2022-05-19 05:30:00'")
+      checkFiltersRemoved(mixed, removed = false)
+      checkPushedInfo(mixed, "NAME = 'amy'")
+      checkKeywordsNotExistsInExplain(mixed, ExtendedMode, "TIME1 = ")
+      checkAnswer(mixed, Seq(Row("amy")))
+
+      checkFiltersRemoved(sql(query.format("h2")))
+    }
   }
 
   private def checkFiltersRemoved(df: DataFrame, removed: Boolean = true): Unit = {

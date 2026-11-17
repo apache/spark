@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.time.ZoneId
 import java.util.{Locale, Properties, TimeZone}
 
 import scala.util.matching.Regex
@@ -27,7 +26,7 @@ import org.apache.commons.io.FilenameUtils
 
 import org.apache.spark.SparkFiles
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
@@ -290,7 +289,7 @@ class JDBCOptions(
   val timestampCalendarTimeZone: Option[TimeZone] =
     parameters
       .get(JDBC_TIMESTAMP_CALENDAR_TIME_ZONE)
-      .map(id => TimeZone.getTimeZone(ZoneId.of(id)))
+      .map(id => DateTimeUtils.getTimeZone(id))
 
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),

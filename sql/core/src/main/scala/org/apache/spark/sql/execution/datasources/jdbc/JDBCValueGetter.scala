@@ -224,10 +224,13 @@ private[jdbc] object JDBCValueGetter {
   // `TimestampGetter` (including the Julian->Gregorian rebase in `fromJavaTimestamp`), then
   // re-attaches the sub-microsecond digits from `java.sql.Timestamp.getNanos` that the micro path
   // drops, before truncating to the column precision.
-  final case class TimestampLTZNanosGetter(dialect: JdbcDialect, precision: Int)
+  final case class TimestampLTZNanosGetter(
+      dialect: JdbcDialect,
+      precision: Int,
+      calendar: Option[Calendar] = None)
       extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
-      val t = rs.getTimestamp(pos + 1)
+      val t = calendar.fold(rs.getTimestamp(pos + 1))(rs.getTimestamp(pos + 1, _))
       if (t != null) {
         val converted = dialect.convertJavaTimestampToTimestamp(t)
         val epochMicros = fromJavaTimestamp(converted)

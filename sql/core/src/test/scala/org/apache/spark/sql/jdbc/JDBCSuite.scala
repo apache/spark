@@ -33,7 +33,7 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{
-  SparkArithmeticException, SparkException,
+  SparkArithmeticException, SparkDateTimeException, SparkException,
   SparkIllegalArgumentException, SparkSQLException, TaskContext
 }
 import org.apache.spark.executor.InputMetrics
@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Sum}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, FilterExec, ProjectExec, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -3479,10 +3479,10 @@ class JDBCSuite extends SharedSparkSession {
           .head()
           .getAs[Timestamp](0)
 
+      val wallClock = LocalDateTime.parse("2026-10-10T11:03:07.123456")
       withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString) {
         DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
           DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-            val wallClock = LocalDateTime.parse("2026-10-10T11:03:07.123456")
             assert(
               readTimestamp(Map("timestampCalendarTimeZone" -> "UTC")).toInstant ===
                 wallClock.toInstant(java.time.ZoneOffset.UTC),
@@ -3494,9 +3494,19 @@ class JDBCSuite extends SharedSparkSession {
           }
         }
 
-        intercept[java.time.DateTimeException] {
-          readTimestamp(Map("timestampCalendarTimeZone" -> "Not/AZone"))
-        }
+        assert(
+          readTimestamp(Map("timestampCalendarTimeZone" -> "+5:30")).toInstant ===
+            wallClock.toInstant(java.time.ZoneOffset.ofHoursMinutes(5, 30)))
+        assert(
+          readTimestamp(Map("timestampCalendarTimeZone" -> "PST")).toInstant ===
+            wallClock.atZone(java.time.ZoneId.of("America/Los_Angeles")).toInstant)
+
+        checkError(
+          exception = intercept[SparkDateTimeException] {
+            readTimestamp(Map("timestampCalendarTimeZone" -> "Not/AZone"))
+          },
+          condition = "INVALID_TIMEZONE",
+          parameters = Map("timeZone" -> "Not/AZone"))
       }
     } finally {
       conn.prepareStatement(s"drop table $tableName").executeUpdate()
@@ -3546,6 +3556,106 @@ class JDBCSuite extends SharedSparkSession {
       }
     } finally {
       conn.prepareStatement(s"drop table if exists $tableName").executeUpdate()
+      conn.commit()
+    }
+  }
+
+  test("SPARK-61857: timestampCalendarTimeZone applies to nanosecond TIMESTAMP_LTZ columns") {
+    val source = "TEST.TS_NANOS_CALENDAR_TZ"
+    val target = "TEST.TS_NANOS_CALENDAR_TZ_WRITE"
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute(s"CREATE TABLE $source (t TIMESTAMP(9))")
+        conn.createStatement().execute(
+          s"INSERT INTO $source VALUES (TIMESTAMP '2026-10-10 11:03:07.123456789')")
+        val wallClock = LocalDateTime.of(2026, 10, 10, 11, 3, 7, 123456789)
+        val expected = wallClock.toInstant(java.time.ZoneOffset.UTC)
+
+        def read(table: String): DataFrame = spark.read
+          .option("preferTimestampNanos", "true")
+          .option("timestampCalendarTimeZone", "UTC")
+          .jdbc(urlWithUserAndPass, table, new Properties())
+
+        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            val df = read(source)
+            assert(df.schema("T").dataType === TimestampLTZNanosType(9))
+            assert(df.head().getAs[Instant](0) === expected, s"zone=$zoneId")
+
+            df.write.mode("overwrite")
+              .option("timestampCalendarTimeZone", "UTC")
+              .jdbc(urlWithUserAndPass, target, new Properties())
+            val rs = conn.createStatement().executeQuery(s"SELECT t FROM $target")
+            assert(rs.next())
+            assert(rs.getObject(1, classOf[LocalDateTime]) === wallClock, s"zone=$zoneId")
+            rs.close()
+            assert(read(target).head().getAs[Instant](0) === expected, s"zone=$zoneId")
+          }
+        }
+      } finally {
+        conn.createStatement().execute(s"DROP TABLE IF EXISTS $source")
+        conn.createStatement().execute(s"DROP TABLE IF EXISTS $target")
+        conn.close()
+      }
+    }
+  }
+
+  test("SPARK-61857: timestamp filters are not pushed down with timestampCalendarTimeZone") {
+    val tableName = "test.timestamp_calendar_tz_filter"
+    conn.prepareStatement(s"create table $tableName (id INT, t TIMESTAMP)").executeUpdate()
+    conn.prepareStatement(s"insert into $tableName values (1, '2026-10-10 11:03:07')")
+      .executeUpdate()
+    conn.prepareStatement(s"insert into $tableName values (2, '2026-10-10 12:00:00')")
+      .executeUpdate()
+    conn.commit()
+    try {
+      def read(calendarTimeZone: Option[String]): DataFrame =
+        spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", tableName)
+          .options(calendarTimeZone.map("timestampCalendarTimeZone" -> _).toMap)
+          .load()
+
+      def hasFilterExec(df: DataFrame): Boolean =
+        df.queryExecution.executedPlan.collectFirst { case f: FilterExec => f }.isDefined
+
+      Seq("true", "false").foreach { java8Api =>
+        withSQLConf(
+            SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString,
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api,
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+          DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+            val df = read(Some("UTC"))
+            val value = df.where($"id" === 1).select("t").head().get(0)
+
+            val equal = df.where($"t" === lit(value))
+            assert(equal.select("id").collect().toSeq === Seq(Row(1)), s"java8Api=$java8Api")
+            assert(hasFilterExec(equal), s"java8Api=$java8Api")
+            val range = df.where($"t" > lit(value))
+            assert(range.select("id").collect().toSeq === Seq(Row(2)), s"java8Api=$java8Api")
+
+            val mixed = df.where($"id" === 1 && $"t" === lit(value))
+            assert(mixed.select("id").collect().toSeq === Seq(Row(1)), s"java8Api=$java8Api")
+            val handled = mixed.queryExecution.executedPlan.collectFirst {
+              case scan: RowDataSourceScanExec => scan.handledFilters
+            }.get
+            assert(handled.exists {
+              case EqualTo("ID", _) => true
+              case _ => false
+            }, s"java8Api=$java8Api")
+            assert(!handled.exists {
+              case EqualTo("T", _) => true
+              case _ => false
+            }, s"java8Api=$java8Api")
+
+            assert(!hasFilterExec(df.where($"id" === 1)), s"java8Api=$java8Api")
+            assert(!hasFilterExec(read(None).where($"t" === lit(value))), s"java8Api=$java8Api")
+          }
+        }
+      }
+    } finally {
+      conn.prepareStatement(s"drop table $tableName").executeUpdate()
       conn.commit()
     }
   }
