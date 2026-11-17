@@ -34,9 +34,12 @@ object SparkSessionUtils extends Logging {
    * `spark.sql.legacy.setCommandRejectsSparkCoreConfs` is false, Spark core configurations.
    * This applies to each pair the helper receives, whether it comes from a pipeline's
    * `configuration` or from flow-level settings such as Python `spark_conf` and SQL `SET`
-   * statements in pipeline source files. Such settings can only be given to the session when it
-   * is created. When the requested value differs from the session's value, a warning is logged on
-   * the driver, with the value redacted the same way the session redacts options.
+   * statements in pipeline source files. Such settings belong to the Spark Connect server the
+   * pipeline runs on and are given when that server starts (for example
+   * `start-connect-server.sh --conf key=value`); a pipeline's `configuration` and a flow's
+   * `spark_conf` can only change settings a running session accepts. When the requested value
+   * differs from the session's value, a warning is logged on the driver, with the value redacted
+   * the same way the session redacts options.
    */
   def withSqlConf[T](spark: SparkSession, pairs: (String, String)*)(f: => T): T = {
     val conf = spark.conf
@@ -51,8 +54,9 @@ object SparkSessionUtils extends Logging {
         if (!isInEffect(spark, k, v)) {
           val (_, redacted) = spark.sessionState.conf.redactOptions(Seq(k -> v)).head
           logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, k)}=${MDC(LogKeys.VALUE, redacted)} " +
-            log"because it cannot be modified on a running session. Set it when the session is " +
-            log"created, for example with --conf on the spark-pipelines command line.")
+            log"because it cannot be modified on a running session. It is a setting of the " +
+            log"Spark Connect server the pipeline runs on. Set it when that server starts, for " +
+            log"example with start-connect-server.sh --conf key=value.")
         }
         None
       }

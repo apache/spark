@@ -48,7 +48,10 @@ def append_flow(
         These confs will be set when the flow is executed; they can override confs set for the \
         destination, for the pipeline, or on the cluster. Static SQL configurations and, by \
         default, Spark core configurations cannot be changed on a running session: they are \
-        ignored with a warning in the driver log and must be set when the session is created.
+        ignored with a warning in the driver log. Such settings belong to the Spark Connect \
+        server the pipeline runs on and are given when that server starts, for example with \
+        ``start-connect-server.sh --conf key=value``; a pipeline's ``configuration`` and a \
+        flow's ``spark_conf`` can only change settings a running session accepts.
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
@@ -154,7 +157,10 @@ def table(
         These confs will be set when the query for the dataset is executed and they can override \
         confs set for the pipeline or on the cluster. Static SQL configurations and, by default, \
         Spark core configurations cannot be changed on a running session: they are ignored with \
-        a warning in the driver log and must be set when the session is created.
+        a warning in the driver log. Such settings belong to the Spark Connect server the \
+        pipeline runs on and are given when that server starts, for example with \
+        ``start-connect-server.sh --conf key=value``; a pipeline's ``configuration`` and a \
+        flow's ``spark_conf`` can only change settings a running session accepts.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
@@ -260,7 +266,10 @@ def materialized_view(
         These confs will be set when the query for the dataset is executed and they can override \
         confs set for the pipeline or on the cluster. Static SQL configurations and, by default, \
         Spark core configurations cannot be changed on a running session: they are ignored with \
-        a warning in the driver log and must be set when the session is created.
+        a warning in the driver log. Such settings belong to the Spark Connect server the \
+        pipeline runs on and are given when that server starts, for example with \
+        ``start-connect-server.sh --conf key=value``; a pipeline's ``configuration`` and a \
+        flow's ``spark_conf`` can only change settings a running session accepts.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
@@ -359,7 +368,10 @@ def temporary_view(
         These confs will be set when the query for the dataset is executed and they can override \
         confs set for the pipeline or on the cluster. Static SQL configurations and, by default, \
         Spark core configurations cannot be changed on a running session: they are ignored with \
-        a warning in the driver log and must be set when the session is created.
+        a warning in the driver log. Such settings belong to the Spark Connect server the \
+        pipeline runs on and are given when that server starts, for example with \
+        ``start-connect-server.sh --conf key=value``; a pipeline's ``configuration`` and a \
+        flow's ``spark_conf`` can only change settings a running session accepts.
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
@@ -630,7 +642,10 @@ def create_auto_cdc_flow(
         These confs will be set when the flow is executed; they can override confs set for the \
         destination, for the pipeline, or on the cluster. Static SQL configurations and, by \
         default, Spark core configurations cannot be changed on a running session: they are \
-        ignored with a warning in the driver log and must be set when the session is created.
+        ignored with a warning in the driver log. Such settings belong to the Spark Connect \
+        server the pipeline runs on and are given when that server starts, for example with \
+        ``start-connect-server.sh --conf key=value``; a pipeline's ``configuration`` and a \
+        flow's ``spark_conf`` can only change settings a running session accepts.
     """
     # Lazy import: pyspark.sql.connect.functions.builtin transitively imports grpc, which is
     # not available in the docs-build environment. pyspark.pipelines.api is loaded eagerly
