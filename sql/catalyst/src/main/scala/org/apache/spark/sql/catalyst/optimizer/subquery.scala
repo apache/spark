@@ -701,8 +701,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * OptimizeSubqueries optimizes it), may put something into its outer input that gives other
    * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
    * builds the domain joins: PushDownPredicates can push a filter or join condition there. The
-   * check is conservative and looks at all of `root`. LimitPushDown keeps a LIMIT above an
-   * operator with a correlated scalar subquery, so it does not push one there.
+   * check is conservative and looks at all of `root`. LimitPushDown keeps a LIMIT above a
+   * Project with a correlated scalar subquery, so it does not push one there; one in a grouping
+   * expression is in a Project below the Aggregate by then (PullOutGroupingExpressions).
    */
   private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
     root.exists {

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Ex
   ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
   PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalLimit, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
@@ -3566,6 +3566,26 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60501: an expression that fails on the value over no rows fails at runtime") {
+    withTempView("t1", "t2") {
+      sql("CREATE TEMP VIEW t1(a1, a2) AS VALUES (0, 1), (1, 2)")
+      sql("CREATE TEMP VIEW t2(b1, b2) AS VALUES (0, 2), (0, 3)")
+      val subquery = "(SELECT SUM(d) FROM (SELECT 10 / COALESCE(MAX(b2), 0) d FROM t2 " +
+        "WHERE t1.a1 = t2.b1))"
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // t1.a1 = 1 has no matching rows, and the same WHERE removes it in the second query.
+        Seq(s"SELECT a1, $subquery FROM t1",
+            s"SELECT a1 FROM t1 WHERE a1 = 0 AND $subquery IS NOT NULL").foreach { query =>
+          val df = sql(query)
+          df.queryExecution.executedPlan
+          val e = intercept[SparkArithmeticException](df.collect())
+          assert(e.getCondition == "DIVIDE_BY_ZERO", query)
+        }
+        checkAnswer(sql(s"SELECT a1, $subquery FROM t1 WHERE a1 = 0"), Row(0, 10.0 / 3))
+      }
+    }
+  }
+
   test("SPARK-60501: a non-deterministic input of the operator with the subquery keeps the " +
       "count bug handling of before") {
     withTempView("b") {
@@ -3617,22 +3637,29 @@ class SubquerySuite extends SharedSparkSession
       // the outer input, the plan is the one of before, without the domain joins.
       val subquery = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))"
       val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
-      def counts(query: String, legacy: Boolean): (Int, Int) =
+      def counts(query: String, legacy: Boolean): (Int, Int, Int) =
           withSQLConf(legacyKey -> legacy.toString) {
         val plan = sql(query).queryExecution.optimizedPlan
-        (plan.collect { case j: Join => j }.size, plan.collect { case l: LocalLimit => l }.size)
+        (plan.collect { case j: Join => j }.size, plan.collect { case l: LocalLimit => l }.size,
+          plan.collect { case Join(_, right, LeftOuter, _, _) =>
+            right.collect { case l: LocalLimit => l }.size }.sum)
       }
       val inInput = s"SELECT o.k, $subquery FROM (SELECT * FROM o LIMIT 100) o"
       assert(counts(inInput, legacy = false) == counts(inInput, legacy = true))
       // A LIMIT above, which LimitPushDown keeps above the Project with the subquery until the
-      // domain joins are built, also when other rules move a filter or a join condition first:
-      // the subquery gets the domain joins, but no more LocalLimits than with the legacy conf.
+      // domain joins are built, also when other rules move a filter or a join condition first,
+      // and a LIMIT 1 over a DISTINCT or over a GROUP BY with the subquery in it: the subquery
+      // gets the domain joins, but no more LocalLimits than with the legacy conf, and none in
+      // the right side of a left outer join, where the domain joins are.
       Seq(s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k LIMIT 100",
           s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k WHERE o.k > 0 LIMIT 100",
-          s"SELECT o.k, $subquery FROM o JOIN b ON b.v = 1 LIMIT 100").foreach { query =>
-        val (joins, limits) = counts(query, legacy = false)
-        val (legacyJoins, legacyLimits) = counts(query, legacy = true)
-        assert(joins > legacyJoins && limits == legacyLimits, query)
+          s"SELECT o.k, $subquery FROM o JOIN b ON b.v = 1 LIMIT 100",
+          s"SELECT o.k, $subquery FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
+          s"SELECT o.k, $subquery c FROM (SELECT DISTINCT k FROM o) o GROUP BY ALL LIMIT 1")
+          .foreach { query =>
+        val (joins, limits, limitsInRight) = counts(query, legacy = false)
+        val (legacyJoins, legacyLimits, _) = counts(query, legacy = true)
+        assert(joins > legacyJoins && limits == legacyLimits && limitsInRight == 0, query)
       }
     }
   }

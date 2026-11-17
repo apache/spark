@@ -246,10 +246,10 @@ select a1, ( select coalesce(c, 10) from (select count(*) c from t2 where t1.a1 
 from t1 order by a1;
 
 -- with an expression that fails on the value of a lower aggregate over no rows, which is
--- evaluated only for an outer row without matching rows: every outer row matches in the first
--- two queries and the CAST query below, and the query over every row of t1 fails when the value
--- for a1 = 1 is computed. The first two queries and the CAST query return results, and the
--- other two fail at runtime.
+-- evaluated only for an outer row without matching rows. Of these five queries, up to the CAST
+-- query, every outer row matches in the first two and the CAST query, which return results; the
+-- query over every row of t1 and the next one fail at runtime when the value for a1 = 1 is
+-- computed.
 select a1, ( select count(*) from (select 10 / coalesce(max(b2), 0) d from t2
   where t1.a1 = t2.b1) ) a
 from t1 where a1 = 0 order by a1;
@@ -262,10 +262,12 @@ select a1, ( select sum(d) from (select 10 / coalesce(max(b2), 0) d from t2
   where t1.a1 = t2.b1) ) a
 from t1 order by a1;
 
--- the expression is also evaluated for an outer row that another condition removes
+-- the expression is also evaluated for an outer row that another condition of the same WHERE
+-- removes
 select a1 from t1 where a1 = 0 and ( select sum(d) from (select 10 / coalesce(max(b2), 0) d
   from t2 where t1.a1 = t2.b1) ) is not null order by a1;
 
+-- with a CAST that fails on the value over no rows, where every outer row matches
 select a1, ( select sum(d) from (select cast(coalesce(max(cast(b2 as string)), 'x') as int) d
   from t2 where t1.a1 = t2.b1) ) a
 from t1 where a1 = 0 order by a1;
