@@ -113,6 +113,7 @@ case class AddColumns(
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
     TypeUtils.failUnsupportedDataType(c.dataType, conf)
+    TypeUtils.checkFileTypeHasQualifier(c.dataType)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
@@ -146,6 +147,7 @@ case class ReplaceColumns(
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
     TypeUtils.failUnsupportedDataType(c.dataType, conf)
+    TypeUtils.checkFileTypeHasQualifier(c.dataType)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
@@ -272,6 +274,8 @@ case class AlterColumns(
     table: LogicalPlan,
     specs: Seq[AlterColumnSpec],
     fromCommentOn: Boolean = false) extends AlterTableCommand {
+  specs.foreach(_.newDataType.foreach(TypeUtils.checkFileTypeHasQualifier))
+
   override def changes: Seq[TableChange] = {
     specs.flatMap { spec =>
       val column = spec.column
@@ -382,7 +386,22 @@ case class AddConstraint(
  */
 case class AddCheckConstraint(
     child: LogicalPlan,
-    checkConstraint: CheckConstraint) extends UnaryCommand {
+    checkConstraint: CheckConstraint,
+    analyzedQuery: Option[LogicalPlan] = None) extends UnaryCommand with KeepAnalyzedQuery {
+
+  // The optimizer replaces the filtered scan with an empty relation if no row can violate the
+  // check, so keep the analyzed child to find the table when planning. The constraint decides
+  // here, with its condition analyzed, whether to store a predicate. `NormalizePlan` also calls
+  // this, on parsed and optimized plans too, so the decision is made only once, on a resolved
+  // constraint.
+  override def storeAnalyzedQuery(): Command = {
+    val check = if (checkConstraint.resolved) {
+      checkConstraint.withPredicateDecision()
+    } else {
+      checkConstraint
+    }
+    copy(checkConstraint = check, analyzedQuery = Some(child))
+  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(child = newChild)

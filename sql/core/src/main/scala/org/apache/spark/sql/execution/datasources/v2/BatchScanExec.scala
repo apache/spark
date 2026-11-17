@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.EmptyRDDWithPartitions
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, SparkPlan}
 import org.apache.spark.sql.execution.datasources.StorageFilterPlanning
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
@@ -67,7 +67,13 @@ case class BatchScanExec(
   private def scanOutput: Seq[AttributeReference] =
     if (appendsCheckedColumn) output.init else output
 
-  @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+  // What this node plans from `scan`, see [[PlannedScan]]. `makeCopy` and `clone` hand it over to a
+  // copy over the same `Scan`. Any other new node plans its own, including one the case-class
+  // `copy` makes.
+  @transient private var plannedScan: PlannedScan =
+    if (scan == null) null else new PlannedScan(scan)
+
+  def batch: Batch = if (scan == null) null else plannedScan.batch
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
@@ -108,8 +114,7 @@ case class BatchScanExec(
   @transient lazy val prunedKeyGroupedPartitioning: Option[Seq[Expression]] =
     keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
-  @transient override lazy val inputPartitions: Seq[InputPartition] =
-    batch.planInputPartitions().toImmutableArraySeq
+  override def inputPartitions: Seq[InputPartition] = plannedScan.inputPartitions
 
   // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
   // column must not take part in.
@@ -122,7 +127,7 @@ case class BatchScanExec(
       reportedKeyedPartitioning,
       inputPartitions)
 
-  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
+  override def readerFactory: PartitionReaderFactory = plannedScan.readerFactory
 
   // What every task's readers get, the storage filters ANDed into one. A runtime bloom arrives as
   // a ScalarSubquery over the build side, which SparkPlan has computed by the time this is forced.
@@ -143,6 +148,19 @@ case class BatchScanExec(
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
+  }
+
+  override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = sharePlanning(super.makeCopy(newArgs))
+
+  // `TreeNode.clone` does not go through `makeCopy`.
+  override def clone(): SparkPlan = sharePlanning(super.clone())
+
+  private def sharePlanning(node: SparkPlan): SparkPlan = {
+    node match {
+      case c: BatchScanExec if c.scan eq scan => c.plannedScan = plannedScan
+      case _ =>
+    }
+    node
   }
 
   override def doCanonicalize(): BatchScanExec = {
@@ -167,9 +185,14 @@ case class BatchScanExec(
     redact(result)
   }
 
+  // A DPP filter, and a fully pushed runtime filter, have no FilterExec above the scan, so the
+  // formatted explain shows them in full only here.
   override def verboseStringWithOperatorId(): String = {
-    val verbose = super.verboseStringWithOperatorId()
-    storageFiltersDescription.map(d => verbose + redact(d) + "\n").getOrElse(verbose)
+    val runtimeFiltersDescription = Option.when(runtimeFilters.nonEmpty) {
+      s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
+    }
+    (runtimeFiltersDescription ++ storageFiltersDescription)
+      .foldLeft(super.verboseStringWithOperatorId())((verbose, d) => verbose + redact(d) + "\n")
   }
 
   // Only when the scan has some, since an empty one would change every other scan's description.
@@ -180,4 +203,22 @@ case class BatchScanExec(
   override def nodeName: String = {
     s"BatchScan ${table.name()}".trim
   }
+}
+
+/**
+ * A `Scan`, with the `Batch` and the input partitions a [[BatchScanExec]] plans from it once, when
+ * a node first asks for them. The node hands it over to the copies `makeCopy` and `clone` make of
+ * it, so they read the partitions the first node planned, with a reader factory from the `Batch`
+ * that planned them. The partitions have to be the planned ones, because the `Scan` can be shared
+ * with another node whose runtime filter prunes it first, e.g. the build side of a DPP subquery
+ * (SPARK-60752). A runtime filter replans them, through `planInputPartitionsWithRuntimeFilters` or
+ * from a new `Batch` after a pushed `filter`, but keeps the planned `Batch`'s reader factory.
+ *
+ * A rule that rebuilds a node over the same `Scan` keeps the planned partitions through
+ * `makeCopy`, e.g. with `transformExpressions`. The case-class `copy` plans them again.
+ */
+private[v2] final class PlannedScan(val scan: Scan) {
+  lazy val batch: Batch = scan.toBatch
+  lazy val inputPartitions: Seq[InputPartition] = batch.planInputPartitions().toImmutableArraySeq
+  lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 }

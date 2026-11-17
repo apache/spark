@@ -1,0 +1,26 @@
+================================================================================================
+Arrow decimal reads
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+decimal(18,2) to decimal(18,2):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Arrow getObject                                      47             48           1         22.1          45.2       1.0X
+ArrowColumnVector                                    19             19           1         55.4          18.0       2.5X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+decimal(18,2) to decimal(18,1):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Arrow getObject                                      66             68           2         15.8          63.4       1.0X
+ArrowColumnVector                                    33             33           1         32.3          31.0       2.0X
+
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+decimal(38,2) to decimal(38,2):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Arrow getObject                                      60             61           1         17.6          56.8       1.0X
+ArrowColumnVector                                    63             64           2         16.7          59.9       0.9X
+
+

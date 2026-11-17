@@ -34,9 +34,10 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Literal, Or, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, BindReferences, EqualTo, Expression, IsNull, LessThan, Literal, Or, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, EliminateLimits}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftSemi, LeftSingle}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftOuter,
+  LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
@@ -46,8 +47,8 @@ import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryT
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin, ValidateRequirements}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, HashedRelationBroadcastMode, IntervalIndexKind, PointIndexKind, RangeRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -1447,8 +1448,12 @@ class AdaptiveQueryExecSuite
   }
 
   test("Scalar subquery in later stages") {
+    // `(value + a) = (SELECT ...)` adds a string to a number, which can fail in ANSI mode, so its
+    // copy on the other side of the join, which makes it small enough to broadcast, is only
+    // inferred with the legacy configuration.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a " +
@@ -1899,6 +1904,155 @@ class AdaptiveQueryExecSuite
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
       }
     }
+  }
+
+  test("SPARK-60458: skip only the skewed join whose split the plan cannot take") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        val query =
+          """
+            |SELECT key1, count(*) FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1
+            |UNION ALL
+            |SELECT key1, 1 FROM skewData1 JOIN skewData2 ON key1 = key2
+            |""".stripMargin
+
+        // The aggregate above the first join needs its input on `key1`, which the split breaks.
+        // The second join feeds the union directly, so its split breaks nothing: it is kept.
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+
+        // key2 is always 0, so only the 334 rows of key1 = 0 join, each against all 1000 rows of
+        // the other side: the aggregated branch collapses them into one row, the other keeps one
+        // row per joined row.
+        val rows = sql(query).collect()
+        assert(rows.length == 334001)
+        assert(rows.count(_ == Row(0L, 334000L)) == 1)
+        assert(rows.count(_ == Row(0L, 1L)) == 334000)
+
+        val rejectedJoins = collect(adaptivePlan) {
+          case agg: BaseAggregateExec => findTopLevelSortMergeJoin(agg)
+        }.flatten.distinct
+        assert(rejectedJoins.size == 1, adaptivePlan.toString)
+        val rejected = rejectedJoins.head
+        assert(!rejected.isSkewJoin)
+        // The rejected join does not lose partition coalescing to the kept split.
+        val rejectedReads = collect(rejected) { case r: AQEShuffleReadExec => r }
+        assert(rejectedReads.size == 2 && rejectedReads.forall(_.hasCoalescedPartition),
+          adaptivePlan.toString)
+
+        val keptJoins = findTopLevelSortMergeJoin(adaptivePlan).filterNot(_ eq rejected)
+        assert(keptJoins.size == 1, adaptivePlan.toString)
+        assert(keptJoins.head.isSkewJoin)
+        assert(collect(keptJoins.head) {
+          case r: AQEShuffleReadExec => r
+        }.exists(_.hasSkewedPartition))
+        assert(ValidateRequirements.validate(adaptivePlan))
+
+        // Turning the fallback off gives the plan back to the all-or-nothing path.
+        withSQLConf(SQLConf.SKEW_JOIN_PER_JOIN_FALLBACK_ENABLED.key -> "false") {
+          val (_, withoutFallback) = runAdaptiveAndVerifyResult(query)
+          val joins = findTopLevelSortMergeJoin(withoutFallback)
+          assert(joins.size == 2 && joins.forall(!_.isSkewJoin), withoutFallback.toString)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60458: keep the layout a union passes through") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+
+        def splitJoins(query: String): Seq[SortMergeJoinExec] = {
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          assert(ValidateRequirements.validate(adaptivePlan))
+          val joins = findTopLevelSortMergeJoin(adaptivePlan)
+          assert(joins.size == 2, adaptivePlan.toString)
+          joins
+        }
+
+        val union =
+          """
+            |SELECT key1 AS k, value1 AS v FROM skewData1 JOIN skewData2 ON key1 = key2
+            |UNION ALL
+            |SELECT key1 AS k, value1 AS v FROM skewData1 JOIN skewData2 ON key1 = key2
+            |""".stripMargin
+        val windowedQuery =
+          s"SELECT k, rank() OVER (PARTITION BY k ORDER BY v) FROM ($union) u"
+
+        // Both branches report the join's hash layout, so the union claims it and the window above
+        // depends on it: a split takes the claim away from both branches. The all-at-once attempt
+        // rejects this plan too; this arm pins that the per-join fallback keeps no split the claim
+        // cannot take, and the arm below that the same splits are kept when nothing reads the
+        // claim.
+        val windowed = splitJoins(windowedQuery)
+        assert(windowed.forall(j => !j.isSkewJoin))
+        // Each branch holds the 334000 joined rows of key1 = 0, so across the union every v of
+        // 0, 3, ..., 999 appears 2000 times and shares its rank with its duplicates.
+        val windowedRows = sql(windowedQuery).collect()
+        assert(windowedRows.length == 668000)
+        assert(windowedRows.forall(_.getLong(0) == 0L))
+        assert(windowedRows.groupBy(_.getInt(1)).view.mapValues(_.length).toMap ==
+          (1 to 666001 by 2000).map(_ -> 2000).toMap)
+
+        // Nothing above reads the union's layout, so the same splits break nothing and are kept.
+        val plain = splitJoins(union)
+        assert(plain.forall(_.isSkewJoin))
+        val plainRows = sql(union).collect()
+        assert(plainRows.length == 668000)
+        assert(plainRows.groupBy(_.getLong(1)).view.mapValues(_.length).toMap ==
+          (0L until 1000L by 3).map(_ -> 2000).toMap)
+      }
+    }
+  }
+
+  test("SPARK-60458: split a join nested in a broadcast join's build side") {
+    // A broadcast-hash join constrains only its streamed side, so another candidate can sit in
+    // its build side. Replacing the outer join must keep the inner split instead of dropping the
+    // outer one and carrying the original build subtree.
+    val k1 = AttributeReference("k1", IntegerType)()
+    val k2 = AttributeReference("k2", IntegerType)()
+    val innerJoin = SortMergeJoinExec(
+      Seq(k1), Seq(k2), Inner, None,
+      LocalTableScanExec(Seq(k1), Nil, None),
+      LocalTableScanExec(Seq(k2), Nil, None))
+    val bhj = BroadcastHashJoinExec(
+      Seq(k2), Seq(k2), Inner, BuildRight, None,
+      LocalTableScanExec(Seq(k2), Nil, None),
+      BroadcastExchangeExec(HashedRelationBroadcastMode(Seq(k2)), innerJoin))
+    val rule = OptimizeSkewedJoin(EnsureRequirements())
+
+    val result = rule.applySkewJoins(bhj, Seq(
+      SkewJoinCandidate(innerJoin, innerJoin.copy(isSkewJoin = true)),
+      SkewJoinCandidate(bhj, bhj.copy(isSkewJoin = true))))
+
+    assert(result.isInstanceOf[BroadcastHashJoinExec])
+    assert(result.asInstanceOf[BroadcastHashJoinExec].isSkewJoin)
+    val innerJoins = findTopLevelSortMergeJoin(result)
+    assert(innerJoins.size == 1 && innerJoins.head.isSkewJoin)
   }
 
   test("SPARK-58099: Remove local sort dangling below the shuffle added by skew join") {
@@ -2872,6 +3026,168 @@ class AdaptiveQueryExecSuite
     val nullAwareAntiJoinWithRegularStage = nullAwareAntiJoin.copy(
       right = broadcastStage(right, isNullAware = false))
     assert(LogicalQueryStageStrategy(nullAwareAntiJoinWithRegularStage).isEmpty)
+  }
+
+  test("LogicalQueryStageStrategy reuses a range broadcast only for the same keys") {
+    val leftAttr = AttributeReference("a", IntegerType)()
+    val lo = AttributeReference("lo", IntegerType)()
+    val hi = AttributeReference("hi", IntegerType)()
+    val left = LocalRelation(leftAttr)
+    val right = LocalRelation(lo, hi)
+    val cond = LessThan(leftAttr, lo)
+
+    def stage(mode: RangeRelationBroadcastMode): LogicalQueryStage = {
+      val scan = LocalTableScanExec(right.output, Nil, None)
+      val exchange = BroadcastExchangeExec(mode, scan)
+      LogicalQueryStage(right, BroadcastQueryStageExec(0, exchange, exchange))
+    }
+
+    def modeFor(buildKey: AttributeReference): RangeRelationBroadcastMode = {
+      val bound: Expression = BindReferences.bindReference(buildKey, right.output)
+      RangeRelationBroadcastMode(Seq(bound), PointIndexKind)
+    }
+
+    withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      val join = Join(left, stage(modeFor(lo)), Inner, Some(cond), JoinHint.NONE)
+      val planned = LogicalQueryStageStrategy(join).head.asInstanceOf[BroadcastRangeJoinExec]
+      assert(planned.rightKeys.head.semanticEquals(lo))
+      assert(planned.buildSide == BuildRight)
+
+      val mismatched = join.copy(right = stage(modeFor(hi)))
+      assert(LogicalQueryStageStrategy(mismatched).isEmpty)
+
+      val boundLo: Expression = BindReferences.bindReference(lo, right.output)
+      val wrongKindMode = RangeRelationBroadcastMode(Seq(boundLo), IntervalIndexKind)
+      val mismatchedKind = join.copy(right = stage(wrongKindMode))
+      assert(LogicalQueryStageStrategy(mismatchedKind).isEmpty)
+    }
+  }
+
+  test("LogicalQueryStageStrategy reuses a left-side range broadcast only for the same keys") {
+    // Mirror of the right-stage test above: BuildLeft reuse (inner with a left stage,
+    // or right outer) must keep matching against the left keys and refuse a mismatched
+    // mode or an unsupported join type over that stage.
+    val leftLo = AttributeReference("lo", IntegerType)()
+    val leftHi = AttributeReference("hi", IntegerType)()
+    val rightAttr = AttributeReference("a", IntegerType)()
+    val left = LocalRelation(leftLo, leftHi)
+    val right = LocalRelation(rightAttr)
+    val cond = LessThan(rightAttr, leftLo)
+
+    def stage(mode: RangeRelationBroadcastMode): LogicalQueryStage = {
+      val scan = LocalTableScanExec(left.output, Nil, None)
+      val exchange = BroadcastExchangeExec(mode, scan)
+      LogicalQueryStage(left, BroadcastQueryStageExec(0, exchange, exchange))
+    }
+
+    def modeFor(buildKey: AttributeReference): RangeRelationBroadcastMode = {
+      val bound: Expression = BindReferences.bindReference(buildKey, left.output)
+      RangeRelationBroadcastMode(Seq(bound), PointIndexKind)
+    }
+
+    withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      val join = Join(stage(modeFor(leftLo)), right, Inner, Some(cond), JoinHint.NONE)
+      val planned = LogicalQueryStageStrategy(join).head.asInstanceOf[BroadcastRangeJoinExec]
+      assert(planned.leftKeys.head.semanticEquals(leftLo))
+      assert(planned.buildSide == BuildLeft)
+
+      val mismatched = join.copy(left = stage(modeFor(leftHi)))
+      assert(LogicalQueryStageStrategy(mismatched).isEmpty)
+
+      val boundLo: Expression = BindReferences.bindReference(leftLo, left.output)
+      val wrongKindMode = RangeRelationBroadcastMode(Seq(boundLo), IntervalIndexKind)
+      val mismatchedKind = join.copy(left = stage(wrongKindMode))
+      assert(LogicalQueryStageStrategy(mismatchedKind).isEmpty)
+
+      // Left outer never builds the left side, so a left stage must not be reused.
+      val leftOuter = Join(stage(modeFor(leftLo)), right, LeftOuter, Some(cond), JoinHint.NONE)
+      assert(LogicalQueryStageStrategy(leftOuter).isEmpty)
+    }
+  }
+
+  test("LogicalQueryStageStrategy binds range broadcast keys to the physical stage output, " +
+      "not the logical query stage output") {
+    // The mode's bound key is an ordinal against the exchange input, which puts
+    // `hi` before `lo` here (ordinal 1). The `LogicalQueryStage` wraps the original
+    // `right` fragment, whose output puts `lo` first (ordinal 0): the stage and the
+    // logical fragment it replaces can disagree on column order after AQE re-plans.
+    // Binding buildKeys against that logical order would fail to reproduce the mode
+    // and lose the range join, so the check binds against `bqs.output`, keeping the
+    // ordinals on the order the broadcast was actually keyed on.
+    val leftAttr = AttributeReference("a", IntegerType)()
+    val lo = AttributeReference("lo", IntegerType)()
+    val hi = AttributeReference("hi", IntegerType)()
+    val left = LocalRelation(leftAttr)
+    val right = LocalRelation(lo, hi)
+    val cond = LessThan(leftAttr, lo)
+
+    val physicalOutput = Seq(hi, lo)
+    val bound: Expression = BindReferences.bindReference(lo, physicalOutput)
+    val mode = RangeRelationBroadcastMode(Seq(bound), PointIndexKind)
+    val scan = LocalTableScanExec(physicalOutput, Nil, None)
+    val exchange = BroadcastExchangeExec(mode, scan)
+    val bqs = BroadcastQueryStageExec(0, exchange, exchange)
+    assert(bqs.output == physicalOutput)
+
+    val join = Join(left, LogicalQueryStage(right, bqs), Inner, Some(cond), JoinHint.NONE)
+    withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      val planned = LogicalQueryStageStrategy(join).head.asInstanceOf[BroadcastRangeJoinExec]
+      assert(planned.rightKeys.head.semanticEquals(lo))
+    }
+  }
+
+  test("range broadcast satisfies its distribution after AQE changes nullability") {
+    // The exchange was built when lo was non-nullable. AQE rewrites the stage
+    // output to nullable. Reuse must still satisfy BroadcastDistribution: the
+    // strategy and EnsureRequirements have to agree on key identity.
+    val leftAttr = AttributeReference("a", IntegerType)()
+    val lo = AttributeReference("lo", IntegerType, nullable = false)()
+    val loNullable = lo.withNullability(true)
+    val left = LocalRelation(leftAttr)
+    val right = LocalRelation(loNullable)
+    val cond = LessThan(leftAttr, loNullable)
+    val built: Expression = BindReferences.bindReference(lo, Seq(lo))
+    val mode = RangeRelationBroadcastMode(Seq(built), PointIndexKind)
+    val scan = LocalTableScanExec(right.output, Nil, None)
+    val exchange = BroadcastExchangeExec(mode, scan)
+    val stage = BroadcastQueryStageExec(0, exchange, exchange)
+    val planned = withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      LogicalQueryStageStrategy(
+        Join(left, LogicalQueryStage(right, stage), Inner, Some(cond), JoinHint.NONE))
+        .head.asInstanceOf[BroadcastRangeJoinExec]
+        .copy(right = stage)
+    }
+
+    assert(planned.buildSide == BuildRight)
+    assert(stage.outputPartitioning.satisfies(planned.requiredChildDistribution(1)))
+  }
+
+  test("ValidateSparkPlan accepts a range-join broadcast stage only on the build side") {
+    val leftAttr = AttributeReference("a", IntegerType)()
+    val lo = AttributeReference("lo", IntegerType)()
+    val left = LocalRelation(leftAttr)
+    val right = LocalRelation(lo)
+    val cond = LessThan(leftAttr, lo)
+    val bound: Expression = BindReferences.bindReference(lo, right.output)
+    val mode = RangeRelationBroadcastMode(Seq(bound), PointIndexKind)
+    val scan = LocalTableScanExec(right.output, Nil, None)
+    val exchange = BroadcastExchangeExec(mode, scan)
+    val stage = BroadcastQueryStageExec(0, exchange, exchange)
+    // planLater leaves a placeholder. Put the real broadcast stage on the build side,
+    // which is what AQE replanning produces.
+    val planned = withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      LogicalQueryStageStrategy(
+        Join(left, LogicalQueryStage(right, stage), Inner, Some(cond), JoinHint.NONE))
+        .head.asInstanceOf[BroadcastRangeJoinExec]
+        .copy(right = stage)
+    }
+
+    ValidateSparkPlan(planned)
+
+    // The same stage on the probe side is not a legal broadcast join.
+    intercept[InvalidAQEPlanException[_]] {
+      ValidateSparkPlan(planned.copy(buildSide = BuildLeft))
+    }
   }
 
   test("SPARK-32717: AQEOptimizer should respect excludedRules configuration") {
@@ -3878,7 +4194,8 @@ class AdaptiveQueryExecSuite
     def localSort(child: SparkPlan): SparkPlan =
       SortExec(SortOrder(child.output.head, Ascending) :: Nil, global = false, child)
 
-    val evaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = false, countLocalSort = true)
+    val evaluator = SimpleCostEvaluator(
+      forceOptimizeSkewedJoin = false, countLocalSort = true, pushDownShuffleThroughUnion = false)
     def cost(plan: SparkPlan): Cost = evaluator.evaluateCost(plan)
 
     // Same number of shuffles: fewer local sorts is cheaper.
@@ -3894,7 +4211,7 @@ class AdaptiveQueryExecSuite
 
     // When countLocalSort is disabled, local sorts do not affect the cost.
     val noSortEvaluator = SimpleCostEvaluator(
-      forceOptimizeSkewedJoin = false, countLocalSort = false)
+      forceOptimizeSkewedJoin = false, countLocalSort = false, pushDownShuffleThroughUnion = false)
     assert(noSortEvaluator.evaluateCost(oneShuffleTwoSorts)
       .compare(noSortEvaluator.evaluateCost(oneShuffleNoSort)) === 0)
 
@@ -3903,7 +4220,8 @@ class AdaptiveQueryExecSuite
     // local sorts.
     def join(l: SparkPlan, r: SparkPlan, isSkew: Boolean): SparkPlan =
       SortMergeJoinExec(l.output.take(1), r.output.take(1), Inner, None, l, r, isSkewJoin = isSkew)
-    val skewEvaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = true, countLocalSort = true)
+    val skewEvaluator = SimpleCostEvaluator(
+      forceOptimizeSkewedJoin = true, countLocalSort = true, pushDownShuffleThroughUnion = false)
     // Skew-join plan: 1 skew join, 3 shuffles, 2 local sorts.
     val withSkewJoin = skewEvaluator.evaluateCost(
       join(localSort(shuffle(shuffle(leaf))), localSort(shuffle(leaf)), isSkew = true))
@@ -4741,11 +5059,11 @@ class AdaptiveQueryExecSuite
             "UNION ALL SELECT key2 FROM skewData2 GROUP BY key2", 1, 1)
 
         // skewJoin1 union (skewJoin2 join aggregate)
-        // skewJoin2 will lead to extra shuffles, but skew1 cannot be optimized
-         checkSkewJoin(
+        // skewJoin2's split would break the join above it, so only skewJoin2 is skipped
+        checkSkewJoin(
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 UNION ALL " +
             "SELECT key1 from (SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2) tmp1 " +
-            "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 0)
+            "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 1)
       }
     }
   }
@@ -5105,6 +5423,56 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("coalesce shuffle partitions under a broadcast range join") {
+    // Same shape as the BNLJ coalesce test: a shuffled aggregate probes a tiny build side.
+    // The join multiplies rows, so the target size is the minimum partition size.
+    Seq(true, false).foreach { expectCoalesce =>
+      val minPartitionSize = if (expectCoalesce) "64MB" else "1B"
+      withSQLConf(
+        SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "64MB",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key -> minPartitionSize) {
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM (SELECT value v, max(key) k FROM testData GROUP BY value) t " +
+            "JOIN (SELECT id AS a FROM range(1)) u ON t.k > u.a")
+        assert(collect(adaptivePlan) {
+          case j: BroadcastRangeJoinExec => j
+        }.size == 1, adaptivePlan)
+        val coalescedReads = collect(adaptivePlan) {
+          case read: AQEShuffleReadExec if read.isCoalescedRead => read
+        }
+        assert(coalescedReads.nonEmpty == expectCoalesce, adaptivePlan)
+      }
+    }
+  }
+
+  test("coalesce shuffle partitions under a broadcast range join over a union") {
+    // A range join does not need compatible child partitioning, so its streamed side's
+    // shuffle stages are still coalesced when the streamed side is a union of a shuffled
+    // aggregate and a branch that is not a query stage. Without the range join's case in
+    // childrenNeedCompatiblePartitioning, the whole subtree would fall to `case _ =>
+    // Seq.empty` and no shuffle would be coalesced.
+    Seq(true, false).foreach { expectCoalesce =>
+      val minPartitionSize = if (expectCoalesce) "64MB" else "1B"
+      withSQLConf(
+        SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "64MB",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key -> minPartitionSize) {
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM ((SELECT value v, max(key) k FROM testData GROUP BY value) " +
+            "UNION ALL (SELECT 'x' v, id k FROM range(10))) t " +
+            "JOIN (SELECT id AS a FROM range(1)) u ON t.k > u.a")
+        assert(collect(adaptivePlan) {
+          case j: BroadcastRangeJoinExec => j
+        }.size == 1, adaptivePlan)
+        val coalescedReads = collect(adaptivePlan) {
+          case read: AQEShuffleReadExec if read.isCoalescedRead => read
+        }
+        assert(coalescedReads.nonEmpty == expectCoalesce, adaptivePlan)
+      }
+    }
+  }
+
   test("SPARK-49979: AQE hang forever when collecting twice on a failed AQE plan") {
     val func: Long => Boolean = (i : Long) => {
       throw new Exception("SPARK-49979")
@@ -5328,11 +5696,10 @@ class AdaptiveQueryExecSuite
     // `EnsureRequirements` asks a `UnionExec` what it reports, and `StampUnionDecisions` freezes
     // that answer so every rule below it and the execution read what the exchanges were planned
     // against. `SnapshotUnionPreparationConf` has to run first, or the value the stamp reads
-    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. The two sit
-    // next to `EnsureRequirements` with nothing in between, and nothing at the list itself says the
-    // three have to stay contiguous: an injected rule cannot land between them, since those are
-    // appended at the tail, but an edit to the list can. AQE builds its own list, and
-    // `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
+    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. Shuffle
+    // push-down runs under that snapshot before the stamp fixes the rebuilt unions. An injected
+    // rule cannot land between these preparation rules, but an edit to the list can. AQE builds
+    // its own list, and `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       // The repartition exchanges are what bring AQE in, with the aggregate's distribution
       // requirement as a second reason: `InsertAdaptiveSparkPlan` tests for either and leaves a
@@ -5356,8 +5723,11 @@ class AdaptiveQueryExecSuite
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
           s"got $snapshot")
-      assert(stamps.headOption.contains(ensureRequirements + 1),
-        s"expected the stamp right behind EnsureRequirements at $ensureRequirements, got $stamps")
+      val pushDown = rules.indexWhere(_.isInstanceOf[PushDownShuffleExchangeThroughUnion])
+      assert(pushDown == ensureRequirements + 1,
+        s"expected shuffle push-down after EnsureRequirements, got $pushDown")
+      assert(stamps.headOption.contains(pushDown + 1),
+        s"expected the union stamp after shuffle push-down at $pushDown, got $stamps")
       assert(stamps.last == rules.length - 1,
         s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
     }

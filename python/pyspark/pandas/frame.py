@@ -61,7 +61,8 @@ from pandas.api.types import (
     is_list_like,
     is_scalar,
 )
-from pandas.tseries.frequencies import DateOffset, to_offset  # type: ignore[attr-defined]
+from pandas.tseries.frequencies import to_offset
+from pandas.tseries.offsets import DateOffset
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler

@@ -23,6 +23,8 @@ import java.util.HashMap
 import java.util.Map
 import javax.net.ssl.SSLContext
 
+import scala.collection.immutable
+
 import org.apache.hadoop.conf.Configuration
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
@@ -344,6 +346,11 @@ private[spark] object SSLOptions extends Logging {
     SPARK_RPC_SSL_TRUST_STORE_PASSWORD_CONF
   )
 
+  val SPARK_SSL_KEY_PASSWORD_CONF = "spark.ssl.keyPassword"
+  val SPARK_SSL_PRIVATE_KEY_PASSWORD_CONF = "spark.ssl.privateKeyPassword"
+  val SPARK_SSL_KEY_STORE_PASSWORD_CONF = "spark.ssl.keyStorePassword"
+  val SPARK_SSL_TRUST_STORE_PASSWORD_CONF = "spark.ssl.trustStorePassword"
+
   val ENV_RPC_SSL_KEY_PASSWORD = "_SPARK_SSL_RPC_KEY_PASSWORD"
   val ENV_RPC_SSL_PRIVATE_KEY_PASSWORD = "_SPARK_SSL_RPC_PRIVATE_KEY_PASSWORD"
   val ENV_RPC_SSL_KEY_STORE_PASSWORD = "_SPARK_SSL_RPC_KEY_STORE_PASSWORD"
@@ -353,6 +360,18 @@ private[spark] object SSLOptions extends Logging {
     ENV_RPC_SSL_PRIVATE_KEY_PASSWORD,
     ENV_RPC_SSL_KEY_STORE_PASSWORD,
     ENV_RPC_SSL_TRUST_STORE_PASSWORD
+  )
+
+  /** The `spark.ssl.rpc.*` key and the inherited `spark.ssl.*` key behind each env variable. */
+  val SPARK_RPC_SSL_PASSWORD_CONFS_BY_ENV: immutable.Map[String, Seq[String]] = immutable.Map(
+    ENV_RPC_SSL_KEY_PASSWORD ->
+      Seq(SPARK_RPC_SSL_KEY_PASSWORD_CONF, SPARK_SSL_KEY_PASSWORD_CONF),
+    ENV_RPC_SSL_PRIVATE_KEY_PASSWORD ->
+      Seq(SPARK_RPC_SSL_PRIVATE_KEY_PASSWORD_CONF, SPARK_SSL_PRIVATE_KEY_PASSWORD_CONF),
+    ENV_RPC_SSL_KEY_STORE_PASSWORD ->
+      Seq(SPARK_RPC_SSL_KEY_STORE_PASSWORD_CONF, SPARK_SSL_KEY_STORE_PASSWORD_CONF),
+    ENV_RPC_SSL_TRUST_STORE_PASSWORD ->
+      Seq(SPARK_RPC_SSL_TRUST_STORE_PASSWORD_CONF, SPARK_SSL_TRUST_STORE_PASSWORD_CONF)
   )
 }
 

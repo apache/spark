@@ -2043,7 +2043,7 @@ private[spark] class DAGScheduler(
    * Cleanup the jobs of query execution tracked in the DAGScheduler.
    */
   def cleanupQueryJobs(executionId: Long): Unit = {
-    logInfo(s"Asked to cleanup jobs for query execution $executionId")
+    logInfo(log"Asked to cleanup jobs for query execution ${MDC(EXECUTION_ID, executionId)}")
     eventProcessLoop.post(CleanupQueryJobs(executionId))
   }
 
@@ -3159,8 +3159,9 @@ private[spark] class DAGScheduler(
           // re-fetches them; updateMapOutput on its own only invalidates the driver-side
           // serialized cache.
           mapOutputTracker.incrementEpoch()
-          logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId after " +
-            s"$newCount downstream consumer successes")
+          logInfo(log"Test injection: corrupted mapper-0 of shuffle " +
+            log"${MDC(SHUFFLE_ID, shuffleId)} after ${MDC(COUNT, newCount)} downstream " +
+            log"consumer successes")
         }
       }
     }
@@ -3192,8 +3193,8 @@ private[spark] class DAGScheduler(
         // re-fetches them; updateMapOutput on its own only invalidates the driver-side
         // serialized cache.
         mapOutputTracker.incrementEpoch()
-        logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId before result-stage " +
-          s"submission")
+        logInfo(log"Test injection: corrupted mapper-0 of shuffle " +
+          log"${MDC(SHUFFLE_ID, shuffleId)} before result-stage submission")
       }
     }
   }
@@ -3413,6 +3414,17 @@ private[spark] class DAGScheduler(
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
         abortStage(stage, "Task not serializable: " + e.toString, Some(e))
+        runningStages -= stage
+
+        // Abort execution
+        return
+      case e: OutOfMemoryError if Utils.isJavaArraySizeLimitExceeded(e) =>
+        // The task binary is too large for a Java array. Report it with a user-facing error and
+        // without the OutOfMemoryError as cause, so it is not mistaken for heap exhaustion.
+        val failure = JavaArraySizeLimitExceeded.forTaskBinary(e, stage.id)
+        logError(log"Failed to serialize the task binary of ${MDC(STAGE, stage)} because it " +
+          log"exceeded Java's maximum array size: ${MDC(ERROR, failure.jvmMessage)}")
+        abortStage(stage, failure.getMessage, Some(failure))
         runningStages -= stage
 
         // Abort execution
@@ -5066,11 +5078,11 @@ private[spark] class DAGScheduler(
       s"MapOutputTracker.${ex.methodName} with shuffleId=${ex.shuffleId}"
     if (stage.isDefined) {
       abortStage(stage.get, reason, Some(ex))
-      logWarning(s"Aborting stage because of $reason. It is possible that the stage is " +
-        "being cancelled.")
+      logWarning(log"Aborting stage because of ${MDC(REASON, reason)}. It is possible that " +
+        log"the stage is being cancelled.")
     } else {
-      logWarning(s"Tried aborting stage because of $reason, but the stage was not found. " +
-        "It is possible that the stage has been cancelled earlier.")
+      logWarning(log"Tried aborting stage because of ${MDC(REASON, reason)}, but the stage " +
+        log"was not found. It is possible that the stage has been cancelled earlier.")
     }
   }
 

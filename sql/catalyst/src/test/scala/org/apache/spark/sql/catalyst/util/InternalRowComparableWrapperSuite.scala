@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.util
 import java.util.UUID
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
-class InternalRowComparableWrapperSuite extends SparkFunSuite {
+class InternalRowComparableWrapperSuite extends SparkFunSuite with SQLConfHelper {
 
   private val structA = new StructType().add("a", IntegerType)
   private val structB = new StructType().add("b", IntegerType)
@@ -152,5 +154,90 @@ class InternalRowComparableWrapperSuite extends SparkFunSuite {
     assert(fromA !== wrap(structA, InternalRow(InternalRow(2))), "two values are still two")
     assert(wrap(IntegerType, InternalRow(1)) !== wrap(LongType, InternalRow(1L)),
       "and a type that decides where a value belongs still tells them apart")
+  }
+
+  test("SPARK-60859: a wrapper prints scalar key types readably") {
+    val dataTypes: Seq[DataType] = Seq(
+      BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
+      DecimalType(10, 2), StringType, StringType, CharType(5), VarcharType(5), BinaryType,
+      DateType, TimestampType, TimestampNTZType, TimestampNTZNanosType(9),
+      TimestampLTZNanosType(9), TimeType(), YearMonthIntervalType(), DayTimeIntervalType())
+    val nanos = new TimestampNanosVal(1704164645000000L, 123.toShort)
+    val row = InternalRow(
+      true, 1.toByte, 2.toShort, 3, 4L, 5.5f, 6.5, Decimal(BigDecimal("12.34"), 10, 2),
+      UTF8String.fromString("ab"), null, UTF8String.fromString("cd"),
+      UTF8String.fromString("ef"), Array[Byte](1, 2),
+      19724, 1704164645000000L, 1704164645000000L, nanos, nanos, 11045000000000L,
+      13, 90061000000L)
+    val expected = "[true,1,2,3,4,5.5,6.5,12.34,ab,null,cd,ef,0x0102," +
+      "2024-01-02,2024-01-02 03:04:05,2024-01-02 03:04:05," +
+      "2024-01-02 03:04:05.000000123,2024-01-02 03:04:05.000000123,03:04:05," +
+      "INTERVAL '1-1' YEAR TO MONTH,INTERVAL '1 01:01:01' DAY TO SECOND]"
+    val factory = InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      assert(factory(row).toString === expected)
+      // UnsafeRow's own toString is a hex dump of its words, so the wrapper has to read the values.
+      assert(factory(UnsafeProjection.create(dataTypes.toArray)(row)).toString === expected)
+    }
+
+    // Two collated keys that compare equal still print their own case.
+    val collated = InternalRowComparableWrapper
+      .getInternalRowComparableWrapperFactory(Seq(StringType("UTF8_LCASE")))
+    val upper = collated(InternalRow(UTF8String.fromString("A")))
+    val lower = collated(InternalRow(UTF8String.fromString("a")))
+    assert(upper === lower)
+    assert(upper.toString === "[A]")
+    assert(lower.toString === "[a]")
+  }
+
+  test("SPARK-60859: a wrapper prints CHAR/VARCHAR keys as stored") {
+    val factory = InternalRowComparableWrapper
+      .getInternalRowComparableWrapperFactory(Seq(CharType(5), VarcharType(5)))
+    // A shorter CHAR and an over-length VARCHAR: printing must neither pad nor throw.
+    val row = InternalRow(UTF8String.fromString("ab"), UTF8String.fromString("abcdefgh"))
+    assert(factory(row).toString === "[ab,abcdefgh]")
+    Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key,
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key).foreach { key =>
+      withSQLConf(key -> "true") {
+        assert(factory(row).toString === "[ab,abcdefgh]")
+      }
+    }
+  }
+
+  test("SPARK-60859: a wrapper prints complex key types by their field types") {
+    val date = 19724 // 2024-01-02
+    val timestamp = 1704164645000000L // 2024-01-02 03:04:05
+    val binary = Array[Byte](1, 2)
+    val struct = new StructType().add("d", DateType).add("t", TimestampType).add("b", BinaryType)
+    val dataTypes: Seq[DataType] = Seq(
+      struct,
+      ArrayType(IntegerType),
+      ArrayType(struct),
+      MapType(StringType, DateType))
+    val row = InternalRow(
+      InternalRow(date, timestamp, binary),
+      new GenericArrayData(Array[Any](1, 2)),
+      new GenericArrayData(Array[Any](
+        InternalRow(date, timestamp, binary), InternalRow(date + 1, timestamp, binary))),
+      new ArrayBasedMapData(
+        new GenericArrayData(Array[Any](UTF8String.fromString("a"), UTF8String.fromString("b"))),
+        new GenericArrayData(Array[Any](date, date + 1))))
+    val expected = "[[2024-01-02,2024-01-02 03:04:05,0x0102],[1,2]," +
+      "[[2024-01-02,2024-01-02 03:04:05,0x0102],[2024-01-03,2024-01-02 03:04:05,0x0102]]," +
+      "{a -> 2024-01-02,b -> 2024-01-03}]"
+    val factory = InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      assert(factory(row).toString === expected)
+      // The same values through an UnsafeRow, UnsafeArrayData and UnsafeMapData.
+      assert(factory(UnsafeProjection.create(dataTypes.toArray)(row)).toString === expected)
+    }
+
+    // A UDT key renders at its SQL type, also through an Unsafe-backed value.
+    val udtFactory = InternalRowComparableWrapper
+      .getInternalRowComparableWrapperFactory(Seq(new TestUDT.MyDenseVectorUDT))
+    val vector = InternalRow(new GenericArrayData(Array[Any](1.0, 2.0)))
+    assert(udtFactory(vector).toString === "[[1.0,2.0]]")
+    val unsafeVector = UnsafeProjection.create(Array[DataType](ArrayType(DoubleType)))(vector)
+    assert(udtFactory(unsafeVector).toString === "[[1.0,2.0]]")
   }
 }

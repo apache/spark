@@ -626,10 +626,12 @@ EOF
   # Extract major.minor prefix
   RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
 
-  # Fetch existing dist URLs
+  # Fetch existing dist URLs. For the first release of a series (e.g. x.y.0), `grep -v` selects
+  # nothing and exits with 1, which aborts the script under `set -o pipefail` (DEBUG_MODE=1).
+  # Ignore only that exit status, so a failing `svn ls` still fails the pipeline.
   OLD_VERSION=$(svn ls https://dist.apache.org/repos/dist/release/spark/ | \
     grep "^spark-$RELEASE_SERIES" | \
-    grep -v "^spark-$RELEASE_VERSION/" | \
+    { grep -v "^spark-$RELEASE_VERSION/" || true; } | \
     sed 's#/##' | sed 's/^spark-//' | \
     sort -V | tail -n 1)
   
@@ -687,6 +689,10 @@ BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
 if [[ $JAVA_VERSION < "1.8." ]] && [[ $SPARK_VERSION < "4.0" ]]; then
   echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
+  echo "Please set JAVA_HOME correctly."
+  exit 1
+elif [[ $JAVA_VERSION < "21" ]] && [[ $SPARK_VERSION > "4.99" ]]; then
+  echo "Java version $JAVA_VERSION is less than required 21 for 5.0+"
   echo "Please set JAVA_HOME correctly."
   exit 1
 elif [[ $JAVA_VERSION < "17.0." ]] && [[ $SPARK_VERSION > "3.5.99" ]]; then

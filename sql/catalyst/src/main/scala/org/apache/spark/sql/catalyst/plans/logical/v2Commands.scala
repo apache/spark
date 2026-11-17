@@ -53,7 +53,9 @@ import org.apache.spark.util.collection.BitSet
 // that DataFrame, instead of the optimized query plan, as building DataFrame optimizes the
 // query plan again. This trait defines a `storeAnalyzedQuery` function which will be called at
 // the end of analysis, and implementations should copy the input query plan into a non-child
-// field so that it won't be transformed by the optimizer.
+// field so that it won't be transformed by the optimizer. `storeAnalyzedQuery` may also take
+// from the analyzed plan what the command needs later, as `AddCheckConstraint` decides there
+// whether to store a predicate. `NormalizePlan` calls it too, on plans in any phase.
 trait KeepAnalyzedQuery extends Command {
   def storeAnalyzedQuery(): Command
 }
@@ -577,7 +579,7 @@ trait V2CreateTableAsSelectPlan
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
   }
 
-  override lazy val resolved: Boolean = childrenResolved && {
+  override lazy val resolved: Boolean = childrenResolved && expressions.forall(_.resolved) && {
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet

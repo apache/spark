@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project, Sample, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -118,36 +118,42 @@ trait PredicateHelper extends AliasHelper with Logging {
    */
   def findExpressionAndTrackLineageDown(
       exp: Expression,
-      plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
-    if (exp.references.isEmpty) return None
+      plan: LogicalPlan): Option[(Expression, LogicalPlan)] =
+    findExpressionAndTrackAllLineagesDown(exp, plan).headOption
+
+  /**
+   * Like [[findExpressionAndTrackLineageDown]], but returns every lineage, not only the first one.
+   * It follows each branch of a union, and each child that has the references of exp. With
+   * `strict`, it returns no lineage at all if it cannot follow exp down one of those.
+   */
+  def findExpressionAndTrackAllLineagesDown(
+      exp: Expression,
+      plan: LogicalPlan,
+      strict: Boolean = false): Seq[(Expression, LogicalPlan)] = {
+    if (exp.references.isEmpty) return Nil
+
+    // The lineages of each expression in the plan it is paired with.
+    def lineages(pairs: Seq[(Expression, LogicalPlan)]): Seq[(Expression, LogicalPlan)] = {
+      val found = pairs.map { case (e, p) => findExpressionAndTrackAllLineagesDown(e, p, strict) }
+      if (strict && found.exists(_.isEmpty)) Nil else found.flatten
+    }
 
     plan match {
       case p: Project =>
         val aliases = getAliasMap(p)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
+        findExpressionAndTrackAllLineagesDown(replaceAlias(exp, aliases), p.child, strict)
       // we can unwrap only if there are row projections, and no aggregation operation
       case a: Aggregate =>
         val aliasMap = getAliasMap(a)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
+        findExpressionAndTrackAllLineagesDown(replaceAlias(exp, aliasMap), a.child, strict)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
-        Some((exp, l))
+        Seq((exp, l))
       case u: Union =>
         val index = u.output.indexWhere(_.semanticEquals(exp))
-        if (index > -1) {
-          u.children
-            .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
-            .headOption
-        } else {
-          None
-        }
+        if (index > -1) lineages(u.children.map(child => (child.output(index), child))) else Nil
       case other =>
-        other.children.flatMap {
-          child => if (exp.references.subsetOf(child.outputSet)) {
-            findExpressionAndTrackLineageDown(exp, child)
-          } else {
-            None
-          }
-        }.headOption
+        lineages(other.children.filter(child => exp.references.subsetOf(child.outputSet))
+          .map(child => (exp, child)))
     }
   }
 
@@ -222,6 +228,30 @@ trait PredicateHelper extends AliasHelper with Logging {
     case _: PythonUDF => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
+  }
+
+  /**
+   * The output columns of `plan` that can fail to compute: the deterministic columns of a
+   * [[Project]] whose expression [[ExprUtils.canEvaluateUnconditionally]] rejects or reads such a
+   * column of its child, looking through [[Filter]] and [[Sample]]. A condition over such a column
+   * can fail as its expression does: under whole-stage codegen, the projection computes a
+   * deterministic column for a row only when a condition above first reads it, and
+   * `PushPredicateThroughNonJoin` pushes a condition below the projection with the expression
+   * substituted. A non-deterministic column is computed on every row the projection gets, so it
+   * does not count. Other operators are not looked through.
+   */
+  protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
+    case Project(projectList, child) =>
+      val below = failableOutput(child)
+      AttributeSet(projectList.collect {
+        case a: Alias if a.child.deterministic &&
+            (!ExprUtils.canEvaluateUnconditionally(a.child) ||
+              a.child.references.exists(below.contains)) => a.toAttribute
+        case a: Attribute if below.contains(a) => a
+      })
+    case Filter(_, child) => failableOutput(child)
+    case s: Sample => failableOutput(s.child)
+    case _ => AttributeSet.empty
   }
 
   /**
@@ -323,7 +353,7 @@ trait PredicateHelper extends AliasHelper with Logging {
   since = "1.0.0",
   group = "predicate_funcs")
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
@@ -460,7 +490,7 @@ case class UnresolvedInSubqueryPlanId(values: Seq[Expression], planId: Long)
   since = "1.0.0",
   group = "predicate_funcs")
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate with NoThrow {
 
   require(list != null, "list should not be null")
 
@@ -625,7 +655,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
+case class InSet(child: Expression, hset: Set[Any])
+  extends UnaryExpression with Predicate with NoThrow {
 
   require(hset != null, "hset could not be null")
 
@@ -852,7 +883,7 @@ object InSet {
   since = "1.0.0",
   group = "predicate_funcs")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate
-  with CommutativeExpression {
+  with CommutativeExpression with NoThrow {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -955,7 +986,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   since = "1.0.0",
   group = "predicate_funcs")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
-  with CommutativeExpression {
+  with CommutativeExpression with NoThrow {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -1101,6 +1132,25 @@ object Equality {
   }
 }
 
+/** Matches a `<`/`<=`/`>`/`>=` comparison; see `unapply` for the exact normalization. */
+object RangePredicate {
+  /**
+   * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with
+   * `>` and `>=` reordered so the lower bound leads. Inclusivity stays on the
+   * original predicate, which execution evaluates as-is; a strict predicate
+   * also selects the exclusive point-index bound.
+   */
+  def unapply(expression: Expression): Option[(DataType, Expression, Expression, Boolean)] = {
+    expression match {
+      case LessThan(low, high) => Some((low.dataType, low, high, true))
+      case LessThanOrEqual(low, high) => Some((low.dataType, low, high, false))
+      case GreaterThan(high, low) => Some((low.dataType, low, high, true))
+      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high, false))
+      case _ => None
+    }
+  }
+}
+
 // TODO: although map type is not orderable, technically map type should be able to be used
 // in equality comparison
 @ExpressionDescription(
@@ -1126,7 +1176,7 @@ object Equality {
   since = "1.0.0",
   group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "="
 
@@ -1174,7 +1224,8 @@ case class EqualTo(left: Expression, right: Expression)
   """,
   since = "1.1.0",
   group = "predicate_funcs")
-case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualNullSafe(left: Expression, right: Expression)
+    extends BinaryComparison with NoThrow {
 
   override def symbol: String = "<=>"
 
@@ -1278,7 +1329,7 @@ case class EqualNull(left: Expression, right: Expression, replacement: Expressio
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<"
 
@@ -1314,7 +1365,7 @@ case class LessThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<="
 
@@ -1350,7 +1401,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">"
@@ -1387,7 +1438,7 @@ case class GreaterThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">="

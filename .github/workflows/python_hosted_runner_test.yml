@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 21
       python:
         required: false
         type: string
@@ -50,6 +50,16 @@ on:
         required: false
         type: string
         default: arm64
+      precompile_timeout_minutes:
+        description: Timeout for precompilation. Raise it for slower runners.
+        required: false
+        type: number
+        default: 90
+      build_timeout_minutes:
+        description: Timeout for each build matrix job. Raise it for slower runners.
+        required: false
+        type: number
+        default: 120
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -57,14 +67,11 @@ on:
         default: '{}'
 jobs:
   # Precompile Spark with SBT once and publish target/ as an artifact for the
-  # matrix entries below to consume. Optional: any failure here degrades the
-  # matrix to its original local SBT build path.
+  # matrix entries below to consume.
   precompile:
     name: "Precompile Spark"
     runs-on: ${{ inputs.os }}
-    # If this job fails or is cancelled, the matrix entries fall back to
-    # running the SBT build locally as before.
-    continue-on-error: true
+    timeout-minutes: ${{ inputs.precompile_timeout_minutes }}
     outputs:
       # Pinned so the build job checks out the same snapshot, even if the branch advances mid-run.
       head_sha: ${{ steps.checkout.outputs.head_sha }}
@@ -93,6 +100,7 @@ jobs:
             -Pdocker-integration-tests -Pvolcano \
             Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
       - name: Package compile output
+        shell: bash
         run: |
           find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
             | tar --null -cf - -T - | zstd -c -T0 > compile-artifact.tar.zst
@@ -102,14 +110,14 @@ jobs:
         with:
           name: spark-compile-${{ inputs.os }}-${{ inputs.branch }}-${{ github.run_id }}
           path: compile-artifact.tar.zst
-          retention-days: 1
+          retention-days: 7
           if-no-files-found: error
 
   build:
     name: "Build modules: ${{ matrix.modules }}"
     needs: precompile
-    if: (!cancelled())
     runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.build_timeout_minutes }}
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -158,12 +166,12 @@ jobs:
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
         with:
-          # Fall back to the branch when the precompile job failed before resolving the SHA.
-          ref: ${{ needs.precompile.outputs.head_sha || inputs.branch }}
+          ref: ${{ needs.precompile.outputs.head_sha }}
       - name: Setup build environment
         uses: ./.github/actions/setup-build-env
         with:
           java-version: ${{ matrix.java }}
+          coursier: none
       - name: Install Python ${{matrix.python}}
         uses: actions/setup-python@v7
         with:
@@ -174,21 +182,16 @@ jobs:
           python${{matrix.python}} -m pip install --ignore-installed 'blinker>=1.6.2'
           python${{matrix.python}} -m pip install --ignore-installed 'six==1.16.0'
           python${{matrix.python}} -m pip install numpy 'pyarrow>=23.0.0' 'six==1.16.0' 'pandas==2.3.3' scipy 'plotly<6.0.0' 'mlflow>=2.8.1' coverage matplotlib openpyxl 'memory-profiler>=0.61.0' 'scikit-learn>=1.3.2' unittest-xml-reporting && \
-          python${{matrix.python}} -m pip install 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'googleapis-common-protos==1.71.0' 'zstandard==0.25.0' 'graphviz==0.20.3' && \
+          python${{matrix.python}} -m pip install 'grpcio==1.84.1' 'grpcio-status==1.84.1' 'protobuf==6.33.5' 'googleapis-common-protos==1.71.0' 'zstandard==0.25.0' 'graphviz==0.20.3' && \
           python${{matrix.python}} -m pip cache purge
       - name: List Python packages
         run: python${{matrix.python}} -m pip list
       - name: Download precompiled artifact
-        id: download-precompiled
-        if: needs.precompile.result == 'success'
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: spark-compile-${{ inputs.os }}-${{ inputs.branch }}-${{ github.run_id }}
       - name: Extract precompiled artifact
-        id: extract-precompiled
-        if: steps.download-precompiled.outcome == 'success'
-        continue-on-error: true
+        shell: bash
         run: |
           zstd -dc compile-artifact.tar.zst | tar -xf -
           rm compile-artifact.tar.zst
@@ -196,10 +199,8 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         run: |
-          if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
-            export SKIP_SCALA_BUILD=true
-            echo "Reusing precompiled artifact, skipping local SBT build."
-          fi
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
           if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
             export SKIP_PACKAGING=false
             echo "Python Packaging Tests Enabled!"

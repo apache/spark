@@ -146,7 +146,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
 
     Seq(false, true).foreach { orderDeterministically =>
       val expectedKeys = ResolveDeduplicate.computeKeys(
-        metadataRelation, spec, orderDeterministically, SQLConf.get.resolver)
+        metadataRelation.output, spec, orderDeterministically, SQLConf.get.resolver)
       val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
         originalKeys, childAfterMetadataPropagation, spec, orderDeterministically,
         SQLConf.get.resolver)
@@ -169,7 +169,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
 
     Seq(false, true).foreach { orderDeterministically =>
       val expectedKeys = ResolveDeduplicate.computeKeys(
-        childWithSelectedMetadata, spec, orderDeterministically, SQLConf.get.resolver)
+        childWithSelectedMetadata.output, spec, orderDeterministically, SQLConf.get.resolver)
       val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
         originalKeys, childWithSelectedMetadata, spec, orderDeterministically,
         SQLConf.get.resolver)
@@ -191,7 +191,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
 
     specs.foreach { spec =>
       val legacyKeys = ResolveDeduplicate.computeKeys(
-        rel, spec, orderDeterministically = false, SQLConf.get.resolver)
+        rel.output, spec, orderDeterministically = false, SQLConf.get.resolver)
       val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
         legacyKeys, rel, spec, orderDeterministically = false, SQLConf.get.resolver)
 
@@ -214,7 +214,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
       metadataRelation.output :+ metadataAddedAfterDeduplication, metadataRelation)
     val spec = DeduplicateSpec(DeduplicateAllColumnsAsKey, viaSparkClassic = true)
     val legacyKeys = ResolveDeduplicate.computeKeys(
-      metadataRelation, spec, orderDeterministically = false, SQLConf.get.resolver)
+      metadataRelation.output, spec, orderDeterministically = false, SQLConf.get.resolver)
 
     val recomputedKeys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
       legacyKeys, childAfterMetadataPropagation, spec, orderDeterministically = false,

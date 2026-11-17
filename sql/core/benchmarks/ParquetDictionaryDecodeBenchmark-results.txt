@@ -2,47 +2,47 @@
 Dictionary Decode (no nulls)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Dictionary Decode (no nulls):             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        4              4           0        297.9           3.4       1.0X
-LongUpdater                                           4              4           0        293.7           3.4       1.0X
-FloatUpdater                                          3              4           0        301.6           3.3       1.0X
-DoubleUpdater                                         3              4           0        299.6           3.3       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  4              4           0        294.0           3.4       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                3              4           0        300.0           3.3       1.0X
+IntegerUpdater                                        5              5           0        219.0           4.6       1.0X
+LongUpdater                                           5              5           0        218.5           4.6       1.0X
+FloatUpdater                                          5              5           0        223.0           4.5       1.0X
+DoubleUpdater                                         5              5           0        222.9           4.5       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  5              5           0        217.9           4.6       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                5              5           0        212.8           4.7       1.0X
 
 
 ================================================================================================
 Dictionary Decode (10% nulls)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Dictionary Decode (10% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        5              5           0        213.7           4.7       1.0X
-LongUpdater                                           5              5           0        212.6           4.7       1.0X
-FloatUpdater                                          5              5           0        214.7           4.7       1.0X
-DoubleUpdater                                         5              5           0        213.6           4.7       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  5              5           0        211.7           4.7       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                5              5           0        214.0           4.7       1.0X
+IntegerUpdater                                        6              7           0        162.1           6.2       1.0X
+LongUpdater                                           7              7           0        159.9           6.3       1.0X
+FloatUpdater                                          6              6           1        167.0           6.0       1.0X
+DoubleUpdater                                         6              6           0        166.0           6.0       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  7              7           0        159.1           6.3       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        166.7           6.0       1.0X
 
 
 ================================================================================================
 Dictionary Decode (50% nulls)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Dictionary Decode (50% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        7              7           0        153.0           6.5       1.0X
-LongUpdater                                           7              7           0        150.8           6.6       1.0X
-FloatUpdater                                          7              7           0        152.8           6.5       1.0X
-DoubleUpdater                                         7              7           0        152.7           6.5       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  7              7           0        151.3           6.6       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                7              7           0        152.7           6.5       1.0X
+IntegerUpdater                                        8              8           0        125.5           8.0       1.0X
+LongUpdater                                           8              8           0        124.9           8.0       1.0X
+FloatUpdater                                          8              8           0        127.9           7.8       1.0X
+DoubleUpdater                                         8              8           0        128.4           7.8       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  8              9           0        123.5           8.1       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                8              8           0        128.3           7.8       1.0X
 
 

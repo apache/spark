@@ -1153,6 +1153,7 @@ class Read(google.protobuf.message.Message):
 
         UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
+        SOURCE_NAME_FIELD_NUMBER: builtins.int
         unparsed_identifier: builtins.str
         """(Required) Unparsed identifier for the table."""
         @property
@@ -1160,18 +1161,36 @@ class Read(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """Options for the named table. The map key is case insensitive."""
+        source_name: builtins.str
         def __init__(
             self,
             *,
             unparsed_identifier: builtins.str = ...,
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            source_name: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_source_name", b"_source_name", "source_name", b"source_name"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "options", b"options", "unparsed_identifier", b"unparsed_identifier"
+                "_source_name",
+                b"_source_name",
+                "options",
+                b"options",
+                "source_name",
+                b"source_name",
+                "unparsed_identifier",
+                b"unparsed_identifier",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_source_name", b"_source_name"]
+        ) -> typing_extensions.Literal["source_name"] | None: ...
 
     class DataSource(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
