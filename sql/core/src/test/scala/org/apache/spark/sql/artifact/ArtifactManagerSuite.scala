@@ -399,7 +399,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assert(ArtifactManager.artifactRootDirectory.toFile.exists())
   }
 
-  test("SPARK-61671: LIST FILES, JARS and ARCHIVES list only the artifacts of the session") {
+  test("SPARK-61671: LIST FILES, JARS and ARCHIVES list the artifacts of the session and of " +
+    "the SparkContext but not those of other sessions") {
     val session1 = spark.newSession()
     val session2 = spark.newSession()
     val sc = spark.sparkContext
@@ -438,6 +439,16 @@ class ArtifactManagerSuite extends SharedSparkSession {
       }
       session1.artifactManager.addArtifact(
         Paths.get("archives/listed.zip"), newFile("listed.zip"), Some("my_files"))
+      // Added again to the session, so that each is recorded both for the session and outside of
+      // any session, and still listed once.
+      session1.sql(s"ADD FILE '$contextFile'")
+      session1.sql(s"ADD JAR '$contextJar'")
+      session1.sql(s"ADD ARCHIVE '$contextArchive'")
+      Seq(sc.addedFiles -> "/context.txt", sc.addedJars -> "/context.jar",
+          sc.addedArchives -> "/context.zip").foreach { case (added, name) =>
+        val key = added("default").keySet.find(_.endsWith(name)).get
+        assert(added(session1.sessionUUID).contains(key), name)
+      }
 
       val root = s"/artifacts/${session1.sessionUUID}"
       assert(list(session1, "FILES") ==
@@ -445,6 +456,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(list(session1, "JARS") == Seq(s"$root/jars/listed.jar", "/context.jar"))
       assert(list(session1, "ARCHIVES") ==
         Seq(s"$root/archives/listed.zip#my_files", "/context.zip"))
+      assert(list(session1, "JAR context.jar") == Seq("/context.jar"))
+      assert(list(session1, "ARCHIVE context.zip") == Seq("/context.zip"))
       assert(list(session2, "FILES") == Seq("/context.txt"))
       assert(list(session2, "JARS") == Seq("/context.jar"))
       assert(list(session2, "ARCHIVES") == Seq("/context.zip"))

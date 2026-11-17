@@ -2373,9 +2373,17 @@ class SparkSession(SparkConversionMixin):
 
         Examples
         --------
+        With Spark Classic in local mode, a file is listed by the path it was added with.
+
         >>> spark.addArtifacts("/tmp/my_file.txt", file=True)  # doctest: +SKIP
         >>> spark.listFiles()  # doctest: +SKIP
         ['file:/tmp/my_file.txt']
+
+        With Spark Connect, the file is uploaded, and listed as the URI of its copy on the server.
+
+        >>> spark.addArtifacts("/tmp/my_file.txt", file=True)  # doctest: +SKIP
+        >>> spark.listFiles()  # doctest: +SKIP
+        ['spark://<host>:<port>/artifacts/<uuid>/files/my_file.txt']
         """
         return self._sc.listFiles
 
@@ -2409,9 +2417,18 @@ class SparkSession(SparkConversionMixin):
 
         Examples
         --------
+        With Spark Classic in local mode, an archive is listed by the path it was added with.
+
         >>> spark.addArtifacts("/tmp/my_archive.zip#my_files", archive=True)  # doctest: +SKIP
         >>> spark.listArchives()  # doctest: +SKIP
         ['file:/tmp/my_archive.zip#my_files']
+
+        With Spark Connect, the archive is uploaded, and listed as the URI of its copy on the
+        server.
+
+        >>> spark.addArtifacts("/tmp/my_archive.zip#my_files", archive=True)  # doctest: +SKIP
+        >>> spark.listArchives()  # doctest: +SKIP
+        ['spark://<host>:<port>/artifacts/<uuid>/archives/my_archive.zip#my_files']
         """
         return self._sc.listArchives
 

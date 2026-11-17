@@ -216,7 +216,8 @@ class ArtifactTestsMixin:
     def test_list_files_and_archives(self):
         self.check_list_files_and_archives(self.spark)
 
-        # A session lists only its own files and archives, and can add the same ones.
+        # A session does not list the files and archives of the other sessions, and can add the
+        # same ones.
         other_session = SparkSession.builder.remote(
             f"sc://localhost:{DefaultChannelBuilder.default_port()}"
         ).create()

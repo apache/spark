@@ -59,11 +59,12 @@ case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
 
 /**
  * The jars, files and archives added to resources, as a session lists them. When the artifacts of
- * the session are isolated, as with Spark Connect and with Scala and Java sessions without Hive
- * support, these are those added to the session and those added to the
+ * the session are isolated (`spark.sql.artifact.isolation.enabled`, the default, and always the
+ * case with Spark Connect), these are those added to the session and those added to the
  * [[org.apache.spark.SparkContext]] outside of any session, such as with `--jars`, `--files` and
- * `--archives`, but not those of the other sessions. Otherwise, these are all those added to the
- * [[org.apache.spark.SparkContext]].
+ * `--archives`, but not those of the other sessions. Otherwise, as in `spark-shell`, in PySpark
+ * when PySpark creates the [[org.apache.spark.SparkContext]], and in sessions whose builder enables
+ * Hive support, these are all those added to the [[org.apache.spark.SparkContext]].
  */
 private object SessionResources {
   // The key of what is added to the SparkContext outside of any session.
