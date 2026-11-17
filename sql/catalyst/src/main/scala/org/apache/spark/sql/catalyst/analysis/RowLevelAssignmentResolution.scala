@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, ExprId, MetadataAttribute, RuntimeReplaceable, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, ExprId, MetadataAttribute, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, LogicalPlan, MergeAction, UpdateAction}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
+import org.apache.spark.sql.types.DataType
 
 /** Assignment validation and value conversion for UPDATE and MERGE actions. */
 private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
@@ -79,7 +80,8 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
   def resolveGeneratedColumnAssignments(
       table: LogicalPlan,
       assignments: Seq[Assignment],
-      analyze: LogicalPlan => LogicalPlan): Seq[Assignment] = {
+      analyze: LogicalPlan => LogicalPlan,
+      shareAssignedValues: Boolean = true): Seq[Assignment] = {
     if (!assignments.exists(_.value.isInstanceOf[GeneratedColumnAssignmentValue])) {
       return assignments
     }
@@ -93,7 +95,12 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
     }
     val input = assigned.map(_._2.toAttribute)
     val valuesByAttribute = AttributeMap(assigned.map { case (_, alias) =>
-      alias.toAttribute -> SharedAssignmentValue(alias.child, alias.exprId)
+      val value = if (shareAssignedValues) {
+        SharedAssignmentValue(alias.child, alias.exprId)
+      } else {
+        alias.child
+      }
+      alias.toAttribute -> value
     })
 
     val generatedAssignments = assignments.map {
@@ -128,18 +135,21 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
       coerceNestedTypes: Boolean,
       ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
       generatedColumns: Set[String],
-      analyze: LogicalPlan => LogicalPlan): Seq[MergeAction] = {
+      analyze: LogicalPlan => LogicalPlan,
+      shareAssignedValues: Boolean = false): Seq[MergeAction] = {
     actions.map {
       case u @ UpdateAction(_, assignments, fromStar) =>
         val aligned = AssignmentUtils.alignUpdateAssignments(table.output, assignments,
           fromStar, coerceNestedTypes, ansiStoreAssignmentCastCheck, generatedColumns)
-        u.copy(assignments = resolveGeneratedColumnAssignments(table, aligned, analyze))
+        u.copy(assignments = resolveGeneratedColumnAssignments(
+          table, aligned, analyze, shareAssignedValues))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>
         val aligned = AssignmentUtils.alignInsertAssignments(table.output, assignments,
           coerceNestedTypes, ansiStoreAssignmentCastCheck, generatedColumns)
-        i.copy(assignments = resolveGeneratedColumnAssignments(table, aligned, analyze))
+        i.copy(assignments = resolveGeneratedColumnAssignments(
+          table, aligned, analyze, shareAssignedValues))
       case other =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3052",
@@ -148,13 +158,11 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
   }
 }
 
-/**
- * An assigned value that a row-level rewrite shares with omitted generated columns.
- * Rewrites using MergeRows can instead inline it during expression replacement.
- */
+/** An assigned value that a row-level rewrite shares with omitted generated columns. */
 private[sql] case class SharedAssignmentValue(child: Expression, id: ExprId)
-  extends UnaryExpression with RuntimeReplaceable {
-  override def replacement: Expression = child
+  extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = child.nullable
   override protected def withNewChildInternal(newChild: Expression): SharedAssignmentValue =
     copy(child = newChild)
 }

@@ -80,7 +80,9 @@ class ResolveRowLevelCommandAssignments(analyze: LogicalPlan => LogicalPlan)
           m.targetTable,
           padded.notMatchedActions,
           coerceNestedTypes,
-          castCheck, generatedColumns, analyze),
+          castCheck, generatedColumns, analyze,
+          shareAssignedValues = m.matchedActions.isEmpty && m.notMatchedActions.size == 1 &&
+            m.notMatchedBySourceActions.isEmpty),
         notMatchedBySourceActions = RowLevelAssignmentResolution.alignActions(
           m.targetTable,
           padded.notMatchedBySourceActions,
