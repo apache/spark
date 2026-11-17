@@ -216,7 +216,7 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
     assert(defaultFormatter.parseOptional("01:02:03").contains(defaultFormatter.parse("01:02:03")))
     assert(defaultFormatter.parseOptional("x123").isEmpty)
 
-    // The Iso8601 formatter uses parseUnresolved and must consume the whole input.
+    // The Iso8601 formatter must consume the whole input.
     val isoFormatter = new Iso8601TimeFormatter("HH:mm:ss", DateFormatter.defaultLocale,
       isParsing = true)
     assert(isoFormatter.parseOptional("01:02:03").contains(isoFormatter.parse("01:02:03")))
@@ -231,6 +231,15 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       val formatter = TimeFormatter(s"$hour:mm:ss", isParsing = true)
       assert(formatter.parseOptional(input) === scala.util.Try(formatter.parse(input)).toOption,
         s"$hour:mm:ss on $input")
+    }
+    for ((pattern, inputs) <- Seq(
+        "HH:mm:ss.SSS" -> Seq("01:02:03.456", "25:00:00.000", "01:02:03.456tail", "bad"),
+        "mm:ss a" -> Seq("02:03 AM", "02:03 PM", "61:03 AM", "02:03 AMtail", "bad"))) {
+      val formatter = TimeFormatter(pattern, isParsing = true)
+      inputs.foreach { input =>
+        assert(formatter.parseOptional(input) === scala.util.Try(formatter.parse(input)).toOption,
+          s"$pattern on $input")
+      }
     }
     val formatter = TimeFormatter("hh:mm:ss a", isParsing = true)
     for (input <- Seq("03:30:00 PM", "13:30:00 PM")) {
