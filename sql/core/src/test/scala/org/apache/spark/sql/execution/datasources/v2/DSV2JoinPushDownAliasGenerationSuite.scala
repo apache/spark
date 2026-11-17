@@ -21,7 +21,9 @@ import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.read.SupportsPushDownJoin.ColumnWithAlias
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class DSV2JoinPushDownAliasGenerationSuite extends SparkFunSuite {
 
   private def assertAliases(

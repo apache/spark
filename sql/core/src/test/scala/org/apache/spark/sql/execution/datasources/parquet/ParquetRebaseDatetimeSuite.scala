@@ -28,6 +28,7 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION,
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.tags.SlowSQLTest
 
 abstract class ParquetRebaseDatetimeSuite
@@ -470,7 +471,7 @@ class ParquetRebaseDatetimeV1Suite extends ParquetRebaseDatetimeSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
-@SlowSQLTest
+@DataSourceV2Test
 class ParquetRebaseDatetimeV2Suite extends ParquetRebaseDatetimeSuite {
   override protected def sparkConf: SparkConf =
     super
