@@ -91,13 +91,15 @@ class StreamingJoinArithmeticWatermarkSuite extends StreamTest {
   }
 
   // Earlier versions admitted a bound through a negative opposite watermark term, so disabling
-  // the finalization check runs this join. The left state is never evicted, so the matched left
-  // row emits no null-padded row later.
+  // the finalization check runs this join. The left watermark keeps the integral casts from
+  // deciding. The left state is never evicted, so the unmatched left row at 30 seconds stays
+  // after the watermark has passed it, and a later right row matches it.
   test("left outer join with a negative opposite watermark term runs with the check disabled") {
     val leftInput = MemoryStream[(Int, Long)]
     val rightInput = MemoryStream[(Int, Long)]
     val left = leftInput.toDF().toDF("leftKey", "time")
       .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+      .withWatermark("leftTime", "0 seconds")
     val right = rightInput.toDF().toDF("rightKey", "time")
       .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
       .withWatermark("rightTime", "0 seconds")
@@ -110,10 +112,11 @@ class StreamingJoinArithmeticWatermarkSuite extends StreamTest {
     withLogAppender(appender, level = Some(Level.WARN)) {
       withSQLConf(SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key -> "false") {
         testStream(joined)(
-          MultiAddData(leftInput, (1, 60L))(rightInput, (1, 50L)),
+          MultiAddData(leftInput, (1, 60L), (3, 30L))(rightInput, (1, 50L)),
           CheckNewAnswer(Row(1, 60L, 50L)),
-          AddData(rightInput, (2, 100L)),
-          CheckNewAnswer())
+          // The watermark is 50 seconds, above the left row at 30 seconds.
+          AddData(rightInput, (3, 80L)),
+          CheckNewAnswer(Row(3, 30L, 80L)))
       }
     }
     assert(appender.loggingEvents.exists(
