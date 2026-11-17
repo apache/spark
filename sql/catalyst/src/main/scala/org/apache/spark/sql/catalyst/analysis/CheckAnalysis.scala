@@ -870,6 +870,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             // - Is not a distinct aggregate function;
             // - Has only non-deterministic functions that are nested inside an aggregate function;
             // - Has only attributes that are nested inside an aggregate function.
+            val independentKll = new ValidateSubqueryExpression.KllSubqueryIndependence
             def deterministicOutsideAggregates(e: Expression): Boolean = {
               // Scalar wrappers inherit aggregate nondeterminism. Check their own behavior with
               // aggregate results replaced by deterministic values, then validate the original
@@ -878,7 +879,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 case a: AggregateExpression => Literal.default(a.dataType)
                 case a: AggregateFunction => Literal.default(a.dataType)
                 case scalar: ScalarSubquery
-                    if ValidateSubqueryExpression.isIndependentKllScalar(scalar) =>
+                    if independentKll(scalar) =>
                   Literal.default(scalar.dataType)
               }.deterministic
             }

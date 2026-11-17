@@ -30,6 +30,26 @@ import org.apache.spark.sql.types.{BinaryType, DoubleType}
  */
 class PullOutNondeterministicSuite extends AnalysisTest {
 
+  test("prunable safe computed outputs retain scalar placement inside inner joins") {
+    val a = $"a".long
+    val b = $"b".long
+    val x = $"x".long
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+    val component = Join(LocalRelation(a), LocalRelation(b), Cross, None, JoinHint.NONE)
+    val computed = Project(Seq(a, b, Alias(BitwiseAnd(a, Literal(1L)), "unused")()), component)
+    val original = Join(computed, LocalRelation(x), Inner,
+      Some(EqualTo(Add(a, scalar), x)), JoinHint.NONE)
+    val pulled = PullOutNondeterministic(original)
+    val producers = pulled.collect { case p: Project if p.projectList.exists {
+      case alias: Alias => alias.isNondeterministicSubqueryBinding
+      case _ => false
+    } => p }
+    assert(producers.nonEmpty)
+    assert(producers.forall(!_.child.exists(_.isInstanceOf[Join])), pulled)
+    assert(pulled.output == original.output)
+  }
+
   test("one scalar identity retains both selective inner join edges") {
     val a = $"a".long
     val b = $"b".long

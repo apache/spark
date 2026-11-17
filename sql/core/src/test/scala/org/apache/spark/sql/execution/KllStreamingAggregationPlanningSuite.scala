@@ -61,6 +61,43 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
       }.flatten
       assert(occurrences.size == 2, execution.normalized.treeString)
       assert(occurrences.forall(!_.deterministic))
+      val comparisons = execution.normalized.collectWithSubqueries {
+        case org.apache.spark.sql.catalyst.plans.logical.Filter(
+            EqualTo(left: Attribute, right: Attribute), _) => (left.exprId, right.exprId)
+      }
+      assert(comparisons.size == 1, execution.normalized.treeString)
+      assert(comparisons.head._1 != comparisons.head._2, execution.normalized.treeString)
+    }
+  }
+
+  test("legacy checkpoint retires unchosen HAVING buffers without column pruning") {
+    for (analysisLegacy <- Seq(false, true)) {
+      val logical = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString) {
+        val input = MemoryStream[(Long, Long, Long, Long)](spark).toDF()
+          .toDF("a", "b", "c", "d")
+        input.createOrReplaceTempView("kll_unchosen_buffers")
+        try {
+          spark.sql("""SELECT kll_sketch_agg_bigint(((a+b)+c)+d) AS s
+              |FROM kll_unchosen_buffers
+              |HAVING kll_sketch_get_n_bigint(kll_sketch_agg_bigint((a+b)+(c+d))) > 0
+              |""".stripMargin).queryExecution.analyzed
+        } finally {
+          spark.catalog.dropTempView("kll_unchosen_buffers")
+        }
+      }
+      withSQLConf(legacySharingKey -> "true",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+            "org.apache.spark.sql.catalyst.optimizer.ColumnPruning") {
+        val execution = new IncrementalExecution(spark, logical, OutputMode.Complete(),
+          "/tmp/unused-kll-unchosen-buffers", UUID.randomUUID(), UUID.randomUUID(), 0L, None,
+          OffsetSeqMetadata(0L, 0L, Map.empty[String, String]), WatermarkPropagator.noop(),
+          isFirstBatch = true)
+        val aggregate = execution.optimizedPlan.collect { case a: Aggregate => a }.head
+        val functions = org.apache.spark.sql.catalyst.planning.PhysicalAggregation
+          .unapply(aggregate).get._2
+        assert(functions.size == 1, execution.optimizedPlan.treeString)
+      }
     }
   }
 

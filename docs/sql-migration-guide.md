@@ -39,7 +39,9 @@ license: |
   Query plans, resource use, and approximate
   results can therefore change. Queries that depend on treating independent randomized scalar
   subqueries as the same grouping value can now fail analysis; compute the value once and reuse
-  its alias instead. To restore the previous analysis and batch optimizer behavior, set
+  its alias instead. Correlated lateral queries with KLL aggregates are rejected when the outer
+  input can contain multiple rows, because decorrelation can share independent invocations.
+  To restore the previous analysis and batch optimizer behavior, set
   `spark.sql.legacy.kllAggregateDeterministic.enabled` to `true` before the query is analyzed.
   This also restores the old assumptions that can duplicate randomized CTE evaluations or share
   independent aggregates. The default is `false`; resolved KLL expressions retain their captured

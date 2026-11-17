@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming.runtime
 
-import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
 
 import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, ExternalUserDefinedFunction, KllAggregateResolution, NamedExpression, SubqueryExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExprId, ExternalUserDefinedFunction, KllAggregateResolution, NamedExpression, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -35,12 +35,15 @@ private[sql] object KllCheckpointPreparation {
     // precedence over the analysis/batch rollback setting captured on KLL expressions.
     var needsExtraction = false
     var kllChanged = false
-    val adjusted = if (!preOptimized.containsAnyPattern(
+    val unchosen = MutableSet.empty[ExprId]
+    val selected = if (!preOptimized.containsAnyPattern(
         KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE)) {
       preOptimized
     } else preOptimized.transformAllExpressionsWithSubqueries {
       case resolution: KllAggregateResolution =>
-        if (legacySharing) resolution.legacy else resolution.corrected
+        val chosen = if (legacySharing) resolution.legacy else resolution.corrected
+        unchosen ++= (resolution.references -- chosen.references).map(_.exprId)
+        chosen
       case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>
         kllChanged = true
         needsExtraction = !legacySharing
@@ -65,6 +68,11 @@ private[sql] object KllCheckpointPreparation {
         kllChanged = true
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
+    }
+    // Alternative resolution outputs are compiler-owned state demands. Retire those that
+    // the selected consumer no longer uses even when optional ColumnPruning is disabled.
+    val adjusted = if (unchosen.isEmpty) selected else {
+      retireUnchosenOutputs(selected, unchosen.toSet)
     }
     // Retain original compiler identities even if custom normalization replaces a producer
     // or its provenance before checkpoint preparation.
@@ -182,5 +190,27 @@ private[sql] object KllCheckpointPreparation {
       adjusted
     }
     optimizerInput
+  }
+
+  private def retireUnchosenOutputs(plan: LogicalPlan, candidates: Set[ExprId]): LogicalPlan = {
+    def visit(input: LogicalPlan, required: AttributeSet): LogicalPlan = {
+      def keep(expression: NamedExpression): Boolean =
+        !candidates.contains(expression.exprId) || required.contains(expression.toAttribute)
+      val trimmed = input match {
+        case aggregate: Aggregate =>
+          aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.filter(keep))
+        case project: Project => project.copy(projectList = project.projectList.filter(keep))
+        case other => other
+      }
+      val current = trimmed.mapExpressionsWithReferenceEquality { expression =>
+        expression.transformDownWithReferenceEquality {
+          case query: SubqueryExpression =>
+            query.withNewPlan(visit(query.plan, query.plan.outputSet))
+        }
+      }
+      val needed = current.references ++ required.intersect(current.inputSet)
+      current.mapChildren(child => visit(child, needed))
+    }
+    visit(plan, plan.outputSet)
   }
 }

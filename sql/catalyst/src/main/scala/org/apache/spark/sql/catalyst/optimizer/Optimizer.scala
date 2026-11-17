@@ -2801,34 +2801,40 @@ object PushDownPredicates extends Rule[LogicalPlan] {
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
-  private def isAggregateScalarBinding(expression: NamedExpression): Boolean = expression match {
-    case alias: Alias if alias.child.containsAnyPattern(
-        SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY) &&
-        ExprUtils.isDeterministicAfterSubqueryExtraction(alias.child) =>
-      def retainedAggregate(plan: LogicalPlan): Boolean = plan.exists {
-        case opaque: OpaqueLogicalPlan => retainedAggregate(opaque.hiddenPlan)
-        case aggregate: Aggregate if aggregate.aggregateExpressions.exists(_.exists {
-              case expression: AggregateExpression => !expression.deterministic
+  private class AggregateScalarBindings {
+    private val independent = new ValidateSubqueryExpression.KllSubqueryIndependence
+    private val deterministic = new ExprUtils.SubqueryExtractionDeterminism
+    private val retained = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
+
+    def apply(expression: NamedExpression): Boolean = expression match {
+      case alias: Alias if alias.child.containsAnyPattern(
+          SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY) && deterministic(alias.child) =>
+        def retainedAggregate(plan: LogicalPlan): Boolean = retained.computeIfAbsent(plan,
+          current => current.exists {
+            case opaque: OpaqueLogicalPlan => retainedAggregate(opaque.hiddenPlan)
+            case aggregate: Aggregate if aggregate.aggregateExpressions.exists(_.exists {
+                  case expression: AggregateExpression => !expression.deterministic
+                  case _ => false
+                }) => true
+            case window: Window if window.windowExpressions.exists(_.exists {
+                  case expression: AggregateExpression => !expression.deterministic
+                  case _ => false
+                }) => true
+            case node => node.expressions.exists(_.exists {
+              case query: SubqueryExpression => retainedAggregate(query.plan)
               case _ => false
-            }) => true
-        case window: Window if window.windowExpressions.exists(_.exists {
-              case expression: AggregateExpression => !expression.deterministic
-              case _ => false
-            }) => true
-        case node => node.expressions.exists(_.exists {
-          case query: SubqueryExpression => retainedAggregate(query.plan)
-          case _ => false
-        })
-      }
-      // Scalar, EXISTS and IN bindings can all inherit randomness from independent retained
-      // KLL aggregates. Row randomness and correlated queries keep their ordinary barrier.
-      val queries = alias.child.collect {
-        case query: SubqueryExpression if !query.deterministic => query
-      }
-      queries.nonEmpty && queries.forall { query =>
-        ValidateSubqueryExpression.isIndependentKllSubquery(query) && retainedAggregate(query.plan)
-      }
-    case _ => false
+            })
+          }).booleanValue()
+        // Scalar, EXISTS and IN bindings can inherit randomness from independent retained
+        // KLL aggregates. Row randomness and correlated queries keep their ordinary barrier.
+        val queries = alias.child.collect {
+          case query: SubqueryExpression if !query.deterministic => query
+        }
+        queries.nonEmpty && queries.forall { query =>
+          independent(query) && retainedAggregate(query.plan)
+        }
+      case _ => false
+    }
   }
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
@@ -2857,7 +2863,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         canPush = _._3, throwable = _._2)
       val push = pushable.map(_._1)
       val stay = retained.map(_._1)
-      if (push.isEmpty || !fields.forall(e => e.deterministic || isAggregateScalarBinding(e))) f
+      lazy val bindings = new AggregateScalarBindings
+      if (push.isEmpty || !fields.forall(e => e.deterministic || bindings(e))) f
       else {
         // Let the ordinary deterministic Project path own alias substitution and expensive
         // expression splitting. Avoid translating each predicate once here and once again below.
@@ -3434,8 +3441,22 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
+    lazy val independent = new ValidateSubqueryExpression.KllSubqueryIndependence
+    lazy val extracted = new ExprUtils.SubqueryExtractionDeterminism
+    def cachedScalarPredicate(expression: Expression): Boolean = {
+      expression.containsPattern(SCALAR_SUBQUERY) && extracted(expression) && {
+        val queries = expression.collect {
+          case query: SubqueryExpression if !query.deterministic => query
+        }
+        queries.nonEmpty && queries.forall {
+          case scalar: ScalarSubquery => independent(scalar)
+          case _ => false
+        }
+      }
+    }
     val (pushDownCandidates, stayUp) =
-      condition.partition(cond => cond.deterministic && !cond.throwable)
+      condition.partition(cond => !cond.throwable &&
+        (cond.deterministic || cachedScalarPredicate(cond)))
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =

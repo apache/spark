@@ -44,7 +44,7 @@ class GroupingAndAggregateExpressionsExtractor(
    */
   private val aliasChildToAliasInAggregateExpressions =
     new IdentityHashMap[Expression, Option[Alias]]
-  private val aggregateExpressionsSemanticComparator = new SemanticComparator(
+  private lazy val aggregateExpressionsSemanticComparator = new SemanticComparator(
     aggregate.aggregateExpressions.map {
       case alias: Alias =>
         aliasChildToAliasInAggregateExpressions.putIfAbsent(alias.child, Some(alias))
@@ -123,9 +123,14 @@ class GroupingAndAggregateExpressionsExtractor(
         resolve(batchExtractor), resolve(correctedExtractor), resolve(legacyExtractor))
     }
     def key(value: Expression): Expression = {
-      if (kllSharing.contains(false) && value.containsPattern(KLL_AGGREGATE)) value
-      else if (kllSharing.contains(true)) legacyKeys.expression(value).canonicalized
-      else value.canonicalized
+      if (!kllSharing.contains(true) && value.containsPattern(KLL_AGGREGATE) &&
+          (kllSharing.contains(false) || !value.deterministic)) {
+        value
+      } else if (kllSharing.contains(true)) {
+        legacyKeys.expression(value).canonicalized
+      } else {
+        value.canonicalized
+      }
     }
     val aggregateExpressionWithAlias = collectFirstAggregateExpression(expression)
     val isGroupingExpression = groupingExpressionsSemanticComparator.exists(expression)

@@ -3352,7 +3352,8 @@ class Analyzer(
         expr match {
           case ae: AggregateExpression =>
             val cleaned = trimTempResolvedColumn(ae)
-            val key = if (sharing.contains(false) && cleaned.containsPattern(KLL_AGGREGATE)) {
+            val key = if (!sharing.contains(true) && cleaned.containsPattern(KLL_AGGREGATE) &&
+                (sharing.contains(false) || !cleaned.deterministic)) {
               cleaned
             } else if (sharing.contains(true)) legacyKeys.expression(cleaned).canonicalized
             else cleaned.canonicalized

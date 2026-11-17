@@ -64,6 +64,19 @@ class FilterPushdownSuite extends PlanTest {
 
   val testArrayStringRelation = LocalRelation($"a".int, $"s_arr".array(StringType))
 
+  test("cached independent KLL WHERE scalars retain single-side join pushdown") {
+    val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(aggregate).as("n")))
+    val join = Join(testRelation, testRelation1, Inner, None, JoinHint.NONE)
+    val condition = Cast(attrA, LongType) > scalar
+    comparePlans(PushPredicateThroughJoin(Filter(condition, join)),
+      join.copy(left = Filter(condition, testRelation)))
+    val random = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+    val unsupported = Filter(Cast(attrA, DoubleType) > random, join)
+    comparePlans(PushPredicateThroughJoin(unsupported), unsupported)
+  }
+
   test("push only independent filters through independent aggregate scalar bindings") {
     val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
     val scalar = ScalarSubquery(OneRowRelation().groupBy()(
@@ -85,6 +98,9 @@ class FilterPushdownSuite extends PlanTest {
       val consuming = Filter(binding.toAttribute > Cast(Literal(1), expression.dataType), project)
       comparePlans(PushPredicateThroughNonJoin(consuming), consuming)
       if (expression eq scalar) {
+        val dependsOnBinding = binding.toAttribute > Literal(1L)
+        comparePlans(PushPredicateThroughNonJoin(Filter(condition && dependsOnBinding, project)),
+          Filter(dependsOnBinding, project.copy(child = Filter(condition, testRelation))))
         val throwing = attrA > Literal(5) || IsNull(RaiseError(Literal("boom")))
         assert(throwing.throwable)
         val guarded = Filter(binding.toAttribute < Literal(0L) && throwing, project)

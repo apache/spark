@@ -138,6 +138,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val membershipDestinations = new java.util.IdentityHashMap[
         LogicalPlan, mutable.Map[AttributeSet, Int]]
       val forwarding = new java.util.IdentityHashMap[Project, java.lang.Boolean]
+      val safeComputed = new java.util.IdentityHashMap[Project, java.lang.Boolean]
       def forwardsAttributes(project: Project): Boolean = {
         val cached = forwarding.get(project)
         if (cached != null) cached.booleanValue() else {
@@ -146,9 +147,14 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
           result
         }
       }
+      def safeProjection(project: Project): Boolean = safeComputed.computeIfAbsent(project,
+        p => p.projectList.forall(e => e.deterministic && !e.throwable)).booleanValue()
+      def mayDescend(project: Project, references: AttributeSet): Boolean =
+        forwardsAttributes(project) ||
+          (safeProjection(project) && references.subsetOf(project.child.outputSet))
       def destination(child: LogicalPlan, references: AttributeSet): Int = child match {
         case alias: SubqueryAlias => destination(alias.child, references)
-        case projection: Project if forwardsAttributes(projection) =>
+        case projection: Project if mayDescend(projection, references) =>
           destination(projection.child, references)
         case inner: Join
             if inner.joinType.isInstanceOf[org.apache.spark.sql.catalyst.plans.InnerLike] &&
@@ -234,6 +240,15 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
           case projection: Project if forwardsAttributes(projection) =>
             projection.copy(projectList = projection.projectList ++ bindings.map(_.toAttribute),
               child = project(projection.child, bindings))
+          case projection: Project if safeProjection(projection) =>
+            val (lower, here) = bindings.partition { binding =>
+              mayDescend(projection, uses(binding.exprId))
+            }
+            val updated = if (lower.isEmpty) projection else {
+              projection.copy(projectList = projection.projectList ++ lower.map(_.toAttribute),
+                child = project(projection.child, lower))
+            }
+            if (here.isEmpty) updated else Project(updated.output ++ here.toSeq, updated)
           // Independent scalars can be attached within an unhinted inner component. Keeping
           // its relations visible lets both join-ordering rules choose selective joins first.
           case inner: Join
@@ -300,21 +315,24 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     // Count's prepared input encodes its complete ordered NULL demand. Other aggregates can
     // skip an argument based on their buffer (First, MaxBy, etc.). Leave those arguments inside
     // their updater and extract only the subqueries, as ordinary subquery planning does.
-    def subqueries(expression: Expression): Seq[Expression] = expression match {
-      case _: SubqueryExpression | _: InSubquery | Not(_: InSubquery) => Seq(expression)
+    val result = mutable.ArrayBuffer.empty[Expression]
+    def subqueries(expression: Expression): Unit = expression match {
+      case _: SubqueryExpression | _: InSubquery | Not(_: InSubquery) => result += expression
       case other if other.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY) =>
-        other.children.flatMap(subqueries)
-      case _ => Nil
+        other.children.foreach(subqueries)
+      case _ =>
     }
     aggregate.aggregateExpressions
       .filter(_.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY))
       .flatMap(_.collect { case expression: AggregateExpression => expression })
-      .flatMap { expression =>
+      .foreach { expression =>
         val inputs = (expression.aggregateFunction.children ++ expression.filter.toSeq)
           // Retain invalid direct-random arguments verbatim for the original error rendering.
           .filter(e => !e.deterministic && deterministic(e))
-        if (expression.aggregateFunction.isInstanceOf[Count]) inputs else inputs.flatMap(subqueries)
+        if (expression.aggregateFunction.isInstanceOf[Count]) result ++= inputs
+        else inputs.foreach(subqueries)
       }
+    result.toSeq
   }
 
   private def guardAggregateInputs(aggregate: Aggregate): Aggregate = {

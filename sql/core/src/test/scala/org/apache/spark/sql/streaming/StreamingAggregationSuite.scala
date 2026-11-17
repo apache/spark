@@ -64,6 +64,40 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
+  testWithAllStateVersions("KLL legacy HAVING restarts without optional column pruning") {
+    for (analysisLegacy <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        withTempView("kll_unpruned_having") {
+          val input = MemoryStream[(Long, Long, Long, Long)]
+          input.toDF().toDF("a", "b", "c", "d")
+            .createOrReplaceTempView("kll_unpruned_having")
+          val left = "kll_sketch_agg_bigint(((a+b)+c)+d, 8)"
+          val right = "kll_sketch_agg_bigint((a+b)+(c+d), 8)"
+          val historical = sql(s"SELECT $left AS s FROM kll_unpruned_having")
+            .filter("kll_sketch_get_n_bigint(s) > 0")
+            .selectExpr("kll_sketch_get_n_bigint(s)")
+          val current = withSQLConf(
+              SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString) {
+            val query = sql(s"""SELECT $left AS s FROM kll_unpruned_having
+                |HAVING kll_sketch_get_n_bigint($right) > 0""".stripMargin)
+              .selectExpr("kll_sketch_get_n_bigint(s)")
+            query.queryExecution.assertAnalyzed()
+            query
+          }
+          val mode = Map(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "true",
+            SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+              "org.apache.spark.sql.catalyst.optimizer.ColumnPruning")
+          testStream(historical, Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, (1L, 2L, 3L, 4L)), CheckLastBatch(Row(1L)), StopStream)
+          testStream(current, Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, (2L, 3L, 4L, 5L)), CheckLastBatch(Row(2L)), StopStream)
+        }
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL legacy wrapped HAVING restores whole-output reuse") {
     for (analysisLegacy <- Seq(false, true)) {
       withTempDir { checkpoint =>

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, KLL_AGGREGATE, PLAN_EXPRESSION}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -240,7 +240,7 @@ object ValidateSubqueryExpression
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1) &&
-            !deterministicWithoutKllRandomness(expr.plan)) {
+            !isIndependentKllSubquery(expr)) {
           cleanQueryInScalarSubquery(join.right.plan)._1 match {
             // Python UDTFs are by default non-deterministic. They are constructed as a
             // OneRowRelation subquery and can be rewritten by the optimizer without
@@ -371,7 +371,7 @@ object ValidateSubqueryExpression
     !query.deterministic && !query.isCorrelated && deterministicWithoutKllRandomness(query.plan)
   }
 
-  private[analysis] final class KllSubqueryIndependence {
+  private[sql] final class KllSubqueryIndependence {
     private val plans = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
 
     def apply(query: SubqueryExpression): Boolean = {
@@ -424,9 +424,11 @@ object ValidateSubqueryExpression
   }
 
   private[sql] def deterministicWithoutKllRandomness(expression: Expression): Boolean = {
-    expression.deterministic || AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      new LegacyKllDeterminism().expression(expression).deterministic
-    }
+    expression.deterministic ||
+      (expression.containsAnyPattern(KLL_AGGREGATE, PLAN_EXPRESSION) &&
+        AnalysisHelper.allowInvokingTransformsInAnalyzer {
+          new LegacyKllDeterminism().expression(expression).deterministic
+        })
   }
 
   private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {

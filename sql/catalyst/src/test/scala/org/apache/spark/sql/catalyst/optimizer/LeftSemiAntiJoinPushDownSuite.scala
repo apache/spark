@@ -47,6 +47,21 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   val testRelation1 = LocalRelation($"d".int)
   val testRelation2 = LocalRelation($"e".int)
 
+  for (joinType <- Seq(LeftSemi, LeftAnti)) {
+    test(s"live KLL outputs retain stable grouping-key $joinType pushdown") {
+      val a = $"key".long
+      val b = $"member".long
+      val input = LocalRelation(a)
+      val right = LocalRelation(b)
+      val sketch = Alias(org.apache.spark.sql.catalyst.expressions.aggregate
+        .KllSketchAggBigint(a).toAggregateExpression(), "s")()
+      val aggregate = Aggregate(Seq(a), Seq(a, sketch), input)
+      val join = Join(aggregate, right, joinType, Some(EqualTo(a, b)), JoinHint.NONE)
+      comparePlans(PushDownLeftSemiAntiJoin(join),
+        aggregate.copy(child = join.copy(left = input)))
+    }
+  }
+
   test("Project: LeftSemi join pushdown") {
     val originalQuery = testRelation
       .select(star())

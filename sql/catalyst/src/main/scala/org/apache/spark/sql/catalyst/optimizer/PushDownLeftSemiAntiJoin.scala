@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.ValidateSubqueryExpression
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -62,7 +63,12 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
 
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
-        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
+        if (agg.aggregateExpressions.forall(_.deterministic) ||
+            (!agg.groupingExpressions.exists(e =>
+              NormalizeFloatingNumbers.needNormalize(e.dataType)) &&
+              agg.aggregateExpressions.forall(
+                ValidateSubqueryExpression.deterministicWithoutKllRandomness))) &&
+          agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
           canPushThroughCondition(agg.children, joinCond, rightOp) &&
           canPlanAsBroadcastHashJoin(join, conf) =>

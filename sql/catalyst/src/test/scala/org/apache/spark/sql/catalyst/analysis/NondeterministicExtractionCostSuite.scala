@@ -30,6 +30,70 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, J
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
+  test("KLL-free aggregate determinism checks avoid traversing random wrapper chains") {
+    val visits = new AtomicInteger
+    val expression = (1 to 64).foldLeft[Expression](Rand(0)) { (child, _) =>
+      Counted(child, visits)
+    }
+    expression.treePatternBits
+    expression.deterministic
+    visits.set(0)
+    assert(!ValidateSubqueryExpression.deterministicWithoutKllRandomness(expression))
+    // No KLL producer or plan expression can change the outcome of the proof.
+    assert(visits.get == 0, s"unrelated proof visits=${visits.get}")
+  }
+
+  private case class ProofCopyCounted(child: Expression, copies: AtomicInteger)
+      extends UnaryExpression with Unevaluable {
+    override def dataType: DataType = child.dataType
+    override def nullable: Boolean = child.nullable
+    override protected def withNewChildInternal(newChild: Expression): Expression = {
+      copies.incrementAndGet()
+      copy(child = newChild)
+    }
+  }
+
+  for (metrics <- Seq(false, true)) {
+    test(s"KLL scalar consumers share immutable plan proofs: metrics=$metrics") {
+      def work(width: Int): Int = {
+        val copies = new AtomicInteger
+        val expression = (1 to 32).foldLeft[Expression](
+          KllSketchAggBigint(Literal(1L)).toAggregateExpression()) { (child, _) =>
+          ProofCopyCounted(child, copies)
+        }
+        val shared = OneRowRelation().groupBy()(expression.as("s"))
+        val value = $"value".long
+        val fields = (1 to width).map { i =>
+          KllSketchGetNBigint(ScalarSubquery(shared)).as(s"n$i")
+        }
+        val plan = if (metrics) CollectMetrics("metrics", fields, LocalRelation(value), 0L)
+          else org.apache.spark.sql.catalyst.plans.logical.Filter(value > Literal(0L),
+            Project(value +: fields, LocalRelation(value)))
+        plan.treePatternBits
+        shared.deterministic
+        copies.set(0)
+        if (metrics) getAnalyzer.checkAnalysis(plan)
+        else org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin(plan)
+        copies.get
+      }
+      val one = work(1)
+      val many = work(32)
+      assert(many <= one * 4, s"one proof=$one copies, repeated shared plan=$many")
+    }
+  }
+
+  test("legacy KLL extractors defer unused ordinary output indices") {
+    val hashes = new AtomicInteger
+    val fields = (1 to 32).map { i =>
+      Alias(SemanticHashCounted(Literal(i.toLong), hashes), s"n$i")()
+    }
+    val extractor = outputExtractor(Aggregate(Nil, fields, OneRowRelation()),
+      Some(true), choices = false)
+    assert(hashes.get == 0, s"unused ordinary index hashes=${hashes.get}")
+    assert(extractor.exists(fields.head.child))
+    assert(hashes.get > 0)
+  }
+
   test("nondeterministic aggregate-host lookup skips redundant alias traversal") {
     val visits = new AtomicInteger
     val fields = (1 to 16).map { i =>
@@ -155,8 +219,9 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     val independent = resolve(sketch())
     assert(first.corrected == repeated.corrected)
     assert(first.corrected != independent.corrected)
-    assert(first.batch == independent.batch)
-    assert(first.batch != first.corrected)
+    assert(first.batch == repeated.batch)
+    assert(first.batch != independent.batch)
+    assert(first.batch == first.corrected)
     Seq(first, repeated, independent).foreach { choice =>
       assert(choice.legacy == selected.toAttribute)
     }
