@@ -2383,7 +2383,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
               val filtered = df.where(predicate)
               val fe = firstFilterOverProject(filtered)
               if (predicate.startsWith("n IS NOT NULL")) {
-                // The check drops the rows only if it is in the filter that reads `r`.
+                // A check in a lower filter would also drop the rows before `r` is computed, and
+                // the shape would pass without testing that `r` is loaded after the check.
                 assert(fe.condition.exists {
                   case IsNotNull(a: Attribute) => a.name == "n"
                   case _ => false
