@@ -174,10 +174,13 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
       metadata = watermarkMetadata)()
     val compatible = StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
       _: Seq[Attribute], _: Seq[Attribute], _: Seq[Expression], _: Seq[Expression], None,
-      consumedSides = Set(LeftSide, RightSide))
+      consumedSides = Set(LeftSide, RightSide), stateFormatVersion = 2)
 
     assert(compatible(Seq(leftId), Seq(rightId), Seq(leftId), Seq(rightId)))
     assert(compatible(Seq(leftId, leftTime), Seq(rightId, rightTime),
+      Seq(leftId, leftTime), Seq(rightId, rightTime)))
+    // The same event time twice under one expression ID is one event-time column.
+    assert(compatible(Seq(leftTime, leftId, leftTime), Seq(rightId, rightTime),
       Seq(leftId, leftTime), Seq(rightId, rightTime)))
     assert(!compatible(Seq(leftId, leftTime), Seq(rightId, rightTime),
       Seq(leftId, leftTime), Seq(rightTime, rightId)))
@@ -204,7 +207,7 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     // gives no bound in either version keeps both inputs unbounded.
     val notConsumed = StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
       _: Seq[Attribute], _: Seq[Attribute], _: Seq[Expression], _: Seq[Expression],
-      _: Option[Expression], consumedSides = Set.empty)
+      _: Option[Expression], consumedSides = Set.empty, stateFormatVersion = 2)
     val leftInput = Seq(leftId, leftTime)
     val rightInput = Seq(rightId, rightTime)
     assert(notConsumed(leftInput, rightInput, Seq(leftId), Seq(rightId), None))
@@ -216,6 +219,25 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
       Seq(rightId, Cast(rightTime, LongType)), None))
     assert(!notConsumed(leftInput, rightInput, Seq(leftId, computed), Seq(rightId, rightTime),
       None))
+
+    // Older versions evicted neither input of a join where only one input has a watermark, so
+    // state formats 1 to 3 can reuse its state when nothing after the join reads the join's
+    // output watermark and no key uses an event time.
+    val rightOther = AttributeReference("rightOther", TimestampType)()
+    val oneSided = Some(LessThanOrEqual(leftTime, rightOther))
+    def oneSidedCompatible(
+        keys: Seq[Expression],
+        consumedSides: Set[JoinSide],
+        stateFormatVersion: Int): Boolean =
+      StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(leftInput,
+        Seq(rightId, rightOther), Seq(leftId) ++ keys, Seq(rightId) ++ keys.map(_ => rightOther),
+        oneSided, consumedSides, stateFormatVersion)
+    (1 to 3).foreach { version =>
+      assert(oneSidedCompatible(Nil, Set.empty, version))
+    }
+    assert(!oneSidedCompatible(Nil, Set.empty, 4))
+    assert(!oneSidedCompatible(Nil, Set(LeftSide), 2))
+    assert(!oneSidedCompatible(Seq(leftTime), Set.empty, 2))
 
     // Ordering time windows is excluded even when nothing reads the output watermark: this
     // version still derives the older bound for whole windows, but SPARK-61348 later removes it
@@ -249,7 +271,7 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     def compatible(condition: Expression, consumedSides: Set[JoinSide]): Boolean =
       StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
         Seq(leftKey, leftPrice, leftOther, leftTime), Seq(rightKey, rightPrice, rightTime),
-        Seq(leftKey), Seq(rightKey), Some(condition), consumedSides)
+        Seq(leftKey), Seq(rightKey), Some(condition), consumedSides, stateFormatVersion = 2)
     val both = Set[JoinSide](LeftSide, RightSide)
 
     // A comparison of columns of both inputs that have no watermark gives no bound.
@@ -270,12 +292,18 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     assert(!compatible(And(interval, LessThanOrEqual(rightTime, leftOther)), both))
   }
 
+  // Shapes where only the right input has a watermark. Older versions evicted neither input, so
+  // state formats 1 to 3 reuse their checkpoints.
+  private def oneSidedShape(shape: String, version: Int): Boolean =
+    Seq("range", "pruned expiry").contains(shape) && version <= 3
+
   for {
     version <- Seq(1, 2, 3, 4)
     logVersion <- Seq(1, 2)
     // Every marker below the current one takes the same rejection branch.
     oldMarker <- Seq(None, Some("0"), Some((currentMarker.toInt - 1).toString)).distinct
     shape <- Seq("range", "expiry", "pruned expiry", "unbounded")
+    if !oneSidedShape(shape, version)
   } {
     test(s"reject old $shape checkpoint, V$version log=$logVersion old=$oldMarker") {
       withJoinConf(version, logVersion) {
@@ -338,7 +366,8 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
             CheckNewAnswer(),
             StopStream)
           assert(pinnedMarker(checkpoint).contains(currentMarker))
-          val oldCompatible = Seq("equality", "no watermark").contains(shape)
+          val oldCompatible =
+            Seq("equality", "no watermark").contains(shape) || oneSidedShape(shape, version)
           val expectedMarker = if (oldCompatible) "0" else currentMarker
           if (oldCompatible) setMarker(checkpoint, None)
           withSQLConf(markerKey -> "0",
@@ -361,10 +390,47 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     }
   }
 
+  test("resume old equality checkpoint whose input outputs its event time twice") {
+    withJoinConf(version = 2, logVersion = 2) {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      def input(memory: MemoryStream[(Int, Int)], side: String): DataFrame =
+        memory.toDF().toDF(s"${side}Key", "time")
+          .select(col(s"${side}Key"), timestamp_seconds($"time").as(s"${side}Time"))
+          .withWatermark(s"${side}Time", "100 seconds")
+      val left = input(leftInput, "left").select($"leftTime", $"*")
+      val joined = left.join(input(rightInput, "right"),
+        expr("leftKey = rightKey AND leftTime = rightTime")).select($"leftKey", $"rightKey")
+      withTempDir { checkpointDir =>
+        val checkpoint = checkpointDir.getCanonicalPath
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint),
+          MultiAddData(leftInput, (1, 10))(rightInput, (2, 10)),
+          CheckNewAnswer(),
+          Execute { query =>
+            val join = query.lastExecution.executedPlan.collectFirst {
+              case j: StreamingSymmetricHashJoinExec => j
+            }.get
+            assert(join.left.output.count(_.name == "leftTime") == 2)
+          },
+          StopStream)
+        setMarker(checkpoint, None)
+        withSQLConf(markerKey -> "0") {
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint),
+            AddData(rightInput, (1, 10)),
+            CheckNewAnswer(Row(1, 1)),
+            StopStream)
+        }
+        assert(pinnedMarker(checkpoint).contains("0"))
+      }
+    }
+  }
+
   Seq(2, 4).foreach { version =>
     test(s"reject an incompatible checkpoint retrying batch zero, V$version") {
       withJoinConf(version, logVersion = 1) {
-        val (leftInput, rightInput, joined) = joinInputs("range")
+        val (leftInput, rightInput, joined) = joinInputs("expiry")
         withTempDir { checkpointDir =>
           val checkpoint = checkpointDir.getCanonicalPath
           testStream(joined)(
@@ -386,8 +452,8 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
               checkError(error.asInstanceOf[AnalysisException],
                 condition = "STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE",
                 parameters = Map(
-                  "joinCondition" -> ".*leftKey.*rightKey.*leftTime.*rightTime.*",
-                  "leftWatermarkColumns" -> "none",
+                  "joinCondition" -> ".*leftKey.*rightKey.*rightTime.*leftTime.*expiry.*",
+                  "leftWatermarkColumns" -> "leftTime",
                   "rightWatermarkColumns" -> "rightTime"),
                 matchPVals = true)
             }))
@@ -432,6 +498,11 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
     // Neither version bounds the right input; nothing after this join reads its event time.
     ("one-directional interval",
       "leftKey = rightKey AND rightTime <= leftTime + INTERVAL 5 SECONDS", Seq(2, 4),
+      "America/Los_Angeles", "inner", true),
+    // A calendar interval without months is an exact duration for both versions.
+    ("interval with a calendar interval without months",
+      "leftKey = rightKey AND rightTime >= leftTime AND " +
+        "rightTime <= leftTime + CAST('5 seconds' AS INTERVAL)", Seq(2, 4),
       "America/Los_Angeles", "inner", true),
     // A month has no fixed length, so neither version reads that conjunct, and neither bounds
     // the left input. Nothing after this join reads its event time.

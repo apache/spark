@@ -30,7 +30,7 @@ import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, SessionWindow, TimeWindow}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, SessionWindow, TimestampAddInterval, TimestampAddYMInterval, TimeWindow}
 import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -54,6 +54,8 @@ import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSou
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaBroadcast, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
+import org.apache.spark.sql.types.{CalendarIntervalType, DayTimeIntervalType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
@@ -629,7 +631,7 @@ class IncrementalExecution(
         //   a wrong guess skips rows that were never evicted.
         // - Another stream-stream join is below this one. Its output watermark depends on the
         //   plan above it (see withJoinOutputWatermarkSides), which can change between runs,
-        //   for example when a stream-static join between the two joins is removed.
+        //   for example when a downstream operator reads another input's event time.
         val hasJoinBelow =
           j.children.exists(_.exists(_.isInstanceOf[StreamingSymmetricHashJoinExec]))
         val prevBatchLateEventsWm =
@@ -665,11 +667,12 @@ class IncrementalExecution(
      * Find, for each stateful operator that applies its input watermark to an event-time column,
      * which stream-stream join inputs' event times that column carries. The walk follows the
      * column down through nodes that pass it on unchanged, to the same position in every input
-     * of a union, through windows built from it, which end after it, and into the one input of
+     * of a union, through windows built from it, which end after it, through constant intervals
+     * with no negative part added to it, which never move it backward, and into the one input of
      * a node with several inputs, such as a stream-static join, that outputs it. It stops at a
      * stream-stream join, at another operator that writes state or sets an event time, and at
-     * any node it does not recognize; a join that no traced column reaches holds back for both
-     * inputs.
+     * any node or expression it does not recognize; a join that no traced column reaches holds
+     * back for both inputs.
      */
     private def joinWatermarkConsumers(plan: SparkPlan): Seq[JoinWatermarkConsumer] = {
       def eventTime(output: Seq[Attribute]): Option[Attribute] =
@@ -684,6 +687,37 @@ class IncrementalExecution(
           case _ => None
         }
       }
+
+      // The column that `expression` shifts by constant intervals with no negative part. Such a
+      // shift never moves a time backward, in any time zone.
+      def forwardShiftSource(expression: Expression): Option[Attribute] = {
+        def nonNegative(interval: Expression): Boolean = interval.foldable &&
+          Try(Option(interval.eval())).toOption.flatten.exists { value =>
+            interval.dataType match {
+              case _: DayTimeIntervalType => value.asInstanceOf[Long] >= 0
+              case _: YearMonthIntervalType => value.asInstanceOf[Int] >= 0
+              case CalendarIntervalType =>
+                val i = value.asInstanceOf[CalendarInterval]
+                i.months >= 0 && i.days >= 0 && i.microseconds >= 0
+              case _ => false
+            }
+          }
+        expression match {
+          case a: Attribute => Some(a)
+          // The analyzer wraps timestamp + interval in a cast to the same timestamp type.
+          case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
+            forwardShiftSource(child)
+          case TimestampAddInterval(start, interval, _) if nonNegative(interval) =>
+            forwardShiftSource(start)
+          case TimestampAddYMInterval(start, interval, _) if nonNegative(interval) =>
+            forwardShiftSource(start)
+          case _ => None
+        }
+      }
+
+      // The column of the child that a computed column stays at or above.
+      def computedSource(column: Attribute, expression: Expression): Option[Attribute] =
+        windowSource(column, expression).orElse(forwardShiftSource(expression))
 
       def passThrough(child: SparkPlan, attribute: Attribute): Seq[(Long, JoinSide, Attribute)] =
         child.output.find(_.exprId == attribute.exprId).toSeq.flatMap(findJoinSides(child, _))
@@ -707,7 +741,10 @@ class IncrementalExecution(
               case a: Attribute => passThrough(p.child, a)
               case Alias(a: Attribute, _) => passThrough(p.child, a)
               case alias: Alias =>
-                windowSource(alias.toAttribute, alias.child).toSeq.flatMap(passThrough(p.child, _))
+                computedSource(alias.toAttribute, alias.child).toSeq
+                  .flatMap(passThrough(p.child, _))
+              // Any other column, such as one that subtracts an interval, truncates or calls a
+              // UDF, can fall below the event time it reads, which could then arrive late.
               case _ => Nil
             }
           case e: ExpandExec =>
@@ -717,7 +754,8 @@ class IncrementalExecution(
               projection.lift(index).toSeq.flatMap {
                 case a: Attribute => passThrough(e.child, a)
                 case expression =>
-                  windowSource(e.output(index), expression).toSeq.flatMap(passThrough(e.child, _))
+                  computedSource(e.output(index), expression).toSeq
+                    .flatMap(passThrough(e.child, _))
               }
             }
             if (traced.nonEmpty && traced.forall(_.nonEmpty) && traced.distinct.size == 1) {
@@ -925,7 +963,7 @@ class IncrementalExecution(
           case j: StreamingSymmetricHashJoinExec
               if !StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
                 j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-                consumedSides(j)) =>
+                consumedSides(j), j.stateFormatVersion) =>
             // Name the side of each equality key; both inputs often use the same column names.
             val keyConditions = j.leftKeys.zip(j.rightKeys).map { case (left, right) =>
               s"left.${left.sql} = right.${right.sql}"

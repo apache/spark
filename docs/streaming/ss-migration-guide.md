@@ -31,21 +31,28 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   The join holds back only for an input whose event time reaches the next stateful operator: in
   a join on `clickTime <= impressionTime + INTERVAL 1 HOUR`, a window aggregation over
   `impressionTime` makes progress, and one over `clickTime` does not. Spark follows the event
-  time through projections, filters, unions, and time and session windows, to aggregations,
-  deduplication, stream-stream joins, and `flatMapGroupsWithState` or `transformWithState` with
-  event-time timeouts. When Spark cannot tell which input's event time the operator uses, for
-  example when the operator's event time is computed from the join output by a function, it
-  holds back for both inputs.
+  time through projections, filters, unions, stream-static joins, and time and session windows,
+  to aggregations, deduplication, stream-stream joins, `flatMapGroupsWithState` and
+  `applyInPandasWithState` with event-time timeouts, and `transformWithState` in event-time
+  mode. It also follows an event time plus constant intervals with no negative
+  part, such as `impressionTime + INTERVAL 1 MINUTE`, which never falls below that event time.
+  When Spark cannot tell which input's event time the operator uses, for example when the
+  operator's event time subtracts an interval or is computed by another function, it holds back
+  for both inputs.
 
 - When restarting a stream-stream join from an older Spark version, Spark may reject the
   existing checkpoint with `STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE`. Spark reuses the checkpoint
   of a join without watermarks, of a join with an equality condition between the two inputs'
   event times, such as `leftTime = rightTime`, and of a join whose time condition compares the
-  two inputs' event times with each other, each optionally cast and offset by constant intervals or
-  numbers, such as `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. When such a
+  two inputs' event times with each other by an ordering comparison (`<`, `<=`, `>`, `>=` or
+  `BETWEEN`), each event time optionally cast and offset by constant intervals or numbers, such as
+  `rightTime BETWEEN leftTime AND leftTime + INTERVAL 1 HOUR`. An equality in which one event time
+  is shifted or cast, such as `leftTime = rightTime + INTERVAL 1 SECOND`, is rejected. When such a
   condition bounds only one input, or the join has only equality conditions on columns other than
   event times, such as `leftKey = rightKey`, Spark reuses the checkpoint only when no stateful
-  operator after the join uses the event time of an input without a bound. A stateful operator that
+  operator after the join uses the event time of an input without a bound. Under the same rule,
+  Spark reuses the checkpoint of a join where only one input has a watermark and no equality
+  condition uses an event time, in state formats 1 to 3. A stateful operator that
   does not use the watermark, such as an update-mode aggregation on columns other than event times,
   does not count, while `transformWithState` always counts because its code can read the watermark.
   The time condition may also include comparisons from which Spark derives no bound, such as one

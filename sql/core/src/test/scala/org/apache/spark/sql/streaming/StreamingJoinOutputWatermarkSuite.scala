@@ -216,6 +216,34 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
         .select($"t".cast("long"))
   }
 
+  // A constant interval with no negative part keeps the column at or above the event time. The
+  // month moves January 1970 times to February.
+  Seq("INTERVAL 1 MINUTE" -> 60L, "INTERVAL '0-1' YEAR TO MONTH" -> 31L * 24 * 3600).foreach {
+    case (interval, seconds) =>
+      def shifted(times: Seq[Long]): Seq[Row] = Row(1000L) +: times.map(t => Row(t + seconds))
+      testTracedConsumer(s"a union with the join second, shifted by $interval",
+          shifted(Seq(5L, 15L, 25L)), shifted(Seq(8L, 20L, 30L))) { (joined, timeColumn) =>
+        laterInput().union(joined.select($"impressionAdId",
+            (col(timeColumn) + expr(interval)).as("t")))
+          .dropDuplicates("id", "t")
+          .select($"t".cast("long"))
+      }
+  }
+
+  // A column that can fall below the event time it reads, which could then arrive late, holds
+  // the join back for both inputs.
+  Seq("impressionTime - INTERVAL 1 SECOND", "impressionTime + INTERVAL -1 SECOND").foreach {
+    computed =>
+      test(s"output watermark is held back for both inputs over $computed") {
+        val (impressionInput, clickInput, joined) = oneDirectionalJoin()
+        runOneDirectionalJoin(impressionInput, clickInput,
+          laterInput().union(joined.select($"impressionAdId", expr(computed).as("t")))
+            .dropDuplicates("id", "t")
+            .select($"t".cast("long")),
+          Seq(1000L, 4L, 14L, 24L).map(Row(_)), None, 0L)
+      }
+  }
+
   testTracedConsumer("a sliding window",
       Seq(0L, 5L, 10L, 15L, 20L, 25L).map(Row(_, 1L)), Nil) { (joined, timeColumn) =>
     windowCounts(joined.select(col(timeColumn)), timeColumn, slide = "5 seconds")
