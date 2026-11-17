@@ -427,6 +427,29 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(afterRemove.collation.isEmpty)
   }
 
+  test("SPARK-57670: alterTable that removes only the comment keeps the collation") {
+    val catalog = newCatalog()
+    spark.sql(s"CREATE TABLE $testIdentQuoted (id INT, data STRING) USING parquet " +
+      "COMMENT 'table comment' DEFAULT COLLATION UTF8_LCASE")
+
+    // The change `COMMENT ON TABLE ... IS NULL` sends.
+    catalog.alterTable(testIdent, TableChange.removeProperty(TableCatalog.PROP_COMMENT))
+    val table = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(table.comment.isEmpty)
+    assert(table.collation.contains("UTF8_LCASE"))
+  }
+
+  test("SPARK-57670: alterTable that removes only the collation keeps the comment") {
+    val catalog = newCatalog()
+    spark.sql(s"CREATE TABLE $testIdentQuoted (id INT, data STRING) USING parquet " +
+      "COMMENT 'table comment' DEFAULT COLLATION UTF8_LCASE")
+
+    catalog.alterTable(testIdent, TableChange.removeProperty(TableCatalog.PROP_COLLATION))
+    val table = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
+    assert(table.comment.contains("table comment"))
+    assert(table.collation.isEmpty)
+  }
+
   test("alterTable: add top-level column") {
     val catalog = newCatalog()
 
