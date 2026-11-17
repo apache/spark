@@ -1685,6 +1685,49 @@ class BasePythonDataSourceTestsMixin:
                 self.assertEqual(len({key for key, _ in rows}), 1)
             self.assertEqual(sum(len(rows) for rows in tasks), 6)
 
+    def test_write_requirements_use_writer_inputs(self):
+        # The planning writer gets the write's schema, options and overwrite flag: it clusters
+        # by the column named in an option, and only when all three are what the write passed.
+        with tempfile.TemporaryDirectory(prefix="write_req_inputs") as d:
+
+            class InputsWriter(DataSourceWriter):
+                def __init__(self, schema, options, overwrite):
+                    self.schema = schema
+                    self.options = options
+                    self.overwrite = overwrite
+
+                def write(self, iterator):
+                    from pyspark import TaskContext
+
+                    rows = [[row.key, row.value] for row in iterator]
+                    output = os.path.join(d, f"{TaskContext.get().partitionId()}.json")
+                    with open(output, "w") as f:
+                        json.dump(rows, f)
+                    return WriterCommitMessage()
+
+                def requiredDistribution(self):
+                    assert self.schema.fieldNames() == ["key", "value"], self.schema
+                    assert self.overwrite is True, self.overwrite
+                    return ClusteredDistribution(((self.options["cluster_by"],),))
+
+            class InputsDataSource(DataSource):
+                @classmethod
+                def name(cls):
+                    return "write_req_inputs"
+
+                def writer(self, schema, overwrite):
+                    return InputsWriter(schema, self.options, overwrite)
+
+            self.spark.dataSource.register(InputsDataSource)
+            with self.sql_conf(self._write_conf()):
+                writer = self._write_df().write.format("write_req_inputs")
+                writer.option("cluster_by", "key").mode("overwrite").save()
+            tasks = self._read_tasks(d)
+            for rows in tasks:
+                self.assertEqual(len({key for key, _ in rows}), 1)
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+
     def test_write_non_strict_distribution(self):
         # A single key spread over several input partitions, with a tiny advisory size, so that
         # adaptive execution splits its skewed shuffle partition whenever it is allowed to.
@@ -1917,21 +1960,39 @@ class BasePythonDataSourceTestsMixin:
                         self._write_df().write.format(name).mode("append").save()
                 self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
 
-    def test_write_num_partitions_without_distribution(self):
-        with tempfile.TemporaryDirectory(prefix="write_req_bad_num_parts") as d:
+    def test_write_partition_sizing_without_distribution(self):
+        cases = [
+            ("write_req_bad_num_parts", dict(num_partitions=3), "PARTITION_NUM"),
+            ("write_req_bad_advisory", dict(advisory_size=1024), "PARTITION_SIZE"),
+        ]
+        for name, requirements, error in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=UnspecifiedDistribution(), **requirements
+                )
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn(
+                    f"INVALID_WRITE_DISTRIBUTION.{error}_WITH_UNSPECIFIED_DISTRIBUTION",
+                    str(cm.exception),
+                )
+
+    def test_write_partition_sizing_below_one_means_none(self):
+        # Values below 1 mean no requirement, including ones that would overflow the JVM fields.
+        with tempfile.TemporaryDirectory(prefix="write_req_below_one") as d:
             self._register_write_requirements_source(
-                "write_req_bad_num_parts",
+                "write_req_below_one",
                 d,
                 distribution=UnspecifiedDistribution(),
-                num_partitions=3,
+                num_partitions=-(2**40),
+                advisory_size=-(2**70),
             )
+            df = self._write_df()
             with self.sql_conf(self._write_conf()):
-                with self.assertRaises(AnalysisException) as cm:
-                    self._write_df().write.format("write_req_bad_num_parts").mode("append").save()
-            self.assertIn(
-                "INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION",
-                str(cm.exception),
-            )
+                df.write.format("write_req_below_one").mode("append").save()
+                expected = self._input_tasks(df)
+            self.assertEqual(self._read_tasks(d), expected)
 
     def test_write_num_partitions_and_advisory_size(self):
         with tempfile.TemporaryDirectory(prefix="write_req_both_sizes") as d:
@@ -1947,17 +2008,19 @@ class BasePythonDataSourceTestsMixin:
                     self._write_df().write.format("write_req_both_sizes").mode("append").save()
             self.assertIn("INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_AND_SIZE", str(cm.exception))
 
-    def test_write_empty_clustering(self):
-        with tempfile.TemporaryDirectory(prefix="write_req_empty_clustering") as d:
-            self._register_write_requirements_source(
-                "write_req_empty_clustering", d, distribution=ClusteredDistribution(())
-            )
-            with self.sql_conf(self._write_conf()):
-                with self.assertRaises(AnalysisException) as cm:
-                    self._write_df().write.format("write_req_empty_clustering").mode(
-                        "append"
-                    ).save()
-            self.assertIn("DATA_SOURCE_EMPTY_DISTRIBUTION", str(cm.exception))
+    def test_write_empty_distribution(self):
+        cases = [
+            ("write_req_empty_clustering", ClusteredDistribution(()), "'clustering'"),
+            ("write_req_empty_ordering", OrderedDistribution(()), "'ordering'"),
+        ]
+        for name, distribution, field in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, distribution=distribution)
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_EMPTY_DISTRIBUTION", str(cm.exception))
+                self.assertIn(f"empty {field}", str(cm.exception))
 
     def test_write_invalid_column_path(self):
         with tempfile.TemporaryDirectory(prefix="write_req_bad_column") as d:

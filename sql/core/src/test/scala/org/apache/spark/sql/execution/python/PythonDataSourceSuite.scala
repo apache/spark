@@ -24,10 +24,11 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
-import org.apache.spark.sql.execution.{FilterExec, LimitExec, QueryExecution}
+import org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering
+import org.apache.spark.sql.execution.{FilterExec, LimitExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.DataSourceManager
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{AppendDataExec, BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1029,6 +1030,24 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
        |        return SimpleDataSourceWriter(self.options)
        |""".stripMargin
 
+  /** Runs `f` and returns the executed plans of the queries it ran. */
+  private def executedPlans(f: => Unit): Seq[SparkPlan] = {
+    val plans = ArrayBuffer.empty[SparkPlan]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit =
+        plans += qe.executedPlan
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    spark.listenerManager.register(listener)
+    try {
+      f
+      sparkContext.listenerBus.waitUntilEmpty()
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+    plans.toSeq
+  }
+
   test("SPARK-61646: write required distribution and ordering") {
     assume(shouldTestPandasUDFs)
     val dataSource = createUserDefinedPythonDataSource(
@@ -1046,25 +1065,13 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempDir { dir =>
         val df = spark.range(0, 10, 1, 3).toDF("id")
-        val plans = ArrayBuffer.empty[String]
-        val listener = new QueryExecutionListener {
-          override def onSuccess(
-              funcName: String, qe: QueryExecution, duration: Long): Unit =
-            plans += qe.executedPlan.toString
-          override def onFailure(
-              funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
-        }
-        spark.listenerManager.register(listener)
-        try {
+        val plans = executedPlans {
           df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
-          sparkContext.listenerBus.waitUntilEmpty()
-          // The required distribution becomes an exchange and the ordering a sort.
-          assert(plans.exists(p => p.contains("Exchange hashpartitioning(id") &&
-            p.contains("Sort [id") && p.contains("DESC NULLS LAST")),
-            s"expected a hash exchange and a sort in:\n${plans.mkString("\n")}")
-        } finally {
-          spark.listenerManager.unregister(listener)
-        }
+        }.map(_.toString)
+        // The required distribution becomes an exchange and the ordering a sort.
+        assert(plans.exists(p => p.contains("Exchange hashpartitioning(id") &&
+          p.contains("Sort [id") && p.contains("DESC NULLS LAST")),
+          s"expected a hash exchange and a sort in:\n${plans.mkString("\n")}")
         // The data still round-trips correctly.
         checkAnswer(spark.read.json(dir.getAbsolutePath), df)
       }
@@ -1084,7 +1091,12 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     withSQLConf(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "false") {
       withTempDir { dir =>
         val df = spark.range(0, 10, 1, 3).toDF("id")
-        df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        val writes = executedPlans {
+          df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        }.flatMap(_.collect { case a: AppendDataExec => a.write })
+        // The planner's requirement handling is skipped entirely, not just given no requirements.
+        assert(writes.nonEmpty)
+        assert(writes.forall(!_.isInstanceOf[RequiresDistributionAndOrdering]), writes)
         checkAnswer(spark.read.json(dir.getAbsolutePath), df)
       }
     }

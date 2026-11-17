@@ -23,7 +23,6 @@ import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, _}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
-import org.apache.spark.sql.internal.SQLConf
 
 
 class PythonWrite(
@@ -31,7 +30,7 @@ class PythonWrite(
     shortName: String,
     info: LogicalWriteInfo,
     isTruncate: Boolean
-  ) extends Write with RequiresDistributionAndOrdering {
+  ) extends Write {
 
   override def toString: String = shortName
 
@@ -44,31 +43,23 @@ class PythonWrite(
 
   override def supportedCustomMetrics(): Array[CustomMetric] =
     ds.source.createPythonMetrics()
+}
 
-  /**
-   * The distribution and ordering the Python writer asks for, fetched from Python once per write.
-   *
-   * The planner calls each `RequiresDistributionAndOrdering` method separately, so the result is
-   * cached to keep this to one Python worker run. When the feature is disabled, or for a streaming
-   * write, no worker runs and the API defaults leave planning unchanged.
-   */
-  private lazy val requirements: PythonWriteRequirements = {
-    if (SQLConf.get.pythonWriteDistributionAndOrdering && !isStreamingWrite) {
-      ds.source.writeDistributionAndOrderingInPython(info.schema(), info.options(), isTruncate)
-    } else {
-      PythonWriteRequirements.none
-    }
-  }
+/**
+ * A [[PythonWrite]] that reports the distribution and ordering the Python writer requires.
+ * [[PythonWriteBuilder]] only builds it when the feature is enabled for a batch write, so other
+ * writes skip the planner's requirement handling entirely.
+ */
+class PythonWriteWithRequirements(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    info: LogicalWriteInfo,
+    isTruncate: Boolean
+  ) extends PythonWrite(ds, shortName, info, isTruncate) with RequiresDistributionAndOrdering {
 
-  /**
-   * Whether a streaming query builds this write. The requirements come from the batch
-   * `DataSourceWriter`, which a streaming sink need not implement. A batch write, even one inside
-   * `foreachBatch`, is not marked.
-   */
-  private def isStreamingWrite: Boolean = info match {
-    case i: LogicalWriteInfoImpl => i.isStreaming
-    case _ => false
-  }
+  // The planner calls each method below separately; cache to run the Python worker once.
+  private lazy val requirements: PythonWriteRequirements =
+    ds.source.writeDistributionAndOrderingInPython(info.schema(), info.options(), isTruncate)
 
   override def requiredDistribution(): Distribution = requirements.distribution
 

@@ -408,16 +408,6 @@ case class PythonWriteRequirements(
     advisoryPartitionSizeInBytes: Long,
     ordering: Array[V2SortOrder])
 
-object PythonWriteRequirements {
-  /** The requirements of a writer that asks for nothing, i.e. the API default. */
-  val none: PythonWriteRequirements = PythonWriteRequirements(
-    distribution = Distributions.unspecified(),
-    distributionStrictlyRequired = true,
-    requiredNumPartitions = 0,
-    advisoryPartitionSizeInBytes = 0,
-    ordering = Array.empty)
-}
-
 /**
  * @param readInfo The read function and partitions, when the worker planned them. Empty in two
  *                 cases: the filter-pushdown pass deferred planning (limit pushdown enabled), or a

@@ -179,7 +179,7 @@ def read_bool_requirement(method: str, value: Any) -> bool:
 
 
 def read_int_requirement(writer: DataSourceWriter, method: str, value: Any, max_value: int) -> int:
-    """Validates that an int-returning requirement method returned an int the JVM can hold."""
+    """Validates the int a requirement method returned and normalizes it for the JVM."""
     # bool is a subclass of int, but is never a meaningful partition count or size.
     if not isinstance(value, int) or isinstance(value, bool):
         raise PySparkAssertionError(
@@ -189,6 +189,9 @@ def read_int_requirement(writer: DataSourceWriter, method: str, value: Any, max_
                 "actual": f"'{type(value).__name__}'",
             },
         )
+    # Any value below 1 means no requirement; send 0 so the JVM field can hold it.
+    if value < 1:
+        return 0
     if value > max_value:
         raise PySparkAssertionError(
             errorClass="DATA_SOURCE_TYPE_MISMATCH",
