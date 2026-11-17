@@ -3464,10 +3464,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // Exercises the cached group-equality check at every kind of group boundary: group 'a'
     // ends under the limit (r <= 2 but only one row, so the limit is never reached), group
     // 'b' exceeds it (one row is skipped via skipRemainingRows), and group 'c' ends exactly
-    // at the limit. Every group's rows mix spellings, so each boundary check -- including
-    // the check of the skipped row, which is spelled unlike the group's first row -- runs
-    // the collation comparison instead of hitting the byte-equality fast path. The default
-    // window group limit threshold (1000) already admits r <= 2.
+    // at the limit. Groups 'b' and 'c' mix spellings, so the checks of their later rows --
+    // including the skipped row ('B', 5), spelled unlike the group's first row -- run the
+    // collation comparison instead of the byte-equality fast path. The default window
+    // group limit threshold (1000) already admits r <= 2.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -3507,8 +3507,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // session per spelling ('foo' 10:00, 'FOO' 10:05, 'foo' 10:08 gave three one-row
     // sessions), and the DISTINCT path hit its sortedness guard ("The iterator must be
     // sorted by key and session start!") as soon as a spelling recurred after the first
-    // session of its byte-group. The session gap is asserted as end - start in seconds
-    // so the expectation does not depend on the session time zone.
+    // session of its byte-group. The merged session length is asserted as end - start in
+    // seconds so the expectation does not depend on the session time zone.
     withTable("t") {
       sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, ts TIMESTAMP, v INT) USING PARQUET")
       sql("""INSERT INTO t VALUES
@@ -3518,7 +3518,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       checkAnswer(
         sql("""SELECT s,
-              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
               |  count(*) FROM t
               |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
         // One merged session from 10:00 to 10:18; the grouping key reported is the first
@@ -3528,13 +3529,29 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       // count(DISTINCT v) plans UpdatingSessionsExec before the aggregation. The
       // spelling of the reported key depends on shuffle arrival order, so only the
-      // session gap and the count are asserted.
+      // session length and the count are asserted.
       checkAnswer(
         sql("""SELECT
-              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
               |  count(DISTINCT v) FROM t
               |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
         Row(1080L, 3L) :: Nil)
+
+      // A query whose only DISTINCT aggregate reads the grouping column: the partial
+      // aggregate under the one-distinct plan evaluates its expressions over the rows
+      // UpdatingSessionsIterator emits, so those rows must keep each row's own spelling
+      // of s. If the iterator rewrote the grouping columns to the session's first key,
+      // count(DISTINCT s COLLATE UTF8_BINARY) would see one value instead of two and
+      // collect_list three copies of 'foo'.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT s COLLATE UTF8_BINARY),
+              |  sort_array(collect_list(s COLLATE UTF8_BINARY)) FROM t
+              |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 2L, Seq("FOO", "foo", "foo")) :: Nil)
     }
 
     // UTF8_BINARY keeps 'foo' and 'FOO' in separate sessions; the two 'foo' rows still
@@ -3567,17 +3584,31 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       checkAnswer(
         sql("""SELECT
-              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
               |  count(*) FROM t
               |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
         Row(1080L, 3L) :: Nil)
 
       checkAnswer(
         sql("""SELECT
-              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG) AS gap,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
               |  count(DISTINCT v) FROM t
               |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
         Row(1080L, 3L) :: Nil)
+
+      // As in the direct-key test, the one-distinct plan's aggregates read the grouping
+      // column from the rows UpdatingSessionsIterator emits, so the nested collated
+      // field must keep each row's own spelling.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT st.s COLLATE UTF8_BINARY),
+              |  sort_array(collect_list(st.s COLLATE UTF8_BINARY)) FROM t
+              |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 2L, Seq("FOO", "foo", "foo")) :: Nil)
     }
 
     // Without the collation the struct keys are compared by bytes and the spellings

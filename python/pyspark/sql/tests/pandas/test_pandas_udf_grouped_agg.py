@@ -1148,6 +1148,38 @@ class GroupedAggPandasUDFTestsMixin:
         expected = [Row(id=1, avg_age=27.5), Row(id=2, avg_age=37.5)]
         self.assertEqual(actual, expected)
 
+    def test_collation_session_window_grouped_agg(self):
+        # SPARK-58928: for a session window, ArrowAggregatePythonExec runs
+        # UpdatingSessionsIterator before the grouped iterator and the UDF input
+        # projection, and that iterator must rewrite only the session column of each
+        # buffered row. If it also rewrote the grouping columns to the session's first
+        # key, a pandas grouped-aggregate UDF whose argument reads the collated grouping
+        # column would see only the first spelling of the group.
+        from datetime import datetime
+
+        df = self.spark.createDataFrame(
+            [
+                ("foo", datetime(2026, 1, 1, 10, 0, 0), 1.0),
+                ("FOO", datetime(2026, 1, 1, 10, 5, 0), 2.0),
+                ("foo", datetime(2026, 1, 1, 10, 8, 0), 3.0),
+            ],
+            "s STRING COLLATE UTF8_LCASE, ts TIMESTAMP, v DOUBLE",
+        )
+
+        @pandas_udf("string")
+        def spellings(s: pd.Series) -> str:
+            return ",".join(sorted(s))
+
+        result = (
+            df.groupby("s", sf.session_window("ts", "10 minutes"))
+            .agg(spellings(df["s"]).alias("sp"))
+            .select("sp")
+        )
+
+        # The three rows merge into one session under the collation, and the UDF receives
+        # each row's own spelling of the grouping column.
+        assertDataFrameEqual(result, [Row(sp="FOO,foo,foo")])
+
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
     pass

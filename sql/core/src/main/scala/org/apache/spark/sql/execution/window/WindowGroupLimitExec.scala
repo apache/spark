@@ -209,9 +209,9 @@ class GroupedLimitIterator(
   // A non-binary-stable key (e.g. a collated STRING) makes the checker fall back to an
   // ordering-based comparison over all fields. Float and double keys arrive already
   // normalized by NormalizeFloatingNumbers (-0.0 becomes 0.0, NaNs are canonical), so
-  // both branches group them the same way WindowExec does. The bytes are checked first:
-  // the base branch compared keys by bytes alone, so the pre-check keeps same-spelling
-  // keys as cheap as they were before the collation-aware grouping.
+  // both branches group them the same way WindowExec does. The bytes are checked first,
+  // so a key spelled like its group's first row costs one byte comparison and only keys
+  // whose bytes differ pay the ordering comparison.
   private val groupEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
     UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType), checkBytesFirst = true)
 

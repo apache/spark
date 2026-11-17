@@ -247,15 +247,12 @@ object UnsafeRowUtils {
    *
    * `checkBytesFirst` controls whether that fallback compares the key bytes before the
    * ordering, and is only observable for non-binary-stable keys: byte-identical rows
-   * compare equal under every collation and SQL ordering, so checking the bytes first
-   * answers the common same-spelling case without the ordering. Pass `true` at grouping
-   * sites whose previous comparison was byte equality (the window group limit, the pandas
-   * window evaluator, and the session-window iterators) -- there the pre-check keeps
-   * same-spelling keys as cheap as they were before. Pass `false` at sites that already
-   * compared collated keys with the interpreted ordering (sort-based aggregation and
-   * WindowExec's evaluator) -- every check with different bytes would run a failed byte
-   * comparison before the same ordering comparison, which is strictly extra work for
-   * inputs whose checks mostly mismatch.
+   * compare equal under every collation and SQL ordering, so a byte-first check answers
+   * same-spelling keys with one byte comparison, while every check whose bytes differ
+   * pays a failed byte comparison before the same ordering comparison. It pays off where
+   * most checks see keys spelled alike, such as rows compared against the first row of
+   * the current group; where that trade-off has not been measured for a site, pass
+   * `false` and compare collated keys with the ordering alone.
    */
   def rowEqualityChecker(
       dataTypes: Seq[DataType],

@@ -109,8 +109,9 @@ class MergingSessionsIterator(
 
   // A non-binary-stable grouping key (e.g. a collated STRING) makes the checker fall back
   // to an ordering-based comparison, so differently spelled collation-equal keys land in
-  // the same group; the bytes are checked first, as this iterator previously compared
-  // grouping keys by bytes alone.
+  // the same group; the bytes are checked first, so a key spelled like the session's
+  // first row costs one byte comparison and only keys whose bytes differ pay the ordering
+  // comparison.
   private[this] val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
     UnsafeRowUtils.rowEqualityChecker(
       groupingWithoutSession.map(_.dataType), checkBytesFirst = true)

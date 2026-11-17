@@ -54,15 +54,21 @@ class UpdatingSessionsIterator(
 
   // A non-binary-stable grouping key (e.g. a collated STRING) makes the checker fall back
   // to an ordering-based comparison, so differently spelled collation-equal keys land in
-  // the same group; the bytes are checked first, as this iterator previously compared
-  // grouping keys by bytes alone. processedKeys below still hashes keys by bytes: once
-  // the group boundaries compare under the collation, a collation group cannot recur in
-  // correctly sorted input, so only a byte-identical key can hit the set.
+  // the same group; the bytes are checked first, so a key spelled like the session's
+  // first row costs one byte comparison and only keys whose bytes differ pay the ordering
+  // comparison. processedKeys below still hashes keys by bytes: once the group boundaries
+  // compare under the collation, a collation group cannot recur in correctly sorted
+  // input, so only a byte-identical key can hit the set.
   private[this] val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
     UnsafeRowUtils.rowEqualityChecker(
       groupingWithoutSession.map(_.dataType), checkBytesFirst = true)
 
-  private val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupingExpressions)
+  // Every input column except the session column, in input order: each row of a closed
+  // session keeps its own values for these columns, and only its session column is
+  // replaced with the merged session. The rows of a session can spell a collated grouping
+  // key differently, and the DISTINCT-aggregate and pandas grouped-aggregate plans that
+  // consume this iterator read the grouping columns from the rows it emits.
+  private val nonSessionExpressions: Seq[Attribute] = inputSchema.diff(Seq(sessionExpression))
 
   private[this] val sessionProjection: UnsafeProjection =
     UnsafeProjection.create(Seq(sessionExpression), inputSchema)
@@ -195,29 +201,26 @@ class UpdatingSessionsIterator(
     throw SparkException.internalError("The iterator must be sorted by key and session start!")
   }
 
-  private val join = new JoinedRow
   private val join2 = new JoinedRow
 
-  private val valueProj = GenerateUnsafeProjection.generate(valuesExpressions, inputSchema)
+  private val nonSessionProj =
+    GenerateUnsafeProjection.generate(nonSessionExpressions, inputSchema)
   private val restoreProj = GenerateUnsafeProjection.generate(inputSchema,
-    groupingWithoutSession.map(_.toAttribute) ++ Seq(sessionExpression.toAttribute) ++
-      valuesExpressions.map(_.toAttribute))
-
-  private def generateGroupingKey(): InternalRow = {
-    val newRow = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
-    newRow.update(0, currentSession)
-    join(currentKeys, newRow)
-  }
+    nonSessionExpressions ++ Seq(sessionExpression.toAttribute))
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
     returnRows = rowsForCurrentSession
     rowsForCurrentSession = null
 
-    val groupingKey = generateGroupingKey().copy()
+    // The merged session every row of this session is rewritten to. Everything else in
+    // each row is projected from the row itself, so rows of a session that mixes the
+    // spellings of a collated key keep their own spelling (see nonSessionExpressions).
+    val mergedSession = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
+    mergedSession.update(0, currentSession)
 
     val currentRowsIter = returnRows.generateIterator().map { internalRow =>
-      val valueRow = valueProj(internalRow)
-      restoreProj(join2(groupingKey, valueRow)).copy()
+      val rowWithoutSession = nonSessionProj(internalRow)
+      restoreProj(join2(rowWithoutSession, mergedSession)).copy()
     }
 
     if (returnRowsIter != null && returnRowsIter.hasNext) {
