@@ -291,8 +291,10 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    *    e.g. with TRUE for `x > 0 AND (id > 0 OR 10 / i > 1) AND i = 0 AND id = 7`, or `x > 5` for
    *    `((id > 10 AND 10 / i > 1) OR x > 5) AND i = 0 AND id = 7`. That is its value on the rows
    *    where the equalities hold, and the AND is not TRUE on the others. If such a replacement
-   *    can fail, e.g. `10 / x > 5` in place of `x > 5`, `movable` goes first, so that it runs only
-   *    on the rows where those equalities hold.
+   *    can fail, e.g. `10 / x > 5` in place of `x > 5`, the equalities over the other columns,
+   *    also those whose constant is not folded yet, go first, so that it runs only on the rows
+   *    where those hold, or, if one of the latter is over a column that can fail, the equalities
+   *    are handled as since SPARK-60983.
    */
   private def propagateInPlace(
       condition: Expression,
@@ -303,8 +305,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     val equalityPredicates = AttributeMap(failable.toSeq ++ movable.toSeq)
     val inPlace = replaceConstantsInPlace(condition, failable)
     val rewritten = if (movable.isEmpty) inPlace else replaceConstants(inPlace, movable)
-    val all = replaceConstantsInPlace(condition, AttributeMap(equalityPredicates.toSeq ++
-      unfoldedEqualities(condition, equalityPredicates, nullIsFalse)))
+    val unfolded = unfoldedEqualities(condition, equalityPredicates, nullIsFalse)
+    val all = replaceConstantsInPlace(condition, AttributeMap(equalityPredicates.toSeq ++ unfolded))
     val folded = splitConjunctivePredicates(condition)
       .zip(splitConjunctivePredicates(rewritten))
       .zip(splitConjunctivePredicates(all))
@@ -326,20 +328,26 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       // A conjunct that fails to fold as rewritten is replaced with what it folds to with all of
       // the constants in, which does not fail to fold.
       val replacements = folded.collect { case (_, FailsToFold, FoldsTo(e)) => e }
-      val replaced = folded.map {
-        case (_, FailsToFold, FoldsTo(e)) => e
-        case (after, _, _) => after
-      }.reduce(And)
-      if (movable.isEmpty) {
-        replaced
-      } else if (replacements.exists(!columns.canEvaluateUnconditionally(_))) {
-        // Such a replacement can fail on a row where an equality does not hold, so they go first.
-        val predicates = movable.values.map(_._2).toSet[Expression]
+      val replaced = if (replacements.isEmpty) {
+        rewritten
+      } else {
+        folded.map {
+          case (_, FailsToFold, FoldsTo(e)) => e
+          case (after, _, _) => after
+        }.reduce(And)
+      }
+      if (replacements.forall(columns.canEvaluateUnconditionally)) {
+        if (movable.isEmpty) replaced else moveEqualitiesFirst(inPlace, replaced, movable, columns)
+      } else if (unfolded.exists { case (a, _) => !columns.canEvaluateUnconditionally(a) }) {
+        moveEqualitiesFirst(condition, replaceConstants(condition, equalityPredicates),
+          equalityPredicates, FailableColumns.none)
+      } else {
+        // Such a replacement can fail on a row where an equality over a column that can not fail
+        // does not hold, also one whose constant is not folded yet, so those go first.
+        val predicates = (movable.values.map(_._2) ++ unfolded.map(_._2._2)).toSet[Expression]
         val (equalities, others) =
           splitConjunctivePredicates(replaced).partition(predicates.contains)
         (equalities ++ others).reduce(And)
-      } else {
-        moveEqualitiesFirst(inPlace, replaced, movable, columns)
       }
     }
   }
@@ -349,7 +357,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * that is not a literal yet, e.g. `id = CAST(7 AS BIGINT)` for a BIGINT `id`, with the literal
    * that it folds to, other than those over the attributes of `equalityPredicates`.
    * [[ConstantFolding]] makes such a one a literal for the next iteration. One whose constant is
-   * NULL is left out: [[NullPropagation]] makes it NULL before it is propagated.
+   * NULL is left out: [[NullPropagation]] makes it NULL, or `IS NULL` for `<=>`, before it is
+   * propagated.
    */
   private def unfoldedEqualities(
       condition: Expression,
@@ -386,7 +395,7 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * What `after`, the conjunct `before` with constants in, folds to with the foldable columns of
    * the filter's child in, if either of them changed it. One that
    * [[ExprUtils.canEvaluateUnconditionally]] accepts is not folded, as it can not fail, and the
-   * constants make it FALSE in the rewritten condition too.
+   * constants make it FALSE once they are in the condition, in this or a later iteration.
    */
   private def foldChanged(
       before: Expression,
@@ -501,8 +510,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Whether `e` gives equal results for equal children, if it does not fail, so that a child can
    * be replaced with a value equal to it: an operator that [[ExprUtils.isTotalOperator]] accepts,
-   * or arithmetic, which can fail in ANSI mode, but whose result, or failure, is the same for
-   * -0.0 as for 0.0, e.g. a division by either zero fails.
+   * or binary arithmetic, which can fail in ANSI mode, but whose results, or failures, are
+   * equal for -0.0 and 0.0, e.g. a division by either zero fails, although they may differ in the
+   * sign of a zero, which only an operator above it that this rejects can tell apart.
    */
   private def keepsEqualValues(e: Expression): Boolean =
     ExprUtils.isTotalOperator(e) || e.isInstanceOf[BinaryArithmetic]
@@ -611,9 +621,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
     val (newChildren, _) = e.children.foldRight((List.empty[Expression], false)) {
       case (child, (laterChildren, laterCanFail)) =>
         // TODO(SPARK-61861): An operand that its constant would make end `e` is kept, so the filter
-        // keeps the operands after it, e.g. `id > 0` in `(id > 0 OR i BETWEEN 1 AND 100) AND
-        // id = 7`, where the subexpression elimination of `FilterExec` computes `i` ahead of the
-        // OR once the filter is pushed below the projection that computes it.
+        // keeps the operands after it, e.g. `id > 0` in
+        // `(id > 0 OR (CAST(s AS INT) >= 1 AND CAST(s AS INT) <= 100)) AND id = 7`, where the
+        // subexpression elimination of `FilterExec` computes the cast ahead of the OR.
         val newChild = if (laterCanFail) child else f(child)
         (newChild :: laterChildren,
           laterCanFail || !ExprUtils.canEvaluateUnconditionally(newChild))

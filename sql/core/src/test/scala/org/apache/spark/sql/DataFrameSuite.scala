@@ -3312,6 +3312,9 @@ class DataFrameSuite extends SharedSparkSession
       check(Seq(("0", 7, 1), ("x", 7, 100)).toDF("s", "id", "x"), ints,
         (($"id" > 10 && lit(10) / $"i" > 1) || lit(10) / $"x" > 5) && $"i" === 0 && $"id" === 7,
         Seq(Row("0", true)))
+      check(Seq(("0", 7L, 1), ("5", 20L, 0)).toDF("s", "id", "x"), ints,
+        (($"id" > 10 && lit(10) / $"i" > 1) || lit(10) / $"x" > 5) && $"i" === 0 && $"id" === 7,
+        Seq(Row("0", true)))
       check(Seq(("0", 7, 1), ("x", 7, -5)).toDF("s", "id", "x"), ints,
         ($"id" > 0 || lit(10) / $"i" > 1).cast("int") + $"x" > 0 && $"i" === 0 && $"id" === 7,
         Seq(Row("0", true)))

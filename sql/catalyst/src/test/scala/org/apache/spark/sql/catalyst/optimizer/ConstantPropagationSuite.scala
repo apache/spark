@@ -571,6 +571,11 @@ class ConstantPropagationSuite extends PlanTest {
         $"i" === 0 && (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) &&
           $"id" === 7L,
         $"id" === 7L && $"i" === 0 && tenDividedBy($"x") > 5.0)
+      // Also with a constant that a later iteration folds, e.g. of `id = 7` for a BIGINT `id`.
+      checkOrdered(projected,
+        (($"id" > 10L && tenDividedBy($"i") > 1.0) || tenDividedBy($"x") > 5.0) && $"i" === 0 &&
+          $"id" === Literal(7).cast(LongType),
+        $"id" === 7L && tenDividedBy($"x") > 5.0 && $"i" === 0)
       // A part that failed in a conditional branch is not folded once another rule takes it out
       // of the branch, as in the batch, so this does not fall back and move `i = 0` first.
       val tagged = $"x" < -100L &&
