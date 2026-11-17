@@ -41,6 +41,7 @@ from pyspark.eval_handlers._base import (
     GroupedEvalTypeHandler,
 )
 from pyspark.eval_handlers.utils import (
+    WindowAggResults,
     extract_key_value_indexes,
     hashable_grouping_key,
     wrap_kwargs_support,
@@ -593,11 +594,13 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
 
 class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     """SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: window aggregation with an incremental
-    ``Aggregator``. The operator sends each frame -- the whole partition for an
-    unbounded frame, or per-row ``[begin, end)`` slices for a bounded one -- and each
-    frame's rows are folded with ``reduce`` (from a fresh ``zero``) and finished with
-    ``finish``, one output value per input row. A window has no shuffle, so the
-    intermediate buffer never leaves the worker; ``merge`` is not used here."""
+    ``Aggregator``. A window partition is evaluated within one task after the exchange, so
+    there is no PARTIAL/FINAL split and ``merge`` is not used. The operator streams each
+    partition. An unbounded frame is the whole partition: it is folded with ``reduce`` from
+    ``zero`` once, and its ``finish`` value is repeated for every row. For a bounded frame,
+    each row also carries its frame's ``[begin, end)`` bounds, and each row's frame is folded
+    from ``zero`` -- or, while the lower bound stays fixed, by extending the previous row's
+    buffer -- and finished."""
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
     _multi_udf = True
@@ -656,7 +659,12 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                     # ``zero`` -- O(n) overall rather than O(n^2). Otherwise -- the lower bound
                     # advanced (a row left the window, which ``reduce`` cannot subtract) or the
                     # frame shrank -- refold the frame from ``zero``.
-                    results = []
+                    #
+                    # ``reduce`` may update the running buffer in place, so an earlier row's
+                    # ``finish`` result can share state with it, e.g. a list that ``reduce``
+                    # appends to. ``results`` converts such results to Arrow before the buffer
+                    # is extended again; a refold starts from a new buffer, which needs none.
+                    results = WindowAggResults(result_type)
                     have_running = False
                     running: Any = None
                     prev_begin = -1
@@ -665,13 +673,17 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
                         begin = begin_col[i].as_py()
                         end = end_col[i].as_py()
                         if have_running and begin == prev_begin and end >= prev_end:
+                            if end > prev_end:
+                                results.flush()
                             running = fold(agg, running, value_cols, prev_end, end)
+                            refolded = False
                         else:
                             running = fold(agg, agg.zero(), value_cols, begin, end)
+                            refolded = True
                         have_running = True
                         prev_begin, prev_end = begin, end
-                        results.append(agg.finish(running))
-                    result_arrays.append(pa.array(results, type=result_type))
+                        results.append(agg.finish(running), refolded)
+                    result_arrays.append(results.to_array())
                 else:
                     raise PySparkRuntimeError(
                         errorClass="INVALID_WINDOW_BOUND_TYPE",

@@ -22,7 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, DeleteFromTable, Filter, Join, JoinHint, LocalRelation, LogicalPlan, LogicalPlanIntegrity, Project, Sort}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, LongType}
@@ -742,5 +742,93 @@ class ConvertToCatalystSuite extends PlanTest {
       },
       condition = "INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX",
       parameters = Map("index" -> "2", "numParams" -> "1"))
+  }
+
+  // ---- Cross join guard (SPARK-58780) ----
+  //
+  // With cross joins disabled, a call that is the only thing tying a join's two sides together
+  // stays Python, so CheckCartesianProducts still raises as it does without transpilation. Lowered,
+  // it would read both sides and pass the check, while giving the planner no key to join on.
+
+  private val attrB = $"b".long
+
+  // `a == b` across the join: a two-argument call whose option reads both sides.
+  private def matchCall(left: Expression = attrA): TranspiledPythonUDF =
+    makeTPUDF(PythonUDF("match", null, BooleanType, Seq(left, attrB),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true), EqualTo(pref(0), pref(1)))
+
+  private def join(
+      condition: Option[Expression],
+      joinType: JoinType = Inner): Join =
+    Join(LocalRelation(attrA), LocalRelation(attrB), joinType, condition, JoinHint.NONE)
+
+  private def crossJoinOff[T](block: => T): T =
+    transpileOn { withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") { block } }
+
+  private def keptPython(plan: LogicalPlan): Boolean =
+    plan.expressions.exists(_.exists(_.isInstanceOf[PythonUDF]))
+
+  test("keeps the only join condition Python while cross joins are off") {
+    crossJoinOff {
+      Seq(Inner, LeftOuter, RightOuter, FullOuter).foreach { joinType =>
+        val converted = convert(join(Some(matchCall()), joinType))
+        assert(keptPython(converted), s"Expected the Python UDF kept for $joinType: $converted")
+      }
+    }
+  }
+
+  test("keeps the only cross-side Filter above a join Python while cross joins are off") {
+    // `join(...).where(match(a, b))`, or a comma join in SQL: pushdown moves the Filter into the
+    // join later, where it would hide the cartesian product just the same.
+    crossJoinOff {
+      val converted = convert(Filter(matchCall(), join(None)))
+      assert(keptPython(converted), s"Expected the Python UDF kept: $converted")
+    }
+  }
+
+  test("transpiles a cross-side call when something else keys the join") {
+    crossJoinOff {
+      // A key in the join's own condition: the check passes without the call, so lowering it
+      // changes nothing about the error.
+      val keyed = convert(join(Some(And(EqualTo(attrA, attrB), matchCall()))))
+      assert(!keptPython(keyed), s"Expected the call lowered: $keyed")
+      // Or in the join below a Filter.
+      val keyedBelow = convert(Filter(matchCall(), join(Some(EqualTo(attrA, attrB)))))
+      assert(!keptPython(keyedBelow), s"Expected the call lowered: $keyedBelow")
+    }
+  }
+
+  test("transpiles a cross-side call when cross joins are allowed") {
+    transpileOn {
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        val converted = convert(join(Some(matchCall())))
+        assert(!keptPython(converted), s"Expected the call lowered: $converted")
+      }
+    }
+    crossJoinOff {
+      // An explicit cross join asks for the cartesian product, so the check skips it.
+      val converted = convert(join(Some(matchCall()), Cross))
+      assert(!keptPython(converted), s"Expected the call lowered: $converted")
+    }
+  }
+
+  test("transpiles a call reading one side of a join while cross joins are off") {
+    // `udf(a) = b`: the interpreted UDF is evaluated below the join, so the conjunct stays in the
+    // join condition and the check passes. Lowering it has no error to hide.
+    crossJoinOff {
+      val oneSide = makeTPUDF(makePyUDF(attrA), catalystExpr)
+      val converted = convert(join(Some(EqualTo(oneSide, attrB))))
+      assert(!keptPython(converted), s"Expected the call lowered: $converted")
+    }
+  }
+
+  test("still lowers a one-side call nested in a cross-side call kept Python") {
+    crossJoinOff {
+      val inner = makeTPUDF(makePyUDF(attrA), catalystExpr)
+      val converted = convert(join(Some(matchCall(left = inner))))
+      val kept = converted.expressions.flatMap(_.collect { case u: PythonUDF => u })
+      assert(kept.map(_.name) == Seq("match"),
+        s"Expected only the cross-side call kept Python: $converted")
+    }
   }
 }

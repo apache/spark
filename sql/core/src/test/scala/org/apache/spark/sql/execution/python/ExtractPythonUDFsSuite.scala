@@ -170,6 +170,29 @@ class ExtractPythonUDFsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-61614: A filter on the result of a Python UDF over a scan does not evaluate it " +
+      "again") {
+    withClue("V2 scan") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempPath { f =>
+          spark.range(10).select($"id".as("a"), $"id".as("b")).write.parquet(f.getCanonicalPath)
+          val query = spark.read.parquet(f.getCanonicalPath)
+            .select(batchedPythonUDF($"a").as("u"), $"b").where($"u")
+          assert(collectBatchExec(query.queryExecution.executedPlan).length == 1)
+        }
+      }
+    }
+    withClue("V1 partition pruning") {
+      withTable("t") {
+        spark.range(10).select($"id".as("a"), ($"id" % 2).as("p"))
+          .write.partitionBy("p").saveAsTable("t")
+        val query = spark.table("t")
+          .select(batchedPythonUDF($"a").as("u"), $"p").where($"u" && $"p" === 1)
+        assert(collectBatchExec(query.queryExecution.executedPlan).length == 1)
+      }
+    }
+  }
+
   test("SPARK-33303: Deterministic UDF calls are deduplicated") {
     val df = Seq("Hello").toDF("a")
 

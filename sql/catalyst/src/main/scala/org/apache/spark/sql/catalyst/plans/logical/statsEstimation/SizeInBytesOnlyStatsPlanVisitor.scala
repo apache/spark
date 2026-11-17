@@ -116,9 +116,15 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitJoin(p: Join): Statistics = {
     p.joinType match {
-      case LeftAnti | LeftSemi =>
-        // LeftSemi and LeftAnti won't ever be bigger than left
-        p.left.stats
+      case LeftExistence(_) =>
+        // A left semi or anti join outputs each row of the left side at most once, so the left
+        // side's statistics bound it. An existence join outputs each row of the left side once,
+        // with a boolean column added, so they are exact for it, with the size scaled by the row
+        // widths. The scaling changes nothing for a left semi or anti join.
+        val leftStats = p.left.stats
+        val sizeInBytes = leftStats.sizeInBytes * EstimationUtils.getSizePerRow(p.output) /
+          EstimationUtils.getSizePerRow(p.left.output)
+        leftStats.copy(sizeInBytes = sizeInBytes)
       case Inner | LeftOuter | RightOuter | FullOuter =>
         p match {
           case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)
