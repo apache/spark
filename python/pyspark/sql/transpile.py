@@ -177,20 +177,47 @@ class AbstractTranspiler(object):
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
         held_code: Any = None,
+        code_owner: Any = None,
+        udf_callable: Optional[Callable[..., Any]] = None,
     ) -> Optional[Union[Column, Tuple[Column, List[str]]]]:
         """Lower the UDF to a :class:`Column`, or return ``None`` to decline.
 
         The override point for ``spark.sql.experimental.optimizer.pyTranspilers``.
 
-        The caller hands over whatever it could extract: ``src`` / ``ast_info`` /
-        ``function_ast`` come from the source on disk and are ``None`` when no
-        trustworthy source exists -- a REPL- or exec-defined function, a
-        functools.wraps-decorated callable (whose visible source is the wrapped
-        function's, not the wrapper's), or a builtin. ``held_code`` is the code
-        object that actually runs when the UDF is called (``None`` for builtins
-        and slot wrappers). One of the two forms is always present; a transpiler
-        declines when the one it needs is not -- the built-in lowering works
-        from ``function_ast``, a numba-style variety from ``held_code``.
+        The caller hands over whatever it could extract, in two forms. One of
+        them is always present; a transpiler declines when the one it needs is
+        not -- the built-in lowering works from the source form, a numba-style
+        variety from the bytecode form.
+
+        Source form, all ``None`` when no trustworthy source exists (a REPL- or
+        exec-defined function, a functools.wraps-decorated callable whose
+        visible source is the wrapped function's, a rejected lambda, or a
+        builtin):
+
+        * ``src`` -- the source text read for the callable.
+        * ``ast_info`` -- the module-level AST parsed from ``src``.
+        * ``function_ast`` -- the :class:`ast.FunctionDef` that runs (a lambda
+          is synthesized into one).
+
+        Bytecode form, all ``None`` together for builtins and slot wrappers:
+
+        * ``held_code`` -- the code object that actually runs when the UDF is
+          called.
+        * ``code_owner`` -- the function or method that owns ``held_code``
+          (``held_code is code_owner.__code__``). Everything the code object
+          does not carry lives here: ``__closure__`` and ``__globals__`` (two
+          closures from one factory share ``held_code`` and differ only in
+          their cells), ``__defaults__``, and ``__annotations__``. For a
+          callable instance this is its type's ``__call__``, unwrapped from any
+          ``staticmethod`` / ``classmethod``.
+        * ``udf_callable`` -- the object handed to ``udf()`` itself: the
+          function, the bound method (whose ``__self__`` is the receiver), or
+          the callable instance (whose attributes ``__call__`` reads).
+
+        A variety must not call ``udf_callable`` or ``code_owner``: deciding
+        what to transpile never runs user code. Code that does not return its
+        value -- a generator, coroutine, or async generator -- never reaches a
+        variety, nor does code with default, variadic, or keyword-only params.
 
         ``params`` is the CALLER-FACING parameter list: a receiver already bound, as
         on a method or callable instance, has been removed, so ``params[i]`` is the
@@ -202,7 +229,13 @@ class AbstractTranspiler(object):
         returns ``(Column, list[str])`` instead -- one category per public param
         (``"integer"`` / ``"float"`` / ``"numeric"`` / ``"string"`` / ``"bool"`` /
         ``"binary"`` / ``"timestamp"`` / ``"map"`` / ``"array"``) describing the option it
-        built, which the caller uses in place of the combo. The hook is called
+        built, which the caller uses in place of the combo. ``"timestamp"``
+        matches TIMESTAMP_NTZ only: a TIMESTAMP (local time zone) value reaches
+        Python as a naive datetime in the worker's zone while Catalyst uses
+        ``spark.sql.session.timeZone``, so a lowering over it can silently
+        disagree with Python. A TIMESTAMP or DATE column matches no
+        ``"timestamp"`` option, and when that leaves the UDF without one the
+        analyzer logs it as the reason for the fallback. The hook is called
         once per ``param_categories`` combo; identical categories from one variety
         are collapsed to a single option.
 
@@ -1078,6 +1111,8 @@ class CatalystTranspiler(AbstractTranspiler):
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
         held_code: Any = None,
+        code_owner: Any = None,
+        udf_callable: Optional[Callable[..., Any]] = None,
     ) -> Optional[Union[Column, Tuple[Column, List[str]]]]:
         # Short circuit on nothing to transpile. This lowering works from the
         # AST; ``held_code`` is for bytecode varieties.
@@ -1640,6 +1675,10 @@ def _transpile_func(
         # failure is recorded as a reason for the fallback warning, not refused
         # outright. Only BOTH missing means there is nothing to lower from.
         held_code = _held_code(func)
+        # The function that owns ``held_code``: the closure cells, globals,
+        # defaults and annotations a bytecode variety needs live here, not on
+        # the code object. ``None`` exactly when ``held_code`` is.
+        code_owner = _code_owner(func) if held_code is not None else None
         src = None
         ast_info = None
         function_ast = None
@@ -1679,6 +1718,25 @@ def _transpile_func(
                 [],
                 [],
             )
+        # A generator, coroutine, or async generator returns an iterator or an
+        # awaitable from the call, never the value its body computes, so no
+        # lowering of that body can agree with Python. Refused from the flags of
+        # the code that runs, whichever form a variety would lower from.
+        if held_code is not None and held_code.co_flags & (
+            inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR
+        ):
+            return (
+                [],
+                errors
+                + [
+                    "generator, coroutine, and async generator functions return an "
+                    "iterator or awaitable rather than a value, so they are not "
+                    "supported by the transpiler"
+                ],
+                [],
+                [],
+                [],
+            )
         # Default, variadic (``*args`` / ``**kwargs``) and keyword-only params
         # can't be represented by the positional ``_udf_param_N`` placeholder
         # scheme: a call site may omit a defaulted argument, leaving the
@@ -1698,10 +1756,9 @@ def _transpile_func(
                 or fn_args.kwarg is not None
             )
         else:
-            owner = _code_owner(func)
             unsupported_params = bool(
-                getattr(owner, "__defaults__", None)
-                or getattr(owner, "__kwdefaults__", None)
+                getattr(code_owner, "__defaults__", None)
+                or getattr(code_owner, "__kwdefaults__", None)
                 or held_code.co_kwonlyargcount
                 or held_code.co_flags & (inspect.CO_VARARGS | inspect.CO_VARKEYWORDS)
             )
@@ -1794,7 +1851,15 @@ def _transpile_func(
             for combo in combos:
                 try:
                     result = transpiler._transpile_from_ast(
-                        src, ast_info, function_ast, public_params, returnType, combo, held_code
+                        src,
+                        ast_info,
+                        function_ast,
+                        public_params,
+                        returnType,
+                        combo,
+                        held_code,
+                        code_owner,
+                        func,
                     )
                     if result is not None:
                         column, categories = _variety_option(result, combo, len(public_params))

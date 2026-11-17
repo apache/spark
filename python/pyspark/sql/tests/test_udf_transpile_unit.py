@@ -1579,6 +1579,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return (
                     col("_udf_param_0").cast(returnType),
@@ -1613,6 +1615,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return col("_udf_param_0").cast(returnType)
 
@@ -1641,6 +1645,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return (None, ["numeric"] * len(params))
 
@@ -1668,6 +1674,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 # A list, not a tuple: the documented shape is (Column, list[str]),
                 # and this is the natural slip.
@@ -1698,6 +1706,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 # One category short of the two public params.
                 return (col("_udf_param_0").cast(returnType), ["numeric"])
@@ -1728,6 +1738,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params), "extra")
 
@@ -1757,6 +1769,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return (col("_udf_param_0").cast(returnType), ("numeric", "numeric"))
 
@@ -1788,6 +1802,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 seen["function_ast"] = function_ast
                 seen["held_code"] = held_code
@@ -1822,6 +1838,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 seen["function_ast"] = function_ast
                 seen["held_code"] = held_code
@@ -1868,6 +1886,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 seen.update(src=src, ast_info=ast_info, function_ast=function_ast)
                 seen["held_code"] = held_code
@@ -1886,6 +1906,96 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIsNone(seen["ast_info"])
             self.assertIsNone(seen["function_ast"])
             self.assertIs(wrapper.__code__, seen["held_code"])
+
+    def _bytecode_recording_variety(self, seen):
+        """A variety that records its bytecode-form inputs and lowers to the identity."""
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class BytecodeRecordingTranspiler(AbstractTranspiler):
+            variety = "bytecode_recording_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+                code_owner=None,
+                udf_callable=None,
+            ):
+                seen.append((held_code, code_owner, udf_callable))
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
+
+        return BytecodeRecordingTranspiler
+
+    def test_udf_transpile_variety_receives_code_owner_and_callable(self):
+        # Two closures from one factory share a code object and differ only in
+        # their cells, which live on the owning function, not on ``held_code``.
+        def make(n):
+            def add(x):
+                return x + n
+
+            return add
+
+        class Scale:
+            def __init__(self, factor):
+                self.factor = factor
+
+            def __call__(self, x):
+                return x * self.factor
+
+            def shift(self, x):
+                return x + self.factor
+
+        add3, add5, scale, shift = make(3), make(5), Scale(2), Scale(7).shift
+        seen: list = []
+        with self._with_variety(self._bytecode_recording_variety(seen)):
+            for func in (add3, add5, scale, shift):
+                seen.clear()
+                self._transpiled_udf(func, LongType())
+                with self.subTest(func=func):
+                    self.assertTrue(seen)
+                    held_code, code_owner, udf_callable = seen[0]
+                    self.assertIs(func, udf_callable)
+                    self.assertIs(code_owner.__code__, held_code)
+                    if func is scale:
+                        # A callable instance runs its type's ``__call__``.
+                        self.assertIs(Scale.__call__, code_owner)
+                    elif func is shift:
+                        # A bound method owns its code and still carries its receiver.
+                        self.assertIs(shift.__self__, code_owner.__self__)
+                    else:
+                        self.assertIs(func, code_owner)
+                    self.assertTrue(all(s == seen[0] for s in seen))
+        self.assertIs(add3.__code__, add5.__code__)
+        self.assertEqual([3, 5], [f.__closure__[0].cell_contents for f in (add3, add5)])
+
+    def test_udf_transpile_generator_and_coroutine_never_reach_a_variety(self):
+        # Calling any of these returns an iterator or awaitable, never the value
+        # the body computes, so no lowering can agree with Python. Refused from
+        # the code's flags whether or not there is source to read.
+        def gen(x):
+            yield x
+
+        async def coro(x):
+            return x
+
+        async def agen(x):
+            yield x
+
+        ns: dict = {}
+        exec("def repl_gen(x):\n    return x\n    yield", ns)
+        seen: list = []
+        with self._with_variety(self._bytecode_recording_variety(seen)):
+            for func in (gen, coro, agen, ns["repl_gen"]):
+                with self.subTest(func=func.__name__):
+                    _, reasons = self._fallback_reason(func)
+                    self.assertIn("generator", reasons)
+        self.assertEqual([], seen)
 
     def test_udf_transpile_no_ast_no_bytecode_falls_back(self):
         # A builtin has neither source nor a code object: nothing to lower
@@ -1913,6 +2023,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
 
@@ -1938,6 +2050,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
 
@@ -2006,6 +2120,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 return (lower(col("_udf_param_0")).cast(returnType), [category])
 
@@ -2036,8 +2152,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     self.assertEqual([[category]], u._transpiled_input_categories)
 
     def test_udf_transpile_variety_container_and_timestamp_lowering(self):
-        # size() and a null check hold for any element type and time zone, so the JVM
-        # serves them. Containers are non-null: size(NULL) is NULL where len(None) raises.
+        # size() holds for any element type and a null check over TIMESTAMP_NTZ for
+        # any time zone, so the JVM serves them. Containers are non-null: size(NULL)
+        # is NULL where len(None) raises.
         import datetime
 
         from pyspark.sql import Column
@@ -2058,7 +2175,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 present,
                 Column.isNotNull,
                 BooleanType(),
-                "x timestamp",
+                "x timestamp_ntz",
                 [(ts,), (None,)],
             ),
         ]
@@ -2071,6 +2188,30 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     self.assertEqual(0, self._eval_python_count(projected))
                     expected = [func(r[0]) for r in rows]
                     self.assertEqual(expected, [r[0] for r in projected.collect()])
+
+    def test_udf_transpile_timestamp_option_skips_ltz_and_date_columns(self):
+        # "timestamp" binds to TIMESTAMP_NTZ only. Python sees a TIMESTAMP value in
+        # the worker's local zone while Catalyst uses the session zone, so even a
+        # lowering that would agree here is not served over TIMESTAMP or DATE: the
+        # UDF runs in Python and still returns Python's answer.
+        import datetime
+
+        from pyspark.sql import Column
+
+        def present(x):
+            return x is not None
+
+        rows_by_schema = {
+            "x timestamp": [(datetime.datetime(2024, 1, 2, 3, 4, 5),), (None,)],
+            "x date": [(datetime.date(2024, 1, 2),), (None,)],
+        }
+        with self._with_variety(self._lowering_variety("timestamp", Column.isNotNull)):
+            u = self._transpiled_udf(present, BooleanType())
+            for schema, rows in rows_by_schema.items():
+                with self.subTest(schema=schema):
+                    projected = self.spark.createDataFrame(rows, schema).select(u("x"))
+                    self.assertEqual(1, self._eval_python_count(projected))
+                    self.assertEqual([True, False], [r[0] for r in projected.collect()])
 
     def test_udf_transpile_self_typing_variety_adds_one_option(self):
         ns: dict = {}
@@ -2099,6 +2240,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 returnType,
                 param_categories=None,
                 held_code=None,
+                code_owner=None,
+                udf_callable=None,
             ):
                 seen.update(src=src, ast_info=ast_info, function_ast=function_ast)
                 return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
