@@ -26,7 +26,19 @@ class GeometryTypeTestMixin:
     def test_geometrytype_specified_valid_srid(self):
         """Test that GeometryType is constructed correctly when a valid SRID is specified."""
 
-        supported_srid = {0: "SRID:0", 3857: "EPSG:3857", 4326: "OGC:CRS84"}
+        supported_srid = {
+            0: "SRID:0",
+            3857: "EPSG:3857",
+            4326: "OGC:CRS84",
+            # The OGC standardizations are the canonical string IDs of their EPSG codes.
+            4267: "OGC:CRS27",
+            4269: "OGC:CRS83",
+            # Any projected or geographic CRS in the PROJ registry PySpark ships, EPSG or ESRI.
+            2154: "EPSG:2154",
+            32610: "EPSG:32610",
+            4612: "EPSG:4612",
+            102100: "ESRI:102100",
+        }
 
         for srid, crs in supported_srid.items():
             geometry_type = GeometryType(srid)
@@ -39,7 +51,7 @@ class GeometryTypeTestMixin:
     def test_geometrytype_specified_invalid_srid(self):
         """Test that the correct error is returned when an invalid SRID value is specified."""
 
-        for srid in [-4612, -4326, -2, -1, 1, 2]:
+        for srid in [-4612, -4326, -2, -1, 1, 2, 9999, 999999]:
             with self.assertRaises(IllegalArgumentException) as error_context:
                 GeometryType(srid)
             srid_header = "[ST_INVALID_SRID_VALUE] Invalid or unsupported SRID"
@@ -84,7 +96,17 @@ class GeometryTypeTestMixin:
     def test_geometrytype_from_invalid_crs(self):
         """Test that GeometryType construction fails when an invalid CRS is specified."""
 
-        for invalid_crs in ["srid", "any", "ogccrs84", "ogc:crs84", "ogc:CRS84", "asdf", ""]:
+        for invalid_crs in [
+            "srid",
+            "any",
+            "ogccrs84",
+            "ogc:crs84",
+            "ogc:CRS84",
+            "asdf",
+            "",
+            "EPSG:999999",
+            "INVALID:ID",
+        ]:
             with self.assertRaises(IllegalArgumentException) as error_context:
                 GeometryType._from_crs(invalid_crs)
             crs_header = "[ST_INVALID_CRS_VALUE] Invalid or unsupported CRS"
@@ -100,6 +122,12 @@ class GeometryTypeTestMixin:
             "SRID:0": 0,
             "EPSG:3857": 3857,
             "OGC:CRS84": 4326,
+            # The EPSG spelling of an OGC-standardized CRS resolves to the same SRID.
+            "EPSG:4326": 4326,
+            "OGC:CRS83": 4269,
+            "EPSG:2154": 2154,
+            "EPSG:32610": 32610,
+            "ESRI:102100": 102100,
         }
         for valid_crs, srid in supported_crs.items():
             geometry_type = GeometryType._from_crs(valid_crs)

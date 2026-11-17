@@ -342,7 +342,7 @@ try:
             "pyspark.examples.src.main.python": "deps/examples",
         },
         package_data={
-            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
+            "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json", "**/*.csv"],
             "pyspark.jars": ["**/*.jar"],
             "pyspark.bin": ["**/*"],
             "pyspark.sbin": [
