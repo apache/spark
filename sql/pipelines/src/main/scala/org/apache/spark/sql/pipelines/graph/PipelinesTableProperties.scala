@@ -43,15 +43,21 @@ object PipelinesTableProperties {
    * (SQL `TBLPROPERTIES`, Python `table_properties`) as of the latest materialization.
    *
    * `DatasetManager` writes it, through `resolveTableProperties`, only when the definition declares
-   * at least one table property. It covers those declared keys, not the `comment` and `provider`
-   * entries derived from the dataset's comment and format. On the next materialization,
-   * `evolveTable` removes a recorded key when the definition no longer declares it, it is still on
-   * the table, and it is not a reserved catalog property other than `comment` (the keys the SQL
-   * parser rejects in `TBLPROPERTIES`). Ownership follows declaration: a key is removable once a
-   * definition declared it, even if the catalog had already set it to the same value. Properties
-   * the definition never declared, e.g. catalog-managed ones, are never removed. A table without
-   * the record, or with one that is not a JSON string array, has nothing removed. The record is
-   * removed together with the last declared property. Auxiliary tables never carry it.
+   * at least one table property, and never for a table in a JDBC catalog, which appends every
+   * non-reserved table property to its `CREATE TABLE` statement as a DDL option. It covers those
+   * declared keys, not the `comment` and `provider` entries derived from the dataset's comment and
+   * format. On the next materialization, `evolveTable` removes a recorded key when the resolved
+   * table properties of the definition no longer contain it, it is still on the table, and it is
+   * not a reserved catalog property other than `comment` (the keys the SQL parser rejects in
+   * `TBLPROPERTIES`). The resolved properties include the `comment` and `provider` derived from the
+   * definition, so a comment moved from the table properties to the dataset's comment field stays.
+   * A dropped reserved key such as `owner`, which Python `table_properties` passes through, is
+   * recorded but never removed. Ownership follows declaration: a key is removable once a definition
+   * declared it, even if the catalog had already set it to the same value. Properties the
+   * definition never declared, e.g. catalog-managed ones, are never removed. A table without the
+   * record, or with one that is not a JSON string array, has nothing removed. The record itself is
+   * removed once the definition declares no table property, whether or not the keys it listed are
+   * removed with it. Auxiliary tables never carry it.
    *
    * This key is not registered as a user-settable property, so [[validateAndCanonicalize]] drops
    * it if a user declares it.

@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.catalog.{
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.{
   PipelinesCatalogUtils,
@@ -320,7 +321,7 @@ object DatasetManager extends Logging {
     val outputSchema = table.specifiedSchema.getOrElse(
       inferredSchemas(table.identifier).asNullable
     )
-    val mergedProperties = resolveTableProperties(table, identifier)
+    val mergedProperties = resolveTableProperties(table, identifier, catalog)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
     val clustering = table.clusterCols.map(cols =>
       ClusterByTransform(cols.map(col => Expressions.column(col)))
@@ -657,15 +658,18 @@ object DatasetManager extends Logging {
    *                                "incoming" side and may differ from `existingTable`'s recorded
    *                                schema due to schema evolution across runs.
    * @param properties              the table properties to (re)set on the table. For graph
-   *                                datasets this is the result of [[resolveTableProperties]],
-   *                                which carries the
+   *                                datasets this is the result of [[resolveTableProperties]]: the
+   *                                declared properties, the `comment` and `provider` derived from
+   *                                the definition, and the
    *                                [[PipelinesTableProperties.declaredPropertyKeys]] record when
-   *                                the definition declares a property; for auxiliary tables it is
-   *                                the spec's properties, which never carry the record. A property
-   *                                absent here is removed only under the conditions listed in the
-   *                                body (recorded as declared, still on the table, not a reserved
-   *                                key other than `comment`); any other existing property (e.g. a
-   *                                catalog-managed one) is left in place.
+   *                                the definition declares a property and the catalog is not a
+   *                                JDBC catalog; for auxiliary tables it is the spec's properties,
+   *                                which never carry the record. A key absent here is removed only
+   *                                when the existing table's record lists it, it is still on the
+   *                                table, and it is not a reserved key other than `comment`. The
+   *                                record itself is removed once `properties` no longer carries
+   *                                it. Any other existing property (e.g. a catalog-managed one) is
+   *                                left in place.
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
@@ -758,8 +762,16 @@ object DatasetManager extends Logging {
    * of the user-provided properties (not of the reserved ones derived here) so that
    * [[evolveTable]] can later remove the ones the definition drops. A definition without table
    * properties carries no record, and [[evolveTable]] removes an existing one.
+   *
+   * A table in a [[JDBCTableCatalog]] never gets the record. That catalog appends every property
+   * other than the reserved ones to the `CREATE TABLE` statement as a DDL option, so the record
+   * would make the statement invalid, and a JDBC table reports no properties, so the record could
+   * never be read back to drive a removal.
    */
-  private def resolveTableProperties(table: Table, identifier: Identifier): Map[String, String] = {
+  private def resolveTableProperties(
+      table: Table,
+      identifier: Identifier,
+      catalog: TableCatalog): Map[String, String] = {
     val validatedAndCanonicalizedProps =
       PipelinesTableProperties.validateAndCanonicalize(
         table.properties,
@@ -783,7 +795,9 @@ object DatasetManager extends Logging {
       }
       .collect { case (key, Some(value)) => key -> value }
 
-    val declaredPropertyKeys = if (validatedAndCanonicalizedProps.nonEmpty) {
+    val recordsDeclaredKeys =
+      validatedAndCanonicalizedProps.nonEmpty && !catalog.isInstanceOf[JDBCTableCatalog]
+    val declaredPropertyKeys = if (recordsDeclaredKeys) {
       Map(PipelinesTableProperties.declaredPropertyKeys ->
         JsonStringArrayCodec.serialize(validatedAndCanonicalizedProps.keys.toSeq.sorted))
     } else {
