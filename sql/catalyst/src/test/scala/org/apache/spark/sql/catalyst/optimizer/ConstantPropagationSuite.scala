@@ -680,8 +680,8 @@ class ConstantPropagationSuite extends PlanTest {
           comparePlans(optimized, withDd.where(expected).analyze)
         }
       }
-      // It also runs `OptimizeUpdateFields`, so that `SimplifyExtractValueOps` takes the field out of
-      // the nested `UpdateFields`, which makes the condition FALSE.
+      // It also runs `SimplifyExtractValueOps`, which takes the field out of `UpdateFields`, so that
+      // the condition becomes FALSE.
       val struct = CreateNamedStruct(Seq(Literal("a"), $"x".cast(DoubleType)))
       val updated = UpdateFields(UpdateFields(struct, Seq(WithField("a", $"i".cast(DoubleType)))),
         Seq(WithField("b", $"x".cast(DoubleType))))
