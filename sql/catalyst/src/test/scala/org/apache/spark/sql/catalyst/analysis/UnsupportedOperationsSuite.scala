@@ -710,22 +710,23 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         condition = Some(leftKey === rightKey && leftWindow === rightWindow))
     }
     // Each input copies its event time shifted back by `micros` into a column with the same
-    // watermark.
-    def shiftedJoin(joinType: JoinType, micros: Long): LogicalPlan = {
-      def input(side: String): (LogicalPlan, Attribute, Attribute) = {
+    // watermark. The condition equates the shifted columns, or with `range` bounds the left
+    // event time from below by the right shifted column.
+    def shiftedJoin(joinType: JoinType, micros: Long, range: Boolean = false): LogicalPlan = {
+      def input(side: String): (LogicalPlan, Attribute, Attribute, Attribute) = {
         val key = AttributeReference(s"${side}Key", IntegerType)()
         val time = AttributeReference(s"${side}Time", TimestampType)()
           .withMetadata(watermarkMetadata)
         val shifted = Alias(TimestampAddInterval(time,
           Literal(-micros, DayTimeIntervalType()), Some("UTC")), s"${side}Shifted")(
           explicitMetadata = Some(watermarkMetadata))
-        (Project(Seq(key, time, shifted), TestStreamingRelation(Seq(key, time))), key,
+        (Project(Seq(key, time, shifted), TestStreamingRelation(Seq(key, time))), key, time,
           shifted.toAttribute)
       }
-      val (left, leftKey, leftShifted) = input("left")
-      val (right, rightKey, rightShifted) = input("right")
-      left.join(right, joinType = joinType,
-        condition = Some(leftKey === rightKey && leftShifted === rightShifted))
+      val (left, leftKey, leftTime, leftShifted) = input("left")
+      val (right, rightKey, _, rightShifted) = input("right")
+      val bound = if (range) leftTime >= rightShifted else leftShifted === rightShifted
+      left.join(right, joinType = joinType, condition = Some(leftKey === rightKey && bound))
     }
     val legacyMode = SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false"
     Seq(
@@ -784,6 +785,34 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         .filter(_.contains("rightShifted does not bound state"))
       assert(warnings.nonEmpty)
       assert(!warnings.exists(_.contains("stateful operator after the join")))
+    }
+
+    // A range bound on a column that the plan shows no bound for, such as a column a day below
+    // the right event time, does not finalize the left state, and earlier versions admitted it.
+    Seq(LeftOuter, LeftSemi).foreach { joinType =>
+      val checkConf = SQLConf.STREAMING_JOIN_CHECK_FINALIZATION_ENABLED.key
+      val plan = shiftedJoin(joinType, 86400000000L, range = true)
+
+      test(s"$joinType bounded only by a range on a column a day below the right event time " +
+          s"fails in legacy mode and warns when $checkConf=false") {
+        val e = intercept[AnalysisException] {
+          withSQLConf(legacyMode) {
+            UnsupportedOperationChecker.checkForStreaming(
+              wrapInStreaming(plan), OutputMode.Append())
+          }
+        }
+        assert(e.getMessage.contains("requires a watermark on the right input"))
+        assert(e.getMessage.contains(checkConf))
+        val appender = new LogAppender("finalization check")
+        withLogAppender(appender, level = Some(Level.WARN)) {
+          withSQLConf(legacyMode, checkConf -> "false") {
+            UnsupportedOperationChecker.checkForStreaming(
+              wrapInStreaming(plan), OutputMode.Append())
+          }
+        }
+        assert(appender.loggingEvents.exists(
+          _.getMessage.getFormattedMessage.contains("requires a watermark on the right input")))
+      }
     }
   }
 

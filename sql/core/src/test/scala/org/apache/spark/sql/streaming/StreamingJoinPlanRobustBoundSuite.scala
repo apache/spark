@@ -68,9 +68,12 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
     assert(query.lastProgress.stateOperators.head.numRowsTotal === rows)
   }
 
-  /** Checks the state rows of a join that keeps every row until eviction, as all but semi do. */
-  private def assertStateRows(joinType: String, rows: Long): Seq[StreamAction] =
-    if (joinType == "left_semi") Nil else Seq(assertStateRows(rows))
+  /**
+   * Checks the state rows. A left semi join does not store a left row that a right row matches in
+   * its batch, so it can hold fewer rows than the joins that keep every row until eviction.
+   */
+  private def assertStateRows(joinType: String, rows: Long, semiRows: Long): Seq[StreamAction] =
+    Seq(assertStateRows(if (joinType == "left_semi") semiRows else rows))
 
   private def version(v: Int): (String, String) =
     SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> v.toString
@@ -110,7 +113,7 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
         CheckNewAnswer()) ++ restartActions(restart) ++ Seq(
         AddData(rightInput, (9, 40)),
         // The windows [0, 10) end below the watermark, so their unmatched rows are output.
-        CheckNewAnswer(unmatched: _*)) ++ assertStateRows(joinType, 3): _*)
+        CheckNewAnswer(unmatched: _*)) ++ assertStateRows(joinType, 3, 3): _*)
     }
   }
 
@@ -147,7 +150,7 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
         // At the watermark of 39 seconds, a right row has rc above 39 seconds, so left rows
         // below 34 seconds can no longer match.
         AddData(rightInput, (9, 41)),
-        CheckNewAnswer(unmatched: _*)) ++ assertStateRows(joinType, 3): _*)
+        CheckNewAnswer(unmatched: _*)) ++ assertStateRows(joinType, 3, 3): _*)
     }
   }
 
@@ -188,11 +191,15 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
         // seconds no later row matches the left row at 25 seconds or the right row at 5 seconds.
         AddData(rightInput, (8, 32)),
         CheckNewAnswer((if (outer) Seq(Row(2, 25, null, null)) else Nil): _*)) ++
-        assertStateRows(joinType, 3): _*)
+        assertStateRows(joinType, 3, 2): _*)
     }
 
+    // The left semi join outputs only left columns, so its right input is pruned to rk and rc,
+    // and rc filters late rows itself: the left state is evicted at the watermark, not less the
+    // window.
+    val evictsAt = if (joinType == "left_semi") "the watermark" else "the watermark less the window"
     test(s"legacy-mode $joinType join on a copy of the event time after a window over it, " +
-        s"with the event time pruned, evicts at the watermark less the window, V$v") {
+        s"with the event time pruned, evicts at $evictsAt, V$v") {
       val leftInput = MemoryStream[(Int, Int)]
       val rightInput = MemoryStream[(Int, Int)]
       val joined = withCopy(leftInput, "l")
@@ -214,7 +221,7 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
         // At the watermark of 40 seconds, each input's state keeps rows above 30 seconds.
         AddData(rightInput, (6, 42)),
         CheckNewAnswer((if (outer) Seq(Row(2, windowRow(20), null, null)) else Nil): _*)) ++
-        assertStateRows(joinType, 6): _*)
+        assertStateRows(joinType, 6, 4): _*)
     }
   }
 
@@ -302,10 +309,41 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
     }
   }
 
+  // Legacy mode: B is the padded left input of an earlier right outer join with A, and bs is bt
+  // less 20 seconds in a column that keeps its watermark. Every non-NULL bt equals at, which
+  // filters late rows, so the range on bs bounds C's state at the watermark less 20 seconds. The
+  // analysis check needs that bound for a right outer join with C, and C's rows stay until then.
+  for (v <- Seq(2, 3)) {
+    test(s"legacy-mode right outer join with a range on a shifted column of the padded input " +
+        s"of an earlier right outer join keeps rows that can still match, V$v") {
+      val a = MemoryStream[(Int, Int)]
+      val b = MemoryStream[(Int, Int)]
+      val c = MemoryStream[(Int, Int)]
+      val ab = withShifted(eventTimeInput(b, "b").join(eventTimeInput(a, "a"),
+          expr("ak = bk AND at = bt"), "right_outer").select($"ak", $"at", $"bk", $"bt"),
+        "b", "- INTERVAL 20 SECONDS")
+      val result = ab.join(eventTimeInput(c, "c"),
+          expr("ak = ck AND ct BETWEEN bs AND bs + INTERVAL 1 HOUR"), "right_outer")
+        .select($"ak", $"at".cast("int"), $"bt".cast("int"), $"ck", $"ct".cast("int"))
+      testJoin(legacyMode, version(v))(result)(
+        AddData(c, (1, 30)),
+        CheckNewAnswer(),
+        MultiAddData(a, (8, 80))(b, (8, 80)),
+        CheckNewAnswer(),
+        AddData(c, (9, 46)),
+        CheckNewAnswer(),
+        // The watermark is 45 seconds. A later AB row at 50 seconds has bs = 30 seconds.
+        AddData(c, (7, 47)),
+        CheckNewAnswer(),
+        MultiAddData(a, (1, 50))(b, (1, 50)),
+        CheckNewAnswer(Row(1, 50, 50, 1, 30)))
+    }
+  }
+
   // The inputs of AB = A.join(B, condition, joinType), followed by a join of AB with C on
   // ak = ck AND ct BETWEEN bt AND bt + INTERVAL 1 HOUR. In legacy mode AB filters late rows by at,
   // which the query keeps. Every row of an inner or left outer AB with a non-NULL bt has bt = at,
-  // so C's state can be evicted at the watermark, as Spark 4.3 did.
+  // or bt >= at for a BETWEEN tie, so C's state can be evicted at the watermark, as Spark 4.3 did.
   private def chainedRangeJoin(condition: String, joinType: String, secondJoinType: String):
       (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], MemoryStream[(Int, Int)],
         DataFrame) = {
@@ -320,13 +358,15 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
   }
 
   for {
+    (tie, condition) <- Seq("equates" -> "ak = bk AND at = bt",
+      "bounds by the event time" -> "ak = bk AND bt BETWEEN at AND at + INTERVAL 10 MINUTES")
     joinType <- Seq("inner", "left_outer")
     secondJoinType <- Seq("right_outer", "inner")
     v <- Seq(2, 3)
   } {
     test(s"legacy-mode $secondJoinType join with a range on a column that an earlier $joinType " +
-        s"join equates with the event time evicts at the watermark, V$v") {
-      val (a, b, c, result) = chainedRangeJoin("ak = bk AND at = bt", joinType, secondJoinType)
+        s"join $tie evicts at the watermark, V$v") {
+      val (a, b, c, result) = chainedRangeJoin(condition, joinType, secondJoinType)
       val unmatched =
         if (secondJoinType == "right_outer") Seq(Row(2, 21, null, null, null)) else Nil
       testJoin(legacyMode, version(v))(result)(
@@ -358,6 +398,27 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
       }
   }
 
+  // bt is at least at less an hour, so C's state is evicted at the watermark less an hour, which
+  // keeps the match of a C row with an AB row whose bt is up to an hour below at.
+  for (v <- Seq(2, 3)) {
+    test(s"legacy-mode inner join with a range on a column that an earlier join bounds an hour " +
+        s"below the event time keeps rows that can still match, V$v") {
+      val (a, b, c, result) =
+        chainedRangeJoin("ak = bk AND bt >= at - INTERVAL 1 HOUR", "inner", "inner")
+      testJoin(legacyMode, version(v))(result)(
+        MultiAddData((b, Seq((1, 1000))), (c, Seq((1, 1000)))),
+        CheckNewAnswer(),
+        // The watermark becomes 1500 seconds, above the C row at 1000 seconds.
+        MultiAddData((a, Seq((9, 1501))), (b, Seq((9, 1501))), (c, Seq((9, 1501)))),
+        CheckNewAnswer(Row(9, 1501, 9, 1501, 1501)),
+        AddData(c, (7, 1502)),
+        CheckNewAnswer(),
+        // A new A row at 1600 seconds joins the B row at 1000 seconds, which is at - 600 seconds.
+        AddData(a, (1, 1600)),
+        CheckNewAnswer(Row(1, 1000, 1, 1600, 1000)))
+    }
+  }
+
   test("legacy-mode inner join with a range on a column of an earlier key-only join keeps rows " +
       "that can still match") {
     val (a, b, c, result) = chainedRangeJoin("ak = bk", "inner", "inner")
@@ -370,6 +431,120 @@ class StreamingJoinPlanRobustBoundSuite extends StreamTest {
       // matches the C row at 15 seconds.
       AddData(a, (1, 100)),
       CheckNewAnswer(Row(1, 15, 1, 100, 10)))
+  }
+
+  // Legacy mode: R = A.join(B, ak = bk) keeps at, which filters its late rows. as is at less 20
+  // seconds in a column that keeps its watermark, and the key-only join leaves bt unrelated to at:
+  // a new A row can join an old B row. The left state is bounded by the as key at the watermark
+  // less 20 seconds; the bt key, whose cutoff the plan does not show to be safe, must not win.
+  for {
+    joinType <- Seq("inner", "left_outer")
+    v <- Seq(2, 3)
+  } {
+    test(s"legacy-mode $joinType join prefers a key with a known lag over an unrelated key, V$v") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val a = MemoryStream[(Int, Int)]
+      val b = MemoryStream[(Int, Int)]
+      // lu has no watermark, so the optimizer cannot tie as to bt through the left input.
+      val left = leftInput.toDF().toDF("lk", "time")
+        .select($"lk", timestamp_seconds($"time").as("lx"), timestamp_seconds($"time").as("lu"))
+        .withWatermark("lx", "1 second")
+      val r = withShifted(eventTimeInput(a, "a"), "a", "- INTERVAL 20 SECONDS")
+        .join(eventTimeInput(b, "b"), expr("ak = bk"))
+      val result = left.join(r, expr("lk = ak AND lx = `as` AND lu = bt"), joinType)
+        .select($"lk", $"lx".cast("int"), $"at".cast("int"), $"bt".cast("int"))
+      testJoin(legacyMode, version(v))(result)(
+        MultiAddData((leftInput, Seq((1, 30))), (b, Seq((1, 30)))),
+        CheckNewAnswer(),
+        MultiAddData((leftInput, Seq((9, 46))), (a, Seq((9, 46))), (b, Seq((9, 46)))),
+        CheckNewAnswer(),
+        // The watermark is 45 seconds: the left row keyed by lu = 30 seconds is below it, but
+        // its lx = 30 seconds is above the as cutoff of 25 seconds.
+        AddData(leftInput, (7, 47)),
+        CheckNewAnswer(),
+        // A new A row at 50 seconds has as = 30 seconds and joins the B row at 30 seconds.
+        AddData(a, (1, 50)),
+        CheckNewAnswer(Row(1, 30, 50, 30)))
+    }
+  }
+
+  // Legacy mode: A keeps as, at less a whole day, in a column that keeps its watermark, and
+  // AB = A.join(B, ak = bk AND as = bt) keeps at, which filters its late rows. A day can last 23
+  // to 25 hours, so the equality bounds bt by nothing below at, as it bounds as: C's state has no
+  // key cutoff, and evicting it at the watermark would lose the match below.
+  private def dayShiftedChain(joinType: String): (MemoryStream[(Int, Int)],
+      MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
+    val a = MemoryStream[(Int, Int)]
+    val b = MemoryStream[(Int, Int)]
+    val c = MemoryStream[(Int, Int)]
+    val ab = withShifted(eventTimeInput(a, "a"), "a", "- INTERVAL 1 DAY")
+      .join(eventTimeInput(b, "b"), expr("ak = bk AND `as` = bt"))
+    val result = ab.join(eventTimeInput(c, "c"), expr("ak = ck AND bt = ct"), joinType)
+      .select($"ck", $"ct".cast("int"), $"at".cast("int"), $"bt".cast("int"))
+    (a, b, c, result)
+  }
+
+  for (v <- Seq(2, 3)) {
+    test(s"legacy-mode inner join on a column that an earlier join ties to a day shift keeps " +
+        s"rows that can still match, V$v") {
+      val (a, b, c, result) = dayShiftedChain("inner")
+      testJoin(legacyMode, version(v))(result)(
+        MultiAddData((b, Seq((1, 35))), (c, Seq((1, 35)))),
+        CheckNewAnswer(),
+        // The watermark becomes 70000 seconds, far above the C row at 35 seconds.
+        MultiAddData((a, Seq((9, 70001))), (b, Seq((9, 70001))), (c, Seq((9, 70001)))),
+        CheckNewAnswer(),
+        AddData(c, (7, 70002)),
+        CheckNewAnswer(),
+        // A new A row at 86435 seconds has as = 35 seconds, which joins the B row at 35 seconds.
+        AddData(a, (1, 86435)),
+        CheckNewAnswer(Row(1, 35, 86435, 35)))
+    }
+  }
+
+  test("legacy-mode right outer join on a column that an earlier join ties to a day shift " +
+      "fails analysis") {
+    val (_, _, _, result) = dayShiftedChain("right_outer")
+    withSQLConf(legacyMode) {
+      val error = intercept[AnalysisException] {
+        testStream(result)(StartStream(), CheckNewAnswer())
+      }
+      assert(error.getMessage.contains("allow unmatched state to be finalized"))
+    }
+  }
+
+  // Legacy mode: the right input is a union whose second input has no watermark and builds rc
+  // from its own column, so rc has no bound below rt, which filters the union's late rows. In a
+  // batch where that input has no data, the optimizer removes it from the plan, and the left
+  // state must still not be evicted by rc.
+  for {
+    (name, condition) <- Seq("an equality key" -> "lk = rk AND lt = rc",
+      "a range" -> "lk = rk AND lt BETWEEN rc AND rc + INTERVAL 1 HOUR")
+    v <- Seq(2, 3)
+  } {
+    test(s"legacy-mode inner join with $name on a column that an unwatermarked union input " +
+        s"builds keeps rows after a batch without its data, V$v") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val r1 = MemoryStream[(Int, Int)]
+      val r2 = MemoryStream[(Int, Int)]
+      val watermarked = eventTimeInput(r1, "r").withColumn("rc", $"rt")
+      val unwatermarked = r2.toDF().toDF("rk", "time").select($"rk",
+        timestamp_seconds($"time").as("rt"), timestamp_seconds($"time" - 70).as("rc"))
+      val result = eventTimeInput(leftInput, "l")
+        .join(watermarked.union(unwatermarked), expr(condition))
+        .select($"lk", $"lt".cast("int"), $"rt".cast("int"), $"rc".cast("int"))
+      testJoin(legacyMode, version(v))(result)(
+        MultiAddData((leftInput, Seq((1, 10))), (r2, Seq((5, 5)))),
+        CheckNewAnswer(),
+        MultiAddData((leftInput, Seq((9, 70))), (r1, Seq((9, 70)))),
+        CheckNewAnswer(Row(9, 70, 70, 70)),
+        // The watermark is 69 seconds, and the unwatermarked input has no data in this batch.
+        AddData(leftInput, (7, 71)),
+        CheckNewAnswer(),
+        // A later row of that input at 80 seconds has rc = 10 seconds.
+        AddData(r2, (1, 80)),
+        CheckNewAnswer(Row(1, 10, 80, 10)))
+    }
   }
 
   // Legacy mode: rs is the right event time less a whole day in a column that keeps its

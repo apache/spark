@@ -400,8 +400,14 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * the cutoff this version uses for the shifted side, and at or below the one it uses for the
    * other side, which can no longer match rows at or below it, and both versions store V4 rows
    * at that ordinal. Only the shifted input's bound in the output watermark changes. Older
-   * versions evicted a backward shift before its last match. A NULL selected key does not change
-   * the semantics: such a row can never match.
+   * versions evicted a backward shift before its last match. With
+   * spark.sql.streaming.statefulOperator.allowMultiple=false, `eventTimeLags` holds the lags that
+   * eviction reads, and an input can keep several watermarked columns, such as its event time and
+   * a window over it. Older versions then evicted both inputs at the watermark by the first
+   * watermarked equality key, so such a join is accepted when that key is the sole watermarked
+   * key of each input, at the same ordinal, and its lag on each side gives the watermark itself
+   * as the cutoff. A NULL selected key does not change the semantics: such a row can never
+   * match.
    * Old V4 state indexed it at timestamp 0 under its own key, and the first batch after the
    * restart scans V4 state from the start, so it evicts the row and a preserved side emits it
    * unless an older version already joined it. V1 to V3 test every stored row each batch and
@@ -414,7 +420,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       rightKeys: Seq[Expression],
       condition: Option[Expression],
       consumedSides: Set[JoinSide],
-      stateFormatVersion: Int): Boolean = {
+      stateFormatVersion: Int,
+      eventTimeLags: Option[EventTimeLags] = None): Boolean = {
     // A projection can output the same watermarked column twice under one expression ID.
     val leftEventTime = leftAttributes.filter(_.metadata.contains(delayKey)).distinctBy(_.exprId)
     val rightEventTime =
@@ -471,6 +478,19 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           LeftSide) ||
         isOwnEventTimeIntervalJoin(leftAttributes, rightAttributes, leftKeys, rightKeys,
           condition, leftEventTime.head, rightEventTime.head, consumedSides)
+    } else if (leftEventTime.nonEmpty && rightEventTime.nonEmpty) {
+      eventTimeLags.exists { lags =>
+        def olderCutoff(keys: Seq[Expression], attributes: Seq[Attribute], ordinal: Int) =
+          StreamingJoinHelper.getStateKeyWatermark(keys, attributes, ordinal, Some(0L),
+            Some(lags)).contains(0L)
+        val ordinal = StreamingJoinHelper.getEventTimeKeyOrdinal(leftKeys, leftAttributes,
+          Some(lags))
+        ordinal.isDefined && leftOrdinals == ordinal.toSeq && rightOrdinals == ordinal.toSeq &&
+          StreamingJoinHelper.getEventTimeKeyOrdinal(rightKeys, rightAttributes, Some(lags)) ==
+            ordinal &&
+          olderCutoff(leftKeys, leftAttributes, ordinal.get) &&
+          olderCutoff(rightKeys, rightAttributes, ordinal.get)
+      }
     } else {
       false
     }

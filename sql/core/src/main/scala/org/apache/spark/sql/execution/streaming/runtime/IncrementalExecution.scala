@@ -177,13 +177,16 @@ class IncrementalExecution(
   // read the optimized plan, whose expression IDs the planned joins use. The analysis check reads
   // the analyzed plan with the same rule, against every column that pruning can leave first, so
   // it bounds a column here whenever it bounds one there. The projections that build the later
-  // watermarked columns stay in every batch's optimized plan: they sit above the input's
-  // watermark node, which the optimizer keeps even for a batch without data.
+  // watermarked columns of an input with a watermark node stay in every batch's optimized plan:
+  // the optimizer keeps that node even for a batch without data. A union input without one is
+  // removed in a batch where its sources have no data, so the union columns that it builds
+  // without a watermark come from the batch's analyzed plan, which keeps every input.
   private lazy val eventTimeLags: Option[EventTimeLags] =
     if (allowMultipleStatefulOperators) {
       None
     } else {
-      Some(StreamingJoinHelper.findEventTimeLags(optimizedPlan, planned = true))
+      Some(StreamingJoinHelper.findEventTimeLags(optimizedPlan, planned = true,
+        StreamingJoinHelper.findUnwatermarkedUnionColumns(analyzed)))
     }
 
   /**
@@ -1048,7 +1051,7 @@ class IncrementalExecution(
           case j: StreamingSymmetricHashJoinExec
               if !StreamingSymmetricHashJoinHelper.isWatermarkCheckpointCompatible(
                 j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-                consumedSides(j), j.stateFormatVersion) =>
+                consumedSides(j), j.stateFormatVersion, eventTimeLags) =>
             // Name the side of each equality key; both inputs often use the same column names.
             val keyConditions = j.leftKeys.zip(j.rightKeys).map { case (left, right) =>
               s"left.${left.sql} = right.${right.sql}"

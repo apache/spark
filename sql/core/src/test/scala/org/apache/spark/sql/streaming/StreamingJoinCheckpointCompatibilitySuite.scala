@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.nio.file.Files
+import java.sql.Timestamp
 
 import scala.jdk.CollectionConverters._
 import scala.util.Using
@@ -586,6 +587,70 @@ class StreamingJoinCheckpointCompatibilitySuite extends StreamTest {
             StopStream)
         }
         assert(pinnedMarker(checkpoint).contains("0"))
+      }
+    }
+  }
+
+  // With multiple stateful operators disabled, each input has its event time t, a window w over
+  // it and a copy s of t shifted back 20 seconds, all watermarked, and filters late rows by t.
+  // Older versions evicted both inputs at the watermark by the sole watermarked key. This version
+  // does the same for a key on t or w, whose lag is zero, so their checkpoints are reused; it
+  // evicts by s 20 seconds lower, so that checkpoint is still rejected.
+  for {
+    (keyName, key) <- Seq("window" -> "w", "event time" -> "t", "shifted event time" -> "s")
+    version <- Seq(2, 3)
+  } {
+    val accepted = key != "s"
+    test(s"${if (accepted) "resume" else "reject"} old legacy-mode join on the $keyName of " +
+        s"inputs with several watermarked columns, V$version") {
+      withJoinConf(version, logVersion = 2) {
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          val leftInput = MemoryStream[(Int, Int)]
+          val rightInput = MemoryStream[(Int, Int)]
+          def input(memory: MemoryStream[(Int, Int)], side: String): DataFrame = {
+            val withWatermark = memory.toDF().toDF(s"${side}k", "time")
+              .select(col(s"${side}k"), timestamp_seconds($"time").as(s"${side}t"))
+              .withWatermark(s"${side}t", "10 seconds")
+            val metadata = withWatermark.schema(s"${side}t").metadata
+            withWatermark.withColumn(s"${side}w", window(col(s"${side}t"), "10 seconds"))
+              .select(col("*"),
+                (col(s"${side}t") - expr("INTERVAL 20 SECONDS")).as(s"${side}s", metadata))
+          }
+          // The query reads t and the whole window after the join, so both stay in the planned
+          // inputs.
+          val joined = input(leftInput, "l").join(input(rightInput, "r"),
+            expr(s"lk = rk AND l$key = r$key"))
+            .select($"lk", $"lt".cast("long"), $"rt".cast("long"), $"lw")
+          withTempDir { checkpointDir =>
+            val checkpoint = checkpointDir.getCanonicalPath
+            testStream(joined)(
+              StartStream(checkpointLocation = checkpoint),
+              MultiAddData(leftInput, (1, 5))(rightInput, (2, 5)),
+              CheckNewAnswer(),
+              StopStream)
+            setMarker(checkpoint, None)
+            val commitsBefore = snapshot(new File(checkpoint, "commits"))
+            withSQLConf(markerKey -> "0") {
+              if (accepted) {
+                // The right row joins the left row stored before the restart.
+                testStream(joined)(
+                  StartStream(checkpointLocation = checkpoint),
+                  AddData(rightInput, (1, 5)),
+                  CheckNewAnswer(Row(1, 5L, 5L, Row(new Timestamp(0L), new Timestamp(10000L)))),
+                  StopStream)
+                assert(pinnedMarker(checkpoint).contains("0"))
+              } else {
+                testStream(joined)(
+                  StartStream(checkpointLocation = checkpoint),
+                  AddData(rightInput, (1, 5)),
+                  ExpectFailure[AnalysisException](assertFailure = error =>
+                    assert(error.asInstanceOf[AnalysisException].getCondition ==
+                      "STREAMING_JOIN_CHECKPOINT_INCOMPATIBLE")))
+                assert(snapshot(new File(checkpoint, "commits")) == commitsBefore)
+              }
+            }
+          }
+        }
       }
     }
   }

@@ -96,17 +96,26 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   to that amount later. A key that rows can hold below by an amount that Spark cannot bound no
   longer bounds state: one built from a time shifted backward by whole days, months or years,
   one that copies a column that an earlier session window with a gap that is not constant is
-  built over, and one that an input of a union builds from a column without a watermark. Outer
+  built over, and one that an input of a union builds from a column without a watermark, also in
+  a batch where that input has no data. Outer
   and left semi joins on such a key now fail, and inner joins keep the other input's rows for the
   life of the query. To bound state, join on the first watermarked column itself or on a time
   window over it, or select the key before the other watermarked columns of its input. A range
   condition on a watermarked column after the first one bounds state at that column's watermark
   less the same amount, but only when Spark can see how the column is built from the ones before
   it. Spark can also see this through an earlier inner join whose condition equates a
-  watermarked column of each of its inputs, such as `at = bt`, and through an earlier left or
-  right outer join with such a condition for a column of the input that it pads with nulls.
-  Checkpoints from earlier versions of joins on a watermarked column after the first one are
-  rejected at restart, as described below.
+  watermarked column of each of its inputs, such as `at = bt`, or bounds one of them from below by
+  the other plus constant intervals, such as `bt BETWEEN at AND at + INTERVAL 1 HOUR`, and through
+  an earlier left or right outer join with such a condition for a column of the input that it pads
+  with nulls.
+  When each such condition relates the columns by an amount that Spark cannot bound, the column
+  bounds no state, as above. Among the keys that bound state, Spark prefers one whose amount it
+  can see over one that the plan does not relate to the column that filters late rows. Spark
+  reuses a checkpoint from an earlier version of a join whose only watermarked equality key, at
+  the same position in both inputs, bounds state at the watermark itself, such as a join on a
+  time window over the first watermarked column, or on that column while the input also keeps
+  the window. Other checkpoints from earlier versions of joins on a watermarked column after the
+  first one are rejected at restart, as described below.
 
 - Spark 4.4 holds back the output watermark of a stream-stream join when retained state can
   still emit old event times. Downstream stateful operators may retain more state, take longer
