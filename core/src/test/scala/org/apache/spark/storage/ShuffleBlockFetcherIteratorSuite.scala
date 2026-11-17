@@ -31,8 +31,8 @@ import scala.concurrent.Future
 
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.logging.log4j.Level
-import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{doThrow, mock, times, verify, when}
+import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
+import org.mockito.Mockito.{doThrow, mock, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.roaringbitmap.RoaringBitmap
@@ -2156,5 +2156,115 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(id5.isInstanceOf[ShuffleBlockChunkId])
     assert(!iterator2.hasNext)
     assert(shuffleMetrics2.mergedFetchFallbackCount === 0)
+  }
+
+  test("SPARK-61894: a failure for a block whose result was already delivered is ignored") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer()
+    )
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      // The network layer reports a failure for a block whose success callback threw after the
+      // iterator had already queued its result.
+      listener.onBlockFetchSuccess(blockIds(0), blocks(BlockId(blockIds(0))))
+      listener.onBlockFetchFailure(blockIds(0), new OutOfMemoryError("Java heap space"))
+      listener.onBlockFetchSuccess(blockIds(1), blocks(BlockId(blockIds(1))))
+    }
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)))
+    val fetched = iterator.map(_._1).toList
+    assert(fetched.size == 2)
+    assert(fetched.toSet == blocks.keySet)
+    verifyFetchBlocksInvocationCount(1)
+  }
+
+  test("SPARK-61894: a Netty OOM failure for an already delivered block does not fetch it " +
+      "again") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer()
+    )
+    var failedAfterSuccess = false
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      blockIds.foreach { blockId =>
+        listener.onBlockFetchSuccess(blockId, blocks(BlockId(blockId)))
+        if (!failedAfterSuccess) {
+          // The success callback of the first block threw after queuing its result.
+          failedAfterSuccess = true
+          val ctor = classOf[OutOfDirectMemoryError]
+            .getDeclaredConstructor(classOf[java.lang.String])
+          ctor.setAccessible(true)
+          listener.onBlockFetchFailure(blockId, ctor.newInstance("failed to allocate memory"))
+        }
+      }
+    }
+    try {
+      // One block per request, so the iterator keeps reading after the first block. Without the
+      // guard, the failure defers the delivered block and fetches it again, and the reader gets
+      // its rows twice.
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        maxBlocksInFlightPerAddress = 1)
+      val fetched = iterator.map(_._1).toList
+      assert(fetched.sortBy(_.name) == blocks.keys.toSeq.sortBy(_.name))
+      verifyFetchBlocksInvocationCount(2)
+      assert(!ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.get())
+    } finally {
+      ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.set(false)
+    }
+  }
+
+  test("SPARK-61894: a failure after a success callback that threw before queuing the result " +
+      "fails the fetch") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blockId = ShuffleBlockId(0, 0, 0)
+    val buf = createMockManagedBuffer()
+    // retain() runs before the success callback queues the result.
+    when(buf.retain()).thenThrow(new OutOfMemoryError("Java heap space"))
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      // What RetryingBlockTransferor and TransportResponseHandler do after the callback throws.
+      try {
+        listener.onBlockFetchSuccess(blockIds.head, buf)
+      } catch {
+        case e: OutOfMemoryError => listener.onBlockFetchFailure(blockIds.head, e)
+      }
+    }
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(Seq(blockId), 1L, 0)))
+    intercept[FetchFailedException] { iterator.toList }
+  }
+
+  test("SPARK-61894: a success callback that throws before queuing the result does not leak " +
+      "the buffer reference") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blockId = ShuffleBlockId(0, 0, 0)
+    val buf = createMockManagedBuffer()
+    // The request-duration metric is updated after the last block of the request arrives and
+    // before its result is queued.
+    val metrics = mock(classOf[ShuffleReadMetricsReporter])
+    doThrow(new OutOfMemoryError("Java heap space")).when(metrics).incRemoteReqsDuration(anyLong())
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      try {
+        listener.onBlockFetchSuccess(blockIds.head, buf)
+      } catch {
+        case e: OutOfMemoryError => listener.onBlockFetchFailure(blockIds.head, e)
+      }
+    }
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(Seq(blockId), 1L, 0)), shuffleMetrics = Some(metrics))
+    intercept[FetchFailedException] { iterator.toList }
+    // The result was never queued, so the iterator must not hold a reference to the buffer.
+    verify(buf, never()).retain()
+    verify(buf, never()).release()
   }
 }

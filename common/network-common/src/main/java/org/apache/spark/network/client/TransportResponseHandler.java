@@ -136,6 +136,29 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     streamCallbacks.clear();
   }
 
+  /**
+   * Fails a fetch whose success callback threw. Its request was removed from the outstanding
+   * requests before the callback ran, so neither a connection close nor the idle timeout can fail
+   * it later; without this its caller would wait forever for a response that never arrives.
+   */
+  private void failAfterSuccessCallbackError(
+      ChunkReceivedCallback listener, int chunkIndex, Throwable cause) {
+    try {
+      listener.onFailure(chunkIndex, cause);
+    } catch (Exception e) {
+      logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
+    }
+  }
+
+  /** Same as above for an RPC or merged block meta request whose success callback threw. */
+  private void failAfterSuccessCallbackError(BaseResponseCallback listener, Throwable cause) {
+    try {
+      listener.onFailure(cause);
+    } catch (Exception e) {
+      logger.warn("RpcResponseCallback.onFailure throws exception", e);
+    }
+  }
+
   @Override
   public void channelActive() {
   }
@@ -173,8 +196,14 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onSuccess(resp.streamChunkId.chunkIndex(), resp.body());
-        resp.body().release();
+        try {
+          listener.onSuccess(resp.streamChunkId.chunkIndex(), resp.body());
+        } catch (Throwable t) {
+          failAfterSuccessCallbackError(listener, resp.streamChunkId.chunkIndex(), t);
+          throw t;
+        } finally {
+          resp.body().release();
+        }
       }
     } else if (message instanceof ChunkFetchFailure resp) {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
@@ -200,6 +229,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         outstandingRpcs.remove(resp.requestId);
         try {
           listener.onSuccess(resp.body().nioByteBuffer());
+        } catch (Throwable t) {
+          failAfterSuccessCallbackError(listener, t);
+          throw t;
         } finally {
           resp.body().release();
         }
@@ -227,7 +259,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
             MDC.of(LogKeys.RESPONSE_BODY_SIZE, resp.body().size()));
         } else {
           outstandingRpcs.remove(resp.requestId);
-          listener.onSuccess(resp.getNumChunks(), resp.body());
+          try {
+            listener.onSuccess(resp.getNumChunks(), resp.body());
+          } catch (Throwable t) {
+            failAfterSuccessCallbackError(listener, t);
+            throw t;
+          }
         }
       } finally {
         resp.body().release();
