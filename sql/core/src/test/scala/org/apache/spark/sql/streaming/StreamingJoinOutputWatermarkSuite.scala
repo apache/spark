@@ -339,10 +339,14 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
 
   // An append-mode aggregation over the event time of an input that the join cannot bound would
   // never emit, so the query fails at start.
-  // The sub-condition asks for a watermark on the other input when that input has none.
+  // The sub-condition asks for a watermark on the other input when that input has none, and
+  // offers the update output mode only when the query has no stream-stream outer join, which
+  // that mode rejects, even if the optimizer turns the outer join into an inner one.
   private def unboundedEventTimeError(
-      eventTime: String, side: String, otherSide: String, otherHasWatermark: Boolean) = {
-    val subClass = if (otherHasWatermark) "TIME_CONSTRAINT" else "WATERMARK_AND_TIME_CONSTRAINT"
+      eventTime: String, side: String, otherSide: String, otherHasWatermark: Boolean,
+      updateModeAllowed: Boolean) = {
+    val base = if (otherHasWatermark) "TIME_CONSTRAINT" else "WATERMARK_AND_TIME_CONSTRAINT"
+    val subClass = base + (if (updateModeAllowed) "_OR_UPDATE_MODE" else "")
     ExpectFailure[AnalysisException](assertFailure = error => {
       checkError(error.asInstanceOf[AnalysisException],
         condition = s"STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME.$subClass",
@@ -387,13 +391,18 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     "a session window" -> { joined =>
       joined.select($"impressionAdId", $"clickTime")
         .groupBy($"impressionAdId", session_window($"clickTime", "5 seconds")).count()
+    },
+    "a stream-static join" -> { joined =>
+      windowCounts(joined.select($"impressionAdId", $"clickTime")
+        .join(broadcast(ads()), $"impressionAdId" === $"staticAdId", "left_outer"), "clickTime")
     }
   ).foreach { case (path, aggregation) =>
     test(s"reject an append-mode aggregation over the unbounded input through $path") {
       val (impressionInput, clickInput, joined) = oneDirectionalJoin()
       testStream(aggregation(joined), OutputMode.Append())(
         MultiAddData(impressionInput, (1, 5L))(clickInput, (1, 8L)),
-        unboundedEventTimeError("clickTime", "right", "left", otherHasWatermark = true))
+        unboundedEventTimeError("clickTime", "right", "left", otherHasWatermark = true,
+          updateModeAllowed = true))
     }
   }
 
@@ -401,7 +410,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
     val (leftInput, rightInput, joined) = oneWatermarkEqualityJoin("inner", watermarkOnLeft = true)
     testStream(windowCounts(joined, "lt"), OutputMode.Append())(
       MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
-      unboundedEventTimeError("lt", "left", "right", otherHasWatermark = false))
+      unboundedEventTimeError("lt", "left", "right", otherHasWatermark = false,
+        updateModeAllowed = true))
   }
 
   test("reject an append-mode aggregation over the unbounded input of an admitted outer join") {
@@ -409,7 +419,8 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       oneWatermarkEqualityJoin("left_outer", watermarkOnLeft = false)
     testStream(windowCounts(joined, "rt"), OutputMode.Append())(
       MultiAddData(leftInput, (1, 5))(rightInput, (1, 5)),
-      unboundedEventTimeError("rt", "right", "left", otherHasWatermark = false))
+      unboundedEventTimeError("rt", "right", "left", otherHasWatermark = false,
+        updateModeAllowed = false))
   }
 
   test("run an update-mode aggregation over an event time the join cannot bound") {

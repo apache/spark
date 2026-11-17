@@ -31,7 +31,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{EventTimeLags, StreamingJoinHelper, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, SessionWindow, TimeWindow}
-import org.apache.spark.sql.catalyst.plans.LeftSemi
+import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -843,12 +843,21 @@ class IncrementalExecution(
           val join = joins(joinOperatorId)
           val (other, otherOutput) =
             if (side == LeftSide) ("right", join.right.output) else ("left", join.left.output)
+          // The update output mode rejects a stream-stream outer join at analysis, so the error
+          // offers it only when the analyzed plan has none. The optimizer can turn an outer join
+          // into an inner one, as a filter on the aggregated column does, so the planned join
+          // does not say.
+          val updateModeAllowed = !analyzed.exists {
+            case j: Join if j.left.isStreaming && j.right.isStreaming =>
+              Seq(LeftOuter, RightOuter, FullOuter).contains(j.joinType)
+            case _ => false
+          }
           val subClass =
-            if (otherOutput.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+            (if (otherOutput.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
               "TIME_CONSTRAINT"
             } else {
               "WATERMARK_AND_TIME_CONSTRAINT"
-            }
+            }) + (if (updateModeAllowed) "_OR_UPDATE_MODE" else "")
           val error = new AnalysisException(
             errorClass = s"STREAMING_JOIN_UNBOUNDED_DOWNSTREAM_EVENT_TIME.$subClass",
             messageParameters = Map(

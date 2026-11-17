@@ -31,11 +31,14 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   them on both sides. An equality key counts as such a time condition when it is the other
   input's event time, or that event time shifted by constant intervals, except a shift with
   months, years, or a day-time interval of 24 hours or more that can move a time backward. To
-  decide this without the session time zone, Spark counts each such day as at least 12 hours and
-  each month as at least 28 such days, so `leftTime = rightTime + INTERVAL 1 DAY - INTERVAL 1 HOUR`
-  counts. A key such as `leftTime = rightTime - INTERVAL 1 DAY`,
-  `leftTime = rightTime - INTERVAL 36 HOURS` or
-  `leftTime = rightTime + INTERVAL 1 DAY - INTERVAL 13 HOURS`, or one truncated from the other
+  decide this without the session time zone, Spark counts each day as 12 to 36 hours and each
+  month as 28 to 31 such days, takes the shortest length for an added term and the longest for a
+  subtracted one, and counts a key only when the total is never negative. So
+  `leftTime = rightTime + INTERVAL 1 DAY - INTERVAL 1 HOUR` counts. A key such as
+  `leftTime = rightTime - INTERVAL 1 DAY`, `leftTime = rightTime - INTERVAL 36 HOURS`,
+  `leftTime = rightTime + INTERVAL 1 DAY - INTERVAL 13 HOURS`,
+  `leftTime = rightTime + INTERVAL 5 DAYS - INTERVAL 2 DAYS` or
+  `leftTime = rightTime + INTERVAL 1 MONTH - INTERVAL 15 DAYS`, or one truncated from the other
   input's event time, such as
   `leftTime = CAST(CAST(rightTime AS BIGINT) AS TIMESTAMP)`, does not count, while
   `timestampadd` in hours, minutes or seconds does, whatever the amount. When both inputs
@@ -99,7 +102,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   window over it, or select the key before the other watermarked columns of its input. A range
   condition on a watermarked column after the first one bounds state at that column's watermark
   less the same amount, but only when Spark can see how the column is built from the ones before
-  it. Checkpoints from earlier versions of joins on a watermarked column after the first one are
+  it. Spark can also see this through an earlier inner join whose condition equates a
+  watermarked column of each of its inputs, such as `at = bt`, and through an earlier left or
+  right outer join with such a condition for a column of the input that it pads with nulls.
+  Checkpoints from earlier versions of joins on a watermarked column after the first one are
   rejected at restart, as described below.
 
 - Spark 4.4 holds back the output watermark of a stream-stream join when retained state can
