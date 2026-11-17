@@ -519,18 +519,16 @@ INK_SECONDARY = "#52514e"
 INK_MUTED = "#898781"
 GRID = "#e1e0d9"
 AXIS = "#c3c2b7"
-# Categorical colors assigned to branches in a fixed order: master, then newest first. Other
-# labels, such as MULTI_BRANCH_LABEL, get OTHER_BRANCH_COLOR.
-BRANCH_COLORS = [
-    "#2a78d6",
-    "#eb6834",
-    "#1baf7a",
-    "#eda100",
-    "#e87ba4",
-    "#008300",
-    "#6250d6",
-    "#e34948",
-]
+# Branch colors follow the branch, so that adding or removing a branch does not repaint the
+# others. master and the branch-N.x lines have fixed colors, and a release branch branch-M.m
+# takes RELEASE_COLORS[m % 6], ordered so that consecutive minor versions follow the order of
+# the categorical palette. When two drawn release branches would share a color, the older one
+# gets SHARED_RELEASE_COLOR. Labels that are not branches, such as MULTI_BRANCH_LABEL, get
+# OTHER_BRANCH_COLOR.
+MASTER_COLOR = "#2a78d6"
+FEATURE_LINE_COLOR = "#eb6834"
+RELEASE_COLORS = ["#6250d6", "#008300", "#e87ba4", "#eda100", "#1baf7a", "#e34948"]
+SHARED_RELEASE_COLOR = "#3f3e3b"
 OTHER_BRANCH_COLOR = "#898781"
 # Sequential ramp for the load heatmap, from no load to the peak.
 HEAT_RAMP = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
@@ -621,13 +619,22 @@ class Renderer:
         self.timelines = timelines
         self.excluded = excluded
         branches = sorted({t.schedule.branch for t in timelines}, key=branch_sort_key)
-        palette = iter(BRANCH_COLORS)
-        self.branch_colors = {
-            b: next(palette, OTHER_BRANCH_COLOR)
-            if b == DEFAULT_BRANCH or b.startswith("branch-")
-            else OTHER_BRANCH_COLOR
-            for b in branches
-        }
+        self.branch_colors = {}
+        release_colors = set()
+        for b in branches:  # Newest first, so the newer branch keeps a shared color.
+            version = re.match(r"^branch-\d+\.(\d+|x)$", b)
+            if b == DEFAULT_BRANCH:
+                color = MASTER_COLOR
+            elif version is None:
+                color = OTHER_BRANCH_COLOR
+            elif version.group(1) == "x":
+                color = FEATURE_LINE_COLOR
+            else:
+                color = RELEASE_COLORS[int(version.group(1)) % len(RELEASE_COLORS)]
+                if color in release_colors:
+                    color = SHARED_RELEASE_COLOR
+                release_colors.add(color)
+            self.branch_colors[b] = color
         self.branches = branches
         self.periods = sorted({t.period for t in timelines})
         self.cycle = 1
