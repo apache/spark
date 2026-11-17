@@ -1589,7 +1589,7 @@ class BaseUDFTestsMixin:
         df = self.spark.range(1)
         grouped = df.groupBy("id")
         cogrouped = grouped.cogroup(grouped)
-        # YearMonthIntervalType has no Arrow mapping.
+        # PySpark's to_arrow_type cannot convert YearMonthIntervalType.
         unsupported = StructType([StructField("a", YearMonthIntervalType())])
 
         def identity(x):
