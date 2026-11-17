@@ -113,6 +113,19 @@ class JavaTranspileLoweringTests(unittest.TestCase):
         mod = _lower("def f(x):\n    return x % 3", LongType(), {0: "integral"})
         self.assertIn("modLong", mod)
 
+    def test_mixed_numeric_conditional_declines_before_rounding(self):
+        sources = [
+            "def f(x):\n    return x if x > 0 else 0.5",
+            "def f(x):\n    y = x if x > 0 else 0.5\n    return y < 9007199254740993",
+            "def f(x):\n    return (x if x > 0 else 0.5) / 3",
+        ]
+        for source, return_type in zip(sources, [DoubleType(), BooleanType(), DoubleType()]):
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(UnsupportedOperationException, "without rounding"):
+                    _lower(source, return_type, {0: "integral"})
+        _lower("def f(x):\n    return x if x > 0 else 0", LongType(), {0: "integral"})
+        _lower("def f(x):\n    return x if x > 0 else 0.5", DoubleType(), {0: "fractional"})
+
     def test_true_divide_of_ints_produces_a_float(self):
         # Python's `/` is always float division, so an int body under a declared double is
         # the correct shape and an int return type is refused.
@@ -520,6 +533,20 @@ class JavaTranspileEndToEndTests(ReusedSQLTestCase):
 
     def _plan(self, df) -> str:
         return df._jdf.queryExecution().optimizedPlan().toString()
+
+    def test_mixed_conditional_keeps_exact_long_through_python_fallback(self):
+        def compare(x: int):
+            y = x if x > 0 else 0.5
+            return y < 9007199254740993
+
+        df = self.spark.createDataFrame([(9007199254740993,), (-1,)], "x bigint")
+        with self.sql_conf(_TRANSPILE_OFF):
+            expected = df.select(UserDefinedFunction(compare, BooleanType())("x")).collect()
+        self.assertEqual([r[0] for r in expected], [False, True])
+        with self.sql_conf(_JAVA_ONLY):
+            pudf = UserDefinedFunction(compare, BooleanType())
+            self.assertEqual(pudf.transpiled, [])
+            self.assertEqual(df.select(pudf("x")).collect(), expected)
 
     def test_java_target_is_off_by_default(self):
         # The whole point of the opt-in: with the conf untouched, a body only this

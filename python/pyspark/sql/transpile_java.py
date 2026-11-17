@@ -488,6 +488,11 @@ class JavaTranspiler(AbstractTranspiler):
                     )
                 when_true = self._lower_expr(body)
                 when_false = self._lower_expr(orelse)
+                if {when_true.category, when_false.category} == {"integral", "fractional"}:
+                    raise UnsupportedOperationException(
+                        "a conditional with integral and fractional branches cannot be "
+                        "lowered without rounding its integral branch"
+                    )
                 category = self._unify(when_true.category, when_false.category, "conditional")
                 true_code = self._coerce(when_true, category).code
                 false_code = self._coerce(when_false, category).code
