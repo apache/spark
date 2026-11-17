@@ -25,7 +25,7 @@ element-wise subset is rewritten (``+`` ``-`` ``*`` ``%``, unary ``+``/``-``, an
 and the reasoning behind each exclusion live in the "Scalar pandas UDFs" section of
 ``python/pyspark/sql/transpile.py``; this module is where those claims are checked.
 
-The tests come in three kinds, and the distinction matters when one fails:
+The tests come in four kinds, and the distinction matters when one fails:
 
 ``...SubsetTests``
     Differentials over the supported subset. Both sides run at ``SQL_SCALAR_PANDAS_UDF``, so
@@ -49,6 +49,11 @@ The tests come in three kinds, and the distinction matters when one fails:
     single-partition DataFrame. The exception is the ``%`` int64 boundary, where numpy is
     exact and the lowering raises.
 
+``...ReturnTypeCastTests``
+    The one difference kept by decision rather than by necessity: the lowered body is cast
+    to the declared return type, so a fractional result declared with an integral type is
+    truncated toward zero where the interpreted path, by default, refuses the conversion.
+
 UDF bodies are module-level ``def``s. ``inspect.getsource`` on a lambda passed as a call
 argument returns the enclosing statement, whose top-level node is a call rather than a lambda,
 so transpilation silently falls back and a differential would compare interpreted against
@@ -64,13 +69,16 @@ from pyspark.sql.functions import pandas_udf
 from pyspark.sql.tests.arrow.test_arrow_python_udf_transpile import _eval_python_nodes
 from pyspark.sql.types import (
     BooleanType,
+    ByteType,
     DecimalType,
     DoubleType,
     FloatType,
+    IntegerType,
     LongType,
+    ShortType,
     StringType,
 )
-from pyspark.sql.udf import UserDefinedFunction
+from pyspark.sql.udf import _TRANSPILE_EVAL_TYPES_CONF, UserDefinedFunction
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,
@@ -91,6 +99,13 @@ _TRANSPILE_ON = {
 _TRANSPILE_OFF = {
     "spark.sql.experimental.optimizer.transpilePyUDFs": False,
     "spark.sql.ansi.enabled": True,
+}
+
+# Transpilation on for the row-at-a-time eval types only: the rollback for this eval type,
+# which leaves the other two as they are (pinned in the Arrow suite).
+_PANDAS_ROLLED_BACK = {
+    **_TRANSPILE_ON,
+    _TRANSPILE_EVAL_TYPES_CONF: "SQL_BATCHED_UDF,SQL_ARROW_BATCHED_UDF",
 }
 
 # A differential that silently fell back would compare interpreted against interpreted and
@@ -154,6 +169,10 @@ def modulo(a, b):
 
 def times_one_and_a_half(s):
     return s * 1.5
+
+
+def times_ten_to_the_thirty(s):
+    return s * 1e30
 
 
 def combine(a, b):
@@ -641,6 +660,30 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
         self.assertTrue(off[0] != off[0], f"expected interpreted NaN, got {off!r}")
         self.assertEqual(repr(off), repr(on), "the ConvertToCatalyst re-check did not fall back")
 
+    def test_eval_type_removed_from_the_list_disables_transpilation(self):
+        # Unlisting SQL_SCALAR_PANDAS_UDF is a gate, not a failed attempt, so no warning.
+        with self.sql_conf(_PANDAS_ROLLED_BACK):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                pudf = self._pandas_udf(add_one, LongType())
+            self.assertEqual([], [str(w.message) for w in caught])
+            self.assertEqual([], pudf.transpiled)
+            df = self._longs(1, None).select(pudf("a"))
+            self.assertEqual({"ArrowEvalPythonExec": 1}, dict(_eval_python_nodes(df)))
+            self.assertEqual([2, None], [r[0] for r in df.collect()])
+
+    def test_eval_type_removed_after_construction_runs_interpreted(self):
+        # The UDF already carries options, so only the ConvertToCatalyst re-check can keep
+        # it interpreted. That is the case a rollback has to cover.
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = self._pandas_udf(add_one, LongType())
+            self._assert_transpiled(pudf, "add_one")
+            self.assertEqual({}, dict(_eval_python_nodes(self._longs(1).select(pudf("a")))))
+        with self.sql_conf(_PANDAS_ROLLED_BACK):
+            df = self._longs(1, None).select(pudf("a"))
+            self.assertEqual({"ArrowEvalPythonExec": 1}, dict(_eval_python_nodes(df)))
+            self.assertEqual([2, None], [r[0] for r in df.collect()])
+
     def test_nan_from_infinite_arithmetic_becomes_null_in_the_default_regime(self):
         # The other half of the pair above: with the conf off, the interpreted NaN really is
         # masked to NULL, which is what the normalization reproduces.
@@ -992,33 +1035,132 @@ class PandasUDFTranspileDivergenceTests(PandasUDFTranspileTestsMixin, ReusedSQLT
                 [r[0] for r in df.select(pudf("a")).collect()],
             )
 
-    def test_fractional_result_for_an_integral_return_type(self):
-        # `s * 1.5` on a bigint column with a bigint return type: interpreted, the float64
-        # result fails the Arrow conversion; transpiled, the Cast truncates. Accepted as the
-        # same class as the documented return-type-cast behavior for the scalar eval types --
-        # the rewrite succeeds where the interpreted path errors out.
-        df = self._longs(3, None)
-        with self.sql_conf(_TRANSPILE_OFF):
-            interpreted = self._values_or_raised(
-                df.select(self._pandas_udf(times_one_and_a_half, LongType())("a"))
-            )
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = self._pandas_udf(times_one_and_a_half, LongType())
-            self._assert_transpiled(pudf, "times_one_and_a_half")
-            transpiled = [r[0] for r in df.select(pudf("a")).collect()]
-        self.assertEqual([4, None], transpiled)
+
+class PandasUDFTranspileReturnTypeCastTests(PandasUDFTranspileTestsMixin, ReusedSQLTestCase):
+    """A fractional body declared with an integral return type: the decision, pinned.
+
+    The lowered body is cast to the declared return type, and that cast is kept on purpose
+    rather than guarded or refused. It truncates toward zero and raises on a value the type
+    cannot hold, which is what the interpreted path does once
+    ``spark.sql.execution.pandas.convertToArrowArraySafely`` is off -- minus that path's
+    silent garbage out of range. With the conf on, which is the default, the interpreted path
+    refuses the lossy conversion instead, so the rewrite turns an error into a truncated value.
+    See "The return-type cast" in python/pyspark/sql/transpile.py.
+    """
+
+    _SAFE_ARROW = "spark.sql.execution.pandas.convertToArrowArraySafely"
+    _INTEGRAL_RETURN_TYPES = (ByteType(), ShortType(), IntegerType(), LongType())
+
+    # 3, -3 and 1 times 1.5 are 4.5, -4.5 and 1.5, which every other way of making an
+    # integer of them gets differently: floor gives -5 for the second, rounding half up
+    # gives 5, -5 and 2, and rounding half to even gives 2 for the third.
+    _INPUTS = (3, -3, 1, None)
+    _TRUNCATED_TOWARD_ZERO = [4, -4, 1, None]
+
+    def _assert_refused_by_the_safe_conversion(self, values, error):
+        """The interpreted side raised, and because the safe Arrow conversion refused.
+
+        Raising alone is not enough to go by: a worker that fails for any other reason
+        raises as well, and would pass for the behavior being pinned.
+        """
         self.assertIs(
-            interpreted[0],
+            values,
             _RAISED,
-            "the interpreted float64 -> int64 conversion was expected to fail; if it now "
+            "the interpreted float64 -> integer conversion was expected to fail; if it now "
             "succeeds, compare the values and update the note in transpile.py",
         )
+        self.assertIn(self._SAFE_ARROW, str(error))
 
-    def test_fractional_result_agrees_for_a_double_return_type(self):
-        # Same body, declared honestly: no divergence.
-        self._assert_matches_interpreted(
-            times_one_and_a_half, DoubleType(), self._longs(3, None), "a"
+    def test_fractional_result_for_an_integral_return_type(self):
+        # The default regime. Interpreted, the float64 result fails the safe Arrow
+        # conversion; transpiled, the Cast truncates.
+        df = self._longs(*self._INPUTS)
+        for return_type in self._INTEGRAL_RETURN_TYPES:
+            with self.subTest(returnType=return_type.simpleString()):
+                (interpreted, error), (transpiled, _) = self._pin_cast(
+                    times_one_and_a_half, return_type, df, conf={self._SAFE_ARROW: True}
+                )
+                self.assertEqual(self._TRUNCATED_TOWARD_ZERO, transpiled)
+                self._assert_refused_by_the_safe_conversion(interpreted, error)
+
+    def test_fractional_result_agrees_with_the_unsafe_arrow_conversion(self):
+        # The interpreted path truncates toward zero too once it is told not to check, so
+        # the transpiled value is not one a pandas UDF could never have produced.
+        for df in (self._longs(*self._INPUTS), self._doubles(2.5, -2.5, NAN, None)):
+            for return_type in self._INTEGRAL_RETURN_TYPES:
+                with self.subTest(returnType=return_type.simpleString(), schema=df.schema):
+                    self._assert_matches_interpreted(
+                        times_one_and_a_half,
+                        return_type,
+                        df,
+                        "a",
+                        conf={self._SAFE_ARROW: False},
+                    )
+        # And the value they agree on is the truncated one, not a shared error.
+        (interpreted, _), (transpiled, _) = self._pin_cast(
+            times_one_and_a_half,
+            LongType(),
+            self._longs(*self._INPUTS),
+            conf={self._SAFE_ARROW: False},
         )
+        self.assertEqual(self._TRUNCATED_TOWARD_ZERO, interpreted)
+        self.assertEqual(self._TRUNCATED_TOWARD_ZERO, transpiled)
+
+    def test_out_of_range_fractional_result_raises_transpiled(self):
+        # Truncation is where the leniency ends: the ANSI cast will not wrap. Unchecked, the
+        # interpreted path returns whatever the conversion left behind instead, which is
+        # deliberately not pinned here.
+        df = self._longs(3, -3)
+        for return_type in self._INTEGRAL_RETURN_TYPES:
+            for safe in (True, False):
+                with self.subTest(returnType=return_type.simpleString(), safe=safe):
+                    (interpreted, interpreted_error), (transpiled, error) = self._pin_cast(
+                        times_ten_to_the_thirty, return_type, df, conf={self._SAFE_ARROW: safe}
+                    )
+                    self.assertIs(transpiled, _RAISED)
+                    self.assertIn("CAST_OVERFLOW", str(error))
+                    if safe:
+                        self._assert_refused_by_the_safe_conversion(interpreted, interpreted_error)
+                    else:
+                        self.assertIsNot(interpreted, _RAISED, interpreted_error)
+
+    def test_fractional_result_agrees_for_a_fractional_return_type(self):
+        # Same body, declared honestly: no divergence.
+        for return_type in (FloatType(), DoubleType()):
+            with self.subTest(returnType=return_type.simpleString()):
+                self._assert_matches_interpreted(
+                    times_one_and_a_half, return_type, self._longs(*self._INPUTS), "a"
+                )
+
+    def test_unlisting_the_eval_type_restores_the_interpreted_error(self):
+        # The way back for anyone relying on the error: take scalar pandas UDFs out of the
+        # eval type list. It has to reach a UDF built before the list changed, too.
+        df = self._longs(*self._INPUTS)
+        with self.sql_conf(_TRANSPILE_ON):
+            built_before = self._pandas_udf(times_one_and_a_half, LongType())
+            self._assert_transpiled(built_before, "times_one_and_a_half")
+            self.assertEqual(
+                self._TRUNCATED_TOWARD_ZERO, [r[0] for r in df.select(built_before("a")).collect()]
+            )
+        with self.sql_conf(_PANDAS_ROLLED_BACK):
+            built_after = self._pandas_udf(times_one_and_a_half, LongType())
+            self.assertEqual([], built_after.transpiled)
+            for when, pudf in (("before", built_before), ("after", built_after)):
+                with self.subTest(built=when):
+                    values, error = self._values_or_raised(df.select(pudf("a")))
+                    self._assert_refused_by_the_safe_conversion(values, error)
+
+    def _pin_cast(self, func, return_type, df, conf):
+        """``((interpreted, error), (transpiled, error))`` for ``func`` over column ``a``."""
+        with self.sql_conf({**_TRANSPILE_OFF, **conf}):
+            interpreted = self._values_or_raised(
+                df.select(self._pandas_udf(func, return_type)("a"))
+            )
+        with self.sql_conf({**_TRANSPILE_ON, **conf}):
+            pudf = self._pandas_udf(func, return_type)
+            self._assert_transpiled(pudf, func.__name__)
+            transpiled = self._values_or_raised(df.select(pudf("a")))
+        return interpreted, transpiled
 
 
 class PandasUDFTranspileDecimalReturnTests(PandasUDFTranspileTestsMixin, ReusedSQLTestCase):
