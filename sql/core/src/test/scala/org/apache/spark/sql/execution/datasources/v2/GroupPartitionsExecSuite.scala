@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.{Partition, SparkConf, SparkContext, SparkException, TaskContext}
-import org.apache.spark.rdd.{CoalescedRDDPartition, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
@@ -947,29 +947,43 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       "there is nothing to move the positions into once the child reports another partitioning")
   }
 
-  test("SPARK-61279: the grouped coalescer prefers majority hosts and spreads ties") {
-    val parent = spark.sparkContext.makeRDD((0 until 6).map(i => (i, Seq("host-a", "host-b"))))
+  test("SPARK-61279: the grouped coalescer prefers a host only when one is ahead") {
+    val sc = spark.sparkContext
+    val parent = sc.makeRDD((0 until 6).map(i => (i, Seq("host-a", "host-b"))))
     val coalescer = new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2), Seq(3, 4), Seq(5)))
-    // Groups whose partitions all prefer both hosts alternate between them. A group of one names
-    // no location: the scheduler offers every location of its partition.
-    assert(coalescer.coalesce(4, parent).map(_.prefLoc).toSeq ===
-      Seq(Some("host-a"), None, Some("host-b"), None))
+    // With no host ahead, a group names no location, and neither does a group of one.
+    assert(coalescer.coalesce(4, parent).map(_.prefLoc).toSeq === Seq(None, None, None, None))
+    // The scheduler then offers the locations of the group's first partition that has any.
+    val disjoint = sc.makeRDD(Seq((0, Seq("a", "b", "c")), (1, Seq("d", "e", "f")))).map(identity)
+      .coalesce(1, shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1)))))
+    assert(disjoint.partitions.map(disjoint.preferredLocations).toSeq === Seq(Nil))
+    assert(sc.getPreferredLocs(disjoint, 0).map(_.host).sorted === Seq("a", "b", "c"))
     // A caller sizes the coalesced RDD by the groups, so another count is a bug.
     intercept[IllegalArgumentException](coalescer.coalesce(3, parent))
-    // A host that the largest number of a group's partitions prefer wins over balancing.
-    val majority = spark.sparkContext.makeRDD((0 until 5).map { i =>
+    intercept[IllegalArgumentException](coalescer.coalesce(5, parent))
+    // A host that more of a group's partitions prefer than any other host wins.
+    val majority = sc.makeRDD((0 until 5).map { i =>
       (i, Seq(if (i < 4) "host-a" else "host-b"))
     })
     assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2, 3, 4))).coalesce(2, majority)
       .map(_.prefLoc).toSeq === Seq(Some("host-a"), Some("host-a")))
+    // It need not be preferred by most of them.
+    val plurality = sc.makeRDD(Seq(
+      (0, Seq("host-a")), (1, Seq("host-a")), (2, Seq("host-b")), (3, Seq("host-c"))))
+    assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1, 2, 3))).coalesce(1, plurality)
+      .map(_.prefLoc).toSeq === Seq(Some("host-a")))
     // A partition counts once for each host it prefers, however often it lists that host.
-    val repeated = spark.sparkContext.makeRDD(Seq(
+    val repeated = sc.makeRDD(Seq(
       (0, Seq("host-a", "host-a", "host-a")), (1, Seq("host-b")), (2, Seq("host-b"))))
     assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1, 2))).coalesce(1, repeated)
       .map(_.prefLoc).toSeq === Seq(Some("host-b")))
+    // That holds when a partition names a host in two forms too.
+    val twoForms = sc.makeRDD(Seq(
+      (0, Seq("executor_host-a_1", "host-a")), (1, Seq("host-b")), (2, Seq("host-b"))))
+    assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1, 2))).coalesce(1, twoForms)
+      .map(_.prefLoc).toSeq === Seq(Some("host-b")))
     // A null host is not a location, as for the scheduler.
-    val withNull =
-      spark.sparkContext.makeRDD(Seq((0, Seq(null, "host-a")), (1, Seq(null, "host-a"))))
+    val withNull = sc.makeRDD(Seq((0, Seq(null, "host-a")), (1, Seq(null, "host-a"))))
     assert(new GroupedPartitionCoalescer(Seq(Seq(0, 1))).coalesce(1, withNull)
       .map(_.prefLoc).toSeq === Seq(Some("host-a")))
     // Only the driver reads the groups, so tasks do not carry them.
@@ -981,43 +995,65 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   test("SPARK-61279: groups over a mapped parent prefer the hosts of its lineage") {
     // As over a scan: `GroupPartitionsExec` coalesces the scan's mapped RDD, which reports no
     // locations of its own, so the vote reads the hosts the scheduler finds through the lineage.
-    val source = spark.sparkContext.makeRDD(Seq(
-      (0, Seq("h2")), (1, Seq("h1")), (2, Seq("h1")), (3, Seq("h3"))))
+    val sc = spark.sparkContext
+    val source = sc.makeRDD(Seq((0, Seq("h2")), (1, Seq("h1")), (2, Seq("h1")), (3, Seq("h3"))))
     val mapped = source.map(identity)
     val coalesced = mapped.coalesce(2, shuffle = false,
       Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1, 2), Seq(3)))))
     assert(coalesced.partitions.map(coalesced.preferredLocations).toSeq === Seq(Seq("h1"), Nil))
     // The group of one leaves its location to the scheduler, which finds it through the lineage.
-    assert(spark.sparkContext.getPreferredLocs(coalesced, 1).map(_.host) === Seq("h3"))
-    // With no host anywhere in the lineage, a group names none, as before.
-    val unplaced = spark.sparkContext.makeRDD(0 until 4, 4).map(identity).coalesce(2,
+    assert(sc.getPreferredLocs(coalesced, 1).map(_.host) === Seq("h3"))
+    // With no host anywhere in the lineage, a group names no location.
+    val unplaced = sc.makeRDD(0 until 4, 4).map(identity).coalesce(2,
       shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(2, 3)))))
     assert(unplaced.partitions.map(unplaced.preferredLocations).forall(_.isEmpty))
   }
 
-  test("SPARK-61279: a zipped group of one leaves its location to the other side") {
-    // A group of one names no location, so the scheduler offers all of its input's locations. A
-    // zip reads each side's own location, though, so a zipped task gets only the other side's.
-    val single = spark.sparkContext.makeRDD(Seq((0, Seq("h1", "h2"))))
-      .coalesce(1, shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0)))))
-    val pair = spark.sparkContext.makeRDD(Seq((0, Seq("h3")), (1, Seq("h3"))))
+  test("SPARK-61279: a zipped side that names no location leaves the task to the other side") {
+    // A zip copies each side's own location, so a side whose groups leave their locations to the
+    // scheduler drops out of the zipped task's locations when the other side names a host.
+    val sc = spark.sparkContext
+    // The other side is over a map, as over a scan, and names h3.
+    val pair = sc.makeRDD(Seq((0, Seq("h3")), (1, Seq("h3")))).map(identity)
       .coalesce(1, shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1)))))
-    assert(spark.sparkContext.getPreferredLocs(single, 0).map(_.host).toSet === Set("h1", "h2"))
+    // A group of one: the scheduler would offer both of its input's hosts.
+    val single = sc.makeRDD(Seq((0, Seq("h1", "h2"))))
+      .coalesce(1, shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0)))))
+    assert(sc.getPreferredLocs(single, 0).map(_.host).toSet === Set("h1", "h2"))
     val zipped = single.zipPartitions(pair)((left, right) => left ++ right)
-    assert(zipped.preferredLocations(zipped.partitions.head) === Seq("h3"))
+    assert(sc.getPreferredLocs(zipped, 0).map(_.host) === Seq("h3"))
+    // Groups over persisted data: the task leaves the executor that holds the cached block.
+    val cached = sc.makeRDD(Seq((0, Seq("h1")), (1, Seq("h1")))).map(identity).cache()
+    try {
+      val cachedSide = cached.map(identity)
+        .coalesce(1, shuffle = false, Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1)))))
+      cached.count()
+      // The scheduler looks the cached blocks up again when the next job is submitted.
+      cachedSide.count()
+      val cachedLocations = sc.getPreferredLocs(cachedSide, 0)
+      assert(cachedLocations.nonEmpty &&
+        cachedLocations.forall(_.isInstanceOf[ExecutorCacheTaskLocation]), cachedLocations)
+      val zippedCached = cachedSide.zipPartitions(pair)((left, right) => left ++ right)
+      assert(sc.getPreferredLocs(zippedCached, 0).map(_.toString) === Seq("h3"))
+    } finally {
+      cached.unpersist()
+    }
   }
 
   test("SPARK-61279: groups over persisted data leave their locations to the scheduler") {
-    // As a `GroupPartitionsExec` right over an `InMemoryTableScanExec`. A job computes the groups
-    // when it is submitted, before the scheduler looks the cached blocks up, so a host fixed then
-    // would be the source's rather than the executor's that holds the block.
+    // As a `GroupPartitionsExec` over an `InMemoryTableScanExec`, whose cached RDD sits under maps.
+    // A job computes the groups when it is submitted, before the scheduler looks the cached blocks
+    // up, so a host fixed then would be the source's rather than the executor's that holds the
+    // block.
     val sc = spark.sparkContext
     val cached = sc.makeRDD(Seq((0, Seq("h1")), (1, Seq("h1")))).map(identity).cache()
     try {
-      val coalesced = cached.coalesce(1, shuffle = false,
+      val direct = cached.coalesce(1, shuffle = false,
         Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1)))))
-      assert(coalesced.partitions.map(_.asInstanceOf[CoalescedRDDPartition].preferredLocation)
-        .toSeq === Seq(None))
+      assert(direct.partitions.map(direct.preferredLocations).toSeq === Seq(Nil))
+      val coalesced = cached.map(identity).map(identity).coalesce(1, shuffle = false,
+        Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1)))))
+      assert(coalesced.partitions.map(coalesced.preferredLocations).toSeq === Seq(Nil))
       cached.count()
       // The scheduler looks the cached blocks up again when the next job is submitted.
       coalesced.count()
@@ -1029,31 +1065,51 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-61279: a group keeps an executor or HDFS-cache location, and a group of one all " +
-      "of its input's locations") {
+  test("SPARK-61279: a group keeps an executor or HDFS-cache location that is the only one on " +
+      "its host, and the scheduler offers every location of a group of one") {
     val sc = spark.sparkContext
     val source = sc.makeRDD(Seq(
       (0, Seq("executor_h9_7")), (1, Seq("hdfs_cache_h8")), (2, Seq("h1", "h2", "h3")),
       (3, Seq("executor_h9_7")), (4, Seq("executor_h9_7")),
-      (5, Seq("executor_h9_7")), (6, Seq("h9"))))
-    val coalesced = source.map(identity).coalesce(5, shuffle = false,
-      Some(new GroupedPartitionCoalescer(Seq(Seq(0), Seq(1), Seq(2), Seq(3, 4), Seq(5, 6)))))
+      (5, Seq("executor_h9_7")), (6, Seq("h9")), (7, Seq("executor_h1_3")),
+      (8, Seq("hdfs_cache_h8")), (9, Seq("hdfs_cache_h8"))))
+    val groups = Seq(Seq(0), Seq(1), Seq(2), Seq(3, 4, 7), Seq(5, 6), Seq(8, 9))
+    val coalesced = source.map(identity)
+      .coalesce(groups.size, shuffle = false, Some(new GroupedPartitionCoalescer(groups)))
     // A group of one names no location, so the scheduler offers every location of its input.
     assert((0 until 3).map(sc.getPreferredLocs(coalesced, _).map(_.toString).sorted) === Seq(
       Seq("executor_h9_7"), Seq("hdfs_cache_h8"), Seq("h1", "h2", "h3")))
-    // A larger group keeps a location that every input on its host names, and the host otherwise.
+    // A larger group keeps a location that is the only one its inputs name on the host, whatever
+    // they name on other hosts, and the host otherwise.
     assert(coalesced.partitions.drop(3).map(coalesced.preferredLocations).toSeq ===
-      Seq(Seq("executor_h9_7"), Seq("h9")))
+      Seq(Seq("executor_h9_7"), Seq("h9"), Seq("hdfs_cache_h8")))
   }
 
-  test("SPARK-61279: the grouped coalescer looks each input's locations up once") {
-    // Under `REPLICATED_FOR_JOIN` every slot of a key holds the same inputs.
-    val source = new LocationCountingRDD(spark.sparkContext, Seq(Seq("h1"), Seq("h2")))
-    val coalesced = source.map(identity).coalesce(3, shuffle = false,
-      Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(0, 1), Seq(0, 1)))))
-    assert(coalesced.partitions.map(coalesced.preferredLocations).toSeq ===
-      Seq(Seq("h1"), Seq("h2"), Seq("h1")))
+  test("SPARK-61279: groups that share partitions leave their locations to the scheduler") {
+    // As in a partially clustered join: under `REPLICATED_FOR_JOIN` every slot of a split key holds
+    // the key's whole group, and on the other side each split is a group of one.
+    val sc = spark.sparkContext
+    val source = new LocationCountingRDD(sc, Seq(Seq("h1"), Seq("h1", "h2"), Seq("h5"), Seq("h5")))
+    // A key split in two and a key that is not split: only the first one's slots share partitions.
+    val mixed = source.map(identity).coalesce(3, shuffle = false,
+      Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(0, 1), Seq(2, 3)))))
+    assert(mixed.partitions.map(mixed.preferredLocations).toSeq === Seq(Nil, Nil, Seq("h5")))
+    // Only the group that votes looks its partitions' locations up, once each.
     assert(source.lookups.get() === 2)
+    // Zipped with the split side's groups of one, the tasks get master's locations: their own
+    // split's when the split side comes first, and the first replicated partition's otherwise.
+    val replicated = sc.makeRDD(Seq((0, Seq("h1", "x1")), (1, Seq("h1", "y1")))).map(identity)
+      .coalesce(3, shuffle = false,
+        Some(new GroupedPartitionCoalescer(Seq(Seq(0, 1), Seq(0, 1), Seq(0, 1)))))
+    val split = sc.makeRDD(Seq((0, Seq("a")), (1, Seq("b")), (2, Seq("c")))).map(identity)
+      .coalesce(3, shuffle = false,
+        Some(new GroupedPartitionCoalescer(Seq(Seq(0), Seq(1), Seq(2)))))
+    val splitFirst = split.zipPartitions(replicated)((left, right) => left ++ right)
+    assert((0 until 3).map(sc.getPreferredLocs(splitFirst, _).map(_.host)) ===
+      Seq(Seq("a"), Seq("b"), Seq("c")))
+    val replicatedFirst = replicated.zipPartitions(split)((left, right) => left ++ right)
+    assert((0 until 3).map(sc.getPreferredLocs(replicatedFirst, _).map(_.host).sorted) ===
+      Seq.fill(3)(Seq("h1", "x1")))
   }
 }
 
