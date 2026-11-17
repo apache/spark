@@ -281,6 +281,37 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             ):
                 self.spark.range(1).select(slow_udf(col("id"))).collect()
 
+    def test_udf_kill_on_idle_timeout_while_sending_input(self):
+        """The idle timeout is the error when the worker is killed while it is sent input.
+
+        The input is larger than what the socket buffers hold, so the writer is still sending
+        it when the worker is killed, and fails as well. The task fails with the idle timeout
+        and not with that failure of the writer.
+        """
+        uds_enabled = self.spark.conf.get(
+            "spark.python.unix.domain.socket.enabled", os.environ.get("PYSPARK_UDS_MODE", "false")
+        )
+        if uds_enabled.lower() == "true":
+            self.skipTest("Pipelined mode has no idle timeout over Unix domain sockets.")
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pyspark.udf.idleTimeoutSeconds": "3s",
+                "spark.sql.execution.pyspark.udf.killOnIdleTimeout": "true",
+            }
+        ):
+
+            @pandas_udf(LongType())
+            def slow_udf(x: pd.Series) -> pd.Series:
+                time.sleep(30)
+                return x
+
+            with self.assertRaisesRegex(
+                Exception,
+                "Python worker process terminated due to idle timeout \\(timeout: 3 seconds\\)",
+            ):
+                self.spark.range(0, 50000000, 1, 1).select(slow_udf(col("id"))).collect()
+
     def test_offheap_reader_with_head_does_not_segfault(self):
         """Regression test: SPARK-33277 reproducer adapted for pipelined mode.
 

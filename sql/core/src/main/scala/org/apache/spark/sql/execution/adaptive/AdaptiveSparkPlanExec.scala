@@ -583,7 +583,8 @@ case class AdaptiveSparkPlanExec(
                     failedStageCancellationResults += stage.resultOption
                     uncancelledObsoleteStageIds ++= obsoleteStageIds
                   }
-                  logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+                  logError(log"Exception in cancelling obsolete query stage: " +
+                    log"${MDC(QUERY_PLAN, stage.treeString)}", t)
                   Seq.empty
               }
             } else {

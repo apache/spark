@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMa
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -1022,6 +1022,32 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(Seq(attrBinary -> binaryStat)))
     assert(Filter(EqualTo(attrBinary, Literal(Array[Byte](1))), binaryChild).stats.rowCount
       .contains(BigInt(1)))
+  }
+
+  test("SPARK-61724: predicates on datetime and ANSI interval columns with min/max") {
+    // The Long or Int values of the first four types are estimated like cint (1 to 10) and
+    // cint2 (7 to 16). Nanosecond timestamps cannot be converted to Double, so their min/max
+    // give no range: comparisons are not estimated, and equality and IN use the distinct count.
+    def nanos(micros: Int): Any = new TimestampNanosVal(micros, 1.toShort)
+    Seq[(DataType, Int => Any, Seq[Int])](
+      (TimestampNTZType, _.toLong, Seq(1, 3, 1, 4)),
+      (TimeType(), _.toLong, Seq(1, 3, 1, 4)),
+      (YearMonthIntervalType(), identity, Seq(1, 3, 1, 4)),
+      (DayTimeIntervalType(), _.toLong, Seq(1, 3, 1, 4)),
+      (TimestampNTZNanosType(9), nanos, Seq(1, 10, 2, 10))).foreach { case (dt, value, rows) =>
+      val (col, col2) = (AttributeReference("c", dt)(), AttributeReference("c2", dt)())
+      val child = StatsTestPlan(Seq(col, col2), rowCount = 10, AttributeMap(Seq(
+        col -> colStatInt.copy(min = Some(value(1)), max = Some(value(10))),
+        col2 -> colStatInt2.copy(min = Some(value(7)), max = Some(value(16))))))
+      Seq(
+        EqualTo(col, Literal(value(3), dt)),
+        LessThan(col, Literal(value(3), dt)),
+        In(col, Seq(Literal(value(3), dt), Literal(value(20), dt))),
+        LessThan(col, col2)).zip(rows).foreach { case (condition, expectedRows) =>
+        assert(Filter(condition, child).stats.rowCount.contains(BigInt(expectedRows)),
+          s"$dt: $condition")
+      }
+    }
   }
 
   test("ColumnStatsMap tests") {

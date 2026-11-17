@@ -2,58 +2,94 @@
 Expand: varying number of COUNT(DISTINCT)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 2 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 3)                      3035           3073          50          3.5         289.5       1.0X
-with sum - optimized (ratio 3)                     2930           2988          35          3.6         279.4       1.0X
-pure distinct - baseline (ratio 2)                 2032           2051          16          5.2         193.8       1.5X
-pure distinct - optimized (ratio 2)                 639            654          14         16.4          60.9       4.8X
+with sum - baseline (ratio 3)                      3014           3088          64          3.5         287.4       1.0X
+with sum - optimized (ratio 3)                     3044           3085          34          3.4         290.3       1.0X
+pure distinct - baseline (ratio 2)                 1929           1946          10          5.4         184.0       1.6X
+pure distinct - optimized (ratio 2)                 559            580          17         18.8          53.3       5.4X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 4 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 5)                      5897           5916          31          1.8         562.4       1.0X
-with sum - optimized (ratio 5)                     5856           5889          20          1.8         558.5       1.0X
-pure distinct - baseline (ratio 4)                 4332           4383          38          2.4         413.1       1.4X
-pure distinct - optimized (ratio 4)                 789            800           7         13.3          75.3       7.5X
+with sum - baseline (ratio 5)                      5658           5713          48          1.9         539.6       1.0X
+with sum - optimized (ratio 5)                     5629           5638           8          1.9         536.8       1.0X
+pure distinct - baseline (ratio 4)                 4254           4290          32          2.5         405.7       1.3X
+pure distinct - optimized (ratio 4)                 742            784          67         14.1          70.7       7.6X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 6 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 7)                      9436           9526          69          1.1         899.9       1.0X
-with sum - optimized (ratio 7)                     9430           9458          27          1.1         899.3       1.0X
-pure distinct - baseline (ratio 6)                 7435           7462          32          1.4         709.0       1.3X
-pure distinct - optimized (ratio 6)                 820            834          13         12.8          78.2      11.5X
+with sum - baseline (ratio 7)                      8849           8927          65          1.2         843.9       1.0X
+with sum - optimized (ratio 7)                     8808           8873          42          1.2         840.0       1.0X
+pure distinct - baseline (ratio 6)                 7191           7249          39          1.5         685.8       1.2X
+pure distinct - optimized (ratio 6)                 780            807          28         13.4          74.4      11.3X
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 8 distinct aggregates:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-with sum - baseline (ratio 9)                     13720          13795          53          0.8        1308.4       1.0X
-with sum - optimized (ratio 9)                    13720          13751          28          0.8        1308.4       1.0X
-pure distinct - baseline (ratio 8)                11483          11527          34          0.9        1095.1       1.2X
-pure distinct - optimized (ratio 8)                1555           1571          12          6.7         148.3       8.8X
+with sum - baseline (ratio 9)                     13067          13133          52          0.8        1246.2       1.0X
+with sum - optimized (ratio 9)                    13041          13133          66          0.8        1243.7       1.0X
+pure distinct - baseline (ratio 8)                11123          11212          71          0.9        1060.8       1.2X
+pure distinct - optimized (ratio 8)                1533           1579          34          6.8         146.2       8.5X
 
 
 ================================================================================================
 Expand: varying data characteristics (pure distinct)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 6 pure distinct aggs with varying data:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1K groups, moderate card - baseline                7539           7568          33          1.4         718.9       1.0X
-1K groups, moderate card - optimized                845            855          10         12.4          80.6       8.9X
-100K groups, moderate card - baseline             13533          13587          32          0.8        1290.6       0.6X
-100K groups, moderate card - optimized             3466           3481          16          3.0         330.5       2.2X
-1K groups, low card (5 vals) - baseline            7137           7159          26          1.5         680.6       1.1X
-1K groups, low card (5 vals) - optimized            686            698          12         15.3          65.4      11.0X
-no grouping key - baseline                         5717           5747          30          1.8         545.2       1.3X
-no grouping key - optimized                         293            297           3         35.8          27.9      25.8X
+1K groups, moderate card - baseline                7142           7186          30          1.5         681.1       1.0X
+1K groups, moderate card - optimized                757            793          22         13.9          72.2       9.4X
+100K groups, moderate card - baseline             13267          13406          92          0.8        1265.3       0.5X
+100K groups, moderate card - optimized             3417           3444          30          3.1         325.9       2.1X
+1K groups, low card (5 vals) - baseline            7067           7156          56          1.5         674.0       1.0X
+1K groups, low card (5 vals) - optimized            669            685          14         15.7          63.8      10.7X
+no grouping key - baseline                         5081           5154          46          2.1         484.6       1.4X
+no grouping key - optimized                         306            318          10         34.3          29.1      23.4X
+
+
+================================================================================================
+Expand: subexpression elimination across branches
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+9 conditional COUNT(DISTINCT) + 9 conditional SUM sharing one subexpression:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+CSE disabled (re-evaluate each use)                                                 102633         102857         304          0.1       19575.6       1.0X
+CSE enabled (evaluate once per row)                                                  17353          17492         184          0.3        3309.9       5.9X
+
+
+================================================================================================
+Expand: conditional COUNT(DISTINCT), overlapping predicates
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+9 conditional COUNT(DISTINCT) + 9 conditional SUM, overlapping day windows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+conf off (9 distinct groups)                                                        65917          66112         179          0.1       12572.7       1.0X
+conf on (1 collapsed group)                                                         17439          17471          40          0.3        3326.3       3.8X
+
+
+================================================================================================
+Expand: conditional COUNT(DISTINCT), high-cardinality base
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
+10 conditional COUNT(DISTINCT), unique base, 1%-selective disjoint predicates:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+conf off (10 distinct groups)                                                          25595          25789         198          0.4        2440.9       1.0X
+conf on (1 guarded group)                                                               2694           2787          80          3.9         256.9       9.5X
 
 

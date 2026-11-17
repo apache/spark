@@ -2,25 +2,25 @@
 Large Row Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 #rows: 100, #cols: 10, cell: 1.3 MB:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-built-in UPPER                                     6490           6586         136          0.0    64903041.2       1.0X
-udf UPPER                                          3825           3848          33          0.0    38253275.9       1.7X
+built-in UPPER                                     6682           7715        1461          0.0    66816869.2       1.0X
+udf UPPER                                          4325           4387          87          0.0    43254773.6       1.5X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 #rows: 1, #cols: 1, cell: 300.0 MB:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-built-in UPPER                                     1461           1470          13          0.0  1460910930.0       1.0X
-udf UPPER                                           873            883          13          0.0   873244468.0       1.7X
+built-in UPPER                                     1552           1553           1          0.0  1552497368.0       1.0X
+udf UPPER                                          1051           1268         307          0.0  1051368261.0       1.5X
 
-OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 #rows: 1, #cols: 200, cell: 1.0 MB:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-built-in UPPER                                     1174           1202          41          0.0  1173658812.0       1.0X
-udf UPPER                                          1245           1251           8          0.0  1245407400.0       0.9X
+built-in UPPER                                     1263           1292          41          0.0  1263264224.0       1.0X
+udf UPPER                                          1366           1582         306          0.0  1365773717.0       0.9X
 
 

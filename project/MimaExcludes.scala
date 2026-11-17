@@ -33,8 +33,11 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
-  // Exclude rules for 5.0.x from 4.4.0 (add 5.0-specific filters below as needed).
-  lazy val v50excludes: Seq[Problem => Boolean] = v44excludes
+  // Exclude rules for 5.0.x from 4.5.0 (add 5.0-specific filters below as needed).
+  lazy val v50excludes: Seq[Problem => Boolean] = v45excludes
+
+  // Exclude rules for 4.5.x from 4.4.0 (add 4.5-specific filters below as needed).
+  lazy val v45excludes: Seq[Problem => Boolean] = v44excludes
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
   lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
@@ -231,6 +234,7 @@ object MimaExcludes {
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
     case v if v.startsWith("5.0") => v50excludes
+    case v if v.startsWith("4.5") => v45excludes
     case v if v.startsWith("4.4") => v44excludes
     case v if v.startsWith("4.3") => v43excludes
     case v if v.startsWith("4.2") => v42excludes
