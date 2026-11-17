@@ -1863,7 +1863,7 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         parameters = Map(
           "sqlExpr" -> "\"payload\"",
           "srcType" -> "\"VARIANT\"",
-          "targetType" -> s"\"$structTarget\"",
+          "targetType" -> s"\"${structTarget}\"",
           "config" -> config),
         context = ExpectedContext(fragment = castExpr, start = 7, stop = 6 + castExpr.length))
     }
