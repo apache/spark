@@ -1602,6 +1602,22 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-58372: pushed filters keep the SQL compiled at planning") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val allRows = Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen"))
+      val df = withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
+        val df = sql("SELECT name FROM h2.test.employee WHERE CAST(bonus / 800 AS INT) = 1")
+        checkFiltersRemoved(df)
+        checkAnswer(df, allRows)
+        df
+      }
+      // Recompiling in the tasks under the legacy conf would drop TRUNC, so H2 would round.
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+        checkAnswer(df, allRows)
+      }
+    }
+  }
+
   test("scan with filter push-down with date time functions") {
     val df1 = sql("SELECT name FROM h2.test.datetime WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")

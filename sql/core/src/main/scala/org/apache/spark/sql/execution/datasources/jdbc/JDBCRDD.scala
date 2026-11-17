@@ -241,13 +241,20 @@ class JDBCRDD(
 
   private lazy val dialect = JdbcDialects.get(url)
 
+  // Recorded on the driver at planning. The conf decides whether some pushed casts compile, so
+  // tasks must compile the pushed predicates under the same value.
+  private val plannedLegacyIntegralCast = JdbcDialects.legacyIntegralCastPushdown
+
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
-    var builder = dialect
-      .getJdbcSQLQueryBuilder(options)
-      .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
+    val part = partition.getOrElse(JDBCPartition(whereClause = null, idx = 1))
+    val builderWithPredicates =
+      JdbcDialects.withPlannedLegacyIntegralCast(plannedLegacyIntegralCast) {
+        dialect.getJdbcSQLQueryBuilder(options).withPredicates(predicates, part)
+      }
+    var builder = builderWithPredicates
       .withColumns(columns)
       .withSortOrders(sortOrders)
       .withLimit(limit)

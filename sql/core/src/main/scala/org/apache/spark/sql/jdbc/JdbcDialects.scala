@@ -460,7 +460,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val mappedType = getJDBCType(dataType).map(_.databaseTypeDefinition)
-      if (SQLConf.get.legacyJdbcRoundIntegralCastPushdown) {
+      if (JdbcDialects.legacyIntegralCastPushdown) {
         s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
       } else {
         if (exprDataType.isInstanceOf[DatetimeType] && dataType.isInstanceOf[IntegralType]) {
@@ -1197,6 +1197,28 @@ object JdbcDialects {
       case 1 => matchingDialects.head
       case _ => new AggregatedDialect(matchingDialects)
     }
+  }
+
+  private val plannedLegacyIntegralCast = new ThreadLocal[Option[Boolean]] {
+    override def initialValue: Option[Boolean] = None
+  }
+
+  /**
+   * Whether pushed casts compile to the SQL Spark 4.3 sent
+   * (`spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled`). Inside
+   * `withPlannedLegacyIntegralCast`, returns the value a scan recorded at planning instead.
+   */
+  private[sql] def legacyIntegralCastPushdown: Boolean =
+    plannedLegacyIntegralCast.get.getOrElse(SQLConf.get.legacyJdbcRoundIntegralCastPushdown)
+
+  /**
+   * Runs `f` with `legacyIntegralCastPushdown` fixed to `planned`, so a task compiles its pushed
+   * predicates as the planner did and none drops out of the WHERE clause.
+   */
+  private[sql] def withPlannedLegacyIntegralCast[T](planned: Boolean)(f: => T): T = {
+    val old = plannedLegacyIntegralCast.get
+    plannedLegacyIntegralCast.set(Some(planned))
+    try f finally plannedLegacyIntegralCast.set(old)
   }
 }
 
