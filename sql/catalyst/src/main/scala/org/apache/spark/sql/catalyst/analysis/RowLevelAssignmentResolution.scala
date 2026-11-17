@@ -100,7 +100,7 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
     val input = assigned.map(_._2.toAttribute)
     val valuesByAttribute = AttributeMap(assigned.map { case (_, alias) =>
       val value = if (shareAssignedValues) {
-        SharedAssignmentValue(alias.child, alias.exprId)
+        GeneratedColumnSharedAssignmentValue(alias.child, alias.exprId)
       } else {
         alias.child
       }
@@ -124,11 +124,11 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
     // Only a needs sharing in this example. Match its assignment to the marker used by g,
     // so the rewrite can project old.b + 1 once and use the result for both a and g.
     val sharedIds = generatedAssignments.flatMap(_.value.collect {
-      case value: SharedAssignmentValue => value.id
+      case value: GeneratedColumnSharedAssignmentValue => value.id
     }).toSet
     val sharedByTarget = AttributeMap(assigned.collect {
       case (attr, alias) if sharedIds.contains(alias.exprId) =>
-        attr -> SharedAssignmentValue(alias.child, alias.exprId)
+        attr -> GeneratedColumnSharedAssignmentValue(alias.child, alias.exprId)
     })
     generatedAssignments.map {
       case Assignment(attr: Attribute, _) if sharedByTarget.contains(attr) =>
@@ -173,10 +173,11 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
  * same ID around old.b + 1 in both a's assignment and g's expression. The rewrite projects
  * old.b + 1 once as v and replaces both markers with v, so a = v and g = v * 2.
  */
-private[sql] case class SharedAssignmentValue(child: Expression, id: ExprId)
+private[sql] case class GeneratedColumnSharedAssignmentValue(child: Expression, id: ExprId)
   extends UnaryExpression with Unevaluable {
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
-  override protected def withNewChildInternal(newChild: Expression): SharedAssignmentValue =
+  override protected def withNewChildInternal(
+      newChild: Expression): GeneratedColumnSharedAssignmentValue =
     copy(child = newChild)
 }

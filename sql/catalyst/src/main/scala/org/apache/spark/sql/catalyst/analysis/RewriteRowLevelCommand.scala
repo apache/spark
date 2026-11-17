@@ -76,13 +76,13 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     assignment.key.semanticEquals(assignment.value)
   }
 
-  /** Projects shared assignment values only on rows to which the assignments apply. */
+  /** Projects values shared with generated columns only on rows being assigned. */
   protected def projectAssignmentValues(
       plan: LogicalPlan,
       assignments: Seq[Assignment],
       cond: Expression = Literal.TrueLiteral): (LogicalPlan, Seq[Assignment]) = {
     val shared = assignments.collect {
-      case Assignment(attr: Attribute, value: SharedAssignmentValue) =>
+      case Assignment(attr: Attribute, value: GeneratedColumnSharedAssignmentValue) =>
         val guarded = if (cond == Literal.TrueLiteral) value.child else If(cond, value.child, attr)
         value.id -> Alias(guarded, attr.name)()
     }
@@ -93,7 +93,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val valuesById = shared.toMap
     val newAssignments = assignments.map { assignment =>
       val value = assignment.value.transformDown {
-        case shared: SharedAssignmentValue =>
+        case shared: GeneratedColumnSharedAssignmentValue =>
           val attr = valuesById(shared.id).toAttribute
           // The assignment only reads this value where its guard is true.
           if (!shared.nullable && attr.nullable) KnownNotNull(attr) else attr
