@@ -16,6 +16,7 @@
  */
 package org.apache.spark.internal.config
 
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
@@ -55,6 +56,29 @@ private[spark] object Python {
     .version("2.4.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  // Defined before the config entry, whose validator captures it.
+  private[spark] val IN_PROCESS_PATH_RULE = "In-process Python site-packages paths cannot " +
+    "contain single quotes, newlines, NUL, surrogate characters (including supplementary " +
+    "Unicode characters) or the platform path separator"
+
+  val IN_PROCESS_SITE_PACKAGES = ConfigBuilder("spark.python.inProcess.sitePackages")
+    .doc("Comma-separated executor directories containing packages for in-process Python UDFs. " +
+      "These directories are processed with site.addsitedir after Spark distribution paths " +
+      "and the process PYTHONPATH. JEP must be directly importable from these directories. " +
+      s"$IN_PROCESS_PATH_RULE. Restart the executor process before changing these directories.")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .version("4.4.0")
+    .stringConf
+    .toSequence
+    .checkValue(_.forall(isValidInProcessPath), IN_PROCESS_PATH_RULE)
+    .createWithDefault(Nil)
+
+  private[spark] def isValidInProcessPath(path: String): Boolean = {
+    !path.exists(c => c == '\'' || c == '\r' || c == '\n' || c == '\u0000' ||
+      Character.isSurrogate(c) ||
+      c == File.pathSeparatorChar)
+  }
 
   val PYTHON_AUTH_SOCKET_TIMEOUT = ConfigBuilder("spark.python.authenticate.socketTimeout")
     .internal()
@@ -97,6 +121,10 @@ private[spark] object Python {
   private val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY = "spark.python.worker.idleTimeoutSeconds"
   private val PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY = "spark.python.worker.killOnIdleTimeout"
 
+  // The idle timeout is waited for as an Int of milliseconds, both by the socket read timeout
+  // and by the selectors of the JDK, so a longer one cannot be honored.
+  private[spark] val PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS: Long = Int.MaxValue / 1000
+
   val PYTHON_WORKER_IDLE_TIMEOUT_SECONDS = ConfigBuilder(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS_KEY)
     .doc("The time (in seconds) Spark will wait for activity " +
       "(e.g., data transfer or communication) from a Python worker before considering it " +
@@ -104,10 +132,13 @@ private[spark] object Python {
       "Spark will log the network-related status for debugging purposes. " +
       "However, the Python worker will remain active and continue waiting for communication " +
       s"unless explicitly terminated via $PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY." +
-      "The default is `0` that means no timeout.")
+      "The default is `0` that means no timeout. " +
+      s"The maximum is $PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS seconds (about 24.8 days).")
     .version("4.0.0")
     .timeConf(TimeUnit.SECONDS)
-    .checkValue(_ >= 0, "The idle timeout should be 0 or positive.")
+    .checkValue(v => v >= 0 && v <= PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS,
+      "The idle timeout should be 0 or positive, and at most " +
+        s"$PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS seconds.")
     .createWithDefault(0)
 
   val PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT = ConfigBuilder(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT_KEY)

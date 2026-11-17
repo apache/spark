@@ -23,6 +23,20 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class ExecuteImmediateEndToEndSuite extends SharedSparkSession {
 
+  test("NULL_QUERY_STRING_EXECUTE_IMMEDIATE names the variable after a supplementary character") {
+    val emoji = new String(Character.toChars(0x1F600))
+    withSessionVariable("q") {
+      spark.sql("DECLARE VARIABLE q STRING")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(s"EXECUTE IMMEDIATE -- $emoji\nq")
+        },
+        condition = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+        parameters = Map("varName" -> "`q`")
+      )
+    }
+  }
+
   test("SPARK-47033: EXECUTE IMMEDIATE USING does not recognize session variable names") {
     try {
       spark.sql("DECLARE parm = 'Hello';")

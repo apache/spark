@@ -457,6 +457,7 @@ object SqlStatementSplitter {
     parser.parameter_substitution_enabled = !conf.legacyParameterSubstitutionConstantsOnly
     parser.legacy_identifier_clause_only = conf.legacyIdentifierClauseOnly
     parser.single_character_pipe_operator_enabled = conf.singleCharacterPipeOperatorEnabled
+    parser.file_type_enabled = conf.isFileTypeEnabled
 
     parser.removeErrorListeners()
     parser.setErrorHandler(new BailErrorStrategy)

@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.IOException
 import java.net.URI
+import java.nio.charset.CharacterCodingException
 import java.util.ServiceLoader
 
 import scala.jdk.CollectionConverters._
@@ -140,7 +141,13 @@ class EventLogFileCompactor(
     // check happens between files, so that file itself is still read to the end.
     val replayedAll = files.forall { log =>
       val completed = Utils.tryWithResource(EventLogFileReader.openEventLog(log, fs)) { in =>
-        bus.replay(in, log.getName)
+        try {
+          bus.replay(in, log.getName)
+        } catch {
+          case e: CharacterCodingException =>
+            logWarning(log"Event log file ${MDC(LogKeys.PATH, log)} contains malformed input")
+            throw e
+        }
       }
       if (bus.numSkippedLines > 0) {
         logWarning(log"Skipping compaction of event log files in " +

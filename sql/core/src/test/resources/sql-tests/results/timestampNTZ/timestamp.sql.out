@@ -181,6 +181,22 @@ NULL
 
 
 -- !query
+SELECT make_timestamp(1, 1, 1, 1, 1, 4324.967296)
+-- !query schema
+struct<make_timestamp(1, 1, 1, 1, 1, 4324.967296):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp(1, 1, 1, 1, 1, 4324.967296)
+-- !query schema
+struct<try_make_timestamp(1, 1, 1, 1, 1, 4324.967296):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
 SELECT make_timestamp(make_date(2021, 07, 11))
 -- !query schema
 struct<make_timestamp(make_date(2021, 7, 11)):timestamp>

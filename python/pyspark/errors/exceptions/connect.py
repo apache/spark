@@ -316,9 +316,8 @@ class SparkConnectGrpcException(SparkConnectException):
     ) -> None:
         if contexts is None:
             contexts = []
-        self._message = message  # type: ignore[assignment]
         if reason is not None:
-            self._message = f"({reason}) {self._message}"
+            message = f"({reason}) {message}"
 
         # PySparkException has the assumption that errorClass and messageParameters are
         # only occurring together. If only one is set, we assume the message to be fully
@@ -331,7 +330,7 @@ class SparkConnectGrpcException(SparkConnectException):
             tmp_message_parameters = None
 
         super().__init__(
-            message=self._message,
+            message=message,
             errorClass=tmp_error_class,
             messageParameters=tmp_message_parameters,
         )

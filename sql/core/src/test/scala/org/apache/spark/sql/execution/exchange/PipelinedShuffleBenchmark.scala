@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
  *      "sql/Test/runMain
  *      org.apache.spark.sql.execution.exchange.PipelinedShuffleBenchmark"
  *      Results will be written to
- *      "sql/core/benchmarks/PipelinedShuffleBenchmark-jdk<version>-results.txt".
+ *      "sql/core/benchmarks/PipelinedShuffleBenchmark-results.txt".
  *      Add -Dspark.pipelinedBenchmark.cores=4 to size the shape as the benchmark workflow's
  *      runner does.
  * }}}

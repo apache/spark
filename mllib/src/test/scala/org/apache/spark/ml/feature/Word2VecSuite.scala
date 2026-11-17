@@ -240,4 +240,23 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
     testTransformerByGlobalCheckFunc[(Seq[String], Seq[String])](ngramDF, model, "result") { _ => }
   }
 
+  test("Load Word2VecModel saved by Spark 4.0.0") {
+    val modelPath = testFile("ml-models/w2v-4.0.0")
+
+    val loadedModel = Word2VecModel.load(modelPath)
+    assert(loadedModel.getVectorSize === 4)
+    val vectors = loadedModel.getVectors.collect().map { row =>
+      row.getString(0) -> row.getAs[Vector](1).toArray
+    }.toMap
+    assert(vectors.keySet === Set("a", "cluster", "engine", "fast", "is", "learning",
+      "machine", "on", "runs", "spark"))
+    assert(vectors("a") === Array(-0.04335077852010727, -0.10706974565982819,
+      -0.11131945252418518, 0.11506903171539307))
+    assert(vectors("spark") === Array(-0.007363073527812958, 0.09850209951400757,
+      -0.11606200784444809, -0.0377626046538353))
+
+    val metadata = spark.read.json(s"$modelPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "4.0.0")
+  }
 }

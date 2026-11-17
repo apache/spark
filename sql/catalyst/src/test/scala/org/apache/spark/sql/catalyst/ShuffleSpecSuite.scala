@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, DirectShufflePartitionID, Expression, GetStructField, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, BindReferences, DirectShufflePartitionID, Expression, GetStructField, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, NonScalarBucketFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, VarcharType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
@@ -32,12 +33,18 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   private val passThrough_b_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"b"), 10)
   private val passThrough_c_10 = ShufflePartitionIdPassThrough(DirectShufflePartitionID($"c"), 10)
 
-  /** A bound function with a stable canonical name, enough to build a `TransformExpression`. */
+  /**
+   * A bound function with a stable canonical name, enough to build a `TransformExpression`. It
+   * declares the bucket count and the value, as `TransformExpression` passes both, and implements
+   * `produceResult`, so Spark can evaluate it.
+   */
   private object TestBucketFunction extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(IntegerType)
+    override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
     override def resultType(): DataType = IntegerType
     override def name(): String = "bucket"
     override def canonicalName(): String = "test.bucket"
+    override def produceResult(input: InternalRow): Int =
+      Math.floorMod(input.getInt(1), input.getInt(0))
   }
 
   /**
@@ -47,11 +54,11 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
    */
   private class FakeBucket extends ScalarFunction[java.lang.Long]
       with ReducibleFunction[java.lang.Long, java.lang.Long] {
-    override def inputTypes(): Array[DataType] = Array(LongType)
+    override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
     override def resultType(): DataType = LongType
     override def name(): String = "test.fakeBucket"
     override def canonicalName(): String = name()
-    override def produceResult(input: InternalRow): java.lang.Long = input.getLong(0)
+    override def produceResult(input: InternalRow): java.lang.Long = input.getLong(1)
     override def reducer(
         thisNumBuckets: Int,
         other: ReducibleFunction[_, _],
@@ -172,7 +179,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       // A marked layout is never offered through a projection: the projecting half of `keysSatisfy`
       // excludes a marked member, so the keys an offered marked one carries are the keys its claim
       // is over.
-      val marked = source.withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      val marked = source.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
       assert(PartitioningCollection.specsForPairing(marked, cd).isEmpty,
         "a marked member is not offered through a projection")
     }
@@ -705,6 +712,299 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-60522: KeyedShuffleSpec refuses a transform Spark cannot evaluate") {
+    // A connector may bind its partition transform to a `BoundFunction` that is not a
+    // `ScalarFunction`, or to a `ScalarFunction` whose `produceResult` is inherited, which
+    // resolving it does not find. `TransformExpression.eval` cannot run either, so an identity
+    // side is not reduced onto it and no other child is shuffled onto it. The gates answer that
+    // without throwing, since they are asked of candidates that may not be chosen.
+    val nonScalarBucket = NonScalarBucketFunction
+    abstract class BucketBase extends ScalarFunction[Int] {
+      override def produceResult(input: InternalRow): Int = input.getInt(1)
+    }
+    // Declares the bucket count too, so that only the inherited `produceResult` refuses it.
+    val inheritedBucket = new BucketBase {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+    }
+    val a = $"a".int
+    def spec(expression: Expression): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(expression), Seq(InternalRow(1))), ClusteredDistribution(Seq(a)))
+    val identity = spec(a)
+
+    Seq(
+      ("scalar", TestBucketFunction, true),
+      ("non-scalar", nonScalarBucket, false),
+      ("inherited produceResult", inheritedBucket, false)
+    ).foreach {
+      case (name, fn, evaluable) =>
+        val bucket = spec(TransformExpression(fn, Seq(a), Some(4)))
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          assert(identity.areKeysCompatible(bucket, allowReduce = true) == evaluable, name)
+          assert(bucket.areKeysCompatible(identity, allowReduce = true) == evaluable, name)
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          assert(bucket.canCreatePartitioning, s"$name: a layout as it stands")
+          assert(bucket.canEvaluatePartitioning == evaluable, name)
+        }
+    }
+  }
+
+  test("SPARK-60027: KeyedShuffleSpec refuses a transform whose arguments miss its input types") {
+    // Nothing casts a transform's arguments, the bucket count included, to its function's
+    // `inputTypes()` after analysis, so the call would get the raw values. So the gates require
+    // the arguments to suit the input types in number and type: types stored alike go as they
+    // are, and a narrower numeric argument, integral or floating-point, is cast, which gives the
+    // value Java's widening gave a magic `invoke`. Anything else is refused.
+    def bucketFunction(declared: DataType*): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = declared.toArray
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    def spec(expression: Expression, key: InternalRow): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(expression), Seq(key)),
+      ClusteredDistribution(expression.references.toSeq))
+
+    // (the function's input types, the column's type, whether Spark can evaluate the transform)
+    Seq(
+      (Seq(IntegerType, LongType), LongType, true),
+      (Seq(IntegerType, LongType), IntegerType, true),
+      (Seq(IntegerType, LongType), ShortType, true),
+      // A wider floating-point type too, which a magic `invoke` got from Java's widening.
+      (Seq(IntegerType, DoubleType), IntegerType, true),
+      (Seq(IntegerType, DoubleType), LongType, true),
+      (Seq(IntegerType, IntegerType), DoubleType, false),
+      (Seq(IntegerType, IntegerType), LongType, false),
+      (Seq(IntegerType, StringType), IntegerType, false),
+      (Seq(LongType, LongType), LongType, true),
+      (Seq(ShortType, LongType), LongType, false),
+      (Seq(LongType), LongType, false),
+      (Seq(IntegerType, LongType, LongType), LongType, false),
+      // A `CHAR`, `VARCHAR` or `STRING` is held as a string of its collation, so it suits any of
+      // them of that collation. Not another collation, which compares strings differently.
+      (Seq(IntegerType, StringType), VarcharType(10), true),
+      (Seq(IntegerType, StringType), CharType(5), true),
+      (Seq(IntegerType, VarcharType(5)), StringType, true),
+      (Seq(IntegerType, StringType), StringType("UTF8_LCASE"), false),
+      (Seq(IntegerType, StringType("UTF8_LCASE")), VarcharType(10), false),
+      // A decimal suits a declared decimal of its scale, so that its unscaled digits are what a
+      // function reads, at the top level at any precision. Not one of another scale.
+      (Seq(IntegerType, DecimalType(38, 2)), DecimalType(10, 2), true),
+      (Seq(IntegerType, DecimalType(38, 18)), DecimalType(10, 2), false),
+      (Seq(IntegerType, DecimalType(10, 2)), DecimalType(5, 0), false),
+      // A `DATE` and a `TIMESTAMP` are held as an `INT` and a `BIGINT`, so they suit those.
+      (Seq(IntegerType, IntegerType), DateType, true),
+      (Seq(IntegerType, LongType), TimestampType, true),
+      (Seq(IntegerType, DecimalType(10, 2)), DecimalType(38, 18), false),
+      (Seq(IntegerType, DecimalType(10, 4)), DecimalType(10, 2), false)
+    ).foreach { case (declared, columnType, evaluable) =>
+      val name = s"${declared.mkString("(", ", ", ")")} over $columnType"
+      val column = AttributeReference("k", columnType)()
+      val bucket = spec(
+        TransformExpression(bucketFunction(declared: _*), Seq(column), Some(4)), InternalRow(1))
+      // The key is a placeholder: compatibility compares partition keys only when they are unknown.
+      val identity = spec(column, InternalRow(1))
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        assert(identity.areKeysCompatible(bucket, allowReduce = true) == evaluable, name)
+        assert(bucket.areKeysCompatible(identity, allowReduce = true) == evaluable, name)
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        assert(bucket.canCreatePartitioning, s"$name: a layout as it stands")
+        assert(bucket.canEvaluatePartitioning == evaluable, name)
+      }
+    }
+
+    // A `years`-like transform over a `DATE` column. A `DATE` matches only a declared `DATE`, as
+    // Iceberg's `years` declares, and an `INT`, which a `DATE` is held as. Not a `TIMESTAMP`, as
+    // the test catalog's `years` declares, which is held as a `BIGINT`, since its cast takes the
+    // session time zone. Nor a `TIMESTAMP_NTZ`, also held as a `BIGINT`.
+    val d = AttributeReference("d", DateType)()
+    Seq(
+      DateType -> true,
+      TimestampType -> false,
+      IntegerType -> true,
+      TimestampNTZType -> false
+    ).foreach { case (declared, evaluable) =>
+      val yearsSpec = spec(TransformExpression(bucketFunction(declared), Seq(d)), InternalRow(1))
+      val identity = spec(d, InternalRow(1))
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        assert(identity.areKeysCompatible(yearsSpec, allowReduce = true) == evaluable,
+          s"DATE against $declared")
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        assert(yearsSpec.canEvaluatePartitioning == evaluable, s"DATE against $declared")
+      }
+    }
+  }
+
+  test("SPARK-60522: createPartitioning refuses a layout Spark cannot evaluate") {
+    // `canCreatePartitioning` answers for a layout read as it stands, which evaluates nothing, so
+    // a caller that shuffles a child onto the layout has to ask `canEvaluatePartitioning` too.
+    // One that does not fails while planning, not on an executor.
+    val nonScalar = NonScalarBucketFunction
+    val a = $"a".int
+    val spec = KeyedShuffleSpec(KeyedPartitioning(
+      Seq(TransformExpression(nonScalar, Seq(a), Some(4))), Seq(InternalRow(1))),
+      ClusteredDistribution(Seq(a)))
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(spec.canCreatePartitioning && !spec.canEvaluatePartitioning)
+      val e = intercept[AssertionError](spec.createPartitioning(Seq($"b".int)))
+      assert(e.getMessage.contains("Cannot shuffle a child onto a layout Spark cannot evaluate"))
+    }
+  }
+
+  test("SPARK-60027: a layout over a nested column places the rows of a more nullable key") {
+    // A join compares two keys that differ only in nullability without a cast, so the side
+    // shuffled onto a layout can have a more nullable key than the column the layout's transform
+    // is over. The partitioning built over that key is evaluated on each of its rows, so it has to
+    // take the key as the function did before the input type check.
+    def nestedBucket(declared: DataType)(value: InternalRow => Int): ScalarFunction[Int] =
+      new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "bucket"
+        override def canonicalName(): String = "test.bucket"
+        override def produceResult(input: InternalRow): Int =
+          Math.floorMod(value(input), input.getInt(0))
+      }
+    val notNullStruct = new StructType().add("a", IntegerType, nullable = false)
+    Seq(
+      (notNullStruct, new StructType().add("a", IntegerType, nullable = true),
+        nestedBucket(notNullStruct)(_.getStruct(1, 1).getInt(0)), InternalRow(5)),
+      (ArrayType(IntegerType, containsNull = false), ArrayType(IntegerType, containsNull = true),
+        nestedBucket(ArrayType(IntegerType, containsNull = false))(_.getArray(1).getInt(0)),
+        new GenericArrayData(Array[Any](5))),
+      (MapType(IntegerType, IntegerType, valueContainsNull = false),
+        MapType(IntegerType, IntegerType, valueContainsNull = true),
+        nestedBucket(MapType(IntegerType, IntegerType, valueContainsNull = false))(
+          _.getMap(1).valueArray().getInt(0)),
+        ArrayBasedMapData(Map(1 -> 5)))
+    ).foreach { case (columnType, keyType, fn, value) =>
+      val k = AttributeReference("k", columnType)()
+      val r = AttributeReference("r", keyType)()
+      val spec = KeyedShuffleSpec(KeyedPartitioning(
+        Seq(TransformExpression(fn, Seq(k), Some(4))), Seq(InternalRow(1))),
+        ClusteredDistribution(Seq(k)))
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        assert(spec.canCreatePartitioning && spec.canEvaluatePartitioning, s"$columnType")
+        val built = spec.createPartitioning(Seq(r)).asInstanceOf[KeyedPartitioning]
+        val bound = BindReferences.bindReference(built.expressions.head, Seq(r))
+        assert(bound.eval(InternalRow(value)) == 1, s"$columnType placing a $keyType key")
+      }
+    }
+  }
+
+  test("SPARK-60027: an identity side whose struct differs only in nullability is reduced") {
+    // A join compares two structs that differ only in nullability without a cast, so they pair,
+    // and the reduce evaluates the transform over the identity side's column. It is taken in
+    // either direction of nullability, and with the identity side on either side of the pair, as
+    // it was before the input type check: a function declaring a non-nullable field gets the
+    // values a nullable one holds.
+    val notNull = new StructType().add("x", IntegerType, nullable = false)
+    val nullable = new StructType().add("x", IntegerType, nullable = true)
+    def structBucket(declared: DataType): ScalarFunction[Int] = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, declared)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int =
+        Math.floorMod(input.getStruct(1, 1).getInt(0), input.getInt(0))
+    }
+    def reduce(reducer: Option[Seq[Option[KeyReducer]]]): Any =
+      reducer.get.head.get.reducer.asInstanceOf[Reducer[Any, Any]].reduce(InternalRow(5))
+    Seq(notNull -> nullable, nullable -> notNull).foreach { case (transformType, identityType) =>
+      val k = AttributeReference("k", transformType)()
+      val a = AttributeReference("a", identityType)()
+      val bucket = KeyedShuffleSpec(KeyedPartitioning(
+        Seq(TransformExpression(structBucket(transformType), Seq(k), Some(4))),
+        Seq(InternalRow(1))), ClusteredDistribution(Seq(k)))
+      val identity = KeyedShuffleSpec(KeyedPartitioning(Seq(a), Seq(InternalRow(InternalRow(5)))),
+        ClusteredDistribution(Seq(a)))
+      val name = s"transform over $transformType, identity $identityType"
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        assert(identity.areKeysCompatible(bucket, allowReduce = true), name)
+        assert(bucket.areKeysCompatible(identity, allowReduce = true), name)
+        assert(reduce(identity.reducersBothWays(bucket)._1) == 1, name)
+        assert(reduce(bucket.reducersBothWays(identity)._2) == 1, name)
+      }
+    }
+  }
+
+  test("SPARK-59971: canCreatePartitioning: KeyedShuffleSpec requires all the cluster keys") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    def spec(expressions: Expression*): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(expressions, Seq(InternalRow.fromSeq(expressions.map(_ => 1)))),
+      distribution)
+    val bucketA = TransformExpression(TestBucketFunction, Seq(a), Some(4))
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+      // Key order does not matter, and a transform covers the column it is over.
+      Seq(spec(a, b), spec(b, a), spec(bucketA, b)).foreach { s =>
+        assert(s.canCreatePartitioning, s"${s.partitioning.expressions} covers [a, b]")
+      }
+      Seq(spec(a), spec(bucketA)).foreach { s =>
+        assert(!s.canCreatePartitioning, s"${s.partitioning.expressions} does not cover b")
+      }
+      // The same specs are accepted without the requirement, so it is what turns them away.
+      withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        Seq(spec(a), spec(bucketA)).foreach { s =>
+          assert(s.canCreatePartitioning, s"${s.partitioning.expressions} without the requirement")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59971: the V2 co-partition key requirement overrides the general one") {
+    val a = $"a".int
+    val b = $"b".int
+    val distribution = ClusteredDistribution(Seq(a, b))
+    val keyed = KeyedShuffleSpec(KeyedPartitioning(Seq(a), Seq(InternalRow(1))), distribution)
+    val hashed = HashShuffleSpec(HashPartitioning(Seq(a), 4), distribution)
+    val v2Key = SQLConf.V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      // Unset, the V2 config follows the general one.
+      Seq(true, false).foreach { requireAll =>
+        withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll.toString) {
+          assert(keyed.canCreatePartitioning == !requireAll, s"requireAll = $requireAll")
+        }
+      }
+      // Set, it decides for a keyed spec only. A hash spec still follows the general config.
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true",
+          v2Key -> "false") {
+        assert(keyed.canCreatePartitioning, "the V2 config lifts the requirement")
+        assert(!hashed.canCreatePartitioning, "a hash spec keeps the general requirement")
+      }
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          v2Key -> "true") {
+        assert(!keyed.canCreatePartitioning, "the V2 config keeps the requirement")
+        assert(hashed.canCreatePartitioning, "a hash spec follows the general config")
+      }
+    }
+  }
+
   test("SPARK-59120: createShuffleSpec sorts the projected keys at their built-with types") {
     val a = $"a".timestamp
     val b = $"b".int
@@ -754,11 +1054,13 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   test("areKeysCompatible: unknown partition keys only allow a subset of the declared keys") {
     val a = $"a".int
     val distribution = ClusteredDistribution(Seq(a))
+    def routing(hasUnknown: Boolean): Option[UnknownKeysOrigin] =
+      Option.when(hasUnknown)(HASH_ROUTING)
     def keyedSpec(
         keys: Seq[Int],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+        .withLayout(_.copy(unknownKeysOrigin = routing(hasUnknown))), distribution)
 
     // A partitioning with unknown partition keys (e.g. a side re-shuffled onto a keyed layout by
     // `KeyedShuffleSpec.createPartitioning`) only guarantees co-location for its declared keys, so
@@ -801,29 +1103,36 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("areKeysCompatible: unknown partition keys require the same partition functions") {
-    // A stand-in for a connector partition function such as `bucket`: only the canonical name
-    // matters here, since `TransformExpression.isSameFunction` compares names and bucket counts.
+    // A stand-in for a connector partition function such as `bucket`.
+    // `TransformExpression.isSameFunction` compares its canonical name and bucket count. An
+    // identity-vs-transform pair also asks whether Spark can evaluate it, so it declares the
+    // bucket count and the value and implements `produceResult`, rather than relying on the
+    // mixin forwarder to the default one.
     val bucketFn = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(LongType)
+      override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
       override def resultType(): DataType = IntegerType
       override def name(): String = "test.bucket"
       override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int =
+        Math.floorMod(input.getLong(1), input.getInt(0).toLong).toInt
     }
     def bucket(numBuckets: Int, expr: Expression): TransformExpression =
       TransformExpression(bucketFn, Seq(expr), Some(numBuckets))
 
     val a = $"a".long
     val distribution = ClusteredDistribution(Seq(a))
+    def routing(hasUnknown: Boolean): Option[UnknownKeysOrigin] =
+      Option.when(hasUnknown)(HASH_ROUTING)
     def bucketSpec(
         keys: Seq[Long],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(bucket(4, a)), keys.map(k => InternalRow(k)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+        .withLayout(_.copy(unknownKeysOrigin = routing(hasUnknown))), distribution)
     def keyedSpec(
         keys: Seq[Long],
         hasUnknown: Boolean = false): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(Seq(a), keys.map(k => InternalRow(k)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)), distribution)
+        .withLayout(_.copy(unknownKeysOrigin = routing(hasUnknown))), distribution)
 
     // `isExpressionCompatible` admits an identity-vs-transform pair when compatible transforms
     // are allowed, but then the two sides' partition keys live in different domains: raw values
@@ -1002,11 +1311,52 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-60277: concat preserves routing only for one grouped nonempty leg") {
+    val a = $"a".int
+    def kp(keys: Int*): KeyedPartitioning =
+      KeyedPartitioning(Seq(a), keys.map(InternalRow(_)))
+    val marked = kp(1, 2, 3).withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    val accurate = kp(4, 5)
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      Seq(Seq(marked, accurate), Seq(accurate, marked)).foreach { legs =>
+        val out = KeyedPartitioning.concat(legs)
+        assert(out.isGrouped && out.mayContainUnknownPartitionKeys && !out.unknownKeysRouted)
+        assert(!KeyedShuffleSpec(out, ClusteredDistribution(Seq(a))).canCreatePartitioning)
+      }
+      val unchanged = KeyedPartitioning.concat(Seq(kp(), marked, kp()))
+      assert(unchanged.isGrouped && unchanged.unknownKeysOrigin.contains(HASH_ROUTING))
+      assert(KeyedShuffleSpec(unchanged, ClusteredDistribution(Seq(a))).canCreatePartitioning)
+    }
+    val repeated = kp(1, 1, 2).withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    assert(!KeyedPartitioning.concat(Seq(kp(), repeated)).unknownKeysRouted)
+  }
+
+  test("SPARK-60277: keyed plan strings show bare unknown-key origins") {
+    val base = KeyedPartitioning(Seq($"a".int), Seq(InternalRow(1)))
+    assert(!base.toString.contains("None"))
+    Seq(HASH_ROUTING, ROUTING_LOST).foreach { origin =>
+      val rendered = base.withLayout(_.copy(unknownKeysOrigin = Some(origin))).toString
+      assert(rendered.contains(origin.toString))
+      assert(!rendered.contains("Some("))
+    }
+  }
+
+  test("SPARK-60277: toGrouped gives the routing up") {
+    val a = $"a".int
+    val marked = KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+    assert(!marked.isGrouped, "test setup: the duplicate key keeps the layout ungrouped")
+    val grouped = marked.toGrouped
+    assert(grouped.isGrouped && grouped.mayContainUnknownPartitionKeys &&
+      !grouped.unknownKeysRouted,
+      s"dedup and sort move the keys off the routing: $grouped")
+  }
+
   test("createShuffleSpec: a marked narrowing projection yields an unusable spec") {
     val a = $"a".int
     val b = $"b".int
     val marked = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 2), InternalRow(3, 4)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
@@ -1027,7 +1377,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // refused would only have re-sorted the keys.
     val marked = KeyedPartitioning(Seq(a),
       Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
@@ -1051,7 +1401,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         KeyedPartitioning(
           Seq(TransformExpression(fn, Seq(a), Some(numBuckets))),
           Seq(InternalRow(0L), InternalRow(1L)))
-          .withLayout(_.copy(mayContainUnknownPartitionKeys = hasUnknown)),
+          .withLayout(_.copy(unknownKeysOrigin = Option.when(hasUnknown)(HASH_ROUTING))),
         ClusteredDistribution(Seq(a)))
 
     // `allowCompatibleTransforms` lets a differing-bucket-count pair through

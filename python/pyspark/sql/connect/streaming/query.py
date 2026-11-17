@@ -287,8 +287,25 @@ class StreamingQueryListenerBus:
         self._bus_lock = Lock()
 
     def close(self) -> None:
-        for listener in self._listener_bus:
+        if self._sqm._session.client.is_closed:
+            # No removal can be sent on a closed client. After SparkSession.stop(), releasing
+            # the session has already removed the server side listener. SparkSession.__del__
+            # calls this only after the handler thread has ended, so only clear the local state.
+            with self._thread_lock:
+                with self._bus_lock:
+                    self._clear_local_listeners()
+            return
+        # remove() deletes from _listener_bus, so iterate over a snapshot taken under the lock.
+        with self._bus_lock:
+            listeners = list(self._listener_bus)
+        for listener in listeners:
             self.remove(listener)
+
+    def _clear_local_listeners(self) -> None:
+        # Drop every local listener and the reference to the handler thread. The caller holds
+        # _bus_lock. The handler thread calls this too, so it must not take _thread_lock.
+        self._execution_thread = None
+        self._listener_bus.clear()
 
     def append(self, listener: StreamingQueryListener) -> None:
         """
@@ -421,8 +438,7 @@ class StreamingQueryListenerBus:
                 f"listeners are removed and handler thread is terminated. The error is: {e}"
             )
             with self._bus_lock:
-                self._execution_thread = None
-                self._listener_bus.clear()
+                self._clear_local_listeners()
             return
 
     @staticmethod

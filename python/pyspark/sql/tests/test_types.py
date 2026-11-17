@@ -50,6 +50,8 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     DecimalType,
     DoubleType,
+    FileType,
+    FileTypeMode,
     FloatType,
     Geography,
     GeographyType,
@@ -2900,6 +2902,48 @@ class TypesTestsMixin:
                 self.assertTrue(row.sa.startswith("2020-01-02 03:04:05.1234567"), row.sa)
                 self.assertTrue(row.mv.startswith("2020-01-02 03:04:05.1234567"), row.mv)
 
+    def test_timestamp_nanos_type_arrow_conversion_floors_to_precision(self):
+        # Arrow timestamp[ns] carries nine fractional digits; a lower declared precision must floor
+        # them, or values equal at that precision compare and group as different.
+        import pandas as pd
+        import pyarrow as pa
+
+        cases = [
+            (
+                TimestampNTZNanosType(7),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456712"],
+                "2020-01-02 03:04:05.1234567",
+            ),
+            (
+                TimestampLTZNanosType(8),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456781"],
+                "2020-01-02 03:04:05.12345678",
+            ),
+            # Pre-epoch values floor toward -inf, not toward zero.
+            (
+                TimestampNTZNanosType(7),
+                ["1969-12-31 23:59:59.999999999", "1969-12-31 23:59:59.999999901"],
+                "1969-12-31 23:59:59.9999999",
+            ),
+        ]
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            for nanos_type, values, floored in cases:
+                pdf = pd.DataFrame({"ts": pd.to_datetime(pd.Series(values))})
+                table = pa.table({"ts": pa.array(pdf["ts"], type=pa.timestamp("ns"))})
+                schema = StructType([StructField("ts", nanos_type)])
+                floored_literal = f"CAST('{floored}' AS {nanos_type.simpleString()})"
+                for data in (pdf, table):
+                    df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(1, df.distinct().count())
+                    self.assertEqual(2, df.where(f"ts = {floored_literal}").count())
+                    self.assertEqual([pd.Timestamp(floored)] * 2, list(df.toPandas()["ts"]))
+
     def test_timestamp_nanos_type_arrow_udf(self):
         # SPARK-57462 follow-up: with the eager Arrow-conversion reject removed, an Arrow-optimized
         # Python UDF (useArrow=True) can take and return the nanosecond timestamp types through the
@@ -3575,6 +3619,25 @@ class TypesTestsMixin:
             StructType([StructField("a", TimeType(6))]),
         )
 
+    def test_file_type_from_ddl(self):
+        self.assertEqual(DataType.fromDDL("file"), FileType())
+        self.assertEqual(DataType.fromDDL("file external"), FileType.external())
+        self.assertEqual(
+            DataType.fromDDL(
+                "a file external, b file, c array<file external>, d map<string, file external>, "
+                "e struct<x: file external>"
+            ),
+            StructType(
+                [
+                    StructField("a", FileType.external()),
+                    StructField("b", FileType()),
+                    StructField("c", ArrayType(FileType.external())),
+                    StructField("d", MapType(StringType(), FileType.external())),
+                    StructField("e", StructType([StructField("x", FileType.external())])),
+                ]
+            ),
+        )
+
     # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
     # `fromDDL`'s behavior.
     def test_spark48834_from_ddl_matches_udf_schema_string(self):
@@ -3706,6 +3769,124 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         v3 = VarcharType(10)
         self.assertEqual(v1, v3)
         self.assertFalse(v1 is v3)
+
+    def test_file_type(self):
+        external, unknown = FileType.external(), FileType()
+        self.assertEqual(FileTypeMode.UNKNOWN, unknown.mode)
+        self.assertEqual(FileTypeMode.EXTERNAL, external.mode)
+        self.assertEqual(external, FileType(FileTypeMode.EXTERNAL))
+        # The mode is part of the type identity.
+        self.assertNotEqual(external, unknown)
+        self.assertNotEqual(hash(external), hash(unknown))
+
+        self.assertEqual("file external", external.simpleString())
+        self.assertEqual("file", unknown.simpleString())
+        self.assertEqual("file", FileType.typeName())
+        self.assertEqual("FileType(FileTypeMode.EXTERNAL)", repr(external))
+        self.assertEqual("FileType()", repr(unknown))
+        self.assertEqual("file external", DataType._get_jvm_type_name(external))
+        self.assertEqual('"file external"', external.json())
+        self.assertEqual('"file unknown"', unknown.json())
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            FileType("external")  # type: ignore[arg-type]
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "mode",
+                "expected_type": "FileTypeMode",
+                "arg_type": "str",
+            },
+        )
+
+    def test_file_type_json(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _parse_datatype_json_value
+
+        # Outside a struct field, the JSON carries the mode, and a plain "file" is unknown.
+        for json_value, expected in [
+            ("file external", FileType.external()),
+            ("file unknown", FileType()),
+            ("file", FileType()),
+        ]:
+            with self.subTest(json_value=json_value):
+                self.assertEqual(expected, _parse_datatype_json_value(json_value))
+        for dt in [FileType(), FileType.external(), ArrayType(FileType.external())]:
+            with self.subTest(dt=dt):
+                self.assertEqual(dt, _parse_datatype_json_string(dt.json()))
+        for json_value in ["file managed", "file external unknown", "files"]:
+            with self.subTest(json_value=json_value):
+                with self.assertRaises(PySparkValueError) as pe:
+                    _parse_datatype_json_value(json_value)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CANNOT_PARSE_DATATYPE",
+                    messageParameters={"msg": json_value},
+                )
+        # Outside a struct field, a plain "file" in an array or a map is unknown too.
+        self.assertEqual(
+            ArrayType(FileType()),
+            _parse_datatype_json_value(
+                {"type": "array", "elementType": "file", "containsNull": True}
+            ),
+        )
+        self.assertEqual(
+            MapType(StringType(), FileType()),
+            _parse_datatype_json_value(
+                {
+                    "type": "map",
+                    "keyType": "string",
+                    "valueType": "file",
+                    "valueContainsNull": True,
+                }
+            ),
+        )
+
+        # In a struct field, and in an array or map of one, an external file is the plain "file"
+        # and a plain "file" is read as external. An unknown file keeps its mode.
+        schema = StructType(
+            [
+                StructField("a", FileType.external()),
+                StructField("b", FileType()),
+                StructField("c", ArrayType(FileType.external())),
+                StructField("d", MapType(StringType(), FileType.external())),
+                StructField("e", StructType([StructField("x", FileType.external())])),
+                StructField("k", MapType(FileType.external(), IntegerType())),
+            ]
+        )
+        fields = schema.jsonValue()["fields"]
+        self.assertEqual("file", fields[0]["type"])
+        self.assertEqual("file unknown", fields[1]["type"])
+        self.assertEqual("file", fields[2]["type"]["elementType"])
+        self.assertEqual("file", fields[3]["type"]["valueType"])
+        self.assertEqual("file", fields[4]["type"]["fields"][0]["type"])
+        self.assertEqual("file", fields[5]["type"]["keyType"])
+        self.assertEqual(schema, _parse_datatype_json_string(schema.json()))
+        self.assertEqual(
+            StructField("f", FileType.external()),
+            StructField.fromJson({"name": "f", "type": "file"}),
+        )
+        self.assertEqual(
+            StructField("f", ArrayType(FileType.external())),
+            StructField.fromJson(
+                {
+                    "name": "f",
+                    "type": {"type": "array", "elementType": "file", "containsNull": True},
+                }
+            ),
+        )
+
+    def test_file_type_json_with_collations(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        # A field that has both a collated string and an external file in a map.
+        field = StructField("m", MapType(StringType("UNICODE"), FileType.external()))
+        json_value = field.jsonValue()
+        self.assertEqual("string", json_value["type"]["keyType"])
+        self.assertEqual("file", json_value["type"]["valueType"])
+        self.assertEqual({"m.key": "icu.UNICODE"}, json_value["metadata"]["__COLLATIONS"])
+        schema = StructType([field])
+        self.assertEqual(schema, _parse_datatype_json_string(schema.json()))
 
     def test_timestamp_nanos_type_precision(self):
         for cls in [TimestampNTZNanosType, TimestampLTZNanosType]:
@@ -4168,7 +4349,29 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
 
 class TypesTests(TypesTestsMixin, ReusedSQLTestCase):
-    pass
+    def test_file_type_json_matches_jvm(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        jvm_data_type = self.spark._jvm.org.apache.spark.sql.types.DataType
+        for dt in [
+            FileType(),
+            FileType.external(),
+            ArrayType(FileType.external()),
+            StructType(
+                [
+                    StructField("a", FileType.external()),
+                    StructField("b", FileType()),
+                    StructField("c", ArrayType(FileType.external())),
+                    StructField("d", MapType(StringType(), FileType.external())),
+                    StructField("k", MapType(FileType.external(), IntegerType())),
+                ]
+            ),
+        ]:
+            with self.subTest(dt=dt):
+                jvm_json = jvm_data_type.fromJson(dt.json()).json()
+                # The JVM does not sort the keys, so the parsed JSON is compared.
+                self.assertEqual(json.loads(dt.json()), json.loads(jvm_json))
+                self.assertEqual(dt, _parse_datatype_json_string(jvm_json))
 
 
 if __name__ == "__main__":

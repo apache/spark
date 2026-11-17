@@ -143,7 +143,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
-      val lc = new Locale($(locale))
+      val lc = Locale.of($(locale))
       // scalastyle:off caselocale
       val toLower = (s: String) => if (s != null) s.toLowerCase(lc) else s
       // scalastyle:on caselocale

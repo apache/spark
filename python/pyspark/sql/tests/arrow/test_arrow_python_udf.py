@@ -15,13 +15,19 @@
 # limitations under the License.
 #
 
+import time
 import unittest
 from decimal import Decimal
+from io import BufferedReader, BufferedWriter, BytesIO
+from itertools import product
+from unittest.mock import patch
 
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.loose_version import LooseVersion
+from pyspark.serializers import read_int
 from pyspark.sql import Row
 from pyspark.sql.functions import col, udf
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer, SpecialLengths
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
     ArrayType,
@@ -43,6 +49,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
 
 if have_pandas:
     import pandas as pd
@@ -385,6 +392,14 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         self.assertIsNotNone(result["interval_field"])
         self.assertEqual(result["name"], "test_name")
 
+    def test_udf_with_output_batch_slicing(self):
+        # Each result row is joined with the next queued input row, so the sliced 10-row result
+        # batch must be output once and in order.
+        df = self.spark.range(0, 10, 1, 1)
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"}):
+            result = df.select(col("id"), udf(lambda x: x + 1, "long")(col("id")))
+            assertDataFrameEqual(result, [Row(i, i + 1) for i in range(10)])
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
@@ -542,6 +557,305 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super().tearDownClass()
+
+    def test_phase_metrics(self):
+        @udf("long", useArrow=True)
+        def measured(value):
+            time.sleep(0.002)
+            return value + 1
+
+        constant = udf(lambda: 7, "long", useArrow=True)
+        phase_names = (
+            "pythonDataReadTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonDataWriteTime",
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "2",
+                "spark.sql.adaptive.enabled": "false",
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+            }
+        ):
+            # Exercise sequential and concurrent evaluation, then an empty worker task.
+            for num_rows, concurrency in ((5, 0), (3, 2), (0, 0)):
+                concurrency_conf = (
+                    {"spark.sql.execution.pythonUDF.arrow.concurrency.level": str(concurrency)}
+                    if concurrency
+                    else {}
+                )
+                with (
+                    self.subTest(num_rows=num_rows, concurrency=concurrency),
+                    self.sql_conf(concurrency_conf),
+                ):
+                    if num_rows:
+                        data = self.spark.range(num_rows, numPartitions=1)
+                    else:
+                        data = self.spark.createDataFrame(self.sc.parallelize([], 1), "id long")
+                    result = data.select(measured("id"), constant())
+                    self.assertEqual(
+                        [tuple(row) for row in result.collect()],
+                        [(value + 1, 7) for value in range(num_rows)],
+                    )
+                    plan = result._jdf.queryExecution().executedPlan()
+                    while plan.nodeName() != "ArrowEvalPython":
+                        self.assertEqual(plan.children().size(), 1)
+                        plan = plan.children().apply(0)
+                    metrics = plan.metrics()
+                    self.assertEqual(metrics.apply("pythonNumPipelinedTasks").value(), 0)
+                    self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+                    self.assertEqual(
+                        metrics.apply("pythonNumTimedBatches").value(), (num_rows + 1) // 2
+                    )
+                    phases = [metrics.apply(name).value() for name in phase_names]
+                    self.assertTrue(all(value >= 0 for value in phases))
+                    if num_rows:
+                        for name in phase_names:
+                            self.assertFalse(metrics.apply(name).isZero(), name)
+                    if num_rows and concurrency == 0:
+                        self.assertGreaterEqual(phases[2], 2 * num_rows)
+                    elif num_rows:
+                        self.assertGreater(phases[2], 0)
+                    else:
+                        self.assertEqual(phases[1:4], [0, 0, 0])
+                    self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
+
+    def test_phase_metrics_disabled_by_default(self):
+        add_one = udf(lambda value: value + 1, "long", useArrow=True)
+
+        def run():
+            result = self.spark.range(2, numPartitions=1).select(add_one("id"))
+            self.assertEqual([row[0] for row in result.collect()], [1, 2])
+            plan = result._jdf.queryExecution().executedPlan()
+            while plan.nodeName() != "ArrowEvalPython":
+                self.assertEqual(plan.children().size(), 1)
+                plan = plan.children().apply(0)
+            return plan.metrics()
+
+        timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
+        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
+            with self.sql_conf({timing_conf: "true"}):
+                self.assertEqual(run().apply("pythonNumTimingReports").value(), 1)
+            self.assertEqual(self.spark.conf.get(timing_conf), "false")
+            metrics = run()
+
+        detailed_metrics = (
+            "pythonDataReadTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonDataWriteTime",
+            "pythonNumTimingReports",
+            "pythonNumTimedBatches",
+        )
+        for name in detailed_metrics:
+            self.assertFalse(metrics.contains(name), name)
+        self.assertTrue(metrics.contains("pythonProcessingTime"))
+        self.assertTrue(metrics.contains("pythonNumPipelinedTasks"))
+
+    def test_phase_metrics_on_materialized_plan_after_config_change(self):
+        add_one = udf(lambda value: value + 1, "long", useArrow=True)
+        timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
+
+        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
+            with self.sql_conf({timing_conf: "true"}):
+                result = self.spark.range(2, numPartitions=1).select(add_one("id"))
+                plan = result._jdf.queryExecution().executedPlan()
+                while plan.nodeName() != "ArrowEvalPython":
+                    self.assertEqual(plan.children().size(), 1)
+                    plan = plan.children().apply(0)
+                metrics = plan.metrics()
+                self.assertTrue(metrics.contains("pythonNumTimingReports"))
+
+            self.assertEqual(self.spark.conf.get(timing_conf), "false")
+            self.assertEqual([row[0] for row in result.collect()], [1, 2])
+            self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+            self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 1)
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowStreamTimingTests(unittest.TestCase):
+    def test_timing_excludes_producer_consumer_and_owner_flush(self):
+        import pyarrow as pa
+
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+        batch = pa.record_batch([[1, 2]], names=["value"])
+        clock_ns = 0
+
+        def clock():
+            return clock_ns
+
+        class DelayedStream(BytesIO):
+            read_ns = 0
+            write_ns = 0
+
+            def read(self, size=-1):
+                nonlocal clock_ns
+                clock_ns += 3_000_000
+                self.read_ns += 3_000_000
+                return super().read(size)
+
+            def write(self, data):
+                nonlocal clock_ns
+                clock_ns += 5_000_000
+                self.write_ns += 5_000_000
+                return super().write(data)
+
+            def flush(self):
+                nonlocal clock_ns
+                clock_ns += 7_000_000
+                self.write_ns += 7_000_000
+                return super().flush()
+
+        def produce():
+            nonlocal clock_ns
+            for _ in range(2):
+                clock_ns += 100_000_000
+                yield batch
+            clock_ns += 100_000_000
+
+        for write_start_stream, flush_per_batch, close_early in product((False, True), repeat=3):
+            with self.subTest(
+                write_start_stream=write_start_stream,
+                flush_per_batch=flush_per_batch,
+                close_early=close_early,
+            ):
+                metrics.reset()
+                serializer = ArrowStreamSerializer(
+                    write_start_stream=write_start_stream,
+                    flush_per_batch=flush_per_batch,
+                    collect_timing=True,
+                )
+                with patch(
+                    "pyspark.sql.pandas.serializers.time.perf_counter_ns", side_effect=clock
+                ):
+                    output = DelayedStream()
+                    serializer.dump_stream(produce(), output)
+                    # Include the start marker and writer close, but not the owner's flush.
+                    write_ns = output.write_ns
+                    output.flush()
+                    source = DelayedStream(output.getvalue())
+                    if write_start_stream:
+                        self.assertEqual(read_int(source), SpecialLengths.START_ARROW_STREAM)
+                    source.read_ns = 0
+                    reader = serializer.load_stream(source)
+                    for actual in reader:
+                        clock_ns += 100_000_000
+                        self.assertTrue(actual.equals(batch))
+                        if close_early:
+                            reader.close()
+                            break
+
+                # Only stream operations advance the clock inside the Arrow intervals.
+                report = metrics.to_dict()
+                self.assertEqual(
+                    report,
+                    {
+                        "pythonDataReadTime": source.read_ns // 1_000_000,
+                        "pythonDataWriteTime": write_ns // 1_000_000,
+                    },
+                )
+
+    def test_disabled_timing_does_not_read_clock(self):
+        import pyarrow as pa
+
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        batch = pa.record_batch([[1, 2]], names=["value"])
+        serializer = ArrowStreamSerializer(write_start_stream=True)
+        with patch(
+            "pyspark.sql.pandas.serializers.time.perf_counter_ns",
+            side_effect=AssertionError("timing is disabled"),
+        ):
+            stream = BytesIO()
+            serializer.dump_stream(iter([batch]), stream)
+            stream.seek(0)
+            self.assertEqual(read_int(stream), SpecialLengths.START_ARROW_STREAM)
+            self.assertTrue(list(serializer.load_stream(stream))[0].equals(batch))
+        self.assertEqual(metrics.to_dict(), {})
+
+    def test_timing_preserves_stream_operations(self):
+        import pyarrow as pa
+
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+        batch = pa.record_batch([[1, 2]], names=["value"])
+
+        def run(timed, buffer_size, write_start_stream, flush_per_batch, num_batches, fail):
+            metrics.reset()
+            events = []
+
+            class RecordedStream(BytesIO):
+                def __init__(self, data, mode):
+                    super().__init__(data)
+                    self.mode = mode
+
+                def readable(self):
+                    return self.mode == "rb"
+
+                def writable(self):
+                    return self.mode == "wb"
+
+                def seekable(self):
+                    return False
+
+                def readinto(self, data):
+                    events.append(("readinto", len(data)))
+                    return super().readinto(data)
+
+                def write(self, data):
+                    events.append(("write", bytes(data)))
+                    return super().write(data)
+
+                def flush(self):
+                    events.append(("flush",))
+                    return super().flush()
+
+            def produce():
+                for _ in range(num_batches):
+                    events.append(("produce",))
+                    yield batch
+                if fail:
+                    raise RuntimeError("batch producer failed")
+
+            raw_output = RecordedStream(b"", "wb")
+            stream = BufferedWriter(raw_output, buffer_size)
+            serializer = ArrowStreamSerializer(
+                write_start_stream=write_start_stream,
+                flush_per_batch=flush_per_batch,
+                collect_timing=timed,
+            )
+            if fail:
+                with self.assertRaisesRegex(RuntimeError, "batch producer failed"):
+                    serializer.dump_stream(produce(), stream)
+            else:
+                serializer.dump_stream(produce(), stream)
+            stream.flush()
+            data = raw_output.getvalue()
+            raw_input = RecordedStream(data, "rb")
+            reader = BufferedReader(raw_input, buffer_size)
+            if num_batches:
+                if write_start_stream:
+                    self.assertEqual(read_int(reader), SpecialLengths.START_ARROW_STREAM)
+                for actual in serializer.load_stream(reader):
+                    events.append(("consume",))
+                    self.assertTrue(actual.equals(batch))
+            self.assertFalse(stream.closed)
+            reader.close()
+            stream.close()
+            return data, events
+
+        for buffer_size in (8, 64, 65536):
+            for write_start_stream in (False, True):
+                for flush_per_batch in (False, True):
+                    for num_batches, fail in ((0, False), (0, True), (2, False), (2, True)):
+                        case = (buffer_size, write_start_stream, flush_per_batch, num_batches, fail)
+                        with self.subTest(case=case):
+                            self.assertEqual(run(False, *case), run(True, *case))
 
 
 if __name__ == "__main__":

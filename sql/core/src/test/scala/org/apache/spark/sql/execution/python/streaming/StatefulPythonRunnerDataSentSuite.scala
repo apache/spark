@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonBroadcast, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{QueryTest, Row}
@@ -60,7 +60,7 @@ class StatefulPythonRunnerDataSentSuite extends QueryTest with SharedSparkSessio
       MessageSerializer.serialize(
         new WriteChannel(Channels.newChannel(schemaMessage)), root.getSchema)
 
-      val inputWriter = newWriter(SparkEnv.get, null, input, 0, null)
+      val inputWriter = newWriter(SparkEnv.get, null, input, 0, TaskContext.empty())
       val buffer = new ByteArrayOutputStream()
       val sharedStream = new DataOutputStream(buffer)
       var hasInput = true

@@ -15,10 +15,12 @@
 # limitations under the License.
 #
 import collections
+import io
 import math
 import pickle
 import sys
 import unittest
+from unittest.mock import MagicMock
 
 from pyspark import serializers
 from pyspark.serializers import (
@@ -220,6 +222,26 @@ class NumPyTests(PySparkTestCase):
 
 
 class SerializersTest(unittest.TestCase):
+    def test_framed_serializer_length_limit(self):
+        ser = NoOpSerializer()
+        for length in [(1 << 31) - 1, 1 << 31, (1 << 31) + 1]:
+            with self.subTest(length=length):
+                payload = MagicMock()
+                payload.__len__.return_value = length
+                stream = MagicMock()
+                if length < 1 << 31:
+                    ser.dump_stream([payload], stream)
+                    self.assertEqual(stream.write.call_count, 2)
+                    header = io.BytesIO(stream.write.call_args_list[0].args[0])
+                    self.assertEqual(serializers.read_int(header), length)
+                    stream.write.assert_called_with(payload)
+                else:
+                    with self.assertRaisesRegex(
+                        ValueError, "can not serialize object larger than 2G"
+                    ):
+                        ser.dump_stream([payload], stream)
+                    stream.write.assert_not_called()
+
     def test_chunked_stream(self):
         original_bytes = bytearray(range(100))
         for data_length in [1, 10, 100]:

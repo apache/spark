@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -358,6 +359,62 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       s"Expected the union of both array rows, got $collectedArrays")
   }
 
+  test("SPARK-61232: UnionExec whole-stage codegen fails when a child output repeats an ExprId") {
+    // `SELECT p, p, w` leaves two output positions with one ExprId, and `r` is a union, so for
+    // `p2`'s rows its second position holds `r` while its first holds `q`. A union child reading
+    // its output by ExprId would take the first position for both: the second union output
+    // column would hold the first column's value, and the generated row would declare that
+    // value's variable twice, which Janino rejects.
+    //
+    // The analyzer normally replaces a repeated output column with a fresh ExprId
+    // (`DeduplicateUnionChildOutput`); these confs keep it so the physical union sees it.
+    withSQLConf(
+      SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false",
+      SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      def build(): DataFrame = {
+        val p1 = spark.range(1000)
+          .selectExpr("id p", "id w").select(col("p"), col("p"), col("w"))
+        val p2 = spark.range(1000, 11000).selectExpr("id q", "id % 1000 r", "id w2")
+        // `u` does not line up with `r`'s partitioning, so the union is plain and fuses
+        // through its query stages.
+        val x = spark.range(1000)
+          .selectExpr("id x", "id c", "id u").repartition(col("u"))
+        val r = p1.union(p2).repartition(p1.col("p"))
+        x.union(r)
+      }
+      val fused = build()
+      val answer = fused.collect().toSeq
+      // The bug needs the union that fuses over query stages to read a child whose output
+      // repeats an ExprId. The analyzer can drop that shape, so assert it survived rather than
+      // letting the test go vacuous. The check is on the InputAdapter child: the inner union
+      // below `r` repeats an ExprId too, but it has no InputAdapter child, so it cannot satisfy
+      // the guard on its own.
+      val fusedUnionExecs = fusedUnions(fused)
+      assert(
+        fusedUnionExecs.exists(_.children.exists { c =>
+          c.isInstanceOf[InputAdapter] &&
+            c.output.map(_.exprId).distinct.size < c.output.size
+        }),
+        s"expected the fused union's staged child to repeat an ExprId:\n" +
+          fused.queryExecution.executedPlan)
+      // Without AQE the nested union below `r` keeps this union out of codegen; AQE turns the
+      // children into query stages, and that is the shape the fused union consumes.
+      assert(fusedUnionExecs.exists(_.children.exists(_.isInstanceOf[InputAdapter])),
+        s"expected the outer union to fuse over its query stages:\n" +
+          fused.queryExecution.executedPlan)
+      assert(answer.length == 12000)
+      // The fused path must agree with the interpreted one, which concatenates child rows as
+      // they are and so keeps each union output column at its own position.
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        checkAnswer(build(), answer)
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Correctness: N children, empty partitions, mixed partition counts
   // ---------------------------------------------------------------------------
@@ -530,6 +587,89 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       // in codegen at any depth, and without it the union would root a stage here.
       assert(codegenUnions(fused).isEmpty,
         s"the denylist has to keep this union out of codegen:\n${fused.queryExecution}")
+    }
+  }
+
+  /** A union of an ASOF join in `direction` and a range. */
+  private def asOfJoinUnion(direction: String): DataFrame = {
+    // `joinAsOf` is on the classic Dataset, so build the inputs from `spark.range`.
+    val left = spark.range(10).select(col("id").as("k"), (col("id") * 2).as("ts"))
+    val right = spark.range(10).select(col("id").as("k"), (col("id") * 2 - 1).as("ts"))
+    left.joinAsOf(right, left("ts"), right("ts"), usingColumns = Seq("k"),
+        joinType = "inner", tolerance = null, allowExactMatches = true, direction = direction)
+      .select(left("k"), right("ts"))
+      .union(rangeDF(100, 103).select(col("id").as("k"), col("id").as("ts")))
+  }
+
+  /** The rows of `asOfJoinUnion`, backward or nearest: each key has one right row, just before. */
+  private val asOfJoinUnionRows =
+    (0L until 10L).map(k => Row(k, 2 * k - 1)) ++ (100L until 103L).map(k => Row(k, k))
+
+  test("Sort-merge ASOF join child union correctness") {
+    // A generated ASOF join reads two RDDs, so the union must not fuse: each child of a fused
+    // union must give it one RDD, so the query would fail.
+    withSQLConf(
+      SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+      SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val (fused, _) = assertFlagParity(() => asOfJoinUnion("backward"))
+      checkAnswer(fused, asOfJoinUnionRows)
+      // The ASOF join has to run in a codegen stage, or this test does not reach the denylist.
+      def inStage(plan: SparkPlan): Boolean = plan match {
+        case _: SortMergeAsOfJoinExec => true
+        case _: InputAdapter => false
+        case other => other.children.exists(inStage)
+      }
+      assert(collect(fused.queryExecution.executedPlan) {
+        case stage: WholeStageCodegenExec if inStage(stage.child) => stage
+      }.nonEmpty, s"expected the ASOF join in a codegen stage:\n${fused.queryExecution}")
+      assert(codegenUnions(fused).isEmpty,
+        s"the denylist has to keep this union out of codegen:\n${fused.queryExecution}")
+    }
+  }
+
+  test("Union over a sort-merge ASOF join that does not generate code still fuses") {
+    // A nearest join, or any ASOF join with its codegen off, sits behind an InputAdapter and
+    // gives the union one RDD, so the union keeps its codegen.
+    Seq(("nearest", "true"), ("backward", "false")).foreach { case (direction, asOfCodegen) =>
+      withClue(s"$direction, ASOF join codegen $asOfCodegen: ") {
+        withSQLConf(
+          SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> asOfCodegen) {
+          val (fused, _) = assertFlagParity(() => asOfJoinUnion(direction))
+          checkAnswer(fused, asOfJoinUnionRows)
+          assert(codegenUnions(fused).nonEmpty,
+            s"the union has to take part in codegen:\n${fused.queryExecution}")
+        }
+      }
+    }
+  }
+
+  test("Union over a sort-merge ASOF join keeps its plan when the ASOF codegen conf changes") {
+    // The join records the conf when it is planned, and both the codegen stages and the union's
+    // codegen check read that record. If the check read the live conf instead, turning it on
+    // after a union fused over a join planned without codegen would leave the union without its
+    // numOutputRows metric, and the query would fail.
+    Seq(("false", "true"), ("true", "false")).foreach { case (planned, atRun) =>
+      withClue(s"ASOF join codegen $planned when planned, $atRun when run: ") {
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true",
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> planned) {
+          val df = asOfJoinUnion("backward")
+          df.queryExecution.executedPlan
+          withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> atRun) {
+            checkAnswer(df, asOfJoinUnionRows)
+          }
+          // The union fuses only over a join that was planned without codegen.
+          assert(codegenUnions(df).nonEmpty == (planned == "false"),
+            s"unexpected union codegen:\n${df.queryExecution}")
+        }
+      }
     }
   }
 
@@ -993,9 +1133,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // Pins the property the standard pipeline has to keep: a stamping pass runs immediately after
       // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in
-      // and no rule in between can change a partitioning the parent already planned against. A
-      // count would break on a sixth legitimate pass and say nothing about the order.
-      // `AdaptiveQueryExecSuite` asserts the same adjacency for the list AQE builds.
+      // and no rule in between can change a partitioning the parent already planned against. The
+      // shuffle push-down sits between the two in the AQE list only, which
+      // `AdaptiveQueryExecSuite` covers. A count would break on a sixth legitimate pass and say
+      // nothing about the order.
       val rules = QueryExecution.preparations(spark, subquery = false)
       val firstStamp = rules.indexWhere(_.isInstanceOf[StampUnionDecisions])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
@@ -1044,11 +1185,11 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   test("SPARK-59122: the stamp uses the conf the exchanges were planned against") {
     // `EnsureRequirements` asks the union what it reports, and the barrier behind it freezes that
-    // answer one rule later. `conf` is live, so another thread turning `UNION_OUTPUT_PARTITIONING`
-    // off in between would leave the parent's elided exchange standing over a union that then
-    // concatenates. `SnapshotUnionPreparationConf` records the value ahead of
-    // `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to each
-    // other in the pipeline and no injected rule can run in the window.
+    // answer one rule later in classic preparation. `conf` is live, so another thread turning
+    // `UNION_OUTPUT_PARTITIONING` off in between would leave the parent's elided exchange standing
+    // over a union that then concatenates. `SnapshotUnionPreparationConf` records the value ahead
+    // of `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to
+    // each other in the pipeline and no injected rule can run in the window.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {

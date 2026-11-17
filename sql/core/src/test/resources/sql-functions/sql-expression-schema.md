@@ -154,6 +154,7 @@
 | org.apache.spark.sql.catalyst.expressions.Expm1 | expm1 | SELECT expm1(0) | struct<EXPM1(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Extract | extract | SELECT extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456') | struct<extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456'):int> |
 | org.apache.spark.sql.catalyst.expressions.Factorial | factorial | SELECT factorial(5) | struct<factorial(5):bigint> |
+| org.apache.spark.sql.catalyst.expressions.FarmFingerprint | farm_fingerprint | SELECT farm_fingerprint('Spark') | struct<farm_fingerprint(Spark):bigint> |
 | org.apache.spark.sql.catalyst.expressions.FindInSet | find_in_set | SELECT find_in_set('ab','abc,b,ab,c,def') | struct<find_in_set(ab, abc,b,ab,c,def):int> |
 | org.apache.spark.sql.catalyst.expressions.Flatten | flatten | SELECT flatten(array(array(1, 2), array(3, 4))) | struct<flatten(array(array(1, 2), array(3, 4))):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.FloorExpressionBuilder | floor | SELECT floor(-0.1) | struct<FLOOR(-0.1):decimal(1,0)> |
@@ -192,6 +193,7 @@
 | org.apache.spark.sql.catalyst.expressions.JaroWinkler | jaro_winkler_similarity | SELECT jaro_winkler_similarity('MARTHA', 'MARHTA') | struct<jaro_winkler_similarity(MARTHA, MARHTA):double> |
 | org.apache.spark.sql.catalyst.expressions.JsonArrayExpressionBuilder | json_array | SELECT json_array(1, 'x', true) | struct<JSON_ARRAY(1, x, true):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonExistsExpressionBuilder | json_exists | SELECT json_exists('{"a":1}', '$.a') | struct<JSON_EXISTS({"a":1}, '$.a'):boolean> |
+| org.apache.spark.sql.catalyst.expressions.JsonObjectExpressionBuilder | json_object | SELECT json_object('id', 7, 'name', 'Ada') | struct<JSON_OBJECT(id VALUE 7, name VALUE Ada):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonObjectKeys | json_object_keys | SELECT json_object_keys('{}') | struct<json_object_keys({}):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.JsonQueryExpressionBuilder | json_query | SELECT json_query('{"a":[1,2]}', '$.a') | struct<JSON_QUERY({"a":[1,2]}, '$.a'):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonToStructs | from_json | SELECT from_json('{"a":1, "b":0.8}', 'a INT, b DOUBLE') | struct<from_json({"a":1, "b":0.8}):struct<a:int,b:double>> |
@@ -283,9 +285,9 @@
 | org.apache.spark.sql.catalyst.expressions.OctetLength | octet_length | SELECT octet_length('Spark SQL') | struct<octet_length(Spark SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.Or | or | SELECT true or false | struct<(true OR false):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Overlay | overlay | SELECT overlay('Spark SQL' PLACING '_' FROM 6) | struct<overlay(Spark SQL, _, 6, -1):string> |
-| org.apache.spark.sql.catalyst.expressions.ParseSql | parse_sql | SELECT parse_sql('SELECT 1;SELECT 2') | struct<parse_sql(SELECT 1;SELECT 2):string> |
+| org.apache.spark.sql.catalyst.expressions.ParseSql | parse_sql | SELECT parse_sql('SELECT 1;SELECT 2') | struct<parse_sql(SELECT 1;SELECT 2, PARSE):string> |
 | org.apache.spark.sql.catalyst.expressions.ParseToDate | to_date | SELECT to_date('2009-07-30 04:17:52') | struct<to_date(2009-07-30 04:17:52):date> |
-| org.apache.spark.sql.catalyst.expressions.ParseToTimestamp | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
+| org.apache.spark.sql.catalyst.expressions.ParseToTimestampExpressionBuilder | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampLTZExpressionBuilder | to_timestamp_ltz | SELECT to_timestamp_ltz('2016-12-31 00:12:00') | struct<to_timestamp_ltz(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampNTZExpressionBuilder | to_timestamp_ntz | SELECT to_timestamp_ntz('2016-12-31 00:12:00') | struct<to_timestamp_ntz(2016-12-31 00:12:00):timestamp_ntz> |
 | org.apache.spark.sql.catalyst.expressions.ParseUrl | parse_url | SELECT parse_url('http://spark.apache.org/path?query=1', 'HOST') | struct<parse_url(http://spark.apache.org/path?query=1, HOST):string> |

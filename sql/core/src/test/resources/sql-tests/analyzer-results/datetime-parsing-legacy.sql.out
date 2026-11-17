@@ -182,6 +182,41 @@ Project [to_timestamp(2020-12-31-366, Some(yyyy-MM-dd-DDD), TimestampType, Some(
 
 
 -- !query
+select to_timestamp(20201231, 'yyyyMMdd')
+-- !query analysis
+Project [to_timestamp(cast(20201231 as string), Some(yyyyMMdd), TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(20201231, yyyyMMdd)#x]
++- OneRowRelation
+
+
+-- !query
+select to_timestamp(20260924073325, 'yyyyMMddHHmmss')
+-- !query analysis
+Project [to_timestamp(cast(20260924073325 as string), Some(yyyyMMddHHmmss), TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(20260924073325, yyyyMMddHHmmss)#x]
++- OneRowRelation
+
+
+-- !query
+select to_timestamp(1.5BD, 'yyyy')
+-- !query analysis
+Project [to_timestamp(cast(1.5 as string), Some(yyyy), TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(1.5, yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+select try_to_timestamp(20201231, 'yyyyMMdd')
+-- !query analysis
+Project [try_to_timestamp(cast(20201231 as string), Some(yyyyMMdd), TimestampType, Some(America/Los_Angeles), false) AS try_to_timestamp(20201231, yyyyMMdd)#x]
++- OneRowRelation
+
+
+-- !query
+select to_timestamp(1)
+-- !query analysis
+Project [to_timestamp(1, None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(1)#x]
++- OneRowRelation
+
+
+-- !query
 select to_time('00:00:00')
 -- !query analysis
 Project [to_time(00:00:00, None) AS to_time(00:00:00)#x]

@@ -21,13 +21,14 @@ import java.util
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
@@ -37,7 +38,8 @@ case class JDBCTable(
     ident: Identifier,
     override val schema: StructType,
     jdbcOptions: JDBCOptions,
-    additionalMetrics: Map[String, SQLMetric] = Map())
+    additionalMetrics: Map[String, SQLMetric] = Map(),
+    databaseMetadata: Option[JDBCDatabaseMetadata] = None)
   extends Table
   with SupportsRead
   with SupportsWrite
@@ -58,15 +60,24 @@ case class JDBCTable(
     util.EnumSet.of(BATCH_READ, V1_BATCH_WRITE, TRUNCATE)
   }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
-    val mergedOptions = new JDBCOptions(
+  private def mergeOptions(options: CaseInsensitiveStringMap): CaseInsensitiveMap[String] = {
+    // Preserve case-sensitive driver properties when merging query options.
+    val merged = CaseInsensitiveMap(
       jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)
-    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics)
+    // Keep the table's type mapping; query options can override its conversion default.
+    merged +
+      (JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK -> options.getOrDefault(
+        JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK, jdbcOptions.timestampNTZAsWallClock.toString)) +
+      (JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ -> jdbcOptions.zonelessTimestampAsNTZ.toString)
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
+    val mergedOptions = new JDBCOptions(mergeOptions(options))
+    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics, databaseMetadata)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    val mergedOptions = new JdbcOptionsInWrite(
-      jdbcOptions.parameters.originalMap ++ info.options.asCaseSensitiveMap().asScala)
+    val mergedOptions = new JdbcOptionsInWrite(mergeOptions(info.options))
     JDBCWriteBuilder(schema, mergedOptions)
   }
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.text.TextOptions
-import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
+import org.apache.spark.sql.execution.datasources.v2.{RuntimePartitionPruningFileScan, TextBasedFileScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -40,7 +40,7 @@ case class TextScan(
     options: CaseInsensitiveStringMap,
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty)
-  extends TextBasedFileScan(sparkSession, options) {
+  extends TextBasedFileScan(sparkSession, options) with RuntimePartitionPruningFileScan {
 
   private val optionsAsScala = options.asScala.toMap
   private lazy val textOptions: TextOptions = new TextOptions(optionsAsScala)
@@ -66,11 +66,7 @@ case class TextScan(
 
   override def createReaderFactory(): PartitionReaderFactory = {
     verifyReadSchema(readDataSchema)
-    val hadoopConf = {
-      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-      // Hadoop Configurations are case sensitive.
-      sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    }
+    val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     TextPartitionReaderFactory(conf, broadcastedConf, readDataSchema,

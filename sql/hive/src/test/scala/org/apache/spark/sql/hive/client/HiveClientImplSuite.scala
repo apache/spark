@@ -22,9 +22,10 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.hive.{HiveUtils, StaticInitFlags, StaticInitInputFormat, StaticInitOutputFormat}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, CharType, MapType, StringType, StructField, StructType, TimestampType, VarcharType}
 
 class HiveClientImplSuite extends SparkFunSuite {
 
@@ -102,5 +103,44 @@ class HiveClientImplSuite extends SparkFunSuite {
       parameters = Map(
         "fieldType" -> "\"STRUCT<A:UNIONTYPE<INT,STRING>>\"",
         "fieldName" -> "`c`"))
+  }
+
+  test("SPARK-60424: Hive timestamp type is TIMESTAMP_LTZ regardless of " +
+      "spark.sql.timestampType") {
+    val column = new FieldSchema(
+      "c", "struct<a:timestamp,b:array<timestamp>,c:map<timestamp,timestamp>>", null)
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.TIMESTAMP_TYPE, SQLConf.TimestampTypes.TIMESTAMP_NTZ)
+    SQLConf.withExistingConf(conf) {
+      assert(HiveClientImpl.fromHiveColumn(column).dataType === new StructType()
+        .add("a", TimestampType)
+        .add("b", ArrayType(TimestampType))
+        .add("c", MapType(TimestampType, TimestampType)))
+    }
+  }
+
+  test("SPARK-60565: toHiveColumn removes collations") {
+    Seq(
+      StringType("UNICODE_CI") -> "string",
+      StringType("UTF8_BINARY") -> "string",
+      ArrayType(StringType("UNICODE_CI")) -> "array<string>",
+      new StructType().add("f", StringType("UTF8_LCASE")) -> "struct<f:string>",
+      MapType(StringType, StringType("UNICODE_CI")) -> "map<string,string>",
+      CharType(3, "UTF8_LCASE") -> "char(3)",
+      VarcharType(3, "UNICODE_CI") -> "varchar(3)"
+    ).foreach { case (dataType, typeString) =>
+      assert(HiveClientImpl.toHiveColumn(StructField("c", dataType)).getType === typeString)
+    }
+
+    // The raw CHAR/VARCHAR type string in the field metadata keeps the collations. Removing them
+    // must not depend on spark.sql.timestampType.
+    val field = CharVarcharUtils.replaceCharVarcharWithStringInSchema(new StructType()
+      .add("c", new StructType().add("a", CharType(3, "UTF8_LCASE")).add("b", TimestampType)))
+      .head
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.TIMESTAMP_TYPE, SQLConf.TimestampTypes.TIMESTAMP_NTZ)
+    SQLConf.withExistingConf(conf) {
+      assert(HiveClientImpl.toHiveColumn(field).getType === "struct<a:char(3),b:timestamp>")
+    }
   }
 }

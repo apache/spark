@@ -35,6 +35,16 @@
   </properties>
 
   <dependencies>
+    <!--
+      jep (Java Embedded Python): embeds CPython in the JVM via JNI for in-process Python UDFs.
+      Marked as "provided": users must install jep on each executor separately.
+      See: https://github.com/ninia/jep
+    -->
+    <dependency>
+      <groupId>black.ninia</groupId>
+      <artifactId>jep</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
@@ -311,6 +321,23 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-udf-worker-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-c-data</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>

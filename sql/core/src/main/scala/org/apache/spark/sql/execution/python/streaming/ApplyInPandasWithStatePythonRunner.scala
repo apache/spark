@@ -72,6 +72,11 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowOutput[OutType] {
   ArrowUtils.failDuplicatedFieldNames(inputSchema)
 
+  // The data and state counts of each batch returned from Python cover the whole batch and are
+  // read from its first row, so the batch must not be sliced.
+  override protected def arrowMaxRecordsPerOutputBatch: Int = -1
+  override protected def arrowMaxBytesPerOutputBatch: Int = -1
+
   // Installed at worker launch. This runner is constructed per task, so each launch reads the
   // configuration that task carries. A running streaming query carries a snapshot:
   // `StreamExecution` runs its batches on `sparkSession.cloneSession()`, whose conf is copied at
