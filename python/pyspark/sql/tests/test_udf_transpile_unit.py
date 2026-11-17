@@ -2851,8 +2851,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(combo[0], "string")
 
     def test_annotation_category_map_and_array(self):
-        # dict/Dict/Mapping -> "map", list/List/Sequence -> "array": bare, subscripted,
-        # typing.-qualified or stringized (SPARK-55219).
+        # dict/Dict/Mapping -> "map", list/List -> "array": bare, subscripted,
+        # typing.-qualified or stringized (SPARK-55219). Sequence pins nothing.
         import ast as _ast
 
         from pyspark.sql.transpile import _annotation_category
@@ -2869,9 +2869,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ('"typing.Dict[str, str]"', "map"),
             ("list", "array"),
             ("List", "array"),
-            ("Sequence", "array"),
+            ("Sequence", None),
             ("list[int]", "array"),
-            ("Sequence[int]", "array"),
+            ("Sequence[int]", None),
             ("typing.List[int]", "array"),
             ('"list"', "array"),
             ('"list[int]"', "array"),
@@ -2900,6 +2900,71 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         )
         fn = _ast.parse("def f(a: list, b: dict): return b").body[0]
         self.assertEqual(_param_category_combos(fn, ["a", "b"]), [{0: "array", 1: "map"}])
+
+    def test_param_category_combos_sequence_is_array_or_string(self):
+        # A str is a Sequence too, so a Sequence param is tried as both array and
+        # string rather than pinned to array alone (SPARK-55219).
+        import ast as _ast
+
+        from pyspark.sql.transpile import _param_category_combos
+
+        for ann in (
+            "Sequence",
+            "Sequence[str]",
+            "typing.Sequence",
+            "typing.Sequence[str]",
+            '"Sequence"',
+            '"Sequence[str]"',
+            '"typing.Sequence[str]"',
+        ):
+            with self.subTest(ann=ann):
+                fn = _ast.parse(f"def f(a: {ann}, b: dict): return b").body[0]
+                self.assertEqual(
+                    _param_category_combos(fn, ["a", "b"]),
+                    [{0: "array", 1: "map"}, {0: "string", 1: "map"}],
+                )
+        # At the cap boundary: three unpinned params (one a Sequence) get the product.
+        fn = _ast.parse("def f(s: Sequence, b, c): return b").body[0]
+        self.assertEqual(len(_param_category_combos(fn, ["s", "b", "c"])), 2 * 3 * 3)
+        # Past it a Sequence param counts as unpinned and gets the collapsed fills,
+        # as an untyped param does, while dict/list stay pinned.
+        fn = _ast.parse("def f(s: Sequence, a: dict, b, c, d): return b").body[0]
+        self.assertEqual(
+            _param_category_combos(fn, ["s", "a", "b", "c", "d"]),
+            [
+                {0: fill, 1: "map", 2: fill, 3: fill, 4: fill}
+                for fill in ("integer", "float", "string")
+            ],
+        )
+
+    def test_udf_transpile_sequence_annotation_string_and_array(self):
+        # A Sequence-annotated param bound to a string column keeps lowering under
+        # the string variant, and bound to an array column lowers its null test
+        # under the array variant (SPARK-55219).
+        from typing import Sequence
+
+        def seq_len(s: Sequence):
+            return len(s)
+
+        def seq_concat(s: Sequence[str]):
+            return s + s
+
+        def seq_eq(s: "Sequence[str]"):
+            return s == "ab"
+
+        def seq_is_none(s: Sequence[str]):
+            return s is None
+
+        str_rows = [("ab",), ("",), ("xyz",)]
+        for func, return_type, schema, rows, expected in (
+            (seq_len, LongType(), "a string", str_rows, [2, 0, 3]),
+            (seq_concat, StringType(), "a string", str_rows, ["abab", "", "xyzxyz"]),
+            (seq_eq, BooleanType(), "a string", str_rows, [True, False, False]),
+            (seq_is_none, BooleanType(), "a string", [("ab",), (None,)], [False, True]),
+            (seq_is_none, BooleanType(), "a array<string>", [(["x"],), (None,)], [False, True]),
+        ):
+            with self.subTest(func=func.__name__, schema=schema):
+                self.assertEqual(self._vals(func, return_type, schema, rows), expected)
 
     def test_udf_transpile_map_and_array_input_categories(self):
         # The option lowers against a matching MapType/ArrayType column and is pruned
