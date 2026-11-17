@@ -88,11 +88,15 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
 
     val relation = table.collectFirst { case r: DataSourceV2Relation => r }.get
     val generationExpressions = GeneratedColumn.expressionReaders(relation)
+    // For the example above, pair a with Alias(old.b + 1, "a") and b with Alias(100, "b").
+    // Each alias has a fresh attribute ID, distinct from the original table column.
     val assigned = assignments.collect {
       case Assignment(attr: Attribute, value)
           if !value.isInstanceOf[GeneratedColumnAssignmentValue] =>
         attr -> Alias(value, attr.name)()
     }
+    // input exposes the new a and b; valuesByAttribute maps them to old.b + 1 and 100.
+    // When sharing is enabled, preserve each alias ID in a marker for the rewrite.
     val input = assigned.map(_._2.toAttribute)
     val valuesByAttribute = AttributeMap(assigned.map { case (_, alias) =>
       val value = if (shareAssignedValues) {
@@ -105,9 +109,11 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
 
     val generatedAssignments = assignments.map {
       case Assignment(attr: Attribute, _: GeneratedColumnAssignmentValue) =>
+        // Bind g's a * 2 to input's new a, not the table's original a.
         val resolved = generationExpressions(attr.name).resolve(input, analyze) { expr =>
           Cast(expr, attr.dataType, Some(conf.sessionLocalTimeZone), ansiEnabled = true)
         }
+        // Substitute once to get (old.b + 1) * 2, with a shared marker if enabled.
         val generated = resolved.transform {
           case a: AttributeReference if valuesByAttribute.contains(a) => valuesByAttribute(a)
         }
@@ -115,6 +121,8 @@ private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
       case assignment => assignment
     }
 
+    // Only a needs sharing in this example. Match its assignment to the marker used by g,
+    // so the rewrite can project old.b + 1 once and use the result for both a and g.
     val sharedIds = generatedAssignments.flatMap(_.value.collect {
       case value: SharedAssignmentValue => value.id
     }).toSet
