@@ -34,7 +34,7 @@ from typing import (
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql import Row
 from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit
-from pyspark.sql.types import StructType
+from pyspark.sql.types import DataType, StructType
 
 if TYPE_CHECKING:
     from pyarrow import RecordBatch
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DataSource",
     "DataSourceReader",
+    "DataSourceLookupReader",
     "DataSourceStreamReader",
     "DataSourceWriter",
     "DataSourceArrowWriter",
@@ -67,6 +68,7 @@ __all__ = [
     "StringStartsWith",
     "StringEndsWith",
     "StringContains",
+    "LookupParameter",
 ]
 
 
@@ -262,6 +264,62 @@ class DataSource(ABC):
             messageParameters={"feature": "streamReader"},
         )
 
+    def lookupReader(self, schema: StructType) -> "DataSourceLookupReader":
+        """
+        Returns a :class:`DataSourceLookupReader` instance that serves lookup joins on this
+        data source.
+
+        The implementation is required for data sources that Spark reads by lookups, as the
+        static side of a stream-static join. For each batch of stream rows, Spark then sends
+        the join keys to the reader and joins the rows that it returns, instead of reading the
+        whole data source.
+
+        Spark detects lookup support by whether the data source class overrides this method:
+
+        - A data source that overrides both :meth:`reader` and this method serves batch reads
+          and lookups. Spark reads it by lookups only in a join whose lookup side carries the
+          `EXTERNAL_LOOKUP` hint, such as ``df.hint("EXTERNAL_LOOKUP")``, and by batch reads
+          otherwise.
+        - A data source that overrides this method but not :meth:`reader` is lookup-only.
+          Spark reads it by lookups in every supported stream-static join, with no hint, and
+          rejects a batch read of it.
+
+        A supported stream-static join has the stream on the left and this data source on the
+        right, and is an inner, left outer, left semi or left anti join. A join of another
+        shape over a lookup side fails rather than falling back to a batch read.
+
+        Spark calls this method on the driver each time it plans a lookup, and plans the new
+        reader with :meth:`DataSourceLookupReader.pushFilters`,
+        :meth:`DataSourceLookupReader.selectLookupPredicates` and
+        :meth:`DataSourceLookupReader.maxParameterRowsPerRequest`. Spark may also plan a lookup
+        when a streaming query starts, to check that the join can be planned, and discard the
+        result.
+
+        .. versionadded:: 4.5.0
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            The schema of the data source: the result of :meth:`schema`, or the schema that the
+            user gave.
+
+        Returns
+        -------
+        reader : :class:`DataSourceLookupReader`
+            A lookup reader instance for this data source.
+
+        Notes
+        -----
+        A result of `None` fails the query with
+        `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT`, and a result of another type with
+        `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_RESULT_TYPE`. A streaming query stops on
+        either when it starts. An exception fails the query with `PYTHON_DATA_SOURCE_ERROR`.
+        """
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "lookupReader"},
+        )
+
 
 ColumnPath = Tuple[str, ...]
 """
@@ -276,7 +334,9 @@ For example, `("a", "b", "c")` represents the column `a.b.c`.
 @dataclass(frozen=True)
 class Filter(ABC):
     """
-    The base class for filters used for filter pushdown.
+    The base class for filters used for filter pushdown, and for the candidate predicates
+    that :meth:`DataSourceLookupReader.selectLookupPredicates` receives. In a candidate, the
+    value is a :class:`LookupParameter` rather than a literal.
 
     .. versionadded:: 4.1.0
 
@@ -470,6 +530,32 @@ class StringContains(Filter):
 
     attribute: ColumnPath
     value: str
+
+
+@dataclass(frozen=True, eq=False)
+class LookupParameter:
+    """
+    A value that Spark binds at run time in a candidate lookup predicate, such as the `?` in
+    `tenant = ?`. Its values arrive in the parameter rows of
+    :meth:`DataSourceLookupReader.lookup`.
+
+    Each candidate predicate has its own instance, which equals only itself. So two candidates
+    of the same shape, such as two `id = ?` from `t.id = s.a AND t.id = s.b`, are not equal,
+    and `candidates.index(candidate)` returns the position of `candidate`.
+
+    Instances are read-only and picklable, so a reader may keep the selected candidates, or
+    their parameters, for :meth:`DataSourceLookupReader.lookup`.
+
+    .. versionadded:: 4.5.0
+
+    Attributes
+    ----------
+    dataType : :class:`DataType`
+        The Spark SQL data type of the value. Its values arrive in the Python type that
+        :meth:`DataSourceLookupReader.lookup` lists for that data type.
+    """
+
+    dataType: DataType
 
 
 class InputPartition:
@@ -1060,6 +1146,351 @@ class SimpleDataSourceStreamReader(ABC):
         ----------
         end : dict
             The latest offset that the streaming query has processed for this source.
+        """
+        ...
+
+
+class DataSourceLookupReader(ABC):
+    """
+    A base class for data source lookup readers. A lookup reader serves lookup joins: for each
+    batch of stream rows, Spark sends the join keys to it and joins the rows that it returns.
+
+    Each time Spark plans a lookup, on the driver, it creates a reader with
+    :meth:`DataSource.lookupReader` and calls :meth:`pushFilters`,
+    :meth:`selectLookupPredicates` and :meth:`maxParameterRowsPerRequest` on it, once each and
+    in that order. Spark may plan a lookup more than once for one query, for example when a
+    streaming query starts, each time with a new reader. Spark then pickles the planned reader
+    and, on the executors, calls :meth:`lookup` and :meth:`close` on a copy of it per input
+    partition. So the reader must stay picklable, and changes that the planning methods make to
+    `self` are visible to :meth:`lookup`. Create connections and other resources lazily, in the
+    first :meth:`lookup` call, not in `__init__` or in a planning method.
+
+    For each parameter row, :meth:`lookup` must return every stored row that matches the
+    selected predicates and passes the filters that :meth:`pushFilters` reports as pushed,
+    under Spark semantics, with no cap on the number of rows and no row lost to paging. Extra
+    rows are fine: Spark evaluates every selected predicate and every lookup-side filter again
+    on each returned row, and drops the rows that fail them. Spark cannot recover a missing row.
+
+    The result of a lookup must depend only on its parameter row. Within a task, Spark may serve
+    a parameter row that it has already requested from its own cache, so the task may not see a
+    later change in the source. A query turns the cache off with
+    `spark.sql.join.externalLookup.cache.enabled` or the hint option `cache_enabled=false`.
+    Spark may send a request again when it retries a task. Requests are not snapshot
+    boundaries: results may mix versions of the source. Any exception that the reader raises
+    fails the task; a failure is never taken as a miss.
+
+    A reader reads a file that the session ships, with :meth:`SparkContext.addFile`,
+    `--files`, or ``spark.addArtifacts(path, file=True)`` in Spark Connect, through
+    :meth:`SparkFiles.get` in :meth:`lookup`.
+
+    .. versionadded:: 4.5.0
+
+    Examples
+    --------
+    A lookup reader over a dictionary, keyed by the `id` column:
+
+    >>> class DictLookupReader(DataSourceLookupReader):
+    ...     def __init__(self, rows):
+    ...         self.rows = rows  # {id: (id, name)}
+    ...
+    ...     def selectLookupPredicates(self, candidates):
+    ...         return [i for i, c in enumerate(candidates)
+    ...                 if isinstance(c, EqualTo) and c.attribute == ("id",)][:1]
+    ...
+    ...     def lookup(self, parameters):
+    ...         for ordinal, (key,) in enumerate(parameters):
+    ...             if key in self.rows:
+    ...                 yield ordinal, self.rows[key]
+    """
+
+    def pushFilters(self, filters: List["Filter"]) -> Iterable["Filter"]:
+        """
+        Called with the filters on lookup-side columns that Spark can translate, such as
+        `t.tier >= 2`, before :meth:`selectLookupPredicates`. The filters carry literal values;
+        compare :meth:`selectLookupPredicates`, whose candidates carry a
+        :class:`LookupParameter`.
+
+        The list of filters should be interpreted as the AND of the elements. The filters are
+        the same classes that :meth:`DataSourceReader.pushFilters` receives. Spark calls this
+        method only when `spark.sql.python.filterPushdown.enabled` is true, and only when there
+        is a filter to push, at most once on each reader.
+
+        By default, it returns all filters, indicating that no filters are pushed down.
+
+        Unlike a batch read, Spark evaluates every lookup-side filter again on the returned
+        rows, also the filters that this method reports as pushed. A pushed filter only lets the
+        reader omit the rows that fail it.
+
+        Parameters
+        ----------
+        filters : list of :class:`Filter`\\s
+
+        Returns
+        -------
+        iterable of :class:`Filter`\\s
+            Filters that the reader does not apply. Every returned filter must be one of the
+            input filters by reference.
+
+        Side effects
+        ------------
+        This method is allowed to modify `self`. The object must remain picklable.
+        Modifications to `self` are visible to the :meth:`lookup` method.
+
+        Notes
+        -----
+        A reader that overrides this method while `spark.sql.python.filterPushdown.enabled` is
+        false fails the query with `DATA_SOURCE_PUSHDOWN_DISABLED`, and a returned filter that
+        is not one of the input filters with `DATA_SOURCE_EXTRANEOUS_FILTERS`. Both, and any
+        exception, are reported as `PYTHON_DATA_SOURCE_ERROR`.
+        """
+        return filters
+
+    @abstractmethod
+    def selectLookupPredicates(self, candidates: List["Filter"]) -> Sequence[int]:
+        """
+        Selects the candidate predicates that this reader serves as one lookup access path, and
+        returns their positions in `candidates`.
+
+        Each candidate is an :class:`EqualTo`, :class:`EqualNullSafe`, :class:`GreaterThan`,
+        :class:`GreaterThanOrEqual`, :class:`LessThan` or :class:`LessThanOrEqual` filter whose
+        `attribute` is a top-level column of the lookup side, such as `("id",)`, and whose
+        `value` is a :class:`LookupParameter`. The list is never empty. When the query writes
+        the lookup column on the right, Spark flips the operator, so `s.ts < t.event_time`
+        arrives as `GreaterThan(("event_time",), LookupParameter(...))`.
+
+        Spark offers `=` and `<=>` only on columns of an integral type, BOOLEAN, DECIMAL, DATE,
+        TIMESTAMP, TIMESTAMP_NTZ, BINARY, or a STRING or VARCHAR whose collation compares
+        bytes, such as UTF8_BINARY. It offers `<`, `<=`, `>` and `>=` only on columns of an
+        integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the parameter
+        cannot fail to evaluate. It offers no predicate on VARCHAR under
+        `spark.sql.charVarchar.standardSemantics.enabled`, and never one on FLOAT, DOUBLE,
+        CHAR, a string with another collation or a complex type. It also offers an equality of
+        a column with a constant from a filter, such as the constant tenant of a composite key,
+        whether or not :meth:`pushFilters` accepted it.
+
+        Selecting a range predicate whose value reads a stream column makes every request hold
+        exactly one parameter row, and turns off Spark's lookup cache for that join. Leave such
+        a range unselected when the equality predicates alone serve the lookup well; Spark still
+        applies it to the returned rows.
+
+        The rules of the selection:
+
+        - The positions must be distinct, each an `int` from 0 to ``len(candidates) - 1``. Two
+          candidates of the same shape, such as two `id = ?`, are told apart by position.
+        - The order of the positions defines the parameter rows: field `i` of every parameter
+          row that :meth:`lookup` receives is the value for the candidate at the `i`-th returned
+          position. A column may appear in several selected predicates, as range bounds do.
+        - Spark evaluates every selected predicate again on each returned row and drops a row
+          that fails it, so extra rows are fine. For each parameter row, :meth:`lookup` must
+          return every stored row that matches the selected predicates and passes the pushed
+          filters, under Spark semantics. Do not select a predicate that the reader cannot
+          evaluate that way.
+        - An empty result means that no access path fits; the query then fails.
+        - `candidates` and its elements are read-only. The positions refer to the offered
+          order, so Spark fails the query if, when this method returns a non-empty result, the
+          list no longer holds the offered candidates in the offered order.
+
+        Spark calls this method once on each reader, after :meth:`pushFilters`.
+
+        Parameters
+        ----------
+        candidates : list of :class:`Filter`\\s
+            The candidate predicates, each with a :class:`LookupParameter` value.
+
+        Returns
+        -------
+        sequence of int
+            The positions in `candidates` of the selected predicates, in the order of the fields
+            of a parameter row.
+
+        Side effects
+        ------------
+        This method is allowed to modify `self`. The object must remain picklable.
+        Modifications to `self` are visible to the :meth:`lookup` method.
+
+        Notes
+        -----
+        Spark fails the query with `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT` for a
+        result of `None`, `INVALID_RESULT_TYPE` for a result that is not a sequence of `int`\\s,
+        such as one that holds a candidate or a `bool`, `INVALID_SELECTED_PREDICATE_POSITION`
+        for a position out of range, `DUPLICATE_SELECTED_PREDICATE` for a position that
+        repeats, and `MODIFIED_CANDIDATES` for a changed list of candidates. It fails with
+        `EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE` for an empty result. A streaming
+        query stops on each of them when it starts. An exception fails the query with
+        `PYTHON_DATA_SOURCE_ERROR`.
+
+        Examples
+        --------
+        :meth:`pushFilters` receives filters with literal values and returns the ones that the
+        reader leaves to Spark. This method receives candidates with :class:`LookupParameter`
+        values and returns positions, whose order defines the parameter rows. For example, for
+        this join of a stream `s` with a lookup source `t`, a reader may answer as follows,
+        where Spark may also pass filters that it infers, such as `IsNotNull`:
+
+        .. code-block:: text
+
+            s JOIN t ON t.tenant = s.tenant
+                AND t.event_time >= s.start AND t.event_time < s.end
+                AND t.region = s.region
+            WHERE t.tier >= 2
+
+            pushFilters([tier >= 2])                     -> []  (the reader applies it)
+            selectLookupPredicates([tenant = ?,          -> [1, 0, 2]
+                                    event_time >= ?,
+                                    event_time < ?,
+                                    region = ?])
+            => each parameter row is (s.start, s.tenant, s.end);
+               Spark evaluates region = ? itself on the returned rows
+
+        The two predicates on `event_time` are two fields of the parameter row, in the order of
+        their positions. A reader that selects them so:
+
+        >>> def selectLookupPredicates(self, candidates):
+        ...     def position(cls, column):
+        ...         return next(
+        ...             (i for i, c in enumerate(candidates)
+        ...              if type(c) is cls and c.attribute == (column,)),
+        ...             None,
+        ...         )
+        ...     positions = [
+        ...         position(GreaterThanOrEqual, "event_time"),
+        ...         position(EqualTo, "tenant"),
+        ...         position(LessThan, "event_time"),
+        ...     ]
+        ...     return [] if None in positions else positions
+        """
+        ...
+
+    def maxParameterRowsPerRequest(self) -> int:
+        """
+        Returns the maximum number of parameter rows that one :meth:`lookup` call receives.
+
+        Spark never sends more parameter rows in one request. Spark also caps a request at 1000
+        parameter rows, and by limits of its own, such as the size of a request in bytes. The
+        reader must return complete results for a request of that size, with no cap on the
+        number of result rows. Spark calls this method once on each reader, after
+        :meth:`selectLookupPredicates`.
+
+        By default, it returns 1000, Spark's own cap, so Spark never splits a request for the
+        reader.
+
+        .. warning::
+            If your backend limits the number of values in one call (for example, the number of
+            `?` markers in a SQL statement, or the keys of one multi-get), override this method
+            and return a number that fits, counting every selected predicate. A request with
+            more values than the backend accepts fails the task.
+
+        Returns
+        -------
+        int
+            A positive number of parameter rows. A value outside the range of a Java `int` is
+            clamped to it, keeping its sign.
+
+        Notes
+        -----
+        Spark fails the query with `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_RESULT` for a
+        result of `None`, `INVALID_RESULT_TYPE` for a result that is not an `int`, including a
+        `bool`, and `NON_POSITIVE_MAX_PARAMETER_ROWS` for a result that is not positive. A
+        streaming query stops on each of them when it starts. An exception fails the query
+        with `PYTHON_DATA_SOURCE_ERROR`.
+        """
+        return 1000
+
+    @abstractmethod
+    def lookup(self, parameters: List[Tuple]) -> Iterator[Tuple[int, Tuple]]:
+        """
+        Looks up the stored rows that match each of the given parameter rows.
+
+        Spark calls this method on an executor once per request, in order, on the copy of the
+        reader that it unpickled for the input partition. Calls never overlap.
+
+        Parameters
+        ----------
+        parameters : list of tuples
+            Between 1 and :meth:`maxParameterRowsPerRequest` parameter rows. Field `i` of each
+            tuple is the value for the candidate at the `i`-th position that
+            :meth:`selectLookupPredicates` returned. No two tuples are equal. Only the fields of
+            `<=>` predicates can be `None`; a `None` there matches a stored NULL. When a
+            selected range predicate reads a stream column, each request holds exactly one
+            parameter row. The list and its tuples are read-only. Each value has the Python
+            type for the data type of its :class:`LookupParameter`:
+
+            - an integral type: `int`
+            - BOOLEAN: `bool`
+            - DECIMAL: `decimal.Decimal`, at the column's precision and scale
+            - DATE: `datetime.date`
+            - TIMESTAMP: a naive `datetime.datetime` in the local time zone of the Python
+              worker, as for the rows that a DataFrame passes to Python elsewhere. During a
+              daylight-saving change, two instants can have the same local time, and so the
+              same value.
+            - TIMESTAMP_NTZ: a naive `datetime.datetime` of the stored date and time
+            - BINARY: `bytes`, or `bytearray` when
+              `spark.sql.execution.pyspark.binaryAsBytes` is false
+            - STRING or VARCHAR: `str`, which Spark compares as UTF-8 bytes
+
+            A conversion that loses precision, such as to milliseconds, can lose matches.
+
+        Returns
+        -------
+        iterator of (int, tuple or :class:`Row`) pairs
+            One `(ordinal, row)` pair per result row, in any order. `ordinal` is the position of
+            the matched parameter row in `parameters`: an `int` in ``[0, len(parameters))``,
+            not a `bool` or `None`. `row` is a tuple in the order of the read schema, or a
+            :class:`Row`, as :meth:`DataSourceReader.read` yields. An ordinal may repeat, for
+            several matching rows; an ordinal that does not appear is a miss. A stored row that
+            matches several parameter rows is returned once per ordinal, and equal stored rows
+            are each returned.
+
+        Notes
+        -----
+        Every returned row must carry the stored values of the columns that the selected
+        predicates read. A value may be NULL only where both the table and the read schema
+        allow one, and a DECIMAL must fit its precision and scale. The results may omit a row
+        that fails a pushed filter. Do not keep `parameters` after the generator ends.
+
+        Spark fails the task with a :class:`PythonException` (`PYTHON_EXCEPTION`) for an
+        exception that this method raises, and for these errors, which the Python worker
+        reports: `DATA_SOURCE_INVALID_RETURN_TYPE`, for a result that is not an iterator, an
+        item that is not an `(ordinal, row)` pair, or an ordinal that is not an `int`; and
+        `DATA_SOURCE_RETURN_SCHEMA_MISMATCH` or `DATA_SOURCE_INVALID_RETURN_TYPE`, for a row
+        that does not fit the read schema. It fails the task with
+        `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_INPUT_ORDINAL` for an ordinal out of range,
+        and with `NULL_IN_NOT_NULL_FIELD` or `DECIMAL_OUT_OF_RANGE` for a value that does not
+        fit.
+
+        Spark may stop reading the result early, for example when a semi join has decided every
+        stream row. It then closes the generator, so `try`/`finally` and `with` blocks run. The
+        stop takes effect at the end of a batch: Python reads the pairs in batches of
+        `spark.sql.execution.arrow.maxRecordsPerBatch`, so the generator may run up to one batch
+        further. If the generator does not stop within `spark.python.task.killTimeout`, Spark
+        ends the Python worker: neither the generator's `finally` blocks nor :meth:`close` run
+        on that copy of the reader, and a later request of the task runs on a new copy of the
+        planned reader.
+
+        Examples
+        --------
+        >>> def lookup(self, parameters):
+        ...     for ordinal, (user_id,) in enumerate(parameters):
+        ...         for row in self.backend.get(user_id):
+        ...             yield ordinal, row
+        """
+        ...
+
+    def close(self) -> None:
+        """
+        Releases the resources of this reader, such as connections.
+
+        Spark calls this method on an executor at most once on each copy of the reader, after
+        its last :meth:`lookup` call, when the task ends, also when it fails. This method must
+        return within `spark.python.task.killTimeout`; otherwise, Spark ends the Python worker
+        and fails the task. An exception from this method fails the task too. When the task has
+        failed already, that failure stays the task's error, and Spark adds the failure of this
+        method, a timeout or an exception, to it as suppressed.
+
+        Spark does not call this method, and ends the Python worker instead, when the task is
+        killed, when another thread closes the reader, when the Python worker has failed, as it
+        does after :meth:`lookup` raises an exception, and for a copy whose :meth:`lookup` does
+        not stop within `spark.python.task.killTimeout`. So do not rely on it for correctness.
         """
         ...
 

@@ -308,6 +308,7 @@ class PySparkBaseTestCase(unittest.TestCase):
         "pyspark.sql.worker.create_data_source": "pyspark.sql.datasource",
         "pyspark.sql.worker.data_source_pushdown_filters": "pyspark.sql.datasource",
         "pyspark.sql.worker.lookup_data_sources": "pyspark.sql.datasource",
+        "pyspark.sql.worker.plan_data_source_lookup": "pyspark.sql.datasource",
         "pyspark.sql.worker.plan_data_source_read": "pyspark.sql.datasource",
         "pyspark.sql.worker.python_streaming_sink_runner": "pyspark.sql.datasource",
         "pyspark.sql.worker.write_into_data_source": "pyspark.sql.datasource",

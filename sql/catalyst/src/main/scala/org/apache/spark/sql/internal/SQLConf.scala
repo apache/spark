@@ -7917,6 +7917,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PYTHON_EXTERNAL_LOOKUP_ENABLED = buildConf("spark.sql.python.externalLookup.enabled")
+    .internal()
+    .doc("When true, a Python data source that implements DataSource.lookupReader() reports " +
+      "the EXTERNAL_LOOKUP table capability, so that Spark can read it by lookups as the " +
+      "static side of a stream-static join. A data source that implements lookupReader() but " +
+      "not reader() is then lookup-only. When false, Python data sources report the same " +
+      "capabilities as without lookup support.")
+    .version("4.5.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val NATIVE_DATA_SOURCE_PATHS = buildConf("spark.sql.dataSource.native.paths")
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
       "directories that contain them, on the local file system of the driver. Spark adds a " +
@@ -11131,6 +11143,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def pythonExternalLookupEnabled: Boolean = getConf(PYTHON_EXTERNAL_LOOKUP_ENABLED)
 
   def nativeDataSourceFilterPushdownEnabled: Boolean =
     getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)

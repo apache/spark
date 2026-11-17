@@ -58,13 +58,19 @@ class RunnerConf(Conf):
 
 def is_method_overridden(reader: Any, name: str) -> bool:
     """
-    Whether `reader` overrides the `DataSourceReader` method `name`, rather than inheriting the
-    default implementation. Used to detect pushdown methods that a reader implements while the
-    corresponding pushdown configuration is disabled, so that they are not silently ignored.
+    Whether `reader` overrides the method `name` of its base class, `DataSourceLookupReader` for
+    a lookup reader and `DataSourceReader` otherwise, rather than inheriting the default
+    implementation. False when the base class has no such method. Used to detect pushdown
+    methods that a reader implements while the corresponding pushdown configuration is disabled,
+    so that they are not silently ignored.
     """
-    from pyspark.sql.datasource import DataSourceReader
+    from pyspark.sql.datasource import DataSourceLookupReader, DataSourceReader
 
-    return getattr(getattr(reader, name), "__func__", None) is not getattr(DataSourceReader, name)
+    base = (
+        DataSourceLookupReader if isinstance(reader, DataSourceLookupReader) else DataSourceReader
+    )
+    default = getattr(base, name, None)
+    return default is not None and getattr(getattr(reader, name), "__func__", None) is not default
 
 
 def check_pushdown_not_disabled(
@@ -74,9 +80,10 @@ def check_pushdown_not_disabled(
     Raise `DATA_SOURCE_PUSHDOWN_DISABLED` if `reader` implements a pushdown method while the
     corresponding pushdown configuration is disabled, so that the method is not silently ignored.
 
-    This is shared by both planning workers: `plan_data_source_read` runs it for a plain read,
+    This is shared by the planning workers: `plan_data_source_read` runs it for a plain read,
     and `data_source_pushdown_filters` runs it too, because a filter- or limit-only scan caches
     the read info in that worker and `plan_data_source_read` never runs for such a scan.
+    `plan_data_source_lookup` runs it for a lookup reader, which has no `pushLimit`.
     """
     from pyspark.errors import PySparkAssertionError
 
