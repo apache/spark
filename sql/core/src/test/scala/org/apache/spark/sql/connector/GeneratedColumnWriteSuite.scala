@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DecimalType, IntegerType, LongType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 // A V2 function that a test binds to the name of a built-in function to shadow it.
@@ -49,6 +50,7 @@ private object ConstantString extends ScalarFunction[UTF8String] {
 /**
  * Tests for generated column auto-fill and constraint enforcement during writes.
  */
+@DataSourceV2Test
 class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
 
   private val rowLevelCat = "rowlevelcat"
@@ -2021,8 +2023,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION")
           assert(ex.getMessage.contains(s"$command with generated columns"))
         }
-        // INSERT auto-fills the column from the legacy getter. Write last, because a write to
-        // this in-memory table rebuilds its columns with `columnGenerationExpression()`.
+        // INSERT auto-fills the column from the legacy getter.
         sql(s"INSERT INTO $legacyCat.$tblName(id, data) VALUES (1, 'a')")
         checkAnswer(spark.table(s"$legacyCat.$tblName"), Row(1, "a", 2))
       }

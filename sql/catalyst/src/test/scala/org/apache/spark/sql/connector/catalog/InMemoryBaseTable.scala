@@ -30,7 +30,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GeneratedColumn, GenericArrayData, MapData, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -152,10 +152,13 @@ abstract class InMemoryBaseTable(
 
   protected def recordScanEvent(filters: Array[Filter]): Unit = {}
 
+  private val nullableMetadataColumns =
+    properties.getOrDefault("nullable-metadata-columns", "false").toBoolean
+
   protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType
-    override def isNullable: Boolean = false
+    override def isNullable: Boolean = nullableMetadataColumns
     override def comment: String = "Partition key used to store the row"
     override def metadataInJSON(): String = {
       val metadata = new MetadataBuilder()
@@ -169,7 +172,7 @@ abstract class InMemoryBaseTable(
   protected object IndexColumn extends MetadataColumn {
     override def name: String = "index"
     override def dataType: DataType = IntegerType
-    override def isNullable: Boolean = false
+    override def isNullable: Boolean = nullableMetadataColumns
     override def comment: String = "Metadata column used to conflict with a data column"
     override def metadataInJSON(): String = {
       val metadata = new MetadataBuilder()
@@ -1066,20 +1069,17 @@ abstract class InMemoryBaseTable(
       }
 
       override def toBatch: BatchWrite = {
-        val generationExpressions = columns().flatMap { col =>
-          GeneratedColumn.columnGenerationExpression(col).map(col.name -> _)
-        }.toMap
         val newSchema = info.schema()
+        val oldColumns = columns()
         val mergedSchema = mergeSchema(
-          oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
+          oldType = CatalogV2Util.v2ColumnsToStructType(oldColumns),
           newType = newSchema)
-        tableColumns = InMemoryBaseTable.assignMissingIds(
-          CatalogV2Util.structTypeToV2Columns(mergedSchema).map { col =>
-            // Restore the modeled form lost in the schema round trip.
-            generationExpressions.get(col.name).map { expr =>
-              Column.builderFrom(col).generationExpression(expr).build()
-            }.getOrElse(col)
-          })
+        // Keep the existing columns as they are and convert only the appended fields: converting
+        // a column to a StructField and back loses what a StructField does not hold, such as a
+        // connector expression or an identity column spec.
+        val newColumns = CatalogV2Util.structTypeToV2Columns(
+          StructType(mergedSchema.fields.drop(oldColumns.length)))
+        tableColumns = oldColumns ++ InMemoryBaseTable.assignMissingIds(newColumns)
         writer
       }
 

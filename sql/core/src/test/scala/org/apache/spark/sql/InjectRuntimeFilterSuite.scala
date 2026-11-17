@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, GreaterThan, Literal, ScalarSubquery, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, ExternalUserDefinedFunction, GreaterThan, Literal, ScalarSubquery, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalLimit, LogicalPlan}
@@ -32,10 +32,11 @@ import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 class InjectRuntimeFilterSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -2407,6 +2408,38 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           }
         }
       }
+    }
+  }
+
+  test("SPARK-61814: do not add bloom filter that evaluates a scalar external UDF") {
+    // No public API builds a scalar external UDF yet, so the test registers one as a function.
+    // Planning it needs a static conf, which the test sets only for itself.
+    val unifiedUDFExecution = conf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED)
+    conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, true)
+    try {
+      spark.sessionState.functionRegistry.createOrReplaceTempFunction("ext",
+        children => ExternalUserDefinedFunction(Some("ext"),
+          UDFWorkerSpecification.getDefaultInstance, Array.emptyByteArray, IntegerType, children,
+          udfDeterministic = true, udfNullable = true),
+        "scala_udf")
+      withUserDefinedFunction("ext" -> true) {
+        withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+          val queries = Seq(
+            // In a filter of the creation side.
+            "select * from bf1 join bf2 on bf1.c1 = bf2.c2 where ext(bf2.a2) = 62",
+            // In the key of the creation side, above its filter.
+            "select * from (select ext(c2) c2 from bf2 where a2 = 62) t " +
+              "left join bf1 on t.c2 = bf1.c1",
+            // In the key of the application side.
+            "select * from bf1 join bf2 on ext(bf1.c1) = bf2.c2 where bf2.a2 = 62",
+            "select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+          assert(queries.map(q => getNumBloomFilters(sql(q).queryExecution.optimizedPlan)) ==
+            Seq(0, 0, 0, 1))
+        }
+      }
+    } finally {
+      conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
     }
   }
 

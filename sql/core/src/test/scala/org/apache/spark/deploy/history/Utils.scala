@@ -27,7 +27,7 @@ object Utils {
     try {
       val clock = new ManualClock()
       val conf = new SparkConf().set(HISTORY_LOG_DIR, logDir)
-      val provider = new FsHistoryProvider(conf, clock)
+      provider = new FsHistoryProvider(conf, clock)
       provider.checkForLogs()
       fn(provider)
     } finally {

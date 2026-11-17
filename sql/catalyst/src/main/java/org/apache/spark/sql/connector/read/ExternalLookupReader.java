@@ -49,6 +49,10 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  *   <li>Retried or speculative tasks may send the same request again, so a source must
  *   tolerate repeated requests. Within one request, matches are returned as
  *   {@link #lookupBatch} describes.</li>
+ *   <li>Within a task, Spark may serve a parameter row that it has already requested from its own
+ *   cache instead of sending it again, so a later change in the source may not be seen by that
+ *   task. A query turns the cache off with {@code spark.sql.join.externalLookup.cache.enabled} or
+ *   the hint option {@code cache_enabled=false}.</li>
  *   <li>Implementations should respond to thread interruption if their client supports it.</li>
  * </ul>
  *

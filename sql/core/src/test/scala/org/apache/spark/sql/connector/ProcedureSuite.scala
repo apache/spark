@@ -40,8 +40,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StructField, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
 
   before {

@@ -2702,7 +2702,43 @@ case class AsOfJoin(
   }
 }
 
-object AsOfJoin {
+object AsOfJoin extends PredicateHelper {
+
+  /**
+   * Extract equi-join key pairs and residual (non-equi) condition
+   * from a conjunction. Only EqualTo is treated as equi-key;
+   * EqualNullSafe is excluded because the scanner implements EqualTo
+   * null semantics (left rows with any null equi-key never match and
+   * are skipped or null-padded), whereas EqualNullSafe requires null
+   * keys to match. Such predicates fall through to the residual
+   * condition, which evaluates them per candidate pair.
+   */
+  def extractEquiJoinKeys(
+      condition: Expression,
+      left: LogicalPlan,
+      right: LogicalPlan): (Seq[Expression], Seq[Expression], Option[Expression]) = {
+    val leftKeys =
+      new scala.collection.mutable.ArrayBuffer[Expression]()
+    val rightKeys =
+      new scala.collection.mutable.ArrayBuffer[Expression]()
+    val residuals =
+      new scala.collection.mutable.ArrayBuffer[Expression]()
+
+    splitConjunctivePredicates(condition).foreach {
+      case EqualTo(l, r)
+          if l.references.subsetOf(left.outputSet) &&
+            r.references.subsetOf(right.outputSet) =>
+        leftKeys += l; rightKeys += r
+      case EqualTo(l, r)
+          if r.references.subsetOf(left.outputSet) &&
+            l.references.subsetOf(right.outputSet) =>
+        leftKeys += r; rightKeys += l
+      case other =>
+        residuals += other
+    }
+    val residual = residuals.reduceOption(And)
+    (leftKeys.toSeq, rightKeys.toSeq, residual)
+  }
 
   /**
    * Computes the output attributes of an [[AsOfJoin]] given its join type and child outputs.
