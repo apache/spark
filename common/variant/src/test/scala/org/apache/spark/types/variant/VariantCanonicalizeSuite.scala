@@ -566,10 +566,33 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     checkError("MALFORMED_VARIANT") {
       VariantBuilder.isCanonical(new Variant(integer(1), bytes(1)))
     }
-    val unknown = new Variant(bytes(primitiveHeader(17)), emptyMetadata)
-    checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.isCanonical(unknown) }
-    checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.canonicalize(unknown) }
-    checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.doCanonicalize(unknown) }
+  }
+
+  test("unsupported primitive types fail at the root and in containers") {
+    // Both 17 and the largest primitive type ID are unsupported.
+    for (typeInfo <- Seq(17, TYPE_INFO_MASK); offsetSize <- Seq(1, 2)) {
+      val unknown = bytes(primitiveHeader(typeInfo))
+      val inputs = Seq(
+        "root" -> new Variant(unknown, metadata(Seq.empty, offsetSize)),
+        "array" -> new Variant(array(Seq(integer(1), unknown)),
+          metadata(Seq.empty, offsetSize)),
+        "object" -> new Variant(obj(Seq(0 -> integer(1), 1 -> unknown)),
+          metadata(Seq(utf8("a"), utf8("b")), offsetSize)))
+      inputs.foreach { case (name, input) =>
+        withClue(s"$name, typeInfo=$typeInfo, offsetSize=$offsetSize: ") {
+          if (offsetSize == 1) {
+            checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") {
+              VariantBuilder.isCanonical(input)
+            }
+          } else {
+            // Non-minimal metadata widths force a rebuild before the unknown type is read.
+            assert(!VariantBuilder.isCanonical(input))
+          }
+          checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.canonicalize(input) }
+          checkError("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT") { VariantBuilder.doCanonicalize(input) }
+        }
+      }
+    }
   }
 
   test("deterministic nested permutations converge to independent expected bytes") {
