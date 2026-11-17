@@ -41,6 +41,140 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       copy(child = newChild)
   }
 
+  test("ASOF validation classifies distinct queries sharing one KLL plan once") {
+    def work(width: Int): Int = {
+      val visits = new AtomicInteger
+      val value = (1 to 32).foldLeft[Expression](
+        KllSketchAggBigint(Literal(1L)).toAggregateExpression()) { (child, _) =>
+        Counted(child, visits)
+      }
+      val query = OneRowRelation().groupBy()(value.as("s"))
+      val condition = Seq.fill(width)(Exists(query)).reduceLeft[Expression](And)
+      val join = org.apache.spark.sql.catalyst.plans.logical.AsOfJoin(
+        OneRowRelation(), OneRowRelation(), Literal.TrueLiteral, Some(condition), Inner,
+        None, org.apache.spark.sql.catalyst.plans.Backward)
+      join.treePatternBits
+      query.deterministic
+      visits.set(0)
+      assert(ValidateSubqueryExpression.allowsNondeterministicJoinSubqueries(join))
+      visits.get
+    }
+    val one = work(1)
+    val many = work(32)
+    assert(many <= one * 4, s"one plan=$one visits, repeated shared plan=$many")
+  }
+
+  test("join side selection reuses one wide operand reference membership") {
+    def work(occurrences: Int): Int = {
+      val hashes = new AtomicInteger
+      val fields = (1 to 64).map { i =>
+        val id = new ExprId(i.toLong, NamedExpression.newExprId.jvmId) {
+          override def equals(other: Any): Boolean = super.equals(other)
+          override def hashCode(): Int = {
+            hashes.incrementAndGet()
+            super.hashCode()
+          }
+        }
+        AttributeReference(s"right_$i", DoubleType)(id)
+      }
+      val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+      val operand = (fields ++ Seq.fill(occurrences)(scalar)).reduceLeft[Expression](Add(_, _))
+      val target = $"target".double
+      val plan = Join(LocalRelation(target), LocalRelation(fields), Inner,
+        Some(EqualTo(target, operand)), JoinHint.NONE)
+      plan.resolved
+      plan.treePatternBits
+      plan.foreach(_.outputSet)
+      operand.foreach { e => e.references; e.deterministic; e.canonicalized }
+      hashes.set(0)
+      PullOutNondeterministic.applyLocally(plan)
+      hashes.get
+    }
+    val one = work(1)
+    val many = work(32)
+    assert(many <= one * 4, s"one=$one membership hashes, repeated=$many")
+  }
+
+  test("retained-only filters skip KLL output classification") {
+    val visits = new AtomicInteger
+    val value = (1 to 32).foldLeft[Expression](
+      KllSketchAggBigint(Literal(1L)).toAggregateExpression()) { (child, _) =>
+      Counted(child, visits)
+    }
+    val query = OneRowRelation().groupBy()(value.as("s"))
+    val fields = (1 to 16).map(i => ScalarSubquery(query).as(s"s$i"))
+    val project = OneRowRelation().select(fields: _*)
+    val filter = org.apache.spark.sql.catalyst.plans.logical.Filter(
+      IsNotNull(project.output.head), project)
+    filter.treePatternBits
+    query.deterministic
+    fields.foreach(_.deterministic)
+    visits.set(0)
+    assert(org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin(filter) eq filter)
+    assert(visits.get == 0, s"no-op field classification visits=${visits.get}")
+  }
+
+  test("filtered aggregate and lateral extraction bound changed-suffix comparisons") {
+    for (depth <- Seq(32, 64); lateral <- Seq(false, true)) {
+      val comparisons = new AtomicInteger
+      val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+        KllSketchGetNBigint(KllSketchAggBigint(Literal(1L)).toAggregateExpression()).as("n")))
+      val value = if (lateral) EqualTo(scalar, Literal(1L)) else {
+        Sum(scalar).toAggregateExpression(isDistinct = false, filter = Some(Literal.TrueLiteral))
+      }
+      val wrapped = (1 to depth).foldLeft[Expression](value) { (child, _) =>
+        EqualityCounted(child, comparisons)
+      }
+      val plan = if (lateral) LateralJoin(OneRowRelation(), LateralSubquery(OneRowRelation()),
+        Inner, Some(wrapped)) else OneRowRelation().groupBy()(wrapped.as("n"))
+      plan.resolved
+      plan.treePatternBits
+      wrapped.foreach { e => e.deterministic; e.canonicalized }
+      comparisons.set(0)
+      PullOutNondeterministic.applyLocally(plan)
+      assert(comparisons.get <= depth * 8,
+        s"lateral=$lateral depth=$depth comparisons=${comparisons.get}")
+    }
+  }
+
+  test("dependency staging shares strict forwarded output prefixes") {
+    val bean = ManagementFactory.getThreadMXBean.asInstanceOf[com.sun.management.ThreadMXBean]
+    assume(bean.isThreadAllocatedMemorySupported)
+    bean.setThreadAllocatedMemoryEnabled(true)
+    val threadId = Thread.currentThread().threadId()
+    for (array <- Seq(false, true)) {
+      def allocation(width: Int, depth: Int): Long = {
+        val attributes = (1 to width).map(i => AttributeReference(s"a$i", DoubleType)())
+        val output = if (array) scala.collection.immutable.ArraySeq.from(attributes)
+          else attributes.toList
+        val input = LocalRelation(output)
+        input.treePatternBits
+        val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+        val expression = (1 to depth).foldLeft[Expression](scalar) { (child, _) =>
+          ScalaUDF((n: java.lang.Double) => n, DoubleType, Seq(child))
+        }
+        val keys = new NondeterministicExpressionCollection.ExpressionKeys
+        val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(
+          Seq(expression), keys)
+        val before = bean.getThreadAllocatedBytes(threadId)
+        val result = NondeterministicExpressionCollection.project(input, bindings, keys)
+        val bytes = bean.getThreadAllocatedBytes(threadId) - before
+        assert(result.output.take(output.size).map(_.exprId) == output.map(_.exprId))
+        bytes
+      }
+      allocation(64, 4)
+      // Subtract per-binding construction: the additional cost of forwarding a wide input
+      // should not grow with the number of stages that forward it.
+      def widthCost(depth: Int): Long = {
+        Seq.fill(3)(allocation(4096, depth)).min - Seq.fill(3)(allocation(64, depth)).min
+      }
+      val small = widthCost(16)
+      val large = widthCost(64)
+      assert(small > 0 && large < small * 2,
+        s"array=$array depth16=$small extra bytes, depth64=$large extra bytes")
+    }
+  }
+
   test("generated FILTER inputs do not erase an equal user conditional during legacy restoration") {
     val predicate = $"p".boolean
     val scalar = ScalarSubquery(OneRowRelation().groupBy()(

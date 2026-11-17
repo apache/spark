@@ -63,6 +63,63 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
+  testWithAllStateVersions("KLL legacy wrapped HAVING restores whole-output reuse") {
+    for (analysisLegacy <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        withTempView("kll_wrapped_having") {
+          val input = MemoryStream[(Long, Long, Long, Long)]
+          input.toDF().toDF("a", "b", "c", "d")
+            .createOrReplaceTempView("kll_wrapped_having")
+          val left = "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(((a+b)+c)+d, 8))"
+          val right = "kll_sketch_get_n_bigint(kll_sketch_agg_bigint((a+b)+(c+d), 8))"
+          val historical = sql(s"SELECT $left AS n FROM kll_wrapped_having HAVING n > 0")
+          val current = withSQLConf(
+              SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString) {
+            val result = sql(s"SELECT $left AS n FROM kll_wrapped_having HAVING $right > 0")
+            result.queryExecution.assertAnalyzed()
+            result
+          }
+          val mode = Map(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "true")
+          testStream(historical, Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, (1L, 2L, 3L, 4L)), CheckLastBatch(Row(1L)), StopStream)
+          testStream(current, Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, (2L, 3L, 4L, 5L)), CheckLastBatch(Row(2L)), StopStream)
+        }
+      }
+    }
+  }
+
+  testWithAllStateVersions("KLL legacy static HAVING restores outer ordinary buffer reuse") {
+    for (analysisLegacy <- Seq(false, true)) {
+      withTempDir { checkpoint =>
+        withTempView("kll_static_having_stream") {
+          val input = MemoryStream[Long]
+          input.toDF().createOrReplaceTempView("kll_static_having_stream")
+          val getter = "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))"
+          val source = "FROM VALUES (0L), (1L), (2L) AS t(id)"
+          val alias = s"(SELECT $getter AS n $source HAVING n > 0)"
+          val explicit = s"(SELECT $getter AS n $source HAVING $getter > 0)"
+          def query(legacy: Boolean): DataFrame = withSQLConf(
+              SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+            val result = sql(s"""SELECT sum(value * $alias), sum(value * $explicit)
+                |FROM kll_static_having_stream""".stripMargin)
+            result.queryExecution.assertAnalyzed()
+            result
+          }
+          val mode = Map(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "true")
+          testStream(query(legacy = true), Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, 1L, 2L), CheckLastBatch(Row(9L, 9L)), StopStream)
+          testStream(query(legacy = analysisLegacy), Complete)(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+            AddData(input, 3L), CheckLastBatch(Row(18L, 18L)), StopStream)
+        }
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL legacy SELECT HAVING restores height-independent reuse") {
     for (havingOnly <- Seq(false, true); analysisLegacy <- Seq(false, true)) {
       withTempDir { checkpoint =>

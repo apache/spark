@@ -2669,7 +2669,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case f @ Filter(condition, project @ Project(fields, grandChild))
         if fields.exists(!_.deterministic) &&
-          fields.forall(e => e.deterministic || isAggregateScalarBinding(e)) &&
           canPushThroughCondition(grandChild, condition) =>
       lazy val aliases = AttributeMap(getAliasMap(project).filter(_._2.deterministic))
       val classified = splitConjunctivePredicates(condition).map { predicate =>
@@ -2691,7 +2690,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         canPush = _._3, throwable = _._2)
       val push = pushable.map(_._1)
       val stay = retained.map(_._1)
-      if (push.isEmpty) f else {
+      if (push.isEmpty || !fields.forall(e => e.deterministic || isAggregateScalarBinding(e))) f
+      else {
         // Let the ordinary deterministic Project path own alias substitution and expensive
         // expression splitting. Avoid translating each predicate once here and once again below.
         val filtered = if (push.forall(_.references.subsetOf(grandChild.outputSet))) {

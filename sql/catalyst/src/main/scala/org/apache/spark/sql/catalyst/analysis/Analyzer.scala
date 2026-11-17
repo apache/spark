@@ -3282,32 +3282,58 @@ class Analyzer(
     def resolveExprsWithAggregate(
         exprs: Seq[Expression],
         agg: Aggregate): (Seq[NamedExpression], Seq[Expression]) = {
-      val extraAggExprs = new LinkedHashMap[Expression, NamedExpression]
-      val transformed = exprs.map { e =>
-        if (!e.resolved) {
-          e
-        } else {
-          buildAggExprList(e, agg, extraAggExprs)
+      val legacyKeys = new ValidateSubqueryExpression.LegacyKllDeterminism
+      def resolve(sharing: Option[Boolean]): (Seq[NamedExpression], Seq[Expression]) = {
+        val extra = new LinkedHashMap[Expression, NamedExpression]
+        val transformed = exprs.map { expression =>
+          if (!expression.resolved) expression else {
+            buildAggExprList(expression, agg, extra, sharing, legacyKeys)
+          }
+        }
+        (extra.values().asScala.toSeq, transformed)
+      }
+      // Only aggregates in this host need alternative output resolution. A scalar subquery
+      // resolves its own aggregates and must not repeatedly wrap its enclosing HAVING clause.
+      lazy val hasLocalKll = exprs.exists { expression =>
+        expression.containsPattern(KLL_AGGREGATE) && expression.exists {
+          case aggregate: AggregateExpression => aggregate.containsPattern(KLL_AGGREGATE)
+          case _ => false
         }
       }
-      (extraAggExprs.values().asScala.toSeq, transformed)
+      if (!exprs.forall(_.resolved) || !hasLocalKll) {
+        resolve(None)
+      } else {
+        // Preserve the full host's matching boundary and compiler output order. In particular,
+        // a getter may match a SELECT output even when its nested aggregate has another height.
+        val (batchOutputs, batch) = resolve(None)
+        val (correctedOutputs, corrected) = resolve(Some(false))
+        val (legacyOutputs, legacy) = resolve(Some(true))
+        val outputs = (batchOutputs ++ correctedOutputs ++ legacyOutputs).distinctBy(_.exprId)
+        (outputs, batch.indices.map { i =>
+          KllAggregateResolution(batch(i), corrected(i), legacy(i))
+        })
+      }
     }
 
     private def buildAggExprList(
         expr: Expression,
         agg: Aggregate,
-        aggExprMap: LinkedHashMap[Expression, NamedExpression]): Expression = {
+        aggExprMap: LinkedHashMap[Expression, NamedExpression],
+        sharing: Option[Boolean],
+        legacyKeys: ValidateSubqueryExpression.LegacyKllDeterminism): Expression = {
       // Avoid adding an extra aggregate expression if it's already present in
       // `agg.aggregateExpressions`. Trim inner aliases from aggregate expressions because of
       // expressions like `spark_grouping_id` that can have inner aliases.
+      def equivalent(left: Expression, right: Expression): Boolean = {
+        if (sharing.contains(true)) {
+          legacyKeys.expression(left).semanticEquals(legacyKeys.expression(right))
+        } else left.semanticEquals(right)
+      }
       val replacement: Option[NamedExpression] =
-        // Checkpoint sharing is restored after analysis. Do not erase separately written KLL
-        // occurrences here, even when the batch rollback setting currently marks them equal.
-        if (agg.isStreaming && expr.containsPattern(KLL_AGGREGATE)) None else {
+        if (sharing.contains(false) && expr.containsPattern(KLL_AGGREGATE)) None else {
           agg.aggregateExpressions.foldLeft(Option.empty[NamedExpression]) {
-            case (None, alias: Alias) if expr.semanticEquals(trimAliases(alias.child)) =>
-              Some(alias)
-            case (None | Some(_: Alias), aggExpr) if expr.semanticEquals(aggExpr) => Some(aggExpr)
+            case (None, alias: Alias) if equivalent(expr, trimAliases(alias.child)) => Some(alias)
+            case (None | Some(_: Alias), aggExpr) if equivalent(expr, aggExpr) => Some(aggExpr)
             case (current, _) => current
           }
         }
@@ -3317,18 +3343,13 @@ class Analyzer(
         expr match {
           case ae: AggregateExpression =>
             val cleaned = trimTempResolvedColumn(ae)
-            val resultAlias = aggExprMap.computeIfAbsent(
-              if (agg.isStreaming && cleaned.containsPattern(KLL_AGGREGATE)) cleaned
-                else cleaned.canonicalized,
-              _ => {
-                val output = if (agg.isStreaming && cleaned.containsPattern(KLL_AGGREGATE)) {
-                  // Keep the written occurrence until checkpoint mode can restore the analyzer's
-                  // historical semantic reuse, which did not depend on raw expression height.
-                  KllLegacyAggregateOutput(cleaned)
-                } else cleaned
-                Alias(output, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
-              }
-            )
+            val key = if (sharing.contains(false) && cleaned.containsPattern(KLL_AGGREGATE)) {
+              cleaned
+            } else if (sharing.contains(true)) legacyKeys.expression(cleaned).canonicalized
+            else cleaned.canonicalized
+            val resultAlias = aggExprMap.computeIfAbsent(key,
+              _ => Alias(cleaned,
+                toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))())
             resultAlias.toAttribute
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
             trimTempResolvedColumn(grouping) match {
@@ -3355,7 +3376,8 @@ class Analyzer(
               val childWithTempCol = t.child.transformUp {
                 case a: Attribute => TempResolvedColumn(a, Seq(a.name))
               }
-              val newChild = buildAggExprList(childWithTempCol, agg, aggExprMap)
+              val newChild =
+                buildAggExprList(childWithTempCol, agg, aggExprMap, sharing, legacyKeys)
               if (newChild.containsPattern(TEMP_RESOLVED_COLUMN)) {
                 withOrigin(t.origin)(t.copy(hasTried = true))
               } else {
@@ -3363,7 +3385,8 @@ class Analyzer(
               }
             }
           case other =>
-            other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprMap)))
+            other.mapChildrenWithReferenceEquality(
+              buildAggExprList(_, agg, aggExprMap, sharing, legacyKeys))
         }
       }
     }

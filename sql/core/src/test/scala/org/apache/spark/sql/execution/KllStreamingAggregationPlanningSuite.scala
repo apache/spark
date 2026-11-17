@@ -39,6 +39,74 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
 
+  test("corrected checkpoint policy recovers independently written static HAVING calls") {
+    val logical = withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "true") {
+      val input = MemoryStream[Long](spark).toDF()
+      val aggregate = "kll_sketch_agg_bigint(id)"
+      val scalar = s"""(SELECT kll_sketch_get_n_bigint(s) FROM
+          |(SELECT $aggregate AS s FROM VALUES (0L), (1L), (2L) AS t(id)
+          |HAVING $aggregate = s))""".stripMargin
+      val result = input.agg(expr(s"sum($scalar)").as("total"))
+      result.queryExecution.analyzed
+    }
+    withSQLConf(legacySharingKey -> "false") {
+      val execution = new IncrementalExecution(spark, logical, OutputMode.Complete(),
+        "/tmp/unused-kll-static-policy", UUID.randomUUID(), UUID.randomUUID(), 0L, None,
+        OffsetSeqMetadata(0L, 0L, Map.empty[String, String]), WatermarkPropagator.noop(),
+        isFirstBatch = true)
+      val occurrences = execution.normalized.collectWithSubqueries {
+        case aggregate: Aggregate => aggregate.aggregateExpressions.flatMap(_.collect {
+          case k: KllSketchAggBigint => k
+        })
+      }.flatten
+      assert(occurrences.size == 2, execution.normalized.treeString)
+      assert(occurrences.forall(!_.deterministic))
+    }
+  }
+
+  test("normalization preserves compiler binding recovery through the micro-batch lifecycle") {
+    for (removeProducer <- Seq(false, true); legacy <- Seq(false, true)) {
+      val session = new org.apache.spark.sql.classic.SparkSession(spark.sparkContext)
+      val normalizer = new org.apache.spark.sql.catalyst.rules.Rule[
+          org.apache.spark.sql.catalyst.plans.logical.LogicalPlan] {
+        override def apply(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
+            : org.apache.spark.sql.catalyst.plans.logical.LogicalPlan = {
+          plan.transformAllExpressionsWithSubqueries {
+            case scalar: ScalarSubquery if removeProducer && scalar.plan.containsPattern(
+                org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE) => Literal(3L)
+            case alias: Alias if alias.isNondeterministicSubqueryBinding =>
+              Alias(alias.child, alias.name)(alias.exprId, alias.qualifier,
+                alias.explicitMetadata, alias.nonInheritableMetadataKeys)
+          }
+        }
+      }
+      session.extensions.injectPlanNormalizationRule(_ => normalizer)
+      session.conf.set(legacySharingKey, legacy.toString)
+      val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+          |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin
+      val input = MemoryStream[Long](spark).toDF().withColumn("user", expr(scalar))
+      val userId = input.queryExecution.analyzed.output.last.exprId
+      val logical = input.agg(expr(s"sum($scalar)").as("a"),
+        expr(s"sum($scalar)").as("b")).queryExecution.analyzed
+      val execution = new IncrementalExecution(session, logical, OutputMode.Complete(),
+        "/tmp/unused-kll-normalizer", UUID.randomUUID(), UUID.randomUUID(), 0L, None,
+        OffsetSeqMetadata(0L, 0L, Map.empty[String, String]), WatermarkPropagator.noop(),
+        isFirstBatch = true)
+      val normalized = execution.normalized
+      assert(normalized.exists {
+        case project: Project => project.projectList.exists(_.exprId == userId)
+        case _ => false
+      }, normalized.treeString)
+      val optimized = execution.optimizedPlan
+      val aggregates = optimized.collect { case a: Aggregate => a }
+      assert(aggregates.size == 1, optimized.treeString)
+      val functions = org.apache.spark.sql.catalyst.planning.PhysicalAggregation
+        .unapply(aggregates.head).get._2
+      assert(functions.size == (if (legacy) 1 else 2),
+        s"removeProducer=$removeProducer legacy=$legacy\n$optimized")
+    }
+  }
+
   private case class NormalizationCounted(child: Expression, visits: AtomicInteger)
       extends Expression with Unevaluable {
     override def children: Seq[Expression] = {

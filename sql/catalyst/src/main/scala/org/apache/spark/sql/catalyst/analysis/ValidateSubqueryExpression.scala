@@ -250,15 +250,16 @@ object ValidateSubqueryExpression
         ExprUtils.isDeterministicAfterPredicateSubqueryRewrite)
       case join: AsOfJoin =>
         val checked = new java.util.IdentityHashMap[Expression, Expression]
+        val independent = new KllSubqueryIndependence
         def rewritten(expression: Expression): Expression = {
           val cached = checked.get(expression)
           if (cached != null) return cached
           val children = expression.mapChildrenWithReferenceEquality(rewritten)
           val result = children match {
-            case scalar: ScalarSubquery if isIndependentKllScalar(scalar) =>
+            case scalar: ScalarSubquery if independent(scalar) =>
               Literal.default(scalar.dataType)
-            case exists: Exists if isIndependentKllSubquery(exists) => Literal.TrueLiteral
-            case in: InSubquery if isIndependentKllSubquery(in.query) &&
+            case exists: Exists if independent(exists) => Literal.TrueLiteral
+            case in: InSubquery if independent(in.query) &&
                 in.values.forall(_.deterministic) => Literal.TrueLiteral
             case other => other
           }
@@ -280,6 +281,15 @@ object ValidateSubqueryExpression
     !query.deterministic && !query.isCorrelated && deterministicWithoutKllRandomness(query.plan)
   }
 
+  private[analysis] final class KllSubqueryIndependence {
+    private val plans = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
+
+    def apply(query: SubqueryExpression): Boolean = {
+      !query.deterministic && !query.isCorrelated && plans.computeIfAbsent(query.plan,
+        plan => deterministicWithoutKllRandomness(plan)).booleanValue()
+    }
+  }
+
   private val legacyKll: PartialFunction[Expression, Expression] = {
     case k: KllSketchAggBigint => k.copy(legacyDeterministic = true)
     case k: KllSketchAggFloat => k.copy(legacyDeterministic = true)
@@ -289,29 +299,44 @@ object ValidateSubqueryExpression
     case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
   }
 
-  private def legacyKllExpression(expression: Expression): Expression = {
-    if (expression.deterministic) expression else expression.transformDownWithReferenceEquality {
-      case query: SubqueryExpression => query.withNewPlan(legacyKllPlan(query.plan))
-      case other if legacyKll.isDefinedAt(other) => legacyKll(other)
-    }
-  }
+  private[analysis] final class LegacyKllDeterminism {
+    private val expressions = new java.util.IdentityHashMap[Expression, Expression]
+    private val plans = new java.util.IdentityHashMap[LogicalPlan, LogicalPlan]
 
-  private def legacyKllPlan(plan: LogicalPlan): LogicalPlan = {
-    if (plan.deterministic) plan else {
-      plan.mapChildrenWithReferenceEquality(legacyKllPlan)
-        .mapExpressionsWithReferenceEquality(legacyKllExpression)
+    def expression(value: Expression): Expression = {
+      if (value.deterministic) return value
+      val cached = expressions.get(value)
+      if (cached != null) return cached
+      val result = value match {
+        case query: SubqueryExpression => query.withNewPlan(plan(query.plan))
+        case other =>
+          val children = other.mapChildrenWithReferenceEquality(expression)
+          legacyKll.applyOrElse(children, identity[Expression])
+      }
+      expressions.put(value, result)
+      result
+    }
+
+    def plan(value: LogicalPlan): LogicalPlan = {
+      if (value.deterministic) return value
+      val cached = plans.get(value)
+      if (cached != null) return cached
+      val result = value.mapChildrenWithReferenceEquality(plan)
+        .mapExpressionsWithReferenceEquality(expression)
+      plans.put(value, result)
+      result
     }
   }
 
   private[sql] def deterministicWithoutKllRandomness(expression: Expression): Boolean = {
     expression.deterministic || AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      legacyKllExpression(expression).deterministic
+      new LegacyKllDeterminism().expression(expression).deterministic
     }
   }
 
   private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      legacyKllPlan(plan).deterministic
+      new LegacyKllDeterminism().plan(plan).deterministic
     }
   }
 

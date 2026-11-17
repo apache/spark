@@ -33,11 +33,19 @@ private[sql] case class KllFilteredAggregateInput(predicate: Expression, input: 
       newLeft: Expression, newRight: Expression): Expression = copy(newLeft, newRight)
 }
 
-/** Retains a HAVING/ORDER BY occurrence until checkpoint preparation chooses historical reuse. */
-private[sql] case class KllLegacyAggregateOutput(child: Expression)
-  extends UnaryExpression with RuntimeReplaceable {
-  override def replacement: Expression = child
+/** Retains whole aggregate-host resolution choices until batch or checkpoint preparation. */
+private[sql] case class KllAggregateResolution(
+    batch: Expression,
+    corrected: Expression,
+    legacy: Expression) extends TernaryExpression with RuntimeReplaceable {
+  override def first: Expression = batch
+  override def second: Expression = corrected
+  override def third: Expression = legacy
+  override def replacement: Expression = batch
+  override lazy val canonicalized: Expression =
+    copy(batch.canonicalized, corrected.canonicalized, legacy.canonicalized)
   override val nodePatterns: Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE, KLL_CHECKPOINT_ALTERNATIVE)
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    copy(newFirst, newSecond, newThird)
 }

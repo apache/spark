@@ -95,6 +95,7 @@ object NondeterministicExpressionCollection {
   private[analysis] class ExpressionKeys {
     private val summaries = new IdentityHashMap[Expression, SubqueryIdentities]
     private val stagingRequirements = new IdentityHashMap[Expression, java.lang.Boolean]
+    private[analysis] val liveOrdinaryBindings = mutable.HashSet.empty[ExprId]
 
     private def subqueryIds(expression: Expression): SubqueryIdentities = {
       if (!expression.containsPattern(PLAN_EXPRESSION)) return SubqueryIdentities.empty
@@ -153,10 +154,9 @@ object NondeterministicExpressionCollection {
     case other => other.children.sizeCompare(1) > 0
   }
 
-  private def guardedSubqueries(expression: Expression): Boolean = {
+  private def guardedSubqueries(expression: Expression, keys: ExpressionKeys): Boolean = {
     // Test cached properties before inspecting the expression's evaluation domain.
-    if (expression.deterministic || !expression.containsAnyPattern(
-        SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+    if (expression.deterministic || !keys.requiresSubqueryStaging(expression)) {
       return false
     }
     expression match {
@@ -166,23 +166,26 @@ object NondeterministicExpressionCollection {
     }
   }
 
-  private val bindingRoots: PartialFunction[Expression, Expression] = {
-    // Bind the evaluation guard as a whole; its descendants must not become unconditional roots.
-    case expression if guardedSubqueries(expression) => expression
-    case expression: Nondeterministic => expression
-    case scalar: ScalarSubquery if !scalar.deterministic => scalar
-    case exists: Exists if !exists.deterministic => exists
-    case not @ Not(in: InSubquery) if !in.deterministic => not
-    case in: InSubquery if !in.deterministic => in
-    case udf: UserDefinedExpression if !udf.deterministic => udf
-    case udf: ExternalUserDefinedFunction if !udf.deterministic => udf
+  private def bindingRoot(expression: Expression, keys: ExpressionKeys): Boolean = {
+    expression match {
+      // Bind an evaluation guard whole; its descendants must not become unconditional roots.
+      case expression if guardedSubqueries(expression, keys) => true
+      case _: Nondeterministic => true
+      case scalar: ScalarSubquery => !scalar.deterministic
+      case exists: Exists => !exists.deterministic
+      case Not(in: InSubquery) => !in.deterministic
+      case in: InSubquery => !in.deterministic
+      case udf: UserDefinedExpression => !udf.deterministic
+      case udf: ExternalUserDefinedFunction => !udf.deterministic
+      case _ => false
+    }
   }
 
   private def bindingFor(
       expression: Expression,
       bindings: LinkedHashMap[ExpressionKey, NamedExpression],
       keys: ExpressionKeys): NamedExpression = {
-    if (bindingRoots.isDefinedAt(expression)) bindings.get(keys(expression)) else null
+    if (bindingRoot(expression, keys)) bindings.get(keys(expression)) else null
   }
 
   private[analysis] def replaceBindings(
@@ -209,8 +212,8 @@ object NondeterministicExpressionCollection {
         val leafNondeterministic = mutable.ArrayBuffer.empty[Expression]
         def collect(expression: Expression): Unit = {
           if (visited.put(expression, true) == null) {
-            bindingRoots.lift(expression).foreach(leafNondeterministic += _)
-            if (!guardedSubqueries(expression)) expression.children.foreach(collect)
+            if (bindingRoot(expression, keys)) leafNondeterministic += expression
+            if (!guardedSubqueries(expression, keys)) expression.children.foreach(collect)
           }
         }
         collect(expr)
@@ -234,7 +237,53 @@ object NondeterministicExpressionCollection {
       }
     }
 
+    if (nonDeterministicToAttributes.values.asScala.exists {
+        case alias: Alias => guardedSubqueries(alias.child, keys)
+        case other => guardedSubqueries(other, keys)
+      }) {
+      recordLiveOrdinaryBindings(expressions, nonDeterministicToAttributes, keys)
+    }
     nonDeterministicToAttributes
+  }
+
+  private def recordLiveOrdinaryBindings(
+      expressions: Seq[Expression],
+      bindings: LinkedHashMap[ExpressionKey, NamedExpression],
+      keys: ExpressionKeys): Unit = {
+    val live = mutable.HashSet.empty[ExprId]
+    val pending = mutable.Queue.empty[NamedExpression]
+    def demand(binding: NamedExpression): Unit = {
+      if (live.add(binding.exprId)) pending.enqueue(binding)
+    }
+    def visit(expression: Expression, host: Boolean): Unit = {
+      if (expression.deterministic) return
+      val binding = bindingFor(expression, bindings, keys)
+      if (binding != null) demand(binding) else if (host) {
+        expression.children.foreach(visit(_, host = true))
+      } else expression match {
+        case conditional: ConditionalExpression =>
+          conditional.alwaysEvaluatedInputs.foreach(visit(_, host = false))
+        case And(left, _) => visit(left, host = false)
+        case Or(left, _) => visit(left, host = false)
+        case other => other.children.foreach(visit(_, host = false))
+      }
+    }
+    expressions.foreach(visit(_, host = true))
+    while (pending.nonEmpty) {
+      val binding = pending.dequeue()
+      val expression = binding match {
+        case alias: Alias => alias.child
+        case other => other
+      }
+      if (!keys.requiresSubqueryStaging(expression)) {
+        keys.liveOrdinaryBindings += binding.exprId
+      } else if (!guardedSubqueries(expression, keys)) {
+        expression match {
+          case Not(in: InSubquery) => in.children.foreach(visit(_, host = false))
+          case other => other.children.foreach(visit(_, host = false))
+        }
+      }
+    }
   }
 
   private[analysis] def project(
@@ -260,7 +309,7 @@ object NondeterministicExpressionCollection {
             conditional.withNewAlwaysEvaluatedInputs(conditional.alwaysEvaluatedInputs.map(replace))
           case And(left, right) => And(replace(left), right)
           case Or(left, right) => Or(replace(left), right)
-          case other if guardedSubqueries(other) => other
+          case other if guardedSubqueries(other, keys) => other
           case other => other.mapChildrenWithReferenceEquality(replace)
         }
       }
@@ -272,7 +321,21 @@ object NondeterministicExpressionCollection {
             // Ordinary nondeterministic UDFs retain their historical single Project. Dependency
             // layers are needed only for the subqueries introduced by this extraction path.
             case expression if !keys.requiresSubqueryStaging(expression) => expression
-            case expression if guardedSubqueries(expression) => expression
+            case expression if guardedSubqueries(expression, keys) =>
+              // Reuse only ordinary producers already consumed by the host or an unconditional
+              // dependency. Collected but unused descendants of ordinary UDFs are not live.
+              def reuseLive(value: Expression): Expression = {
+                if (value.deterministic) return value
+                val dependency = bindingFor(value, bindings, keys)
+                if (dependency != null && keys.liveOrdinaryBindings.contains(dependency.exprId)) {
+                  level = math.max(level, stage(dependency) + 1)
+                  dependency.toAttribute
+                } else value match {
+                  case _: SubqueryExpression => value
+                  case other => other.mapChildrenWithReferenceEquality(reuseLive)
+                }
+              }
+              expression.mapChildrenWithReferenceEquality(reuseLive)
             // NOT IN must reach the existing NULL-aware predicate-subquery rewrite as a whole.
             // Only stage its operands; extraction must not turn it into NOT of an IN binding.
             case not @ Not(in: InSubquery) =>
@@ -291,12 +354,12 @@ object NondeterministicExpressionCollection {
 
     val ordered = bindings.values.asScala.toSeq
     ordered.foreach(stage)
-    var output = child.output
+    var output = child.output.toVector
     // TODO: Prune forwarded bindings after their last use. Full forwarding keeps dependency
     // construction simple, but logical width accumulates across dependency levels.
     ordered.groupBy(binding => levels(binding.exprId)).toSeq.sortBy(_._1).foldLeft(child) {
       case (input, (_, expressions)) =>
-        val additions = expressions.map(e => rewritten(e.exprId))
+        val additions = expressions.iterator.map(e => rewritten(e.exprId)).toVector
         val result = Project(output ++ additions, input)
         output = output ++ additions.map(_.toAttribute)
         result

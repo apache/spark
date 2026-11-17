@@ -73,15 +73,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       }
 
     case join: LateralJoin if join.condition.exists(_.containsPattern(SCALAR_SUBQUERY)) =>
-      val classified = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
-      def independent(scalar: ScalarSubquery): Boolean = {
-        val cached = classified.get(scalar.plan)
-        if (cached != null) cached.booleanValue() else {
-          val result = ValidateSubqueryExpression.isIndependentKllScalar(scalar)
-          classified.put(scalar.plan, result)
-          result
-        }
-      }
+      val independent = new ValidateSubqueryExpression.KllSubqueryIndependence
       val scalars = join.condition.toSeq.flatMap(_.collect {
         case scalar: ScalarSubquery if independent(scalar) => scalar
       })
@@ -90,7 +82,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         val keys = new NondeterministicExpressionCollection.ExpressionKeys
         val bindings =
           NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
-        val condition = join.condition.map(_.transformDown {
+        val condition = join.condition.map(_.transformDownWithReferenceEquality {
           case scalar: ScalarSubquery if bindings.containsKey(keys(scalar)) =>
             bindings.get(keys(scalar)).toAttribute
         })
@@ -177,11 +169,13 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         (NondeterministicExpressionCollection.ExpressionKey, Int), NamedExpression]
       val referenceSets = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
       val rightOutput = join.right.outputSet
+      val rightMemberships = new java.util.IdentityHashMap[AttributeSet, java.lang.Boolean]
       def rewrite(expression: Expression, references: AttributeSet): Expression = expression match {
         case value @ (_: ScalarSubquery | _: KllSketchGetNBase)
             if nondeterToAttr.containsKey(keys(value)) =>
           val key = keys(value)
-          val side = if (references.nonEmpty && references.subsetOf(rightOutput)) {
+          val side = if (rightMemberships.computeIfAbsent(references,
+              refs => refs.nonEmpty && refs.subsetOf(rightOutput)).booleanValue()) {
             rightBindings
           } else leftBindings
           val input = if (side eq rightBindings) join.right else join.left
@@ -308,8 +302,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
     val keys = new NondeterministicExpressionCollection.ExpressionKeys
     val filters = mutable.LinkedHashMap.empty[
       NondeterministicExpressionCollection.ExpressionKey, Alias]
-    val guarded = aggregate.mapExpressionsWithReferenceEquality(_.transformDownWithPruning(
-      _.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+    val guard: PartialFunction[Expression, Expression] = {
       case expression: AggregateExpression if expression.filter.exists(deterministic.apply) =>
         val function = expression.aggregateFunction
         def needsGuard(input: Expression): Boolean = !input.deterministic && deterministic(input)
@@ -329,7 +322,16 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
             aggregateFunction = function.withNewChildren(inputs).asInstanceOf[AggregateFunction],
             filter = Some(predicate))
         }
-    }).asInstanceOf[Aggregate]
+    }
+    def rewrite(expression: Expression): Expression = {
+      if (!expression.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) {
+        expression
+      } else {
+        guard.applyOrElse(expression, identity[Expression])
+          .mapChildrenWithReferenceEquality(rewrite)
+      }
+    }
+    val guarded = aggregate.mapExpressionsWithReferenceEquality(rewrite).asInstanceOf[Aggregate]
     if (filters.isEmpty) guarded else {
       guarded.copy(child = Project(guarded.child.output ++ filters.values.toSeq, guarded.child))
     }

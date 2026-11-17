@@ -32,6 +32,48 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL HAVING and ordering resolve checkpoint alternatives once in both analyzers") {
+    for (singlePass <- Seq(false, true); legacy <- Seq(false, true)) {
+      withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val getter = "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))"
+        for (clause <- Seq(s"HAVING $getter > 0", s"ORDER BY $getter")) {
+          QueryTest.checkAnswer(
+            sql(s"SELECT $getter AS n FROM VALUES (0L), (1L), (2L) AS t(id) $clause"),
+            Seq(Row(3L)), checkToRDD = false)
+        }
+        QueryTest.checkAnswer(
+          sql(s"SELECT count(*) FROM VALUES (0L), (1L), (2L) AS t(id) HAVING $scalar > 0"),
+          Seq(Row(3L)), checkToRDD = false)
+      }
+    }
+  }
+
+  Seq("deterministic", "KLL").foreach { queryKind =>
+    test(s"guarded $queryKind subqueries preserve a shared seeded random grouping value") {
+      for (legacy <- Seq(false, true); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val random = org.apache.spark.sql.functions.rand(0L)
+          val query = if (queryKind == "KLL") s"CAST(($scalar - 3) AS DOUBLE)"
+            else "(SELECT 0D)"
+          val input = spark.range(0, 4, 1, 1)
+          val result = input.groupBy($"id", random.as("r"),
+            org.apache.spark.sql.functions.when($"id" % 2 === 0,
+              random + expr(query)).otherwise(0D).as("guarded")).count()
+            .orderBy("id").collect()
+          assert(result.length == 4)
+          result.foreach { row =>
+            assert(row.getDouble(2) == (if (row.getLong(0) % 2 == 0) row.getDouble(1) else 0D),
+              s"legacy=$legacy codegen=$codegen row=$row")
+          }
+        }
+      }
+    }
+  }
+
   test("aggregate FILTER stages one predicate evaluation for its guarded inputs") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
@@ -63,10 +105,14 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
                 |kll_sketch_get_n_bigint($window) AS n FROM kll_window_partitions) q
                 |WHERE p = 1""".stripMargin)
             val scans = query.queryExecution.sparkPlan.collect {
-              case scan: FileSourceScanExec => scan.partitionFilters
-              case scan: BatchScanExec => scan.scan.asInstanceOf[FileScan].partitionFilters
+              case scan: FileSourceScanExec =>
+                scan.selectedPartitions.filePartitionIterator.map(_.values.getInt(0)).toSet
+              case scan: BatchScanExec =>
+                val file = scan.scan.asInstanceOf[FileScan]
+                file.fileIndex.listFiles(file.partitionFilters, file.dataFilters)
+                  .map(_.values.getInt(0)).toSet
             }
-            assert(scans.size == 1 && scans.head.nonEmpty, query.queryExecution.toString)
+            assert(scans == Seq(Set(1)), query.queryExecution.toString)
             checkAnswer(query, Seq(1L, 3L, 5L, 7L).map(id => Row(id, 3L)))
           }
         }

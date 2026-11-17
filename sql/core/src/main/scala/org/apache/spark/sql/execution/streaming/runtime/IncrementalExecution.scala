@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic, WidenStatefulOperatorAttributeNullability}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId, KllLegacyAggregateOutput, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, Expression, ExpressionWithRandomSeed, ExprId, KllAggregateResolution, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -144,9 +144,12 @@ class IncrementalExecution(
       SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
     var needsExtraction = false
     var kllChanged = false
-    val adjusted = if (!preOptimized.containsPattern(KLL_AGGREGATE)) {
+    val adjusted = if (!preOptimized.containsAnyPattern(
+        KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE)) {
       preOptimized
     } else preOptimized.transformAllExpressionsWithSubqueries {
+      case resolution: KllAggregateResolution =>
+        if (legacySharing) resolution.legacy else resolution.corrected
       case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>
         kllChanged = true
         needsExtraction = !legacySharing
@@ -186,6 +189,10 @@ class IncrementalExecution(
           input: LogicalPlan,
           independentOnly: Boolean): (LogicalPlan, MutableMap[ExprId, Expression]) = {
         val bindings = MutableMap.empty[ExprId, Expression]
+        if (!input.containsAnyPattern(
+            NONDETERMINISTIC_SUBQUERY_BINDING, KLL_CHECKPOINT_ALTERNATIVE)) {
+          return (input, bindings)
+        }
         def restore(expression: Expression): Expression = {
           NondeterministicExpressionCollection.restoreBindingReferences(
             expression, bindings, stripFilterGuards = true)
@@ -255,37 +262,7 @@ class IncrementalExecution(
                   Alias(restore(a), a.name)(a.exprId, a.qualifier, Some(a.metadata))
                 case other => restore(other).asInstanceOf[NamedExpression]
               }, child = child)
-            if (!restored.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) restored else {
-              val candidates = scala.collection.mutable.HashMap.empty[Expression, Expression]
-              def trim(expression: Expression): Expression = expression match {
-                case alias: Alias => trim(alias.child)
-                case other if other.containsPattern(ALIAS) =>
-                  other.mapChildrenWithReferenceEquality(trim)
-                case other => other
-              }
-              def remember(expression: Expression): Unit = {
-                val value = expression match {
-                  case alias: Alias => alias.child
-                  case other => other
-                }
-                if (value.containsPattern(KLL_AGGREGATE) && value.deterministic) {
-                  candidates.getOrElseUpdate(trim(value).canonicalized, value)
-                }
-              }
-              restored.aggregateExpressions.filterNot(
-                _.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)).foreach(remember)
-              val outputs = restored.aggregateExpressions.map { expression =>
-                val output = expression.transformDownWithReferenceEquality {
-                  case alternative: KllLegacyAggregateOutput if alternative.child.deterministic =>
-                    candidates.getOrElse(alternative.child.canonicalized, alternative.child)
-                  case alternative: KllLegacyAggregateOutput => alternative.child
-                }.asInstanceOf[NamedExpression]
-                // Earlier compiler-added HAVING outputs were also reused by the old analyzer.
-                remember(output)
-                output
-              }
-              restored.copy(aggregateExpressions = outputs)
-            }
+            restored
           }
       }
     } else if (needsExtraction) {

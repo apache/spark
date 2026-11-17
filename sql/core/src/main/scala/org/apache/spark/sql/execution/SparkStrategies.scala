@@ -532,7 +532,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // Released checkpoints may contain one buffer for equivalent KLL calls. Restore their
         // ordered buffer layout before selecting any stateful aggregation implementation.
         val (aggregateExpressions, rewrittenResultExpressions) =
-          preserveLegacyKllSharing(extractedAggregates, extractedResults)
+          if (plan.containsPattern(org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE)) {
+            preserveLegacyKllSharing(extractedAggregates, extractedResults)
+          } else {
+            (extractedAggregates, extractedResults)
+          }
 
         if (aggregateExpressions.exists(ae =>
             ae.aggregateFunction.isInstanceOf[PythonUDAF] ||
