@@ -5726,8 +5726,13 @@ class AdaptiveQueryExecSuite
       val pushDown = rules.indexWhere(_.isInstanceOf[PushDownShuffleExchangeThroughUnion])
       assert(pushDown == ensureRequirements + 1,
         s"expected shuffle push-down after EnsureRequirements, got $pushDown")
-      assert(stamps.headOption.contains(pushDown + 1),
-        s"expected the union stamp after shuffle push-down at $pushDown, got $stamps")
+      // The keyed push-down moves a shuffle a consumer already has, so it runs on the layouts the
+      // union push-down settled and before the stamp fixes the unions it left alone.
+      val keyedPushDown = rules.indexWhere(_.isInstanceOf[PushDownKeyedShuffleExchange])
+      assert(keyedPushDown == pushDown + 1,
+        s"expected keyed push-down after shuffle push-down at $pushDown, got $keyedPushDown")
+      assert(stamps.headOption.contains(keyedPushDown + 1),
+        s"expected the union stamp after keyed shuffle push-down at $keyedPushDown, got $stamps")
       assert(stamps.last == rules.length - 1,
         s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
     }

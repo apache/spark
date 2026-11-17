@@ -38,6 +38,30 @@ object ValidateRequirements extends Logging {
     plan.children.forall(validate) && validateInternal(plan)
   }
 
+  /**
+   * Whether `plan` keeps the root distribution and every recorded user repartition layout after a
+   * rewrite. A preparation rewrite's local checks do not cover ancestors, and a recorded layout
+   * can sit below the subtree it rebuilt, so the whole plan is judged: every node has to satisfy
+   * its own requirements, the root its `requiredDistribution`, and every node has to keep the
+   * layout [[PartitioningOrigin]] recorded when it elided a user repartition.
+   *
+   * A user repartition elided at the root was asked for on all its keys, so a layout on a subset
+   * of them does not stand in for it.
+   */
+  private[sql] def validateWithOrigins(
+      plan: SparkPlan,
+      requiredDistribution: Option[Distribution]): Boolean = {
+    val satisfied = requiredDistribution match {
+      case Some(required: ClusteredDistribution) =>
+        validate(plan, required.copy(requireAllClusterKeys = true))
+      case Some(required) =>
+        validate(plan, required)
+      case None =>
+        validate(plan)
+    }
+    satisfied && !plan.exists(node => !PartitioningOrigin.validateNode(node))
+  }
+
   private def validateInternal(plan: SparkPlan): Boolean = {
     val children: Seq[SparkPlan] = plan.children
     val requiredChildDistributions: Seq[Distribution] = plan.requiredChildDistribution

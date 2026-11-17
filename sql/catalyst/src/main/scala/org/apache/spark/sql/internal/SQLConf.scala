@@ -9427,6 +9427,36 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PUSH_DOWN_KEYED_SHUFFLE_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownKeyedShuffle.enabled")
+      .internal()
+      .doc("When true, a keyed shuffle that the one-side shuffle of " +
+        s"${V2_BUCKETING_SHUFFLE_ENABLED.key} puts above an operator clustered on the same " +
+        "keys, such as an aggregate or a window, replaces the hash shuffle that feeds that " +
+        "operator during AQE query stage preparation, so one shuffle serves both. The operator " +
+        "then runs on the keyed shuffle at its partition count. A hash shuffle that the plan " +
+        "reuses elsewhere is kept. Requires " +
+        s"${V2_BUCKETING_SHUFFLE_ENABLED.key} to be enabled and " +
+        s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} to be disabled.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val PUSH_DOWN_KEYED_SHUFFLE_ALLOW_WITH_SUBQUERIES_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownKeyedShuffle.allowWithSubqueries.enabled")
+      .internal()
+      .doc("When true, allows keyed shuffle push-down in queries containing scalar, IN or " +
+        "dynamic pruning subqueries, including builds injected by runtime Bloom filters. " +
+        "Independent adaptive plans can differ, so a rewrite that changes a subquery's exchanges " +
+        "can cost the query the exchange or broadcast reuse it was planned with, and a failed " +
+        "broadcast reuse can remove a pruning filter and scan all partitions. When false, " +
+        "push-down is disabled for the main query and all its subqueries.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val SINGLE_TASK_EXECUTION_ENABLED =
     buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
       .doc("When true, eligible query fragments that read a small single-partition scan can run " +
