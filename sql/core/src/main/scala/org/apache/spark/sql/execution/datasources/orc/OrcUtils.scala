@@ -323,6 +323,10 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       orcSchema: TypeDescription,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
+    val orcFieldNames = orcSchema.getFieldNames.asScala
+    val usePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf) ||
+      orcFieldNames.forall(_.startsWith("_col"))
+
     def isOrcTimestamp(dt: DataType): Boolean = dt match {
       case TimestampType | TimestampNTZType | _: AnyTimestampNanoType => true
       case _ => false
@@ -359,19 +363,30 @@ object OrcUtils extends Logging {
       }
 
     def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
-      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
-        case (orcType, dataType) => checkTypeCompatibility(orcType, dataType)
+      val fieldPairs = if (usePositionalEvolution) {
+        orcCatalystSchema.fields.zip(dataSchema.fields)
+      } else {
+        // Nested pruning can remove or reorder fields. Validate the field ORC will read.
+        dataSchema.fields.flatMap { field =>
+          val index = if (isCaseSensitive) {
+            orcCatalystSchema.getFieldIndex(field.name)
+          } else {
+            orcCatalystSchema.getFieldIndexCaseInsensitive(field.name)
+          }
+          index.map(i => orcCatalystSchema(i) -> field)
+        }
+      }
+      fieldPairs.foreach { case (orcField, dataField) =>
+        checkTypeCompatibility(orcField.dataType, dataField.dataType)
       }
     }
 
     checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
-    val orcFieldNames = orcSchema.getFieldNames.asScala
-    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
       None
     } else {
-      if (forcePositionalEvolution || orcFieldNames.forall(_.startsWith("_col"))) {
+      if (usePositionalEvolution) {
         // This is either an ORC file written by an old version of Hive and there are no field
         // names in the physical schema, or `orc.force.positional.evolution=true` is forced because
         // the file was written by a newer version of Hive where
