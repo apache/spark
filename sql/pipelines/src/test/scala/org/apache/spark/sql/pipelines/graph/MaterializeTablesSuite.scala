@@ -1882,6 +1882,30 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  test("SPARK-57670: a declared-keys record with trailing content is malformed and removes " +
+    "nothing") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      // Each record lists `p.stale` in a leading JSON array that more input follows. Read as that
+      // array, it would drive the removal of `p.stale`; as malformed input, it removes nothing.
+      Seq(
+        "t1" -> """["p.stale"]x""",
+        "t2" -> """["p.stale"]]""",
+        "t3" -> """["p.stale"],["p.a"]""").foreach { case (name, malformed) =>
+        materializeStreamingTable(name, schema, Map("p.a" -> "1", "p.stale" -> "old"))
+        spark.sql(
+          s"ALTER TABLE $recordingCatalogName.$recordingNamespace.$name SET TBLPROPERTIES " +
+          s"('${PipelinesTableProperties.declaredPropertyKeys}' = '$malformed')")
+
+        materializeStreamingTable(name, schema, Map("p.a" -> "1"))
+        val props = loadTableFromRecordingCatalog(name).properties()
+        assert(props.get("p.stale") == "old", s"record: $malformed")
+        assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""",
+          s"record: $malformed")
+      }
+    }
+  }
+
   test("SPARK-57670: declaring the same keys in a different order issues no alterTable") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)

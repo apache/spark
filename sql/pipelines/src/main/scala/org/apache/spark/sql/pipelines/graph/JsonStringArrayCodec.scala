@@ -19,7 +19,8 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.util.control.NonFatal
 
-import org.json4s.JsonAST.{JArray, JString}
+import com.fasterxml.jackson.databind.DeserializationFeature
+import org.json4s.JsonAST.{JArray, JString, JValue}
 import org.json4s.jackson.JsonMethods
 
 /**
@@ -35,11 +36,20 @@ private[graph] object JsonStringArrayCodec {
   }
 
   /**
-   * Parses a value written by [[serialize]]. `None` if it is not JSON, or not a JSON array whose
-   * elements are all strings, so that callers can treat a malformed value as absent.
+   * Reads one JSON value and fails on anything but whitespace after it. `JsonMethods.parse` stops
+   * at the end of the first value, so `["p.a"]x` or `["p.a"],["p.b"]` would read as `["p.a"]`.
+   */
+  private val reader = JsonMethods.mapper
+    .readerFor(classOf[JValue])
+    .withFeatures(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+
+  /**
+   * Parses a value written by [[serialize]]. `None` if it is not JSON, is followed by anything but
+   * whitespace, or is not a JSON array whose elements are all strings, so that callers can treat a
+   * malformed value as absent.
    */
   def parse(raw: String): Option[Seq[String]] = {
-    val parsed = try Some(JsonMethods.parse(raw)) catch { case NonFatal(_) => None }
+    val parsed = try Some(reader.readValue[JValue](raw)) catch { case NonFatal(_) => None }
     parsed.flatMap {
       case JArray(elems) =>
         val values = elems.collect { case JString(s) => s }

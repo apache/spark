@@ -61,6 +61,23 @@ class JsonStringArrayCodecSuite extends SparkFunSuite {
     assert(JsonStringArrayCodec.parse("""[ "p.a" , "p.b" ]""").contains(Seq("p.a", "p.b")))
   }
 
+  test("SPARK-57670: parse accepts whitespace before and after the array") {
+    assert(JsonStringArrayCodec.parse("""  ["p.a"]  """).contains(Seq("p.a")))
+    assert(JsonStringArrayCodec.parse("[\"p.a\"]\n").contains(Seq("p.a")))
+    assert(JsonStringArrayCodec.parse("\t[]").contains(Seq.empty))
+  }
+
+  test("SPARK-57670: parse returns None for a JSON array followed by trailing content") {
+    Seq(
+      """["p.a"]x""", // trailing text
+      """["p.a"]]""", // extra closing bracket
+      """["p.a"],["p.b"]""", // second array
+      """["p.a"] "p.b"""" // second value
+    ).foreach { raw =>
+      assert(JsonStringArrayCodec.parse(raw).isEmpty, s"expected None for: $raw")
+    }
+  }
+
   test("parse returns None for inputs that are not a JSON array of strings") {
     Seq(
       "not-json",
