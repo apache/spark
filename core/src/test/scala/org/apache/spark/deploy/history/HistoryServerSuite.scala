@@ -18,6 +18,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL}
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
@@ -799,7 +800,6 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   }
 
   test("SPARK-59613: /static/sql resources are served on startup without loading any app") {
-
     stop()
     init()
 
@@ -811,15 +811,21 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
       "spark-sql-viz.js",
       "sql-table-utils.js").foreach { name =>
       val url = new URI(s"http://$localhost:$port/static/sql/$name").toURL
-      val (code, content, error) = HistoryServerSuite.getContentAndCode(url)
-      assert(code === 200, s"got code $code when getting $url w/ error: $error")
-      assert(content.exists(_.nonEmpty), s"$url returned an empty body")
+      assert(HistoryServerSuite.getUrl(url) === HistoryServerSuite.bundledStaticFile(s"sql/$name"),
+        s"$url did not return the bundled file")
     }
     assert(server.cacheMetrics.loadCount.getCount === 0, "no apps should be loaded")
   }
 }
 
 object HistoryServerSuite {
+
+  /** Returns a file bundled under the core static resource dir, e.g. "sql/spark-sql-viz.js". */
+  def bundledStaticFile(relativePath: String): String = {
+    val in = getClass.getResourceAsStream(s"/${SparkUI.STATIC_RESOURCE_DIR}/$relativePath")
+    assert(in != null, s"missing bundled static file $relativePath")
+    Utils.tryWithResource(in)(s => new String(s.readAllBytes(), StandardCharsets.UTF_8))
+  }
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
     val (code, in, errString) = connectAndGetInputStream(url)

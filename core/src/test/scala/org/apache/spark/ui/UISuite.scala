@@ -19,6 +19,7 @@ package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
 import java.net.{URI, URL}
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 import scala.io.Source
@@ -211,9 +212,12 @@ class UISuite extends SparkFunSuite {
         "spark-sql-viz.js",
         "sql-table-utils.js").foreach { name =>
         val url = new URI(s"${ui.webUrl}/static/sql/$name").toURL
-        // fromURL throws on a non-2xx response, so reading the body also checks the status.
-        val content = Utils.tryWithResource(Source.fromURL(url))(_.mkString)
-        assert(content.nonEmpty, s"$url returned an empty body")
+        val content = Utils.tryWithResource(Source.fromURL(url, "UTF-8"))(_.mkString)
+        val expected = Utils.tryWithResource(
+          getClass.getResourceAsStream(s"/${SparkUI.STATIC_RESOURCE_DIR}/sql/$name")) { in =>
+          new String(in.readAllBytes(), StandardCharsets.UTF_8)
+        }
+        assert(content === expected, s"$url did not return the bundled file")
       }
     }
   }
