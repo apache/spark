@@ -442,12 +442,12 @@ table t
 select * from pipe_set_new_column_view;
 
 -- The view's definition is resolved with the reading session's value of
--- spark.sql.legacy.pipeSetRequiresExistingColumns, so the view fails to resolve while it is true.
-set spark.sql.legacy.pipeSetRequiresExistingColumns=true;
+-- spark.sql.pipeSetAddsMissingColumns.enabled, so the view fails to resolve while it is false.
+set spark.sql.pipeSetAddsMissingColumns.enabled=false;
 
 select * from pipe_set_new_column_view;
 
-set spark.sql.legacy.pipeSetRequiresExistingColumns=false;
+set spark.sql.pipeSetAddsMissingColumns.enabled=true;
 
 drop view pipe_set_new_column_view;
 
@@ -455,13 +455,13 @@ drop view pipe_set_new_column_view;
 ---------------------------------
 
 -- SET with a column name that does not exist in the input relation is an error when
--- spark.sql.legacy.pipeSetRequiresExistingColumns is true.
-set spark.sql.legacy.pipeSetRequiresExistingColumns=true;
+-- spark.sql.pipeSetAddsMissingColumns.enabled is false.
+set spark.sql.pipeSetAddsMissingColumns.enabled=false;
 
 table t
 |> set z = 1;
 
-set spark.sql.legacy.pipeSetRequiresExistingColumns=false;
+set spark.sql.pipeSetAddsMissingColumns.enabled=true;
 
 -- SET with a column name that matches more than one column.
 select 1 as a, 2 as a

@@ -8853,17 +8853,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val LEGACY_PIPE_SET_REQUIRES_EXISTING_COLUMNS =
-    buildConf("spark.sql.legacy.pipeSetRequiresExistingColumns")
+  val PIPE_SET_ADDS_MISSING_COLUMNS_ENABLED =
+    buildConf("spark.sql.pipeSetAddsMissingColumns.enabled")
       .internal()
-      .doc("When true, a pipe |> SET assignment to a column that does not exist fails with " +
-        "UNRESOLVED_COLUMN, as it did before Spark 5.0. When false (the default), such an " +
-        "assignment appends the column after the input columns, as |> EXTEND does. Either way, " +
-        "an assignment to an existing column replaces it in place.")
+      .doc("When true (the default), a pipe |> SET assignment to a column that does not exist " +
+        "appends the column after the input columns, as |> EXTEND does. When false, such an " +
+        "assignment fails with UNRESOLVED_COLUMN, as it did before Spark 5.0. Either way, an " +
+        "assignment to an existing column replaces it in place.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_ALLOW_ALIASED_PIPE_AGGREGATE_ORDINALS =
     buildConf("spark.sql.legacy.allowAliasedPipeAggregateOrdinals")

@@ -1196,9 +1196,9 @@ Project [x#x, y#x, z#x]
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+set spark.sql.pipeSetAddsMissingColumns.enabled=false
 -- !query analysis
-SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(true))
+SetCommand (spark.sql.pipeSetAddsMissingColumns.enabled,Some(false))
 
 
 -- !query
@@ -1223,9 +1223,9 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+set spark.sql.pipeSetAddsMissingColumns.enabled=true
 -- !query analysis
-SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(false))
+SetCommand (spark.sql.pipeSetAddsMissingColumns.enabled,Some(true))
 
 
 -- !query
@@ -1235,9 +1235,9 @@ DropTempViewCommand pipe_set_new_column_view, false
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+set spark.sql.pipeSetAddsMissingColumns.enabled=false
 -- !query analysis
-SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(true))
+SetCommand (spark.sql.pipeSetAddsMissingColumns.enabled,Some(false))
 
 
 -- !query
@@ -1263,9 +1263,9 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+set spark.sql.pipeSetAddsMissingColumns.enabled=true
 -- !query analysis
-SetCommand (spark.sql.legacy.pipeSetRequiresExistingColumns,Some(false))
+SetCommand (spark.sql.pipeSetAddsMissingColumns.enabled,Some(true))
 
 
 -- !query

@@ -8520,7 +8520,7 @@ class AstBuilder extends DataTypeAstBuilder
     val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
       visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
     // An assignment to a column that does not exist appends the column, as EXTEND would.
-    val appendMissingColumns = !conf.getConf(SQLConf.LEGACY_PIPE_SET_REQUIRES_EXISTING_COLUMNS)
+    val appendMissingColumns = conf.getConf(SQLConf.PIPE_SET_ADDS_MISSING_COLUMNS_ENABLED)
     var plan = left
     setIdentifiers.zip(setTargets).foreach {
       case (_, _: Alias) =>

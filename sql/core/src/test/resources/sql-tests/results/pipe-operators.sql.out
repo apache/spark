@@ -1101,11 +1101,11 @@ struct<x:int,y:string,z:int>
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+set spark.sql.pipeSetAddsMissingColumns.enabled=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.pipeSetRequiresExistingColumns	true
+spark.sql.pipeSetAddsMissingColumns.enabled	false
 
 
 -- !query
@@ -1132,11 +1132,11 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+set spark.sql.pipeSetAddsMissingColumns.enabled=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.pipeSetRequiresExistingColumns	false
+spark.sql.pipeSetAddsMissingColumns.enabled	true
 
 
 -- !query
@@ -1148,11 +1148,11 @@ struct<>
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=true
+set spark.sql.pipeSetAddsMissingColumns.enabled=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.pipeSetRequiresExistingColumns	true
+spark.sql.pipeSetAddsMissingColumns.enabled	false
 
 
 -- !query
@@ -1180,11 +1180,11 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-set spark.sql.legacy.pipeSetRequiresExistingColumns=false
+set spark.sql.pipeSetAddsMissingColumns.enabled=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.pipeSetRequiresExistingColumns	false
+spark.sql.pipeSetAddsMissingColumns.enabled	true
 
 
 -- !query
