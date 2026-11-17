@@ -4723,8 +4723,9 @@ object SQLConf {
         "function references that earlier versions did not detect: an unqualified call to a " +
         "temporary table function, a temporary table function reached through another SQL " +
         "function the body calls, a call through an IDENTIFIER clause, and a `session.` call " +
-        "that a persistent function in a schema named `session` also matches. Such a function " +
-        "fails when called from a session that does not have the temporary function.")
+        "that a persistent function in a schema named `session` also matches. Called from a " +
+        "session without the temporary function, such a function fails, or for the `session.` " +
+        "call, runs the persistent function instead.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

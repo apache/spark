@@ -675,18 +675,25 @@ class SQLFunctionSuite extends SharedSparkSession {
 
   test("SPARK-60805: a temp TVF counts only when resolution binds it") {
     // A same-named temp function does not make a built-in table function call a temp reference.
-    withUserDefinedFunction("perm_range" -> false, "perm_explode" -> false) {
+    withUserDefinedFunction("perm_range" -> false, "perm_explode" -> false, "perm_abs" -> false) {
       try {
         sql("CREATE TEMPORARY FUNCTION range() RETURNS TABLE (a INT) RETURN SELECT 1")
         sql("CREATE TEMPORARY FUNCTION explode(x INT) RETURNS INT RETURN x")
+        sql("CREATE TEMPORARY FUNCTION abs() RETURNS TABLE (a INT) RETURN SELECT 1")
         sql("CREATE FUNCTION perm_range() RETURNS TABLE (id BIGINT) RETURN SELECT * FROM range(3)")
         checkAnswer(sql("SELECT * FROM perm_range()"), Seq(Row(0), Row(1), Row(2)))
         sql("CREATE FUNCTION perm_explode() RETURNS TABLE (col INT) " +
           "RETURN SELECT * FROM explode(array(1, 2))")
         checkAnswer(sql("SELECT * FROM perm_explode()"), Seq(Row(1), Row(2)))
+        // A temp table function does not make a scalar call to the built-in a temp reference.
+        Seq("abs(-1)", "IDENTIFIER('abs')(-1)").foreach { call =>
+          sql(s"CREATE OR REPLACE FUNCTION perm_abs() RETURNS INT RETURN $call")
+          checkAnswer(sql("SELECT perm_abs()"), Row(1))
+        }
       } finally {
         sql("DROP TEMPORARY FUNCTION IF EXISTS range")
         sql("DROP TEMPORARY FUNCTION IF EXISTS explode")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS abs")
       }
     }
     // Nor does it when a persistent function owns the call.

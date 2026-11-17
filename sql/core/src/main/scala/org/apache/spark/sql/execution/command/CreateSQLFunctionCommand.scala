@@ -378,13 +378,13 @@ case class CreateSQLFunctionCommand(
 
     def collectInExpression(expr: Expression): Seq[String] = expr.flatMap {
       case e: SubqueryExpression => collectTempFunctions(e.plan)
-      case e: UnresolvedFunction if isTemporaryFunctionName(catalog, e.nameParts) =>
+      case e: UnresolvedFunction if isTemporaryScalarFunctionName(catalog, e.nameParts) =>
         Seq(e.nameParts.last)
       // An IDENTIFIER-clause call: check the call it builds from its constant name. An unqualified
       // name counts only when the SQL PATH resolves it to the temp function.
       case e: ExpressionWithUnresolvedIdentifier if !legacyTempFunctionCheck =>
         identifierNameParts(analyzer, e.identifierExpr).map(e.exprBuilder(_, e.otherExprs)) match {
-          case Some(f: UnresolvedFunction) if isTemporaryFunctionName(catalog, f.nameParts) &&
+          case Some(f: UnresolvedFunction) if isTemporaryScalarFunctionName(catalog, f.nameParts) &&
               (f.nameParts.length > 1 ||
                 analyzer.unqualifiedFunctionResolvesToTemp(f.nameParts.head)) =>
             Seq(f.nameParts.last)
@@ -405,7 +405,7 @@ case class CreateSQLFunctionCommand(
         case w: UnresolvedWith if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
         // A qualified temp table function call. Resolution's recorded names cover the others.
         case u: UnresolvedTableValuedFunction =>
-          val qualified = if (u.name.length > 1 && isTemporaryFunctionName(catalog, u.name)) {
+          val qualified = if (u.name.length > 1 && isTemporaryTableFunctionName(catalog, u.name)) {
             Seq(u.name.last)
           } else {
             Nil
@@ -444,14 +444,29 @@ case class CreateSQLFunctionCommand(
       case _: AnalysisException => None
     }
 
+  // A same-named temp table function does not count: the scalar call then reaches a built-in or
+  // persistent function, or fails analysis.
+  private def isTemporaryScalarFunctionName(
+      catalog: SessionCatalog,
+      nameParts: Seq[String]): Boolean =
+    isTemporaryFunctionName(catalog, nameParts, catalog.isTemporaryScalarFunctionVisible)
+
+  private def isTemporaryTableFunctionName(
+      catalog: SessionCatalog,
+      nameParts: Seq[String]): Boolean =
+    isTemporaryFunctionName(catalog, nameParts, catalog.isTemporaryTableFunctionVisible)
+
   // Whether `nameParts` (unqualified, or `session.` / `system.session.`-qualified) names a temp
-  // function.
-  private def isTemporaryFunctionName(catalog: SessionCatalog, nameParts: Seq[String]): Boolean =
+  // function that `isTemp` accepts.
+  private def isTemporaryFunctionName(
+      catalog: SessionCatalog,
+      nameParts: Seq[String],
+      isTemp: FunctionIdentifier => Boolean): Boolean =
     nameParts match {
-      case Seq(funcName) => catalog.isTemporaryFunction(FunctionIdentifier(funcName))
+      case Seq(funcName) => isTemp(FunctionIdentifier(funcName))
       // Check the in-memory registry first: the lookup may probe the metastore.
       case _ =>
-        catalog.identifierFromSystemNameParts(nameParts).exists(catalog.isTemporaryFunction) &&
+        catalog.identifierFromSystemNameParts(nameParts).exists(isTemp) &&
           functionIdentifierForLookup(catalog, nameParts).exists(_._2) &&
           // Legacy: earlier versions took a `session.f` call to be the persistent `session.f`
           // whenever that function existed.
