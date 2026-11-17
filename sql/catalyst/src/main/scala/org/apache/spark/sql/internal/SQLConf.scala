@@ -4084,7 +4084,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.kllAggregateDeterministic.enabled")
       .doc("When true, restore the historical deterministic classification of KLL sketch and " +
         "merge aggregates during analysis and batch optimization. This can duplicate randomized " +
-        "CTE evaluations or share independent aggregates. Streaming optimization instead uses " +
+        "CTE evaluations or share independent aggregates. Micro-batch optimization instead uses " +
         "the sharing mode recorded in its checkpoint.")
       .version("4.4.0")
       .booleanConf

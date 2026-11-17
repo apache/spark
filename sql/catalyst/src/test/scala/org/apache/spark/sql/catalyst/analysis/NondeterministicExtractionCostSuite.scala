@@ -129,4 +129,69 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     val large = Seq.fill(3)(allocation(512)).min
     assert(large < small * 8, s"128=$small bytes,512=$large bytes")
   }
+
+  test("growing identity keys bound hashing work during map consumption") {
+    Seq(64, 128, 256).foreach { width =>
+      val hashes = new AtomicInteger
+      val query = OneRowRelation().select(Rand(0).as("n"))
+      val nodes = (1 to width).scanLeft[Expression](Literal(0D)) { (child, i) =>
+        val id = new ExprId(i.toLong, NamedExpression.newExprId.jvmId) {
+          override def equals(other: Any): Boolean = super.equals(other)
+          override def hashCode(): Int = {
+            hashes.incrementAndGet()
+            super.hashCode()
+          }
+        }
+        Subtract(child, ScalarSubquery(query, exprId = id))
+      }
+      nodes.last.treePatternBits
+      nodes.foreach(_.canonicalized)
+      nodes.foreach(_.deterministic)
+      hashes.set(0)
+      val keys = new NondeterministicExpressionCollection.ExpressionKeys
+      val map = new java.util.HashMap[Any, Expression]
+      nodes.foreach(node => map.put(keys(node), node))
+      nodes.foreach(node => assert(map.get(keys(node)) eq node))
+      assert(hashes.get <= width * 8, s"width=$width hashes=${hashes.get}")
+    }
+  }
+
+  test("accepted nested IN operands share validity work within aggregate extraction") {
+    Seq(32, 64, 128).foreach { depth =>
+      val visits = new AtomicInteger
+      val value = $"value".long
+      val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+      val query = ListQuery(OneRowRelation().groupBy()(
+        (KllSketchGetNBigint(aggregate) > Literal(0L)).as("b")), numCols = 1)
+      val expression = (1 to depth).foldLeft[Expression](Literal.TrueLiteral) { (child, i) =>
+        val in = InSubquery(Seq(child), query.copy(exprId = NamedExpression.newExprId))
+        Counted(if (i % 2 == 0) Not(in) else in, visits)
+      }
+      val plan = LocalRelation(value).groupBy()(count(expression).as("n"))
+      plan.treePatternBits
+      expression.deterministic
+      expression.canonicalized
+      visits.set(0)
+      PullOutNondeterministic(plan)
+      assert(visits.get <= depth * 100, s"depth=$depth visits=${visits.get}")
+    }
+  }
+
+  test("identity key equality separates ordered identities despite hash collisions") {
+    val first = ExprId(0L)
+    val second = ExprId(4294967297L)
+    assert(first.hashCode() == second.hashCode())
+    val query = OneRowRelation().select(Rand(0).as("n"))
+    val a = ScalarSubquery(query, exprId = first)
+    val b = ScalarSubquery(query, exprId = second)
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    val forward = keys(Subtract(a, b))
+    val backward = keys(Subtract(b, a))
+    assert(forward.hashCode() == backward.hashCode())
+    assert(forward != backward)
+    val map = Map(forward -> 1, backward -> 2)
+    assert(map(keys(Subtract(a.copy(), b.copy()))) == 1)
+    assert(map(keys(Subtract(b.copy(), a.copy()))) == 2)
+    assert(keys(Literal(1))._2.size == 0)
+  }
 }

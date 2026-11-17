@@ -192,8 +192,10 @@ class IncrementalExecution(
           input: LogicalPlan,
           independentOnly: Boolean): (LogicalPlan, MutableMap[ExprId, Expression]) = {
         val bindings = MutableMap.empty[ExprId, Expression]
-        def restore(expression: Expression): Expression = expression.transformDown {
-          case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
+        def restore(expression: Expression): Expression = {
+          if (bindings.isEmpty) expression else expression.transformDown {
+            case a: Attribute if bindings.contains(a.exprId) => bindings(a.exprId)
+          }
         }
         def visit(plan: LogicalPlan): LogicalPlan = plan match {
           case project: Project =>
@@ -203,8 +205,7 @@ class IncrementalExecution(
               case original =>
                 val expression = restore(original).asInstanceOf[NamedExpression]
                 expression match {
-                  case alias: Alias if alias.containsTag(
-                      NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
+                  case alias: Alias if alias.isNondeterministicSubqueryBinding &&
                       alias.child.deterministic &&
                       (!independentOnly || alias.child.references.isEmpty) =>
                     bindings(alias.exprId) = alias.child

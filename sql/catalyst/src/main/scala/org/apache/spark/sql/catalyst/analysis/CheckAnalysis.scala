@@ -838,6 +838,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map.empty)
 
           case a: Aggregate =>
+            // Report invalid aggregate grouping expressions before the extraction invariant.
+            ExprUtils.assertValidAggregation(a)
             a.groupingExpressions.foreach(
               expression =>
                 if (!expression.deterministic) {
@@ -849,8 +851,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                   )
                 }
             )
-            ExprUtils.assertValidAggregation(a)
-
           case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
               operator.failAnalysis(
@@ -1185,8 +1185,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "dataType" -> toSQLType(fileExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !(o.isInstanceOf[Join] && o.expressions.forall(
-              ExprUtils.isDeterministicAfterPredicateSubqueryRewrite)) &&
+            !ValidateSubqueryExpression.allowsNondeterministicJoinSubqueries(o) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
             // non-deterministic expressions inside CollectMetrics have been

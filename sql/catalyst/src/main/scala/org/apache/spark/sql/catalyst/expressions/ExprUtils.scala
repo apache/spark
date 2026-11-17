@@ -193,7 +193,9 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
   }
 
   private[sql] def isDeterministicAfterSubqueryExtraction(
-      expression: Expression): Boolean = {
+      expression: Expression): Boolean = new SubqueryExtractionDeterminism().apply(expression)
+
+  private[sql] final class SubqueryExtractionDeterminism {
     // Function resolution and the single-pass analyzer validate before the post hoc extraction.
     // Rewrite each expression once. A recursive transform at each IN operand would walk
     // rejected descendants again even if their Boolean result had already been memoized.
@@ -213,7 +215,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       checked.put(expr, result)
       result
     }
-    rewritten(expression).deterministic
+    def apply(expression: Expression): Boolean = rewritten(expression).deterministic
   }
 
   private[sql] def isDeterministicAfterPredicateSubqueryRewrite(expression: Expression): Boolean = {

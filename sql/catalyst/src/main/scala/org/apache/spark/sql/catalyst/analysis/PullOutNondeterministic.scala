@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -37,6 +37,12 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
     case p if !p.resolved => p // Skip unresolved nodes.
     case p: Project => p
     case f: Filter => f
+
+    // Let ordinary aggregate validation report the original invalid grouping expression.
+    case a: Aggregate if a.groupingExpressions.exists(_.exists {
+        case _: AggregateExpression | _: AggregateFunction => true
+        case _ => false
+      }) => a
 
     case a: Aggregate =>
       val expressionsToExtract = a.groupingExpressions ++ nondeterministicSubqueriesInInputs(a)
@@ -95,8 +101,11 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
       val keys = new NondeterministicExpressionCollection.ExpressionKeys
       val nondeterToAttr =
         NondeterministicExpressionCollection.getNondeterministicToAttributes(scalars, keys)
-      val leftBindings = mutable.LinkedHashMap.empty[(Expression, Seq[ExprId]), NamedExpression]
-      val rightBindings = mutable.LinkedHashMap.empty[(Expression, Seq[ExprId]), NamedExpression]
+      val leftBindings = mutable.LinkedHashMap.empty[
+        NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
+      val rightBindings = mutable.LinkedHashMap.empty[
+        NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
+      val uses = mutable.HashMap.empty[ExprId, AttributeSet]
       val rightOutput = join.right.outputSet
       def rewrite(expression: Expression, references: AttributeSet): Expression = expression match {
         case scalar: ScalarSubquery if nondeterToAttr.containsKey(keys(scalar)) =>
@@ -104,13 +113,20 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
           val side = if (references.nonEmpty && references.subsetOf(rightOutput)) {
             rightBindings
           } else leftBindings
-          side.getOrElseUpdate(key, {
+          val binding = side.getOrElseUpdate(key, {
             // One scalar identity may occur in both equi-key operands. Keep attributes local to
             // each input while preserving the scalar's original identity and physical reuse policy.
             val alias = nondeterToAttr.get(key).newInstance()
             alias.copyTagsFrom(nondeterToAttr.get(key))
             alias
-          }).toAttribute
+          })
+          uses.get(binding.exprId) match {
+            case Some(previous) if !(previous eq references) =>
+              uses(binding.exprId) = previous ++ references
+            case None => uses(binding.exprId) = references
+            case _ =>
+          }
+          binding.toAttribute
         case comparison: BinaryComparison =>
           comparison.mapChildren { operand =>
             val local = operand.references
@@ -125,8 +141,22 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
           rewrite(conjunct, conjunct.references)
         }.reduceLeft(And)
       }
-      def project(child: LogicalPlan, bindings: Iterable[NamedExpression]): LogicalPlan =
-        if (bindings.isEmpty) child else Project(child.output ++ bindings.toSeq, child)
+      def project(child: LogicalPlan, bindings: Iterable[NamedExpression]): LogicalPlan = {
+        if (bindings.isEmpty) child else child match {
+          // Independent scalars can be attached within an unhinted inner component. Keeping
+          // its relations visible lets both join-ordering rules choose selective joins first.
+          case inner: Join
+              if inner.joinType.isInstanceOf[org.apache.spark.sql.catalyst.plans.InnerLike]
+              && inner.hint == JoinHint.NONE =>
+            val rightOutput = inner.right.outputSet
+            val (right, left) = bindings.partition { binding =>
+              val references = uses(binding.exprId)
+              references.nonEmpty && references.subsetOf(rightOutput)
+            }
+            inner.copy(left = project(inner.left, left), right = project(inner.right, right))
+          case _ => Project(child.output ++ bindings.toSeq, child)
+        }
+      }
       Project(join.output, join.copy(left = project(join.left, leftBindings.values),
         right = project(join.right, rightBindings.values), condition = condition))
 
@@ -155,33 +185,40 @@ object PullOutNondeterministic extends Rule[LogicalPlan] with PredicateHelper {
 
   private def nondeterministicSubqueriesInInputs(
       aggregate: Aggregate): Seq[Expression] = {
+    val deterministic = new ExprUtils.SubqueryExtractionDeterminism
     // Only complete subquery expressions may be extracted. Direct nondeterministic
     // inputs, such as rand() and nondeterministic UDFs, must retain their validation errors.
     aggregate.aggregateExpressions
       .flatMap(_.collect { case expression: AggregateExpression => expression })
       .flatMap(expression => expression.aggregateFunction.children ++ expression.filter.toSeq)
       // Retain invalid direct-random arguments verbatim for the original error rendering.
-      .filter(ExprUtils.isDeterministicAfterSubqueryExtraction)
+      .filter(deterministic.apply)
       .flatMap(_.collect {
         case scalar: ScalarSubquery if !scalar.deterministic => scalar
         case exists: Exists if !exists.deterministic => exists
         case not @ Not(in: InSubquery)
             if !in.deterministic &&
-              in.values.forall(ExprUtils.isDeterministicAfterSubqueryExtraction) => not
+              in.values.forall(deterministic.apply) => not
         case in: InSubquery if !in.deterministic &&
-            in.values.forall(ExprUtils.isDeterministicAfterSubqueryExtraction) => in
+            in.values.forall(deterministic.apply) => in
       })
   }
 
   private def validateNondeterministicSubqueries(
       plan: LogicalPlan,
       expressions: Seq[Expression]): Unit = {
-    expressions.foreach(_.foreach {
-      // Moving a correlated scalar into a Project must not bypass its original host's
-      // restrictions, including grouping-only correlated scalar subqueries.
-      case subquery: SubqueryExpression if !subquery.deterministic =>
-        ValidateSubqueryExpression(plan, subquery)
-      case _ =>
-    })
+    val visited = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
+    def validate(expression: Expression): Unit = {
+      if (visited.put(expression, true) == null) {
+        expression match {
+          // Extraction must retain the restrictions of the subquery's original host.
+          case subquery: SubqueryExpression if !subquery.deterministic =>
+            ValidateSubqueryExpression(plan, subquery)
+          case _ =>
+        }
+        expression.children.foreach(validate)
+      }
+    }
+    expressions.foreach(validate)
   }
 }

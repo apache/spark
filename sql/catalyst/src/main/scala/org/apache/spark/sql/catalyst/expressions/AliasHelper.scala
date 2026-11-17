@@ -195,7 +195,8 @@ trait AliasHelper {
         exprId = alias.exprId,
         qualifier = alias.qualifier,
         explicitMetadata = explicitMetadata,
-        nonInheritableMetadataKeys = nonInheritableMetadataKeys)
+        nonInheritableMetadataKeys = nonInheritableMetadataKeys,
+        nondeterministicSubqueryOrigin = alias.nondeterministicSubqueryOrigin)
     }
     res.copyTagsFrom(alias)
     res

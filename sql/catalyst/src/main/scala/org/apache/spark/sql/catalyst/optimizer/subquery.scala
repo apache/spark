@@ -544,6 +544,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 
    // Returns true if 'query' is guaranteed to return at most 1 row.
    private def guaranteedToReturnOneRow(query: LogicalPlan): Boolean = {
+     query match {
+       case scope: WithCTE => return guaranteedToReturnOneRow(scope.plan)
+       case _ =>
+     }
      if (query.maxRows.exists(_ <= 1)) {
        return true
      }
@@ -610,7 +614,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // constructLeftJoins is an optimization, so that additional, redundant left outer joins are
         // not introduced.
         val handleCountBugInDecorrelate = SQLConf.get.decorrelateInnerQueryEnabled &&
-          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !({
+          @scala.annotation.tailrec
+          def body(plan: LogicalPlan): LogicalPlan = plan match {
+            case scope: WithCTE => body(scope.plan)
+            case other => other
+          }
+          body(sub) match {
           // Handle count bug only if there exists lower level Aggs with count bugs. It does not
           // matter if the top level agg is count bug vulnerable or not, because:
           // 1. If the top level agg is count bug vulnerable, it can be handled in
@@ -623,6 +633,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
             case _ => false
           }
           case _ => false
+          }
         })
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
         val mayHaveCountBug = if (mayHaveCountBugOld.isDefined) {
@@ -795,6 +806,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
     def evalPlan(lp : LogicalPlan) : Map[ExprId, Expression] = lp match {
+      case scope: WithCTE => evalPlan(scope.plan)
       case SubqueryAlias(_, child) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
@@ -859,6 +871,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     var bottomPart: LogicalPlan = plan
     while (true) {
       bottomPart match {
+        case scope: WithCTE =>
+          topPart += scope
+          bottomPart = scope.plan
         case havingPart @ Filter(_, aggPart: Aggregate) =>
           return (topPart.toSeq, Option(havingPart), Some(aggPart))
 
@@ -973,10 +988,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
               // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
               // Need to modify any operators below the join to pass through all columns
               // referenced in the HAVING clause.
-              var subqueryRoot: UnaryNode = aggregate
+              var subqueryRoot: LogicalPlan = aggregate
               val havingInputs: Seq[NamedExpression] = aggregate.output
 
               topPart.reverse.foreach {
+                case scope: WithCTE => subqueryRoot = scope.withNewPlan(subqueryRoot)
                 case Project(projList, _) =>
                   subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
                 case s@SubqueryAlias(alias, _) =>

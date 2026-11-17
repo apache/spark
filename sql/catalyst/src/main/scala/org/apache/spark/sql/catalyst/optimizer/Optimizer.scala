@@ -1987,7 +1987,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
             exprId = newAlias.exprId,
             qualifier = newAlias.qualifier,
             explicitMetadata = Some(alias.metadata),
-            nonInheritableMetadataKeys = newAlias.nonInheritableMetadataKeys
+            nonInheritableMetadataKeys = newAlias.nonInheritableMetadataKeys,
+            nondeterministicSubqueryOrigin = newAlias.nondeterministicSubqueryOrigin
           )
           case other => other
         }
@@ -2637,12 +2638,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
   private def isAggregateScalarBinding(expression: NamedExpression): Boolean = expression match {
-    case alias: Alias if alias.containsTag(
-        NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) &&
+    case alias: Alias if alias.isNondeterministicSubqueryBinding &&
         ExprUtils.isDeterministicAfterSubqueryExtraction(alias.child) =>
       def retainedAggregate(plan: LogicalPlan): Boolean = plan.exists {
-        case aggregate: Aggregate if aggregate.groupingExpressions.isEmpty &&
-            aggregate.aggregateExpressions.exists(_.exists {
+        case aggregate: Aggregate if aggregate.aggregateExpressions.exists(_.exists {
               case expression: AggregateExpression => !expression.deterministic
               case _ => false
             }) => true
@@ -2794,7 +2793,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // stays up is not pushed, though (see `splitPushable`). This includes a predicate over a
     // throwable alias of the aggregate.
     case filter @ Filter(condition, aggregate: Aggregate)
-      if aggregate.aggregateExpressions.forall(_.deterministic)
+      if aggregate.aggregateExpressions.forall(
+          ValidateSubqueryExpression.deterministicWithoutKllRandomness)
         && aggregate.groupingExpressions.nonEmpty =>
       val (pushDown, stayUp) = pushBelowAggregate(splitConjunctivePredicates(condition), aggregate)
 

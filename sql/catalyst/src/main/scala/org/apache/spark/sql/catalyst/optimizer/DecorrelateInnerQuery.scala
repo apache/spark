@@ -1122,6 +1122,11 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newGenerate = g.copy(generator = newGenerator, child = newChild)
             (newGenerate, joinCond, outerReferenceMap)
 
+          case scope: WithCTE if scope.cteDefs.forall(!hasOuterReferences(_)) =>
+            val (body, joinCond, outerReferenceMap) =
+              decorrelate(scope.plan, parentOuterReferences, aggregated, underSetOp)
+            (scope.withNewPlan(body), joinCond, outerReferenceMap)
+
           case u: UnaryNode =>
             val outerReferences = collectOuterReferences(u.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in $u")

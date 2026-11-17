@@ -27,8 +27,206 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+
+  test("KLL ASOF ON scalars retain analyzer parity") {
+    for (singlePass <- Seq(false, true); valueType <- Seq("bigint", "float", "double");
+        merge <- Seq(false, true)) {
+      val sketch = s"kll_sketch_agg_$valueType(CAST(id AS $valueType))"
+      val aggregate = if (merge) s"kll_merge_agg_$valueType(s)" else sketch
+      val values = "VALUES (0), (1), (2) AS input(id)"
+      val from = if (merge) s"(SELECT $sketch AS s FROM $values GROUP BY id)" else values
+      val count = s"(SELECT kll_sketch_get_n_$valueType($aggregate) FROM $from)"
+      withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val query = sql(s"""SELECT l.k, r.k FROM VALUES (3), (4) AS l(k)
+            |ASOF JOIN VALUES (0), (1) AS r(k) MATCH_CONDITION (l.k >= r.k)
+            |ON l.k = r.k + $count""".stripMargin)
+        QueryTest.checkAnswer(query, Seq(Row(3, 0), Row(4, 1)), checkToRDD = false)
+      }
+    }
+  }
+
+  test("Boolean short circuiting retains conditional random UDF dependencies") {
+    withUserDefinedFunction("bool_identity" -> true) {
+      spark.udf.register("bool_identity", (b: Boolean) => b)
+      for (codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN");
+          condition <- Seq(
+            "id = 0 OR array_contains(shuffle(array(1D / id, 2D)), 2D)",
+            "id <> 0 AND array_contains(shuffle(array(1D / id, 2D)), 2D)")) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+            SQLConf.ANSI_ENABLED.key -> "true") {
+          val query = sql(s"""SELECT count(*) FROM range(2)
+              |GROUP BY bool_identity($condition)""".stripMargin)
+          val expected = if (condition.startsWith("id =")) Seq(Row(2L))
+            else Seq(Row(1L), Row(1L))
+          checkAnswer(query, expected)
+        }
+      }
+    }
+  }
+
+  test("KLL-only correlated lateral queries retain per-key results") {
+    for (legacy <- Seq(true, false); valueType <- Seq("bigint", "float", "double");
+        merge <- Seq(false, true)) {
+      withSQLConf("spark.sql.legacy.kllAggregateDeterministic.enabled" -> legacy.toString) {
+        val sketch = s"kll_sketch_agg_$valueType(CAST(i.id AS $valueType))"
+        val aggregate = if (merge) s"kll_merge_agg_$valueType(s)" else sketch
+        val values = "VALUES (0), (1) AS i(id) WHERE i.id = o.id"
+        val from = if (merge) s"(SELECT $sketch AS s FROM $values GROUP BY i.id)" else values
+        checkAnswer(sql(s"""SELECT o.id, q.n FROM VALUES (0), (0), (1), (9) AS o(id),
+            |LATERAL (SELECT kll_sketch_get_n_$valueType($aggregate) AS n
+            |FROM $from) q""".stripMargin),
+          Seq(Row(0, 1L), Row(0, 1L), Row(1, 1L), Row(9, 0L)))
+      }
+    }
+    val outer = spark.range(2).as("o")
+    val inner = spark.range(2).toDF().as("i").where($"i.id" === $"o.id".outer())
+      .select(expr("kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))").as("n"))
+    checkAnswer(outer.lateralJoin(inner), Seq(Row(0L, 1L), Row(1L, 1L)))
+  }
+
+  test("conditional Boolean UDF grouping preserves seeded draw and NULL behavior") {
+    withUserDefinedFunction("nullable_bool_identity" -> true) {
+      spark.udf.register("nullable_bool_identity", (b: java.lang.Boolean) => b)
+      for (codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN"); operator <- Seq("AND", "OR")) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val left = "CASE WHEN id % 3 = 0 THEN CAST(NULL AS BOOLEAN) ELSE id % 2 = 0 END"
+          val expression = s"nullable_bool_identity(($left) $operator (rand(7) > 0.5))"
+          val expected = spark.range(0, 128, 1, 1).selectExpr(s"$expression AS b")
+            .groupBy("b").count().collect().toSeq
+          checkAnswer(sql(s"""SELECT $expression, count(*) FROM range(0, 128, 1, 1)
+              |GROUP BY 1""".stripMargin), expected)
+        }
+      }
+    }
+  }
+
+  test("compiler KLL bindings retain throwable conjunct ordering") {
+    checkAnswer(sql(s"""SELECT id, $scalar AS n, count(*)
+        |FROM VALUES (0), (4) AS t(id) GROUP BY 1, 2
+        |HAVING n < id AND IF(id = 0, raise_error('bad row'), id) > 0""".stripMargin),
+      Row(4, 3L, 1L))
+  }
+
+  test("correlated scalars retain independent KLL CTE scopes") {
+    for (legacy <- Seq(true, false);
+        (aggregate, having, unmatched, matched) <- Seq(
+          ("max(a.n + b.n)", "", null, 12L),
+          ("sum(a.n + b.n)", "", null, 12L),
+          ("count(*)", "", 0L, 1L),
+          ("count(*)", "HAVING count(*) > 0", null, 1L),
+          ("count(*)", "HAVING count(*) = 0", 0L, null))) {
+      withSQLConf("spark.sql.legacy.kllAggregateDeterministic.enabled" -> legacy.toString) {
+        checkAnswer(sql(s"""SELECT o.id, (WITH c AS
+            |(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS n FROM range(3)),
+            |d AS (SELECT a.n + b.n AS n FROM c a CROSS JOIN c b)
+            |SELECT $aggregate FROM d a CROSS JOIN d b WHERE a.n = o.id $having) AS n
+            |FROM VALUES (0), (6) AS o(id)""".stripMargin),
+          Seq(Row(0, unmatched), Row(6, matched)))
+      }
+    }
+  }
+
+  test("invalid direct KLL grouping retains a structured diagnostic") {
+    for (valueType <- Seq("bigint", "float", "double"); merge <- Seq(false, true);
+        wrapped <- Seq(false, true)) {
+      val sketch = s"kll_sketch_agg_$valueType(CAST(id AS $valueType))"
+      val aggregate = if (merge) s"kll_merge_agg_$valueType(s)" else sketch
+      val from = if (merge) s"(SELECT $sketch AS s FROM range(3) GROUP BY id)" else "range(3)"
+      val grouping = if (wrapped) s"kll_sketch_get_n_$valueType($aggregate)" else aggregate
+      val error = intercept[AnalysisException] {
+        sql(s"SELECT count(*) FROM $from GROUP BY $grouping").collect()
+      }
+      assert(error.getCondition == "GROUP_BY_AGGREGATE", error.toString)
+    }
+  }
+
+  test("KLL scalar placement keeps a selective inner join ahead of a Cartesian product") {
+    withTempView("kll_a", "kll_b", "kll_c") {
+      spark.sparkContext.parallelize(0L until 100L).toDF("id")
+        .createOrReplaceTempView("kll_a")
+      spark.sparkContext.parallelize(0L until 100L).toDF("id")
+        .createOrReplaceTempView("kll_b")
+      spark.sparkContext.parallelize(Seq(3L)).toDF("id")
+        .createOrReplaceTempView("kll_c")
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val query = sql(s"""SELECT a.id, b.id FROM kll_a a CROSS JOIN kll_b b
+            |JOIN kll_c c ON a.id = c.id AND b.id + $scalar = c.id""".stripMargin)
+        assert(!query.queryExecution.executedPlan.exists(_.nodeName == "CartesianProduct"),
+          query.queryExecution.toString)
+        checkAnswer(query, Row(3L, 0L))
+      }
+    }
+  }
+
+  test("KLL scalar placement keeps a conditional join component visible to CBO") {
+    withTempView("kll_cbo_a", "kll_cbo_b", "kll_cbo_c") {
+      val a = spark.sparkContext.parallelize(0L until 100L).toDF("a_key").cache()
+      val b = spark.sparkContext.parallelize((0L until 1000L).map(i => (i, i % 100)))
+        .toDF("b_id", "b_key").cache()
+      val c = spark.sparkContext.parallelize(Seq(3L)).toDF("c_key").cache()
+      try {
+        a.count()
+        b.count()
+        c.count()
+        a.createOrReplaceTempView("kll_cbo_a")
+        b.createOrReplaceTempView("kll_cbo_b")
+        c.createOrReplaceTempView("kll_cbo_c")
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "true",
+            SQLConf.JOIN_REORDER_ENABLED.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          val query = sql(s"""SELECT a_key, b_id FROM kll_cbo_a
+              |JOIN kll_cbo_b ON a_key = b_key
+              |JOIN kll_cbo_c ON b_id + $scalar = c_key""".stripMargin)
+          assert(query.queryExecution.optimizedPlan.exists {
+            case join: org.apache.spark.sql.catalyst.plans.logical.Join =>
+              val names = join.output.map(_.name).toSet
+              names.contains("b_id") && names.contains("c_key") && !names.contains("a_key")
+            case _ => false
+          }, query.queryExecution.toString)
+          checkAnswer(query, Row(0L, 0L))
+        }
+      } finally {
+        a.unpersist()
+        b.unpersist()
+        c.unpersist()
+      }
+    }
+  }
+
+  for (groupedScalar <- Seq(false, true)) {
+    test(s"KLL aggregates retain selective pruning: groupedScalar=$groupedScalar") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+        withTempPath { path =>
+          spark.range(8).selectExpr("id", "CAST(id % 2 AS INT) AS p")
+            .write.partitionBy("p").parquet(path.getAbsolutePath)
+          withTempView("kll_pruning") {
+            spark.read.parquet(path.getAbsolutePath).createOrReplaceTempView("kll_pruning")
+            val grouped = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+                |FROM range(6) GROUP BY id % 2 LIMIT 1)""".stripMargin
+            val queryText = if (groupedScalar) {
+              s"SELECT p, count(*) FROM kll_pruning GROUP BY p, $grouped HAVING p = 1"
+            } else {
+              "SELECT p, kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) " +
+                "FROM kll_pruning GROUP BY p HAVING p = 1"
+            }
+            val query = sql(queryText)
+            val scans = query.queryExecution.sparkPlan.collect { case s: FileSourceScanExec => s }
+            assert(scans.size == 1)
+            assert(scans.head.selectedPartitions.filePartitionIterator
+              .map(_.values.getInt(0)).toSet == Set(1), query.queryExecution.toString)
+            checkAnswer(query, Row(1, 4L))
+          }
+        }
+      }
+    }
+  }
 
   test("extracted UDFs preserve conditional nondeterministic evaluation") {
     val first = udf((a: Seq[Double]) => a.head)

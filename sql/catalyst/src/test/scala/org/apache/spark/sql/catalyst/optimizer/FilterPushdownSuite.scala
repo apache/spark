@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import java.util.UUID
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NondeterministicExpressionCollection}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -72,10 +72,8 @@ class FilterPushdownSuite extends PlanTest {
     val prunableAggregate = ScalarSubquery(scalar.plan.select(Rand(0).as("n")))
     for (expression <- Seq[Expression](scalar, randomScalar, prunableAggregate, Rand(0));
         generated <- Seq(false, true)) {
-      val binding = Alias(expression, "s")()
-      if (generated) {
-        binding.setTagValue(NondeterministicExpressionCollection.EXTRACTED_SUBQUERY, ())
-      }
+      val alias = Alias(expression, "s")()
+      val binding = if (generated) alias.asNondeterministicSubqueryBinding else alias
       val project = Project(testRelation.output :+ binding, testRelation)
       val condition = attrA > Literal(1)
       val plan = Filter(condition, project)
@@ -86,6 +84,12 @@ class FilterPushdownSuite extends PlanTest {
       comparePlans(actual, expected)
       val consuming = Filter(binding.toAttribute > Cast(Literal(1), expression.dataType), project)
       comparePlans(PushPredicateThroughNonJoin(consuming), consuming)
+      if (generated && (expression eq scalar)) {
+        val throwing = attrA > Literal(5) || IsNull(RaiseError(Literal("boom")))
+        assert(throwing.throwable)
+        val guarded = Filter(binding.toAttribute < Literal(0L) && throwing, project)
+        comparePlans(PushPredicateThroughNonJoin(guarded), guarded)
+      }
     }
   }
 

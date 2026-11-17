@@ -200,7 +200,7 @@ object ValidateSubqueryExpression
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1) &&
-            (expr.isCorrelated || !deterministicWithoutKllRandomness(expr.plan))) {
+            !deterministicWithoutKllRandomness(expr.plan)) {
           cleanQueryInScalarSubquery(join.right.plan) match {
             // Python UDTFs are by default non-deterministic. They are constructed as a
             // OneRowRelation subquery and can be rewritten by the optimizer without
@@ -244,6 +244,19 @@ object ValidateSubqueryExpression
     }
   }
 
+  private[analysis] def allowsNondeterministicJoinSubqueries(operator: LogicalPlan): Boolean =
+    operator match {
+      case join: Join => join.expressions.forall(
+        ExprUtils.isDeterministicAfterPredicateSubqueryRewrite)
+      case join: AsOfJoin =>
+        join.copy(condition = None).expressions.forall(_.deterministic) &&
+          join.condition.forall(_.transformDown {
+            case scalar: ScalarSubquery if isIndependentKllScalar(scalar) =>
+              Literal.default(scalar.dataType)
+          }.deterministic)
+      case _ => false
+    }
+
   // An independent KLL relation was accepted before its implicit randomness was exposed.
   // Inspect copies only; direct row randomness and crossing lateral references retain the guard.
   private[sql] def isIndependentKllScalar(scalar: ScalarSubquery): Boolean = {
@@ -254,16 +267,24 @@ object ValidateSubqueryExpression
     !query.deterministic && !query.isCorrelated && deterministicWithoutKllRandomness(query.plan)
   }
 
+  private val legacyKll: PartialFunction[Expression, Expression] = {
+    case k: KllSketchAggBigint => k.copy(legacyDeterministic = true)
+    case k: KllSketchAggFloat => k.copy(legacyDeterministic = true)
+    case k: KllSketchAggDouble => k.copy(legacyDeterministic = true)
+    case k: KllMergeAggBigint => k.copy(legacyDeterministic = true)
+    case k: KllMergeAggFloat => k.copy(legacyDeterministic = true)
+    case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
+  }
+
+  private[sql] def deterministicWithoutKllRandomness(expression: Expression): Boolean = {
+    expression.deterministic || AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      expression.transformDown(legacyKll).deterministic
+    }
+  }
+
   private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      plan.transformAllExpressionsWithSubqueries {
-        case k: KllSketchAggBigint => k.copy(legacyDeterministic = true)
-        case k: KllSketchAggFloat => k.copy(legacyDeterministic = true)
-        case k: KllSketchAggDouble => k.copy(legacyDeterministic = true)
-        case k: KllMergeAggBigint => k.copy(legacyDeterministic = true)
-        case k: KllMergeAggFloat => k.copy(legacyDeterministic = true)
-        case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
-      }.deterministic
+      plan.transformAllExpressionsWithSubqueries(legacyKll).deterministic
     }
   }
 

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, OneRowRelation, Project, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan, OneRowRelation, Project, RepartitionByExpression}
 import org.apache.spark.sql.types.{BinaryType, DoubleType}
 
 /**
@@ -33,27 +33,34 @@ class PullOutNondeterministicSuite extends AnalysisTest {
   test("checkpoint preparation reconciles compiler provenance by binding identity") {
     val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
     val original = PullOutNondeterministic(r.groupBy(scalar)(count(Literal(1)).as("n")))
-    val tagged = original.collect { case project: Project => project.projectList.collect {
-      case alias: Alias if alias.containsTag(
-          NondeterministicExpressionCollection.EXTRACTED_SUBQUERY) => alias
-    }}.flatten
-    assert(tagged.nonEmpty)
-    val generated = tagged.head
+    def aliases(plan: LogicalPlan): Seq[Alias] = plan.collect {
+      case project: Project => project.projectList.collect { case alias: Alias => alias }
+    }.flatten
+    val generated = aliases(original).find(_.isNondeterministicSubqueryBinding).get
     val user = Alias(generated.child, generated.name)()
     val prepared = original.transformAllExpressionsWithSubqueries {
       case alias: Alias => Alias(alias.child, alias.name)(alias.exprId, alias.qualifier,
         alias.explicitMetadata, alias.nonInheritableMetadataKeys)
     }
+    assert(aliases(prepared).forall(!_.isNondeterministicSubqueryBinding))
+    assert(generated.isNondeterministicSubqueryBinding)
     val withUser = Project(prepared.output :+ user, prepared)
     val reconciled =
       NondeterministicExpressionCollection.restoreBindingProvenance(original, withUser)
-    val aliases = reconciled.collect { case project: Project => project.projectList.collect {
-      case alias: Alias => alias
-    }}.flatten
-    assert(aliases.find(_.exprId == generated.exprId).get.containsTag(
-      NondeterministicExpressionCollection.EXTRACTED_SUBQUERY))
-    assert(!aliases.find(_.exprId == user.exprId).get.containsTag(
-      NondeterministicExpressionCollection.EXTRACTED_SUBQUERY))
+    assert(aliases(reconciled).find(_.exprId == generated.exprId).get
+      .isNondeterministicSubqueryBinding)
+    assert(!aliases(reconciled).find(_.exprId == user.exprId).get
+      .isNondeterministicSubqueryBinding)
+    assert(reconciled.schema == withUser.schema)
+    assert(reconciled.canonicalized == withUser.canonicalized)
+    assert(generated.clone().asInstanceOf[Alias].isNondeterministicSubqueryBinding)
+    assert(generated.withNewChild(generated.child).isNondeterministicSubqueryBinding)
+    assert(generated.withExprId(NamedExpression.newExprId).isNondeterministicSubqueryBinding)
+    assert(generated.newInstance().asInstanceOf[Alias].isNondeterministicSubqueryBinding)
+    assert(generated.withName("copy").asInstanceOf[Alias].isNondeterministicSubqueryBinding)
+    assert(generated.canonicalized == Alias(generated.child, generated.name)(generated.exprId)
+      .canonicalized)
+    assert(!Alias(generated.toAttribute, generated.name)().isNondeterministicSubqueryBinding)
   }
 
   private lazy val a = $"a".int

@@ -4486,17 +4486,19 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
-  test("kll lateral extraction retains row randomness and correlation restrictions") {
+  test("kll lateral extraction retains direct row randomness restrictions") {
     val query = """SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS n
         |FROM VALUES (0), (1), (2) AS i(id)""".stripMargin
     Seq(s"SELECT n + rand() FROM ($query)",
-      s"SELECT n FROM ($query) WHERE n = o.id").foreach { lateral =>
+      s"SELECT n + rand() FROM ($query) WHERE n = o.id").foreach { lateral =>
       val error = intercept[AnalysisException] {
         sql(s"SELECT * FROM VALUES (0), (1) AS o(id), LATERAL ($lateral) l")
       }
       assert(error.getCondition ==
         "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES")
     }
+    checkAnswer(sql(s"""SELECT * FROM VALUES (3), (9) AS o(id),
+        |LATERAL (SELECT n FROM ($query) WHERE n = o.id) l""".stripMargin), Row(3, 3L))
   }
 
   test("kll scalar extraction retains direct randomness restrictions") {
