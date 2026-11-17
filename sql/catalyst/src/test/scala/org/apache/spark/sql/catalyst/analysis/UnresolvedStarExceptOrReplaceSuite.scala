@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 /**
  * Tests [[UnresolvedStarExceptOrReplace]] with `appendMissingReplacements` on a node that holds
- * several EXCEPT names. Pipe `|> SET` builds one node per assignment, so SQL tests only reach the
+ * several EXCEPT names. Pipe `|> EVAL` builds one node per assignment, so SQL tests only reach the
  * single-name case.
  */
 class UnresolvedStarExceptOrReplaceSuite extends SparkFunSuite {

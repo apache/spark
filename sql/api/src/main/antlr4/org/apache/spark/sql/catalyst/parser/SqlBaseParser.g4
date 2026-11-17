@@ -85,7 +85,10 @@ options { tokenVocab = SqlBaseLexer; }
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
            (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN &&
-            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY);
+            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY) ||
+           // Requiring an assignment keeps `a | eval`, with a column named eval, a bitwise OR. DOT
+           // matches a multi-part key, which the parser captures to report a dedicated error.
+           (la == EVAL && (_input.LA(4) == EQ || _input.LA(4) == DOT));
   }
 
   /**
@@ -2420,6 +2423,7 @@ operatorPipeRightSide
     : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
+    | EVAL operatorPipeSetAssignmentSeq
     | DROP multipartIdentifierList
     | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
@@ -2573,6 +2577,7 @@ ansiNonReserved
     | ENFORCED
     | ERROR
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
@@ -3026,6 +3031,7 @@ nonReserved
     | ERROR
     | ESCAPE
     | ESCAPED
+    | EVAL
     | EVOLUTION
     | EXACT
     | EXCHANGE
