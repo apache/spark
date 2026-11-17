@@ -5142,6 +5142,8 @@ class AstBuilder extends DataTypeAstBuilder
     dollarQuotedString(ctx.DOLLAR_QUOTED_STRING_BODY())
   }
 
+  protected def escapedStringLiterals: Boolean = conf.escapedStringLiterals
+
   /**
    * Create a String from a string literal context. This supports:
    *   - Consecutive string literals: `'hello' 'world'` becomes `'helloworld'`
@@ -5162,7 +5164,7 @@ class AstBuilder extends DataTypeAstBuilder
     val tokens = visitStringLit(ctx.stringLit())
     if (tokens == null || tokens.isEmpty) {
       ""
-    } else if (conf.escapedStringLiterals) {
+    } else if (escapedStringLiterals) {
       tokens.map(stringWithoutUnescape).mkString
     } else if (conf.getConf(LEGACY_CONSECUTIVE_STRING_LITERALS)) {
       tokens.map(stringIgnoreQuoteQuote).mkString

@@ -891,10 +891,7 @@ private[sql] object CatalogV2Util {
       checkDefaultColumnConflicts(f)
 
       val existsDefault = if (f.getExistenceDefaultValue().isDefined) {
-        val e = analyze(
-          f,
-          statementType = "Column analysis",
-          metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+        val e = analyzeExistenceDefaultValue(f, statementType = "Column analysis")
 
         assert(e.resolved && e.foldable,
           "The existence default value must be a simple SQL string that is resolved and " +

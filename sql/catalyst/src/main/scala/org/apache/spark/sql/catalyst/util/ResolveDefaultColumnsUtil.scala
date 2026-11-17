@@ -324,15 +324,46 @@ object ResolveDefaultColumns extends QueryErrorsBase
     coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
   }
 
+  // Recognize the constructors emitted by Literal.sql, without accepting arbitrary functions
+  // whose string literals must still be interpreted using the session's parser configuration.
+  private def isSerializedLiteral(expr: Expression): Boolean = expr match {
+    case _: ExprLiteral => true
+    case c: Cast => c.child.isInstanceOf[ExprLiteral]
+    case Collate(_: ExprLiteral, _: UnresolvedCollation) => true
+    case _: CreateArray | _: CreateMap | _: CreateNamedStruct =>
+      expr.children.forall(isSerializedLiteral)
+    case _ => false
+  }
+
   /**
-   * Analyze EXISTS_DEFAULT value.  EXISTS_DEFAULT value was created from CURRENT_DEFAQULT
-   * via [[analyze]] and thus this can skip most of those steps.
+   * Decodes an existence default and applies full default-column analysis for catalog conversion.
    */
-  private def analyzeExistenceDefaultValue(field: StructField): Expression = {
+  def analyzeExistenceDefaultValue(field: StructField, statementType: String): Expression = {
+    decodeExistenceDefaultValue(field, statementType, useFullAnalysis = true)
+  }
+
+  // Existence defaults are normally constant-folded already, so readers can skip full analysis
+  // for resolved literals and casts. Catalog conversion still requires full analysis above.
+  private def decodeExistenceDefaultValue(
+      field: StructField,
+      statementType: String,
+      useFullAnalysis: Boolean = false): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
-    // Parse the expression.
-    val resolvedExpr = Try(Literal.fromSQL(defaultSQL)) match {
+    val parsedExpr = Try {
+      if (!SQLConf.get.escapedStringLiterals) {
+        // The session parser already uses canonical escaping in this mode.
+        Literal.fromSQL(defaultSQL)
+      } else {
+        val parsed = Literal.fromSQLWithCanonicalEscaping(defaultSQL)
+        // External expressions, including resolved casts containing functions, retain session
+        // parsing. Recognizing a resolved cast alone does not establish literal serialization.
+        if (isSerializedLiteral(parsed)) parsed else Literal.fromSQL(defaultSQL)
+      }
+    }
+    val resolvedExpr = parsedExpr match {
+      case Success(expr) if useFullAnalysis =>
+        analyze(field.name, field.dataType, expr, defaultSQL, statementType)
       case Success(literal) =>
         val expr = literal match {
           // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
@@ -345,21 +376,28 @@ object ResolveDefaultColumns extends QueryErrorsBase
         // Check invariants
         if (expr.containsPattern(PLAN_EXPRESSION)) {
           throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-            "", field.name, defaultSQL)
+            statementType, field.name, defaultSQL)
         }
 
         expr match {
           case _: ExprLiteral => expr
           case c: Cast if c.resolved => expr
+          case e if isSerializedLiteral(e) =>
+            // Resolve nested constructors and collations from the decoded expression.
+            analyze(field.name, field.dataType, e, defaultSQL, statementType)
           case _ =>
-            fallbackResolveExistenceDefaultValue(field)
+            fallbackResolveExistenceDefaultValue(field, statementType)
         }
 
       case Failure(_) =>
         // If Literal.fromSQL fails, use fallback resolution
-        fallbackResolveExistenceDefaultValue(field)
+        fallbackResolveExistenceDefaultValue(field, statementType)
     }
-    coerceDefaultValue(resolvedExpr, field.dataType, "", field.name, defaultSQL)
+    if (useFullAnalysis) {
+      resolvedExpr
+    } else {
+      coerceDefaultValue(resolvedExpr, field.dataType, statementType, field.name, defaultSQL)
+    }
   }
 
   // In most cases, column existsDefault should already be persisted as resolved
@@ -367,7 +405,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
   // it is possible that this assumption does not hold, so we fallback to full analysis
   // if we encounter an unresolved existsDefault
   private def fallbackResolveExistenceDefaultValue(
-      field: StructField): Expression = {
+      field: StructField,
+      statementType: String): Expression = {
     field.getExistenceDefaultValue().map { defaultSQL: String =>
 
       logWarning(log"Encountered unresolved exists default value: " +
@@ -376,7 +415,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
         log"with ${MDC(COLUMN_DATA_TYPE_SOURCE, field.dataType)}, " +
         log"falling back to full analysis.")
 
-      val expr = analyze(field, "", EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val expr = analyze(field, statementType, EXISTS_DEFAULT_COLUMN_METADATA_KEY)
       val literal = expr match {
         case _: ExprLiteral | _: Cast => expr
         case _ => throw SparkException.internalError(s"parse existence default as literal err," +
@@ -475,7 +514,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   def getExistenceDefaultValue(field: StructField): Any = {
     if (field.hasExistenceDefaultValue) {
-      val expr = analyzeExistenceDefaultValue(field)
+      val expr = decodeExistenceDefaultValue(field, statementType = "")
       // The expression should be a literal value by this point, possibly wrapped in a cast
       // function. This is enforced by the execution of commands that assign default values.
       expr.eval()
