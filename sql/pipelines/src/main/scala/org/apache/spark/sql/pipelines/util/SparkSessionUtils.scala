@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.pipelines.util
 
+import scala.util.Try
+
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.internal.{SharedState, StaticSQLConf}
 
 object SparkSessionUtils extends Logging {
 
@@ -28,35 +29,56 @@ object SparkSessionUtils extends Logging {
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
    * configurations.
    *
-   * Configurations that cannot be changed on a running session (static SQL configurations and
-   * Spark core configurations) are skipped: a pipeline's `configuration` is also used to create
-   * the session, which is the only place where those can take effect.
+   * Every pair that a running session cannot take is ignored. These are the pairs
+   * `spark.conf.set` rejects: static SQL configurations and, unless
+   * `spark.sql.legacy.setCommandRejectsSparkCoreConfs` is false, Spark core configurations.
+   * This applies to each pair the helper receives, whether it comes from a pipeline's
+   * `configuration` or from flow-level settings such as Python `spark_conf` and SQL `SET`
+   * statements in pipeline source files. Such settings can only be given to the session when it
+   * is created. When the requested value differs from the session's value, a warning is logged on
+   * the driver, with the value redacted the same way the session redacts options.
    */
   def withSqlConf[T](spark: SparkSession, pairs: (String, String)*)(f: => T): T = {
     val conf = spark.conf
-    val (runtimePairs, nonRuntimePairs) = pairs.partition { case (k, _) => isRuntimeConf(k) }
-    nonRuntimePairs.foreach { case (k, v) =>
-      if (!conf.getOption(k).contains(v)) {
-        logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, k)}=${MDC(LogKeys.VALUE, v)} because it " +
-          log"cannot be modified on a running session. Set it when the session is created, " +
-          log"for example with --conf on the spark-pipelines command line.")
+    // Each pair is checked with the rule `spark.conf.set` itself applies, right before it is set,
+    // so the skip cannot drift from what the session rejects.
+    val previousValues = pairs.flatMap { case (k, v) =>
+      if (Try(conf.requireNonStaticConf(k)).isSuccess) {
+        val previous = conf.getOption(k)
+        conf.set(k, v)
+        Some(k -> previous)
+      } else {
+        if (!isInEffect(spark, k, v)) {
+          val (_, redacted) = spark.sessionState.conf.redactOptions(Seq(k -> v)).head
+          logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, k)}=${MDC(LogKeys.VALUE, redacted)} " +
+            log"because it cannot be modified on a running session. Set it when the session is " +
+            log"created, for example with --conf on the spark-pipelines command line.")
+        }
+        None
       }
     }
-    val (keys, values) = runtimePairs.unzip
-    val currentValues = keys.map(conf.getOption)
-    keys.lazyZip(values).foreach((k, v) => conf.set(k, v))
     try f
     finally {
-      keys.zip(currentValues).foreach {
+      previousValues.reverse.foreach {
         case (key, Some(value)) => conf.set(key, value)
         case (key, None) => conf.unset(key)
       }
     }
   }
 
-  /** Whether `key` can be changed on a running session with `spark.conf.set`. */
-  private def isRuntimeConf(key: String): Boolean = {
-    !SQLConf.isStaticConfigKey(key) &&
-      (SQLConf.containsConfigKey(key) || ConfigEntry.findEntry(key) == null)
+  /**
+   * Whether the session already holds `value` for `key`, so that skipping the pair changes
+   * nothing.
+   */
+  private def isInEffect(spark: SparkSession, key: String, value: String): Boolean = {
+    val requested = if (key == StaticSQLConf.WAREHOUSE_PATH.key) {
+      // The session stores the warehouse directory qualified (see `SharedState`), so qualify the
+      // requested directory the same way before comparing. Keep the raw value if that fails.
+      Try(SharedState.qualifyWarehousePath(spark.sessionState.newHadoopConf(), value))
+        .getOrElse(value)
+    } else {
+      value
+    }
+    spark.conf.getOption(key).contains(requested)
   }
 }
