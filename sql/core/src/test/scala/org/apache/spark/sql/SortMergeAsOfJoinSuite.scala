@@ -1945,13 +1945,17 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
+  // The (left rid, right rid) matches of a self join of the right input of `withFileSizeInputs`
+  // on file size, without exact matches.
+  private val fileSizeSelfJoinMatches = Seq(
+    "backward" -> Seq(Row(200L, 100L)),
+    "forward" -> Seq(Row(100L, 200L)),
+    "nearest" -> Seq(Row(100L, 200L), Row(200L, 100L)))
+
   test("self join keys can reference file metadata columns through aliases") {
     withFileSizeInputs { (_, path) =>
       val df = spark.read.parquet(path)
-      for ((direction, expected) <- Seq(
-          "backward" -> Seq(Row(200L, 100L)),
-          "forward" -> Seq(Row(100L, 200L)),
-          "nearest" -> Seq(Row(100L, 200L), Row(200L, 100L)))) {
+      for ((direction, expected) <- fileSizeSelfJoinMatches) {
         withClue(s"$direction: ") {
           checkAnswerCodegenOffAndOn(
             df.as("l").joinAsOf(
@@ -1961,6 +1965,31 @@ class SortMergeAsOfJoinSuite extends QueryTest
               allowExactMatches = false, direction = direction
             ).select("l.rid", "r.rid"),
             expected)
+        }
+      }
+    }
+  }
+
+  test("self join keys can reference file metadata columns without aliases") {
+    withFileSizeInputs { (_, path) =>
+      def fileSize(df: DataFrame): Column = df.col("_metadata.file_size")
+      // The same key, with the metadata column in a lambda body.
+      def fileSizeInLambda(df: DataFrame): Column = functions.aggregate(
+        functions.array(functions.lit(0L)), functions.lit(0L), (acc, x) => acc + x + fileSize(df))
+      def selfJoin(direction: String)(
+          other: classic.DataFrame => classic.DataFrame, key: DataFrame => Column): DataFrame = {
+        val df = spark.read.parquet(path)
+        df.joinAsOf(
+          other(df), key(df), key(df), usingColumns = Seq.empty, joinType = "inner",
+          tolerance = null, allowExactMatches = false, direction = direction
+        ).toDF("lrid", "ltext", "rrid", "rtext").select("lrid", "rrid")
+      }
+      for ((direction, expected) <- fileSizeSelfJoinMatches) {
+        withClue(s"$direction: ") {
+          checkAnswerCodegenOffAndOn(selfJoin(direction)(df => df, fileSize), expected)
+          checkAnswerCodegenOffAndOn(
+            selfJoin(direction)(_.filter(functions.col("rid") > 0), fileSize), expected)
+          checkAnswerCodegenOffAndOn(selfJoin(direction)(df => df, fileSizeInLambda), expected)
         }
       }
     }
@@ -1977,9 +2006,6 @@ class SortMergeAsOfJoinSuite extends QueryTest
           (left, right, left.col("_metadata.file_size") + right.col("rid"),
             right.col("_metadata.file_size"), "\"(_metadata.file_size AS file_size + rid)\""),
           (left, right, left.col("_metadata.file_size"), left.col("_metadata.file_size"),
-            metadataKey),
-          // Without aliases, both keys of a self join resolve to its left input.
-          (right, right, right.col("_metadata.file_size"), right.col("_metadata.file_size"),
             metadataKey))
       } {
         checkError(
@@ -2031,6 +2057,78 @@ class SortMergeAsOfJoinSuite extends QueryTest
         // The ON key limits each left row to the right rows with the same `k`.
         checkAnswerCodegenOffAndOn(
           join(Seq("k"), "inner", "backward"), Seq(Row("a", "x"), Row("b", "x"), Row("c", "y")))
+      }
+    }
+  }
+
+  /** Writes a DSv2 table `testcat.asof_self` with ids x, y and z at indexes 0, 1 and 2. */
+  private def withIndexedTable(f: => Unit): Unit = {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      withTable("testcat.asof_self") {
+        // One write task, so the `index` metadata column numbers the rows in order.
+        spark.sql("SELECT * FROM VALUES (1, 'x'), (2, 'y'), (3, 'z') AS t(k, id)")
+          .coalesce(1).writeTo("testcat.asof_self").create()
+        checkAnswer(spark.table("testcat.asof_self").select("id", "index"),
+          Seq(Row("x", 0), Row("y", 1), Row("z", 2)))
+        f
+      }
+    }
+  }
+
+  /** Joins `testcat.asof_self` with `other(t)`, a plan over that table, on `index`, unaliased. */
+  private def indexSelfJoin(
+      direction: String,
+      allowExactMatches: Boolean,
+      other: classic.DataFrame => classic.DataFrame = df => df): DataFrame = {
+    val t = spark.table("testcat.asof_self")
+    t.joinAsOf(
+      other(t), t.col("index"), t.col("index"), usingColumns = Seq.empty, joinType = "inner",
+      tolerance = null, allowExactMatches = allowExactMatches, direction = direction
+    ).toDF("lk", "lid", "rk", "rid").select("lid", "rid")
+  }
+
+  test("self join keys can reference DSv2 metadata columns without aliases") {
+    withIndexedTable {
+      for ((direction, expected) <- Seq(
+          "backward" -> Seq(Row("y", "x"), Row("z", "y")),
+          "forward" -> Seq(Row("x", "y"), Row("y", "z")),
+          // On equal gaps, nearest keeps the earlier row, so y gets x.
+          "nearest" -> Seq(Row("x", "y"), Row("y", "x"), Row("z", "y")))) {
+        withClue(s"$direction: ") {
+          val t = spark.table("testcat.asof_self")
+          checkAnswerCodegenOffAndOn(
+            t.as("l").joinAsOf(
+              t.as("r"), functions.col("l.index"), functions.col("r.index"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = false, direction = direction
+            ).select("l.id", "r.id"),
+            expected)
+          checkAnswerCodegenOffAndOn(indexSelfJoin(direction, allowExactMatches = false), expected)
+          checkAnswerCodegenOffAndOn(
+            indexSelfJoin(direction, allowExactMatches = false, _.filter(functions.col("k") > 0)),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("unaliased DSv2 metadata self join returns the same rows with sort-merge on and off") {
+    withIndexedTable {
+      for ((direction, allowExactMatches, expected) <- Seq(
+          ("backward", false, Seq(Row("y", "x"), Row("z", "y"))),
+          ("forward", false, Seq(Row("x", "y"), Row("y", "z"))),
+          // Exact matches: y is as near to x as to z, and the two plans pick different rows then.
+          ("nearest", true, Seq(Row("x", "x"), Row("y", "y"), Row("z", "z"))))) {
+        withClue(s"$direction: ") {
+          checkAnswerCodegenOffAndOn(indexSelfJoin(direction, allowExactMatches), expected)
+          withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+            val joined = indexSelfJoin(direction, allowExactMatches)
+            checkAnswer(joined, expected)
+            assert(collectWithSubqueries(joined.queryExecution.executedPlan) {
+              case j: SortMergeAsOfJoinExec => j
+            }.isEmpty, "Expected the correlated subquery rewrite")
+          }
+        }
       }
     }
   }
