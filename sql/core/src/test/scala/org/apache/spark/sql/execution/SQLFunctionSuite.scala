@@ -721,6 +721,47 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60805: a temp scalar function in a table function argument is a temp reference") {
+    withUserDefinedFunction("temp_fn" -> true, "tbl_fn" -> false, "perm_fn" -> false) {
+      sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 2")
+      sql("CREATE FUNCTION tbl_fn(x INT) RETURNS TABLE (a INT) RETURN SELECT x")
+      Seq(
+        "RETURNS TABLE (a INT) RETURN SELECT * FROM tbl_fn(temp_fn())",
+        "RETURNS TABLE (a INT) RETURN SELECT * FROM tbl_fn(IDENTIFIER('temp_fn')())",
+        "RETURNS INT RETURN (SELECT a FROM tbl_fn(session.temp_fn()))"
+      ).foreach { body =>
+        val e = intercept[AnalysisException](sql(s"CREATE FUNCTION perm_fn() $body"))
+        assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
+        assert(e.getMessageParameters.get("tempObjName") == "`temp_fn`", e.getMessage)
+      }
+    }
+  }
+
+  test("SPARK-60805: an IDENTIFIER call is a temp reference only if PATH resolves it to temp") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_shadow_db") {
+        withUserDefinedFunction("shadow_fn" -> true, "perm_fn" -> false) {
+          sql("CREATE DATABASE path_shadow_db")
+          sql("CREATE FUNCTION path_shadow_db.shadow_fn() RETURNS INT RETURN 5")
+          sql("CREATE TEMPORARY FUNCTION shadow_fn() RETURNS INT RETURN 9")
+          val ddl = "CREATE OR REPLACE FUNCTION default.perm_fn() RETURNS INT " +
+            "RETURN IDENTIFIER('shadow_fn')()"
+          try {
+            sql("SET PATH = spark_catalog.path_shadow_db, system.session, system.builtin")
+            sql(ddl)
+            checkAnswer(sql("SELECT default.perm_fn()"), Row(5))
+            sql("SET PATH = system.session, spark_catalog.path_shadow_db, system.builtin")
+            val e = intercept[AnalysisException](sql(ddl))
+            assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", e.getMessage)
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+            sql("DROP FUNCTION IF EXISTS path_shadow_db.shadow_fn")
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60805: builtin./session. calls fall back to a same-named persistent schema") {
     Seq("builtin", "session").foreach { schema =>
       withDatabase(schema) {
