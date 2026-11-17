@@ -48,6 +48,8 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   override def timestampNTZAsWallClock: Boolean = dialects.exists(_.timestampNTZAsWallClock)
 
+  // Truncating explicitly is harmless where the cast already truncates, so any dialect that
+  // truncates explicitly wins.
   override def truncateFractionalValue(expr: String): String =
     dialects.iterator.map(_.truncateFractionalValue(expr)).find(_ != expr).getOrElse(expr)
 

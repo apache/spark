@@ -460,14 +460,14 @@ abstract class JdbcDialect extends Serializable with Logging {
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val mappedType = getJDBCType(dataType).map(_.databaseTypeDefinition)
-      if (JdbcDialects.legacyIntegralCastPushdown) {
-        s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
-      } else {
-        if (exprDataType.isInstanceOf[DatetimeType] && dataType.isInstanceOf[IntegralType]) {
-          // Spark casts a datetime to seconds since the epoch; database casts don't.
-          throw new UnsupportedOperationException(
-            s"Cannot cast $exprDataType to $dataType without changing the result")
-        }
+      val legacy = JdbcDialects.legacyIntegralCastPushdown
+      if (!legacy && exprDataType.isInstanceOf[DatetimeType] &&
+          dataType.isInstanceOf[IntegralType]) {
+        // Spark and databases convert datetimes to numbers differently.
+        throw new UnsupportedOperationException(
+          s"Cannot cast $exprDataType to $dataType without changing the result")
+      }
+      if (!legacy && isFractionalToIntegral(exprDataType, dataType)) {
         val databaseTypeDefinition = mappedType.getOrElse(dataType match {
           // Spark's names `short` and `long` aren't valid SQL types. TINYINT isn't portable either,
           // so ByteType keeps Spark's name.
@@ -479,8 +479,13 @@ abstract class JdbcDialect extends Serializable with Logging {
         val castedExpr =
           if (dropsFraction(exprDataType, dataType)) truncateFractionalValue(expr) else expr
         s"CAST($castedExpr AS $databaseTypeDefinition)"
+      } else {
+        s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
       }
     }
+
+    protected def isFractionalToIntegral(from: DataType, to: DataType): Boolean =
+      from.isInstanceOf[FractionalType] && to.isInstanceOf[IntegralType]
 
     // Whether a cast from `from` to `to` drops digits after the decimal point. Spark truncates
     // them, but many databases round.

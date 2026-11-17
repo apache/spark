@@ -1493,21 +1493,27 @@ class JDBCSuite extends SharedSparkSession {
       """CAST(TRUNC("a") AS INTEGER)""")
   }
 
-  test("SPARK-58372: unmapped SMALLINT, INTEGER and BIGINT cast targets use SQL type names") {
-    val toBigint = new V2Cast(FieldReference("a"), IntegerType, LongType)
+  test("SPARK-58372: unmapped integral targets of fractional casts use SQL type names") {
+    val decimal = DecimalType(10, 0)
+    val toBigint = new V2Cast(FieldReference("a"), decimal, LongType)
     Seq("jdbc:", "jdbc:postgresql://127.0.0.1/db", "jdbc:sqlserver://127.0.0.1/db",
       "jdbc:db2://127.0.0.1/db", "jdbc:derby:memory:db", "jdbc:teradata://127.0.0.1/db"
     ).foreach { url =>
       assert(JdbcDialects.get(url).compileExpression(toBigint).get === """CAST("a" AS BIGINT)""")
     }
-    val toSmallint = new V2Cast(FieldReference("a"), IntegerType, ShortType)
+    val toSmallint = new V2Cast(FieldReference("a"), decimal, ShortType)
     Seq("jdbc:", "jdbc:teradata://127.0.0.1/db").foreach { url =>
       assert(
         JdbcDialects.get(url).compileExpression(toSmallint).get === """CAST("a" AS SMALLINT)""")
     }
+    // Casts from other types keep the previous SQL.
+    Seq(IntegerType, StringType).foreach { from =>
+      val cast = new V2Cast(FieldReference("a"), from, LongType)
+      assert(JdbcDialects.get("jdbc:").compileExpression(cast).get === """CAST("a" AS long)""")
+    }
   }
 
-  test("SPARK-58372: MySQL pushes only BIGINT casts from DECIMALs that fit SIGNED") {
+  test("SPARK-58372: MySQL pushes only fractional casts to BIGINT from DECIMALs that fit SIGNED") {
     val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     def compile(from: DataType, to: DataType): Option[String] =
       mysql.compileExpression(new V2Cast(FieldReference("a"), from, to))
@@ -1531,8 +1537,11 @@ class JDBCSuite extends SharedSparkSession {
          to <- Seq(ByteType, ShortType, IntegerType, LongType)) {
       assert(compile(from, to).isEmpty)
     }
-    Seq(TimestampType, StringType, IntegerType, BooleanType).foreach { from =>
-      Seq(IntegerType, LongType).foreach(to => assert(compile(from, to).isEmpty))
+    Seq(IntegerType, LongType).foreach(to => assert(compile(TimestampType, to).isEmpty))
+    // Casts from other types keep the previous SQL.
+    Seq(StringType, IntegerType, BooleanType).foreach { from =>
+      assert(compile(from, IntegerType).get === "CAST(`a` AS INTEGER)")
+      assert(compile(from, LongType).get === "CAST(`a` AS BIGINT)")
     }
   }
 

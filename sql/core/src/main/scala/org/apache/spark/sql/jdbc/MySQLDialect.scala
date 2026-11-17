@@ -131,7 +131,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           // MySQL-compatible databases. In particular, MariaDB rejects it with a syntax error.
           throw new UnsupportedOperationException("Cannot cast to double type")
         // MySQL's only integral CAST target is 64-bit SIGNED, and MariaDB clamps values out of its
-        // range, so only BIGINT casts from a DECIMAL that always fits are pushed down.
+        // range, so of the fractional casts only BIGINT from a DECIMAL that always fits is pushed.
         case LongType if !JdbcDialects.legacyIntegralCastPushdown && (exprDataType match {
           case d: DecimalType => d.precision - d.scale <= 18
           case _ => false
@@ -139,7 +139,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           val value =
             if (dropsFraction(exprDataType, dataType)) truncateFractionalValue(expr) else expr
           s"CAST($value AS SIGNED)"
-        case _: IntegralType if !JdbcDialects.legacyIntegralCastPushdown =>
+        case _: IntegralType if !JdbcDialects.legacyIntegralCastPushdown &&
+            isFractionalToIntegral(exprDataType, dataType) =>
           throw new UnsupportedOperationException(
             s"Cannot cast $exprDataType to $dataType without changing the result")
         case _ => super.visitCast(expr, exprDataType, dataType)
