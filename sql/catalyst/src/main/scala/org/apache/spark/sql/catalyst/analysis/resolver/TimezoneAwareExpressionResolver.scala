@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.types.StringType
 
 /**
- * Resolves [[TimeZoneAwareExpressions]] by applying the session's local timezone.
+ * Resolves [[TimeZoneAwareExpression]]s by applying the session's local timezone.
  *
  * This class is responsible for resolving [[TimeZoneAwareExpression]]s by first resolving their
  * children and then applying the session's local timezone. Additionally, ensures that any tags from
@@ -77,13 +77,13 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
    * default collation.
    *
    * Special case:
-   * Before resolution, if the [[Cast]]'s child is a [[DefaultStringProducingExpression]] and the
-   * custom default collation is not `UTF8_BINARY`, then the [[DefaultStringProducingExpression]]
-   * will be wrapped with a [[Cast]] to [[StringType]] with the default collation. Additionally,
-   * if the currently resolving [[Cast]] is also a [[Cast]] to the companion object [[StringType]],
-   * we update it to a [[Cast]] to [[StringType]] with the default collation as well.
+   * Before resolution, if the [[Cast]]'s child produces a default string and the custom default
+   * collation is not `UTF8_BINARY`, then the child will be wrapped with a [[Cast]] to
+   * [[StringType]] with the default collation. Additionally, if the currently resolving [[Cast]]
+   * is also a [[Cast]] to the companion object [[StringType]], we update it to a [[Cast]] to
+   * [[StringType]] with the default collation as well.
    *
-   * This results in two identical [[Cast]]s, which is redundant-so we can remove one of them.
+   * This results in two identical [[Cast]]s, which is redundant, so we can remove one of them.
    * We are doing this to have the same plan as the one from the fixed-point analyzer.
    *
    * Example query for the special case:
@@ -110,7 +110,7 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
   private def shouldCollapseInnerCast(cast: Cast, defaultCollation: String): Boolean = {
     StringType(defaultCollation) != StringType && {
       cast.child match {
-        case _ @Cast(_: DefaultStringProducingExpression, innerDataType, _, _)
+        case Cast(_: DefaultStringProducingExpression, innerDataType, _, _)
             if cast.dataType == innerDataType =>
           true
         case _ =>

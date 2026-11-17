@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 /**
- * This is a dummy [[LogicalPlanResolver]] whose [[resolve]] is not implemented and throws
- * [[SparkException]].
+ * This is a dummy [[LogicalPlanResolver]] whose resolution APIs throw [[SparkException]].
  *
  * It's used by the [[MetadataResolver]] to pass it as an argument to
  * [[tryDelegateResolutionToExtensions]], because unresolved subtree resolution doesn't make sense
@@ -30,6 +30,20 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 class ProhibitedResolver extends LogicalPlanResolver {
   override def resolve(plan: LogicalPlan): LogicalPlan = {
+    throw SparkException.internalError("Resolver cannot be used here")
+  }
+
+  override def getOperatorResolutionContextStack: OperatorResolutionContextStack = {
+    throw SparkException.internalError("Resolver cannot be used here")
+  }
+
+  override def resolveExpressionTreeInOperator(
+      unresolvedExpression: Expression,
+      parentOperator: LogicalPlan): Expression = {
+    throw SparkException.internalError("Resolver cannot be used here")
+  }
+
+  override def handleLeafOperator(leafOperator: LeafNode): LogicalPlan = {
     throw SparkException.internalError("Resolver cannot be used here")
   }
 }

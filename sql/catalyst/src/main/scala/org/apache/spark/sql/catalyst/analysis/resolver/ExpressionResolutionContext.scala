@@ -36,8 +36,12 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
  *   [[ExpressionResolutionContext]] has local [[AttributeReferences]] in its subtree.
  * @param hasOuterReferences A flag that highlights that a specific node corresponding to
  *   [[ExpressionResolutionContext]] has outer [[AttributeReferences]] in its subtree.
+ * @param hasAggregateOrWindowAggregateExpressions A flag that highlights that a specific node
+ *   corresponding to [[ExpressionResolutionContext]] has [[AggregateExpression]]s anywhere in its
+ *   subtree, including inside [[WindowExpression]]s.
  * @param hasAggregateExpressionsOutsideWindow A flag that highlights that a specific node
- *   corresponding to [[ExpressionResolutionContext]] has aggregate expressions in its subtree.
+ *   corresponding to [[ExpressionResolutionContext]] has [[AggregateExpression]]s in its subtree
+ *   that are not nested inside a [[WindowExpression]].
  * @param hasAttributeOutsideOfAggregateExpressions A flag that highlights that a specific node
  *   corresponding to [[ExpressionResolutionContext]] has non-LCA attributes in its subtree which
  *   are not under an [[AggregateExpression]].
@@ -45,8 +49,6 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
  *   [[ExpressionResolutionContext]] has LCA in its subtree.
  * @param hasWindowExpressions A flag that highlights that a specific node corresponding to
  *   [[ExpressionResolutionContext]] has [[WindowExpression]]s in its subtree.
- * @param hasGeneratorExpressions A flag that highlights that a specific node corresponding to
- *   [[ExpressionResolutionContext]] has [[Generator]] expressions in its subtree.
  * @param shouldPreserveAlias A flag indicating whether we preserve the [[Alias]] e.g. if it is on
  *   top of a [[Project.projectList]]. If it is `false`, extra [[Alias]]es have to be stripped
  *   away.
@@ -75,9 +77,6 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
  *       remains unchanged and is `0`.
  * @param resolvingWindowSpec A flag indicating whether an expression we are resolving is part
  *   of [[WindowExpression.windowSpec]].
- * @param hasCorrelatedScalarSubqueryExpressions A flag that highlights that a specific node
- *   corresponding to [[ExpressionResolutionContext]] has correlated [[ScalarSubquery]] expressions
- *   in its subtree.
  * @param resolvingTreeUnderAggregateExpression A flag indicating whether an expression we are
  *   resolving a tree under [[AggregateExpression]].
  * @param resolvingCreateNamedStruct A flag indicating whether we are resolving a tree under an
@@ -87,7 +86,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
  *   [[UnresolvedAlias]]. This is needed in order to prevent alias collapsing before the name of
  *   [[UnresolvedAlias]] above is computed.
  * @param resolvingPivotAggregates A flag indicating whether we are resolving a tree under the
- *   [[Pivot.aggregates]]. This need for validation of those expressions.
+ *   [[Pivot.aggregates]]. This is needed for validation of those expressions.
  * @param hasGroupingAnalyticsExpression A flag indicating whether a specific node corresponding to
  *   [[ExpressionResolutionContext]] has grouping expressions ([[Grouping]] or [[GroupingID]]) in
  *   its subtree.
@@ -101,6 +100,7 @@ class ExpressionResolutionContext(
     val isRoot: Boolean = false,
     var hasLocalReferences: Boolean = false,
     var hasOuterReferences: Boolean = false,
+    var hasAggregateOrWindowAggregateExpressions: Boolean = false,
     var hasAggregateExpressionsOutsideWindow: Boolean = false,
     var hasAttributeOutsideOfAggregateExpressions: Boolean = false,
     var hasLateralColumnAlias: Boolean = false,
@@ -111,7 +111,6 @@ class ExpressionResolutionContext(
     var resolvingWindowFunction: Boolean = false,
     var windowFunctionNestednessLevel: Int = 0,
     var resolvingWindowSpec: Boolean = false,
-    var hasCorrelatedScalarSubqueryExpressions: Boolean = false,
     var resolvingTreeUnderAggregateExpression: Boolean = false,
     var resolvingCreateNamedStruct: Boolean = false,
     var resolvingUnresolvedAlias: Boolean = false,
@@ -127,21 +126,18 @@ class ExpressionResolutionContext(
   def mergeChild(child: ExpressionResolutionContext): Unit = {
     hasLocalReferences |= child.hasLocalReferences
     hasOuterReferences |= child.hasOuterReferences
+    hasAggregateOrWindowAggregateExpressions |= child.hasAggregateOrWindowAggregateExpressions
     hasAggregateExpressionsOutsideWindow |= child.hasAggregateExpressionsOutsideWindow
     hasAttributeOutsideOfAggregateExpressions |= child.hasAttributeOutsideOfAggregateExpressions
     hasLateralColumnAlias |= child.hasLateralColumnAlias
     hasWindowExpressions |= child.hasWindowExpressions
     hasGroupingAnalyticsExpression |= child.hasGroupingAnalyticsExpression
-    hasCorrelatedScalarSubqueryExpressions |= child.hasCorrelatedScalarSubqueryExpressions
   }
 }
 
 object ExpressionResolutionContext {
 
-  /**
-   * Create a new child [[ExpressionResolutionContext]]. Propagates the relevant information
-   * top-down.
-   */
+  /** Creates a child context with the relevant top-down expression-node state. */
   def createChild(parent: ExpressionResolutionContext): ExpressionResolutionContext = {
     if (parent.isRoot) {
       new ExpressionResolutionContext(

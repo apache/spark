@@ -25,9 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
  * [[ExprUtils.assertValidAggregation]] with canonicalized expression equality since
  * non-deterministic expressions are still not extracted (done in [[PullOutNondeterministic]] post
  * hoc rule).
- *
- * TODO: [[ExprUtils.assertValidAggregation]] does a post-traversal. This is discouraged in the
- * single-pass Analyzer.
  */
 object AggregationValidator {
 

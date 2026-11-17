@@ -29,8 +29,12 @@ import org.apache.spark.sql.catalyst.analysis.{
 import org.apache.spark.sql.catalyst.expressions.{
   BinaryArithmetic,
   Collate,
+  CreateNamedStruct,
   Expression,
+  ExpressionInfo,
   ExpressionWithRandomSeed,
+  Grouping,
+  GroupingID,
   InheritAnalysisRules,
   ResolvedCollation,
   TryEval,
@@ -42,8 +46,12 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 
 /**
  * A resolver for [[UnresolvedFunction]]s that resolves functions to concrete [[Expression]]s.
- * It resolves the children of the function first by calling [[ExpressionResolver.resolve]] on them.
- * Examples are following:
+ * In case the function is a higher order function, it delegates the resolution to
+ * [[HigherOrderFunctionResolver]]. Otherwise, the resolution is done in the [[resolveFunction]]
+ * method.
+ * It resolves the children of the function first by calling [[ExpressionResolver.resolve]] on them
+ * if they are not [[UnresolvedStar]]s. If the children are [[Star]]s, it expands them using
+ * [[ExpressionResolver.expandStarExpressions]]. Examples are following:
  *
  *  - Function doesn't contain any [[Star]]:
  *  {{{ SELECT ARRAY(col1) FROM VALUES (1); }}}
@@ -73,9 +81,40 @@ class FunctionResolver(
   private val traversals = expressionResolver.getExpressionTreeTraversals
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
+  private val higherOrderFunctionResolver =
+    new HigherOrderFunctionResolver(expressionResolver, functionResolution)
 
   /**
-   * Main method used to resolve an [[UnresolvedFunction]]. It resolves it in the following steps:
+   * In case the function is a higher order function, it delegates the resolution to
+   * [[HigherOrderFunctionResolver]]. Otherwise, the resolution is done in the [[resolveFunction]]
+   * method.
+   * Examples of higher order functions are (resolved by [[HigherOrderFunctionResolver]]):
+   *  - `ARRAY_SORT`
+   *  - `MAP_FILTER`
+   *  - `MAP_ZIP_WITH`
+   * Higher order functions take lambda functions as arguments (which are handled in the
+   * [[LambdaFunctionResolver]]).
+   * Examples of non-higher order functions are (resolved by [[resolveFunction]]):
+   *  - `LOWER`
+   *  - `ROUND`
+   *  - `COALESCE`
+   */
+  override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
+    val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
+      nameParts = unresolvedFunction.nameParts,
+      unresolvedFunc = Some(unresolvedFunction)
+    )
+
+    if (expressionInfo.exists(_.getGroup == "lambda_funcs")) {
+      higherOrderFunctionResolver.resolve(unresolvedFunction)
+    } else {
+      resolveFunction(unresolvedFunction, expressionInfo)
+    }
+  }
+
+  /**
+   * Main method used to resolve an [[UnresolvedFunction]]. It's used only for non-lambda functions
+   * (for lambda ones, see [[HigherOrderFunctionResolver]]). It resolves it in the following steps:
    *  - Check if the `unresolvedFunction` is an aggregate expression. Set
    *    `resolvingTreeUnderAggregateExpression` to `true` in that case so we can properly resolve
    *    attributes in ORDER BY and HAVING.
@@ -85,8 +124,11 @@ class FunctionResolver(
    *    additional context refer to
    *    [[AggregateExpressionResolver.handleAggregateExpressionWithChildrenResolved]]. This is also
    *    necessary for handling `WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE` exception.
+   *  - Expand all star `*` arguments in the function (see [[handleStarInArguments]] documentation
+   *    for more details).
    *  - Resolve children of the function.
-   *  - Resolve the function using [[FunctionResolution.resolveFunction]].
+   *  - Resolve the function using [[FunctionResolution.resolveFunction]] and reject the function
+   *    types the single-pass Analyzer does not support yet (see [[checkSupportedFunctionType]]).
    *  - Perform further resolution and validation on specific nodes:
    *    - For [[Collate]], resolve its [[UnresolvedCollation]] to [[ResolvedCollation]]
    *      and perform type coercion.
@@ -113,19 +155,23 @@ class FunctionResolver(
    *        over clause.
    *      - Consequently, if `windowFunctionNestednessLevel != 1` we are resolving something
    *        other than [[WindowExpression]]'s function child which implies a missing over clause.
+   *    - In case the `resolvedFunction` is [[Grouping]] or [[GroupingID]], set
+   *      `hasGroupingAnalyticsExpression` to `true` in the current [[ExpressionResolutionContext]].
+   *    - For [[CreateNamedStruct]], apply type coercion to each child individually, since
+   *      [[DefaultCollationTypeCoercion]] applied to [[CreateNamedStruct]] doesn't recurse into
+   *      children. This is needed so that default collation is applied to name literals created
+   *      by [[CreateStruct.apply]].
    *  - Apply [[TypeCoercion]] rules to the result of previous step. In case that the resulting
    *    expression of the previous step is [[BinaryArithmetic]], skip this one as type coercion is
    *    already applied.
    *  - Apply timezone, if the resulting expression is [[TimeZoneAwareExpression]].
    */
-  override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
-    val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
-      nameParts = unresolvedFunction.nameParts,
-      unresolvedFunc = Some(unresolvedFunction)
-    )
+  private def resolveFunction(
+      unresolvedFunction: UnresolvedFunction,
+      expressionInfo: Option[ExpressionInfo]): Expression = {
     val expressionResolutionContext = expressionResolutionContextStack.peek()
 
-    if (expressionInfo.exists(_.getGroup == "agg_funcs")) {
+    if (isAggregateFunction(expressionInfo)) {
       expressionResolutionContext.resolvingTreeUnderAggregateExpression = true
     }
 
@@ -145,15 +191,54 @@ class FunctionResolver(
       functionWithResolvedChildren,
       handlePartiallyResolvedFunction _
     ) {
-      functionResolution.resolveFunction(functionWithResolvedChildren)
+      val partiallyResolved = functionResolution.resolveFunction(functionWithResolvedChildren)
+      checkSupportedFunctionType(expressionInfo, partiallyResolved)
+      partiallyResolved
     }
+  }
+
+  /**
+   * Rejects a resolved function single-pass does not support, throwing
+   * [[ExplicitlyUnsupportedResolverFeature]]: a builtin/session function ([[Some]]) whose source is
+   * neither `sql_udf`, `built-in` nor empty (e.g. a temp Scala or Python UDF), or a catalog
+   * function ([[None]]) that did not resolve to a [[SQLFunctionExpression]], since a catalog
+   * function can resolve to an arbitrary expression via a custom builder.
+   * [[SQLFunctionExpression]]s are rejected later in [[handlePartiallyResolvedFunction]].
+   *
+   * An empty source is accepted because it is not a UDF: functions injected through
+   * [[org.apache.spark.sql.SparkSessionExtensions]] and builtin expressions without an
+   * [[ExpressionDescription]] are registered with an empty source.
+   *
+   * [[ResolverGuard]] also screens non-SQL session functions before resolution, so the [[Some]]
+   * branch is redundant in the full pipeline; it stays as the resolver's own fail-safe so a direct
+   * resolution without the guard still rejects an unsupported function rather than resolving it.
+   */
+  private def checkSupportedFunctionType(
+      expressionInfo: Option[ExpressionInfo],
+      partiallyResolved: Expression): Unit = expressionInfo match {
+    case Some(info)
+        if info.getSource == "sql_udf" || info.getSource == "built-in" ||
+          info.getSource.isEmpty =>
+    case Some(info) =>
+      throw new ExplicitlyUnsupportedResolverFeature(
+        ResolutionGap.NonSQLFunction,
+        s"non-SQL function (source: '${info.getSource}')"
+      )
+    case None =>
+      partiallyResolved match {
+        case _: SQLFunctionExpression =>
+        case _ =>
+          throw new ExplicitlyUnsupportedResolverFeature(
+            ResolutionGap.NonSQLCatalogFunction(partiallyResolved.getClass)
+          )
+      }
   }
 
   private def handlePartiallyResolvedFunction(partiallyResolvedFunction: Expression): Expression = {
     val expressionResolutionContext = expressionResolutionContextStack.peek()
     val resolvedFunction = partiallyResolvedFunction match {
       case _: SQLFunctionExpression =>
-        throw new ExplicitlyUnsupportedResolverFeature("SQL function expression")
+        throw new ExplicitlyUnsupportedResolverFeature(ResolutionGap.SQLFunctions)
       case collate @ Collate(_, collation: UnresolvedCollation) =>
         val withResolvedCollation = collate.copy(
           collation = ResolvedCollation(
@@ -206,6 +291,13 @@ class FunctionResolver(
       case windowFunction: WindowFunction
           if (expressionResolutionContext.windowFunctionNestednessLevel != 1) =>
         throwWindowFunctionWithoutOverClause(windowFunction)
+      case grouping @ (_: Grouping | _: GroupingID) =>
+        expressionResolutionContextStack.peek().hasGroupingAnalyticsExpression = true
+        coerceExpressionTypes(expression = grouping, expressionTreeTraversal = traversals.current)
+      case createNamedStruct: CreateNamedStruct =>
+        val coercedChildren = createNamedStruct.children.map(
+          coerceExpressionTypes(_, traversals.current))
+        createNamedStruct.withNewChildren(coercedChildren)
       case other =>
         coerceExpressionTypes(expression = other, expressionTreeTraversal = traversals.current)
     }
@@ -214,6 +306,20 @@ class FunctionResolver(
       resolvedFunction,
       traversals.current.sessionLocalTimeZone
     )
+  }
+
+  /**
+   * Returns true if the function is a true aggregate function whose children should be resolved
+   * with aggregate-expression context. Grouping and GroupingID are classified under "agg_funcs"
+   * for documentation purposes but are not real aggregates - they are Unevaluable placeholders
+   * rewritten into spark_grouping_id bit-extraction expressions.
+   */
+  private def isAggregateFunction(expressionInfo: Option[ExpressionInfo]): Boolean = {
+    expressionInfo.exists { info =>
+      info.getGroup == "agg_funcs" &&
+        info.getClassName != classOf[Grouping].getName &&
+        info.getClassName != classOf[GroupingID].getName
+    }
   }
 
   private def throwWindowFunctionWithoutOverClause(windowFunction: WindowFunction) =

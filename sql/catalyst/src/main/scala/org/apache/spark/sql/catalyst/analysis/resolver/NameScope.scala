@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   LiteralFunctionResolution,
   Resolver => NameComparator,
   Star,
+  UnresolvedAttribute,
   UnresolvedStarBase,
   VariableResolution
 }
@@ -43,11 +44,18 @@ import org.apache.spark.sql.catalyst.expressions.{
   NamedExpression,
   OuterReference
 }
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate,
+  CollectMetrics,
+  LateralJoin,
+  LogicalPlan,
+  Project
+}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Metadata
+import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 
 /**
  * The [[NameScope]] is used to control the resolution of names (table, column, alias identifiers).
@@ -143,26 +151,58 @@ import org.apache.spark.sql.types.Metadata
  *   - Output of a current operator that is being resolved (leaf nodes like [[Relations]]).
  * @param hiddenOutput Attributes that are not directly visible in the scope, but available for
  *   lookup in case the resolved attribute is not found in `output`.
- * @param isSubqueryRoot Indicates that the current scope is a root of a subquery. This is used by
- *   [[NameScopeStack.resolveMultipartName]] to detect the nearest outer scope.
+ * @param scopeType Indicates the type of this scope. See [[NameScopeType]] for details.
  * @param availableAliases User specified aliases that are present in this [[NameScope]].
- * @param aggregateListAliases List of aliases that are present in the [[Aggregate]] corresponding
- *  to this [[NameScope]]. If the [[Aggregate]] has lateral column references, this list contains
- *  both the aliases from [[Aggregate]] as well as all aliases from artificially inserted
- *  [[Project]] nodes.
- * @param baseAggregate [[Aggregate]] node that is either a resolved [[Aggregate]] corresponding to
- *  this node or base [[Aggregate]] constructed when resolving lateral column references in
- *  [[Aggregate]].
+ * @param unaggregatedAccessOnlyIds ExprIds of Expand-output grouping attributes. When
+ *   `canReferenceAggregatedAccessOnlyAttributes` is true (inside aggregate expressions),
+ *   these IDs are excluded from candidates so the pre-Expand original is resolved instead.
+ *   Outside aggregate expressions these attributes remain accessible normally.
+ * @param qualifiedAccessOnlyOutputIds ExprIds of qualified access only attributes from
+ *   `hiddenOutput` that the operator outputs, even though `output` omits them. For example, a
+ *   NATURAL or USING join that is not the top-level operator appends its hidden keys to its
+ *   [[Project]]. A [[Project]] or an [[Aggregate]] above that join keeps these keys only in
+ *   `hiddenOutput`, so they are not in its set. This set must never be mutated, because
+ *   [[overwrite]] shares it between scopes.
+ * @param queryBlockScope [[QueryBlockScope]] of the enclosing query block. Holds the resolved
+ *  [[Aggregate]] context (including aggregate-list aliases) that HAVING and ORDER BY of the same
+ *  query block consume. Multiple [[NameScope]]s within a single query block
+ *  share the same [[QueryBlockScope]].
+ * @param planIdTargetRegistry Resolved DataFrame plan-id targets visible from this scope.
+ * @param lcaRegistryOverride When set, the new scope reuses this
+ *  [[LateralColumnAliasRegistry]] instead of building a fresh one. `overwrite` passes the
+ *  current registry so lateral-column-alias state survives within a query block; `None` (the
+ *  default) builds a fresh registry from conf.
+ * @param topAggregateExpressionsByAliasNameOverride When set, the new scope reuses this map of
+ *  aggregate-list aliases instead of building a fresh one. `overwrite` passes the current map so
+ *  group-by-alias resolution survives an output overwrite within a query block; `None` (the
+ *  default) builds a fresh map.
  */
 class NameScope(
+    val queryBlockScope: QueryBlockScope,
     val output: Seq[Attribute] = Seq.empty,
     val hiddenOutput: Seq[Attribute] = Seq.empty,
-    val isSubqueryRoot: Boolean = false,
+    val scopeType: NameScopeType = NameScopeType.Intermediate,
     val availableAliases: HashMap[ExprId, Alias] = new HashMap[ExprId, Alias],
-    val aggregateListAliases: Seq[Alias] = Seq.empty,
-    val baseAggregate: Option[Aggregate] = None,
-    planLogger: PlanLogger = new PlanLogger
+    val unaggregatedAccessOnlyIds: HashSet[ExprId] = new HashSet[ExprId],
+    val qualifiedAccessOnlyOutputIds: HashSet[ExprId] = new HashSet[ExprId],
+    val planIdTargetRegistry: PlanIdTargetRegistry = new PlanIdTargetRegistry,
+    planLogger: PlanLogger = new PlanLogger,
+    lcaRegistryOverride: Option[LateralColumnAliasRegistry] = None,
+    topAggregateExpressionsByAliasNameOverride: Option[IdentifierMap[ArrayList[Alias]]] = None
 ) extends SQLConfHelper {
+
+  /**
+   * Whether hidden output can be used for name resolution in this scope. When `false`, only main
+   * output and metadata columns from hidden output are considered during resolution.
+   */
+  private var canResolveNameByHiddenOutput: Boolean = false
+
+  /**
+   * Whether hidden output should be preferred over main output during name resolution.
+   * When `true`, hidden output candidates are tried before main output candidates; when `false`,
+   * main output is tried first.
+   */
+  private var shouldPreferHiddenOutput: Boolean = false
 
   /**
    * Case-insensitive map of alias names to aliases present in this [[NameScope]].
@@ -221,17 +261,13 @@ class NameScope(
   private lazy val hiddenAttributesById: HashMap[ExprId, Attribute] =
     createAttributeIds(hiddenOutput)
 
-  /**
-   * Whether the scope can resolve names by hidden output. This is set to `true` by
-   * [[markScopeForHiddenOutputResolution]].
-   */
-  private var canResolveNameByHiddenOutput: Boolean = false
-
   lazy val lcaRegistry: LateralColumnAliasRegistry =
-    if (conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
-      new LateralColumnAliasRegistryImpl
-    } else {
-      new LateralColumnAliasProhibitedRegistry
+    lcaRegistryOverride.getOrElse {
+      if (conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
+        new LateralColumnAliasRegistryImpl
+      } else {
+        new LateralColumnAliasProhibitedRegistry
+      }
     }
 
   /**
@@ -240,11 +276,45 @@ class NameScope(
    * aggregate expressions.
    */
   private lazy val topAggregateExpressionsByAliasName: IdentifierMap[ArrayList[Alias]] =
-    new IdentifierMap[ArrayList[Alias]]
+    topAggregateExpressionsByAliasNameOverride.getOrElse(new IdentifierMap[ArrayList[Alias]])
 
   /**
-   * Sets `canResolveNameByHiddenOutput` to `true`, enabling hidden output resolution for this
-   * scope.
+   * Mark this scope for HAVING clause resolution.
+   *
+   * Sets `canResolveNameByHiddenOutput` to `true` and `shouldPreferHiddenOutput` to `true`,
+   * allowing resolution to use hidden output attributes and preferring them over main output.
+   */
+  def markScopeForHaving(): Unit = {
+    canResolveNameByHiddenOutput = true
+    shouldPreferHiddenOutput = true
+  }
+
+  /**
+   * Mark this scope for ORDER BY (Sort) clause resolution.
+   *
+   * Sets `canResolveNameByHiddenOutput` to `true` and `shouldPreferHiddenOutput` to `false`,
+   * allowing resolution to use hidden output attributes but preferring main output (SELECT list
+   * aliases) over hidden output (table columns). This also resets any prior [[markScopeForHaving]]
+   * marking when Sort sits above a HAVING clause.
+   */
+  def markScopeForSort(): Unit = {
+    canResolveNameByHiddenOutput = true
+    shouldPreferHiddenOutput = false
+  }
+
+  /**
+   * Mark this scope for hidden output resolution without preferring hidden output over main
+   * output. Used by [[Filter]] and [[RepartitionByExpression]] where attributes from hidden output
+   * need to be resolvable but main output (SELECT list aliases) takes precedence.
+   *
+   * For example in the following case `col1` from the `filter` clause should be resolvable:
+   *
+   * {{{
+   *   sql("SELECT col1, col2 FROM VALUES(1, 2)").select("col2").filter($"col1" > 1)
+   * }}}
+   *
+   * In this case, even though `col1` is not in the main output, we should resolve it from the
+   * hidden one.
    */
   def markScopeForHiddenOutputResolution(): Unit = {
     canResolveNameByHiddenOutput = true
@@ -252,29 +322,51 @@ class NameScope(
 
   /**
    * Returns new [[NameScope]] which preserves all the immutable [[NameScope]] properties but
-   * overwrites `output`, `hiddenOutput`, `availableAliases`, `aggregateListAliases` and
-   * `baseAggregate` if provided. Mutable state like `lcaRegistry` is not preserved.
+   * overwrites `output`, `hiddenOutput`, `availableAliases`, `unaggregatedAccessOnlyIds` and
+   * `qualifiedAccessOnlyOutputIds` if provided. The
+   * [[QueryBlockScope]] is preserved so that query-block-scoped state ([[Aggregate]]
+   * context, aggregate-list aliases) is shared across [[NameScope]]s of the same query block. The
+   * `lcaRegistry` is carried over for the same reason: an overwrite produces a new scope for the
+   * same query block with updated outputs, so the lateral-column-alias state collected during
+   * expression resolution must survive it (e.g. grouping analytics inserts an [[Expand]] below the
+   * [[Aggregate]] and overwrites the output before the lateral aliases are resolved).
+   * `topAggregateExpressionsByAliasName` is carried over for the same reason: it is populated
+   * while resolving the aggregate expressions and read while resolving the grouping expressions,
+   * and an overwrite can happen in between, so dropping it would make SELECT-list aliases
+   * invisible to group-by-alias resolution. The `canResolveNameByHiddenOutput` and
+   * `shouldPreferHiddenOutput` flags are propagated from the current scope.
    */
   def overwrite(
       output: Option[Seq[Attribute]] = None,
       hiddenOutput: Option[Seq[Attribute]] = None,
       availableAliases: Option[HashMap[ExprId, Alias]] = None,
-      aggregateListAliases: Seq[Alias] = Seq.empty,
-      baseAggregate: Option[Aggregate] = None): NameScope = {
-    new NameScope(
+      unaggregatedAccessOnlyIds: Option[HashSet[ExprId]] = None,
+      qualifiedAccessOnlyOutputIds: Option[HashSet[ExprId]] = None,
+      planIdTargetRegistry: Option[PlanIdTargetRegistry] = None): NameScope = {
+    val newScope = new NameScope(
       output = output.getOrElse(this.output),
       hiddenOutput = hiddenOutput.getOrElse(this.hiddenOutput),
-      isSubqueryRoot = isSubqueryRoot,
+      scopeType = scopeType,
       availableAliases = availableAliases.getOrElse(this.availableAliases),
-      aggregateListAliases = aggregateListAliases,
-      baseAggregate = baseAggregate,
-      planLogger = planLogger
+      queryBlockScope = queryBlockScope,
+      unaggregatedAccessOnlyIds =
+        unaggregatedAccessOnlyIds.getOrElse(this.unaggregatedAccessOnlyIds),
+      qualifiedAccessOnlyOutputIds =
+        qualifiedAccessOnlyOutputIds.getOrElse(this.qualifiedAccessOnlyOutputIds),
+      planIdTargetRegistry = planIdTargetRegistry.getOrElse(this.planIdTargetRegistry),
+      planLogger = planLogger,
+      lcaRegistryOverride = Some(lcaRegistry),
+      topAggregateExpressionsByAliasNameOverride = Some(topAggregateExpressionsByAliasName)
     )
+    newScope.canResolveNameByHiddenOutput = this.canResolveNameByHiddenOutput
+    newScope.shouldPreferHiddenOutput = this.shouldPreferHiddenOutput
+    newScope
   }
 
   /**
    * Given referenced attributes, returns all attributes that are referenced and missing from
-   * current output, but can be found in hidden output.
+   * current output, but can be found in hidden output. Non-qualified-access-only metadata columns
+   * are excluded - they are handled separately by [[InsertsMetadataColumns]].
    */
   def resolveMissingAttributesByHiddenOutput(
       referencedAttributes: HashMap[ExprId, Attribute]): Seq[Attribute] = {
@@ -283,11 +375,37 @@ class NameScope(
       attribute =>
         if (referencedAttributes.containsKey(attribute.exprId) &&
           !outputById.containsKey(attribute.exprId) &&
-          !distinctMissingAttributes.containsKey(attribute.exprId)) {
+          !distinctMissingAttributes.containsKey(attribute.exprId) &&
+          !(attribute.isMetadataCol && !attribute.qualifiedAccessOnly)) {
           distinctMissingAttributes.put(attribute.exprId, attribute)
         }
     )
     distinctMissingAttributes.asScala.values.toSeq
+  }
+
+  /**
+   * Returns hidden attributes that a project list may legitimately restore. Project expressions
+   * may access qualified hidden columns, but cannot resurrect regular attributes removed by an
+   * earlier projection. The qualified `r.col1` reference below should resolve even though the
+   * `USING` join hides the right key:
+   *
+   * {{{
+   * SELECT r.col1
+   * FROM t AS l JOIN t AS r USING (col1);
+   * }}}
+   *
+   * However, `projected.select(df("col2"))` below should not resolve because the earlier project
+   * removed `col2` from its output:
+   *
+   * {{{
+   * val df = sql("SELECT 1 AS col1, 2 AS col2")
+   * val projected = df.select("col1")
+   * projected.select(df("col2"))
+   * }}}
+   */
+  def resolveMissingAttributesByHiddenOutputForProjectList(
+      referencedAttributes: HashMap[ExprId, Attribute]): Seq[Attribute] = {
+    resolveMissingAttributesByHiddenOutput(referencedAttributes).filter(_.qualifiedAccessOnly)
   }
 
   /**
@@ -329,6 +447,24 @@ class NameScope(
    */
   def getHiddenAttributeById(expressionId: ExprId): Option[Attribute] =
     Option(hiddenAttributesById.get(expressionId))
+
+  /**
+   * Returns whether the operator outputs the attribute with `expressionId`, either in `output` or
+   * in `qualifiedAccessOnlyOutputIds`.
+   */
+  def isOperatorOutput(expressionId: ExprId): Boolean =
+    outputById.containsKey(expressionId) || qualifiedAccessOnlyOutputIds.contains(expressionId)
+
+  /**
+   * Returns the attributes from `hiddenOutput` whose ids are in `qualifiedAccessOnlyOutputIds`, in
+   * `hiddenOutput` order.
+   */
+  def qualifiedAccessOnlyOutput: Seq[Attribute] =
+    if (qualifiedAccessOnlyOutputIds.isEmpty) {
+      Seq.empty
+    } else {
+      hiddenOutput.filter(attribute => qualifiedAccessOnlyOutputIds.contains(attribute.exprId))
+    }
 
   /**
    * Return all the explicitly outputted expression IDs. Hidden or metadata output are not included.
@@ -413,16 +549,6 @@ class NameScope(
   }
 
   /**
-   * Returns true if star has target and it's a table (not struct). E.g. `path.to.table.*`
-   */
-  def isStarQualifiedByTable(unresolvedStar: UnresolvedStarBase): Boolean = {
-    unresolvedStar.isQualifiedByTable(
-      childOperatorOutput = output,
-      resolver = nameComparator
-    )
-  }
-
-  /**
    * Checks whether the given [[Star]] can be resolved in this scope without performing the actual
    * expansion. This is used to decide whether to attempt outer scope expansion: if the star can
    * be resolved in the current scope, there is no need to probe outer scopes.
@@ -439,6 +565,16 @@ class NameScope(
           resolveNameInStarExpansion(starBase.target.get, nameComparator).isDefined
       case _ => true
     }
+  }
+
+  /**
+   * Returns true if star has target and it's a table (not struct). E.g. `path.to.table.*`
+   */
+  def isStarQualifiedByTable(unresolvedStar: UnresolvedStarBase): Boolean = {
+    unresolvedStar.isQualifiedByTable(
+      childOperatorOutput = output,
+      resolver = nameComparator
+    )
   }
 
   /**
@@ -539,9 +675,9 @@ class NameScope(
    * }}}
    *
    * Name resolution can be done using the hidden output for certain operators (e.g [[Sort]],
-   * [[Filter]], [[RepartitionByExpression]]). This is indicated by
-   * `parameters.canResolveNameByHiddenOutput` which is passed from
-   * [[ExpressionResolver.resolveAttribute]] based on the parent operator.
+   * [[Filter]], [[RepartitionByExpression]]). This is indicated by the scope-level
+   * [[canResolveNameByHiddenOutput]] flag, set via [[markScopeForHaving]], [[markScopeForSort]],
+   * or directly by the corresponding operator resolver.
    * Example:
    *
    * {{{
@@ -563,7 +699,7 @@ class NameScope(
    * will be true when we are resolving the grouping expressions. This is called "GROUP BY alias".
    * Example:
    *
-   * {{ SELECT col1 + col2 AS a FROM VALUES (1, 2) GROUP BY a; }}}
+   * {{{ SELECT col1 + col2 AS a FROM VALUES (1, 2) GROUP BY a; }}}
    *
    * GROUP BY alias can only resolve one-part names. Nested field extraction is not supported in
    * that case:
@@ -623,8 +759,8 @@ class NameScope(
       tryResolveMultipartNameByOutput(
         multipartName = multipartName,
         nameComparator = nameComparator,
-        canResolveNameByHiddenOutput = parameters.canResolveNameByHiddenOutput,
-        shouldPreferHiddenOutput = parameters.shouldPreferHiddenOutput,
+        canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
+        shouldPreferHiddenOutput = shouldPreferHiddenOutput,
         canReferenceAggregatedAccessOnlyAttributes =
           parameters.canReferenceAggregatedAccessOnlyAttributes,
         extractValueExtractionKey = parameters.extractValueExtractionKey
@@ -672,19 +808,22 @@ class NameScope(
    *   that name.
    * 2. If nested fields were inferred during the name matching process, we are dealing with
    *   struct/map/array field/element extraction. Further narrow down those attributes that are
-   *   suitable for field extraction using [[ExtractValue.isExtractable]]. We can safely do this
-   *   right away, because nested fields cannot be applied to non-recursive data types.
+   *   suitable for field extraction using [[ExtractValue.isExtractable]]. For grouping analytics,
+   *   Expand-output grouping attributes in [[unaggregatedAccessOnlyIds]] are also excluded inside
+   *   aggregate expressions so the pre-Expand originals resolve instead. We can safely do both
+   *   right away, because nested fields cannot be applied to non-recursive data types and
+   *   unaggregated-access-only attributes never appear in metadata output.
    * 3. Triage the candidates into several groups: main output, metadata output and hidden output.
-   *   Main output is the topmost output of a relevant operator (actual SELECT list). Metadata
-   *   output is a special qualified-access only output which originates from [[NaturalJoin]] or
-   *   [[UsingJoin]] and can only be accessed by a qualified multipart name. If we have it, it
-   *   means that [[attributesForResolution.getCandidatesForResolution]] inferred a qualified
-   *   attribute name. Hidden output is only used if [[canResolveNameByHiddenOutput]] is specified
-   *   (in ORDER BY and HAVING clauses). These attributes can sometimes be accessed from below in
-   *   relation to the relevant operator - the attributes are not explicitly mentioned in a SELECT
-   *   clause, but SQL language rules still allow referencing them. Not all hidden attributes can
-   *   be referenced if we are dealing with an [[Aggregate]] - only those that are part of grouping
-   *   expressions, or if we are resolving a name under an aggregate function (if
+   *   Main output is the topmost output of a relevant operator (actual SELECT list).
+   *   Metadata output is a special qualified-access only output which originates from
+   *   [[NaturalJoin]] or [[UsingJoin]] and can only be accessed by a qualified multipart name. If
+   *   we have it, it means that [[attributesForResolution.getCandidatesForResolution]] inferred a
+   *   qualified attribute name. Hidden output is only used if [[canResolveNameByHiddenOutput]] is
+   *   specified (in ORDER BY and HAVING clauses). These attributes can sometimes be accessed from
+   *   below in relation to the relevant operator - the attributes are not explicitly mentioned in
+   *   a SELECT clause, but SQL language rules still allow referencing them. Not all hidden
+   *   attributes can be referenced if we are dealing with an [[Aggregate]] - only those that are
+   *   part of grouping expressions, or if we are resolving a name under an aggregate function (if
    *   [[canReferenceAggregatedAccessOnlyAttributes]] is specified).
    * 4. Infer the right resolution priority depending on [[canResolveNameByHiddenOutput]] and
    *   [[shouldPreferHiddenOutput]] flag values. These flags are set depending on the operator
@@ -710,7 +849,8 @@ class NameScope(
       shouldPreferHiddenOutput: Boolean,
       canReferenceAggregatedAccessOnlyAttributes: Boolean,
       extractValueExtractionKey: Option[Expression]): Option[ResolvedMultipartName] = {
-    val (candidates, nestedFields) = getCandidatesForResolution(multipartName)
+    val (candidates, nestedFields) =
+      getCandidatesForResolution(multipartName, canReferenceAggregatedAccessOnlyAttributes)
 
     val mainOutputCandidates = getMainOutputCandidates(candidates)
     val metadataOutputCandidates = getMetadataOutputCandidates(candidates)
@@ -772,11 +912,12 @@ class NameScope(
   }
 
   private def getCandidatesForResolution(
-      multipartName: Seq[String]): (Seq[Attribute], Seq[String]) = {
+      multipartName: Seq[String],
+      canReferenceAggregatedAccessOnlyAttributes: Boolean): (Seq[Attribute], Seq[String]) = {
     val (candidates, nestedFields) =
       attributesForResolution.getCandidatesForResolution(multipartName, nameComparator)
 
-    val filteredCandidates = if (nestedFields.nonEmpty) {
+    val extractableCandidates = if (nestedFields.nonEmpty) {
       candidates.filter { attribute =>
         ExtractValue.isExtractable(
           attribute = attribute,
@@ -786,6 +927,14 @@ class NameScope(
       }
     } else {
       candidates
+    }
+
+    val filteredCandidates = if (canReferenceAggregatedAccessOnlyAttributes) {
+      extractableCandidates.filter { attribute =>
+        !unaggregatedAccessOnlyIds.contains(attribute.exprId)
+      }
+    } else {
+      extractableCandidates
     }
 
     (filteredCandidates, nestedFields)
@@ -799,7 +948,8 @@ class NameScope(
 
   private def getMetadataOutputCandidates(candidates: Seq[Attribute]): Seq[Attribute] = {
     candidates.filter { element =>
-      !outputById.containsKey(element.exprId) && element.qualifiedAccessOnly
+      !outputById.containsKey(element.exprId) &&
+      (element.qualifiedAccessOnly || element.isMetadataCol)
     }
   }
 
@@ -859,7 +1009,7 @@ class NameScope(
       planLogger.logNameResolutionEvent(
         multipartName,
         literalFunction,
-        s"As literal function"
+        "As literal function"
       )
 
       Some(ResolvedMultipartName(candidates = literalFunction, referencedAttribute = None))
@@ -977,11 +1127,19 @@ class NameScope(
     result
   }
 
+  /**
+   * Resolves a struct star target against visible output first, then eligible metadata output.
+   * This prevents metadata from making a visible struct with the same name ambiguous.
+   */
   private def resolveNameInStarExpansion(
       nameParts: Seq[String],
       nameComparator: NameComparator): Option[NamedExpression] = {
     val attributesForResolution = AttributeSeq.fromNormalOutput(output)
-    attributesForResolution.resolve(nameParts, nameComparator)
+    attributesForResolution.resolve(nameParts, nameComparator).orElse {
+      val metadataAttributesForResolution =
+        new AttributeSeq(getMetadataOutputCandidates(hiddenOutput))
+      metadataAttributesForResolution.resolve(nameParts, nameComparator)
+    }
   }
 }
 
@@ -997,10 +1155,11 @@ class NameScopeStack(
     tempVariableManager: TempVariableManager,
     catalogManager: CatalogManager,
     subqueryRegistry: SubqueryRegistry,
+    queryBlockScopes: QueryBlockScopeStack,
     planLogger: PlanLogger = new PlanLogger)
     extends SQLConfHelper {
   private val stack = new ArrayDeque[NameScope]
-  stack.push(new NameScope(planLogger = planLogger))
+  stack.push(new NameScope(queryBlockScope = queryBlockScopes.current, planLogger = planLogger))
 
   private val variableResolution = new VariableResolution(tempVariableManager, catalogManager)
 
@@ -1013,11 +1172,14 @@ class NameScopeStack(
 
   /**
    * Completely overwrite the current scope state with operator `output`, `hiddenOutput`,
-   * `availableAliases`, `aggregateListAliases` and `baseAggregate`. If `hiddenOutput`,
-   * `availableAliases` or `baseAggregate` are not provided, preserve the previous values.
+   * `availableAliases` and `qualifiedAccessOnlyOutputIds`. If `hiddenOutput`, `availableAliases`
+   * or `qualifiedAccessOnlyOutputIds` are not provided, preserve the previous values.
    * Additionally, update nullabilities of attributes in hidden output from new output, so that if
    * attribute was nullable in either old hidden output or new output, it must stay nullable in new
    * hidden output as well.
+   *
+   * Query-block-scoped state ([[Aggregate]] context, aggregate-list aliases) is held
+   * separately by [[QueryBlockScope]] and is not affected by this call.
    *
    * This method is called by the [[Resolver]] when we've calculated the output of an operator that
    * is being resolved. The new output is calculated based on the outputs of operator's children.
@@ -1040,8 +1202,8 @@ class NameScopeStack(
       output: Option[Seq[Attribute]] = None,
       hiddenOutput: Option[Seq[Attribute]] = None,
       availableAliases: Option[HashMap[ExprId, Alias]] = None,
-      aggregateListAliases: Seq[Alias] = Seq.empty,
-      baseAggregate: Option[Aggregate] = None): Unit = {
+      planIdTargetRegistry: Option[PlanIdTargetRegistry] = None,
+      qualifiedAccessOnlyOutputIds: Option[HashSet[ExprId]] = None): Unit = {
     val hiddenOutputWithUpdatedNullabilities = updateHiddenOutputProperties(
       output.getOrElse(stack.peek().output),
       hiddenOutput.getOrElse(stack.peek().hiddenOutput)
@@ -1051,16 +1213,15 @@ class NameScopeStack(
       output = output,
       hiddenOutput = Some(hiddenOutputWithUpdatedNullabilities),
       availableAliases = availableAliases,
-      aggregateListAliases = aggregateListAliases,
-      baseAggregate = baseAggregate
+      qualifiedAccessOnlyOutputIds = qualifiedAccessOnlyOutputIds,
+      planIdTargetRegistry = planIdTargetRegistry
     )
 
     stack.push(newScope)
   }
 
   /**
-   * Overwrites `output`, `groupingAttributeIds`, `aggregateListAliases` and `baseAggregate` of the
-   * current [[NameScope]] entry and:
+   * Overwrites `output` of the current [[NameScope]] entry and:
    *  1. Extends hidden output with the provided output. For attributes that appear in both hidden
    *  output and the provided output, the output version takes precedence. This ensures that the
    *  hidden output carries the most up-to-date attribute properties from the current operator.
@@ -1086,12 +1247,32 @@ class NameScopeStack(
    *
    *  2. updates properties of attributes in hidden output. This includes nullabilities and access
    *  modes. See [[updateHiddenOutputProperties]] for more details.
+   *
+   *  When `stripMetadataFromHiddenOutput` is `true`, non-qualified-access-only metadata columns
+   *  (`isMetadataCol && !qualifiedAccessOnly`) are removed from hidden output before extending.
+   *  A regular `GROUP BY` retains its metadata grouping attributes so a query such as
+   *  `SELECT _metadata.*, COUNT(*) FROM t GROUP BY ALL ORDER BY _metadata.file_name` can resolve
+   *  the sort above the [[Aggregate]]. Grouping analytics instead use grouping attributes produced
+   *  by [[Expand]] with different expression IDs, so their original metadata attributes are not
+   *  retained here. This is used by operators that redefine their output schema (e.g.
+   *  [[Aggregate]], [[Pivot]]) where propagating raw metadata columns would be incorrect.
+   *
+   *  `qualifiedAccessOnlyOutputIds` is cleared, because the previous output stays only in hidden
+   *  output, unless `retainQualifiedAccessOnlyOutput` is `true`. Operators that output all
+   *  attributes of their child (e.g. [[BinBy]]) set it.
+   *
+   *  Query-block-scoped state ([[Aggregate]] context, aggregate-list aliases) is held
+   *  separately by [[QueryBlockScope]] and is not affected by this call.
+   *
+   * @param output The new output attributes for the current scope.
+   * @param groupingModifier Controls how hidden output attributes are tagged for access control
+   *   above an [[Aggregate]]. See [[GroupingModifier]] for details.
    */
   def overwriteOutputAndExtendHiddenOutput(
       output: Seq[Attribute],
-      groupingAttributeIds: Option[HashSet[ExprId]] = None,
-      aggregateListAliases: Seq[Alias] = Seq.empty,
-      baseAggregate: Option[Aggregate] = None): Unit = {
+      groupingModifier: GroupingModifier = GroupingModifier.NoGrouping,
+      stripMetadataFromHiddenOutput: Boolean = false,
+      retainQualifiedAccessOnlyOutput: Boolean = false): Unit = {
     val prevScope = stack.pop
 
     val outputLookup = new HashMap[ExprId, Attribute](output.size)
@@ -1099,7 +1280,22 @@ class NameScopeStack(
       outputLookup.put(attribute.exprId, attribute)
     }
 
-    val refreshedHiddenOutput = prevScope.hiddenOutput.map { attribute =>
+    val regularGroupingAttributeIds = groupingModifier match {
+      case GroupingModifier.GroupBy(attributeIds) => Some(attributeIds)
+      case _ => None
+    }
+
+    val hiddenOutputWithStrippedMetadata = if (stripMetadataFromHiddenOutput) {
+      prevScope.hiddenOutput.filter(attribute =>
+        !attribute.isMetadataCol ||
+        attribute.qualifiedAccessOnly ||
+        regularGroupingAttributeIds.exists(_.contains(attribute.exprId))
+      )
+    } else {
+      prevScope.hiddenOutput
+    }
+
+    val refreshedHiddenOutput = hiddenOutputWithStrippedMetadata.map { attribute =>
       outputLookup.get(attribute.exprId) match {
         case null => attribute
         case outputAttribute => outputAttribute
@@ -1109,18 +1305,31 @@ class NameScopeStack(
     val hiddenOutputWithUpdatedProperties: Seq[Attribute] = updateHiddenOutputProperties(
       output = output,
       hiddenOutput = refreshedHiddenOutput,
-      groupingAttributeIds = groupingAttributeIds
+      groupingModifier = groupingModifier
     )
 
     val resultHiddenOutput = hiddenOutputWithUpdatedProperties ++ output.filter { attribute =>
         prevScope.getHiddenAttributeById(attribute.exprId).isEmpty
       }
 
+    val newUnaggregatedAccessOnlyIds = groupingModifier match {
+      case GroupingModifier.GroupingAnalytics(attributeIds) =>
+        val result = new HashSet[ExprId](attributeIds.size)
+        result.addAll(attributeIds)
+        Some(result)
+      case _ =>
+        None
+    }
+
     val newScope = prevScope.overwrite(
       output = Some(output),
       hiddenOutput = Some(resultHiddenOutput),
-      aggregateListAliases = aggregateListAliases,
-      baseAggregate = baseAggregate
+      unaggregatedAccessOnlyIds = newUnaggregatedAccessOnlyIds,
+      qualifiedAccessOnlyOutputIds = if (retainQualifiedAccessOnlyOutput) {
+        None
+      } else {
+        Some(new HashSet[ExprId])
+      }
     )
 
     stack.push(newScope)
@@ -1168,31 +1377,71 @@ class NameScopeStack(
    * }
    * }}}
    *
-   * @param isSubqueryRoot Indicates that the current scope is a root of a subquery. This is used by
-   *   [[NameScopeStack.resolveMultipartName]] to detect the nearest outer scope.
+   * @param scopeType Indicates the type of this scope. See [[NameScopeType]] for details.
    */
-  def pushScope(isSubqueryRoot: Boolean = false): Unit = {
-    stack.push(new NameScope(isSubqueryRoot = isSubqueryRoot, planLogger = planLogger))
+  def pushScope(scopeType: NameScopeType = NameScopeType.Intermediate): Unit = {
+    stack.push(
+      new NameScope(
+        scopeType = scopeType,
+        queryBlockScope = queryBlockScopes.current,
+        planLogger = planLogger
+      )
+    )
   }
 
   /**
    * After finishing the resolution after [[pushScope]], the caller needs to call [[popScope]] to
    * clear the stack. We propagate `hiddenOutput`, `availableAliases` upwards because of name
-   * resolution by overwriting their current values with the popped ones. This is not done in case
-   * [[pushScope]] and [[popScope]] were called in the context of subquery resolution (which is
-   * indicated by `isSubqueryRoot` flag), because we don't want to overwrite the existing
-   * `hiddenOutput` of the main plan.
+   * resolution by overwriting their current values with the popped ones, together with
+   * `qualifiedAccessOnlyOutputIds` that describe `hiddenOutput`. This is only done for
+   * [[NameScopeType.Intermediate]] scopes, which represent operators within the same query block
+   * (e.g., nested [[Project]] inside [[Filter]]) whose accumulated resolution state must be
+   * visible to subsequent sibling operators. [[NameScopeType.SubqueryRoot]] and
+   * [[NameScopeType.Opaque]] scopes do not propagate any state to the parent because they
+   * represent independent query blocks whose internal state should not leak out.
    */
   def popScope(): Unit = {
     val childScope = stack.pop()
-    if (!stack.isEmpty && !childScope.isSubqueryRoot) {
+    if (!stack.isEmpty && childScope.scopeType == NameScopeType.Intermediate) {
       val currentScope = stack.pop()
       stack.push(
         currentScope.overwrite(
           hiddenOutput = Some(childScope.hiddenOutput),
-          availableAliases = Some(childScope.availableAliases)
+          availableAliases = Some(childScope.availableAliases),
+          qualifiedAccessOnlyOutputIds = Some(childScope.qualifiedAccessOnlyOutputIds),
+          planIdTargetRegistry = Some(childScope.planIdTargetRegistry)
         )
       )
+    }
+  }
+
+  /**
+   * Move existing plan-id targets through the current operator and register the operator's tag.
+   *
+   * The plan id is read from `unresolvedOperator` because it is the authoritative carrier of
+   * [[LogicalPlan.PLAN_ID_TAG]]. Some operators (e.g. NATURAL/USING joins) resolve into a new node
+   * that already carries its own tag, and `copyTagsFrom` will not overwrite it, so the resolved
+   * node may not have the plan id even though the unresolved one does.
+   */
+  def updatePlanIdTargetsForCurrentOperator(unresolvedOperator: LogicalPlan): Unit = {
+    val registry = current.planIdTargetRegistry
+    val planId = unresolvedOperator.getTagValue(LogicalPlan.PLAN_ID_TAG)
+    if (!registry.isEmpty || planId.isDefined) {
+      val planIdHiddenOutput = sideChannelHiddenColumns(
+        output = current.output,
+        hiddenOutput = current.hiddenOutput
+      )
+      registry.advanceThroughOperator(
+        output = current.output,
+        hiddenOutput = planIdHiddenOutput
+      )
+      planId.foreach { id =>
+        registry.register(
+          planId = id,
+          output = current.output,
+          hiddenOutput = planIdHiddenOutput
+        )
+      }
     }
   }
 
@@ -1244,7 +1493,7 @@ class NameScopeStack(
    * -- These examples fail with `UNRESOLVED_COLUMN`.
    * -- LCA in outer scope.
    * SELECT col1 AS a, (SELECT a + 1) AS b FROM VALUES (1);
-   * -- Aliased aggerate expression in outer scope.
+   * -- Aliased aggregate expression in outer scope.
    * SELECT col1 AS a FROM VALUES (1) GROUP BY a, (SELECT a + 1);
    * }}}
    *
@@ -1274,37 +1523,133 @@ class NameScopeStack(
   def resolveMultipartName(
       multipartName: Seq[String],
       parameters: NameResolutionParameters = NameResolutionParameters()): NameTarget = {
-    val nameTargetFromCurrentScope = current.resolveMultipartName(multipartName, parameters)
+    tryResolvePlanIdTaggedName(parameters).getOrElse {
+      val nameTargetFromCurrentScope = current.resolveMultipartName(multipartName, parameters)
 
-    if (nameTargetFromCurrentScope.candidates.nonEmpty) {
-      nameTargetFromCurrentScope
-    } else {
-      val nameTargetFromOuterScope = resolveMultipartNameFromOuterScope(
-        multipartName = multipartName,
-        parameters = NameResolutionParameters(
-          canResolveNameByHiddenOutput = parameters.canResolveNameByHiddenOutputInSubquery,
-          canReferenceAggregatedAccessOnlyAttributes =
-            parameters.canReferenceAggregatedAccessOnlyAttributes
-        )
-      )
-
-      if (nameTargetFromOuterScope.candidates.nonEmpty) {
-        nameTargetFromOuterScope
+      if (nameTargetFromCurrentScope.candidates.nonEmpty) {
+        nameTargetFromCurrentScope
       } else {
-        val nameTargetFromVariableResolution = resolveMultipartNameAsVariable(
+        val nameTargetFromOuterScope = resolveMultipartNameFromOuterScope(
           multipartName = multipartName,
           parameters = NameResolutionParameters(
-            resolvingView = parameters.resolvingView,
-            referredTempVariableNames = parameters.referredTempVariableNames
+            canResolveNameByHiddenOutput = parameters.canResolveNameByHiddenOutputInSubquery,
+            canReferenceAggregatedAccessOnlyAttributes =
+              parameters.canReferenceAggregatedAccessOnlyAttributes
           )
         )
 
-        if (nameTargetFromVariableResolution.candidates.nonEmpty) {
-          nameTargetFromVariableResolution
+        if (nameTargetFromOuterScope.candidates.nonEmpty) {
+          nameTargetFromOuterScope
         } else {
-          nameTargetFromCurrentScope
+          val nameTargetFromVariableResolution = resolveMultipartNameAsVariable(
+            multipartName = multipartName,
+            parameters = NameResolutionParameters(
+              restrictTempVariableResolutionToReferredNames =
+                parameters.restrictTempVariableResolutionToReferredNames,
+              resolvingExecuteImmediate = parameters.resolvingExecuteImmediate,
+              referredTempVariableNames = parameters.referredTempVariableNames
+            )
+          )
+
+          if (nameTargetFromVariableResolution.candidates.nonEmpty) {
+            nameTargetFromVariableResolution
+          } else {
+            nameTargetFromCurrentScope
+          }
         }
       }
+    }
+  }
+
+  /**
+   * Expand a [[Star]] expression. The resolution strategy is:
+   *   1. If the current scope can resolve the star ([[NameScope.canExpandStarFromCurrentScope]]),
+   *      expand it there.
+   *   2. Otherwise, try to expand from the nearest outer scope ([[expandStarFromOuterScope]]),
+   *      wrapping results in [[OuterReference]].
+   *   3. If neither succeeds, fall back to [[NameScope.expandStar]] on the current scope solely
+   *      to throw the appropriate error with the correct context (e.g. available column names).
+   */
+  def expandStar(star: Star): Seq[NamedExpression] = {
+    if (current.canExpandStarFromCurrentScope(star)) {
+      current.expandStar(star)
+    } else {
+      val fromOuterScope = expandStarFromOuterScope(star)
+      if (fromOuterScope.nonEmpty) {
+        fromOuterScope
+      } else {
+        current.expandStar(star)
+      }
+    }
+  }
+
+  /**
+   * Resolve a DataFrame plan-id-tagged [[UnresolvedAttribute]] against the current scope's
+   * [[PlanIdTargetRegistry]].
+   *
+   * Returns `None` -- falling through to the normal name-resolution path -- when there is no
+   * plan-id-tagged attribute to resolve, or when the plan id matched a target but the column did
+   * not resolve there (`MatchedWithoutCandidate`). The fall-through lets a `Sort`/`Filter` above
+   * recover the reference from the hidden output, while a bare projection still fails it. Throws
+   * `CANNOT_RESOLVE_DATAFRAME_COLUMN` when no target matches the plan id.
+   */
+  private def tryResolvePlanIdTaggedName(
+      parameters: NameResolutionParameters): Option[NameTarget] = {
+    parameters.planIdTaggedAttribute match {
+      case Some(unresolvedAttribute) =>
+        unresolvedAttribute.getTagValue(LogicalPlan.PLAN_ID_TAG) match {
+          case Some(planId) =>
+            resolveAgainstPlanIdRegistry(unresolvedAttribute, planId)
+          case None =>
+            None
+        }
+      case None =>
+        None
+    }
+  }
+
+  /**
+   * Resolve `unresolvedAttribute` against the scope's [[PlanIdTargetRegistry]] for `planId`.
+   *
+   * A `MatchedWithoutCandidate` -- the plan id matched a target but the column was dropped or
+   * shadowed above the tagged node -- returns `None` so the reference falls through to normal name
+   * resolution (which lets a `Sort`/`Filter` recover it from the hidden output, while a bare
+   * projection still fails it).
+   */
+  private def resolveAgainstPlanIdRegistry(
+      unresolvedAttribute: UnresolvedAttribute,
+      planId: Long): Option[NameTarget] = {
+    current.planIdTargetRegistry.resolve(unresolvedAttribute, planId, conf.resolver) match {
+      case PlanIdResolutionResult.Resolved(nameTarget) =>
+        Some(nameTarget)
+      case PlanIdResolutionResult.NoTarget =>
+        throw QueryCompilationErrors.cannotResolveDataFrameColumn(unresolvedAttribute)
+      case PlanIdResolutionResult.MatchedWithoutCandidate =>
+        None
+    }
+  }
+
+  /**
+   * Returns the `hiddenOutput` columns that a plan-id-tagged reference can resolve against: the
+   * metadata and qualified-access-only side-channel columns (e.g. a natural/USING join key).
+   * Columns already in `output`, and regular columns kept in `hiddenOutput` only for `Sort`/
+   * `Filter` missing-attribute recovery, are excluded.
+   *
+   * {{{
+   * val df1 = spark.range(2).withColumn("x", $"id" + 1)
+   * val df2 = df1.select($"id")
+   * df2.sort(df1("x"))   // resolves: `x` dropped from df2's output, but the Sort recovers it
+   * df2.select(df1("x")) // fails: a bare projection cannot recover the dropped `x`
+   * }}}
+   */
+  private def sideChannelHiddenColumns(
+      output: Seq[Attribute],
+      hiddenOutput: Seq[Attribute]): Seq[Attribute] = {
+    val outputExprIds = new HashSet[ExprId](output.size)
+    output.foreach(attribute => outputExprIds.add(attribute.exprId))
+    hiddenOutput.filter { attribute =>
+      !outputExprIds.contains(attribute.exprId) &&
+      (attribute.isMetadataCol || attribute.qualifiedAccessOnly)
     }
   }
 
@@ -1354,11 +1699,11 @@ class NameScopeStack(
    */
   private def resolveMultipartNameAsVariable(
       multipartName: Seq[String],
-      parameters: NameResolutionParameters = NameResolutionParameters()
+      parameters: NameResolutionParameters
   ): NameTarget = {
     variableResolution.resolveMultipartName(
       nameParts = multipartName,
-      resolvingView = parameters.resolvingView,
+      resolvingView = parameters.restrictTempVariableResolutionToReferredNames,
       referredTempVariableNames = parameters.referredTempVariableNames
     ) match {
       case Some(variable) =>
@@ -1369,46 +1714,46 @@ class NameScopeStack(
   }
 
   /**
-   * Expand a [[Star]] expression. The resolution strategy is:
-   *   1. If the current scope can resolve the star ([[NameScope.canExpandStarFromCurrentScope]]),
-   *      expand it there.
-   *   2. Otherwise, try to expand from the nearest outer scope ([[expandStarFromOuterScope]]),
-   *      wrapping results in [[OuterReference]].
-   *   3. If neither succeeds, fall back to [[NameScope.expandStar]] on the current scope solely
-   *      to throw the appropriate error with the correct context (e.g. available column names).
+   * Expand a [[Star]] expression from the outer scope of a subquery. This is needed for queries
+   * like:
+   *
+   * {{{
+   * SELECT (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1) FROM VALUES(1) AS t1(col1)
+   * }}}
+   *
+   * Where `t1.*` inside the scalar subquery references the outer query's relation `t1`.
+   *
+   * The method checks the nearest outer scope and, if it can resolve the star, wraps the
+   * resulting attributes in [[OuterReference]]. To match the fixed-point analyzer's behavior,
+   * only the nearest outer scope is checked, and star expansion is only attempted when the
+   * outer operator hosting the subquery is [[Project]], [[Aggregate]], [[CollectMetrics]], or
+   * [[LateralJoin]] (see [[SubqueryScope.parentOperator]]).
+   *
+   * The expanded [[OuterReference]]s are returned bare. Aliasing (to give each a fresh ExprId in
+   * the subquery's scope) is owned by the result slot, where `aliasOuterReferenceIfNeeded` only
+   * aliases stars that are top-level project/aggregate outputs; stars nested inside an expression
+   * (e.g. `COALESCE(t1.*)`) keep bare [[OuterReference]]s.
+   *
+   * @return expanded attributes wrapped in [[OuterReference]] (or [[Alias]] for struct field
+   *         expansion), or empty sequence if the nearest outer scope cannot resolve the star.
    */
-  def expandStar(star: Star): Seq[NamedExpression] = {
-    if (current.canExpandStarFromCurrentScope(star)) {
-      current.expandStar(star)
-    } else {
-      val fromOuterScope = expandStarFromOuterScope(star)
-      if (fromOuterScope.nonEmpty) {
-        fromOuterScope
-      } else {
-        current.expandStar(star)
-      }
-    }
-  }
-
   private def expandStarFromOuterScope(star: Star): Seq[NamedExpression] = {
     (star, subqueryRegistry.currentScope.parentOperator) match {
-      case (starBase: UnresolvedStarBase, Some(_: Project | _: Aggregate | _: CollectMetrics))
-          if starBase.target.isDefined =>
+      case (
+            starBase: UnresolvedStarBase,
+            Some(_: Project | _: Aggregate | _: CollectMetrics | _: LateralJoin)
+          ) if starBase.target.isDefined =>
         outerScopes.headOption match {
           case Some(outerScope) if outerScope.canExpandStarFromCurrentScope(star) =>
             outerScope.expandStar(star).map { namedExpression =>
-              val wrapped = wrapCandidateInOuterReference(
+              wrapCandidateInOuterReference(
                 candidate = namedExpression,
                 outerScope = outerScope,
                 subqueryScope = subqueryRegistry.currentScope,
                 outerScopeLevel = 1
-              )
-
-              wrapped match {
-                case alias: Alias =>
-                  alias
+              ) match {
                 case named: NamedExpression =>
-                  Alias(named, toPrettySQL(namedExpression))()
+                  named
                 case other =>
                   throw SparkException.internalError(
                     s"Expected NamedExpression from outer star expansion, got " +
@@ -1425,15 +1770,23 @@ class NameScopeStack(
   /**
    * Find the nearest outer scope and return it if we are in a subquery. Only one level of
    * correlation is supported, so at most one scope is returned.
+   *
+   * [[NameScopeType.Opaque]] scopes act as opaque boundaries - the traversal stops when hitting
+   * one because the scope body (e.g., a view, UDF, or procedure) should be resolved in isolation
+   * from the enclosing query context. This prevents outer references from leaking in.
    */
   private def outerScopes: mutable.ArrayBuffer[NameScope] = {
-    val supportNestedCorrelations = false
     val buffer = mutable.ArrayBuffer.empty[NameScope]
     val iter = stack.iterator
-    while (iter.hasNext && (supportNestedCorrelations || buffer.isEmpty)) {
+    var hitOpaqueScope = false
+    while (iter.hasNext && !hitOpaqueScope && buffer.isEmpty) {
       val scope = iter.next
-      if (scope.isSubqueryRoot && iter.hasNext) {
-        buffer += iter.next
+      scope.scopeType match {
+        case NameScopeType.Opaque =>
+          hitOpaqueScope = true
+        case NameScopeType.SubqueryRoot if iter.hasNext =>
+          buffer += iter.next
+        case _ =>
       }
     }
     buffer
@@ -1441,10 +1794,11 @@ class NameScopeStack(
 
   /**
    * Wrap candidate in [[OuterReference]]. If the root is not an [[Attribute]], but an
-   * [[ExtractValue]] (struct/map/array field reference) we find the actual [[Attribute]] and wrap
-   * it in [[OuterReference]]. In case found [[Attribute]] is aliased in the outer scope, we
-   * replace it with an [[Attribute]] created from the [[Alias]]. Record the `outerScopeLevel`
-   * within the current [[SubqueryScope]] for the [[OuterReference]].
+   * [[ExtractValue]] (struct/map/array field reference) or an [[Alias]] (from struct star
+   * expansion) we find the actual [[Attribute]] and wrap it in [[OuterReference]]. In case
+   * found [[Attribute]] is aliased in the outer scope, we replace it with an [[Attribute]]
+   * created from the [[Alias]]. Record the `outerScopeLevel` within the current
+   * [[SubqueryScope]] for the [[OuterReference]].
    */
   private def wrapCandidateInOuterReference(
       candidate: Expression,
@@ -1497,21 +1851,37 @@ class NameScopeStack(
    *
    * As it can be seen, we replace `outer(col1)` with `outer(alias)` but keep the original
    * [[Attribute]] in the name (to be compatible with the fixed-point implementation).
+   *
+   * When the attribute is replaced, we also store the original attribute's name in
+   * [[OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE]]. If this [[OuterReference]]
+   * surfaces as a top-level subquery output and gets aliased (see
+   * `ExpressionResolver.aliasOuterReferenceIfNeeded`), the alias takes the original attribute's
+   * name rather than the replacement's. Fixed-point names that alias before
+   * [[UpdateOuterReferences]] rewrites the reference, so it sees the original name; this keeps
+   * both analyzers in sync. For example,
+   * `SELECT col1 AS a FROM v GROUP BY col1 HAVING col1 IN (SELECT v.col1 ...)` yields
+   * `outer(a#x) AS col1#x` in both analyzers.
    */
   private def tryReplaceOuterReferenceAttributeWithAlias(
       attribute: Attribute,
       outerScope: NameScope): OuterReference = {
-    val replacedAttribute = outerScope.aggregateListAliases
+    val aggregateListAlias = outerScope.queryBlockScope.getAggregateListAliases
       .collectFirst {
-        case alias if alias.child.semanticEquals(attribute) => alias.toAttribute
+        case alias if alias.child.semanticEquals(attribute) => alias
       }
-      .getOrElse(attribute)
 
-    val outerReference = OuterReference(replacedAttribute)
+    val outerReference =
+      OuterReference(aggregateListAlias.map(_.toAttribute).getOrElse(attribute))
     outerReference.setTagValue(
       OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE,
       toPrettySQL(OuterReference(attribute))
     )
+    if (aggregateListAlias.isDefined) {
+      outerReference.setTagValue(
+        OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE,
+        toPrettySQL(attribute)
+      )
+    }
 
     outerReference
   }
@@ -1535,7 +1905,7 @@ class NameScopeStack(
   private def updateHiddenOutputProperties(
       output: Seq[Attribute],
       hiddenOutput: Seq[Attribute],
-      groupingAttributeIds: Option[HashSet[ExprId]] = None): Seq[Attribute] = {
+      groupingModifier: GroupingModifier = GroupingModifier.NoGrouping): Seq[Attribute] = {
     val outputLookup = new HashMap[ExprId, Attribute](output.size)
     output.foreach(attribute => outputLookup.put(attribute.exprId, attribute))
 
@@ -1546,16 +1916,39 @@ class NameScopeStack(
         attribute
       }
 
-      groupingAttributeIds match {
-        case Some(groupingAttributeIds) =>
-          if (groupingAttributeIds.contains(attribute.exprId)) {
+      groupingModifier match {
+        case GroupingModifier.GroupBy(attributeIds) =>
+          if (attributeIds.contains(attribute.exprId)) {
             attributeWithUpdatedNullability.markAsAllowAnyAccess()
           } else {
             attributeWithUpdatedNullability.markAsAggregatedAccessOnly()
           }
-        case None =>
+        case GroupingModifier.GroupingAnalytics(attributeIds) =>
+          if (attributeIds.contains(attribute.exprId)) {
+            attributeWithUpdatedNullability.markAsAllowAnyAccess()
+          } else {
+            stripIsDuplicateMetadata(attributeWithUpdatedNullability.markAsAggregatedAccessOnly())
+          }
+        case GroupingModifier.NoGrouping =>
           attributeWithUpdatedNullability
       }
+    }
+  }
+
+  /**
+   * Strips `__is_duplicate` metadata so the attribute survives `AttributeSeq` candidate pruning
+   * when it is the sole pre-Expand representative for a grouping column.
+   */
+  private def stripIsDuplicateMetadata(attribute: Attribute): Attribute = {
+    if (attribute.metadata.contains("__is_duplicate")) {
+      attribute.withMetadata(
+        new MetadataBuilder()
+          .withMetadata(attribute.metadata)
+          .remove("__is_duplicate")
+          .build()
+      )
+    } else {
+      attribute
     }
   }
 }

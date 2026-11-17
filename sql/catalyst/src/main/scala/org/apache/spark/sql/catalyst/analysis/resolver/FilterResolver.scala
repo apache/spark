@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  AttributeSet,
+  ExpressionSet,
+  PipeOperator
+}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 
 /**
  * Resolves [[Filter]] node and its condition.
@@ -42,6 +47,14 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
   override def resolve(unresolvedFilter: Filter): LogicalPlan = {
     val resolvedChild = resolver.resolve(unresolvedFilter.child)
 
+    // A pipe operator is a name resolution boundary, so names in a pipe `WHERE` are resolved
+    // using only the output of the previous pipe step, like in the fixed-point Analyzer. For
+    // example, `x` is ambiguous here:
+    // {{{ SELECT 1 x |> AGGREGATE SUM(x) AS x GROUP BY x |> WHERE x = 1; }}}
+    if (!resolvedChild.isInstanceOf[PipeOperator]) {
+      scopes.current.markScopeForHiddenOutputResolution()
+    }
+
     val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
 
     val partiallyResolvedFilter = unresolvedFilter.copy(child = resolvedChild)
@@ -55,15 +68,28 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     val resolvedFilter = Filter(resolvedCondition, resolvedChild)
 
     validateFilter(
-      invalidExpressions = expressionResolver.getLastInvalidExpressionsInTheContextOfOperator,
+      invalidExpressions = operatorResolutionContextStack.current.invalidExpressions,
       unresolvedOperator = unresolvedFilter,
       resolvedFilter = resolvedFilter
     )
 
     val missingAttributes: Seq[Attribute] =
       scopes.current.resolveMissingAttributesByHiddenOutput(referencedAttributes)
+
+    failIfMissingAttributesInsideAndOutsideLambdaFunctions(
+      expressions = Seq(resolvedCondition),
+      missingAttributes = missingAttributes
+    )
+
+    validateMissingAttributesForAggregateChild(
+      resolvedFilter = resolvedFilter,
+      resolvedChild = resolvedChild,
+      missingAttributes = missingAttributes
+    )
+
     val resolvedChildWithMissingAttributes =
       insertMissingExpressions(resolvedChild, missingAttributes)
+
     val resolvedChildWithMetadataColumns = retainOriginalJoinOutput(
       plan = resolvedChildWithMissingAttributes,
       outputExpressions = Seq.empty,
@@ -79,5 +105,29 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       scopes = scopes,
       operatorResolutionContextStack = operatorResolutionContextStack
     )
+  }
+
+  /**
+   * Rejects hidden attributes that a [[Filter]] on top of an [[Aggregate]] references without
+   * grouping by them. Such attributes cannot be appended to the aggregate expressions, so they
+   * fail with the same missing attribute error that the fixed-point analyzer reports. As in
+   * fixed-point, an attribute counts as grouped only if a grouping expression is semantically
+   * equal to it. The check is a no-op when the [[Filter]] references no hidden attributes, and
+   * otherwise canonicalizes each grouping expression once via an [[ExpressionSet]].
+   */
+  private def validateMissingAttributesForAggregateChild(
+      resolvedFilter: Filter,
+      resolvedChild: LogicalPlan,
+      missingAttributes: Seq[Attribute]): Unit = resolvedChild match {
+    case aggregate: Aggregate if missingAttributes.nonEmpty =>
+      val groupingExpressions = ExpressionSet(aggregate.groupingExpressions)
+      val nonGroupingAttributes = missingAttributes.filterNot(groupingExpressions.contains)
+      if (nonGroupingAttributes.nonEmpty) {
+        Resolver.throwMissingAttributesError(
+          operator = resolvedFilter,
+          missingInput = AttributeSet(nonGroupingAttributes)
+        )
+      }
+    case _ =>
   }
 }

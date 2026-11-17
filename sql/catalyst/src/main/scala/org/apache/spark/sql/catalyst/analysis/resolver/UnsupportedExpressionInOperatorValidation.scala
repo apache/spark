@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.expressions.{Expression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 
 object UnsupportedExpressionInOperatorValidation {
 
@@ -59,19 +58,9 @@ object UnsupportedExpressionInOperatorValidation {
         operator.isInstanceOf[CollectMetrics] ||
         operator.isInstanceOf[Pivot] ||
         isSortOnTopOfAggregate ||
-        isFilterOnTopOfAggregate ||
-        onlyInLateralSubquery(operator))
+        isFilterOnTopOfAggregate)
       case _ =>
         false
-    }
-  }
-
-  private def onlyInLateralSubquery(operator: LogicalPlan): Boolean = {
-    operator.isInstanceOf[LateralJoin] && {
-      // TODO: check if we are resolving a lateral join condition once lateral join is supported.
-      throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(
-        s"${operator.getClass} operator resolution"
-      )
     }
   }
 }
