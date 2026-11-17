@@ -2128,6 +2128,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  Seq(1, 2).foreach { numPartitions =>
+    test(s"SPARK-61525: histogram_numeric with NaN and $numPartitions input partitions") {
+      for (nBins <- Seq(2, 4)) {
+        val input = Seq(Double.NaN, Double.NaN, 1.0).toDF("value").repartition(numPartitions)
+        checkAnswer(
+          input.agg(histogram_numeric(col("value"), lit(nBins))),
+          Row(Seq(Row(1.0, 1.0), Row(Double.NaN, 2.0))))
+      }
+    }
+  }
+
   Seq(true, false).foreach { value =>
     test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
       withSQLConf(

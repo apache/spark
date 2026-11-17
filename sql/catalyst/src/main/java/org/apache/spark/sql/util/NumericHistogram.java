@@ -22,6 +22,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.spark.sql.catalyst.util.SQLOrderingUtil;
+
 
 /**
  * A generic, re-usable histogram class that supports partial aggregations.
@@ -191,9 +193,17 @@ public class NumericHistogram {
       }
       Collections.sort(tmp_bins);
 
+      // Combine NaN bins before trimming so they do not displace finite values.
+      int last = tmp_bins.size() - 1;
+      while (last > 0 && Double.isNaN(tmp_bins.get(last - 1).x)) {
+        Coord lastBin = tmp_bins.remove(last);
+        tmp_bins.get(last - 1).y += lastBin.y;
+        last--;
+      }
+
       // Now trim the overstuffed histogram down to the correct number of bins
       bins = tmp_bins;
-      nusedbins += other.nusedbins;
+      nusedbins = bins.size();
       trim();
     }
   }
@@ -215,10 +225,11 @@ public class NumericHistogram {
     int bin = 0;
     for (int l = 0, r = nusedbins; l < r; ) {
       bin = (l + r) / 2;
-      if (bins.get(bin).x > v) {
+      int comparison = SQLOrderingUtil.compareDoubles(bins.get(bin).x, v);
+      if (comparison > 0) {
         r = bin;
       } else {
-        if (bins.get(bin).x < v) {
+        if (comparison < 0) {
           l = ++bin;
         } else {
           break; // break loop on equal comparator
@@ -232,7 +243,7 @@ public class NumericHistogram {
     // assumed to be equal to the closest bin -- if fabs(v-bins[bin].x) < THRESHOLD, then
     // just increment 'bin'. This is not done now because we don't want to make any
     // assumptions about the range of numeric data being analyzed.
-    if (bin < nusedbins && bins.get(bin).x == v) {
+    if (bin < nusedbins && SQLOrderingUtil.compareDoubles(bins.get(bin).x, v) == 0) {
       bins.get(bin).y++;
     } else {
       Coord newBin = new Coord();
