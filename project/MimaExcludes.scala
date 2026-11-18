@@ -41,9 +41,6 @@ object MimaExcludes {
 
   // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
   lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
-    // [SPARK-60733][CORE][SQL] Add TaskContext.isCompletionStarted
-    ProblemFilters.exclude[ReversedMissingMethodProblem](
-      "org.apache.spark.TaskContext.isCompletionStarted"),
     // [SPARK-60217][SQL] Remove the unused createZstdInputStream overload that built a default
     // Hadoop conf; callers pass the read's conf to the remaining overload.
     ProblemFilters.exclude[DirectMissingMethodProblem](

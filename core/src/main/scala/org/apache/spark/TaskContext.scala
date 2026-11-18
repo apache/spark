@@ -389,7 +389,7 @@ abstract class TaskContext extends Serializable {
    * thread that such a listener stops and waits for can check this to stop on its own. It reads
    * a volatile field, without the lock of the task.
    */
-  private[spark] def isCompletionStarted(): Boolean
+  private[spark] def isCompletionStarted(): Boolean = false
 
   /** If the task fails, the exception that caused it, otherwise None. */
   private[spark] def getTaskFailure: Option[Throwable] = None
