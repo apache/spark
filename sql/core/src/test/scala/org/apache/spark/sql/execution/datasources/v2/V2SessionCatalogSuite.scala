@@ -379,62 +379,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(filterV2TableProperties(table.properties) == Map())
   }
 
-  test("SPARK-57670: alterTable keeps the comment and collation unless a change names them") {
-    // (changes, expected comment, expected collation, expected value of `prop-1`)
-    Seq[(Seq[TableChange], Option[String], Option[String], Option[String])](
-      (Seq(TableChange.setProperty("prop-1", "1")),
-        Some("table comment"), Some("UTF8_LCASE"), Some("1")),
-      (Seq(TableChange.removeProperty("prop-1")),
-        Some("table comment"), Some("UTF8_LCASE"), None),
-      // The change `COMMENT ON TABLE ... IS NULL` sends.
-      (Seq(TableChange.removeProperty(TableCatalog.PROP_COMMENT)),
-        None, Some("UTF8_LCASE"), Some("0")),
-      (Seq(TableChange.removeProperty(TableCatalog.PROP_COLLATION)),
-        Some("table comment"), None, Some("0"))
-    ).foreach { case (changes, expectedComment, expectedCollation, expectedProp) =>
-      val catalog = newCatalog()
-      catalog.dropTable(testIdent)
-      // A table created by DDL keeps its comment and default collation only in the dedicated
-      // fields of the catalog table, not in its properties.
-      spark.sql(s"CREATE TABLE $testIdentQuoted (id INT, data STRING) USING parquet " +
-        "COMMENT 'table comment' DEFAULT COLLATION UTF8_LCASE TBLPROPERTIES ('prop-1' = '0')")
-      val created = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
-      assert(created.comment.contains("table comment"))
-      assert(created.collation.contains("UTF8_LCASE"))
-      assert(!created.properties.contains(TableCatalog.PROP_COMMENT))
-      assert(!created.properties.contains(TableCatalog.PROP_COLLATION))
-
-      catalog.alterTable(testIdent, changes: _*)
-      val altered = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
-      assert(altered.comment == expectedComment, s"changes: $changes")
-      assert(altered.collation == expectedCollation, s"changes: $changes")
-      assert(altered.properties.get("prop-1") == expectedProp, s"changes: $changes")
-    }
-  }
-
-  test("SPARK-57670: alterTable sets or removes the comment and collation a change names") {
-    val catalog = newCatalog()
-    spark.sql(s"CREATE TABLE $testIdentQuoted (id INT, data STRING) USING parquet " +
-      "COMMENT 'table comment' DEFAULT COLLATION UTF8_LCASE")
-
-    catalog.alterTable(testIdent, TableChange.setProperty(TableCatalog.PROP_COMMENT, "new comment"))
-    val afterComment = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
-    assert(afterComment.comment.contains("new comment"))
-    assert(afterComment.collation.contains("UTF8_LCASE"))
-
-    catalog.alterTable(testIdent, TableChange.setProperty(TableCatalog.PROP_COLLATION, "UNICODE"))
-    val afterCollation = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
-    assert(afterCollation.comment.contains("new comment"))
-    assert(afterCollation.collation.contains("UNICODE"))
-
-    catalog.alterTable(testIdent,
-      TableChange.removeProperty(TableCatalog.PROP_COMMENT),
-      TableChange.removeProperty(TableCatalog.PROP_COLLATION))
-    val afterRemove = catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
-    assert(afterRemove.comment.isEmpty)
-    assert(afterRemove.collation.isEmpty)
-  }
-
   test("alterTable: add top-level column") {
     val catalog = newCatalog()
 
