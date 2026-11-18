@@ -347,7 +347,7 @@ class ExpressionResolver(
           case createNamedStruct: CreateNamedStruct =>
             resolveCreateNamedStruct(createNamedStruct)
           case sortOrder: SortOrder =>
-            resolveExpressionGenerically(sortOrder)
+            resolveSortOrder(sortOrder)
           case unresolvedConditionalExpression: ConditionalExpression =>
             resolveExpressionGenericallyWithTypeCoercion(unresolvedConditionalExpression)
           case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
@@ -1165,6 +1165,18 @@ class ExpressionResolver(
     expressionResolutionContextStack.peek().resolvingCreateNamedStruct = false
 
     CreateNamedStruct(resolvedChildren)
+  }
+
+  /**
+   * Resolves [[SortOrder]] generically, failing first if its child is itself a [[SortOrder]],
+   * e.g. for `$"a".desc.asc`. This is the same check that [[CheckAnalysis]] performs in the
+   * fixed-point analyzer.
+   */
+  private def resolveSortOrder(sortOrder: SortOrder): Expression = sortOrder match {
+    case SortOrder(_: SortOrder, _, _, _) =>
+      throw QueryCompilationErrors.nestedSortOrderError(sortOrder)
+    case _ =>
+      resolveExpressionGenerically(sortOrder)
   }
 
   private def resolveUnresolvedJsonConstructor(

@@ -660,6 +660,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case UnresolvedWindowExpression(_, WindowSpecReference(windowName)) =>
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
 
+          case s @ SortOrder(_: SortOrder, _, _, _) =>
+            throw QueryCompilationErrors.nestedSortOrderError(s)
+
           case e: Expression if e.checkInputDataTypes().isFailure =>
             TypeCoercionValidation.failOnTypeCheckResult(e, Some(operator))
 
