@@ -828,8 +828,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           }
           case _ => false
         })
-        if (mayHaveCountBugOld.isEmpty && handleCountBugInDecorrelate &&
-            !handledInDecorrelateBefore) {
+        if (handleCountBugInDecorrelate && !handledInDecorrelateBefore) {
           newPlan.foreach {
             case d: DomainJoin => d.setTagValue(COUNT_BUG_DOMAIN_JOIN, ())
             case _ =>
