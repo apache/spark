@@ -110,11 +110,12 @@ abstract class StringRegexExpression extends BinaryExpression
    * reads it (SPARK-60731). This is not `isTotal`, which the other rules read too and which
    * promises more than not failing.
    */
-  private[catalyst] lazy val cannotFailPattern: Boolean = right match {
+  private[catalyst] final lazy val cannotFailPattern: Boolean = right match {
     case Literal(null, _) => true
     case Literal(pattern: UTF8String, _) =>
       val str = pattern.toString
-      str.length <= 100 && isStackSafePattern(str) && Try(compile(str)).isSuccess
+      str.length <= StringRegexExpression.MaxCannotFailPatternLength &&
+        isStackSafePattern(str) && Try(compile(str)).isSuccess
     case _ => false
   }
 
@@ -129,6 +130,9 @@ abstract class StringRegexExpression extends BinaryExpression
 }
 
 private[catalyst] object StringRegexExpression {
+  /** The longest pattern, in UTF-16 code units, that `cannotFailPattern` accepts. */
+  val MaxCannotFailPatternLength = 100
+
   /**
    * Whether matching `regex` is likely to be expensive. A failed match tries every combination of
    * the lengths that its repeating quantifiers take, so each one costs a factor of the input
@@ -411,7 +415,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   override protected def isExpensivePattern(str: String): Boolean =
     StringRegexExpression.isExpensiveRegex(escape(str), matchesWhole = true)
 
-  // The only quantifier of the regex a LIKE pattern translates to is `.*`, which loops instead.
+  // The only quantifier of the regex a LIKE pattern translates to is `.*`, which Java's regex
+  // engine matches in a loop rather than by recursion.
   override protected def isStackSafePattern(str: String): Boolean = true
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)

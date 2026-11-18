@@ -3117,23 +3117,24 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * first non-deterministic one, are filtered on in a layer below it, in their written order, when
    * nothing there can fail: none of these conditions can fail over the aliases not computed yet,
    * which a later pass inlines into a condition it pushes (`cannotFail`, which also accepts LIKE
-   * and RLIKE with a literal pattern of at most 100 characters that compiles, for RLIKE without
-   * `(`, `\` or `{`), and no alias the layer computes can fail. The layer is also only added while
-   * it still leaves an expensive alias for a later one and none of the aliases it leaves shares
-   * expensive work with one it computes, which would then run twice; a condition that would break
-   * this stays above. So the layer only drops rows earlier. It can compute an alias on rows that a
-   * later rewrite of the condition ending the split, or a check inferred for it, would have dropped
-   * first, which costs time but cannot fail. For example, with `f` and `g` the only expensive
-   * aliases, LIKE or RLIKE with such a pattern under version 0 of the regex pattern cost estimate,
-   * `f != g AND f` computes `f` and filters on `f` below `f != g`, which stays above the
-   * projection. The check is conservative: when the layer would compute an alias that can fail,
-   * such as a UDF, or a condition after the one ending the split can fail, nothing is filtered on
-   * below it. Later passes split each layer the same way, so in a layer's filter a condition that
-   * cannot fail can likewise be filtered on below the first one, when that one needs every
-   * expensive alias the layer computes: with `j` expensive too, `f != g AND j AND f` filters on
-   * `f`, then on `f != g`, then on `j`. Among the conditions that cannot fail, the split does not
-   * otherwise order by cost: in this example, and in `(f || g) AND j`, it computes `f` and `g` on
-   * more rows than filtering on `j` first would (SPARK-61680).
+   * and RLIKE with a literal pattern that is null, or that has at most 100 characters and
+   * compiles, for RLIKE without `(`, `\` or `{`), and no alias the layer computes can fail. The
+   * layer is also only added while it still leaves an expensive alias for a later one and none of
+   * the aliases it leaves shares expensive work with one it computes, which would then run twice;
+   * a condition that would break this stays above. So the layer only drops rows earlier. It can
+   * compute an alias on rows that a later rewrite of the condition ending the split, or a check
+   * inferred for it, would have dropped first, which costs time but cannot fail. For example, with
+   * `f` and `g` the only expensive aliases, LIKE or RLIKE with such a pattern under version 0 of
+   * the regex pattern cost estimate, `f != g AND f` computes `f` and filters on `f` below `f != g`,
+   * which stays above the projection. The check is conservative: when the layer would compute an
+   * alias that can fail, such as a UDF, or a condition after the one ending the split can fail,
+   * nothing is filtered on below it. Later passes split each layer the same way, so in a layer's
+   * filter a condition that cannot fail can likewise be filtered on below the first one, when that
+   * one needs every expensive alias the layer computes: with `j` expensive too,
+   * `f != g AND j AND f` filters on `f`, then on `f != g`, then on `j`. Among the conditions that
+   * cannot fail, the split does not otherwise order by cost: in this example, and in
+   * `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on `j` first would
+   * (SPARK-61680).
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form and written order).
@@ -3220,12 +3221,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val conds = pending.toIndexedSeq
         val following = conds.indices.tail.takeWhile(idx => conds(idx)._2.deterministic)
         // Over the aliases not computed yet, which a later pass inlines into a condition it
-        // pushes once the projection on top computes them.
-        lazy val notComputed = AttributeMap(aliasMap.toSeq.filterNot { case (attr, _) =>
-          computed.contains(attr)
-        })
-        val followingCannotFail =
-          following.forall(idx => cannotFail(replaceAlias(conds(idx)._2, notComputed)))
+        // pushes once the projection on top computes them. `cannotFail` judges a tree by its
+        // parts, so the condition and the aliases it reads are checked apart, without building
+        // the inlined condition, on the expressions of the projection, which cache the pattern
+        // check of their regexes.
+        def cannotFailInlined(cond: Expression): Boolean = cannotFail(cond) &&
+          cond.references.forall { attr =>
+            computed.contains(attr) || aliasMap.get(attr).forall(a => cannotFail(a.child))
+          }
+        val followingCannotFail = following.forall(idx => cannotFailInlined(conds(idx)._2))
         val (deferred, deferredNeeded) = (if (followingCannotFail) following else Nil)
           .foldLeft((Set.empty[Int], AttributeSet.empty)) { case ((taken, unit), idx) =>
             val grown = unit ++ conds(idx)._1
@@ -3293,17 +3297,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   /**
    * Whether `e` cannot fail: `ExprUtils.canEvaluateUnconditionally`, also accepting LIKE and RLIKE
    * whose pattern `StringRegexExpression.cannotFailPattern` accepts, which version 0 of the regex
-   * pattern cost estimate treats as expensive (SPARK-60731). As in `canEvaluateUnconditionally`,
-   * the whole tree is checked once for being deterministic and having no subquery.
+   * pattern cost estimate treats as expensive (SPARK-60731).
    */
-  private def cannotFail(e: Expression): Boolean =
-    e.deterministic && !e.containsPattern(PLAN_EXPRESSION) && cannotFailInternal(e)
-
-  private def cannotFailInternal(e: Expression): Boolean = e match {
-    case r: StringRegexExpression => r.cannotFailPattern && cannotFailInternal(r.left)
-    case _ if e.children.isEmpty => ExprUtils.canEvaluateUnconditionally(e)
-    case _ => ExprUtils.isTotalOperator(e) && e.children.forall(cannotFailInternal)
-  }
+  private def cannotFail(e: Expression): Boolean = ExprUtils.canEvaluateUnconditionally(e, {
+    case r: StringRegexExpression => r.cannotFailPattern
+    case _ => false
+  })
 
   /**
    * Whether `e` is expensive. Version 0 of the regex pattern cost estimate treats every LIKE and

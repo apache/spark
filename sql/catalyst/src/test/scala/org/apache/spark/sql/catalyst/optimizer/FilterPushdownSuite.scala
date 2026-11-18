@@ -864,6 +864,21 @@ class FilterPushdownSuite extends PlanTest {
       val two = query($"f" && Not($"g" === $"j") && $"j" && (Not($"j") || $"f"))
       check(Optimize.execute(two), twoAnswer)
       check(PushPredicateThroughNonJoin(two), twoAnswer)
+      // Also when that alias, computed in an earlier layer, can fail: only the aliases not
+      // computed yet are inlined. One application of the rule, as later passes place it there too.
+      val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
+        udfDeterministic = true)
+      check(PushPredicateThroughNonJoin(testStringRelation
+          .select($"a", udfF as "f", g as "g", j as "j")
+          .where($"f" && Not($"g" === $"j") && $"j" && (Not($"j") || $"f"))
+          .analyze),
+        testStringRelation
+          .select($"a", $"b", $"e", udfF as "f")
+          .where($"f")
+          .select($"a", $"b", $"e", $"f", j as "j")
+          .where($"j" && (Not($"j") || $"f"))
+          .select($"a", $"f", g as "g", $"j")
+          .where(Not($"g" === $"j")))
       // `f != g AND j AND f`: (f != g) does not need every expensive alias, so it does not end
       // the split, and the split places the conditions in their written order, although filtering
       // on j first would compute f and g on fewer rows (SPARK-61680 would change this plan). j
@@ -971,18 +986,20 @@ class FilterPushdownSuite extends PlanTest {
           .where(Not($"g" === $"j") && $"j" && ($"c" > 5 || Not($"j")))
           .analyze)
       // An alias the layer would compute that can fail: a regex whose pattern is not a literal,
+      // also a column,
       // does not compile, or has a quantified group, `\R` or a `{}` quantifier, which can
       // overflow the stack on a long input, a LIKE whose pattern is longer than 100 characters, a
       // regex whose input can fail, a UDF, also under an operator that cannot fail, a throwable
-      // alias, and an expression with a subquery, even one that declares it cannot fail.
+      // alias, and a subquery expression with a child, even one that declares `NoThrow`.
       val udfJ = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       val udfString = ScalaUDF((s: String) => s, StringType, Seq($"e"), Seq(None),
         udfDeterministic = true)
-      Seq(expensiveRLike("third"), $"e".rlike("["), $"e".rlike("(a|b)*c"), $"e".rlike("\\R*c"),
-        $"e".rlike(".{0,99999}c"), $"e".like("_" * 101), udfString.rlike("^3"), udfJ, Not(udfJ),
+      Seq(expensiveRLike("third"), $"e".rlike($"e"), $"e".rlike("["), $"e".rlike("(a|b)*c"),
+        $"e".rlike("\\R*c"), $"e".rlike(".{0,99999}c"), $"e".like("_" * 101),
+        udfString.rlike("^3"), udfJ, Not(udfJ),
         If(literalRLike("^3"), Literal(true), raiseError),
-        NoThrowPlanExpression(literalRLike("^3"))).foreach { failingJ =>
+        NoThrowWithPlanExpressionPattern(literalRLike("^3"))).foreach { failingJ =>
         val originalQuery = testStringRelation
           .select($"a", f as "f", g as "g", failingJ as "j")
           .where($"f" && Not($"g" === $"j") && $"j")
@@ -3687,13 +3704,15 @@ class FilterPushdownSuite extends PlanTest {
 }
 
 /**
- * Stands for a subquery expression with a child that declares it cannot fail, which none does
- * yet: the split must still not evaluate it ahead of a condition (SPARK-60731).
+ * Has a child, declares `NoThrow` and carries the `PLAN_EXPRESSION` pattern, as a subquery
+ * expression with a child would if it declared `NoThrow`, which none does yet. The split must
+ * still not compute it ahead of a condition (SPARK-60731). It is not a `SubqueryExpression`, so
+ * the rules looking for one leave it alone. Only for plan tests; it is never evaluated.
  */
-private case class NoThrowPlanExpression(child: Expression)
+private case class NoThrowWithPlanExpressionPattern(child: Expression)
   extends UnaryExpression with NoThrow with Unevaluable {
   override def dataType: DataType = BooleanType
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_EXPRESSION)
-  override protected def withNewChildInternal(newChild: Expression): NoThrowPlanExpression =
-    copy(child = newChild)
+  override protected def withNewChildInternal(
+      newChild: Expression): NoThrowWithPlanExpressionPattern = copy(child = newChild)
 }
