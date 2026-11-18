@@ -111,13 +111,24 @@ def check_pushdown_not_disabled(
 
 
 @with_faulthandler
-def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
+def worker_run(
+    main: Callable,
+    infile: IO,
+    outfile: IO,
+    memory_limit_env: str = "PYSPARK_PLANNER_MEMORY_MB",
+) -> None:
+    """
+    Runs `main` in a Python worker that the JVM started for a named module, such as a planner
+    worker on the driver. The memory limit of the worker is read from the environment variable
+    `memory_limit_env`: a planner worker has `PYSPARK_PLANNER_MEMORY_MB`, and a worker that runs
+    in a task, such as the lookup worker, has `PYSPARK_EXECUTOR_MEMORY_MB`.
+    """
     try:
         check_python_version(infile)
 
         start_faulthandler_periodic_traceback()
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
+        memory_limit_mb = int(os.environ.get(memory_limit_env, "-1"))
         setup_memory_limits(memory_limit_mb)
 
         setup_spark_files(infile)
