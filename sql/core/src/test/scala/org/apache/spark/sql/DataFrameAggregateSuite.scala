@@ -23,6 +23,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
+import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch, KllSketch}
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.tuple.{Sketches => TupleSketches}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
@@ -4285,6 +4286,158 @@ class DataFrameAggregateSuite extends SharedSparkSession
     ).collect()(0)(0)
     assert(merged != null)
     assert(merged.asInstanceOf[Array[Byte]].length > 0)
+  }
+
+  // Helpers for the kll_sketch_merge k-rule tests.
+  private object KllMergeKRule {
+    val confKey = SQLConf.KLL_SKETCH_MERGE_LOWEST_COMPACTING_K.key
+    val types = Seq("bigint", "float", "double")
+
+    // A sketch over the values from until from + n compacts iff n > k. n = 0 is an empty sketch.
+    def sketch(t: String, k: Int, n: Int, from: Int = 0): Array[Byte] = t match {
+      case "bigint" =>
+        val s = KllLongsSketch.newHeapInstance(k)
+        (from until from + n).foreach(i => s.update(i.toLong))
+        s.toByteArray
+      case "float" =>
+        val s = KllFloatsSketch.newHeapInstance(k)
+        (from until from + n).foreach(i => s.update(i.toFloat))
+        s.toByteArray
+      case "double" =>
+        val s = KllDoublesSketch.newHeapInstance(k)
+        (from until from + n).foreach(i => s.update(i.toDouble))
+        s.toByteArray
+    }
+    def kOf(t: String, bytes: Array[Byte]): Int = t match {
+      case "bigint" => KllLongsSketch.heapify(Memory.wrap(bytes)).getK
+      case "float" => KllFloatsSketch.heapify(Memory.wrap(bytes)).getK
+      case "double" => KllDoublesSketch.heapify(Memory.wrap(bytes)).getK
+    }
+    // kll_sketch_merge reads the conf at resolve time, so the DataFrame keeps the value in effect
+    // when it is built.
+    def mergedDf(t: String, cases: Seq[Seq[(Int, Int)]], mergeSql: String): DataFrame =
+      cases.zipWithIndex.map { case (inputs, id) =>
+        (id, inputs.map { case (k, n) => sketch(t, k, n) })
+      }.toDF("id", "ss").selectExpr("id", s"$mergeSql AS m")
+    def kAndN(t: String, df: DataFrame): Seq[(Int, Long)] =
+      df.selectExpr("id", "m", s"kll_sketch_get_n_$t(m)").orderBy("id").collect().toSeq
+        .map(r => (kOf(t, r.getAs[Array[Byte]](1)), r.getLong(2)))
+    def merged(t: String, cases: Seq[Seq[(Int, Int)]], mergeSql: String): Seq[(Int, Long)] =
+      kAndN(t, mergedDf(t, cases, mergeSql))
+  }
+
+  test("SPARK-61981: kll_sketch_merge k follows the k rule with the conf on, " +
+      "and the k of left with it off") {
+    import KllMergeKRule._
+
+    // (k, n) of each input, merged left to right, and the expected k with the conf on.
+    val examples: Seq[(Seq[(Int, Int)], Int)] = Seq(
+      Seq((400, 8000), (100, 2000)) -> 100,
+      Seq((100, 2000), (400, 8000)) -> 100,
+      Seq((400, 8000), (8, 3)) -> 400,
+      Seq((8, 3), (400, 8000)) -> 8,
+      Seq((400, 3), (100, 2000)) -> 100,
+      Seq((20, 3), (8, 3)) -> 20,
+      Seq((8, 0), (400, 8000)) -> 400,
+      Seq((8, 0), (400, 3)) -> 400,
+      Seq((400, 0), (8, 160)) -> 8,
+      Seq((8, 0), (400, 0)) -> KllSketch.DEFAULT_K,
+      Seq((400, 8000), (8, 0)) -> 400,
+      Seq((200, 4000), (100, 100)) -> 200,
+      Seq((200, 4000), (100, 101)) -> 100,
+      Seq((65535, 70000), (8, 9)) -> 8,
+      Seq((8, 0), (50, 10), (4096, 5000), (100, 300)) -> 50,
+      Seq((50, 0), (8, 0), (400, 10), (100, 0), (200, 1000)) -> 200)
+    def ruleK(inputs: Seq[(Int, Int)]): Int = inputs.dropWhile(_._2 == 0) match {
+      case first +: rest => (first._1 +: rest.collect { case (k, n) if n > k => k }).min
+      case _ => KllSketch.DEFAULT_K
+    }
+    examples.foreach { case (inputs, k) => assert(ruleK(inputs) == k, s"inputs $inputs") }
+    val rng = new Random(20261116)
+    val random = Seq.fill(100) {
+      val inputs = Seq.fill(2 + rng.nextInt(4)) {
+        val k = Seq(8, 50, 100, 200, 400, 1000)(rng.nextInt(6))
+        // 20% empty, 40% exact, 40% compacted.
+        val n = rng.nextInt(5) match {
+          case 0 => 0
+          case kind if kind < 3 => 1 + rng.nextInt(k)
+          case _ => k + 1 + rng.nextInt(2 * k)
+        }
+        (k, n)
+      }
+      inputs -> ruleK(inputs)
+    }
+
+    for (t <- types; (width, group) <- (examples ++ random).groupBy(_._1.size).toSeq.sortBy(_._1)) {
+      val chain = (1 until width).foldLeft("ss[0]") { (acc, i) =>
+        s"kll_sketch_merge_$t($acc, ss[$i])"
+      }
+      val inputs = group.map(_._1)
+      val ns = inputs.map(_.map(_._2.toLong).sum)
+      withSQLConf(confKey -> "true") {
+        assert(merged(t, inputs, chain) == group.map(_._2).zip(ns), s"$t, $width inputs")
+      }
+      withSQLConf(confKey -> "false") {
+        assert(merged(t, inputs, chain) == inputs.map(_.head._1).zip(ns), s"$t, $width inputs")
+      }
+    }
+  }
+
+  // The inner merge compacts, so the outer merge takes its k (100), not the k of ss[0] (1000).
+  test("SPARK-61981: kll_sketch_merge k rule applies to each call, " +
+      "so a compacted inner merge counts") {
+    import KllMergeKRule._
+    val inputs = Seq(Seq((1000, 10), (100, 60), (200, 60)))
+    val nested = "kll_sketch_merge_bigint(ss[0], kll_sketch_merge_bigint(ss[1], ss[2]))"
+    val flat = "kll_sketch_merge_bigint(kll_sketch_merge_bigint(ss[0], ss[1]), ss[2])"
+    withSQLConf(confKey -> "true") {
+      assert(merged("bigint", inputs, nested) == Seq((100, 130)))
+      assert(merged("bigint", inputs, flat) == Seq((1000, 130)))
+    }
+    withSQLConf(confKey -> "false") {
+      assert(merged("bigint", inputs, nested) == Seq((1000, 130)))
+    }
+  }
+
+  test("SPARK-61981: kll_sketch_merge keeps the conf value from when it was resolved") {
+    import KllMergeKRule._
+    val pair = Seq(Seq((400, 8000), (100, 2000)))
+    val two = "kll_sketch_merge_bigint(ss[0], ss[1])"
+    val builtOn = withSQLConf(confKey -> "true") { mergedDf("bigint", pair, two) }
+    val builtOff = withSQLConf(confKey -> "false") { mergedDf("bigint", pair, two) }
+    withSQLConf(confKey -> "false") { assert(kAndN("bigint", builtOn) == Seq((100, 10000))) }
+    withSQLConf(confKey -> "true") { assert(kAndN("bigint", builtOff) == Seq((400, 10000))) }
+  }
+
+  // 50000 is the median of the union [0, 100000), so its rank is about 0.5.
+  test("SPARK-61981: kll_sketch_merge with the k of right keeps the data of both inputs") {
+    import KllMergeKRule._
+    for (t <- types) {
+      withSQLConf(confKey -> "true") {
+        val row = Seq((sketch(t, 400, 50000), sketch(t, 100, 50000, 50000)))
+          .toDF("l", "r")
+          .selectExpr(s"kll_sketch_merge_$t(l, r) AS m")
+          .selectExpr("m", s"kll_sketch_get_rank_$t(m, CAST(50000 AS $t))")
+          .head()
+        assert(kOf(t, row.getAs[Array[Byte]](0)) == 100, t)
+        assert(math.abs(row.getDouble(1) - 0.5) < 0.1, t)
+      }
+    }
+  }
+
+  test("SPARK-61981: kll_sketch_merge returns NULL for a NULL input, " +
+      "with the lowestCompactingK conf on and off") {
+    for (t <- Seq("bigint", "float", "double"); conf <- Seq(true, false)) {
+      withSQLConf(SQLConf.KLL_SKETCH_MERGE_LOWEST_COMPACTING_K.key -> conf.toString) {
+        val s = spark.range(8000).selectExpr(s"kll_sketch_agg_$t(CAST(id AS $t), 400)")
+          .head().getAs[Array[Byte]](0)
+        val inputs = Seq[(Option[Array[Byte]], Option[Array[Byte]])](
+          (None, Some(s)), (Some(s), None), (None, None), (Some(s), Some(s)))
+        val merged = inputs.toDF("l", "r").selectExpr(s"kll_sketch_merge_$t(l, r)")
+          .collect().map(_.get(0))
+        assert(merged.map(_ == null).toSeq == Seq(true, true, true, false), s"$t, conf = $conf")
+      }
+    }
   }
 
   test("kll_sketch_get_quantile_bigint") {
