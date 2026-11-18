@@ -735,9 +735,7 @@ pyspark_base = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core, pyspark_base],
-    source_file_regexes=[
-        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing|inprocess))"
-    ],
+    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -780,7 +778,7 @@ pyspark_core = Module(
 pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql", "python/pyspark/inprocess"],
+    source_file_regexes=["python/pyspark/sql"],
     python_test_goals=[
         # doctests
         "pyspark.sql.types",
@@ -841,8 +839,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_sql",
         "pyspark.sql.tests.test_job_cancellation",
-        "pyspark.sql.tests.test_inprocess_udf",
-        "pyspark.sql.tests.test_inprocess_runtime",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
