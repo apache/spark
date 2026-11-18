@@ -755,24 +755,27 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * The columns of `plan` that can fail, i.e. those that a projection at its top, or below the
-   * filters, samples, limits, offsets, joins and projections there, computes with a deterministic
-   * expression that [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads such a column,
-   * or passes such a column through, and the result columns of an aggregation there whose
-   * expression, with each aggregate function taken as its value, is deterministic and rejected by
-   * it.
+   * filters, samples, limits, offsets, sorts, joins, unions and projections there, computes with
+   * a deterministic expression that [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads
+   * such a column, or passes such a column through, and the result columns of an aggregation with
+   * grouping keys there whose expression, with each aggregate function taken as its value, is
+   * deterministic and rejected by it.
    * Under whole-stage codegen, the projection computes a deterministic column for a row only when
    * a conjunct of the filter above first reads it, unless its subexpression elimination computes
    * it up front, and `PushPredicateThroughNonJoin` pushes a conjunct below the projection with the
    * expression of the column substituted. So a conjunct over such a column can fail as that
-   * expression does. So can one over a result column of an aggregation with grouping keys. A
-   * non-deterministic column is computed on every row the projection gets, and no filter is pushed
-   * through a projection with one, so it does not count. A limit or an offset passes the columns
-   * on as they are, in the same stage where its input has one partition, and so does the streamed
-   * side of a broadcast hash join. Elsewhere, e.g. below a shuffle, on the build side of a join or
-   * in a global aggregation, the columns are computed for every row anyway, but they still count:
-   * an equality over them stays where it is written, as before SPARK-60983, which can fail where
-   * moving it first would not. Other operators are not looked through for the columns that can
-   * fail.
+   * expression does, and so can one over such a result column, which an aggregation with grouping
+   * keys computes the same way. A non-deterministic column is computed on every row the projection
+   * gets, and no filter is pushed through a projection with one, so it does not count; nor does a
+   * result column of a global aggregation, which computes it for its one row up front.
+   * A limit, an offset, a union and the streamed side of a broadcast hash join pass the columns on
+   * as they are, in the same stage, and so does a sort that the physical plan removes as its input
+   * is sorted already. Otherwise, e.g. below the shuffle of a limit or an offset over more than one
+   * partition, on the build side of a join or below a sort, the columns are computed for every row
+   * anyway, but they still count: the constant of an equality over them then goes into the other
+   * conjuncts in place, as before SPARK-60983, which can fail on a row where the equality does not
+   * hold, where moving the equality first would not. Other operators are not looked through for
+   * the columns that can fail.
    */
   private def failableColumnsOf(plan: LogicalPlan, cache: ChildColumns): AttributeSet =
     cached(cache.failable, plan) {
@@ -790,8 +793,16 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         case l: GlobalLimit => failableColumnsOf(l.child, cache)
         case l: LocalLimit => failableColumnsOf(l.child, cache)
         case o: Offset => failableColumnsOf(o.child, cache)
+        case s: Sort => failableColumnsOf(s.child, cache)
         case j: Join => failableColumnsOf(j.left, cache) ++ failableColumnsOf(j.right, cache)
-        case agg: Aggregate =>
+        case u: Union =>
+          val children = u.children.map(c => (c.output, failableColumnsOf(c, cache)))
+          AttributeSet(u.output.zipWithIndex.collect {
+            case (a, n) if children.exists { case (output, failable) =>
+              failable.contains(output(n))
+            } => a
+          })
+        case agg: Aggregate if agg.groupingExpressions.nonEmpty =>
           AttributeSet(agg.aggregateExpressions.flatMap {
             case a: Alias =>
               val result = a.child.transform { case e: AggregateExpression => e.resultAttribute }

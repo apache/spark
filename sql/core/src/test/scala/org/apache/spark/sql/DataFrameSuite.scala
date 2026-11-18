@@ -3140,7 +3140,26 @@ class DataFrameSuite extends SharedSparkSession
                 case p if operator.isInstance(p) => p
               }.nonEmpty)
             }
+            // And above a union, which passes `i` on from each child.
+            checkAnswer(projected.union(projected).select($"*", rand(1).as("r")).where(condition)
+              .select($"s", $"id", $"r" >= 0), Seq(Row("1", 7L, true), Row("1", 7L, true)))
           }
+          // Also above an offset, where its input has one partition, and a sort that the physical
+          // plan removes, as `range` is sorted by `id` already.
+          withTempPath { three =>
+            Seq(("2", 7L), ("1", 7L), ("x", 0L)).toDF("s", "id").coalesce(1)
+              .write.parquet(three.toString)
+            checkAnswer(spark.read.parquet(three.toString).repartition(1)
+              .select($"s", $"id", $"s".cast("int").as("i")).offset(1)
+              .select($"*", rand(1).as("r")).where($"id" > 5 && $"i" * $"id" > 0 && $"i" === 1)
+              .select($"s", $"id", $"r" >= 0), Row("1", 7L, true))
+          }
+          val sorted = spark.range(0, 10, 1, 1).toDF()
+            .select($"id", expr("10 div (id - 3)").as("i")).orderBy($"id")
+            .select($"id", $"i", rand(1).as("r"))
+            .where($"id" > 5 && $"i" * $"id" > 0 && $"i" === 2).select($"id", $"r" >= 0)
+          checkAnswer(sorted, Seq(Row(7L, true), Row(8L, true)))
+          assert(collect(sorted.queryExecution.executedPlan) { case s: SortExec => s }.isEmpty)
           // As on 4.3.0, `i = 1` makes the condition FALSE, so the filter is pruned,
           // and `i` is not computed for the row ("x", 0).
           Seq(

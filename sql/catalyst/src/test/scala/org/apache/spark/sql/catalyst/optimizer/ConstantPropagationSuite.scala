@@ -367,10 +367,13 @@ class ConstantPropagationSuite extends PlanTest {
         projected.sample(0.0, 0.5, withReplacement = false, 1L).select($"s", $"id", $"i"),
         projected.limit(5).select($"s", $"id", $"i"),
         projected.offset(1).select($"s", $"id", $"i"),
+        projected.orderBy($"id".asc).select($"s", $"id", $"i"),
         projected.select($"s", $"id", $"i".as("j")).select($"s", $"id", $"j".as("i")),
-        // Also from either side of a join, and from an aggregation, whose result columns over
-        // its grouping keys are computed only for the rows that reach a condition reading them,
-        // with grouping keys under whole-stage codegen.
+        // Also from any child of a union, either side of a join, and an aggregation with grouping
+        // keys, which computes a result column over them only for the rows that reach a condition
+        // reading it under whole-stage codegen.
+        stringIds.select($"s", $"id", $"x", Literal(1).as("i")).union(projected),
+        projected.union(stringIds.select($"s", $"id", $"x", Literal(1).as("i"))),
         projected.join(LocalRelation($"k".long), Inner, Some($"x" === $"k")),
         LocalRelation($"k".long).join(projected, Inner, Some($"x" === $"k")),
         stringIds.groupBy($"s", $"id")($"s", $"id", castS.as("i"))
@@ -893,10 +896,14 @@ class ConstantPropagationSuite extends PlanTest {
       val shuffled = stringIds.select($"id", castS.as("i")).repartition(2).select($"id", $"i")
       checkOrdered(shuffled, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
       // And the result of an aggregate function, whose input an aggregation computes for every
-      // row it gets, and a grouping key.
+      // row it gets, a grouping key, a result column of a global aggregation, which computes it for
+      // its one row up front, and a non-deterministic result column.
       Seq(
         stringIds.groupBy($"id")($"id", max(castS).as("i")),
-        stringIds.select($"id", castS.as("i")).groupBy($"i")($"i", max($"id").as("id"))
+        stringIds.select($"id", castS.as("i")).groupBy($"i")($"i", max($"id").as("id")),
+        stringIds.groupBy()(max($"id").as("id"), max($"s").cast(IntegerType).as("i")),
+        stringIds.groupBy($"s", $"id")($"s", $"id",
+          (castS + Rand(1L).cast(IntegerType)).as("i"))
       ).foreach { child =>
         checkOrdered(child, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
       }
