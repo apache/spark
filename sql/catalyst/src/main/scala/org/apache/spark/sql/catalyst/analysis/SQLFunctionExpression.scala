@@ -54,10 +54,14 @@ case class SQLFunctionExpression(
   def sqlString(render: Expression => String): String =
     s"$prettyName(${displayInputs.map(render).mkString(", ")})"
   override def sql: String = sqlString(_.sql)
-  // Defaults belong to the saved function, rather than to the supplied argument list. Grouping
-  // can compare completed argument lists separately when differently spelled calls need to match.
-  override lazy val canonicalized: Expression =
-    copy(inputs = inputs.map(_.canonicalized), defaultInputs = Map.empty)
+  // Named omissions have already been resolved, including independent random seeds. Include
+  // those defaults in identity; positional omissions keep their normal lazy expansion timing.
+  override lazy val canonicalized: Expression = if (defaultInputs.nonEmpty) {
+    copy(inputs = displayInputs.map(_.canonicalized),
+      inputPositions = Nil, defaultInputs = Map.empty)
+  } else {
+    copy(inputs = inputs.map(_.canonicalized))
+  }
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): SQLFunctionExpression = copy(inputs = newChildren)
   final override val nodePatterns: Seq[TreePattern] = Seq(SQL_FUNCTION_EXPRESSION)

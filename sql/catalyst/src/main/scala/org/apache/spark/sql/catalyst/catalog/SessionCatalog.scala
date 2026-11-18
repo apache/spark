@@ -2328,14 +2328,15 @@ class SessionCatalog(
     val params = function.inputParam.toSeq.flatMap(_.toSeq)
     // These placeholders only validate and reorder supplied arguments. They never enter a plan.
     val defaults = params.map(p => p.getDefault().map(_ => Literal(null, p.dataType)))
-    val signature = FunctionSignature(params.zip(defaults).map { case (param, default) =>
-      InputParameter(param.name, default)
-    })
+    val signature = FunctionSignature(params.iterator.zip(defaults.iterator).map {
+      case (param, default) =>
+        InputParameter(param.name, default)
+    }.toVector)
     val ordered = NamedParametersSupport.defaultRearrange(
       signature, input, function.name.toString, SQLConf.get.resolver)
-    val supplied = ordered.zip(defaults).zipWithIndex.collect {
+    val supplied = ordered.iterator.zip(defaults.iterator).zipWithIndex.collect {
       case ((expr, default), index) if !default.exists(_ eq expr) => (expr, index)
-    }
+    }.toVector
     if (supplied.size == params.size) {
       return (supplied.map(_._1), Nil, Map.empty)
     }

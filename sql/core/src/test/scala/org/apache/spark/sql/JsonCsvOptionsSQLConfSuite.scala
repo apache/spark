@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.time.Instant
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{SQLFunctionExpression, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, EquivalentExpressions, Expression, JsonToStructs, Literal, NamedArgumentExpression, StructsToCsv}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
@@ -247,7 +247,6 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
             spark.sessionState.catalog.lookupFunction(
               FunctionIdentifier("named_args_fn"), inputs).asInstanceOf[SQLFunctionExpression]
           }
-        assert(calls.head.semanticEquals(calls.last))
         calls.foreach { call =>
           // Leave the aggregate unresolved so the rule defers expansion to a later iteration.
           val plan = Aggregate(Seq(UnresolvedAttribute("missing")),
@@ -258,6 +257,7 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
           Seq(deferred.copy(), serialized).foreach { copied =>
             assert(copied.sql == deferred.sql)
             assert(copied.toString == deferred.toString)
+            assert(copied.semanticEquals(deferred))
           }
         }
       }
@@ -298,7 +298,92 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("numeric named defaults avoid a nested analyzer pipeline") {
+    withSQLConf(captureKey -> "true") {
+      withUserDefinedFunction("named_args_fn" -> false) {
+        sql("CREATE FUNCTION named_args_fn(a BIGINT, b BIGINT DEFAULT 1) " +
+          "RETURNS BIGINT RETURN a + b")
+        val plan = spark.sessionState.sqlParser.parsePlan("SELECT " +
+          Seq.fill(8)("named_args_fn(a => CAST(0 AS BIGINT))").mkString(", "))
+        val tracker = new QueryPlanningTracker
+        val resolved = QueryPlanningTracker.withTracker(tracker) {
+          spark.sessionState.analyzer.ResolveFunctions(plan)
+        }
+        val functions = resolved.expressions.flatMap(_.collect {
+          case f: SQLFunctionExpression => f
+        })
+        assert(functions.size == 8)
+        assert(functions.forall(f =>
+          f.defaultInputs.nonEmpty && f.defaultInputs.values.forall(_.resolved)))
+        assert(tracker.rules.isEmpty)
+      }
+    }
+  }
+
   for (capture <- Seq(true, false)) {
+    test(s"named random defaults preserve independent grouping keys: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql("CREATE FUNCTION named_args_fn(a INT, " +
+            "b INT DEFAULT CAST(rand() * 2 AS INT)) RETURNS INT RETURN b")
+          val query = sql("SELECT count(*) FROM range(128) " +
+            "GROUP BY named_args_fn(a => 0), named_args_fn(a => 0)")
+          val grouping = query.queryExecution.analyzed.collect {
+            case a: Aggregate => a.groupingExpressions
+          }.head
+          assert(grouping.map(_.canonicalized).distinct.size == 2)
+          assert(query.collect().map(_.getLong(0)).sum == 128L)
+        }
+      }
+    }
+
+    test(s"unequal omitted and explicit defaults cannot share a grouping key: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql("CREATE FUNCTION named_args_fn(a BIGINT, b BIGINT DEFAULT 1) " +
+            "RETURNS BIGINT RETURN a + b")
+          val omitted = "named_args_fn(a => id)"
+          val explicit = "named_args_fn(id, CAST(2 AS BIGINT))"
+          Seq((explicit, omitted), (omitted, explicit)).foreach { case (selected, grouped) =>
+            val error = intercept[AnalysisException] {
+              sql(s"SELECT $selected, count(*) FROM range(3) GROUP BY $grouped")
+            }
+            assert(error.getCondition == "MISSING_AGGREGATION")
+          }
+        }
+      }
+    }
+
+    test(s"named default dependencies distinguish saved and caller SQL paths: $capture") {
+      withSQLConf(captureKey -> capture.toString, SQLConf.PATH_ENABLED.key -> "true") {
+        withDatabase("path_defaults_a", "path_defaults_b") {
+          sql("CREATE DATABASE path_defaults_a")
+          sql("CREATE DATABASE path_defaults_b")
+          withUserDefinedFunction("path_defaults_a.named_args_fn" -> false,
+              "path_defaults_a.default_dep" -> false, "path_defaults_b.default_dep" -> false) {
+            sql("CREATE FUNCTION path_defaults_a.default_dep() RETURNS BIGINT RETURN 11")
+            sql("CREATE FUNCTION path_defaults_b.default_dep() RETURNS BIGINT RETURN 22")
+            try {
+              sql("USE path_defaults_a")
+              sql("SET PATH = spark_catalog.path_defaults_a, system.builtin")
+              sql("CREATE FUNCTION path_defaults_a.named_args_fn(" +
+                "a BIGINT DEFAULT default_dep(), " +
+                "b BIGINT DEFAULT 2) RETURNS BIGINT RETURN a + b")
+              sql("USE default")
+              sql("SET PATH = spark_catalog.path_defaults_b, system.builtin")
+              checkAnswer(sql("SELECT default_dep()"), Row(22L))
+              val expected = if (capture) 14L else 25L
+              checkAnswer(sql("SELECT path_defaults_a.named_args_fn(b => CAST(3 AS BIGINT))"),
+                Row(expected))
+            } finally {
+              sql("USE default")
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
+        }
+      }
+    }
+
     test(s"an unrelated aggregate preserves a closed lambda in a positional default: $capture") {
       withSQLConf(captureKey -> capture.toString) {
         withUserDefinedFunction("named_args_fn" -> false) {

@@ -2852,19 +2852,19 @@ class Analyzer(
   object ResolveSQLFunctions extends Rule[LogicalPlan] {
 
     def resolveDefaultInputs(f: SQLFunctionExpression): Map[Int, Expression] = {
-      val params = f.function.inputParam.get
-      val positions = if (f.inputPositions.isEmpty) f.inputs.indices else f.inputPositions
-      val supplied = positions.zip(f.inputs).toMap
       val parsed = if (f.defaultInputs.nonEmpty) {
         f.defaultInputs
       } else {
+        val params = f.function.inputParam.get
+        val positions = if (f.inputPositions.isEmpty) f.inputs.indices else f.inputPositions
+        val suppliedPositions = positions.toSet
         val parseConf = Analyzer.buildSQLFunctionConf(
           function = f.function,
           applySessionOverrides = false,
           alwaysSetAnsiValue = true)
         SQLConf.withExistingConf(parseConf) {
           params.iterator.zipWithIndex.collect {
-            case (param, index) if !supplied.contains(index) =>
+            case (param, index) if !suppliedPositions.contains(index) =>
               val text = param.getDefault().getOrElse {
                 throw QueryCompilationErrors.wrongNumArgsError(
                   f.name, params.size.toString, f.inputs.size)
@@ -2872,6 +2872,15 @@ class Analyzer(
               index -> Cast(SQLFunction.parseDefault(text, v1SessionCatalog.parser), param.dataType)
           }.toMap
         }
+      }
+      // Numeric literal casts need no analyzer transformations or saved-context bindings.
+      // Other resolved expressions can still require rewrites, so retain their analysis below.
+      if (parsed.valuesIterator.forall {
+          case c @ Cast(l: Literal, _: NumericType, _, _) =>
+            l.dataType.isInstanceOf[NumericType] && c.resolved
+          case _ => false
+        }) {
+        return parsed
       }
       val defaults = parsed.toSeq.sortBy(_._1).map { case (index, expr) =>
         Alias(expr, index.toString)()
