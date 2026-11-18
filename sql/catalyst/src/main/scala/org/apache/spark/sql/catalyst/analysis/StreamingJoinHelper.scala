@@ -137,8 +137,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * Get the column that evicts the state of an input with its own watermark, with its state value
-   * watermark. That is the event time if the condition bounds it, and otherwise the first other
+   * Get the column that evicts the state of an input, with its state value watermark. That is the
+   * event time if the input has one and the condition bounds it, and otherwise the first other
    * TIMESTAMP column in input order that the condition bounds. Each column is solved on its own,
    * so the cutoff applies to the column that the condition bounds.
    */

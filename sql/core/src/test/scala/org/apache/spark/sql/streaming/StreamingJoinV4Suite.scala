@@ -376,11 +376,11 @@ class StreamingInnerJoinV4Suite
       // joinKeyOrdinalForWatermark is None -> only left has hasEventTime = true.
       // Neither side can actually evict: the left state watermark is derived from the right
       // side's watermark via the join condition, which is absent here. The left secondary
-      // index is populated but never used for eviction.
+      // index is populated but never used for eviction. The condition gives rightTime no lower
+      // bound, so the left watermark does not evict the right side either.
 
       val joined = df1.join(df2,
-        expr("leftKey = rightKey AND " +
-          "leftTime BETWEEN rightTime - interval 5 seconds AND rightTime + interval 5 seconds"))
+        expr("leftKey = rightKey AND leftTime >= rightTime - interval 5 seconds"))
         .select($"leftKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
 
       testStream(joined)(
