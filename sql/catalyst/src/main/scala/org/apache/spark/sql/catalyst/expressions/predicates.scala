@@ -232,19 +232,33 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   /**
-   * The output columns of `plan` that can fail to compute: the deterministic columns of a
-   * [[Project]] whose expression [[ExprUtils.canEvaluateUnconditionally]] rejects or reads such a
-   * column of its child, and the result columns of an [[Aggregate]] whose expression, with each
-   * aggregate function taken as its value, is deterministic and rejected by it. A [[Filter]],
-   * [[Sample]], [[LocalLimit]], [[GlobalLimit]], [[Offset]] or [[Join]] passes such columns of
-   * its children through. A condition over such a column can fail as its expression does: under
-   * whole-stage codegen, the projection or aggregation computes a deterministic column for a row
-   * only when a condition above first reads it, also through those operators, and
-   * `PushPredicateThroughNonJoin` pushes a condition below the projection with the expression
-   * substituted. A non-deterministic column is computed for every row the operator outputs, and
-   * an aggregation computes its grouping keys and aggregate functions on every row it gets, so
-   * they do not count. Other operators are not looked through, e.g. a `Union`, `Sort` or `Window`,
-   * whose input rows get every column computed.
+   * The output columns of `plan` that can fail to compute. Under whole-stage codegen, a
+   * projection or an aggregation computes a deterministic column for a row only when a condition
+   * above first reads it, and `PushPredicateThroughNonJoin` pushes a condition below a projection
+   * with the expression substituted. So a condition over such a column can fail as its expression
+   * does. The columns are:
+   *  - A deterministic column of a [[Project]] whose expression
+   *    [[ExprUtils.canEvaluateUnconditionally]] rejects or reads such a column of its child.
+   *  - A result column of an [[Aggregate]] whose expression, with each aggregate function taken
+   *    as its value, is deterministic and rejected by it. Only an aggregation with grouping keys
+   *    under whole-stage codegen computes it lazily, so this is conservative for the others,
+   *    e.g. a global aggregation or an `ObjectHashAggregateExec`.
+   *
+   * These operators pass such columns of their children through:
+   *  - [[Filter]] and [[Sample]].
+   *  - [[LocalLimit]], [[GlobalLimit]] and [[Offset]]. A global limit or an offset passes them
+   *    through only when its input has a single partition; otherwise the exchange below it
+   *    computes every column, and this is conservative.
+   *  - [[Join]], from both sides. Only the streamed side of a hash join passes them through, so
+   *    this is conservative for the others.
+   *
+   * Other columns and operators do not count:
+   *  - A non-deterministic column, computed for every row the operator outputs, and the grouping
+   *    keys and aggregate functions of an aggregation, computed on every row it gets.
+   *  - The columns through any other operator, e.g. a `Union`, `Generate`, `Deduplicate`,
+   *    `Sort`, `Window` or `Repartition`, whose input rows get every column computed.
+   *    `FinishAnalysis`, the first batch of the optimizer, removes `SubqueryAlias` and
+   *    `ResolvedHint`, and a `Tail` is only at the top of a plan.
    */
   protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
     case Project(projectList, child) =>
