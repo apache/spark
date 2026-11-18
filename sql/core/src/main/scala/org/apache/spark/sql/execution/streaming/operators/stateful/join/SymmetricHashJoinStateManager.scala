@@ -277,6 +277,8 @@ class SymmetricHashJoinStateManagerV4(
       case Some(idx) =>
         val attr = inputValueAttributes(idx)
 
+        // TODO: [SPARK-62022] A NULL window struct throws NullPointerException here. Handle NULL
+        //  value-side event times, as extractEventTimeFnFromKey does for keys.
         if (attr.dataType.isInstanceOf[StructType]) {
           // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
           row.getStruct(idx, 2).getLong(1)

@@ -2400,7 +2400,7 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
       // Left time 5 is in window [0, 10).
       val (matchingStart, length) = if (windowKey) (0, 10L) else (5, 0L)
       // V4 reads the NULL key as time 0, so the first eviction outputs the row. V2 and V3 never
-      // evict it, because their key eviction predicate is unknown for NULL (SPARK-61382).
+      // evict it, because their key eviction predicate is unknown for NULL (SPARK-62046).
       val isV4 = spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) == 4
       val nullKeyRow = if (isV4) Seq(Row(null, null, 1, null)) else Nil
 
