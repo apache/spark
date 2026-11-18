@@ -820,9 +820,15 @@ class GeneratorFunctionSuite extends SharedSparkSession {
   }
 
   test("generator output alias in the same SELECT list has higher priority than outer reference") {
-    withTempView("users", "sessions") {
+    withTempView("users", "struct_users", "sessions") {
       Seq(("ann", "vip", 1), ("bob", "new", 2)).toDF("user_name", "tag", "ms")
         .createOrReplaceTempView("users")
+      sql(
+        """
+          |CREATE TEMPORARY VIEW struct_users AS SELECT * FROM VALUES
+          |  ('ann', named_struct('f', 'vip')), ('bob', named_struct('f', 'new'))
+          |  AS t(user_name, tag)
+          |""".stripMargin)
       Seq(
         ("ann", Seq("mobile", "promo"), Map("home" -> 120), "mobile,promo"),
         ("bob", Seq("repeat"), Map("shop" -> 60), "repeat")
@@ -862,8 +868,20 @@ class GeneratorFunctionSuite extends SharedSparkSession {
         Row("ann", "mobile", "MOBILE") :: Row("ann", "promo", "PROMO") ::
           Row("bob", "repeat", "REPEAT") :: Nil)
 
-      // Like lateral column alias, only the aliases before the reference are considered. A
-      // forward reference still resolves to the outer column.
+      // A struct field of the generator output: like lateral column alias, only the first name
+      // part is used to look up the generator output.
+      checkAnswer(
+        sql(
+          """
+            |SELECT u.user_name, x.f
+            |FROM struct_users u, LATERAL (
+            |  SELECT explode(array(named_struct('f', 'x'), named_struct('f', 'y'))) AS tag,
+            |    upper(tag.f) AS f) x
+            |""".stripMargin),
+        Row("ann", "X") :: Row("ann", "Y") :: Row("bob", "X") :: Row("bob", "Y") :: Nil)
+
+      // Lateral column alias baselines without a generator: a forward reference to a lateral
+      // column alias resolves to the outer column.
       checkAnswer(
         sql(
           """
@@ -873,7 +891,8 @@ class GeneratorFunctionSuite extends SharedSparkSession {
             |  FROM sessions s WHERE s.user_name = u.user_name) x
             |""".stripMargin),
         Row("ann", "VIP") :: Row("bob", "NEW") :: Nil)
-      // A forward reference that a later alias depends on through lateral column alias.
+      // The same for a forward reference that a later alias depends on through lateral column
+      // alias.
       checkAnswer(
         sql(
           """
@@ -883,6 +902,18 @@ class GeneratorFunctionSuite extends SharedSparkSession {
             |  FROM sessions s WHERE s.user_name = u.user_name) x
             |""".stripMargin),
         Row("ann", "VIP", "vip") :: Row("bob", "NEW", "new") :: Nil)
+      // Like lateral column alias, only the generators before the reference are considered. A
+      // forward reference to the output of a later generator still resolves to the outer column.
+      checkAnswer(
+        sql(
+          """
+            |SELECT u.user_name, x.a, x.pos, x.tag
+            |FROM users u, LATERAL (
+            |  SELECT upper(tag) AS a, posexplode(s.tags) AS (pos, tag)
+            |  FROM sessions s WHERE s.user_name = u.user_name) x
+            |""".stripMargin),
+        Row("ann", "VIP", 0, "mobile") :: Row("ann", "VIP", 1, "promo") ::
+          Row("bob", "NEW", 0, "repeat") :: Nil)
 
       // The output of a generator does not precede its own arguments, so they can still
       // reference an outer column of the same name.
@@ -890,6 +921,18 @@ class GeneratorFunctionSuite extends SharedSparkSession {
         sql("SELECT u.user_name, x.tag " +
           "FROM users u, LATERAL (SELECT explode(array(tag)) AS tag) x"),
         Row("ann", "vip") :: Row("bob", "new") :: Nil)
+      checkAnswer(
+        sql("SELECT u.user_name, x.pos, x.tag " +
+          "FROM users u, LATERAL (SELECT posexplode(array(tag)) AS (pos, tag)) x"),
+        Row("ann", 0, "vip") :: Row("bob", 0, "new") :: Nil)
+
+      // Without implicit lateral column alias resolution, a single alias is protected too.
+      withSQLConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED.key -> "false") {
+        checkAnswer(
+          sql(singleAlias),
+          Row("ann", "mobile", "MOBILE") :: Row("ann", "promo", "PROMO") ::
+            Row("bob", "repeat", "REPEAT") :: Nil)
+      }
 
       withSQLConf(
         SQLConf.PREFER_GENERATOR_ALIAS_OVER_OUTER_REFERENCE_AND_VARIABLE.key -> "false") {
@@ -915,8 +958,20 @@ class GeneratorFunctionSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT explode(split('a,b', ',')) AS tag, upper(tag)"),
         Row("a", "A") :: Row("b", "B") :: Nil)
-      // A forward reference still resolves to the SQL variable.
+      // A lateral column alias baseline without a generator: a forward reference to a lateral
+      // column alias resolves to the SQL variable.
       checkAnswer(sql("SELECT upper(tag) AS a, lower(a) AS tag"), Row("VAR", "var") :: Nil)
+      // A forward reference to the output of a later generator still resolves to the SQL
+      // variable.
+      checkAnswer(
+        sql("SELECT upper(tag) AS a, posexplode(array('x', 'y')) AS (pos, tag)"),
+        Row("VAR", 0, "x") :: Row("VAR", 1, "y") :: Nil)
+      // So does an argument of the generator.
+      checkAnswer(sql("SELECT posexplode(array(tag)) AS (pos, tag)"), Row(0, "var") :: Nil)
+      // Without implicit lateral column alias resolution, a single alias is protected too.
+      withSQLConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED.key -> "false") {
+        checkAnswer(sql(singleAlias), Row("a", "A") :: Row("b", "B") :: Nil)
+      }
       checkAnswer(
         sql(
           """
@@ -932,6 +987,61 @@ class GeneratorFunctionSuite extends SharedSparkSession {
         SQLConf.PREFER_GENERATOR_ALIAS_OVER_OUTER_REFERENCE_AND_VARIABLE.key -> "false") {
         checkAnswer(sql(singleAlias), Row("a", "VAR") :: Row("b", "VAR") :: Nil)
         checkAnswer(sql(aggregate), Row("a", "VAR", 1L) :: Row("b", "VAR", 1L) :: Nil)
+      }
+    }
+  }
+
+  test("generator output without an alias in the same SELECT list has higher priority than " +
+      "outer reference and SQL variable") {
+    // Without an alias, the generator output is named after the field names of its element
+    // schema, such as `col` for exploding an array, and `key` and `value` for exploding a map.
+    val lateral =
+      """
+        |SELECT u.user_name, x.key, x.value, x.key_uc
+        |FROM users u, LATERAL (
+        |  SELECT explode(s.page_ms), upper(key) AS key_uc
+        |  FROM sessions s WHERE s.user_name = u.user_name) x
+        |""".stripMargin
+    val variable = "SELECT explode(array('a', 'b')), upper(col)"
+    val aggregate = "SELECT explode(array('a', 'b')), upper(col), count(*) FROM range(1)"
+    // In a SELECT list with aggregation, the generator output can not be referenced.
+    val aggregateError = intercept[AnalysisException](sql(aggregate).collect())
+    withTempView("users", "sessions") {
+      Seq(("ann", "k1"), ("bob", "k2")).toDF("user_name", "key").createOrReplaceTempView("users")
+      Seq(("ann", Map("home" -> 120)), ("bob", Map("shop" -> 60)))
+        .toDF("user_name", "page_ms").createOrReplaceTempView("sessions")
+      withSessionVariable("col") {
+        sql("DECLARE VARIABLE col STRING DEFAULT 'var'")
+
+        checkAnswer(
+          sql(lateral),
+          Row("ann", "home", 120, "HOME") :: Row("bob", "shop", 60, "SHOP") :: Nil)
+        checkAnswer(sql(variable), Row("a", "A") :: Row("b", "B") :: Nil)
+        // The reference should not be resolved to the SQL variable either.
+        val e = intercept[AnalysisException](sql(aggregate).collect())
+        assert(e.getCondition == aggregateError.getCondition)
+
+        // A function call that is not a generator does not change the resolution of the columns
+        // after it.
+        checkAnswer(
+          sql(
+            """
+              |SELECT u.user_name, x.key_uc
+              |FROM users u, LATERAL (
+              |  SELECT upper(s.user_name), upper(key) AS key_uc
+              |  FROM sessions s WHERE s.user_name = u.user_name) x
+              |""".stripMargin),
+          Row("ann", "K1") :: Row("bob", "K2") :: Nil)
+        checkAnswer(sql("SELECT upper('a'), upper(col)"), Row("A", "VAR") :: Nil)
+
+        withSQLConf(
+          SQLConf.PREFER_GENERATOR_ALIAS_OVER_OUTER_REFERENCE_AND_VARIABLE.key -> "false") {
+          checkAnswer(
+            sql(lateral),
+            Row("ann", "home", 120, "K1") :: Row("bob", "shop", 60, "K2") :: Nil)
+          checkAnswer(sql(variable), Row("a", "VAR") :: Row("b", "VAR") :: Nil)
+          checkAnswer(sql(aggregate), Row("a", "VAR", 1L) :: Row("b", "VAR", 1L) :: Nil)
+        }
       }
     }
   }
