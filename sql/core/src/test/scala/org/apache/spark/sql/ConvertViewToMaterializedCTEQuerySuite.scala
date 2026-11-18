@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.plans.logical.{
   BROADCAST, CommandResult, Join, JoinHint, LogicalPlan, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
@@ -58,6 +59,13 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
   private def countRepartitions(plan: LogicalPlan): Int =
     plan.collectWithSubqueries {
       case _: RepartitionByExpression => true
+    }.length
+
+  // Only the conversion's added shuffle is round-robin; a body's own DISTRIBUTE BY
+  // carries partition expressions.
+  private def countRoundRobinRepartitions(query: String): Int =
+    spark.sql(query).queryExecution.optimizedPlan.collectWithSubqueries {
+      case r: RepartitionByExpression if r.partitionExpressions.isEmpty => true
     }.length
 
   test("self-joined view returns identical results with conversion enabled") {
@@ -300,6 +308,36 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
+  test("occurrences whose view hints sit on different subtrees are not converted") {
+    // BROADCAST(a) and BROADCAST(b) compare equal as flat HintInfo lists - HintInfo
+    // holds no parameters - so only the hint's position in the body tells them apart.
+    // Converting would keep the first occurrence's placement and drop the other's.
+    withTable("a", "b") {
+      sql("CREATE TABLE a USING parquet AS SELECT id FROM range(0, 100)")
+      sql("CREATE TABLE b USING parquet AS SELECT id FROM range(0, 1000)")
+      withTempView("v") {
+        sql("CREATE TEMP VIEW v AS " +
+          "SELECT /*+ BROADCAST(a) */ a.id FROM a JOIN b ON a.id = b.id")
+        val held = spark.table("v")
+        sql("CREATE OR REPLACE TEMP VIEW v AS " +
+          "SELECT /*+ BROADCAST(b) */ a.id FROM a JOIN b ON a.id = b.id")
+        def mkQuery(): DataFrame = held.union(spark.table("v"))
+        def joinHints(df: DataFrame): Seq[JoinHint] =
+          df.queryExecution.optimizedPlan.collectWithSubqueries { case j: Join => j.hint }
+
+        val expectedHints = joinHints(mkQuery())
+        assert(
+          expectedHints.count(_.leftHint.exists(_.strategy.contains(BROADCAST))) == 1)
+        assert(
+          expectedHints.count(_.rightHint.exists(_.strategy.contains(BROADCAST))) == 1)
+        withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+          assert(countRepartitions(mkQuery()) == 0)
+          assert(joinHints(mkQuery()) == expectedHints)
+        }
+      }
+    }
+  }
+
   private def countBroadcastHintedJoins(query: String): Int =
     spark.sql(query).queryExecution.optimizedPlan.collect {
       case j: Join => j.hint
@@ -371,9 +409,115 @@ class ConvertViewToMaterializedCTEQuerySuite extends QueryTest with SharedSparkS
     }
   }
 
+  test("a view whose body repartitions its output is not converted") {
+    // TRANSFORM runs the script once per partition, so it observes the key grouping
+    // DISTRIBUTE BY guarantees and the added round-robin shuffle would drop. The
+    // column list puts a Project above the body's RepartitionByExpression, which is
+    // what hides the repartition from the top-node-only check in
+    // ReplaceCTERefWithRepartition. Coalescing is off so the 8 round-robin partitions
+    // stay separate; with conversion each would hold all 3 keys.
+    withTempView("v") {
+      sql("CREATE TEMP VIEW v(a, b) AS " +
+        "SELECT id % 3, id FROM range(0, 600) DISTRIBUTE BY id % 3")
+      val query =
+        "SELECT TRANSFORM(a) USING 'sort -u' AS (k STRING) FROM v " +
+        "UNION ALL " +
+        "SELECT TRANSFORM(a) USING 'sort -u' AS (k STRING) FROM v"
+      // Row order depends on which partition each key lands in; compare row counts.
+      // One partition per key dedupes to 3 rows per reference.
+      val stats = s"SELECT count(*), count(DISTINCT k) FROM ($query)"
+      checkAnswer(sql(stats), Row(6, 3))
+      Seq(true, false).foreach { aqeEnabled =>
+        withSQLConf(
+            SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true",
+            SQLConf.SHUFFLE_PARTITIONS.key -> "8",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+            SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+          assert(countRoundRobinRepartitions(query) == 0)
+          checkAnswer(sql(stats), Row(6, 3))
+        }
+      }
+    }
+  }
+
+  test("a DataFrame temp view whose body is a recursive CTE is not converted") {
+    // A Dataset-backed temp view stores one analyzed plan, so its occurrences share
+    // the recursive CTE's loop ids and canonicalize equal; only the explicit UnionLoop
+    // check keeps them from converting. This loop has no fixpoint and terminates only
+    // through the LIMIT pushdown conversion would sever: converted, the shared
+    // definition would run to the recursion level limit and fail.
+    withTempView("rv") {
+      spark.sql("WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r)" +
+        " SELECT * FROM r").createOrReplaceTempView("rv")
+      val stats = "SELECT count(*), sum(n) FROM (" +
+        "(SELECT * FROM rv LIMIT 5) UNION ALL (SELECT * FROM rv LIMIT 5))"
+      checkAnswer(sql(stats), Row(10, 30))
+      Seq(true, false).foreach { aqeEnabled =>
+        withSQLConf(
+            SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true",
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+          assert(countRepartitions(stats) == 0)
+          checkAnswer(sql(stats), Row(10, 30))
+        }
+      }
+    }
+  }
+
+  test("a converted view can fail where the unconverted query would not") {
+    // Pins the evaluation-scope trade the config doc states. The first branch reads
+    // only id, so unconverted the cast never sees the 'abc' at id = 99; converted,
+    // the shared definition computes n over the union of both branches' rows and the
+    // query fails exactly like a hand-written materialized CTE of the same body.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        withTempView("v") {
+          sql("CREATE TABLE t USING parquet AS SELECT id, " +
+            "CASE WHEN id = 99 THEN 'abc' ELSE CAST(id AS STRING) END AS s FROM range(0, 100)")
+          sql("CREATE TEMP VIEW v AS SELECT id, CAST(s AS INT) AS n FROM t")
+          val query =
+            "SELECT id FROM v WHERE id > 50 UNION ALL SELECT n FROM v WHERE id < 5"
+          val castError = Map(
+            "expression" -> "'abc'",
+            "sourceType" -> "\"STRING\"",
+            "targetType" -> "\"INT\"",
+            "ansiConfig" -> ("\"" + SQLConf.ANSI_ENABLED.key + "\""))
+
+          val sorted = s"SELECT * FROM ($query) q ORDER BY 1"
+          checkAnswer(sql(sorted), (0 to 4).map(Row(_)) ++ (51 to 99).map(Row(_)))
+
+          // The cast fails in a task, so it can reach the driver inside a job-aborted
+          // SparkException; find the CAST_INVALID_INPUT in the cause chain. The
+          // handwritten query's context points at the cast, the converted one's at
+          // the view reference.
+          def checkCastInvalidInput(queryText: String, fragment: String): Unit = {
+            val e = intercept[Throwable](sql(queryText).collect())
+            val failure = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+              .collectFirst {
+                case t: SparkThrowable if t.getCondition == "CAST_INVALID_INPUT" => t
+              }
+            checkError(
+              exception = failure.getOrElse(fail(s"no CAST_INVALID_INPUT thrown by: $e")),
+              condition = "CAST_INVALID_INPUT",
+              parameters = castError,
+              queryContext = Array(ExpectedContext(fragment = fragment)))
+          }
+
+          val handwritten =
+            "WITH c AS MATERIALIZED (SELECT id, CAST(s AS INT) AS n FROM t) " +
+            "SELECT id FROM c WHERE id > 50 UNION ALL SELECT n FROM c WHERE id < 5"
+          checkCastInvalidInput(handwritten, "CAST(s AS INT)")
+
+          withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+            checkCastInvalidInput(query, "v")
+          }
+        }
+      }
+    }
+  }
+
   test("a TABLESAMPLE over a sorted inner view is not converted") {
     // REPEATABLE keeps the seedless-sample guard from rejecting the view before
-    // hasMainRegionSort sees the inner ORDER BY.
+    // hasMainRegionSortOrRepartition sees the inner ORDER BY.
     withTable("t") {
       sql("CREATE TABLE t USING parquet AS SELECT id, id % 10 AS k FROM range(0, 100)")
       withTempView("v1", "v") {
