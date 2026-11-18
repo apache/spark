@@ -58,8 +58,8 @@ Before the first code edit or running test in a session, ensure a clean working 
 
 - Keep source lines within 100 characters; the linters enforce this for Scala, Java, and Python.
   Avoid non-ASCII characters in code and comments (string literals may contain them when the
-  content requires it). Before committing Scala, Java or Python changes: read
-  `.agents/code-conventions.md` and run its spot-checks.
+  content requires it). When changing Scala, Java or Python code: read
+  `.agents/code-conventions.md`, and run its spot-checks before committing.
 - When adding a member to an existing class or object, put it with the code it belongs with,
   following the file's existing sectioning. Do not reorganize existing members unless the change
   requires it.
