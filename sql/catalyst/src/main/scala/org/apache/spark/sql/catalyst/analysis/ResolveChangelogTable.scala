@@ -175,7 +175,8 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       name: String): LogicalPlan = {
     val columnNames = source.output.map(_.name).toSet
     val project = Project(plan.output.filter(a => columnNames.contains(a.name)), plan)
-    // Metadata availability must not depend on which post-processing passes were required.
+    // Set hiddenOutputTag = empty to hide metadata columns, and wrap in a SubqueryAlias to
+    // prevent analyzer rules reaching inside the Project to find the metadata columns.
     project.setTagValue(Project.hiddenOutputTag, Seq.empty[Attribute])
     val boundary = SubqueryAlias(name, project)
     boundary.mergeTagsFrom(source)
