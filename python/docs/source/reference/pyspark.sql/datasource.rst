@@ -25,11 +25,17 @@ Python Data Source
 .. autosummary::
     :toctree: api/
 
+    DataSource.lookupReader
     DataSource.name
     DataSource.reader
     DataSource.schema
     DataSource.streamReader
     DataSource.writer
+    DataSourceLookupReader.close
+    DataSourceLookupReader.lookup
+    DataSourceLookupReader.maxParameterRowsPerRequest
+    DataSourceLookupReader.pushFilters
+    DataSourceLookupReader.selectLookupPredicates
     DataSourceReader.partitions
     DataSourceReader.pushFilters
     DataSourceReader.pushLimit
@@ -46,3 +52,4 @@ Python Data Source
     DataSourceWriter.abort
     DataSourceWriter.commit
     DataSourceWriter.write
+    LookupParameter

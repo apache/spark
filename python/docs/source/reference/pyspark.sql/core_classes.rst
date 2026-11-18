@@ -45,6 +45,7 @@ Core Classes
     datasource.DataSource
     datasource.DataSourceReader
     datasource.DataSourceStreamReader
+    datasource.DataSourceLookupReader
     datasource.DataSourceWriter
     datasource.DataSourceRegistration
     datasource.InputPartition
