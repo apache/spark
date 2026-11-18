@@ -19,8 +19,8 @@
 
 """
 Reports which apache/spark branches a pull request was merged to, so the caller does
-not have to reason about it by hand (see the "Checking PR Merge Status" section of
-AGENTS.md for why this is non-obvious):
+not have to reason about it by hand (see the merge-status notes that `AGENTS.md` points
+to for why this is non-obvious):
 
     $ dev/pr_merge_status.py 56356
     PR #56356 (base master): [SPARK-57295][SQL] Make database location validation ...

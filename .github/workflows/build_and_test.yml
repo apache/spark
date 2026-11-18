@@ -1029,6 +1029,9 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Agent instruction files check
+      if: hashFiles('dev/agent_docs_lint.py') != ''
+      run: python3.12 ./dev/agent_docs_lint.py --strict
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
