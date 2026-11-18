@@ -44,10 +44,8 @@ class Table(Output):
 
     :param table_properties: A dict where the keys are the property names and the values are the
         property values. These properties will be set on the table. A property removed from
-        this dict is removed from the table on the next pipeline run, provided an earlier run
-        recorded it in the ``pipelines.declaredPropertyKeys`` table property. A property
-        dropped before that stays on the table, as does a reserved key other than ``comment``,
-        such as ``owner``. See the Declarative Pipelines entry in the SQL migration guide.
+        this dict is removed from the table on a later run; see the migration guide for
+        exceptions.
     :param partition_cols: A list containing the column names of the partition columns.
     :param cluster_by: A list containing the column names of the cluster columns.
     :param schema Explicit Spark SQL schema to materialize this table with. Supports either a

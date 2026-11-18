@@ -82,6 +82,9 @@ class MaterializeTablesInJdbcCatalogSuite extends BaseCoreExecutionTest with Sha
 
   test("SPARK-57670: a materialized view that declares a table property is created without the " +
     "declared-keys record") {
+    // This test covers only the first run. Re-runs are not supported for a JDBC table with table
+    // properties: the second run fails on `SetProperty`, with or without the record, because the
+    // JDBC dialect rejects it and `JDBCTable` reports no properties.
     // The JDBC catalog turns `comment` into the table comment and appends every other declared
     // property to the CREATE TABLE statement, where H2 accepts no such option. So the view declares
     // its comment as a table property, and the record would be the statement's only option.

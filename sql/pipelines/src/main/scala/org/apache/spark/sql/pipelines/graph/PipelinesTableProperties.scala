@@ -40,24 +40,24 @@ object PipelinesTableProperties {
   /**
    * Internal table property recording, as a sorted JSON string array (see
    * [[JsonStringArrayCodec]]), the keys of the table properties declared in the dataset definition
-   * (SQL `TBLPROPERTIES`, Python `table_properties`) as of the latest materialization.
+   * (SQL `TBLPROPERTIES`, Python `table_properties`) as of the latest materialization. This is the
+   * one place that states the removal rule; other code and docs point here.
    *
-   * `DatasetManager` writes it, through `resolveTableProperties`, only when the definition declares
-   * at least one table property, and never for a table in a JDBC catalog, which appends every
-   * non-reserved table property to its `CREATE TABLE` statement as a DDL option. It covers those
-   * declared keys, not the `comment` and `provider` entries derived from the dataset's comment and
-   * format. On the next materialization, `evolveTable` removes a recorded key when the resolved
-   * table properties of the definition no longer contain it, it is still on the table, and it is
-   * not a reserved catalog property other than `comment` (the keys the SQL parser rejects in
-   * `TBLPROPERTIES`). The resolved properties include the `comment` and `provider` derived from the
-   * definition, so a comment moved from the table properties to the dataset's comment field stays.
-   * A dropped reserved key such as `owner`, which Python `table_properties` passes through, is
-   * recorded but never removed. Ownership follows declaration: a key is removable once a definition
-   * declared it, even if the catalog had already set it to the same value. Properties the
-   * definition never declared, e.g. catalog-managed ones, are never removed. A table without the
-   * record, or with one that is not a JSON string array, has nothing removed. The record itself is
-   * removed once the definition declares no table property, whether or not the keys it listed are
-   * removed with it. Auxiliary tables never carry it.
+   * What is recorded: the declared keys, except the reserved catalog properties other than
+   * `comment` (`provider`, `location`, `owner`, ...; the SQL parser rejects them in
+   * `TBLPROPERTIES`, and they describe the table itself), and not the `comment` and `provider`
+   * entries derived from the dataset's comment and format. The record is written only when that
+   * list is non-empty, and never for a table in a JDBC catalog. Auxiliary tables never carry it.
+   *
+   * What is removed: on the next materialization, a recorded key is removed when the resolved table
+   * properties of the definition no longer contain it and it is still on the table. The resolved
+   * properties include the `comment` and `provider` derived from the definition, so a comment moved
+   * from the table properties to the dataset's comment field stays. Ownership follows declaration:
+   * a key is removable once a definition declared it, even if the catalog had already set it to the
+   * same value. A key the record does not list, e.g. a catalog-managed one or one set outside the
+   * pipeline, is never removed. A table without the record, or with one that is not a JSON string
+   * array, has nothing removed; that run writes a new record. The record itself is removed once the
+   * definition declares no recorded key, whether or not the keys it listed are removed with it.
    *
    * This key is not registered as a user-settable property, so [[validateAndCanonicalize]] drops
    * it if a user declares it.

@@ -20,6 +20,8 @@ package org.apache.spark.sql.pipelines.graph
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -1167,6 +1169,18 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     catalog.loadTable(Identifier.of(Array(recordingNamespace), name))
   }
 
+  /** The declared-keys record of a table in the recording catalog, if it has one. */
+  private def declaredKeysRecord(name: String): Option[String] =
+    Option(loadTableFromRecordingCatalog(name).properties().get(
+      PipelinesTableProperties.declaredPropertyKeys))
+
+  /** Overwrites the declared-keys record of a table in the recording catalog. */
+  private def setRecord(name: String, value: String): Unit = {
+    spark.sql(
+      s"ALTER TABLE $recordingCatalogName.$recordingNamespace.$name SET TBLPROPERTIES " +
+      s"('${PipelinesTableProperties.declaredPropertyKeys}' = '$value')")
+  }
+
   test("re-materializing an unchanged table does not issue an alterTable") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType).add("value", StringType)
@@ -1647,7 +1661,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       assert(!props.containsKey("p.stale"))
       assert(props.get("p.keep") == "v")
       assert(props.get("p.external") == "e")
-      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.keep"]""")
+      assert(declaredKeysRecord("t").contains("""["p.keep"]"""))
     }
   }
 
@@ -1668,7 +1682,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val props = loadTableFromRecordingCatalog("t").properties()
       assert(!props.containsKey("p.a"))
       assert(!props.containsKey("p.b"))
-      assert(!props.containsKey(PipelinesTableProperties.declaredPropertyKeys))
+      assert(declaredKeysRecord("t").isEmpty)
 
       // The table is now in sync with its definition, so re-materializing is a no-op.
       recordingCatalog.recordedAlters.clear()
@@ -1681,26 +1695,13 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)
       materializeStreamingTable("t", schema, Map.empty)
-      assert(!loadTableFromRecordingCatalog("t").properties()
-        .containsKey(PipelinesTableProperties.declaredPropertyKeys))
-    }
-  }
-
-  test("SPARK-57670: a table without properties and without a record is re-materialized " +
-    "without an alterTable") {
-    withRecordingCatalog {
-      val schema = new StructType().add("id", IntegerType)
-      materializeStreamingTable("t", schema, Map.empty)
-      // Stand in for a table materialized before the record was introduced.
-      spark.sql(
-        s"ALTER TABLE $recordingCatalogName.$recordingNamespace.t UNSET TBLPROPERTIES IF EXISTS " +
-        s"('${PipelinesTableProperties.declaredPropertyKeys}')")
+      assert(declaredKeysRecord("t").isEmpty)
       recordingCatalog.recordedAlters.clear()
 
+      // A table without properties and without a record is re-materialized without an alterTable.
       materializeStreamingTable("t", schema, Map.empty)
       assert(recordingCatalog.recordedAlters.isEmpty)
-      assert(!loadTableFromRecordingCatalog("t").properties()
-        .containsKey(PipelinesTableProperties.declaredPropertyKeys))
+      assert(declaredKeysRecord("t").isEmpty)
     }
   }
 
@@ -1717,7 +1718,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       materializeStreamingTable("t", schema, Map("p.keep" -> "v"))
       val props = loadTableFromRecordingCatalog("t").properties()
       assert(props.get("p.stale") == "old")
-      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.keep"]""")
+      assert(declaredKeysRecord("t").contains("""["p.keep"]"""))
     }
   }
 
@@ -1727,8 +1728,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       materializeStreamingTable("t", schema, Map(
         "p.a" -> "1",
         PipelinesTableProperties.declaredPropertyKeys -> """["p.other"]"""))
-      assert(loadTableFromRecordingCatalog("t").properties()
-        .get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""")
+      assert(declaredKeysRecord("t").contains("""["p.a"]"""))
     }
   }
 
@@ -1766,7 +1766,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val props = loadTableFromRecordingCatalog("t").properties()
       assert(!props.containsKey(TableCatalog.PROP_COMMENT))
       assert(props.get("p.a") == "1")
-      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""")
+      assert(declaredKeysRecord("t").contains("""["p.a"]"""))
     }
   }
 
@@ -1784,7 +1784,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       } == Seq(PipelinesTableProperties.declaredPropertyKeys))
       val props = loadTableFromRecordingCatalog("t").properties()
       assert(props.get(TableCatalog.PROP_COMMENT) == "kept")
-      assert(!props.containsKey(PipelinesTableProperties.declaredPropertyKeys))
+      assert(declaredKeysRecord("t").isEmpty)
     }
   }
 
@@ -1794,13 +1794,30 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val schema = new StructType().add("id", IntegerType)
       materializeStreamingTable(
         "t", schema, Map("p.a" -> "1", TableCatalog.PROP_OWNER -> "someone"))
-      assert(loadTableFromRecordingCatalog("t").properties()
-        .get(PipelinesTableProperties.declaredPropertyKeys) == """["owner","p.a"]""")
+      // Simulate a hand-edited record that lists the reserved key.
+      setRecord("t", """["owner","p.a"]""")
 
       materializeStreamingTable("t", schema, Map("p.a" -> "1"))
       val props = loadTableFromRecordingCatalog("t").properties()
       assert(props.get(TableCatalog.PROP_OWNER) == "someone")
-      assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""")
+      assert(declaredKeysRecord("t").contains("""["p.a"]"""))
+    }
+  }
+
+  test("SPARK-57670: a reserved key passed as a table property is not recorded") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      // Python `table_properties` passes reserved keys such as `owner` through.
+      materializeStreamingTable(
+        "t", schema, Map("p.a" -> "1", TableCatalog.PROP_OWNER -> "someone"))
+      assert(loadTableFromRecordingCatalog("t").properties()
+        .get(TableCatalog.PROP_OWNER) == "someone")
+      assert(declaredKeysRecord("t").contains("""["p.a"]"""))
+
+      materializeStreamingTable("only_owner", schema, Map(TableCatalog.PROP_OWNER -> "someone"))
+      assert(loadTableFromRecordingCatalog("only_owner").properties()
+        .get(TableCatalog.PROP_OWNER) == "someone")
+      assert(declaredKeysRecord("only_owner").isEmpty)
     }
   }
 
@@ -1864,44 +1881,36 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     assert(sessionCatalogTable("external").properties.get("p.keep").contains("v"))
   }
 
-  test("SPARK-57670: a malformed declared-keys record removes nothing and is rewritten") {
+  test("SPARK-57670: a malformed declared-keys record removes nothing, is rewritten and is " +
+    "logged") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)
-      Seq("t1" -> "not-json", "t2" -> """["p.stale", 1]""").foreach { case (name, malformed) =>
-        materializeStreamingTable(name, schema, Map("p.a" -> "1", "p.stale" -> "old"))
-        spark.sql(
-          s"ALTER TABLE $recordingCatalogName.$recordingNamespace.$name SET TBLPROPERTIES " +
-          s"('${PipelinesTableProperties.declaredPropertyKeys}' = '$malformed')")
-
-        materializeStreamingTable(name, schema, Map("p.a" -> "1"))
-        val props = loadTableFromRecordingCatalog(name).properties()
-        assert(props.get("p.stale") == "old", s"record: $malformed")
-        assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""",
-          s"record: $malformed")
-      }
-    }
-  }
-
-  test("SPARK-57670: a declared-keys record with trailing content is malformed and removes " +
-    "nothing") {
-    withRecordingCatalog {
-      val schema = new StructType().add("id", IntegerType)
-      // Each record lists `p.stale` in a leading JSON array that more input follows. Read as that
-      // array, it would drive the removal of `p.stale`; as malformed input, it removes nothing.
+      // The last three records list `p.stale` in a leading JSON array that more input follows.
+      // Read as that array, they would drive the removal of `p.stale`; as malformed input, they
+      // remove nothing.
       Seq(
-        "t1" -> """["p.stale"]x""",
-        "t2" -> """["p.stale"]]""",
-        "t3" -> """["p.stale"],["p.a"]""").foreach { case (name, malformed) =>
+        "t1" -> "not-json",
+        "t2" -> """["p.stale", 1]""",
+        "t3" -> """["p.stale"]x""",
+        "t4" -> """["p.stale"]]""",
+        "t5" -> """["p.stale"],["p.a"]""").foreach { case (name, malformed) =>
         materializeStreamingTable(name, schema, Map("p.a" -> "1", "p.stale" -> "old"))
-        spark.sql(
-          s"ALTER TABLE $recordingCatalogName.$recordingNamespace.$name SET TBLPROPERTIES " +
-          s"('${PipelinesTableProperties.declaredPropertyKeys}' = '$malformed')")
+        setRecord(name, malformed)
 
-        materializeStreamingTable(name, schema, Map("p.a" -> "1"))
+        val logAppender = new LogAppender("a malformed declared-keys record")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          materializeStreamingTable(name, schema, Map("p.a" -> "1"))
+        }
         val props = loadTableFromRecordingCatalog(name).properties()
         assert(props.get("p.stale") == "old", s"record: $malformed")
-        assert(props.get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a"]""",
-          s"record: $malformed")
+        assert(declaredKeysRecord(name).contains("""["p.a"]"""), s"record: $malformed")
+        val warnings = logAppender.loggingEvents
+          .filter(_.getLevel == Level.WARN)
+          .map(_.getMessage.getFormattedMessage)
+        assert(warnings.exists { w =>
+          w.contains(PipelinesTableProperties.declaredPropertyKeys) && w.contains(name) &&
+            w.contains("is not a JSON string array")
+        }, s"record: $malformed, warnings: $warnings")
       }
     }
   }
@@ -1910,14 +1919,12 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)
       materializeStreamingTable("t", schema, Map("p.b" -> "2", "p.a" -> "1"))
-      assert(loadTableFromRecordingCatalog("t").properties()
-        .get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a","p.b"]""")
+      assert(declaredKeysRecord("t").contains("""["p.a","p.b"]"""))
       recordingCatalog.recordedAlters.clear()
 
       materializeStreamingTable("t", schema, Map("p.a" -> "1", "p.b" -> "2"))
       assert(recordingCatalog.recordedAlters.isEmpty)
-      assert(loadTableFromRecordingCatalog("t").properties()
-        .get(PipelinesTableProperties.declaredPropertyKeys) == """["p.a","p.b"]""")
+      assert(declaredKeysRecord("t").contains("""["p.a","p.b"]"""))
     }
   }
 
@@ -1929,8 +1936,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       val separators = "p,comma[bracket]"
       materializeStreamingTable(
         "t", schema, Map(quoted -> "1", backslash -> "2", separators -> "3"))
-      val record = loadTableFromRecordingCatalog("t").properties()
-        .get(PipelinesTableProperties.declaredPropertyKeys)
+      val record = declaredKeysRecord("t").get
       assert(record == """["p,comma[bracket]","p.\"quoted\"","p.back\\slash"]""")
       assert(JsonStringArrayCodec.parse(record).contains(Seq(separators, quoted, backslash)))
 
@@ -1939,8 +1945,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       assert(!props.containsKey(quoted))
       assert(!props.containsKey(backslash))
       assert(props.get(separators) == "3")
-      assert(JsonStringArrayCodec.parse(props.get(PipelinesTableProperties.declaredPropertyKeys))
-        .contains(Seq(separators)))
+      assert(declaredKeysRecord("t").flatMap(JsonStringArrayCodec.parse).contains(Seq(separators)))
     }
   }
 }
