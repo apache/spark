@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -967,6 +967,78 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         $"employer.id")
       .analyze
 
+    comparePlans(optimized, expected)
+  }
+
+  private val withArray = LocalRelation(
+    $"id".int,
+    $"s".struct(StructType.fromDDL("arr array<struct<x: int, y: int>>, e int")),
+    $"seq".array(IntegerType))
+
+  // `arr[index].x`.
+  private def elementX(arr: Expression, index: Expression): Expression =
+    GetStructField(GetArrayItem(arr, index), 0, Some("x"))
+
+  private val randomIndex = Cast(Multiply(Rand(Literal(0L)), Literal(1000.0)), IntegerType)
+
+  test("SPARK-62042: Do not alias non-deterministic nested field accesses below a Join") {
+    val other = LocalRelation($"rid".int)
+    // The second index mixes an input file function with rand(), so it is not exempt.
+    val mixedIndex = Cast(
+      Add(Cast(InputFileBlockStart(), DoubleType), Multiply(Rand(Literal(0L)), Literal(1000.0))),
+      IntegerType)
+    Seq(randomIndex, mixedIndex).foreach { index =>
+      val query = withArray.join(other, condition = Some($"id" === $"rid"))
+        .select(elementX($"s".getField("arr"), index).as("v"))
+        .analyze
+      val optimized = Optimize.execute(query)
+
+      val join = optimized.collectFirst { case j: Join => j }.get
+      assert(join.children.forall(_.deterministic),
+        s"a non-deterministic access is evaluated below the Join:\n$optimized")
+      // Only the deterministic `s.arr` is aliased below the Join, so `s.e` is still pruned, and
+      // the element is picked above the Join, once per joined row.
+      val aliases = collectGeneratedAliases(optimized)
+      val expected = withArray.select($"id", $"s".getField("arr").as(aliases(0)))
+        .join(other, condition = Some($"id" === $"rid"))
+        .select(elementX($"${aliases(0)}", index).as("v"))
+        .analyze
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("SPARK-62042: Do not alias non-deterministic nested field accesses below a Generate") {
+    val query = withArray
+      .generate(Explode($"seq"), outputNames = Seq("n"))
+      .select(elementX($"s".getField("arr"), randomIndex).as("v"), $"n")
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val generate = optimized.collectFirst { case g: Generate => g }.get
+    assert(generate.child.deterministic,
+      s"a non-deterministic access is evaluated below the Generate:\n$optimized")
+    val aliases = collectGeneratedAliases(optimized)
+    val expected = withArray
+      .select($"s".getField("arr").as(aliases(0)), $"seq")
+      .generate(Explode($"seq"), unrequiredChildIndex = Seq(1), outputNames = Seq("n"))
+      .select(elementX($"${aliases(0)}", randomIndex).as("v"), $"n")
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-62042: Alias nested field accesses whose only sources of non-determinism are " +
+      "input file functions") {
+    // The access is evaluated below the Repartition, where input_file_block_start() still has the
+    // value for the file the row comes from.
+    val access = elementX($"s".getField("arr"), Cast(InputFileBlockStart(), IntegerType))
+    val query = withArray.repartition(2).select(access.as("v")).analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+    val expected = withArray.select(access.as(aliases(0)))
+      .select($"${aliases(0)}".as("v"))
+      .repartition(2)
+      .analyze
     comparePlans(optimized, expected)
   }
 }

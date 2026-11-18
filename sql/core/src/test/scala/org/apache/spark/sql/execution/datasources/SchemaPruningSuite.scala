@@ -92,6 +92,17 @@ abstract class SchemaPruningSuite
   val organizations =
     Organization(Team(Array[Employer](null, employerWithNullCompany, employer))) :: Nil
 
+  case class Element(x: Int, y: Int)
+  case class Elements(arr: Array[Element], e: Int)
+  case class ElementRow(id: Int, s: Elements, seq: Array[Int])
+  case class JoinKey(rid: Int)
+
+  // One row whose `s.arr` holds 1000 elements with x = 0..999, and 1000 rows that join to it.
+  val elementRows =
+    ElementRow(1, Elements(Array.tabulate(1000)(i => Element(i, i)), 0), Array.range(1, 1001)) ::
+      Nil
+  val joinKeys = Seq.fill(1000)(JoinKey(1))
+
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
 
@@ -809,6 +820,32 @@ abstract class SchemaPruningSuite
       Row("Jane", "abc") ::
         Row("John", null) ::
         Row(null, null) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-62042: non-deterministic nested field accesses get a value per " +
+      "output row") {
+    withDataSourceTable(elementRows, "elements") {
+      withDataSourceTable(joinKeys, "join_keys") {
+        // Each query below builds about 1000 rows from the one row of `elements`, and picks a
+        // random element of `s.arr` for each of them.
+        val access = "s.arr[CAST(rand(0) * 1000 AS INT)].x"
+        val joined = sql(s"SELECT $access AS v FROM elements JOIN join_keys ON id = rid")
+        val exploded =
+          sql(s"SELECT $access AS v, n FROM elements LATERAL VIEW explode(seq) t AS n")
+        val sampled = spark.table("elements")
+          .sample(withReplacement = true, fraction = 1000.0, seed = 0L)
+          .selectExpr(s"$access AS v")
+
+        val numDistinctValues = Seq("join" -> joined, "explode" -> exploded, "sample" -> sampled)
+          .map { case (name, df) => name -> df.collect().map(_.get(0)).distinct.length }
+        assert(numDistinctValues.forall(_._2 > 1),
+          s"every row built from the one input row got the same value: $numDistinctValues")
+        // `s.e` is still pruned: only the element access itself stays above the join.
+        checkScan(joined,
+          "struct<id:int,s:struct<arr:array<struct<x:int,y:int>>>>",
+          "struct<rid:int>")
+      }
+    }
   }
 
   testSchemaPruning("select nested field in aggregation function of Aggregate") {
