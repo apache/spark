@@ -2660,13 +2660,15 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
-  test("COMMENT ON TABLE keeps the default collation and ALTER TABLE DEFAULT COLLATION " +
-    "keeps the comment") {
+  test("SPARK-62033: COMMENT ON TABLE keeps the default collation and " +
+    "ALTER TABLE DEFAULT COLLATION keeps the comment") {
     // No SQL statement removes a default collation: UNSET TBLPROPERTIES rejects the reserved
-    // `collation` key. V2SessionCatalogSuite covers removing it through a table change.
+    // `collation` key. V2SessionCatalogTableSuite covers removing it through a table change.
+    // The parser turns `IS NULL` into an empty comment, so that row expects Some("").
     // (statement, expected comment, expected collation)
     Seq(
       ("COMMENT ON TABLE t IS 'new comment'", Some("new comment"), Some("UTF8_LCASE")),
+      ("COMMENT ON TABLE t IS NULL", Some(""), Some("UTF8_LCASE")),
       ("ALTER TABLE t DEFAULT COLLATION UNICODE", Some("table comment"), Some("UNICODE"))
     ).foreach { case (statement, expectedComment, expectedCollation) =>
       withTable("t") {

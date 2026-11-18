@@ -390,7 +390,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   private def loadCatalogTable(catalog: V2SessionCatalog): CatalogTable =
     catalog.loadTable(testIdent).asInstanceOf[V1Table].catalogTable
 
-  test("alterTable keeps the comment and collation unless a change names them") {
+  test("SPARK-62033: alterTable keeps the comment and collation unless a change names them") {
     // (changes, expected comment, expected collation)
     Seq[(Seq[TableChange], Option[String], Option[String])](
       (Seq(TableChange.setProperty("prop-1", "1")), Some("table comment"), Some("UTF8_LCASE")),
@@ -413,7 +413,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     }
   }
 
-  test("alterTable sets or removes the comment and collation a change names") {
+  test("SPARK-62033: alterTable sets or removes the comment and collation a change names") {
     val catalog = newCatalog()
     createTableWithCommentAndCollation()
 

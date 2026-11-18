@@ -294,8 +294,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
-    // Comment and collation live in dedicated fields, not `properties`; keep them unless a change
-    // sets or removes them, as the v1 SET/UNSET commands do.
+    // The dedicated CatalogTable fields hold these values, not properties; keep them unless a
+    // change names the key.
     val comment = if (namesProperty(changes, TableCatalog.PROP_COMMENT)) {
       properties.get(TableCatalog.PROP_COMMENT)
     } else {
