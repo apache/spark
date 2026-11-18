@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet, ListAgg, StddevSamp}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, CollectList, CollectSet, ListAgg, StddevSamp, Sum}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationRef, Deduplicate, DeleteAction, DeleteFromTable, Distinct, DomainJoin, InsertAction, LateralJoin, LocalRelation, LogicalPlan, MergeIntoTable, Sample, Tail, Union, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -232,6 +232,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val intervals = LocalRelation($"a".int, AttributeReference("i", DayTimeIntervalType())())
     assert(countBugHandling(correlated(max($"d")),
       outer = intervals.groupBy($"a")($"a", avg($"i").as("m"))) == inDecorrelation)
+    // try_sum and try_avg give NULL on an overflow that depends on the order.
+    Seq(Sum($"b", NumericEvalContext(EvalMode.TRY)), Sum($"i", NumericEvalContext(EvalMode.TRY)),
+        Average($"i", EvalMode.TRY)).foreach { f =>
+      val input =
+        LocalRelation($"a".int, $"b".long, AttributeReference("i", DayTimeIntervalType())())
+      val outer = input.groupBy($"a")($"a", f.toAggregateExpression().as("s"))
+      assert(countBugHandling(correlated(max($"d")), outer = outer) == inLegacy, f)
+    }
     val decimals = LocalRelation($"a".int, $"x".decimal(10, 2))
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {

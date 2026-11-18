@@ -634,13 +634,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * rows when the domain joins of [[DecorrelateInnerQuery]] compute it again. The check is
    * conservative: it accepts only operators known to keep the same rows, deterministic
    * expressions, aggregate functions whose result does not depend on the order of the rows, and
-   * leaves other than a CTE that is not inlined (which may be a non-deterministic one; a
-   * CTERelationRef does not tell) and a streaming source, for which the domain joins fail. It
+   * leaf nodes other than a CTE that is not inlined (which may be a non-deterministic one; a
+   * CTERelationRef does not tell) and a streaming source (for which the domain joins fail). It
    * also checks the plans of the subqueries in `input`. A relation is taken to give the same
    * rows again, as elsewhere in Spark, e.g. in a self-join; a LogicalRDD over an RDD that does
-   * not is not detected. Anything else, e.g. a LIMIT (other than
-   * over rows of constants), a window function, a sample or a FIRST, keeps the previous
-   * handling.
+   * not is not detected. Anything else, e.g. a LIMIT (other than over rows of constants), a
+   * window function, a sample or a FIRST, keeps the previous handling.
    */
   private def repeatableInput(input: LogicalPlan, inSubquery: Boolean = false): Boolean =
     !input.exists { p =>
@@ -679,17 +678,17 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   // associative, so neither a SUM of floating-point values nor an AVG of anything but decimals
   // and ANSI intervals, which AVG adds up as DOUBLE, nor a CentralMomentAgg qualifies; and a SUM
   // or AVG of decimals becomes NULL on an overflow that depends on the order unless in ANSI
-  // mode, where the overflow fails the query.
+  // mode, where the overflow fails the query, as does try_sum or try_avg of any type.
   private def orderIrrelevant(f: AggregateFunction): Boolean = f match {
     case _: Min | _: Max | _: Count | _: BitAndAgg | _: BitOrAgg | _: BitXorAgg => true
     case s: Sum => s.child.dataType match {
       case FloatType | DoubleType => false
       case _: DecimalType => s.evalContext.evalMode == EvalMode.ANSI
-      case _ => true
+      case _ => s.evalContext.evalMode != EvalMode.TRY
     }
     case a: Average => a.child.dataType match {
       case _: DecimalType => a.evalMode == EvalMode.ANSI
-      case _: AnsiIntervalType => true
+      case _: AnsiIntervalType => a.evalMode != EvalMode.TRY
       case _ => false
     }
     case _ => false
@@ -701,9 +700,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * OptimizeSubqueries optimizes it), may put something into its outer input that gives other
    * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
    * builds the domain joins: PushDownPredicates can push a filter or join condition there. The
-   * check is conservative and looks at all of `root`. LimitPushDown keeps a LIMIT above a
-   * Project with a correlated scalar subquery, so it does not push one there; one in a grouping
-   * expression is in a Project below the Aggregate by then (PullOutGroupingExpressions).
+   * check is conservative and looks at all of `root`. LimitPushDown pushes a LIMIT below a
+   * Project only into a join or, for a LIMIT 1, a group-only Aggregate, and keeps it above a
+   * Project with a subquery with domain joins; its other cases for a Project, over UDF evaluation
+   * nodes or a UnionLoop, occur only after the rewrite or in inputs that repeatableInput rejects.
+   * A correlated scalar subquery in a grouping expression is in a Project below the Aggregate by
+   * then (PullOutGroupingExpressions).
    */
   private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
     root.exists {

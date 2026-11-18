@@ -353,26 +353,33 @@ class LimitPushdownSuite extends PlanTest {
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
   }
 
-  test("SPARK-60501: keep a limit above a Project with a correlated scalar subquery") {
+  test("SPARK-60501: keep a limit above a Project with a scalar subquery with domain joins") {
     val Seq(a, _, _) = testRelation.output
     val Seq(d, e, _) = testRelation2.output
     val agg = testRelation2.groupBy()(max(e).as("m")).analyze
-    // The domain joins that RewriteCorrelatedScalarSubquery builds for a correlated subquery
-    // compute the input of the Project again, so a limit there could keep other rows.
+    // The domain joins that RewriteCorrelatedScalarSubquery builds for a subquery with a
+    // DomainJoin compute the input of the Project again, so a limit there could keep other rows.
+    val withDomainJoins = ScalarSubquery(
+      DomainJoin(Seq(d), testRelation2).groupBy()(max(e).as("m")), outerAttrs = Seq(a)).as("s")
+    // Not analyzed, since the analyzer would recompute the outer references from the plan.
     val correlated = ScalarSubquery(agg, outerAttrs = Seq(a)).as("s")
     val uncorrelated = ScalarSubquery(agg).as("s")
     val join = testRelation.join(testRelation2, LeftOuter, Some(a === d))
-    // Not analyzed, since the analyzer would recompute the outer references from the plan.
-    val keptAbove = Project(Seq(a, correlated), join).limit(2)
+    val keptAbove = Project(Seq(a, withDomainJoins), join).limit(2)
     comparePlans(Optimize.execute(keptAbove), keptAbove)
-    comparePlans(
-      Optimize.execute(Project(Seq(a, uncorrelated), join).limit(2).analyze),
-      Project(Seq(a, uncorrelated),
-        LocalLimit(2, testRelation).join(testRelation2, LeftOuter, Some(a === d))).limit(2)
-        .analyze)
     val groupOnly = testRelation.groupBy(a)(a)
-    val limitOneKeptAbove = Project(Seq(a, correlated), groupOnly).limit(1)
+    val limitOneKeptAbove = Project(Seq(a, withDomainJoins), groupOnly).limit(1)
     comparePlans(Optimize.execute(limitOneKeptAbove), limitOneKeptAbove)
+    // Other scalar subqueries, also correlated ones, do not compute the input again.
+    Seq(correlated, uncorrelated).foreach { s =>
+      comparePlans(
+        Optimize.execute(Project(Seq(a, s), join).limit(2)),
+        Project(Seq(a, s),
+          LocalLimit(2, testRelation).join(testRelation2, LeftOuter, Some(a === d))).limit(2))
+      comparePlans(
+        Optimize.execute(Project(Seq(a, s), groupOnly).limit(1)),
+        Project(Seq(a, s), Project(Seq(a), LocalLimit(1, testRelation))).limit(1))
+    }
   }
 
   test("SPARK-39511: Push limit 1 to right side if join type is LeftSemiOrAnti") {
