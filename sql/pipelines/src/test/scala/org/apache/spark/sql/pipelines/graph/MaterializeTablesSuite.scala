@@ -1804,6 +1804,35 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  test("SPARK-57670: a declared-keys record that lists its own key removes the record once") {
+    withRecordingCatalog {
+      val schema = new StructType().add("id", IntegerType)
+      val recordKey = PipelinesTableProperties.declaredPropertyKeys
+      materializeStreamingTable("t", schema, Map("p.a" -> "1"))
+      // Simulate a hand-edited record that lists the record key itself.
+      setRecord("t", s"""["p.a","$recordKey"]""")
+      recordingCatalog.recordedAlters.clear()
+
+      val logAppender = new LogAppender("removed table properties")
+      withLogAppender(logAppender, level = Some(Level.INFO)) {
+        materializeStreamingTable("t", schema, Map.empty)
+      }
+      val removed = recordingCatalog.recordedAlters.flatten.collect {
+        case r: TableChange.RemoveProperty => r.property()
+      }
+      assert(removed == Seq("p.a", recordKey))
+      val props = loadTableFromRecordingCatalog("t").properties()
+      assert(!props.containsKey("p.a"))
+      assert(declaredKeysRecord("t").isEmpty)
+      val removalLogs = logAppender.loggingEvents
+        .filter(_.getLevel == Level.INFO)
+        .map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("Removing table properties dropped from the definition"))
+      assert(removalLogs.size == 1, s"logs: $removalLogs")
+      assert(removalLogs.head.endsWith(": p.a."), s"logs: $removalLogs")
+    }
+  }
+
   test("SPARK-57670: a reserved key passed as a table property is not recorded") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)

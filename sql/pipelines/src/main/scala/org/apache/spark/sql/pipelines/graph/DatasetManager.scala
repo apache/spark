@@ -711,6 +711,7 @@ object DatasetManager extends Logging {
     val previouslyDeclaredKeys = parsedRecord
       .getOrElse(Seq.empty)
       .filterNot(nonRemovableReservedProperties.contains)
+      .filterNot(_ == recordKey)
     val userPropertiesToRemove = previouslyDeclaredKeys.distinct.collect {
       case k if !properties.contains(k) && existingProperties.containsKey(k) => k
     }
