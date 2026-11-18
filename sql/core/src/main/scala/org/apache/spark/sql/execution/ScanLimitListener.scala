@@ -143,13 +143,12 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
 
   /** Records the bytes that an attempt of a task has read so far. */
   private def recordBytesRead(stage: StageScanState, partitionId: Int, bytesRead: Long): Unit = {
+    val execution = stage.execution
     val previous = stage.partitionBytes.get(partitionId).getOrElse(0L)
-    if (bytesRead > previous) {
+    if (bytesRead > previous && execution.bytesReadOverLimit.isEmpty) {
       stage.partitionBytes(partitionId) = bytesRead
-      val execution = stage.execution
       execution.bytesRead += bytesRead - previous
-      if (execution.bytesRead > execution.maxScanBytes && execution.bytesReadOverLimit.isEmpty) {
-        execution.bytesReadOverLimit = Some(execution.bytesRead)
+      if (execution.bytesRead > execution.maxScanBytes) {
         logWarning(log"Cancelling SQL execution ${MDC(EXECUTION_ID, execution.executionId)}: " +
           log"it read ${MDC(NUM_BYTES, execution.bytesRead)} bytes, more than the limit of " +
           log"${MDC(NUM_BYTES_MAX, execution.maxScanBytes)} bytes set by " +
@@ -173,11 +172,14 @@ private class ExecutionScanState(
     val maxScanBytes: Long,
     val jobTag: String) {
 
-  /** The bytes that the tasks of the execution have read. */
+  /**
+   * The bytes that the tasks of the execution have read. It stops growing once it is over the
+   * limit, so it keeps what the execution had read at that point.
+   */
   var bytesRead = 0L
 
-  /** Set once the execution is over its limit: the bytes it had read at that point. */
-  var bytesReadOverLimit: Option[Long] = None
+  /** The bytes that the execution had read when it went over its limit, if it did. */
+  def bytesReadOverLimit: Option[Long] = Some(bytesRead).filter(_ > maxScanBytes)
 }
 
 /** What the tasks of a stage have read, over all the attempts of the stage. */
