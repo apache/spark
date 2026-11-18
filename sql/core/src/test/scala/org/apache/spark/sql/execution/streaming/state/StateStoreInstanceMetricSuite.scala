@@ -59,6 +59,14 @@ class HDFSBackedSkipMaintenanceOnCertainPartitionsProvider extends HDFSBackedSta
 class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // The maintenance task is shared by the JVM and keeps the interval of the test that
+    // started it. Stop it so that each test starts one with its own configuration.
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
   private val SNAPSHOT_LAG_METRIC_PREFIX = "SnapshotLastUploaded.partition_"
 
   private def snapshotLagMetricName(

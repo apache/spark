@@ -375,6 +375,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
             try:
                 self.spark.streams.addListener(test_listener)
+                self.spark.sparkContext.addJobTag("listener-job-tag")
 
                 df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
 
@@ -399,6 +400,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
 
                 self.check_start_event(start_event)
+                self.assertIn("listener-job-tag", start_event.jobTags)
                 self.check_progress_event(progress_event, True)
                 self.check_terminated_event(terminated_event)
 
@@ -423,6 +425,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 )
 
             finally:
+                self.spark.sparkContext.clearJobTags()
                 self.spark.streams.removeListener(test_listener)
 
         verify(TestListenerV1())

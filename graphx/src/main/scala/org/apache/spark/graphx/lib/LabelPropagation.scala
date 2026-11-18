@@ -29,7 +29,7 @@ object LabelPropagation {
    *
    * Each node in the network is initially assigned to its own community. At every superstep, nodes
    * send their community affiliation to all neighbors and update their state to the mode community
-   * affiliation of incoming messages.
+   * affiliation of incoming messages. Ties are broken by choosing the smallest label.
    *
    * LPA is a standard community detection algorithm for graphs. It is very inexpensive
    * computationally, although (1) convergence is not guaranteed and (2) one can end up with
@@ -62,7 +62,7 @@ object LabelPropagation {
       map
     }
     def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
-      if (message.isEmpty) attr else message.maxBy(_._2)._1
+      if (message.isEmpty) attr else message.minBy { case (key, value) => (-value, key) }._1
     }
     val initialMessage = Map[VertexId, Long]()
     Pregel(lpaGraph, initialMessage, maxIterations = maxSteps)(

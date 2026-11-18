@@ -28,11 +28,10 @@ on:
         default: '*'
       jdk:
         type: choice
-        description: 'JDK version: 17, 21, or 25'
+        description: 'JDK version: 21 or 25'
         required: true
-        default: '17'
+        default: '21'
         options:
-        - '17'
         - '21'
         - '25'
       scala:
@@ -194,7 +193,7 @@ jobs:
         # In benchmark, we use local as master so set driver memory only. Note that GitHub Actions has 7 GB memory limit.
         bin/spark-submit \
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
-          --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`,`find ~/.cache/coursier -name 'curator-test-*.jar'`" \
+          --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' -o -name 'spark-*kafka-0-10*-SNAPSHOT.jar' | paste -sd ',' -`,`find ~/.cache/coursier -name 'curator-test-*.jar'`,`find ~/.cache/coursier \( -name 'kafka*.jar' -o -name 'metrics-core-2.2.0.jar' -o -name 'jopt-simple-*.jar' -o -name 'scala-java8-compat_*.jar' -o -name 'scala-logging_*.jar' -o -name 'jackson-dataformat-csv-*.jar' -o -name 'commons-pool2-*.jar' \) ! -name '*-sources.jar' ! -name '*-javadoc.jar' | paste -sd ',' -`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
           "${{ inputs.class }}"
         # To keep the directory structure and file permissions, tar them

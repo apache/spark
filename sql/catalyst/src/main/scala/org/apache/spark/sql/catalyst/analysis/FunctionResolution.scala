@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -54,11 +55,7 @@ object FunctionType {
   case object NotFound extends FunctionType
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.{
-  AggregateFunction => V2AggregateFunction,
-  ScalarFunction,
-  UnboundFunction
-}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
@@ -419,7 +416,23 @@ class FunctionResolution(
    * `system.builtin` actually defines a function of this name, so calling it for a non-builtin name
    * would wrongly report builtin ownership.
    */
-  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean = {
+  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean =
+    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Builtin)
+
+  /**
+   * Whether a temp function owns an unqualified name: it comes first in the effective SQL PATH,
+   * before `system.builtin` and any persistent function. Same precondition as
+   * [[unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow]].
+   */
+  def unqualifiedFunctionResolvesToTemp(functionName: String): Boolean =
+    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Temp)
+
+  /**
+   * The kind of the first PATH entry that owns an unqualified name: `Builtin`, `Temp`, or None for
+   * a persistent function (or no owner).
+   */
+  private def unqualifiedFunctionOwnerKind(
+      functionName: String): Option[SessionCatalog.SessionFunctionKind] = {
     // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
     // system.builtin first, so the common case returns on the first entry with no catalog lookup;
     // only a custom PATH that lists a persistent catalog ahead of system.builtin reaches the probe
@@ -427,24 +440,24 @@ class FunctionResolution(
     sqlResolutionPathEntriesForAnalysis.foreach { pathEntry =>
       val candidate = pathEntry :+ functionName
       FunctionResolution.sessionNamespaceKind(candidate) match {
-        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin) =>
-          return true
-        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp) =>
+        case Some(SessionCatalog.Builtin) =>
+          return Some(SessionCatalog.Builtin)
+        case Some(SessionCatalog.Temp) =>
           // A visible temp scalar function shadows the builtin; a visible temp *table* function
           // makes scalar resolution terminal at this PATH entry (NOT_A_SCALAR_FUNCTION). Either way
           // the name never reaches system.builtin, mirroring `resolveFunctionCandidate`.
           val ident = FunctionIdentifier(functionName)
           if (v1SessionCatalog.isTemporaryScalarFunctionVisible(ident) ||
               v1SessionCatalog.isTemporaryTableFunctionVisible(ident)) {
-            return false
+            return Some(SessionCatalog.Temp)
           }
         case None =>
           if (persistentFunctionExists(candidate)) {
-            return false
+            return None
           }
       }
     }
-    false
+    None
   }
 
   /**
@@ -470,6 +483,24 @@ class FunctionResolution(
       case _ =>
         false
     }
+  }
+
+  /**
+   * Like [[functionNameResolvesToBuiltin]], but false for an `injectFunction` replacement: it keeps
+   * the built-in name, yet must be called like an ordinary function.
+   */
+  def functionNameResolvesToStockBuiltin(nameParts: Seq[String], expectedName: String): Boolean = {
+    functionNameResolvesToBuiltin(nameParts, expectedName) &&
+      v1SessionCatalog.isStockBuiltinFunction(expectedName)
+  }
+
+  /**
+   * Whether a routine or an `injectFunction` replacement, not the built-in, owns a routed JSON
+   * constructor call.
+   */
+  def routesJsonConstructorToFunction(j: UnresolvedJsonConstructor): Boolean = {
+    j.routeThroughResolution &&
+      !functionNameResolvesToStockBuiltin(Seq(j.prettyName), j.prettyName)
   }
 
   // All routed SQL/JSON functions forbid a direct star argument (a bare `*` or a qualified
@@ -686,7 +717,7 @@ class FunctionResolution(
         // clauses (DISTINCT / FILTER / ORDER BY / IGNORE NULLS). They have dedicated physical
         // operators that do not honor them, so reject rather than silently drop the clause.
         if (agg.isInstanceOf[PythonUDAF] || agg.isInstanceOf[PythonAggregate]) {
-          checkUnsupportedAggregateClause(agg, unresolvedFunc)
+          checkUnsupportedAggregateClause(agg.prettyName, unresolvedFunc)
         }
         // After parse, the functions not set the ordering within group yet.
         val newAgg = agg match {
@@ -718,7 +749,7 @@ class FunctionResolution(
         aggFunc.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
       // This function is not an aggregate function, just return the resolved one.
       case other =>
-        checkUnsupportedAggregateClause(other, unresolvedFunc)
+        checkUnsupportedAggregateClause(other.prettyName, unresolvedFunc)
         if (other.isInstanceOf[String2TrimExpression] && numArgs == 2) {
           if (trimWarningEnabled.get) {
             log.warn(
@@ -734,21 +765,21 @@ class FunctionResolution(
   }
 
   private def checkUnsupportedAggregateClause(
-      func: Expression,
+      funcName: String,
       unresolvedFunc: UnresolvedFunction): Unit = {
     if (unresolvedFunc.isDistinct) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(func.prettyName, "DISTINCT")
+      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(funcName, "DISTINCT")
     }
     if (unresolvedFunc.filter.isDefined) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        func.prettyName,
+        funcName,
         "FILTER clause"
       )
     }
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        func.prettyName,
+        funcName,
         "IGNORE NULLS"
       )
     }
@@ -796,78 +827,26 @@ class FunctionResolution(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
       unresolvedFunc: UnresolvedFunction): Expression = {
-    val inputType = StructType(arguments.zipWithIndex.map {
-      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
-    })
-    val bound = try {
-      unbound.bind(inputType)
-    } catch {
-      case unsupported: UnsupportedOperationException =>
-        throw QueryCompilationErrors.functionCannotProcessInputError(
-          unbound,
-          arguments,
-          unsupported
-        )
-    }
-
-    if (bound.inputTypes().length != arguments.length) {
-      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(bound, arguments)
-    }
-
-    bound match {
-      case scalarFunc: ScalarFunction[_] =>
-        processV2ScalarFunction(scalarFunc, arguments, unresolvedFunc)
-      case aggFunc: V2AggregateFunction[_, _] =>
-        processV2AggregateFunction(aggFunc, arguments, unresolvedFunc)
-      case _ =>
-        failAnalysis(
-          errorClass = "INVALID_UDF_IMPLEMENTATION",
-          messageParameters = Map("funcName" -> toSQLId(bound.name()))
-        )
-    }
-  }
-
-  private def processV2ScalarFunction(
-      scalarFunc: ScalarFunction[_],
-      arguments: Seq[Expression],
-      unresolvedFunc: UnresolvedFunction): Expression = {
-    if (unresolvedFunc.isDistinct) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(scalarFunc.name(), "DISTINCT")
-    } else if (unresolvedFunc.filter.isDefined) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        scalarFunc.name(),
-        "FILTER clause"
-      )
-    } else if (unresolvedFunc.ignoreNulls.contains(true)) {
-      // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        scalarFunc.name(),
-        "IGNORE NULLS"
-      )
-    } else {
-      V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments)
+    V2ExpressionUtils.bindFunction(unbound, arguments) match {
+      case aggregator: V2Aggregator[_, _] =>
+        processV2AggregateFunction(aggregator, unresolvedFunc)
+      case scalarExpr =>
+        checkUnsupportedAggregateClause(unbound.name(), unresolvedFunc)
+        scalarExpr
     }
   }
 
   private def processV2AggregateFunction(
-      aggFunc: V2AggregateFunction[_, _],
-      arguments: Seq[Expression],
+      aggregator: V2Aggregator[_, _],
       unresolvedFunc: UnresolvedFunction): Expression = {
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        aggFunc.name(),
+        aggregator.aggrFunc.name(),
         "IGNORE NULLS"
       )
     }
-    val aggregator = V2Aggregator(aggFunc, arguments)
     aggregator.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
-  }
-
-  private def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
-    throw new AnalysisException(
-      errorClass = errorClass,
-      messageParameters = messageParameters)
   }
 
   /**
@@ -894,7 +873,11 @@ class FunctionResolution(
             case pc: ProcedureCatalog =>
               try {
                 val procedure = pc.loadProcedure(ident)
-                return ResolvedProcedure(pc, ident, procedure)
+                // A null means the catalog has no such procedure. Treat it as a miss, so an
+                // unqualified name keeps searching PATH and a qualified one fails as unresolved.
+                if (procedure != null) {
+                  return ResolvedProcedure(pc, ident, procedure)
+                }
               } catch {
                 // ProcedureCatalog has no standard "not found" exception type today. For
                 // unqualified names searched through PATH, treat candidate failures as misses and

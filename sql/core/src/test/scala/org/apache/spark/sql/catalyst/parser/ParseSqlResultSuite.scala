@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkThrowable}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -254,6 +254,19 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
   }
 
+  test("PARSE temp-view DDL keeps the syntax name") {
+    assert(targetTableRefs("CREATE TEMP VIEW v AS SELECT 1") === Set(Seq("v")))
+    assert(targetTableRefs("CREATE GLOBAL TEMP VIEW v AS SELECT 1") === Set(Seq("v")))
+    assert(targetTableRefs("CREATE TEMPORARY VIEW v USING parquet") === Set(Seq("v")))
+  }
+
+  test("ANALYZE without a session fails with PARSE_SQL_ANALYZE_REQUIRES_SESSION") {
+    val e = intercept[SparkThrowable] {
+      ParseSqlResult.fromSql("SELECT 1", ParseSqlMode.Analyze)
+    }
+    assert(e.getCondition === "PARSE_SQL_ANALYZE_REQUIRES_SESSION")
+  }
+
   test("error queryContext indexes are Unicode code points") {
     val emoji = new String(Character.toChars(0x1F600))
     val sql = s"SELECT '$emoji' FRUM t"
@@ -278,7 +291,8 @@ class ParseSqlResultSuite extends SparkFunSuite {
     val JInt(literalStart) = literalCtx \ "startIndex"
     val JInt(literalStop) = literalCtx \ "stopIndex"
     assert(literalCtx \ "fragment" === JString("DATE 'bad'"))
-    assert(literalStart.toInt === literalSql.codePointCount(0, literalSql.indexOf("DATE")) + 1)
+    assert(literalStart.toInt ===
+      literalSql.codePointCount(0, literalSql.indexOf("DATE")) + 1)
     assert(literalStop.toInt === literalSql.codePointCount(0, literalSql.length))
 
     val failedAfterEmoji = s"SELECT '$emoji'; SELECT '$emoji' FRUM t"
@@ -290,7 +304,8 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sliceByCodePoints(failedAfterEmoji, failedStart.toInt, failedLength.toInt) ===
       s"SELECT '$emoji' FRUM t")
 
-    val scriptSql = s"BEGIN SELECT '$emoji'; lbl_begin: BEGIN SELECT 1; END lbl_end; END"
+    val scriptSql =
+      s"BEGIN SELECT '$emoji'; lbl_begin: BEGIN SELECT 1; END lbl_end; END"
     val script = obj(scriptSql)
     assert(script \ "error" \ "errorClass" === JString("LABELS_MISMATCH"))
     val scriptCtx = (script \ "error" \ "queryContext")(0)

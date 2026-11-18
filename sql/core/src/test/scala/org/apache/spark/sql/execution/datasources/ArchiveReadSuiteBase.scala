@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.File
 import java.nio.file.Files
+import java.util.regex.Pattern
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{col, input_file_name, struct}
 import org.apache.spark.sql.internal.SQLConf
@@ -167,6 +168,17 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
    * override it to false.
    */
   protected def supportsSchemaMerge: Boolean = true
+
+  /**
+   * Whether this format accepts the `decompression` read option. It does not mean archives
+   * support the option: a format that accepts it must reject it for archive inputs, failing with
+   * `UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE`, since an archive is always decoded based
+   * on its file name extension. Gates the shared tests that assert that rejection. CSV, JSON and
+   * XML set it true; formats that ignore the option (e.g. Parquet, ORC, Avro) keep the default,
+   * because their archive reads succeed with it set. Text has its own archive base,
+   * [[TextArchiveReadBase]], with the same test.
+   */
+  protected def supportsDecompressionCodec: Boolean = false
 
   /**
    * Whether default (non-merge) inference samples a single file rather than scanning every input.
@@ -746,6 +758,68 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       assertArchiveMatchesDir(
         Seq(entryName(0) -> encodeFile(complexSampleDf)),
         schema = complexReadSchema)
+    }
+  }
+
+  // ----- shared `decompression` tests (run when `supportsDecompressionCodec`) -----
+
+  if (supportsDecompressionCodec) {
+    Seq(true, false).foreach { ignoreCorrupt =>
+      test("decompression is rejected for an archive " +
+          s"(ignoreCorruptFiles=$ignoreCorrupt)") {
+        archiveExtensions.foreach { ext =>
+          withArchiveFile(ext) { archive =>
+            writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))
+            // Raised while planning the scan, so `ignoreCorruptFiles` cannot skip the archive.
+            withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+              checkErrorMatchPVals(
+                exception = intercept[SparkUnsupportedOperationException] {
+                  read(archive.getCanonicalPath, Map("decompression" -> "gzip")).collect()
+                },
+                condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+                parameters = Map(
+                  "option" -> "\"decompression\"",
+                  "path" -> s".*${Pattern.quote(archive.getName)}"))
+            }
+          }
+        }
+      }
+    }
+
+    test("decompression is rejected for an archive among loose files") {
+      withTempDir { dir =>
+        writeArchive(
+          new File(dir, s"data.${archiveExtensions.head}"),
+          Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))
+        Files.write(new File(dir, entryName(1)).toPath, encodeFile(sampleDf((2, "Bob"))))
+        val e = intercept[SparkUnsupportedOperationException] {
+          read(dir.getCanonicalPath, Map("decompression" -> "none")).collect()
+        }
+        assert(e.getCondition == "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE")
+      }
+    }
+
+    if (supportsSchemaInference) {
+      Seq(true, false).foreach { ignoreCorrupt =>
+        test("decompression is rejected for an archive during schema inference " +
+            s"(ignoreCorruptFiles=$ignoreCorrupt)") {
+          withArchiveFile() { archive =>
+            writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))
+            // Raised on the driver before any inference task opens the archive, so it is neither
+            // wrapped in a task failure nor skipped by `ignoreCorruptFiles`.
+            withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+              checkErrorMatchPVals(
+                exception = intercept[SparkUnsupportedOperationException] {
+                  inferredSchema(Seq(archive.getCanonicalPath), Map("decompression" -> "gzip"))
+                },
+                condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+                parameters = Map(
+                  "option" -> "\"decompression\"",
+                  "path" -> s".*${Pattern.quote(archive.getName)}"))
+            }
+          }
+        }
+      }
     }
   }
 }

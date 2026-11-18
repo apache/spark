@@ -287,9 +287,18 @@ trait BaseEvalPython extends UnaryNode {
 
   def udfs: Seq[PythonUDF]
 
+  /**
+   * The columns of the child that are passed through to the output. Starts as the whole output
+   * of the child, and is narrowed by column pruning to those that the parent uses.
+   */
+  def requiredChildOutput: Seq[Attribute]
+
   def resultAttrs: Seq[Attribute]
 
-  override def output: Seq[Attribute] = child.output ++ resultAttrs
+  /** Returns a copy that passes through `requiredChildOutput` of the child. */
+  def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): BaseEvalPython
+
+  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
@@ -313,23 +322,42 @@ trait BaseEvalPythonUDTF extends UnaryNode {
 
 /**
  * A logical plan that evaluates a [[PythonUDF]]
+ *
+ * @param udfs the Python UDFs to evaluate
+ * @param requiredChildOutput the columns of the child that are passed through to the output
+ * @param resultAttrs the attributes of the results of the UDFs
+ * @param child the child plan
  */
 case class BatchEvalPython(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan) extends BaseEvalPython {
+  override def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): BatchEvalPython =
+    copy(requiredChildOutput = requiredChildOutput)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): BatchEvalPython =
     copy(child = newChild)
 }
 
 /**
  * A logical plan that evaluates a [[PythonUDF]] with Apache Arrow.
+ *
+ * @param udfs the Python UDFs to evaluate
+ * @param requiredChildOutput the columns of the child that are passed through to the output
+ * @param resultAttrs the attributes of the results of the UDFs
+ * @param child the child plan
+ * @param evalType the eval type of the UDFs
  */
 case class ArrowEvalPython(
     udfs: Seq[PythonUDF],
+    requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
     evalType: Int) extends BaseEvalPython {
+  override def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): ArrowEvalPython =
+    copy(requiredChildOutput = requiredChildOutput)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): ArrowEvalPython =
     copy(child = newChild)
 }

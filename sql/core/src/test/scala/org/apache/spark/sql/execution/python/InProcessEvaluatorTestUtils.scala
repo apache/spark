@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.TaskContext
+import org.apache.spark.api.python.{PythonFunction, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -34,6 +36,11 @@ private[python] object InProcessEvaluatorTestUtils {
     (InProcessArrowEvalPythonExec.sizeMetricsDesc ++
       InProcessArrowEvalPythonExec.nanoTimingMetricsDesc ++
       InProcessArrowEvalPythonExec.otherMetricsDesc).keys.map(_ -> new SQLMetric("sum", 0L)).toMap
+
+  /** A Python function without a command, for UDFs that are never run by Python. */
+  def emptyFunction(): PythonFunction = SimplePythonFunction(
+    Seq.empty, Collections.emptyMap[String, String](), Collections.emptyList[String](),
+    "", "3.12", Collections.emptyList(), null)
 
   def thread(body: => Unit): Thread = {
     val t = new Thread(() => body)
@@ -98,7 +105,7 @@ private[python] object InProcessEvaluatorTestUtils {
 
     def iterator(): Iterator[InternalRow] = {
       // The byte limit always applies; 64 MB is its default.
-      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column),
+      new InProcessArrowEvalPythonEvaluatorFactory(Seq(column), Seq.empty, Seq(column), Seq.empty,
           batchSize, 64L << 20, "UTC", false, false, false, false, true, allMetrics()) {
         override private[python] def runtimeSession = session
       }.evaluateBatches(Seq.empty, Array.empty, rows,

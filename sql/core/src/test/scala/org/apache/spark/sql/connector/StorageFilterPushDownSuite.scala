@@ -32,6 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.StorageFilterImpl
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, DoubleType, LongType, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Covers the storage-filter contract for a data source v2 scan. With
@@ -39,6 +40,7 @@ import org.apache.spark.sql.types.{BinaryType, DoubleType, LongType, StructType}
  * `SupportsStorageFilters` gets the runtime bloom filter over those columns in every reader. The
  * bloom stays in the Filter above the scan, skipped on the rows the reader marks as checked.
  */
+@DataSourceV2Test
 class StorageFilterPushDownSuite
   extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper with PredicateHelper {
 
@@ -352,10 +354,8 @@ class StorageFilterPushDownSuite
     test("a scan with a column named like the checked column gets the filter, and runtime " +
         s"filtering still resolves that column (AQE $aqe)") {
       // Runtime filtering resolves the declared filter attributes by name, which the checked column
-      // the scan appends would make ambiguous. Dynamic partition pruning on `k` would take the
-      // bloom's place.
-      withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+      // the scan appends would make ambiguous.
+      withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
         val plan = runBloomJoin(
           "columnar" -> "true", "valueName" -> checkedName, "runtimeFiltering" -> "v2")
         val scan = scanOf(plan)
@@ -370,9 +370,7 @@ class StorageFilterPushDownSuite
     }
 
     test(s"a bloom the scan fully evaluates through runtime filtering is not offered (AQE $aqe)") {
-      // Dynamic partition pruning on `k` would take the bloom's place.
-      withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+      withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
         val plan = runBloomJoin("columnar" -> "true", "runtimeFiltering" -> "catalyst")
         val scan = scanOf(plan)
         assert(scan.runtimeFilters.exists(_.exists(_.isInstanceOf[BloomFilterMightContain])) &&

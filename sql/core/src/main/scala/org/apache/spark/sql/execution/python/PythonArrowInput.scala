@@ -135,7 +135,7 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
   protected lazy val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
-  protected lazy val unloader = new VectorUnloader(root, true, codec, true)
+  protected lazy val unloader = ArrowCompressionUtils.createVectorUnloader(root, codec)
 
   protected val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
@@ -295,7 +295,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
               schema, timeZoneId, pythonExec,
               largeVarTypes, dataOut, context)
             // Set the unloader with compression after creating the writer
-            writer.unloader = new VectorUnloader(writer.root, true, self.codec, true)
+            writer.unloader = ArrowCompressionUtils.createVectorUnloader(writer.root, self.codec)
             nextBatchStart = inputIterator.next()
           }
         }

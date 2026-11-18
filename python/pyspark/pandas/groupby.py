@@ -118,6 +118,18 @@ def with_ansi_mode_context(f: FuncT) -> FuncT:
     return cast(FuncT, _with_ansi_mode_context)
 
 
+def _drop_group_keys(pdf: pd.DataFrame, groupkey_names: List[str]) -> pd.DataFrame:
+    """
+    Drop the group key columns from a pandas group, keeping the `name` attribute that pandas
+    sets to the group key, which `drop` does not carry over to the new DataFrame.
+    """
+    pdf_without_keys = pdf.drop(groupkey_names, axis=1)
+    # Read `name` from `__dict__` so that a column named "name" is not picked up instead.
+    if "name" in pdf.__dict__:
+        object.__setattr__(pdf_without_keys, "name", pdf.__dict__["name"])
+    return pdf_without_keys
+
+
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
 
@@ -2037,7 +2049,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         else:
 
             def pandas_apply(pdf: pd.DataFrame, *a: Any, **k: Any) -> Any:
-                return f(pdf.drop(groupkey_names, axis=1), *a, **k)
+                return f(_drop_group_keys(pdf, groupkey_names), *a, **k)
 
         should_return_series = False
 
@@ -2270,7 +2282,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 f = func
 
             def wrapped_func(pdf: pd.DataFrame) -> pd.DataFrame:
-                return f(pdf.drop(groupkey_names, axis=1))
+                return f(_drop_group_keys(pdf, groupkey_names))
 
             def pandas_filter(pdf: pd.DataFrame) -> pd.DataFrame:
                 return pdf.groupby(groupkey_names).filter(wrapped_func).drop(groupkey_names, axis=1)

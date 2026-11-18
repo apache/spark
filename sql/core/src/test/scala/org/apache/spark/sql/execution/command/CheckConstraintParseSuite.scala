@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{AddCheckConstraint, ColumnDefinition, CreateTable, Filter, ReplaceTable, UnresolvedTableSpec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
@@ -195,6 +196,51 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       constraint1
     )
     comparePlans(parsed, expected)
+  }
+
+  test("SPARK-60032: Add check constraint with a cast to TIMESTAMP") {
+    // Comparing plans calls `storeAnalyzedQuery`, which must leave the predicate of an unresolved
+    // constraint undecided: deciding it would read the type of `d`.
+    val condition = "CAST(d AS TIMESTAMP) > TIMESTAMP'2020-01-01 00:00:00'"
+    val parsed = parsePlan(s"ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK ($condition)")
+    val child = parsed.asInstanceOf[AddCheckConstraint].checkConstraint.child
+    val expected = AddCheckConstraint(
+      Filter(Not(child), UnresolvedRelation(Seq("a", "b", "t"))),
+      CheckConstraint(child = child, condition = condition, userProvidedName = "c1",
+        tableName = "t"))
+    comparePlans(parsed, expected)
+  }
+
+  test("SPARK-60032: only ALTER TABLE marks a condition that a write can resolve differently") {
+    def keepsPredicate(condition: String): Boolean =
+      parsePlan(s"ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK ($condition)") match {
+        case a: AddCheckConstraint => a.checkConstraint.omitPredicate.contains(false)
+        case other => fail(s"Expected AddCheckConstraint, but got: $other")
+      }
+    Seq("a.b > 0", "a = user", "a = `current_date`", "IDENTIFIER(v) > 0",
+        "exists(s, x -> x = user)", "exists(s, x -> x = `user`)", "exists(s, x -> x = t.id)",
+        "exists(s, x -> x = current_user.y)").foreach { condition =>
+      assert(keepsPredicate(condition), condition)
+    }
+    Seq("a > 0", "a = current_user()", "a = current_path").foreach { condition =>
+      assert(!keepsPredicate(condition), condition)
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      Seq("a = user", "a <= current_date", "a <= current_timestamp", "a = localtime",
+          "exists(s, x -> x = user)").foreach { condition =>
+        assert(keepsPredicate(condition), condition)
+      }
+      assert(!keepsPredicate("a = current_path"))
+    }
+
+    // A CREATE TABLE constraint gets no decision, and always stores its predicate.
+    val created = parsePlan("CREATE TABLE t (a STRUCT<b: INT>, s ARRAY<STRING>, " +
+      "CONSTRAINT c1 CHECK (a.b > 0 AND exists(s, x -> x = user))) USING parquet")
+    val constraints = created.collectFirst {
+      case c: CreateTable => c.tableSpec.asInstanceOf[UnresolvedTableSpec].constraints
+    }.getOrElse(fail(s"Expected CreateTable, but got: $created"))
+    assert(constraints.map(_.asInstanceOf[CheckConstraint].omitPredicate) == Seq(None))
   }
 
   test("Add invalid check constraint name") {
