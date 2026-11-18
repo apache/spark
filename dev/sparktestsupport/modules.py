@@ -39,6 +39,7 @@ all_modules = []
 #   standard library.
 ignored_file_patterns = (
     # Contributor docs.
+    ".agents/*.md",
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
@@ -56,6 +57,7 @@ ignored_file_patterns = (
     ".asf.yaml",
     ".gitattributes",
     ".gitignore",
+    ".ignore",
     # Build and test workflow wrappers or schedulers.
     "/.github/workflows/benchmark.yml",
     "/.github/workflows/branch*_scheduler.yml",
@@ -92,6 +94,7 @@ ignored_file_patterns = (
     ".pre-commit-config.yaml",
     "/dev/.rat-excludes",
     "/dev/.scalafmt.conf",
+    "/dev/agent_docs_lint.py",
     "/dev/check_pyspark_custom_errors.py",
     "/dev/check-license",
     "/dev/check-protos.py",
@@ -732,9 +735,7 @@ pyspark_base = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core, pyspark_base],
-    source_file_regexes=[
-        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing|inprocess))"
-    ],
+    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -777,7 +778,7 @@ pyspark_core = Module(
 pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql", "python/pyspark/inprocess"],
+    source_file_regexes=["python/pyspark/sql"],
     python_test_goals=[
         # doctests
         "pyspark.sql.types",
@@ -838,8 +839,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_sql",
         "pyspark.sql.tests.test_job_cancellation",
-        "pyspark.sql.tests.test_inprocess_udf",
-        "pyspark.sql.tests.test_inprocess_runtime",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",

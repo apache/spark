@@ -130,11 +130,18 @@ public interface Column {
    * @since 4.2.0
    */
   static Builder builderFrom(Column column) {
+    GenerationExpression genExpr = column.columnGenerationExpression();
+    String legacySql = column.generationExpression();
+    if (legacySql != null && (genExpr == null || genExpr.getSql() == null)) {
+      // The column may provide the SQL only through the legacy SQL getter.
+      genExpr = new GenerationExpression(
+          legacySql, genExpr != null ? genExpr.getExpression() : null);
+    }
     return new Builder(column.name(), column.dataType())
         .nullable(column.nullable())
         .comment(column.comment())
         .defaultValue(column.defaultValue())
-        .generationExpression(column.columnGenerationExpression())
+        .generationExpression(genExpr)
         .identityColumnSpec(column.identityColumnSpec())
         .metadata(column.metadataInJSON())
         .id(column.id());

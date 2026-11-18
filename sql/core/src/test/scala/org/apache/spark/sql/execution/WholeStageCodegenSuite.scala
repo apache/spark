@@ -35,13 +35,14 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.{MapPartitionsWithEvaluatorRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, TransformExpression, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, ExprCode, ExprValue, GlobalValue, JavaCode, WholeStageSplit, WholeStageSplitKey}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSingle}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows
+import org.apache.spark.sql.catalyst.plans.logical.{MergeRows, Project}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLId}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, DisableAdaptiveExecutionSuite, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -2329,8 +2330,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
       if (x <= 5) throw new IllegalStateException(s"rc($x)"); java.lang.Long.valueOf(x) }
     // Not read by the filter at all, so the parent's `consume` loads it.
     val u = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"u($x)"); x })
-    // NULL for the rows `r` throws on, so the inferred IsNotNull(n), generated among the checks
-    // of `n + r > 0`, the first condition that reads `r`, drops them: `r` must be loaded after it.
+    // NULL for the rows `r` throws on, so `n IS NOT NULL`, generated among the checks of
+    // `n + r > 0`, the first condition that reads `r`, drops them: `r` must be loaded after it.
     val n = udf { (x: Long) => if (x <= 5) null else java.lang.Long.valueOf(x) }
 
     def firstFilterOverProject(df: DataFrame): FilterExec = {
@@ -2347,20 +2348,20 @@ class WholeStageCodegenSuite extends SharedSparkSession
     def normalize(code: String): String =
       code.replaceAll("#\\d+", "#").replaceAll("/\\* \\d+ \\*/", "").replaceAll("\\s+", " ")
 
-    // A condition, and whether the shape relies on the inferred IsNotNull(n).
-    case class Shape(predicate: String, inferredNotNullN: Boolean = false)
     val shapes = Seq(
       // `r` (non-nullable, no IsNotNull) first read by `r > 0`, after the dropping `f + 1 > 6`.
-      Shape("f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0"),
+      "f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0",
       // `rb` (nullable) first read by its IsNotNull check, just before `rb > 0`.
-      Shape("f + 1 > 6 AND f + 1 < 100 AND rb IS NOT NULL AND rb > 0"),
+      "f + 1 > 6 AND f + 1 < 100 AND rb IS NOT NULL AND rb > 0",
       // `r` first read by the common subexpression `r + 1`, referenced after `f + 1 > 6`.
-      Shape("f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100"),
+      "f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100",
       // `rc` read only by a leftover IsNotNull; `rb`, `u` and `n` are not read by the filter.
-      Shape("f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL"),
-      // `r` first read by `n + r > 0`, after the inferred IsNotNull(n) generated among the checks
-      // of `n + r > 0`.
-      Shape("n + r > 0 AND f + 1 > 0 AND f + 1 < 100", inferredNotNullN = true))
+      "f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL",
+      // `r` first read by `n + r > 0`, after `n IS NOT NULL` generated among its checks. The
+      // check is written so that the shape does not depend on whether
+      // `InferFiltersFromConstraints` infers it, which it does not since SPARK-61823, as `n` can
+      // fail.
+      "n IS NOT NULL AND n + r > 0 AND f + 1 > 0 AND f + 1 < 100")
 
     // `methodSplitThreshold` 1 exercises the path that splits each common subexpression into its
     // own function, whose parameters are the input columns' variables; Int.MaxValue keeps the
@@ -2376,17 +2377,20 @@ class WholeStageCodegenSuite extends SharedSparkSession
         val df = spark.range(10).select(
           f($"id").as("f"), r($"id").as("r"), rb($"id").as("rb"),
           rc($"id").as("rc"), u($"id").as("u"), n($"id").as("n"))
-        shapes.foreach { case Shape(predicate, inferredNotNullN) =>
+        shapes.foreach { predicate =>
           // Names the shape and the threshold in a failure, also when the query raises.
           withClue(s"methodSplitThreshold $threshold, $predicate: ") {
             try {
               val filtered = df.where(predicate)
               val fe = firstFilterOverProject(filtered)
-              if (inferredNotNullN) {
+              if (predicate.startsWith("n IS NOT NULL")) {
+                // A check in a lower filter would also drop the rows before `r` is computed, and
+                // the shape would pass without testing that `r` is loaded after the check.
                 assert(fe.condition.exists {
                   case IsNotNull(a: Attribute) => a.name == "n"
                   case _ => false
-                }, s"IsNotNull(n) should be inferred: ${fe.condition}")
+                } && fe.condition.references.exists(_.name == "r"),
+                  s"IsNotNull(n) and n + r > 0 should be in one filter: ${fe.condition}")
               }
               checkAnswer(filtered,
                 (6L to 9L).map(i => Row(i, i, i, i, i, i)))
@@ -4146,6 +4150,30 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val compiles = CodegenMetrics.METRIC_COMPILATION_TIME.getCount
       query().collect()
       assert(CodegenMetrics.METRIC_COMPILATION_TIME.getCount == compiles)
+    }
+  }
+
+  test("SPARK-60541: whole-stage codegen runs a partition transform's function call") {
+    // `years` has a magic `invoke`, so its call generates code. `bucket` has only `produceResult`,
+    // whose call falls back to `eval` on the input row. So its project runs outside whole-stage
+    // codegen.
+    val base = spark.range(3)
+      .select(col("id"), timestamp_seconds(col("id") * 400 * 86400).as("ts"))
+      .queryExecution.analyzed
+    val Seq(id, ts) = base.output
+    Seq(
+      TransformExpression(YearsFunction, Seq(ts)) -> true,
+      TransformExpression(BucketFunction, Seq(id), Some(4)) -> false
+    ).foreach { case (transform, wholeStage) =>
+      val df = classic.Dataset.ofRows(spark, Project(Seq(Alias(transform, "key")()), base))
+      val inWholeStage = df.queryExecution.executedPlan.collect {
+        case w: WholeStageCodegenExec => w
+      }.exists(_.child.exists {
+        case p: ProjectExec => p.projectList.exists(_.exists(_.isInstanceOf[TransformExpression]))
+        case _ => false
+      })
+      assert(inWholeStage == wholeStage, df.queryExecution.executedPlan)
+      checkAnswer(df, Seq(Row(0), Row(1), Row(2)))
     }
   }
 }

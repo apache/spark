@@ -192,6 +192,40 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("SPARK-61885: an argument with an invalid subquery") {
+    // `CheckAnalysis` rejects these subqueries, as for `EXPLAIN CALL`. The procedure must not be
+    // invoked before that, and `NonExecutableSum` throws if it is.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum((SELECT 1, 2), 3)")
+      },
+      condition = "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+      parameters = Map("number" -> "2"),
+      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 16, stop = 28))
+    // The optimizer can remove the invalid `max(1)` and fold the argument.
+    Seq(
+      "(SELECT 1 WHERE true OR max(1) > 0)" -> 17,
+      "CAST(EXISTS (SELECT 1 WHERE true OR max(1) > 0) AS INT)" -> 29).foreach {
+      case (arg, start) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CALL cat.ns.sum($arg, 2)")
+          },
+          condition = "INVALID_WHERE_CONDITION",
+          parameters = Map(
+            "condition" -> "\"(true OR (max(1) > 0))\"",
+            "expressionList" -> "max(1)"),
+          context = ExpectedContext(
+            fragment = "SELECT 1 WHERE true OR max(1) > 0", start = start, stop = start + 32))
+    }
+  }
+
+  test("SPARK-61885: an argument with a valid uncorrelated EXISTS subquery") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkAnswer(sql("CALL cat.ns.sum(CAST(EXISTS (SELECT 1) AS INT), 2)"), Row(3) :: Nil)
+  }
+
   test("type coercion") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
     checkAnswer(sql("CALL cat.ns.sum(1, 2)"), Row(3) :: Nil)
@@ -492,6 +526,59 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
     val explain = sql("EXPLAIN EXECUTE IMMEDIATE 'CALL cat.ns.sum(5, 5)'").head().getString(0)
     assert(explain.contains("Call cat.ns.sum(5, 5)"), explain)
+  }
+
+  test("SPARK-61889: CALL with an aggregate, window or generator expression in an argument") {
+    // The optimizer folds these arguments away, so the procedure must not be invoked.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    val call = "CALL cat.ns.sum(IF(true OR max(1) > 0, 1, 2), 2)"
+    checkError(
+      exception = intercept[AnalysisException](sql(call)),
+      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      parameters = Map("operator" -> "Call", "invalidExprSqls" -> "\"max(1)\""),
+      context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+    val windowCall = "CALL cat.ns.sum(IF(true OR row_number() OVER (ORDER BY 1) > 0, 1, 2), 2)"
+    checkError(
+      exception = intercept[AnalysisException](sql(windowCall)),
+      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      parameters = Map(
+        "operator" -> "Call",
+        "invalidExprSqls" -> ("\"row_number() OVER (ORDER BY 1 ASC NULLS FIRST " +
+          "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"")),
+      context = ExpectedContext(fragment = windowCall, start = 0, stop = windowCall.length - 1))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(IF(true OR size(explode(array(1))) > 0, 1, 2), 2)")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map("plan" -> "(?s)Call cat.ns.sum.*"),
+      matchPVals = true)
+    // A window function without OVER and a grouping function.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(IF(true OR row_number() > 0, 1, 2), 2)")
+      },
+      condition = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      parameters = Map("funcName" -> "\"row_number()\""),
+      context = ExpectedContext(fragment = "row_number() > 0", start = 27, stop = 42))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(IF(true OR grouping(1) > 0, 1, 2), 2)")
+      },
+      condition = "UNSUPPORTED_GROUPING_EXPRESSION",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "grouping(1)", start = 27, stop = 37))
+  }
+
+  test("SPARK-61889: CALL with a window function as a whole argument") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException](sql("CALL cat.ns.sum(row_number(), 2)")),
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in1"),
+        "paramType" -> toSQLType("INT")))
   }
 
   test("void procedure") {
