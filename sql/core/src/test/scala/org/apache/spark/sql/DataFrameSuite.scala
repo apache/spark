@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
@@ -3136,6 +3136,10 @@ class DataFrameSuite extends SharedSparkSession
               val df = child.select($"*", rand(1).as("r")).where(condition)
                 .select($"s", $"id", $"r" >= 0)
               checkAnswer(df, Row("1", 7L, true))
+              assert(df.queryExecution.optimizedPlan.exists {
+                case Filter(_, _: Aggregate | _: Join | Project(_, _: Aggregate | _: Join)) => true
+                case _ => false
+              })
               assert(collect(df.queryExecution.executedPlan) {
                 case p if operator.isInstance(p) => p
               }.nonEmpty)

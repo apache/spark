@@ -23,8 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSingle, PlanTest,
-  RightOuter}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSingle, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
