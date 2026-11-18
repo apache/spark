@@ -243,10 +243,10 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
 
   test("does not convert views whose body contains a recursive CTE") {
     withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
-      // Re-analysis re-mints a recursive CTE's `UnionLoop` id, `UnionLoopRef`
-      // loopId, and `UnionLoop` outputAttrIds per occurrence, and `normalizeCteIds`
-      // rewrites only CTE relation ids, so the bodies canonicalize apart and the
-      // view is left unconverted.
+      // The `UnionLoop` check in `qualifies` rejects the body however the occurrences
+      // carry their loop ids. Fresh ids per call mirror a SQL view's re-analysis; one
+      // shared body mirrors a DataFrame temp view, whose occurrences reuse the stored
+      // analyzed plan and would otherwise canonicalize equal.
       def recursiveBody(): LogicalPlan = {
         val defId = CTERelationDef.newId
         val anchor = LocalRelation(Seq(
@@ -268,6 +268,31 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
       val (v1, v2) = sameViewTwice("v", () => recursiveBody())
       val query = Join(v1, v2, Inner, None, JoinHint(None, None))
       comparePlans(Optimize.execute(query), query)
+
+      // A DataFrame temp view stores one analyzed plan, so its occurrences share the
+      // loop ids and would canonicalize equal without the check. Union tolerates the
+      // occurrences' identical output ids (a join would not). checkAnalysis is off:
+      // its InlineCTE pass renews the inlined definitions off the global `newExprId`
+      // counter, which must stay below this suite's fixed attribute ids (100+).
+      val defId = CTERelationDef.newId
+      val anchor = LocalRelation(Seq(attr("x", 900)))
+      val loop = UnionLoop(
+        defId,
+        anchor,
+        UnionLoopRef(defId, Seq(attr("x", 901)), accumulated = false),
+        Seq(ExprId(902)))
+      val cteDef = CTERelationDef(SubqueryAlias("r", loop), id = defId)
+      val sharedBody = WithCTE(
+        CTERelationRef(
+          defId,
+          _resolved = true,
+          output = Seq(attr("x", 903)),
+          isStreaming = false),
+        Seq(cteDef))
+      val shared = Union(
+        Seq(tempView("w", sharedBody), tempView("w", sharedBody)),
+        byName = false, allowMissingCol = false)
+      comparePlans(Optimize.execute(shared), shared, checkAnalysis = false)
     }
   }
 
@@ -371,6 +396,26 @@ class ConvertViewToMaterializedCTESuite extends PlanTest {
         tempView("v", body(a1, b1)), tempView("v", body(a2, b2)),
         Inner, None, JoinHint(None, None))
       comparePlans(Optimize.execute(query), query)
+    }
+  }
+
+  test("does not convert views whose body repartitions its output") {
+    withSQLConf(SQLConf.CONVERT_VIEW_TO_MATERIALIZED_CTE.key -> "true") {
+      // DISTRIBUTE BY, REPARTITION and REBALANCE each promise an output partitioning
+      // the added shuffle would drop. The Project on top mirrors a view column list,
+      // which is what hides the repartition from the top-node-only check in
+      // ReplaceCTERefWithRepartition.
+      val a1 = attr("a", 100)
+      val a2 = attr("a", 200)
+      def bodies(a: AttributeReference): Seq[LogicalPlan] = Seq(
+        Project(Seq(a), RepartitionByExpression(Seq(a), LocalRelation(Seq(a)), None)),
+        Project(Seq(a), Repartition(4, shuffle = true, LocalRelation(Seq(a)))),
+        Project(Seq(a), RebalancePartitions(Seq(a), LocalRelation(Seq(a)))))
+      bodies(a1).zip(bodies(a2)).foreach { case (b1, b2) =>
+        val query = Join(tempView("v", b1), tempView("v", b2), Inner, None,
+          JoinHint(None, None))
+        comparePlans(Optimize.execute(query), query)
+      }
     }
   }
 

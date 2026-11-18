@@ -1075,19 +1075,25 @@ object SQLConf {
     buildConf("spark.sql.optimizer.convertViewToMaterializedCTE.enabled")
       .doc("When true, multiple references to the same view are rewritten into one " +
         "materialized CTE, so the view's plan runs once (through exchange reuse) " +
-        "instead of once per reference. Enable it for queries that repeatedly read an " +
-        "expensive view. Each reference gains a shuffle of the view's output, and " +
-        "per-reference pushdown, dynamic partition pruning, and scalar-subquery " +
-        "merging no longer reach the view body, so it can also make queries slower; " +
-        "that trade is the user's to make. It does nothing when exchange reuse is " +
-        "disabled. A view is not converted when conversion could change results: " +
-        "non-deterministic or streaming bodies, seedless TABLESAMPLE, an ORDER BY " +
-        "outside subquery expressions, or occurrences of the name whose bodies, " +
-        "hints, or effective SQL configs differ. A view whose body contains a " +
-        "recursive CTE is never converted, because re-analysis re-mints the " +
-        "loop's ids, so its occurrences never share one canonical body. The " +
-        "query is left unchanged when it evaluates input file functions, whose " +
-        "file context does not survive the shuffle.")
+        "instead of once per reference. It does nothing when exchange reuse is " +
+        "disabled. Enable it for queries that repeatedly read an expensive view. " +
+        "Each reference gains a shuffle of the view's output, per-reference " +
+        "pushdown and dynamic partition pruning no longer reach the view body, " +
+        "and scalar-subquery merging is off for the whole query, so it can also " +
+        "make queries slower; that trade is the user's to make. The shared " +
+        "definition also computes each body expression over the union of the rows " +
+        "all references read, so under ANSI mode a body expression that can fail " +
+        "(a cast, a division) can fail where the unconverted query would not, " +
+        "just as a hand-written materialized CTE would. A view is not converted " +
+        "when conversion could change a successful query's results: " +
+        "non-deterministic or streaming bodies; a seedless TABLESAMPLE; an " +
+        "ORDER BY or a repartitioning clause (DISTRIBUTE BY, REPARTITION, " +
+        "REBALANCE) outside subquery expressions; a recursive CTE, since one " +
+        "shared definition would keep a per-reference LIMIT from stopping the " +
+        "loop early; or occurrences of the same name whose bodies, hints, or " +
+        "effective SQL configs differ. The whole query is left unchanged when " +
+        "it evaluates input file functions, whose file context does not survive " +
+        "the shuffle.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
