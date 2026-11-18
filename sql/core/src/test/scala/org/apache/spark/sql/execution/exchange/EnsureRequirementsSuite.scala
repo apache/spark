@@ -1860,6 +1860,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       case _: TimestampNTZNanosType =>
         Seq(TimestampNanosVal.fromParts(3600123456L, 789.toShort),
           TimestampNanosVal.fromParts(-1L, 5.toShort))
+      case StructType(Array(field)) => values(field.dataType).map(InternalRow(_))
     }
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("value", IntegerType))),
@@ -1878,7 +1879,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       (TimeType(6), readAs(TimeType(6)), TimeType(9)),
       (DayTimeIntervalType(0, 1), readAs(DayTimeIntervalType(0, 1)), DayTimeIntervalType()),
       (TimestampNTZNanosType(7), readAs(TimestampNTZNanosType(7)), TimestampNTZNanosType(9)),
-      (DateType, readAs(DateType), YearMonthIntervalType())
+      (DateType, readAs(DateType), YearMonthIntervalType()),
+      // A datetime member is compared by storage too.
+      (new StructType().add("t", TimestampType), readAs(new StructType().add("t", TimestampType)),
+        new StructType().add("t", TimeType(9)))
     ).foreach { case (columnType, function, keyType) =>
       Seq(true, false).foreach { keyedLeft =>
         val name = s"a $keyType key onto a $columnType column, keyed on the " +

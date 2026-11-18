@@ -416,22 +416,14 @@ class TransformExpressionSuite extends SparkFunSuite {
     // An unset `reducedWith` or `storedKey` stays out of the plan string, so the ordinary form is
     // unchanged, and a set one prints, since it changes how the call resolves or what the
     // transform equals.
-    val function = new ScalarFunction[Int] {
-      override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
-      override def resultType(): DataType = IntegerType
-      override def name(): String = "bucket"
-      override def canonicalName(): String = "test.bucket"
-      override def produceResult(input: InternalRow): Int = 0
-    }
-    val column = AttributeReference("c", IntegerType)()
-    val transform = TransformExpression(function, Seq(column), Some(4))
+    val transform = bucket(new NamedFunction("test.bucket"), a)
     val marked = transform.copy(storedKey = true)
     assert(marked.toString == transform.toString.stripSuffix(")") + ", storedKey)",
       marked.toString)
     assert(!transform.toString.contains("None") && !transform.toString.contains("false"),
       transform.toString)
     // A set `reducedWith` prints as master printed it.
-    val reduced = transform.copy(reducedWith = Some(TransformFunctionId("other", Some(2))))
+    val reduced = transform.reducedTogetherWith(bucket(new NamedFunction("other"), a, 2))
     assert(reduced.toString.endsWith(", Some(TransformFunctionId(other,Some(2))))"),
       reduced.toString)
   }
@@ -451,6 +443,7 @@ class TransformExpressionSuite extends SparkFunSuite {
       (IntegerType, IntegerType, true),
       (DateType, IntegerType, true),
       (TimestampNTZType, TimestampType, true),
+      (ArrayType(TimestampNTZType), ArrayType(TimestampType), true),
       (TimeType(3), TimeType(6), true),
       (StringType, VarcharType(5), true),
       (new IntUDT, IntegerType, true),

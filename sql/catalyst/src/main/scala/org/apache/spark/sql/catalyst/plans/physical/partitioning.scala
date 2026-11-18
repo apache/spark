@@ -2658,11 +2658,12 @@ case class KeyedShuffleSpec(
     // A join's keys share their types, apart from nullability and field names, so that answers
     // for what is built too. A cogroup that does not coerce its keys, e.g. a Pandas or Arrow
     // cogroup, need not have them (SPARK-60782). Its other key can be stored otherwise than the
-    // layout's column, e.g. an `INT` against a `BIGINT` column, whether the function takes it
-    // through a widening cast or not, or a string of another collation. Its rows would then be
-    // placed by values other than the keyed side's, but the cogroup pairs its groups by comparing
-    // the two sides' key rows, so they do not pair, or the cogroup fails, and falling back to a
-    // hash shuffle would pair them wrongly too. So such a child fails here, while planning, with
+    // layout's column, e.g. an `INT` against a `BIGINT` column, or a string of another collation.
+    // Where the function takes such a key, e.g. that `INT` through a widening cast, every row is
+    // then placed with the keyed side's rows of its value, but the cogroup pairs its groups by
+    // comparing the two sides' key rows, so they do not pair, or the cogroup fails, and falling
+    // back to a hash shuffle would pair them wrongly too. So such a child fails here, while
+    // planning, with
     // an error that names the key and its type. A key stored as the column is goes by storage and
     // is placed by the keyed side's bytes, see `storedKey`, unless the function cannot take it
     // even so, e.g. a nested decimal of more precision than declared, which fails here too.

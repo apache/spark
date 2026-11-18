@@ -483,7 +483,8 @@ object TransformExpression extends Logging {
    * e.g. a `TIME` key and a `TIMESTAMP` column, which the hash shuffle hashes alike. Nanosecond
    * timestamps with and without a time zone, though stored and hashed alike, have physical types
    * of their own, so they are not taken for each other. A key taken here goes to the layout's
-   * function by storage too, see `TransformExpression.storedKey`.
+   * function by storage too, see `TransformExpression.storedKey`, unless the function cannot take
+   * it even so, e.g. a nested decimal of more precision than declared.
    */
   private[sql] def keysStoredAlike(from: DataType, to: DataType): Boolean =
     storedAlike(from, to, nested = true, anyNestedPrecision = true, datetimeByStorage = true)
