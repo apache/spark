@@ -27,7 +27,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
-import org.apache.spark.sql.catalyst.expressions.variant.{VariantExpressionEvalUtils, VariantGet}
+import org.apache.spark.sql.catalyst.expressions.variant.{VariantExplode, VariantExpressionEvalUtils, VariantGet}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -211,6 +211,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     checkAnswer(
       sql("SELECT to_json(variant_delete(parse_json('[1, 2, 3]'), '$[1]'))"),
       rows("[1,3]"))
+
+    Seq(false, true).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        val input = Seq("""{"a\nb":1,"a\\nb":2}""").toDF("json")
+        checkAnswer(
+          input.selectExpr("""to_json(variant_delete(parse_json(json), r"$['a\nb']"))"""),
+          rows(if (legacy) """{"a\nb":1}""" else """{"a\\nb":2}"""))
+      }
+    }
 
     checkAnswer(
       sql("SELECT to_json(variant_delete(CAST(NULL AS VARIANT), '$.a'))"),
@@ -776,6 +785,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1}'), '$'))"),
       rows("""{"a":1}"""))
 
+    Seq(false, true).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        val input = Seq("""{"a\nb":1,"a\\nb":2}""").toDF("json")
+        checkAnswer(
+          input.selectExpr("""to_json(variant_pick(parse_json(json), r"$['a\nb']"))"""),
+          rows(if (legacy) """{"a\\nb":2}""" else """{"a\nb":1}"""))
+      }
+    }
+
     // The String* DataFrame-API overload compiles each path to a literal.
     val df = Seq("""{"a": 1, "b": 2, "c": 3}""").toDF("json")
     checkAnswer(
@@ -1208,6 +1226,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     )
   }
 
+  test("recursive variant_explode reuses its iterator") {
+    val input = VariantExpressionEvalUtils.parseJson(UTF8String.fromString("[1,2]"))
+    val output = VariantExplode.variantExplodeRecursive(input, isNull = false)
+    val iterator = output.iterator
+    assert(!iterator.isEmpty)
+    assert(output.iterator eq iterator)
+    assert(iterator.size == 2)
+  }
+
   test("variant_explode") {
     def check(input: String, expected: Seq[Row]): Unit = {
       withView("v") {
@@ -1228,6 +1255,185 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         check("""{"a": [1, 2, 3], "b": true}""", Seq(Row(0, "a", "[1,2,3]"), Row(1, "b", "true")))
         check("""[null, "hello", {}]""",
           Seq(Row(0, null, "null"), Row(1, null, "\"hello\""), Row(2, null, "{}")))
+
+        val nonRecursive = sql(
+          """SELECT * FROM variant_explode(parse_json('{"a": [1]}'), false)""")
+        assert(nonRecursive.schema.fieldNames.toSeq == Seq("pos", "key", "value"))
+        checkAnswer(
+          nonRecursive.selectExpr("pos", "key", "to_json(value)"),
+          Seq(Row(0, "a", "[1]")))
+
+        val recursiveExpected = Seq(
+          Row("$.a", 0, "a", """[1,{"b":2}]"""),
+          Row("$.a[0]", 0, null, "1"),
+          Row("$.a[1]", 1, null, """{"b":2}"""),
+          Row("$.a[1].b", 0, "b", "2"),
+          Row("$.c", 1, "c", """{"d":[3]}"""),
+          Row("$.c.d", 0, "d", "[3]"),
+          Row("$.c.d[0]", 0, null, "3"))
+        Seq("variant_explode", "variant_explode_outer").foreach { function =>
+          checkAnswer(
+            sql(s"""
+              |SELECT path, pos, key, to_json(value)
+              |FROM $function(
+              |  parse_json('{"a": [1, {"b": 2}], "c": {"d": [3]}}'),
+              |  recursive => true)
+              |""".stripMargin),
+            recursiveExpected)
+        }
+
+        checkAnswer(
+          sql("""
+            |SELECT path, pos, key, to_json(value)
+            |FROM variant_explode(parse_json('[{"a": 1}, 2]'), true)
+            |""".stripMargin),
+          Seq(
+            Row("$[0]", 0, null, """{"a":1}"""),
+            Row("$[0].a", 0, "a", "1"),
+            Row("$[1]", 1, null, "2")))
+
+        // Keys that are not dot-safe use bracket notation.
+        checkAnswer(
+          sql("""
+            |SELECT path, key, to_json(value)
+            |FROM variant_explode(to_variant_object(
+            |  map('a.b', 1, 'a[b', 2, 'a."b', 3, '', 4)), true)
+            |""".stripMargin),
+          Seq(
+            Row("""$['a.b']""", "a.b", "1"),
+            Row("""$['a[b']""", "a[b", "2"),
+            Row("""$['a."b']""", """a."b""", "3"),
+            Row("""$['']""", "", "4")))
+
+        // Bracketed keys escape `\` and `'`; `"` is left literal.
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('a''b', 1)), true)""".stripMargin),
+          Seq(Row("""$['a\'b']""", "a'b")))
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('a"''b', 1)), true)""".stripMargin),
+          Seq(Row("""$['a"\'b']""", """a"'b""")))
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('a\\b', 1)), true)""".stripMargin),
+          Seq(Row("""$['a\\b']""", """a\b""")))
+        checkAnswer(
+          sql("""SELECT path, key FROM variant_explode(
+            |  to_variant_object(map('0', 1)), true)""".stripMargin),
+          Seq(Row("""$['0']""", "0")))
+
+        // Short control escapes (`\b \t \n \f \r`). The keys hold real control chars, injected
+        // into the map so no SQL/JSON escape layer intervenes.
+        val (bsp, tabc, lfc, ffc, crc) = ("\b", "\t", "\n", "\f", "\r")
+        checkAnswer(
+          sql(s"SELECT path FROM variant_explode(to_variant_object(map(" +
+            s"'a${bsp}b', 1, 'a${tabc}c', 2, 'a${lfc}d', 3, 'a${ffc}e', 4, 'a${crc}g', 5)), true)"),
+          Seq(
+            Row("""$['a\bb']"""),
+            Row("""$['a\tc']"""),
+            Row("""$['a\nd']"""),
+            Row("""$['a\fe']"""),
+            Row("""$['a\rg']""")))
+
+        // Other controls use `\uXXXX` (vertical tab U+000B, injected as a real char); the expected
+        // path is split around `\u` so Scala leaves it literal.
+        val vtab = 11.toChar
+        checkAnswer(
+          sql(s"SELECT path FROM variant_explode(to_variant_object(map('a${vtab}b', 1)), true)"),
+          Seq(Row("$['a\\" + "u000bb']")))
+
+        withView("variant_explode_round_trip") {
+          Seq(Map(
+            "a'\"b" -> Seq(1),
+            "a\\nb" -> Seq(2),
+            "a\b\f\n\r\tb" -> Seq(3),
+            s"a${vtab}b" -> Seq(4),
+            "" -> Seq(5),
+            "a.b" -> Seq(6))).toDF("input")
+            .selectExpr("to_variant_object(input) AS v")
+            .createOrReplaceTempView("variant_explode_round_trip")
+          Seq("variant_explode", "variant_explode_outer").foreach { function =>
+            checkAnswer(
+              sql(s"""
+                |SELECT to_json(value), to_json(variant_get(v, path, 'variant'))
+                |FROM variant_explode_round_trip, LATERAL $function(v, true)
+                |""".stripMargin),
+              (1 to 6).flatMap { value =>
+                Seq(Row(s"[$value]", s"[$value]"), Row(value.toString, value.toString))
+              })
+          }
+        }
+
+        // scalastyle:off nonascii
+        checkAnswer(
+          sql("""
+            |SELECT path, key, to_json(value)
+            |FROM variant_explode(parse_json('{"你好": 5}'), true)
+            |""".stripMargin),
+          Seq(Row("$.你好", "你好", "5")))
+
+        checkAnswer(
+          sql("""
+            |SELECT path, key, to_json(value)
+            |FROM variant_explode(parse_json('{"键.名": 5}'), true)
+            |""".stripMargin),
+          Seq(Row("""$['键.名']""", "键.名", "5")))
+        // scalastyle:on nonascii
+
+        // A single path can mix representations per segment: dot for dot-safe keys, bracket for
+        // the rest, and `[i]` for array indices.
+        checkAnswer(
+          sql("""
+            |SELECT path, to_json(value)
+            |FROM variant_explode(parse_json('{"a": {"b c": [{"d.e": 1}]}}'), true)
+            |""".stripMargin),
+          Seq(
+            Row("$.a", """{"b c":[{"d.e":1}]}"""),
+            Row("""$.a['b c']""", """[{"d.e":1}]"""),
+            Row("""$.a['b c'][0]""", """{"d.e":1}"""),
+            Row("""$.a['b c'][0]['d.e']""", "1")))
+
+        checkAnswer(
+          sql("""
+            |SELECT path, to_json(value)
+            |FROM variant_explode(parse_json('{"a": {"b''c": {"d e": [1]}}}'), true)
+            |""".stripMargin),
+          Seq(
+            Row("$.a", """{"b'c":{"d e":[1]}}"""),
+            Row("""$.a['b\'c']""", """{"d e":[1]}"""),
+            Row("""$.a['b\'c']['d e']""", "[1]"),
+            Row("""$.a['b\'c']['d e'][0]""", "1")))
+
+        checkAnswer(
+          sql("SELECT * FROM variant_explode(parse_json('[]'), true)"),
+          Nil)
+        Seq(
+          "parse_json('[]')",
+          "CAST(NULL AS VARIANT)",
+          "parse_json('null')",
+          "parse_json('1')").foreach { input =>
+          checkAnswer(
+            sql(s"SELECT * FROM variant_explode_outer($input, true)"),
+            Seq(Row(null, null, null, null)))
+        }
+
+        val nonFoldable = intercept[AnalysisException] {
+          sql("""
+            |SELECT *
+            |FROM VALUES (true) AS t(recursive),
+            |LATERAL variant_explode(parse_json('[1]'), recursive)
+            |""".stripMargin)
+        }
+        assert(nonFoldable.getCondition == "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
+
+        val nullRecursive = intercept[AnalysisException] {
+          sql("""
+            |SELECT *
+            |FROM variant_explode(parse_json('[1]'), CAST(NULL AS BOOLEAN))
+            |""".stripMargin)
+        }
+        assert(nullRecursive.getCondition == "DATATYPE_MISMATCH.UNEXPECTED_NULL")
       }
     }
   }

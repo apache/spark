@@ -27,8 +27,9 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 import org.apache.spark.util.TransientBestEffortLazyVal
@@ -448,6 +449,23 @@ case object REPLICATED_FOR_JOIN extends UngroupingOrigin
 case object SPLIT_FOR_ORDERING extends UngroupingOrigin
 
 /**
+ * Why a layout may hold rows whose key it does not declare, and what became of the hash routing
+ * that placed them. `KeyGroupedPartitioner` routes such a row by
+ * `nonNegativeMod(key.hashCode, numPartitions)`, so a marked layout co-locates whole keys, never a
+ * subset of their columns. Non-identity regrouping and `toGrouped` lose routing, as does
+ * concatenation with duplicate keys or multiple nonempty legs. Combining different origins also
+ * records `ROUTING_LOST`.
+ * Key-rewriting projections and reductions cannot retain a marked keyed claim.
+ */
+sealed trait UnknownKeysOrigin
+
+// An undeclared row sits at `nonNegativeMod(key.hashCode, numPartitions)`; the relation holds.
+case object HASH_ROUTING extends UnknownKeysOrigin
+
+// The layout no longer guarantees the hash-index relation; full-key grouping remains possible.
+case object ROUTING_LOST extends UnknownKeysOrigin
+
+/**
  * The physical layout of the partitions a [[KeyedPartitioning]] describes, which is everything
  * about them except the expressions naming them.
  *
@@ -473,34 +491,33 @@ case object SPLIT_FOR_ORDERING extends UngroupingOrigin
  *                    partitioning this layout was derived from onto the same key, so one key here
  *                    can stand for several of the original ones. Sticky. See
  *                    [[KeyedPartitioning]]'s "Key Collapse" for what it gates and how it travels.
- * @param mayContainUnknownPartitionKeys Whether the data may contain rows whose partition key is
- *                                 not among the declared `partitionKeys`. `KeyGroupedPartitioner`
- *                                 routes such rows by a deterministic hash when a side is
- *                                 re-shuffled onto this partitioning (see
- *                                 `KeyedShuffleSpec.createPartitioning`), so co-location holds
- *                                 for whole keys only: two marked partitionings declaring the
- *                                 same keys in the same order and using the same partition
- *                                 function per position still pair (equal undeclared keys hash
- *                                 to the same partition), but a row of an undeclared key sits in
- *                                 the partition of some other declared key and need not be
- *                                 co-located with rows sharing only a subset of its columns.
- *                                 `satisfies` and `KeyedShuffleSpec.areKeysCompatible` therefore
- *                                 accept a marked partitioning only for full-key clustering,
- *                                 never for a subset of its partition columns and never for a
- *                                 global ordering across several partitions. Two carry rules:
- *                                 (1) a node that changes the declared key set must drop the
- *                                 keyed partitioning, whether it coarsens it (a key-dropping
- *                                 projection, a key-changing reduction, a join-key projection)
- *                                 or expands it over a marked leg (a union, where another leg
- *                                 may declare exactly the key that leg holds out-of-set);
- *                                 (2) marker agreement comes free with the layout, since the
- *                                 members of a [[PartitioningCollection]] share it by reference
- *                                 and `fromPartitionings` merges one canonical layout, so
- *                                 consumers may read any member. `ShuffledJoin`'s `InnerLike`
- *                                 arm, the only site that meets a marked input with an unmarked
- *                                 one, clears the markers first. That is precision, not the
- *                                 guarantee: without it the merge would spread the spurious
- *                                 marker onto the accurate side.
+ * @param unknownKeysOrigin Whether the data may contain rows whose partition key is not among the
+ *                           declared `partitionKeys`, and whether the layout still says where they
+ *                           sit. `None` when every row's key is declared. See
+ *                           [[UnknownKeysOrigin]]. `KeyGroupedPartitioner` routes such rows by a
+ *                           deterministic hash when a side is re-shuffled onto this partitioning
+ *                           (see `KeyedShuffleSpec.createPartitioning`), so co-location holds for
+ *                           whole keys only: two marked partitionings declaring the same keys in
+ *                           the same order and still routing by that hash still pair (equal
+ *                           undeclared keys hash to the same partition), but a row of an undeclared
+ *                           key sits in the partition of some other declared key and need not be
+ *                           co-located with rows sharing only a subset of its columns.
+ *                           `satisfies` and `KeyedShuffleSpec` therefore accept a marked
+ *                           partitioning only for full-key clustering, never for a subset of its
+ *                           partition columns and never for a global ordering across several
+ *                           partitions. Two carry rules:
+ *                           (1) key-rewriting projections and reductions drop the marked claim.
+ *                           A union retains it only when the legs prove full-key grouping remains
+ *                           possible, without adding keys beyond the marked declaration. Hash
+ *                           routing survives only a grouped concatenation with at most one nonempty
+ *                           leg; other concatenations and non-identity regrouping lose routing;
+ *                           (2) state agreement comes free with the layout, since the members of a
+ *                           [[PartitioningCollection]] share it by reference and
+ *                           `fromPartitionings` merges one canonical layout, so consumers may read
+ *                           any member. `ShuffledJoin`'s `InnerLike` arm clears the marker when
+ *                           marked and unmarked inputs meet. That is precision, not the guarantee:
+ *                           without it the merge would spread the spurious state onto the accurate
+ *                           side.
  * @param ungroupingOrigin Why the keys repeat on purpose, when a producer built them that way
  *                         rather than leaving them for the grouping node that would settle them.
  *                         A clustering refuses an ungrouped layout whatever this says: on its
@@ -516,7 +533,7 @@ case class KeyLayout(
     dataTypes: Seq[DataType],
     isGrouped: Boolean,
     isCollapsed: Boolean,
-    mayContainUnknownPartitionKeys: Boolean = false,
+    unknownKeysOrigin: Option[UnknownKeysOrigin] = None,
     ungroupingOrigin: Option[UngroupingOrigin] = None) {
 
   // The rows carry the types they are compared at, so the pair is checked against itself rather
@@ -525,6 +542,19 @@ case class KeyLayout(
   require(partitionKeys.isEmpty || partitionKeys.head.dataTypes == dataTypes,
     s"A KeyLayout's dataTypes ($dataTypes) must be the types its keys are compared at " +
       s"(${partitionKeys.head.dataTypes})")
+
+  def mayContainUnknownPartitionKeys: Boolean = unknownKeysOrigin.isDefined
+
+  /**
+   * Whether an undeclared row still sits at `nonNegativeMod(key.hashCode, numPartitions)`. A
+   * marked layout answers true only while its key list is the one the data was routed over; every
+   * carrier that changes the list records `ROUTING_LOST` instead.
+   */
+  def unknownKeysRouted: Boolean = unknownKeysOrigin.forall(_ == HASH_ROUTING)
+
+  /** The unknown-keys state after a change that moved the keys, which gives the routing up. */
+  def unknownKeysRoutingLost: Option[UnknownKeysOrigin] =
+    unknownKeysOrigin.map(_ => ROUTING_LOST)
 
   /**
    * Whether `other` describes the same partition keys as this layout, which is the question every
@@ -707,6 +737,8 @@ case class KeyedPartitioning(
   def isGrouped: Boolean = layout.isGrouped
   def isCollapsed: Boolean = layout.isCollapsed
   def mayContainUnknownPartitionKeys: Boolean = layout.mayContainUnknownPartitionKeys
+  def unknownKeysOrigin: Option[UnknownKeysOrigin] = layout.unknownKeysOrigin
+  def unknownKeysRouted: Boolean = layout.unknownKeysRouted
   def ungroupingOrigin: Option[UngroupingOrigin] = layout.ungroupingOrigin
 
   /** This partitioning over a changed layout, e.g. `withLayout(_.copy(isGrouped = false))`. */
@@ -717,17 +749,33 @@ case class KeyedPartitioning(
   override def dataType: DataType = IntegerType
 
   /**
-   * Prints the layout's contents where the value object would print, which keeps the plan string as
-   * it was before the layout held them. The list is curated rather than the layout's own fields,
-   * for two reasons. `partitionKeys` has to be printed as a `Seq` for `maxFields` to truncate it,
-   * and a partitioning can hold one key per split. And `dataTypes` has its naming erased, so
-   * printing it would put a struct field name into a plan that appears nowhere in the query. A
-   * field the layout grows is therefore a decision here, and the default is to print it: the plan
-   * string is the only place a reader sees why a marked partitioning still shuffles.
+   * Prints the layout as the partition keys followed by the flags and origins. The keys are
+   * summarized once they exceed the fields that `maxFields` leaves after the expressions and the
+   * trailing fields; when those fields alone exceed the budget, the argument list is truncated
+   * from the end as usual. `dataTypes` is left out because its naming is erased, so printing it
+   * would put a struct field name into a plan that appears nowhere in the query. The plan string
+   * is the only place a reader sees why a marked partitioning still shuffles. Keys print as
+   * values, so two keys that `equals` considers equal can print differently, e.g. `'a'` and `'A'`
+   * under `UTF8_LCASE`.
    */
-  override protected def stringArgs: Iterator[Any] =
-    Iterator(expressions, partitionKeys, isGrouped, isCollapsed,
-      mayContainUnknownPartitionKeys) ++ ungroupingOrigin
+  override def toString: String = simpleString(SQLConf.get.maxToStringFields)
+
+  override def simpleString(maxFields: Int): String = {
+    val trailing = Seq[Any](isGrouped, isCollapsed) ++ unknownKeysOrigin ++ ungroupingOrigin
+    // The keys take the fields that the expressions and the trailing flags leave.
+    val keyBudget = maxFields - expressions.size - trailing.size
+    val keys = if (keyBudget < 1) {
+      Iterator.empty
+    } else if (partitionKeys == null) {
+      Iterator.single("null")
+    } else if (partitionKeys.isEmpty) {
+      Iterator.empty
+    } else {
+      Iterator.single(truncatedString(partitionKeys, "[", ", ", "]", keyBudget))
+    }
+    val args = expressions.map(_.toString) ++ keys ++ trailing.map(_.toString)
+    s"$prettyName" + truncatedString(args, "(", ", ", ")", maxFields)
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): KeyedPartitioning =
@@ -783,8 +831,8 @@ case class KeyedPartitioning(
    * Projects this partitioning onto the key positions in `positions`, whose order becomes the order
    * of the projected expressions and key fields. The projected `isGrouped` and `isCollapsed` are
    * computed together, because dropping a position can map keys that were distinct here onto the
-   * same key. Keeping every position changes no key, so both answers are inherited as they are,
-   * with no pass over the keys. `GroupPartitionsExec` decides the same two answers from the key
+   * same key. Keeping every position in its original order returns this partitioning without
+   * scanning keys. `GroupPartitionsExec` decides the same two answers from the key
    * groups it keeps, so it does not use this.
    */
   def project(positions: Seq[Int]): KeyedPartitioning = {
@@ -810,9 +858,10 @@ case class KeyedPartitioning(
         }
       }
       // A `copy` of the layout rather than a fresh one, so every field this method does not decide
-      // is carried, including the unknown-keys marker and anything the layout grows later. A
-      // projection that coarsens the declared key set cannot keep a marked claim, and
-      // `createShuffleSpec` refuses that case before it gets here, but this does not depend on it.
+      // is carried, including anything the layout grows later. A marked projection cannot keep
+      // co-location: an undeclared row can project to a different key than its partition's label.
+      assert(!mayContainUnknownPartitionKeys,
+        "A key-dropping projection cannot be applied to a layout that may hold undeclared rows")
       copy(
         expressions = positions.map(expressions),
         layout = layout.copy(
@@ -828,7 +877,8 @@ case class KeyedPartitioning(
     val uniqueKeys = if (isGrouped) partitionKeys else partitionKeys.distinct
     // The keys are unique afterwards, so a reason to be ungrouped has been spent.
     withLayout(_.copy(partitionKeys = uniqueKeys.sorted(keyOrdering), isGrouped = true,
-      ungroupingOrigin = None))
+      ungroupingOrigin = None,
+      unknownKeysOrigin = layout.unknownKeysRoutingLost))
   }
 
   /**
@@ -1129,10 +1179,9 @@ case class KeyedPartitioning(
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       // A marked claim is never projected. The claim says the undeclared rows sit at
       // `hash(key) % numPartitions` over *these* keys in *this* order, and both halves of the
-      // projection below break it: narrowing coarsens the declared set, and `toGrouped` sorts it,
-      // which sends a consumer's undeclared rows where this side does not hold them. Producing
-      // either would also need a `GroupPartitionsExec` on this side, and that node gives the keyed
-      // claim up rather than perform a non-identity regrouping of a marked layout.
+      // projection below can break it: narrowing loses co-location, and `toGrouped` sorts it,
+      // which can change undeclared rows' partition indices. Plain regrouping retains clustering
+      // but loses routing, so its result cannot be a shuffle template.
       //
       // What the unprojected spec is good for depends on the layout. Where every partition
       // expression covers a clustering key, so the projection would only have re-sorted, the spec
@@ -1202,24 +1251,49 @@ object KeyedPartitioning {
   }
 
   /**
+   * The unknown-keys state a layout built from several members carries: the marked members have to
+   * agree, since one layout cannot carry two descriptions of where an undeclared row sits, and a
+   * disagreement leaves `ROUTING_LOST`. An unmarked member takes no part. Asked of the members'
+   * states, so a new origin joins without this changing.
+   */
+  def combine(states: Seq[Option[UnknownKeysOrigin]]): Option[UnknownKeysOrigin] =
+    states.flatten.distinct match {
+      case Seq() => None
+      case Seq(one) => Some(one)
+      case _ => Some(ROUTING_LOST)
+    }
+
+  /**
    * Concatenates partitionings that agree on their expressions, which is what a `UnionExec` does to
    * its children's partitions. The result reports one key per output partition, so its keys are the
    * children's keys in child order.
    *
    * Keys repeating across children is not a collapse. Only a child's own collapse carries over,
    * since such a key still stands for several finer-grained ones in the concatenation.
+   *
+   * One marked child marks the result. Hash routing survives only when the combined origin is
+   * `HASH_ROUTING`, the result is grouped, and at most one leg is nonempty. Other marked
+   * concatenations lose routing: each leg routed undeclared rows over its own partition count.
    */
   def concat(kps: Seq[KeyedPartitioning]): KeyedPartitioning = {
     val concatenatedKeys = kps.flatMap(_.partitionKeys)
     val ungroupingOrigin = PartitioningCollection.concatUngrouping(kps.map(_.ungroupingOrigin))
+    // A child that has duplicates of its own puts them in the concatenation too, which answers
+    // this without walking the keys.
+    val grouped = kps.forall(_.isGrouped) &&
+      concatenatedKeys.distinct.length == concatenatedKeys.length
+    // Only a grouped concatenation, where one marked leg holds every partition, keeps the routing.
+    val routing = combine(kps.map(_.layout.unknownKeysOrigin)) match {
+      case Some(HASH_ROUTING) if !grouped || kps.count(_.numPartitions > 0) > 1 =>
+        Some(ROUTING_LOST)
+      case other => other
+    }
     kps.head.withLayout(_.copy(
       ungroupingOrigin = ungroupingOrigin,
       partitionKeys = concatenatedKeys,
-      // A child that has duplicates of its own puts them in the concatenation too, which answers
-      // this without walking the keys.
-      isGrouped = kps.forall(_.isGrouped) &&
-        concatenatedKeys.distinct.length == concatenatedKeys.length,
-      isCollapsed = kps.exists(_.isCollapsed)))
+      isGrouped = grouped,
+      isCollapsed = kps.exists(_.isCollapsed),
+      unknownKeysOrigin = routing))
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
@@ -1624,13 +1698,12 @@ object PartitioningCollection {
   }
 
   /**
-   * The uniform `mayContainUnknownPartitionKeys` marker of `p`'s keyed members, read from its
-   * first keyed member, the same one `checkKeyedPartitioningInvariant` compares against.
-   * `None` when `p` holds no [[KeyedPartitioning]] at all, distinct from the `Some(false)` of
-   * an unmarked keyed one: there is no claim there to answer about.
+   * The uniform `unknownKeysOrigin` state of `p`'s keyed members, read from its first keyed
+   * member, the same one `checkKeyedPartitioningInvariant` compares against. `None` when `p` holds
+   * no [[KeyedPartitioning]], and when its keyed member holds no undeclared rows.
    */
-  private[sql] def keyedMarkerOf(p: Partitioning): Option[Boolean] =
-    representativeOf(p).map(_.mayContainUnknownPartitionKeys)
+  private[sql] def keyedUnknownKeysOf(p: Partitioning): Option[UnknownKeysOrigin] =
+    representativeOf(p).flatMap(_.layout.unknownKeysOrigin)
 
   /**
    * Builds a [[PartitioningCollection]], unifying the [[KeyLayout]] reference across all
@@ -1641,17 +1714,19 @@ object PartitioningCollection {
    * Note: this can't be implemented with `TreeNode.transform`.
    */
   def fromPartitionings(partitionings: Seq[Partitioning]): PartitioningCollection = {
-    // See the class doc for why the flags are normalized by OR rather than required to agree. One
+    // See the class doc for why the flags are normalized rather than required to agree. One
     // representative per member is enough, because every collection agrees internally by this same
     // construction, and only a member that disagrees is rebuilt.
     val representatives = partitionings.flatMap(representativeOf)
     val anyCollapsed = representatives.exists(_.isCollapsed)
-    val anyUnknownKeys = representatives.exists(_.mayContainUnknownPartitionKeys)
+    // The weakest state wins: any member that may hold undeclared rows marks the joint layout,
+    // and one that lost the routing leaves it unable to say where they sit.
+    val anyRouting = KeyedPartitioning.combine(representatives.map(_.layout.unknownKeysOrigin))
 
-    // The canonical layout is the first one that already agrees with the OR'd flags, so the members
-    // that agree keep their instance and only the ones that disagree are rebuilt. Anchoring on the
-    // first representative instead would push *every* member off the `eq` path whenever that one
-    // happened to need a flag fixed, since no existing layout is `eq` a fresh copy.
+    // The canonical layout is the first one that already agrees with the normalized flags, so the
+    // members that agree keep their instance and only the ones that disagree are rebuilt. Anchoring
+    // on the first representative instead would push *every* member off the `eq` path whenever that
+    // one happened to need a flag fixed, since no existing layout is `eq` a fresh copy.
     //
     // A partitioning with no `KeyedPartitioning` in it has nothing to normalize, and one that
     // already holds the canonical layout is returned as it is. That is what keeps repeated
@@ -1663,10 +1738,10 @@ object PartitioningCollection {
       PartitioningCollection.concatUngrouping(representatives.map(_.layout.ungroupingOrigin))
     val canonicalLayout = representatives.map(_.layout)
       .find(l => l.isCollapsed == anyCollapsed &&
-        l.mayContainUnknownPartitionKeys == anyUnknownKeys &&
+        l.unknownKeysOrigin == anyRouting &&
         l.ungroupingOrigin == concatUngrouping)
       .orElse(representatives.headOption.map(_.layout.copy(
-        isCollapsed = anyCollapsed, mayContainUnknownPartitionKeys = anyUnknownKeys,
+        isCollapsed = anyCollapsed, unknownKeysOrigin = anyRouting,
         ungroupingOrigin = concatUngrouping)))
       .orNull
 
@@ -1793,10 +1868,12 @@ sealed trait ShuffleSpec {
   def isCompatibleWith(other: ShuffleSpec): Boolean
 
   /**
-   * Whether this shuffle spec can be used to create partitionings for the other children. A
-   * [[ShuffleSpecCollection]] can when any of its members can. Building the partitioning is
+   * Whether this shuffle spec can serve as the layout the children are lined up on: read as it
+   * stands by a child that pairs with it, or used to create partitionings for the other children.
+   * A [[ShuffleSpecCollection]] can when any of its members can. Building the partitioning is
    * [[LeafShuffleSpec.createPartitioning]], and that is always one member's job, so the planner
-   * builds it from a member that can.
+   * builds it from a member that can. Shuffling a child onto the layout also needs Spark to
+   * evaluate the partitioning, which is [[LeafShuffleSpec.canEvaluatePartitioning]], not this.
    */
   def canCreatePartitioning: Boolean
 
@@ -1824,6 +1901,17 @@ trait LeafShuffleSpec extends ShuffleSpec {
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
     throw SparkUnsupportedOperationException()
+
+  /**
+   * Whether Spark can evaluate the partitioning [[createPartitioning]] builds, to place the rows
+   * of a child shuffled onto this layout. [[canCreatePartitioning]] does not ask it, since a child
+   * that pairs with this layout as it stands evaluates nothing. A caller that shuffles a child onto
+   * this layout has to ask it too. Only a [[KeyedShuffleSpec]] can answer false, and its
+   * [[createPartitioning]] asserts it, so a caller that does not ask fails while planning. A
+   * cogroup child's key the layout cannot place fails while planning too, see
+   * [[createPartitioning]].
+   */
+  def canEvaluatePartitioning: Boolean = true
 
   override final def flatten: Seq[LeafShuffleSpec] = Seq(this)
 }
@@ -2270,20 +2358,22 @@ case class KeyedShuffleSpec(
       // their order: the out-of-set keys hash to the same-index partition on both sides, and a
       // `GroupPartitionsExec` regrouping re-labels each partition by that side's declared key, so
       // a differing declared order would push the out-of-set keys into different output
-      // partitions and lose their matches.
+      // partitions and lose their matches. They also have to still route by that hash: a side a
+      // regrouping moved off it reports `ROUTING_LOST`, and two such sides cannot pair this way.
       if (unknownKeys) {
         // Comparing the declared keys also asks that neither side's keys were reduced, since
         // reduced keys are in a space neither expression describes. A marked layout never carries
         // them: `canCreatePartitioning` requires `expressionsDescribeKeys` before
         // `KeyedShuffleSpec.createPartitioning` can mark anything, a `GroupPartitionsExec` that
-        // reduces is not an identity regrouping and so gives the keyed claim up, and
+        // reduces rewrites keys and so gives the keyed claim up, and
         // `ShuffledJoin.clearUnknownPartitionKeys` strips the marker a `PartitioningCollection`
         // would otherwise OR onto a merged layout. Asked rather than asserted, so that a producer
         // this misses costs a shuffle rather than the query.
         partitioning.expressionsDescribeKeys && other.partitioning.expressionsDescribeKeys && {
           if (partitioning.mayContainUnknownPartitionKeys &&
               other.partitioning.mayContainUnknownPartitionKeys) {
-            partitioning.partitionKeys == other.partitioning.partitionKeys
+            partitioning.unknownKeysRouted && other.partitioning.unknownKeysRouted &&
+              partitioning.partitionKeys == other.partitioning.partitionKeys
           } else if (partitioning.mayContainUnknownPartitionKeys) {
             val declared = partitioning.partitionKeys.toSet
             other.partitioning.partitionKeys.forall(declared.contains)
@@ -2329,8 +2419,11 @@ case class KeyedShuffleSpec(
         case (left: TransformExpression, right: TransformExpression) =>
           if (allowReduce && canReduceKeys) left.isCompatible(right)
           else left.isSameFunction(right)
+        // The reduce evaluates the transform rebuilt over the identity side's column, see
+        // `canEvaluate`.
         case (_: AttributeReference, _: TransformExpression) |
-             (_: TransformExpression, _: AttributeReference) => allowReduce && canReduceKeys
+             (_: TransformExpression, _: AttributeReference) =>
+          allowReduce && canReduceKeys && canEvaluate(left) && canEvaluate(right)
         case _ => false
       }
     }
@@ -2354,6 +2447,27 @@ case class KeyedShuffleSpec(
    */
   private def argumentsAreColumns(transform: TransformExpression): Boolean =
     transform.children.forall(_.isInstanceOf[Attribute])
+
+  /**
+   * Whether Spark can evaluate `transform`, see `TransformExpression.evaluableFunction`. An
+   * identity reduce evaluates it on the identity side's partition keys, and a one-side shuffle on
+   * each row of the side it shuffles, both after rebuilding it over the other side's key. An
+   * equi-join pairs two keys only when their types are equal apart from nullability and field
+   * names (`BinaryComparison.sameType`), which `evaluableFunction` does not tell apart either. So
+   * for a join, asking this of the reported transform answers it for the rebuilt one, and the
+   * reported one keeps the answer. The keys of a cogroup that does not coerce them, e.g. a Pandas
+   * or Arrow cogroup, need not share a type, see `createPartitioning`. True for anything that is
+   * not a transform, which needs no call.
+   *
+   * A Scala class or object that extends `ScalarFunction` directly gets a mixin forwarder to the
+   * default `produceResult`, which the lookup finds, so this is true even when the connector
+   * implements neither `produceResult` nor `invoke`. Evaluating it then throws
+   * `SCALAR_FUNCTION_NOT_COMPATIBLE`. Reflection cannot tell the forwarder from an override.
+   */
+  private def canEvaluate(expression: Expression): Boolean = expression match {
+    case t: TransformExpression => t.evaluableFunction.isDefined
+    case _ => true
+  }
 
   /**
    * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
@@ -2409,6 +2523,12 @@ case class KeyedShuffleSpec(
    */
   def reducersBothWays(other: KeyedShuffleSpec)
       : (Option[Seq[Option[KeyReducer]]], Option[Seq[Option[KeyReducer]]]) = {
+    // `canReduceKeys` is the same condition `areKeysCompatible` consults: when it is false, for
+    // example under partial clustering, only same-function pairs are admitted, and those already
+    // share a key space, so neither side needs a reducer. Deriving one anyway lets a function that
+    // reduces itself merge keys that were never meant to merge, so the spread side's expected
+    // counts no longer match the groups it builds (SPARK-59234).
+    if (!canReduceKeys) return (None, None)
     val results: Seq[(Option[KeyReducer], Option[KeyReducer])] =
       partitioning.expressions.zip(other.partitioning.expressions).map {
       // Keys an earlier join already reduced live in a key space that neither expression
@@ -2457,8 +2577,9 @@ case class KeyedShuffleSpec(
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. `areKeysCompatible` admitted
-      // this pair, so `t`'s argument is one bare column. `isExpressionCompatible` refuses any other
-      // argument here, and `keyPositions` maps an expression with more references to no position.
+      // this pair, so `t`'s argument is one bare column, and Spark can evaluate `t`, as far as
+      // `canEvaluate` can tell. `isExpressionCompatible` refuses any other argument or function
+      // here, and `keyPositions` maps an expression with more references to no position.
       // `IdentityReducer` binds `a` to ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
         (Some(KeyReducer(IdentityReducer(rebuiltOver(t, a)), t)), None)
@@ -2488,6 +2609,9 @@ case class KeyedShuffleSpec(
       // satisfy the distribution in a `GroupPartitionsExec` before it builds any spec -- so do not
       // read this clause as redundant.
       partitioning.isGrouped &&
+      // The sibling laid out here routes its undeclared rows by `hash % numPartitions`, so it
+      // lands where this side's own undeclared rows sit only while this layout still does too.
+      partitioning.unknownKeysRouted &&
       // Every partition expression must map to a clustering key, otherwise `createPartitioning`
       // cannot rewrite it. This also keeps the unprojected spec returned by `createShuffleSpec`
       // for a marked narrowing projection from being chosen as the best spec.
@@ -2501,7 +2625,7 @@ case class KeyedShuffleSpec(
         // `createPartitioning` replaces a transform's argument with the other child's cluster key,
         // which drops whatever surrounds the key, e.g. the `+ 1` of `bucket(4, b + 1)` or the `.a`
         // of `bucket(4, s.a)`. Such a spec's own child would then be laid out differently from the
-        // children shuffled onto it.
+        // children shuffled onto it. Whether Spark can evaluate it is `canEvaluatePartitioning`.
         case t: TransformExpression => argumentsAreColumns(t)
         case _ => false
       } &&
@@ -2509,15 +2633,55 @@ case class KeyedShuffleSpec(
       // decide where each row goes, and reduced keys are not what those expressions compute.
       partitioning.expressionsDescribeKeys
 
+  /** Whether Spark can evaluate each transform of this layout, see `canEvaluate`. */
+  override lazy val canEvaluatePartitioning: Boolean = partitioning.expressions.forall(canEvaluate)
+
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     assert(clustering.size == distribution.clustering.size,
       "Required distributions of join legs should be the same size.")
-
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
         // `canCreatePartitioning` admits only a template over bare columns, see there.
         rebuiltOver(te, clustering(positionSet.head))
       case (_, positionSet) => clustering(positionSet.head)
+    }
+    // The child shuffled onto this layout is placed by evaluating what is built here, which would
+    // fail on an executor. A caller has to ask `canEvaluatePartitioning` first, which answers for
+    // this layout's own keys, so a caller that does not is a bug.
+    assert(canEvaluatePartitioning,
+      s"Cannot shuffle a child onto a layout Spark cannot evaluate: ${partitioning.expressions}")
+    // A join's keys share their types, apart from nullability and field names, so that answers
+    // for what is built too. A cogroup that does not coerce its keys, e.g. a Pandas or Arrow
+    // cogroup, need not have them (SPARK-60782). Its other key can be one the layout's function
+    // does not take, e.g. a `BIGINT` against a function declaring `INT`, or a string of another
+    // collation. Or one the function takes, but stored otherwise than
+    // the layout's column, e.g. an `INT` widened to a `BIGINT` column's declared type: every row is
+    // then placed, but the cogroup pairs its groups by comparing the two sides' key rows, so they
+    // do not pair, or the cogroup fails. Falling back to a hash shuffle would pair them wrongly
+    // too. So such a child fails here, while planning, with an error that names the key's type.
+    // This covers transform positions only. An identity position is rebuilt over the other key
+    // whatever its type, and a layout Spark cannot evaluate takes the hash shuffle. Both behave as
+    // before this check, and are left to SPARK-60782.
+    // The storage check comes first, since it needs no call: a key it refuses is named, and the
+    // call of the transform rebuilt over the other key is not resolved, so nothing logs that it is
+    // not evaluated.
+    partitioning.expressions.zip(keyPositions).zip(newExpressions).foreach {
+      case ((te: TransformExpression, positionSet), t: TransformExpression) =>
+        val columnType = te.references.head.dataType
+        positionSet.iterator.map(clustering)
+          .find(key => !TransformExpression.keysStoredAlike(key.dataType, columnType))
+          .orElse(Option.when(!canEvaluate(t))(t.children.head))
+          .foreach { key =>
+            // `name()` and `inputTypes()` are connector code, which must not replace this error.
+            val functionClass = t.function.getClass.getName
+            val name = TransformExpression.orElse(t.function.name(), functionClass)
+            throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
+              t.numBucketsOpt.fold(name)(n => s"$name($n)"),
+              columnType,
+              TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
+              key)
+          }
+      case _ =>
     }
     // The shuffled side is laid out on this side's partitions, so it shares their layout, with one
     // change. The child re-shuffled onto it may hold keys outside the declared set, so every
@@ -2531,7 +2695,7 @@ case class KeyedShuffleSpec(
     // One `copy`, so no intermediate node is built and discarded.
     partitioning.copy(
       expressions = newExpressions,
-      layout = partitioning.layout.copy(mayContainUnknownPartitionKeys = true))
+      layout = partitioning.layout.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
   }
 }
 
@@ -2584,6 +2748,8 @@ case class ShufflePartitionIdPassThroughSpec(
  * A choice between several layouts, produced by [[PartitioningCollection.createShuffleSpec]].
  *
  * `specs` can hold a nested collection, since a [[PartitioningCollection]] can hold a nested one.
+ * A collection has no `canEvaluatePartitioning` of its own: a child is shuffled onto one member,
+ * so the planner asks it of that member, see [[ShuffleSpec.flatten]].
  */
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
   require(specs.nonEmpty, "expected specs to be non-empty")

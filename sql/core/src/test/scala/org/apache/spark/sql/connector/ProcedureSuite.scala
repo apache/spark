@@ -23,7 +23,11 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.IntegratedUDFTestUtils.{registerTestUDF, shouldTestPythonUDFs, TestPythonUDF}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedProcedure
+import org.apache.spark.sql.catalyst.plans.logical.{Call, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, SimpleProcedure, UnboundProcedure}
@@ -36,8 +40,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StructField, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
 
   before {
@@ -98,11 +104,92 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(sql("CALL cat.ns.sum((1 + 1) * 2, in2 => (2 + 1) / 3)"), Row(5) :: Nil)
   }
 
+  test("SPARK-61557: non-foldable arguments") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, CAST(rand() * 10 AS INT))")
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in2"),
+        "paramType" -> toSQLType("INT")))
+  }
+
   test("SPARK-59962: an argument reading a value twice") {
     // NULLIF reads the scalar subquery twice. Pre-evaluating it in a `Project` over the
     // `ResolvedProcedure` would leave a plan `InvokeProcedures` does not expect.
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
     checkAnswer(sql("CALL cat.ns.sum(nullif((SELECT 5), 3), 1)"), Row(6) :: Nil)
+  }
+
+  test("SPARK-61656: an argument with an IN subquery") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, CAST(1 IN (SELECT 1) AS INT))")
+      },
+      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_IN_EXISTS_SUBQUERY",
+      parameters = Map("treeNode" -> "(?s)Call cat.ns.sum.*"),
+      matchPVals = true,
+      queryContext = Array(ExpectedContext(fragment = "IN (SELECT 1)", start = 26, stop = 38)))
+  }
+
+  test("SPARK-61669: an argument with an IN subquery inside a scalar subquery") {
+    // Unlike the case above, `CheckAnalysis` accepts the IN subquery inside the scalar subquery.
+    // The optimizer inlines the scalar subquery, and `RewritePredicateSubquery` then evaluates
+    // the IN subquery in a join under the `Call`.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(1, (SELECT CAST(1 IN (SELECT 1) AS INT)))")
+      },
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in2"),
+        "paramType" -> toSQLType("INT")))
+  }
+
+  test("SPARK-61669: an argument with a Python UDF") {
+    assume(shouldTestPythonUDFs)
+    // `ExtractPythonUDFs` evaluates the Python UDF in an operator under the `Call`.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    withUserDefinedFunction("pyudf" -> true) {
+      registerTestUDF(TestPythonUDF(name = "pyudf"), spark)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CALL cat.ns.sum(1, CAST(pyudf(1) AS INT))")
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = Map(
+          "funcName" -> toSQLId("sum"),
+          "paramName" -> toSQLId("in2"),
+          "paramType" -> toSQLType("INT")))
+    }
+  }
+
+  test("SPARK-61669: an operator under the CALL with foldable arguments") {
+    // No built-in rule leads here, but invoking the procedure would ignore the operator.
+    object AddProjectUnderCall extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+        case c @ Call(p: ResolvedProcedure, _, _) => c.copy(procedure = Project(p.output, p))
+      }
+    }
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    val saved = spark.experimental.extraOptimizations
+    spark.experimental.extraOptimizations = saved :+ AddProjectUnderCall
+    try {
+      checkError(
+        exception = intercept[SparkException] {
+          sql("CALL cat.ns.sum(1, 2)")
+        },
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> "Unexpected plan for optimized CALL statement"))
+    } finally {
+      spark.experimental.extraOptimizations = saved
+    }
   }
 
   test("type coercion") {
@@ -241,6 +328,37 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("SPARK-61553: a null from loadProcedure means the procedure is not found") {
+    withSQLConf("spark.sql.catalog.nullcat" -> classOf[NullReturningProcedureCatalog].getName) {
+      checkError(
+        exception = intercept[AnalysisException](sql("CALL nullcat.ns.missing()")),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`nullcat`.`ns`.`missing`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(fragment = "CALL nullcat.ns.missing()", start = 0, stop = 24))
+
+      checkError(
+        exception = intercept[AnalysisException](sql("DESC PROCEDURE nullcat.ns.missing")),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`nullcat`.`ns`.`missing`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(
+          fragment = "DESC PROCEDURE nullcat.ns.missing", start = 0, stop = 32))
+
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        try {
+          catalog("cat2").createProcedure(Identifier.of(Array("ns_hit"), "sum"), UnboundLongSum)
+          sql("SET PATH = nullcat.ns_miss, cat2.ns_hit")
+          checkAnswer(sql("CALL sum(1, 2)"), Row(3L) :: Nil)
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+        }
+      }
+    }
+  }
+
   test("required parameter not found") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
     checkError(
@@ -368,6 +486,65 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     assert(explain1.toString.contains("cat.ns.sum(5, 5)"))
     val explain2 = sql("EXPLAIN EXTENDED CALL cat.ns.sum(10, 10)").head().get(0)
     assert(explain2.toString.contains("cat.ns.sum(10, 10)"))
+  }
+
+  test("SPARK-61554: EXPLAIN does not run a CALL inside EXECUTE IMMEDIATE") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    val explain = sql("EXPLAIN EXECUTE IMMEDIATE 'CALL cat.ns.sum(5, 5)'").head().getString(0)
+    assert(explain.contains("Call cat.ns.sum(5, 5)"), explain)
+  }
+
+  test("SPARK-61889: CALL with an aggregate, window or generator expression in an argument") {
+    // The optimizer folds these arguments away, so the procedure must not be invoked.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    val call = "CALL cat.ns.sum(IF(true OR max(1) > 0, 1, 2), 2)"
+    checkError(
+      exception = intercept[AnalysisException](sql(call)),
+      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      parameters = Map("operator" -> "Call", "invalidExprSqls" -> "\"max(1)\""),
+      context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+    val windowCall = "CALL cat.ns.sum(IF(true OR row_number() OVER (ORDER BY 1) > 0, 1, 2), 2)"
+    checkError(
+      exception = intercept[AnalysisException](sql(windowCall)),
+      condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      parameters = Map(
+        "operator" -> "Call",
+        "invalidExprSqls" -> ("\"row_number() OVER (ORDER BY 1 ASC NULLS FIRST " +
+          "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"")),
+      context = ExpectedContext(fragment = windowCall, start = 0, stop = windowCall.length - 1))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(IF(true OR size(explode(array(1))) > 0, 1, 2), 2)")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map("plan" -> "(?s)Call cat.ns.sum.*"),
+      matchPVals = true)
+    // A window function without OVER and a grouping function.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(IF(true OR row_number() > 0, 1, 2), 2)")
+      },
+      condition = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
+      parameters = Map("funcName" -> "\"row_number()\""),
+      context = ExpectedContext(fragment = "row_number() > 0", start = 27, stop = 42))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum(IF(true OR grouping(1) > 0, 1, 2), 2)")
+      },
+      condition = "UNSUPPORTED_GROUPING_EXPRESSION",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "grouping(1)", start = 27, stop = 37))
+  }
+
+  test("SPARK-61889: CALL with a window function as a whole argument") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkError(
+      exception = intercept[AnalysisException](sql("CALL cat.ns.sum(row_number(), 2)")),
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> toSQLId("sum"),
+        "paramName" -> toSQLId("in1"),
+        "paramType" -> toSQLType("INT")))
   }
 
   test("void procedure") {
@@ -981,4 +1158,9 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     override def parameters: Array[ProcedureParameter] = Array.empty
     override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
   }
+}
+
+/** A procedure catalog that returns null for an unknown procedure instead of throwing. */
+class NullReturningProcedureCatalog extends InMemoryCatalog {
+  override def loadProcedure(ident: Identifier): UnboundProcedure = procedures.get(ident)
 }

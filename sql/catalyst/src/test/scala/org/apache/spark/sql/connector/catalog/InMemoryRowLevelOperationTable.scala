@@ -42,7 +42,7 @@ trait RowLevelOperationWithOptions {
   def options: CaseInsensitiveStringMap
 }
 
-class InMemoryRowLevelOperationTable private (
+class InMemoryRowLevelOperationTable private[catalog] (
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
@@ -124,7 +124,7 @@ class InMemoryRowLevelOperationTable private (
       }
     }
     copied.commits ++= commits.map(_.copy())
-    copied.setVersionAndValidatedVersionFrom(this)
+    copied.copyTableStateFrom(this)
     copied.replacedPartitions = replacedPartitions
     copied.lastWriteInfo = lastWriteInfo
     copied.lastWriteLog = lastWriteLog
@@ -197,10 +197,10 @@ class InMemoryRowLevelOperationTable private (
     override protected def doCommit(
         messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
-      val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
-      val readPartitions = readRows.map(r => getKey(r, schema)).distinct
-      dataMap --= readPartitions
-      replacedPartitions = readPartitions
+      val readRows = scan.readPartitions.flatMap(_.asInstanceOf[BufferedRows].rows)
+      val readPartitionKeys = readRows.map(r => getKey(r, schema)).distinct
+      dataMap --= readPartitionKeys
+      replacedPartitions = readPartitionKeys
       withData(newData, schema)
       lastWriteLog = newData.flatMap(buffer => buffer.log).toImmutableArraySeq
     }

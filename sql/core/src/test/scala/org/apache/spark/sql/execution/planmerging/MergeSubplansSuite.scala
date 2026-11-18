@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.planmerging
 
 import java.util.OptionalLong
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, ExprId, GetStructField, GreaterThan, If, LessThan, Literal, Or, ScalarSubquery, SortOrder, TransformExpression}
@@ -31,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, Supp
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanContext, Statistics => V2Statistics, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsReportOrdering, SupportsReportPartitioning, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning => V2KeyGroupedPartitioning, Partitioning => V2Partitioning, UnknownPartitioning => V2UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
@@ -427,6 +429,59 @@ class MergeSubplansSuite extends PlanTest {
     val originalQuery = testRelation.select(
       subquery1,
       subquery2)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("SPARK-61818: Merge subqueries with existence joins that differ below the join") {
+    // `RewritePredicateSubquery` creates a fresh `exists` attribute for every existence join.
+    val exists1 = AttributeReference("exists", BooleanType, nullable = false)()
+    val exists2 = AttributeReference("exists", BooleanType, nullable = false)()
+    val subquery1 = ScalarSubquery(
+      testRelation.select($"a", $"b")
+        .join(testRelation2, ExistenceJoin(exists1), Some($"a" === $"d"))
+        .where($"b" > 1 || exists1)
+        .groupBy()(max($"b").as("max_b")))
+    val subquery2 = ScalarSubquery(
+      testRelation.select($"a", $"b", $"c")
+        .join(testRelation2, ExistenceJoin(exists2), Some($"a" === $"d"))
+        .where($"b" > 1 || exists2)
+        .groupBy()(count($"c").as("count_c")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    val mergedSubquery = testRelation.select($"a", $"b", $"c")
+      .join(testRelation2, ExistenceJoin(exists2), Some($"a" === $"d"))
+      .where($"b" > 1 || exists2)
+      .groupBy()(max($"b").as("max_b"), count($"c").as("count_c"))
+      .select(CreateNamedStruct(Seq(
+        Literal("max_b"), $"max_b",
+        Literal("count_c"), $"count_c"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-61818: Do not merge subqueries with existence joins with different conditions") {
+    val exists1 = AttributeReference("exists", BooleanType, nullable = false)()
+    val exists2 = AttributeReference("exists", BooleanType, nullable = false)()
+    val subquery1 = ScalarSubquery(
+      testRelation.select($"a", $"b")
+        .join(testRelation2, ExistenceJoin(exists1), Some($"a" === $"d"))
+        .where($"b" > 1 || exists1)
+        .groupBy()(max($"b").as("max_b")))
+    val subquery2 = ScalarSubquery(
+      testRelation.select($"a", $"b", $"c")
+        .join(testRelation2, ExistenceJoin(exists2), Some($"a" === $"e"))
+        .where($"b" > 1 || exists2)
+        .groupBy()(count($"c").as("count_c")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
 
     comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
@@ -2430,8 +2485,10 @@ class MergeSubplansSuite extends PlanTest {
       DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
     val output = cols.map(c => fullOutput.find(_.name == c).get)
     val scan = TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
-    // These stand in for a plain scan produced by the column-pruning path, which is mergeable.
-    DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true)
+    // These stand in for a plain scan produced by the column-pruning path, which is mergeable and
+    // has only row-wise pushdowns.
+    DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true,
+      onlyRowWisePushdowns = true)
   }
 
   /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
@@ -2457,7 +2514,8 @@ class MergeSubplansSuite extends PlanTest {
     builder.asInstanceOf[SupportsPushDownRequiredColumns].pruneColumns(
       StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
     V2ScanPartitioningAndOrdering(
-      DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true))
+      DataSourceV2ScanRelation(relation, builder.build(), output, mergeableScan = true,
+        onlyRowWisePushdowns = true))
       .asInstanceOf[DataSourceV2ScanRelation]
   }
 
@@ -2525,6 +2583,38 @@ class MergeSubplansSuite extends PlanTest {
         extractorExpression(0, analyzedMergedSubquery.output, 1)),
       Seq(definitionNode(analyzedMergedSubquery, 0)))
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("merged DSv2 scans receive subquery context for main-query aggregates") {
+    val scanContexts = ArrayBuffer.empty[Boolean]
+    val table = new TestV2Table(StructType(Seq(
+      StructField("a", IntegerType), StructField("b", IntegerType)))) {
+      override def newScanBuilder(
+          context: ScanContext,
+          options: CaseInsensitiveStringMap): ScanBuilder = {
+        scanContexts += context.isInSubquery()
+        super.newScanBuilder(options)
+      }
+    }
+
+    def aggregate(column: String): LogicalPlan = {
+      val relation = DataSourceV2Relation.create(table, None, None)
+      val attribute = relation.output.find(_.name == column).get
+      val pushed = V2ScanRelationPushDown(Project(Seq(attribute), relation))
+      pushed.groupBy()(sum(attribute).as(s"sum_$column"))
+    }
+
+    val originalQuery = aggregate("a").join(aggregate("b")).analyze
+    assert(scanContexts.toSeq == Seq(false, false))
+    scanContexts.clear()
+
+    // Merging moves these aggregates into scalar subqueries and rebuilds their shared scan.
+    val optimized = Optimize.execute(originalQuery)
+    assert(optimized.isInstanceOf[WithCTE])
+    val scans = v2Scans(optimized)
+    assert(scans.size == 1, s"expected the scans to merge:\n$optimized")
+    assert(scans.head.output.map(_.name).toSet == Set("a", "b"))
+    assert(scanContexts.nonEmpty && scanContexts.forall(identity))
   }
 
   gridTest("SPARK-58892: inferred filters survive rebuilding a merged scan")(

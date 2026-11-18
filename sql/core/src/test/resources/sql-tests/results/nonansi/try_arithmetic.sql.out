@@ -302,7 +302,7 @@ SELECT try_divide(1, (2147483647 + 1))
 -- !query schema
 struct<try_divide(1, (2147483647 + 1)):double>
 -- !query output
--4.6566128730773926E-10
+-4.656612873077393E-10
 
 
 -- !query

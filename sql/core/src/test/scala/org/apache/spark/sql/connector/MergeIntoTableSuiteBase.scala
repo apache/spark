@@ -893,6 +893,153 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-60673: merge with metadata columns in conditions and assignments") {
+    // the metadata columns must be read even if the operation does not require them
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq((1, "hr"), (2, "hr"), (5, "hr")).toDF("pk", "dep")
+      sourceDF.createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk AND t._partition = s.dep
+           |WHEN MATCHED AND t.index = 0 THEN
+           | UPDATE SET t.salary = t.index + 10
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, 0, s.dep)
+           |WHEN NOT MATCHED BY SOURCE AND t._partition = 'software' THEN
+           | DELETE
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 10, "hr"), // update
+          Row(2, 0, "hr"), // insert
+          Row(3, 300, "hr"), // unchanged
+          Row(5, 0, "hr"))) // insert
+    }
+  }
+
+  test("SPARK-60721: merge with assignments to metadata columns") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      Seq((1, "hr"), (3, "hr")).toDF("pk", "dep").createOrReplaceTempView("source")
+
+      Seq(
+        "WHEN MATCHED THEN UPDATE SET t.salary = -1, t.index = 5" -> "index",
+        "WHEN NOT MATCHED BY SOURCE THEN UPDATE SET t._partition = 'x'" -> "_partition",
+        """WHEN MATCHED THEN UPDATE SET salary = -1
+          |WHEN NOT MATCHED THEN INSERT (pk, salary, dep, _partition)
+          | VALUES (s.pk, 0, s.dep, 'x')""".stripMargin -> "_partition",
+        // insert-only MERGE
+        "WHEN NOT MATCHED THEN INSERT (pk, salary, dep, index) VALUES (s.pk, 0, s.dep, 7)" ->
+          "index",
+        // the implicit cast in the condition resolves the command in a later analyzer iteration
+        "WHEN MATCHED AND t.salary < 150.5 THEN UPDATE SET index = 5" -> "index"
+      ).foreach { case (clauses, metadataCol) =>
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |$clauses
+               |""".stripMargin)
+        }
+        assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+        assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged
+          Row(2, 200, "software"))) // unchanged
+    }
+  }
+
+  test("SPARK-60721: merge ignores assignments to metadata columns in legacy mode") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      Seq((1, "hr"), (3, "hr")).toDF("pk", "dep").createOrReplaceTempView("source")
+
+      withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = -1, t.index = 5
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep, _partition) VALUES (s.pk, 0, s.dep, 'x')
+             |""".stripMargin)
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, -1, "hr"), // updated
+          Row(2, 200, "software"), // unchanged
+          Row(3, 0, "hr"))) // new
+    }
+  }
+
+  test("SPARK-60721: merge with schema evolution rejects assignments to metadata columns" +
+      " before evolving the schema") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      // `bonus` is missing from the target, so schema evolution would add it
+      Seq((1, 150, "hr", 10, 1000), (3, 350, "hr", 30, 3000))
+        .toDF("pk", "salary", "dep", "index", "bonus")
+        .createOrReplaceTempView("source")
+
+      Seq(
+        "WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *" -> "index",
+        "WHEN MATCHED THEN UPDATE SET bonus = s.bonus, _partition = s.dep" -> "_partition"
+      ).foreach { case (clauses, metadataCol) =>
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""MERGE WITH SCHEMA EVOLUTION INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |$clauses
+               |""".stripMargin)
+        }
+        assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+        assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+        // the schema is not evolved, not even in the aborted transaction
+        assert(catalog.lastTransaction.currentState == Aborted)
+        val txnTable = catalog.lastTransaction.catalog.txnTables(ident)
+        assert(txnTable.columns().map(_.name).toSeq == Seq("pk", "salary", "dep"))
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged
+          Row(2, 200, "software"))) // unchanged
+    }
+  }
+
   test("merge with one NOT MATCHED BY SOURCE clause") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -1777,6 +1924,37 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-60978: merge keeps columns whose names differ only by case") {
+    withTempView("source") {
+      // such a table can only be created and read in a case-sensitive session
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        createAndInitTable("pk INT NOT NULL, salary INT, SALARY INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "SALARY": 200, "dep": "hr" }
+            |{ "pk": 2, "salary": 300, "SALARY": 400, "dep": "hr" }
+            |""".stripMargin)
+      }
+
+      Seq(1).toDF("pk").createOrReplaceTempView("source")
+
+      // the statement does not name the colliding columns so it is not ambiguous
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET t.dep = 'support'
+           |""".stripMargin)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 100, 200, "support"), // update
+            Row(2, 300, 400, "hr"))) // unchanged
+      }
+    }
+  }
+
   test("merge refreshed relation cache") {
     withTempView("temp", "source") {
       withCache("temp") {
@@ -1992,6 +2170,258 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, Row("x1 ", "x2"), "hr"), // update (matched)
           Row(2, Row("x1 ", "x2"), "software"), // update (matched)
           Row(3, Row("y1 ", "y2"), "hr"))) // update (not matched by source)
+    }
+  }
+
+  test("SPARK-61462: delete-only merge comparing CHAR columns stored with and without padding") {
+    createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+    sql(s"CREATE TABLE $sourceNameAsString (c CHAR(3), dep STRING)")
+
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "dep": "hr" }
+          |{ "pk": 3, "c": "x", "dep": "hr" }
+          |""".stripMargin)
+      sql(s"INSERT INTO $sourceNameAsString VALUES ('b', 'software')")
+    }
+    append("pk INT NOT NULL, c STRING, dep STRING",
+      """{ "pk": 2, "c": "b", "dep": "software" }
+        |{ "pk": 4, "c": "y", "dep": "finance" }
+        |""".stripMargin)
+    sql(s"INSERT INTO $sourceNameAsString VALUES ('a', 'hr')")
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.c = s.c AND t.dep = s.dep
+         |WHEN MATCHED THEN
+         | DELETE
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(3, "x  ", "hr") :: Row(4, "y  ", "finance") :: Nil)
+  }
+
+  Seq("true", "false").foreach { groupFilterEnabled =>
+    test("SPARK-61462: delete-only merge with a condition on a CHAR column stored without " +
+      s"padding (group filter enabled: $groupFilterEnabled)") {
+      withSQLConf(
+          SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> groupFilterEnabled) {
+        withTempView("source") {
+          createTable("pk INT NOT NULL, id INT, dep CHAR(8)")
+          withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+            append("pk INT NOT NULL, id INT, dep STRING",
+              """{ "pk": 1, "id": 1, "dep": "hr" }
+                |{ "pk": 2, "id": 2, "dep": "it" }
+                |{ "pk": 3, "id": 3, "dep": "software" }
+                |""".stripMargin)
+          }
+
+          Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
+
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk AND t.dep IN ('hr', 'it')
+               |WHEN MATCHED THEN
+               | DELETE
+               |""".stripMargin)
+
+          checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 3, "software") :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60708: merge into char/varchar table with metadata columns") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+      append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+          |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+          |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+          |{ "pk": 4, "id": 4, "dep": "software", "name": "d" }
+          |""".stripMargin)
+
+      Seq(1, 2, 5).toDF("pk").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND t._partition = 'hr' THEN
+           | UPDATE SET t.id = t.index + 10
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, id, dep, name) VALUES (s.pk, 0, 'hr', 'e')
+           |WHEN NOT MATCHED BY SOURCE AND t._partition = 'software' THEN
+           | DELETE
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 10, "hr", "a"), // update (matched)
+          Row(2, 2, "software", "b"), // unchanged
+          Row(3, 3, "hr", "c"), // unchanged
+          Row(5, 0, "hr", "e"))) // insert
+    }
+  }
+
+  test("SPARK-60708: insert-only merge into char/varchar table with metadata column in ON") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+      append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+          |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+          |""".stripMargin)
+
+      Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk AND t._partition = 'hr'
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, id, dep, name) VALUES (s.pk, 0, 'hr', 'new')
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 1, "hr", "a"), // unchanged (matched)
+          Row(2, 2, "software", "b"), // unchanged
+          Row(2, 0, "hr", "new"), // insert (not matched in hr)
+          Row(3, 0, "hr", "new"))) // insert
+    }
+  }
+
+  test("SPARK-61479: merge with CHAR columns stored without padding") {
+    createTable("pk INT NOT NULL, c CHAR(3), id INT, v STRING, dep STRING")
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, c CHAR(3))")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 'a'), (2, 'q'), (3, 'x')")
+    // read-side padding also covers values that are not padded in the storage, so the rows to
+    // update must be found by comparing the padded values of the target
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      append("pk INT NOT NULL, c STRING, id INT, v STRING, dep STRING",
+        """{ "pk": 1, "c": "a", "id": 1, "dep": "hr" }
+          |{ "pk": 2, "c": "b", "id": 2, "dep": "software" }
+          |{ "pk": 3, "c": "x", "id": 3, "dep": "hr" }
+          |{ "pk": 4, "c": "y", "id": 4, "dep": "finance" }
+          |""".stripMargin)
+    }
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.pk = s.pk AND t.c IN ('a', 'b', 'c')
+         |WHEN MATCHED THEN
+         | UPDATE SET id = -1
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT pk, id FROM $tableNameAsString"),
+      Row(1, -1) :: Row(2, -1) :: Row(3, 3) :: Row(4, 4) :: Nil)
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.c = s.c
+         |WHEN MATCHED THEN
+         | UPDATE SET id = -2
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT pk, id FROM $tableNameAsString"),
+      Row(1, -2) :: Row(2, -1) :: Row(3, -2) :: Row(4, 4) :: Nil)
+
+    sql(
+      s"""MERGE INTO $tableNameAsString t
+         |USING $sourceNameAsString s
+         |ON t.pk = s.pk
+         |WHEN MATCHED AND t.c = 'x' THEN
+         | UPDATE SET v = t.c
+         |WHEN NOT MATCHED BY SOURCE AND t.c = 'y' THEN
+         | UPDATE SET v = t.c
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT pk, v FROM $tableNameAsString"),
+      Row(1, null) :: Row(2, null) :: Row(3, "x  ") :: Row(4, "y  ") :: Nil)
+
+    // only the conditions and the assigned values read the padded values
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      checkAnswer(
+        sql(s"SELECT c FROM $tableNameAsString"),
+        Row("a") :: Row("b") :: Row("x") :: Row("y") :: Nil)
+    }
+  }
+
+  test("SPARK-61479: insert-only merge with CHAR columns stored without padding") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, c CHAR(3), dep STRING")
+      withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        append("pk INT NOT NULL, c STRING, dep STRING",
+          """{ "pk": 1, "c": "a", "dep": "hr" }
+            |""".stripMargin)
+      }
+
+      Seq((1, "a  "), (2, "b  ")).toDF("pk", "c").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.c = s.c
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, c, dep) VALUES (s.pk, s.c, 'new')
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, "a  ", "hr") :: Row(2, "b  ", "new") :: Nil)
+    }
+  }
+
+  test("SPARK-60667: insert-only merge with type coercion handles metadata columns correctly") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 700, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq(1, 2, 3, 4).toDF("pk").createOrReplaceTempView("source")
+
+      // the ON condition references a metadata column and needs type coercion
+      // (`t.salary < 600.5`), so the MERGE is resolved only in a later iteration of the analyzer
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t._partition = 'hr' AND t.salary < 600.5
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
+             |""".stripMargin)
+      }
+
+      // the MERGE is rewritten into InsertOnlyMerge (an append) that writes only data columns
+      val write = executedPlan.collectFirst {
+        case e: InsertOnlyMergeExec => e.write
+      }.getOrElse(fail("expected an InsertOnlyMergeExec in the executed plan"))
+      val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
+      assert(append.info.schema.fieldNames === table.schema.fieldNames)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged (matched)
+          Row(2, 200, "software"), // unchanged
+          Row(3, 700, "hr"), // unchanged
+          Row(2, 0, "new"), // insert (not matched in hr)
+          Row(3, 0, "new"), // insert (not matched by salary)
+          Row(4, 0, "new"))) // insert
     }
   }
 

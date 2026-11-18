@@ -24,15 +24,36 @@ same way: ``run(0, <input>)`` and assert on the output batches.
 
 import os
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.eval_handlers.utils import hashable_grouping_key
+from pyspark.eval_handlers._typing import UDF
+from pyspark.eval_handlers.utils import (
+    WindowAggResults,
+    hashable_grouping_key,
+    is_immutable_python_value,
+)
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
-from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
-from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    DoubleType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+)
+from pyspark.testing.utils import (
+    PySparkBaseTestCase,
+    have_numpy,
+    have_pyarrow,
+    numpy_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker_util import EvalConf, RunnerConf
@@ -85,6 +106,35 @@ class _SumAggregator:
         return buffer[0]
 
 
+class _InPlaceCollector:
+    """Incremental ``Aggregator`` stub whose ``reduce`` appends to the buffer's ``bytearray``
+    (the digits of each input) or ``list`` in place, and whose ``finish`` returns that very
+    object."""
+
+    bufferSchema = StructType([StructField("c", BinaryType())])
+
+    def __init__(self, as_list=False):
+        self._as_list = as_list
+
+    def zero(self):
+        return ([] if self._as_list else bytearray(),)
+
+    def reduce(self, buffer, values):
+        (v,) = values
+        if self._as_list:
+            buffer[0].append(v)
+        else:
+            buffer[0].extend(b"%d" % v)
+        return buffer
+
+    def merge(self, left, right):
+        left[0].extend(right[0])
+        return left
+
+    def finish(self, buffer):
+        return buffer[0]
+
+
 class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
     """Builders for handler input in the wire format the serializers produce."""
 
@@ -122,23 +172,22 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
         return offsets
 
     @staticmethod
-    def _scalar_handler(handler_cls, udf):
-        """Build a scalar handler whose one UDF reads column 0 and returns LongType.
-
-        The scalar UDF tuple is ``(func, args_offsets, kwargs_offsets, return_type)``.
-        """
-        return handler_cls(
-            udfs=[(udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
+    def _udf(func, args_offsets, kwargs_offsets=None, return_type=None):
+        """A ``UDF`` record as the worker builds it."""
+        return UDF(
+            funcs=[func],
+            args_offsets=args_offsets,
+            kwargs_offsets=kwargs_offsets or {},
+            return_type=return_type or LongType(),
+            result_id=0,
         )
 
     @classmethod
-    def _grouped_handler(cls, handler_cls, udf, arg_offsets, num_udf_args):
-        """Build a grouped/cogrouped-map handler with the shared return type.
-
-        The grouped-map UDF tuple is ``(func, arg_offsets, return_type, num_udf_args)``.
-        """
+    def _grouped_handler(cls, handler_cls, udf, arg_offsets):
+        """Build a grouped/cogrouped-map handler with the shared return type. The function the
+        handler wraps loses its signature, so the handler reads it from its ``_raw_func``."""
         return handler_cls(
-            udfs=[(udf, arg_offsets, cls._RETURN_TYPE, num_udf_args)],
+            udf_descs=[cls._udf(udf, arg_offsets, return_type=cls._RETURN_TYPE)],
             runner_conf=RunnerConf({}),
             eval_conf=None,
         )
@@ -189,10 +238,10 @@ class ArrowEvalTypeHandlerRegistrationTests(PySparkBaseTestCase):
 class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
     _INPUT_TYPE = StructType([StructField("a", LongType()), StructField("b", LongType())])
 
-    def _handler(self, *udfs, runner_conf=None, input_type=None):
+    def _handler(self, *udf_descs, runner_conf=None, input_type=None):
         """Build the handler from ``(func, args_offsets, kwargs_offsets, return_type)`` tuples."""
         return ArrowBatchedUDFArrowHandler(
-            udfs=list(udfs),
+            udf_descs=[self._udf(*u) for u in udf_descs],
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=EvalConf({"input_type": (input_type or self._INPUT_TYPE).json()}),
         )
@@ -200,6 +249,122 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
     def test_serializer(self):
         handler = self._handler((lambda a: a, [0], {}, LongType()))
         self.assertIsInstance(handler.serializer, ArrowStreamSerializer)
+        for value, flush in (("0", False), ("1", True)):
+            with patch.dict(os.environ, {"SPARK_PIPELINED_UDF": value}):
+                self.assertEqual(handler.serializer._flush_per_batch, flush)
+
+    def test_detailed_timing_uses_handler_gate(self):
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+        timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                metrics.reset()
+                handler = self._handler(
+                    (lambda a: a + 1, [0], {}, LongType()),
+                    (lambda a, b: a * b, [0, 1], {}, LongType()),
+                    runner_conf=RunnerConf({timing_conf: str(enabled).lower()}),
+                )
+                self.assertEqual(handler.serializer._collect_timing, enabled)
+                output = list(
+                    handler.run(
+                        0,
+                        iter([self._batch(a=[1, 2], b=[10, 20]), self._batch(a=[3], b=[4])]),
+                    )
+                )
+                self.assertEqual([batch.num_rows for batch in output], [2, 1])
+                report = metrics.to_dict()
+                if enabled:
+                    self.assertEqual(report["pythonNumTimingReports"], 1)
+                    self.assertEqual(report["pythonNumTimedBatches"], 2)
+                    for name in (
+                        "pythonInputPreparationTime",
+                        "pythonUDFExecutionTime",
+                        "pythonOutputPreparationTime",
+                    ):
+                        self.assertIn(name, report)
+                else:
+                    self.assertNotIn("pythonNumTimingReports", report)
+                    self.assertNotIn("pythonInputPreparationTime", report)
+
+    def test_phase_timing_boundaries(self):
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+        clock_ns = 0
+        udf_rows = 0
+        input_ns = 0
+        output_ns = 0
+
+        class TimedBatch:
+            def __init__(self, batch):
+                self.batch = batch
+
+            @property
+            def num_rows(self):
+                return self.batch.num_rows
+
+            def itercolumns(self):
+                nonlocal clock_ns, input_ns
+                clock_ns += 3_000_000
+                input_ns += 3_000_000
+                return self.batch.itercolumns()
+
+        class TimedInt:
+            def __init__(self, value):
+                self.value = value
+
+            def __index__(self):
+                nonlocal clock_ns, output_ns
+                clock_ns += 5_000_000
+                output_ns += 5_000_000
+                return self.value
+
+        def udf(value):
+            nonlocal clock_ns, udf_rows
+            clock_ns += 100_000_000
+            udf_rows += 1
+            return TimedInt(value + 1)
+
+        class OutputStream(BytesIO):
+            write_ns = 0
+            rows_at_write = None
+
+            def write(self, data):
+                nonlocal clock_ns
+                if self.rows_at_write is None:
+                    self.rows_at_write = udf_rows
+                clock_ns += 5_000_000
+                self.write_ns += 5_000_000
+                return super().write(data)
+
+        handler = self._handler(
+            (udf, [0], {}, LongType()),
+            runner_conf=RunnerConf(
+                {"spark.sql.execution.pythonUDF.detailedTiming.enabled": "true"}
+            ),
+        )
+        output = OutputStream()
+        batches = [self._batch(a=[1, 2], b=[10, 20]), self._batch(a=[3], b=[30])]
+
+        def input_batches():
+            nonlocal clock_ns
+            for batch in batches:
+                clock_ns += 100_000_000
+                yield TimedBatch(batch)
+
+        with patch("pyspark.eval_handlers._arrow.time.perf_counter_ns", new=lambda: clock_ns):
+            handler.serializer.dump_stream(handler.run(0, input_batches()), output)
+
+        report = metrics.to_dict()
+        self.assertEqual(output.rows_at_write, 2)
+        self.assertEqual(report["pythonNumTimedBatches"], 2)
+        self.assertGreater(input_ns, 0)
+        self.assertEqual(report["pythonInputPreparationTime"], input_ns // 1_000_000)
+        self.assertEqual(report["pythonUDFExecutionTime"], 300)
+        self.assertGreater(output_ns, 0)
+        self.assertEqual(report["pythonOutputPreparationTime"], output_ns // 1_000_000)
+        self.assertEqual(report["pythonDataWriteTime"], output.write_ns // 1_000_000)
 
     def test_invokes_udf_per_row(self):
         handler = self._handler(
@@ -251,13 +416,44 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
         out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[0] * 10)])))
         self.assertEqual(out[0].column(0).to_pylist(), [v * 2 for v in range(10)])
 
+    def test_concurrency_level_multi_and_zero_arg(self):
+        conf = RunnerConf({"spark.sql.execution.pythonUDF.arrow.concurrency.level": "4"})
+        handler = self._handler((lambda a, b: a - b, [0, 1], {}, LongType()), runner_conf=conf)
+        out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[1] * 10)])))
+        self.assertEqual(out[0].column(0).to_pylist(), [v - 1 for v in range(10)])
+
+        handler = self._handler((lambda x, y: x - y, [0], {"y": 1}, LongType()), runner_conf=conf)
+        out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[1] * 10)])))
+        self.assertEqual(out[0].column(0).to_pylist(), [v - 1 for v in range(10)])
+
+        handler = self._handler(
+            (lambda: 7, [], {}, LongType()), runner_conf=conf, input_type=StructType()
+        )
+        empty = pa.RecordBatch.from_pydict({"a": [1, 2, 3]}).select([])
+        out = list(handler.run(0, iter([empty])))
+        self.assertEqual(out[0].column(0).to_pylist(), [7, 7, 7])
+
     def test_stop_iteration_raises_runtime_error(self):
-        def stop(a):
+        def stop(*args, **kwargs):
             raise StopIteration()
 
-        handler = self._handler((stop, [0], {}, LongType()))
-        with self.assertRaises(PySparkRuntimeError):
-            list(handler.run(0, iter([self._batch(a=[1], b=[0])])))
+        batch = self._batch(a=[1, 2], b=[0, 0])
+        empty = batch.select([])
+        # (args_offsets, kwargs_offsets, input_type, batch): one case per evaluation branch.
+        cases = {
+            "zero_arg": ([], {}, StructType(), empty),
+            "single_arg": ([0], {}, None, batch),
+            "multi_arg": ([0, 1], {}, None, batch),
+            "keyword_arg": ([0], {"y": 1}, None, batch),
+        }
+        for name, (args_offsets, kwargs_offsets, input_type, data) in cases.items():
+            with self.subTest(case=name):
+                handler = self._handler(
+                    (stop, args_offsets, kwargs_offsets, LongType()), input_type=input_type
+                )
+                with self.assertRaises(PySparkRuntimeError) as ctx:
+                    list(handler.run(0, iter([data])))
+                self.assertEqual(ctx.exception.getCondition(), "STOP_ITERATION_OCCURRED")
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -266,7 +462,9 @@ class ArrowScalarUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int64())
 
-        handler = self._scalar_handler(ArrowScalarUDFHandler, add_one)
+        handler = ArrowScalarUDFHandler(
+            udf_descs=[self._udf(add_one, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, iter([self._batch(a=[1, 2, 3])])))
         self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3, 4]])
 
@@ -275,7 +473,9 @@ class ArrowScalarUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int32())
 
-        handler = self._scalar_handler(ArrowScalarUDFHandler, add_one)
+        handler = ArrowScalarUDFHandler(
+            udf_descs=[self._udf(add_one, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, iter([self._batch(a=[10, 20])])))
         self.assertEqual(out[0].schema.field(0).type, pa.int64())
         self.assertEqual(out[0].column(0).to_pylist(), [11, 21])
@@ -288,7 +488,9 @@ class ArrowScalarIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             for col in col_iter:
                 yield pa.array([v.as_py() + 1 for v in col], type=pa.int64())
 
-        handler = self._scalar_handler(ArrowScalarIterUDFHandler, add_one)
+        handler = ArrowScalarIterUDFHandler(
+            udf_descs=[self._udf(add_one, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, iter([self._batch(a=[1, 2]), self._batch(a=[3])])))
         self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3], [4]])
 
@@ -298,7 +500,9 @@ class ArrowScalarIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             for col in col_iter:
                 yield pa.array(list(range(len(col) + 1)), type=pa.int64())
 
-        handler = self._scalar_handler(ArrowScalarIterUDFHandler, too_many)
+        handler = ArrowScalarIterUDFHandler(
+            udf_descs=[self._udf(too_many, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         with self.assertRaises(PySparkRuntimeError):
             list(handler.run(0, iter([self._batch(a=[1, 2])])))
 
@@ -312,7 +516,7 @@ class ArrowMapUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
                 yield self._batch(v=[c.as_py() * 2 for c in batch.column("v")])
 
         handler = ArrowMapUDFHandler(
-            udfs=[(double_v, None, None, None)], runner_conf=RunnerConf({}), eval_conf=None
+            udf_descs=[self._udf(double_v, [])], runner_conf=RunnerConf({}), eval_conf=None
         )
         out = list(handler.run(0, iter([self._struct_batch(v=[1, 2, 3])])))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
@@ -327,9 +531,7 @@ class ArrowGroupedMapUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         def grouped_udf(value_table):
             return pa.table({"v": pa.array([c.as_py() * 10 for c in value_table.column("v")])})
 
-        handler = self._grouped_handler(
-            ArrowGroupedMapUDFHandler, grouped_udf, self._GROUP_OFFSETS, 1
-        )
+        handler = self._grouped_handler(ArrowGroupedMapUDFHandler, grouped_udf, self._GROUP_OFFSETS)
         out = list(handler.run(0, self._one_group(self._struct_batch(k=[7, 7], v=[1, 2]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [10, 20])
 
@@ -338,9 +540,7 @@ class ArrowGroupedMapUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             k = key[0].as_py()
             return pa.table({"v": pa.array([c.as_py() + k for c in value_table.column("v")])})
 
-        handler = self._grouped_handler(
-            ArrowGroupedMapUDFHandler, grouped_udf, self._GROUP_OFFSETS, 2
-        )
+        handler = self._grouped_handler(ArrowGroupedMapUDFHandler, grouped_udf, self._GROUP_OFFSETS)
         out = list(handler.run(0, self._one_group(self._struct_batch(k=[7, 7], v=[1, 2]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [8, 9])
 
@@ -356,7 +556,7 @@ class ArrowGroupedMapIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
                 yield self._batch(v=[c.as_py() + 1 for c in batch.column("v")])
 
         handler = self._grouped_handler(
-            ArrowGroupedMapIterUDFHandler, grouped_udf, self._GROUP_OFFSETS, 1
+            ArrowGroupedMapIterUDFHandler, grouped_udf, self._GROUP_OFFSETS
         )
         out = list(handler.run(0, self._one_group(self._struct_batch(k=[7], v=[41]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [42])
@@ -368,7 +568,7 @@ class ArrowGroupedMapIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
                 yield self._batch(v=[c.as_py() + k for c in batch.column("v")])
 
         handler = self._grouped_handler(
-            ArrowGroupedMapIterUDFHandler, grouped_udf, self._GROUP_OFFSETS, 2
+            ArrowGroupedMapIterUDFHandler, grouped_udf, self._GROUP_OFFSETS
         )
         out = list(handler.run(0, self._one_group(self._struct_batch(k=[10], v=[5]))))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [15])
@@ -391,7 +591,7 @@ class ArrowCoGroupedMapUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return pa.table({"v": pa.array([total], type=pa.int64())})
 
         handler = self._grouped_handler(
-            ArrowCoGroupedMapUDFHandler, cogrouped_udf, self._COGROUP_OFFSETS, 2
+            ArrowCoGroupedMapUDFHandler, cogrouped_udf, self._COGROUP_OFFSETS
         )
         out = list(
             handler.run(
@@ -407,7 +607,7 @@ class ArrowCoGroupedMapUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return pa.table({"v": pa.array([total + k], type=pa.int64())})
 
         handler = self._grouped_handler(
-            ArrowCoGroupedMapUDFHandler, cogrouped_udf, self._COGROUP_OFFSETS, 3
+            ArrowCoGroupedMapUDFHandler, cogrouped_udf, self._COGROUP_OFFSETS
         )
         out = list(
             handler.run(
@@ -426,7 +626,7 @@ class ArrowGroupedAggUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return sum(c.as_py() for c in col)
 
         handler = ArrowGroupedAggUDFHandler(
-            udfs=[(sum_udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
+            udf_descs=[self._udf(sum_udf, [0])], runner_conf=RunnerConf({}), eval_conf=None
         )
         out = list(handler.run(0, self._one_group(self._batch(v=[1, 2, 3]), self._batch(v=[4]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [10])
@@ -440,7 +640,7 @@ class ArrowGroupedAggIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return sum(c.as_py() for col in col_iter for c in col)
 
         handler = ArrowGroupedAggIterUDFHandler(
-            udfs=[(sum_iter_udf, [0], {}, LongType())], runner_conf=RunnerConf({}), eval_conf=None
+            udf_descs=[self._udf(sum_iter_udf, [0])], runner_conf=RunnerConf({}), eval_conf=None
         )
         out = list(handler.run(0, self._one_group(self._batch(v=[10]), self._batch(v=[20]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [30])
@@ -454,7 +654,7 @@ class ArrowWindowAggUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return sum(c.as_py() for c in col)
 
         handler = ArrowWindowAggUDFHandler(
-            udfs=[(sum_udf, [0], {}, LongType())],
+            udf_descs=[self._udf(sum_udf, [0])],
             runner_conf=RunnerConf({"window_bound_types": "unbounded"}),
             eval_conf=None,
         )
@@ -467,7 +667,7 @@ class ArrowWindowAggUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return sum(c.as_py() for c in col)
 
         handler = ArrowWindowAggUDFHandler(
-            udfs=[(sum_udf, [0, 1, 2], {}, LongType())],
+            udf_descs=[self._udf(sum_udf, [0, 1, 2])],
             runner_conf=RunnerConf({"window_bound_types": "bounded"}),
             eval_conf=None,
         )
@@ -485,8 +685,9 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
     _KEY_SCHEMA = StructType([StructField("k", LongType())])
 
     def _handler(self, cap=10000):
+        # The handler takes the Aggregator itself, unchained and unwrapped, as its raw function.
         return ArrowGroupedAggIncrementalPartialUDFHandler(
-            udfs=[(_SumAggregator(), [1], {}, LongType())],
+            udf_descs=[self._udf(_SumAggregator(), [1])],
             runner_conf=RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": str(cap)}),
             eval_conf=EvalConf({"grouping_key_schema": self._KEY_SCHEMA.json()}),
         )
@@ -544,7 +745,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
             ["k", "v"],
         )
         handler = ArrowGroupedAggIncrementalPartialUDFHandler(
-            udfs=[(_SumAggregator(), [1], {}, LongType())],
+            udf_descs=[self._udf(_SumAggregator(), [1])],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf(
                 {"grouping_key_schema": StructType([StructField("k", DoubleType())]).json()}
@@ -565,10 +766,9 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
         return pa.RecordBatch.from_arrays([pa.array(buffers, type=self._BUFFER_TYPE)], ["buf"])
 
     def _handler(self):
+        # The handler takes the Aggregator itself, unchained and unwrapped, as its raw function.
         return ArrowGroupedAggIncrementalFinalUDFHandler(
-            udfs=[(_SumAggregator(), [0], {}, LongType())],
-            runner_conf=RunnerConf({}),
-            eval_conf=None,
+            udf_descs=[self._udf(_SumAggregator(), [0])], runner_conf=RunnerConf({}), eval_conf=None
         )
 
     def test_merges_partial_buffers_per_group(self):
@@ -593,7 +793,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
 class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
     def _handler(self, agg, bound_type, args_offsets):
         return ArrowWindowAggIncrementalUDFHandler(
-            udfs=[(agg, args_offsets, {}, LongType())],
+            udf_descs=[self._udf(agg, args_offsets)],
             runner_conf=RunnerConf({"window_bound_types": bound_type}),
             eval_conf=None,
         )
@@ -622,10 +822,172 @@ class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         self.assertEqual(out[0].column("_0").to_pylist(), [1, 3, 5, 7])
         self.assertEqual(agg.reduce_calls, 1 + 1 + 2 + 2)
 
+    def test_bounded_frame_results_do_not_share_the_running_buffer(self):
+        # Rows 0-3 extend the running buffer, row 4 has row 3's frame, and row 5 refolds from
+        # ``zero``. ``reduce`` updates the buffer in place and ``finish`` returns it, so every
+        # row must keep its own frame's value, for string, binary and nested result types.
+        batch = self._batch(begin=[0, 0, 0, 0, 0, 2], end=[1, 2, 3, 4, 4, 6], v=[1, 2, 3, 4, 5, 6])
+        digits = ["1", "12", "123", "1234", "1234", "3456"]
+        cases = [
+            (StringType(), _InPlaceCollector(), digits),
+            (BinaryType(), _InPlaceCollector(), [d.encode() for d in digits]),
+            (
+                ArrayType(LongType()),
+                _InPlaceCollector(as_list=True),
+                [[int(c) for c in d] for d in digits],
+            ),
+        ]
+        for return_type, agg, expected in cases:
+            with self.subTest(return_type=return_type):
+                handler = ArrowWindowAggIncrementalUDFHandler(
+                    udf_descs=[self._udf(agg, [0, 1, 2], return_type=return_type)],
+                    runner_conf=RunnerConf({"window_bound_types": "bounded"}),
+                    eval_conf=None,
+                )
+                out = list(handler.run(0, self._one_group(batch)))
+                self.assertEqual(out[0].column("_0").to_pylist(), expected)
+
+    def test_refolded_frame_result_does_not_share_the_extended_buffer(self):
+        # rangeBetween(-1, currentRow) over 1, 3, 5 and 6: rows 1 and 2 refold from ``zero``, and
+        # row 3 extends row 2's buffer, whose result must keep its own frame's value.
+        batch = self._batch(begin=[0, 1, 2, 2], end=[1, 2, 3, 4], v=[1, 3, 5, 6])
+        handler = ArrowWindowAggIncrementalUDFHandler(
+            udf_descs=[
+                self._udf(
+                    _InPlaceCollector(as_list=True), [0, 1, 2], return_type=ArrayType(LongType())
+                )
+            ],
+            runner_conf=RunnerConf({"window_bound_types": "bounded"}),
+            eval_conf=None,
+        )
+        out = list(handler.run(0, self._one_group(batch)))
+        self.assertEqual(out[0].column("_0").to_pylist(), [[1], [3], [5], [5, 6]])
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_bounded_frame_results_do_not_share_a_numpy_buffer(self):
+        # ``reduce`` adds into a 0-d numpy array in place and ``finish`` returns it. pyarrow
+        # converts such an array to an integer type, so the result type alone does not show
+        # that a result can share state with the running buffer.
+        import numpy as np
+
+        class ZeroDimSum:
+            bufferSchema = StructType([StructField("s", LongType())])
+
+            def zero(self):
+                return (np.zeros((), dtype=np.int64),)
+
+            def reduce(self, buffer, values):
+                acc = buffer[0]
+                acc += values[0]
+                return buffer
+
+            def merge(self, left, right):
+                return (left[0] + right[0],)
+
+            def finish(self, buffer):
+                return buffer[0]
+
+        handler = self._handler(ZeroDimSum(), "bounded", [0, 1, 2])
+        batch = self._batch(begin=[0, 0, 0], end=[1, 2, 3], v=[1, 2, 3])
+        out = list(handler.run(0, self._one_group(batch)))
+        self.assertEqual(out[0].column("_0").to_pylist(), [1, 3, 6])
+
     def test_invalid_bound_type_raises(self):
         handler = self._handler(_SumAggregator(), "bogus", [0])
         with self.assertRaises(PySparkRuntimeError):
             list(handler.run(0, self._one_group(self._batch(v=[1]))))
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class WindowAggResultsTests(PySparkBaseTestCase):
+    def test_results_do_not_follow_later_updates(self):
+        # A result flushed before an in-place update of its value keeps the value it had.
+        results = WindowAggResults(pa.binary())
+        results.append(b"x")
+        results.append(None)
+        results.flush()
+        value = bytearray(b"a")
+        results.append(value)
+        results.flush()
+        value.extend(b"b")
+        results.append(value)
+        self.assertEqual(results.to_array().to_pylist(), [b"x", None, b"a", b"ab"])
+
+    def test_refolded_result_checked_at_flush(self):
+        # A result finished from a buffer just folded from ``zero`` is converted by the flush
+        # before that buffer is updated in place.
+        results = WindowAggResults(pa.list_(pa.int64()))
+        first = [1]
+        results.append(first, refolded=True)
+        second = [2]
+        results.append(second, refolded=True)
+        results.flush()
+        second.append(3)
+        results.append(second)
+        self.assertEqual(results.to_array().to_pylist(), [[1], [2], [2, 3]])
+
+    def test_many_flushed_results(self):
+        values = [[i] for i in range(WindowAggResults._COMBINE_CHUNKS * 2 + 3)]
+        results = WindowAggResults(pa.list_(pa.int64()))
+        for value in values:
+            results.append(value)
+            results.flush()
+        for value in values:
+            value.append(-1)
+        self.assertEqual(results.to_array().to_pylist(), [[i] for i in range(len(values))])
+
+    def test_no_results(self):
+        array = WindowAggResults(pa.int64()).to_array()
+        self.assertEqual(array.type, pa.int64())
+        self.assertEqual(array.to_pylist(), [])
+
+
+class IsImmutablePythonValueTests(PySparkBaseTestCase):
+    def test_immutable_values(self):
+        import collections
+        import datetime
+        import decimal
+
+        from pyspark.sql import Row
+
+        Point = collections.namedtuple("Point", ["x", "y"])
+        values = [
+            None,
+            True,
+            1,
+            1.5,
+            "s",
+            b"b",
+            decimal.Decimal("1.5"),
+            datetime.date(2026, 1, 1),
+            datetime.datetime(2026, 1, 1, 10),
+            datetime.time(10),
+            datetime.timedelta(1),
+            (1, ("a", None)),
+            Row(mn=1.0, mx=2.0),
+            Point(1, 2),
+        ]
+        for value in values:
+            with self.subTest(value=value):
+                self.assertTrue(is_immutable_python_value(value))
+
+    def test_mutable_values(self):
+        from pyspark.sql import Row
+
+        for value in [bytearray(b"b"), [1], {"a": 1}, {1}, (1, [2]), Row(l=[1])]:
+            with self.subTest(value=value):
+                self.assertFalse(is_immutable_python_value(value))
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_numpy_values(self):
+        import numpy as np
+
+        for value in [np.int64(1), np.float64(1.5), np.bool_(True), np.str_("s"), (np.int64(1),)]:
+            with self.subTest(value=value):
+                self.assertTrue(is_immutable_python_value(value))
+        for value in [np.zeros((), dtype=np.int64), np.zeros(2), np.zeros(1, dtype="i8,f8")[0]]:
+            with self.subTest(value=value):
+                self.assertFalse(is_immutable_python_value(value))
 
 
 class HashableGroupingKeyTests(PySparkBaseTestCase):

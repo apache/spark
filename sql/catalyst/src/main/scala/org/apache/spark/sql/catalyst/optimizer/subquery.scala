@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
@@ -715,7 +716,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
   /**
    * Checks if given expression is foldable. Evaluates it and returns it as literal, if yes.
-   * If not, returns the original expression without evaluation.
+   * If not, returns the original expression. If the evaluation fails, returns the original
+   * expression without its aliases.
    */
   private def tryEvalExpr(expr: Expression): Expression = {
     // Removes Alias over given expression, because Alias is not foldable.
@@ -724,14 +726,29 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       // Needs to evaluate them on query runtime.
       expr
     } else {
-      Literal.create(expr.eval(), expr.dataType)
+      try {
+        Literal.create(expr.freshCopyIfContainsStatefulExpression().eval(), expr.dataType)
+      } catch {
+        // SPARK-61444: The result on zero tuples is only used for the outer rows without
+        // matching rows, in a conditional branch such as If(IsNull(alwaysTrue), ...). If its
+        // evaluation fails, e.g. with DIVIDE_BY_ZERO in ANSI mode, keep it, so that it is
+        // evaluated later and the query fails only if the result on zero tuples is used.
+        // Like ConstantFolding in conditional branches (SPARK-39106), tag it so that
+        // ConstantFolding does not evaluate it again. Tag a copy: without attributes or
+        // aggregates, the expression can be the node in the plan itself, e.g. `10 / 0` in the
+        // output of an Aggregate, where ConstantFolding must still evaluate it.
+        case NonFatal(_) =>
+          val trimmed = trimAliases(expr).clone()
+          trimmed.setTagValue(ConstantFolding.FAILED_TO_EVALUATE, ())
+          trimmed
+      }
     }
   }
 
   /**
-   * Statically evaluate an expression containing zero or more placeholders, given a set
-   * of bindings for placeholder values, if the expression is evaluable. If it is not,
-   * bind statically evaluated expression results to an expression.
+   * Binds the given values to the placeholders of an expression containing zero or more
+   * placeholders, and statically evaluates it if possible. If it is not foldable or its
+   * evaluation fails, returns the bound expression, see `tryEvalExpr`.
    */
   private def bindingExpr(
       expr: Expression,
@@ -745,7 +762,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   }
 
   /**
-   * Statically evaluate an expression containing one or more aggregates on an empty input.
+   * Statically evaluate an expression containing one or more aggregates on an empty input. If
+   * it is not foldable or its evaluation fails, returns the expression with the aggregates
+   * replaced by their results on an empty input, see `tryEvalExpr`.
    */
   private def evalAggExprOnZeroTups(expr: Expression) : Expression = {
     // AggregateExpressions are Unevaluable, so we need to replace all aggregates
@@ -763,12 +782,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
   /**
    * Statically evaluate an [[Aggregate]] on an empty input and return a mapping
-   * between its output attribute expression ID and evaluated result.
+   * between its output attribute expression ID and evaluated result. A result that can't be
+   * evaluated statically is an expression instead of a literal, see `evalAggExprOnZeroTups`.
    */
   def evalAggregateOnZeroTups(a: Aggregate): Map[ExprId, Expression] = {
     // Some of the expressions under the Aggregate node are the join columns
     // for joining with the outer query block. Fill those expressions in with
-    // nulls and statically evaluate the remainder.
+    // nulls and statically evaluate the remainder if possible.
     a.aggregateExpressions.map {
       case ref: AttributeReference => (ref.exprId, Literal.create(null, ref.dataType))
       case alias @ Alias(_: AttributeReference, _) =>
@@ -784,7 +804,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   }
 
   /**
-   * Statically evaluate a scalar subquery on an empty input.
+   * Statically evaluate a scalar subquery on an empty input. A result that can't be evaluated
+   * statically is an expression instead of a literal, see `tryEvalExpr`.
    *
    * <b>WARNING:</b> This method only covers subqueries that pass the checks under
    * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
@@ -801,21 +822,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         if (bindings.isEmpty) {
           bindings
         } else {
-          val bindCondition = bindingExpr(condition, bindings)
-
-          if (!bindCondition.foldable) {
-            // We can't evaluate the condition. Evaluate it in query runtime.
-            bindings.map { case (id, expr) =>
-              val newExpr = If(bindCondition, expr, Literal.create(null, expr.dataType))
-              (id, newExpr)
-            }
-          } else {
-            // The bound condition can be evaluated.
-            bindCondition.eval() match {
-              // For filter condition, null is the same as false.
-              case null | false => Map.empty
-              case true => bindings
-            }
+          bindingExpr(condition, bindings) match {
+            // The bound condition was evaluated. For filter condition, null is the same as false.
+            case Literal(null, _) | Literal(false, BooleanType) => Map.empty
+            case Literal(true, BooleanType) => bindings
+            case bindCondition =>
+              // We can't evaluate the condition, because it is not foldable or its evaluation
+              // failed. Keep it in an `If`, see `tryEvalExpr`.
+              bindings.map { case (id, expr) =>
+                val newExpr = If(bindCondition, expr, Literal.create(null, expr.dataType))
+                (id, newExpr)
+              }
           }
         }
 

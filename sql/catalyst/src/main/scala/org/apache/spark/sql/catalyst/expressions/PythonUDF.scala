@@ -51,12 +51,41 @@ object PythonUDF {
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
-    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+    PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
   }
+
+  /**
+   * Whether `e` is a scalar Python UDF that runs in a Python worker, where it can be chained
+   * with the scalar Python UDFs around it. In-process UDFs never are: a nested in-process call
+   * is extracted into a separate operator, although sibling calls may share one. Rules that
+   * keep or build such chains use this rather than [[isScalarPythonUDF]].
+   */
+  def chainsInWorker(e: Expression): Boolean = {
+    isScalarPythonUDF(e) &&
+      e.asInstanceOf[PythonUDF].evalType != PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
+  }
+
+  /**
+   * The key that decides whether two Python UDF calls are the same call, evaluated once. A
+   * deterministic call is keyed by its canonical form, so identical calls share one evaluation. A
+   * nondeterministic call is keyed by itself: in `f(x) + f(x)` each call may return a different
+   * value, and only the calls' `resultId`s, which `canonicalized` drops, keep them apart.
+   *
+   * A call is deterministic only if its arguments are too (`deterministic`, not
+   * `udfDeterministic`). In `f(r(x)) = f(r(x))` with a nondeterministic `r`, each `f` call wraps
+   * its own draw of `r`; canonicalizing the `f` calls would drop the inner calls' `resultId`s as
+   * well and merge both sides into one call, compared with itself.
+   *
+   * Shared by `ExtractPythonUDFs` and `ExtractPythonUDFFromLambda`, so that calls the latter keeps
+   * apart when lifting them out of a lambda are not merged by the former afterwards.
+   */
+  def canonicalizeDeterministic(udf: PythonUDF): PythonUDF =
+    if (udf.deterministic) udf.canonicalized.asInstanceOf[PythonUDF] else udf
 
   /**
    * Whether `e` is a Python UDF that can be lifted out of a higher-order function's lambda by
@@ -169,8 +198,8 @@ object PythonUDF {
    *     each lifted UDF's argument, the `map_keys`/`map_values` desugar, the pairwise `array_sort`
    *     path), and nondeterministic expressions are not subexpression-eliminated, so the copies
    *     would evaluate independently and disagree - keeping the results misaligned. (This is
-   *     distinct from a nondeterministic UDF *call*, which `ExtractPythonUDFFromLambda.liftKey`
-   *     keeps distinct but well-defined.)
+   *     distinct from a nondeterministic UDF *call*, which [[canonicalizeDeterministic]] keeps
+   *     distinct but well-defined.)
    *   - a HOF (at any level) whose shape the rewrite does not model (see [[isRewritableShape]]).
    */
   def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
@@ -430,12 +459,13 @@ case class TranspiledPythonUDF(
     case other => other.children
   }
 
-  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF). Used to decide
-  // whether to preserve the UDF batch pipeline rather than inserting a Catalyst node in the middle
-  // of a Python UDF chain. Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF
-  // the latter is the aggregate function and its filter, so this said false for every UDAF.
+  // True when every argument is a plain PythonUDF (not a TranspiledPythonUDF) that runs in a
+  // worker. Used to decide whether to preserve the UDF batch pipeline rather than inserting a
+  // Catalyst node in the middle of a Python UDF chain; an in-process argument is not part of one.
+  // Reads `arguments`, not `pythonUDFExpr.children`: for an aggregate UDF the latter is the
+  // aggregate function and its filter, so this said false for every UDAF.
   def hasOnlyPythonUDFInputs: Boolean =
-    arguments.nonEmpty && arguments.forall(_.isInstanceOf[PythonUDF])
+    arguments.nonEmpty && arguments.forall(PythonUDF.chainsInWorker)
 }
 
 /**

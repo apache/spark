@@ -406,9 +406,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       left.output.head >= right.output.head,
       condition = None,
       joinType = Inner,
-      orderExpression = left.output.head - right.output.head,
-      toleranceAssertion = None,
-      direction = Backward)
+      tolerance = None,
+      direction = Backward,
+      leftSortExprs = Seq(left.output.head),
+      rightSortExprs = Seq(right.output.head),
+      orderExpression = Some(left.output.head - right.output.head))
   }
 
   assertSupportedInStreamingPlan(

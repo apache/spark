@@ -18,13 +18,14 @@
 package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkArithmeticException, SparkConf, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkNumberFormatException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Expression,
-  ExprId, GreaterThanOrEqual, Literal, NamedExpression, OuterReference, PlanExpression, Rand,
-  SubqueryExpression}
+  ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
+  PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
@@ -2510,6 +2511,112 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60577: FileSourceScanExec supports push down IN data filter with scalar subquery") {
+    def checkFileSourceScan(query: String, numScalarSubqueries: Int): Unit = {
+      val df = sql(query)
+      // `PushedFilters` is a part of the output of EXPLAIN, and of the plan description that is
+      // built when the query starts.
+      Seq(SimpleMode, FormattedMode).foreach(df.queryExecution.explainString(_))
+      checkAnswer(df, Seq.empty)
+      val fileSourceScanExec = collect(df.queryExecution.executedPlan) {
+        case f: FileSourceScanExec => f
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(fileSourceScanExec.size === 1)
+      val scalarSubquery = fileSourceScanExec.head.dataFilters.flatMap(_.collect {
+        case s: ScalarSubquery => s
+      })
+      assert(scalarSubquery.length === numScalarSubqueries)
+      // The `In` is not displayed in `PushedFilters`, but it is pushed down to skip the row group.
+      assert(!fileSourceScanExec.head.metadata("PushedFilters").contains("In("))
+      assert(fileSourceScanExec.head.metrics("numOutputRows").value === 0)
+    }
+
+    withTable("t1", "t2") {
+      // Parquet does not skip row groups by INT96 timestamps, which are the default.
+      withSQLConf(
+          SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1",
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+        Seq("t1" -> Seq(1, 2, 3), "t2" -> Seq(4, 5, 6)).foreach { case (table, ids) =>
+          ids.toDF("id").selectExpr(
+            "DATE_FROM_UNIX_DATE(id) AS d",
+            "TIMESTAMP_SECONDS(id) AS ts",
+            "CAST(id AS DECIMAL(10, 2)) AS dec").write.format("parquet").saveAsTable(table)
+        }
+
+        Seq(
+          "d" -> "DATE_FROM_UNIX_DATE(5)",
+          "ts" -> "TIMESTAMP_SECONDS(5)",
+          "dec" -> "CAST(5 AS DECIMAL(10, 2))").foreach { case (column, literal) =>
+          checkFileSourceScan(
+            s"SELECT * FROM t1 WHERE $column IN ($literal, (SELECT max($column) FROM t2))", 1)
+          val twoSubqueries = s"SELECT * FROM t1 WHERE $column IN " +
+            s"((SELECT min($column) FROM t2), (SELECT max($column) FROM t2))"
+          // `MergeSubplans` merges the two subqueries into one, unless subquery reuse is off.
+          checkFileSourceScan(twoSubqueries, 2)
+          withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
+            checkFileSourceScan(twoSubqueries, 2)
+          }
+        }
+
+        // `NOT IN` and an `IN` under `OR` hold the `In` below the top of the filter.
+        Seq(
+          "SELECT * FROM t1 WHERE d NOT IN (DATE_FROM_UNIX_DATE(5), (SELECT max(d) FROM t2))",
+          "SELECT * FROM t1 WHERE d IN (DATE_FROM_UNIX_DATE(5), (SELECT max(d) FROM t2)) " +
+            "OR dec IS NULL").foreach { query =>
+          val df = sql(query)
+          Seq(SimpleMode, FormattedMode).foreach(df.queryExecution.explainString(_))
+          df.collect()
+        }
+      }
+    }
+  }
+
+  test("SPARK-60569: FileSourceScanExec pushes down data filters with merged scalar subqueries") {
+    def checkFileSourceScan(query: String, answer: Seq[Row]): Unit = {
+      val df = sql(query)
+      checkAnswer(df, answer)
+      val fileSourceScanExec = collect(df.queryExecution.executedPlan) {
+        case f: FileSourceScanExec => f
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(fileSourceScanExec.size === 1)
+      // `MergeSubplans` merged the two subqueries into one, and each filter reads its result out
+      // of the struct the merged one returns.
+      val mergedSubqueryResults = fileSourceScanExec.head.dataFilters.flatMap(_.collect {
+        case g @ GetStructField(_: ScalarSubquery, _, _) => g
+      })
+      assert(mergedSubqueryResults.length === 2)
+      val pushedFilters = fileSourceScanExec.head.metadata("PushedFilters")
+      assert(pushedFilters.contains("GreaterThan(c1,ScalarSubquery#"))
+      assert(pushedFilters.contains("LessThan(c1,ScalarSubquery#"))
+      assert(fileSourceScanExec.head.metrics("numFiles").value === 1)
+      assert(fileSourceScanExec.head.metrics("numOutputRows").value === answer.size)
+    }
+
+    withTable("t1", "t2") {
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+        Seq(1, 2, 3).toDF("c1").write.format("parquet").saveAsTable("t1")
+        Seq(4, 5, 6).toDF("c2").write.format("parquet").saveAsTable("t2")
+
+        // The row group is skipped by `c1 > 4`.
+        checkFileSourceScan(
+          "SELECT * FROM t1 WHERE c1 > (SELECT min(c2) FROM t2) AND c1 < (SELECT max(c2) FROM t2)",
+          Seq.empty)
+        // The row group is skipped by `c1 < 1`.
+        checkFileSourceScan(
+          "SELECT * FROM t1 " +
+            "WHERE c1 > (SELECT min(c2) - 10 FROM t2) AND c1 < (SELECT max(c2) - 5 FROM t2)",
+          Seq.empty)
+        // The row group is kept by `c1 > -6` and `c1 < 6`, but not if the fields were swapped.
+        checkFileSourceScan(
+          "SELECT * FROM t1 " +
+            "WHERE c1 > (SELECT min(c2) - 10 FROM t2) AND c1 < (SELECT max(c2) FROM t2)",
+          Row(1) :: Row(2) :: Row(3) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-44562: Add OptimizeOneRowRelationSubquery in batch of Subquery") {
     withTempView("v1", "v2") {
       sql(
@@ -3224,6 +3331,203 @@ class SubquerySuite extends SharedSparkSession
             |""".stripMargin)
         assertContainsInSubqueryExec(falseDf)
         checkAnswer(falseDf, Seq(Row(1, 1)))
+      }
+    }
+  }
+
+  test("SPARK-60969: correlated equality on a cast from a scale-0 decimal under an aggregate") {
+    withTable("o", "i", "j", "s") {
+      sql("CREATE TABLE o USING parquet AS SELECT * FROM VALUES " +
+        "(-8446744073709551617), (1), (CAST(NULL AS BIGINT)) AS t(k)")
+      // 9999999999999999999 and -8446744073709551617 are the same BIGINT when wrapped around.
+      // 9999999999999999999 and -9999999999999999999 are out of the BIGINT range.
+      sql("CREATE TABLE i USING parquet AS SELECT * FROM VALUES " +
+        "(9999999999999999999BD), (-8446744073709551617BD), (-9999999999999999999BD), (1BD) " +
+        "AS t(d)")
+      sql("CREATE TABLE j USING parquet AS SELECT * FROM VALUES (1BD), (2BD), (2BD) AS t(d)")
+      sql("CREATE TABLE s USING parquet AS SELECT * FROM VALUES (1.0BD), (2.5BD) AS t(d)")
+
+      def check(
+          ansi: Boolean,
+          table: String,
+          cond: String,
+          domainJoin: Boolean,
+          expected: Seq[Row]): Unit = {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val df = sql(s"SELECT k, (SELECT count(*) FROM $table WHERE $cond) FROM o")
+          // The domain join scans the outer table once more.
+          assert(df.queryExecution.optimizedPlan.collectLeaves().size ==
+            (if (domainJoin) 3 else 2), cond)
+          checkAnswer(df, expected)
+        }
+      }
+      val min = new java.math.BigDecimal("-8446744073709551617")
+
+      // LEGACY wraps around, so two inner values are the same key.
+      check(ansi = false, "i", "CAST(d AS BIGINT) = o.k", domainJoin = true,
+        Seq(Row(min, 2), Row(1, 1), Row(null, 0)))
+      // ANSI is one-to-one under both equalities, unless the scale is not zero.
+      check(ansi = true, "j", "CAST(d AS BIGINT) = o.k", domainJoin = false,
+        Seq(Row(min, 0), Row(1, 1), Row(null, 0)))
+      check(ansi = true, "j", "CAST(d AS BIGINT) <=> o.k", domainJoin = false,
+        Seq(Row(min, 0), Row(1, 1), Row(null, 0)))
+      check(ansi = true, "s", "CAST(d AS BIGINT) = o.k", domainJoin = true,
+        Seq(Row(min, 0), Row(1, 1), Row(null, 0)))
+      // TRY is one-to-one under `=` which never matches NULL, but not under `<=>`.
+      check(ansi = false, "i", "try_cast(d AS BIGINT) = o.k", domainJoin = false,
+        Seq(Row(min, 1), Row(1, 1), Row(null, 0)))
+      check(ansi = false, "i", "try_cast(d AS BIGINT) <=> o.k", domainJoin = true,
+        Seq(Row(min, 1), Row(1, 1), Row(null, 2)))
+
+      // The correlated predicates are validated without the decorrelation framework.
+      withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+        Seq("CAST(d AS BIGINT) = o.k" -> "j", "try_cast(d AS BIGINT) = o.k" -> "i").foreach {
+          case (cond, table) =>
+            withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+              sql(s"SELECT k, (SELECT count(*) FROM $table WHERE $cond) FROM o").collect()
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60983: Propagate a constant into a comparison with a correlated scalar subquery") {
+    withTempView("t1", "t2") {
+      Seq((1, 2), (2, 3)).toDF("a", "b").createOrReplaceTempView("t1")
+      Seq((1, 2), (1, 1), (2, 3)).toDF("a", "b").createOrReplaceTempView("t2")
+      // The constant of `t1.a` is not looked up for `t2.a` in the condition of the subquery.
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE t1.a = 1 AND " +
+          "t1.b = (SELECT max(t2.b) FROM t2 WHERE t2.a = t1.a)"),
+        Row(1, 2))
+    }
+  }
+
+  test("SPARK-61444: COUNT bug with a result on zero rows that fails to evaluate") {
+    withTempView("o", "o2", "e", "i") {
+      Seq(1, 2).toDF("k").createOrReplaceTempView("o")
+      Seq(1, 2, 3).toDF("k").createOrReplaceTempView("o2")
+      Seq.empty[Int].toDF("k").createOrReplaceTempView("e")
+      Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
+      // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows. The query
+      // is still optimized and planned, and fails when it runs.
+      def checkFailsAtRuntime[T <: SparkThrowable : ClassTag](
+          query: String,
+          condition: String): Unit = withClue(query) {
+        val df = sql(query)
+        df.queryExecution.executedPlan
+        val e = intercept[T](df.collect())
+        assert(e.getCondition === condition)
+      }
+      def checkFailsWhileOptimized[T <: SparkThrowable : ClassTag](
+          query: String,
+          condition: String): Unit = withClue(query) {
+        val e = intercept[T](sql(query).queryExecution.executedPlan)
+        assert(e.getCondition === condition)
+      }
+
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // Every outer row has matching rows, so the result on zero rows is not used, and the
+        // queries must not fail while the subquery is rewritten.
+        // The top Aggregate, handled in RewriteCorrelatedScalarSubquery.constructLeftJoins.
+        checkAnswer(
+          sql("SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k) FROM o"),
+          Row(1, 0.05) :: Row(2, 10.0 / 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k, (SELECT CAST(coalesce(max(CAST(v AS STRING)), 'x') AS INT) " +
+            "FROM i WHERE i.k = o.k) FROM o"),
+          Row(1, 200) :: Row(2, 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o WHERE (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k) " +
+            "> 0.04"),
+          Row(1) :: Nil)
+        // A HAVING clause whose condition fails to evaluate on zero rows, handled in
+        // DecorrelateInnerQuery with the default confs.
+        checkAnswer(
+          sql("SELECT k, (SELECT count(*) FROM i WHERE i.k = o.k HAVING 10 / count(*) > 0) " +
+            "FROM o"),
+          Row(1, 2) :: Row(2, 1) :: Nil)
+        // A lower Aggregate, handled in DecorrelateInnerQuery.
+        checkAnswer(
+          sql("SELECT k, (SELECT max(c) FROM (SELECT 10 / count(*) c FROM i WHERE i.k = o.k)) " +
+            "FROM o"),
+          Row(1, 5.0) :: Row(2, 10.0) :: Nil)
+        // LATERAL, EXISTS and IN subqueries, also handled in DecorrelateInnerQuery.
+        checkAnswer(
+          sql("SELECT o.k, t.d FROM o, " +
+            "LATERAL (SELECT 10 / coalesce(max(i.v), 0) d FROM i WHERE i.k = o.k) t"),
+          Row(1, 0.05) :: Row(2, 10.0 / 300) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o WHERE " +
+            "EXISTS (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o.k)"),
+          Row(1) :: Row(2) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o WHERE " +
+            "5 IN (SELECT 1000 / coalesce(max(v), 0) FROM i WHERE i.k = o.k)"),
+          Row(1) :: Nil)
+
+        // A grouped subquery and EXISTS don't use the result on zero rows, so they don't fail
+        // for the outer row k = 3 of o2 either.
+        checkAnswer(
+          sql("SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k GROUP BY i.k) " +
+            "FROM o2"),
+          Row(1, 0.05) :: Row(2, 10.0 / 300) :: Row(3, null) :: Nil)
+        checkAnswer(
+          sql("SELECT k FROM o2 WHERE " +
+            "EXISTS (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k)"),
+          Row(1) :: Row(2) :: Row(3) :: Nil)
+
+        Seq(
+          "SELECT k, (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k) FROM o2",
+          "SELECT k FROM o2 WHERE (SELECT 10 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k) " +
+            "> 0.04",
+          "SELECT k, (SELECT count(*) FROM i WHERE i.k = o2.k HAVING 10 / count(*) > 0) FROM o2",
+          "SELECT k, (SELECT max(c) FROM (SELECT 10 / count(*) c FROM i WHERE i.k = o2.k)) " +
+            "FROM o2",
+          "SELECT o2.k, t.d FROM o2, " +
+            "LATERAL (SELECT 10 / coalesce(max(i.v), 0) d FROM i WHERE i.k = o2.k) t",
+          "SELECT k FROM o2 WHERE " +
+            "5 IN (SELECT 1000 / coalesce(max(v), 0) FROM i WHERE i.k = o2.k)"
+        ).foreach(checkFailsAtRuntime[SparkArithmeticException](_, "DIVIDE_BY_ZERO"))
+        checkFailsAtRuntime[SparkNumberFormatException](
+          "SELECT k, (SELECT CAST(coalesce(max(CAST(v AS STRING)), 'x') AS INT) " +
+            "FROM i WHERE i.k = o2.k) FROM o2",
+          "CAST_INVALID_INPUT")
+
+        // Without DecorrelateInnerQuery, the HAVING clause is handled in CASE 3 of
+        // RewriteCorrelatedScalarSubquery.constructLeftJoins.
+        withSQLConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false") {
+          checkAnswer(
+            sql("SELECT k, (SELECT count(*) FROM i WHERE i.k = o.k HAVING 10 / count(*) > 0) " +
+              "FROM o"),
+            Row(1, 2) :: Row(2, 1) :: Nil)
+          checkFailsAtRuntime[SparkArithmeticException](
+            "SELECT k, (SELECT count(*) FROM i WHERE i.k = o2.k HAVING 10 / count(*) > 0) " +
+              "FROM o2",
+            "DIVIDE_BY_ZERO")
+        }
+
+        // A failing expression without attributes or aggregates is also a column of the
+        // subquery, outside the conditional branch, so the query still fails while it is
+        // optimized, even when the outer table is empty.
+        Seq("o2", "e").foreach { outer =>
+          checkFailsWhileOptimized[SparkArithmeticException](
+            s"SELECT $outer.k, t.c, t.d FROM $outer, " +
+              s"LATERAL (SELECT count(*) c, 10 / 0 d FROM i WHERE i.k = $outer.k) t",
+            "DIVIDE_BY_ZERO")
+        }
+      }
+
+      // An expression can also fail to evaluate with ANSI mode off.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("SELECT k, (SELECT element_at(array(1, 2), CAST(count(v) AS INT)) FROM i " +
+            "WHERE i.k = o.k) FROM o"),
+          Row(1, 2) :: Row(2, 1) :: Nil)
+        checkFailsAtRuntime[SparkRuntimeException](
+          "SELECT k, (SELECT element_at(array(1, 2), CAST(count(v) AS INT)) FROM i " +
+            "WHERE i.k = o2.k) FROM o2",
+          "INVALID_INDEX_OF_ZERO")
       }
     }
   }

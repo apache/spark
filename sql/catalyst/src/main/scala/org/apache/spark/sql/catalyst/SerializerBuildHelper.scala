@@ -293,7 +293,11 @@ object SerializerBuildHelper {
     val nonNullOutput = CreateNamedStruct(fields.flatMap { case(fieldName, fieldExpr) =>
       argumentsForFieldSerializer(fieldName, fieldExpr)
     })
-    if (inputObject.nullable) {
+    // An empty struct has no field serializers that evaluate `inputObject`, so check it for null
+    // even when it is not nullable. Otherwise, the serializer would not refer to the input object,
+    // which `ExpressionEncoder` requires, and would skip its validation, e.g., the not-null and
+    // external type checks of a `Row` field.
+    if (inputObject.nullable || fields.isEmpty) {
       val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
       expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
     } else {

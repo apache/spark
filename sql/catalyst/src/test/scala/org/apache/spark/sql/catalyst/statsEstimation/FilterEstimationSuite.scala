@@ -25,8 +25,9 @@ import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -961,6 +962,92 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       condition,
       Seq(attrString -> colStatString),
       expectedRowCount = 10)
+  }
+
+  test("SPARK-60810: predicates on a read-side padded CHAR column use the column's stats") {
+    val padded = CharVarcharUtils.addPaddingForScan(
+      charAttr("cstring", 2).withExprId(attrString.exprId))
+    assert(padded match {
+      case CharVarcharUtils.ReadSidePadding(a: Attribute, _) => a.exprId == attrString.exprId
+      case _ => false
+    }, s"expected read-side padding over cstring, got $padded")
+    val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L)
+    // colStatString has 10 distinct values and no nulls over 10 rows.
+    Seq(
+      EqualTo(padded, Literal("A0")) -> 1,
+      EqualTo(Literal("A0"), padded) -> 1,
+      In(padded, Seq(Literal("A0"), Literal("A1"))) -> 2,
+      InSet(padded, Set(UTF8String.fromString("A0"), UTF8String.fromString("A1"))) -> 2,
+      IsNull(padded) -> 0).foreach { case (condition, expectedRows) =>
+      val filter = Filter(condition, child)
+      assert(filter.stats.rowCount.contains(BigInt(expectedRows)), condition)
+    }
+    // With no nulls IS NOT NULL keeps every row, which an unsupported predicate does too, so
+    // use a child with nulls. The update lands on the column's own stat (in a plan, the padding
+    // Project above passes it on): nullCount becomes 0, where scaling alone would give 3.
+    val childWithNulls = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+      attributeMap = AttributeMap(Seq(attrString -> colStatString.copy(nullCount = Some(4)))))
+    validateEstimatedStats(
+      Filter(IsNotNull(padded), childWithNulls),
+      Seq(attrString -> colStatString.copy(distinctCount = Some(6), nullCount = Some(0))),
+      expectedRowCount = 6)
+    // Under Not the predicate is estimated without update; the output stat is only scaled to
+    // the 9 remaining rows.
+    validateEstimatedStats(
+      Filter(Not(EqualTo(padded, Literal("A0"))), child),
+      Seq(attrString -> colStatString.copy(distinctCount = Some(9))),
+      expectedRowCount = 9)
+  }
+
+  test("SPARK-60810: equality on a string or binary column with a reported histogram") {
+    // DSv2 connectors can report a histogram for any type. Only numeric-like types have
+    // equi-height histograms, so string and binary columns fall back to their distinct count.
+    val histogram = Histogram(height = 1, Array(HistogramBin(lo = 0, hi = 10, ndv = 10)))
+    val stat = colStatString.copy(min = Some(UTF8String.fromString("A0")),
+      max = Some(UTF8String.fromString("A9")), histogram = Some(histogram))
+    val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+      attributeMap = AttributeMap(Seq(attrString -> stat)))
+    validateEstimatedStats(
+      Filter(EqualTo(attrString, Literal("A0")), child),
+      Seq(attrString -> stat.copy(distinctCount = Some(1))),
+      expectedRowCount = 1)
+
+    val attrBinary = AttributeReference("cbinary", BinaryType)()
+    val binaryStat = ColumnStat(distinctCount = Some(10), min = Some(Array[Byte](0)),
+      max = Some(Array[Byte](9)), nullCount = Some(0), avgLen = Some(1), maxLen = Some(1),
+      histogram = Some(histogram))
+    val binaryChild = StatsTestPlan(
+      outputList = Seq(attrBinary),
+      rowCount = 10,
+      attributeStats = AttributeMap(Seq(attrBinary -> binaryStat)))
+    assert(Filter(EqualTo(attrBinary, Literal(Array[Byte](1))), binaryChild).stats.rowCount
+      .contains(BigInt(1)))
+  }
+
+  test("SPARK-61724: predicates on datetime and ANSI interval columns with min/max") {
+    // The Long or Int values of the first four types are estimated like cint (1 to 10) and
+    // cint2 (7 to 16). Nanosecond timestamps cannot be converted to Double, so their min/max
+    // give no range: comparisons are not estimated, and equality and IN use the distinct count.
+    def nanos(micros: Int): Any = new TimestampNanosVal(micros, 1.toShort)
+    Seq[(DataType, Int => Any, Seq[Int])](
+      (TimestampNTZType, _.toLong, Seq(1, 3, 1, 4)),
+      (TimeType(), _.toLong, Seq(1, 3, 1, 4)),
+      (YearMonthIntervalType(), identity, Seq(1, 3, 1, 4)),
+      (DayTimeIntervalType(), _.toLong, Seq(1, 3, 1, 4)),
+      (TimestampNTZNanosType(9), nanos, Seq(1, 10, 2, 10))).foreach { case (dt, value, rows) =>
+      val (col, col2) = (AttributeReference("c", dt)(), AttributeReference("c2", dt)())
+      val child = StatsTestPlan(Seq(col, col2), rowCount = 10, AttributeMap(Seq(
+        col -> colStatInt.copy(min = Some(value(1)), max = Some(value(10))),
+        col2 -> colStatInt2.copy(min = Some(value(7)), max = Some(value(16))))))
+      Seq(
+        EqualTo(col, Literal(value(3), dt)),
+        LessThan(col, Literal(value(3), dt)),
+        In(col, Seq(Literal(value(3), dt), Literal(value(20), dt))),
+        LessThan(col, col2)).zip(rows).foreach { case (condition, expectedRows) =>
+        assert(Filter(condition, child).stats.rowCount.contains(BigInt(expectedRows)),
+          s"$dt: $condition")
+      }
+    }
   }
 
   test("ColumnStatsMap tests") {

@@ -1871,7 +1871,7 @@ def median(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a numeric, interval, or time.
+        A column that evaluates to a numeric, interval, time, or nanosecond-precision timestamp.
 
     Returns
     -------
@@ -12839,6 +12839,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -12993,6 +12994,7 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -14481,7 +14483,7 @@ def window(
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
+    def check_string_field(field: Any, fieldName: str) -> None:
         if not field or type(field) is not str:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
@@ -14748,6 +14750,7 @@ def to_timestamp_ltz(
     timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampType` timestamp values.
         A column that evaluates to a string.
@@ -15246,6 +15249,41 @@ def xxh3_128(col: "ColumnOrName") -> Column:
     [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
     """
     return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
+def farm_fingerprint(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit fingerprint of the argument, computed with the FarmHash Fingerprint64
+    algorithm.
+
+    The result matches ``FARM_FINGERPRINT`` in BigQuery / GoogleSQL and does not change across
+    Spark versions, so it is safe to persist. String input is hashed as its UTF-8 bytes.
+
+    .. versionadded:: 4.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column to fingerprint, which must have string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.farm_fingerprint('a').alias('h')).collect()
+    [Row(h=-2743780590904673122)]
+    """
+    return _invoke_function_over_columns("farm_fingerprint", col)
 
 
 @_try_remote_functions
@@ -23123,6 +23161,13 @@ def from_json(
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
+      ``spark.sql.charVarchar.standardSemantics.enabled``.
 
     Examples
     --------
@@ -24525,6 +24570,15 @@ def from_xml(
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
     * ``spark.sql.xml.variant.respectInferSchema``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. With this flag, CHAR/VARCHAR
+      map keys are length-checked without padding or trimming; with only
+      ``spark.sql.preserveCharVarcharTypeInfo``, short CHAR keys are padded and
+      over-length keys raise ``EXCEED_LIMIT_LENGTH``.
 
     Examples
     --------
@@ -24807,6 +24861,9 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     Affected by these public SQL configurations:
 
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. When CHAR is first-class, padding can change
+      inferred field count and types.
 
     Examples
     --------
@@ -26462,6 +26519,12 @@ def from_csv(
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``.
 
     Examples
     --------

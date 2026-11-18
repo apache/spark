@@ -48,6 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
@@ -863,6 +864,74 @@ trait CharVarcharTestSuite extends QueryTest {
          """.stripMargin),
           Row(1))
       }
+    }
+  }
+
+  test("SPARK-60876: char type comparison: outer reference returned by a LATERAL subquery") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(c CHAR(5), s STRING, v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t1 VALUES ('ab', 'x', 'v1'), ('cd', 'y', 'v2')")
+      sql(s"CREATE TABLE t2(c CHAR(8)) USING $format")
+      sql("INSERT INTO t2 VALUES ('ab')")
+      Seq("true", "false").foreach { readSidePadding =>
+        withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> readSidePadding) {
+          Seq(
+            "LATERAL (SELECT t1.c) l WHERE l.c = 'ab'",
+            "LATERAL (SELECT t1.c AS k) l WHERE l.k = 'ab'",
+            "LATERAL (SELECT t1.*) l WHERE l.c IN ('ab', 'xyz')",
+            "LATERAL (SELECT t1.c AS k) l, t2 WHERE l.k = t2.c").foreach { q =>
+            checkAnswer(sql(s"SELECT t1.s FROM t1, $q"), Row("x"))
+          }
+        }
+      }
+      Seq(
+        "SELECT l.c FROM t1, LATERAL (SELECT t1.c) l",
+        "SELECT l.k FROM t1, LATERAL (SELECT t1.c AS k) l",
+        "SELECT l.c FROM t1, LATERAL (SELECT t1.*) l").foreach { q =>
+        checkColType(sql(q).schema.head, CharType(5))
+      }
+      checkColType(
+        sql("SELECT l.v FROM t1, LATERAL (SELECT t1.v) l").schema.head, VarcharType(3))
+    }
+  }
+
+  test("SPARK-60876: char type comparison: outer reference returned by a correlated subquery") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(c CHAR(5), s STRING) USING $format")
+      sql("INSERT INTO t1 VALUES ('ab', 'x'), ('cd', 'y')")
+      sql(s"CREATE TABLE t2(i INT) USING $format")
+      sql("INSERT INTO t2 VALUES (1)")
+      checkAnswer(sql(
+        """SELECT s FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM (SELECT t1.c AS k FROM t2) x WHERE x.k = 'ab')
+        """.stripMargin),
+        Row("x"))
+      checkAnswer(sql(
+        """SELECT s FROM t1 WHERE s IN (
+          |  SELECT x.s FROM (SELECT t1.c AS k, t1.s FROM t2) x WHERE x.k = 'ab')
+        """.stripMargin),
+        Row("x"))
+      checkAnswer(sql(
+        """SELECT s, (SELECT max(x.k) FROM (SELECT t1.c AS k) x WHERE x.k = 'ab') FROM t1
+        """.stripMargin),
+        Seq(Row("x", "ab   "), Row("y", null)))
+    }
+  }
+
+  test("SPARK-60876: CTAS over an outer reference returned by a LATERAL subquery") {
+    withTable("t1", "ct", "ct_str") {
+      sql(s"CREATE TABLE t1(c CHAR(5), v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t1 VALUES ('ab', 'xy')")
+      sql(s"CREATE TABLE ct USING $format AS SELECT l.k, l.w " +
+        "FROM t1, LATERAL (SELECT t1.c AS k, t1.v AS w) l")
+      checkColType(spark.table("ct").schema(0), CharType(5))
+      checkColType(spark.table("ct").schema(1), VarcharType(3))
+      checkAnswer(sql("SELECT k FROM ct WHERE k = 'ab'"), Row("ab   "))
+      assertLengthCheckFailure("INSERT INTO ct VALUES ('abcdefgh', 'xy')")
+      // A cast in the query keeps STRING.
+      sql(s"CREATE TABLE ct_str USING $format AS SELECT l.k " +
+        "FROM t1, LATERAL (SELECT CAST(t1.c AS STRING) AS k) l")
+      assert(CharVarcharUtils.getRawType(spark.table("ct_str").schema.head.metadata).isEmpty)
     }
   }
 
@@ -1846,6 +1915,30 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
           fragment = "SELECT cast('a' AS CHAR(:n))",
           start = 0,
           stop = 27))
+    }
+  }
+
+  test("SPARK-58942: CHAR column vs string literal under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("contacts", "contacts_by_code") {
+        sql("CREATE TABLE contacts (code CHAR(4), name VARCHAR(10)) USING parquet")
+        sql("INSERT INTO contacts VALUES ('ab', 'Ada')")
+        // A predicate on a CHAR partition column goes through partition pruning instead of a
+        // scan filter, so check the same predicates against a table partitioned by the column.
+        sql("CREATE TABLE contacts_by_code (name VARCHAR(10), code CHAR(4)) USING parquet " +
+          "PARTITIONED BY (code)")
+        sql("INSERT INTO contacts_by_code VALUES ('Ada', 'ab')")
+        Seq("contacts", "contacts_by_code").foreach { t =>
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab'"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab  '"), Row("Ada"))
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab', 'cd')"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab  ', 'cd')"), Row("Ada"))
+        }
+        checkAnswer(
+          sql("SELECT name FROM contacts WHERE code COLLATE UTF8_BINARY_RTRIM = " +
+            "'ab' COLLATE UTF8_BINARY_RTRIM"),
+          Row("Ada"))
+      }
     }
   }
 
@@ -3204,6 +3297,17 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
         key = "abcd",
         dataTypeSql = "VARCHAR(3)")
 
+      // A name longer than the 128-character echo cap is truncated with a trailing "..." in the
+      // error, as for JSON object names.
+      val longName = "a" * 200
+      assertUnsupportedXmlMapKey(
+        s"""SELECT from_xml(
+          |  '<ROW><m><$longName>1</$longName></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a" * 128 + "...",
+        dataTypeSql = "CHAR(2)")
+
       checkAnswer(
         sql("""SELECT from_xml(
           |  '<ROW><m a="1"><bc>2</bc></m></ROW>',
@@ -4278,6 +4382,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   }
 }
 
+@DataSourceV2Test
 class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
   with SharedSparkSession {
   override def format: String = "foo"

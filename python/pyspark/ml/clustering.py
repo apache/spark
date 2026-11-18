@@ -156,6 +156,7 @@ class _GaussianMixtureParams(
     HasTol,
     HasAggregationDepth,
     HasWeightCol,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`GaussianMixture` and :py:class:`GaussianMixtureModel`.
@@ -418,11 +419,13 @@ class GaussianMixture(
         seed: Optional[int] = None,
         aggregationDepth: int = 2,
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                 aggregationDepth=2, weightCol=None)
+                 aggregationDepth=2, weightCol=None, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj(
@@ -448,11 +451,13 @@ class GaussianMixture(
         seed: Optional[int] = None,
         aggregationDepth: int = 2,
         weightCol: Optional[str] = None,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "GaussianMixture":
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
-                  aggregationDepth=2, weightCol=None)
+                  aggregationDepth=2, weightCol=None, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
 
         Sets params for GaussianMixture.
         """
@@ -521,6 +526,13 @@ class GaussianMixture(
         Sets the value of :py:attr:`aggregationDepth`.
         """
         return self._set(aggregationDepth=value)
+
+    @since("4.4.0")
+    def setIntermediateStorageLevel(self, value: str) -> "GaussianMixture":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class GaussianMixtureSummary(ClusteringSummary):
@@ -796,12 +808,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         weightCol: Optional[str] = None,
         solver: str = "auto",
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                  distanceMeasure="euclidean", weightCol=None, solver="auto", \
-                 maxBlockSizeInMB=0.0)
+                 maxBlockSizeInMB=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
@@ -828,12 +842,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         weightCol: Optional[str] = None,
         solver: str = "auto",
         maxBlockSizeInMB: float = 0.0,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "KMeans":
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
                   distanceMeasure="euclidean", weightCol=None, solver="auto", \
-                  maxBlockSizeInMB=0.0)
+                  maxBlockSizeInMB=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
 
         Sets params for KMeans.
         """

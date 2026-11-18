@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
@@ -53,7 +53,9 @@ import org.apache.spark.util.collection.BitSet
 // that DataFrame, instead of the optimized query plan, as building DataFrame optimizes the
 // query plan again. This trait defines a `storeAnalyzedQuery` function which will be called at
 // the end of analysis, and implementations should copy the input query plan into a non-child
-// field so that it won't be transformed by the optimizer.
+// field so that it won't be transformed by the optimizer. `storeAnalyzedQuery` may also take
+// from the analyzed plan what the command needs later, as `AddCheckConstraint` decides there
+// whether to store a predicate. `NormalizePlan` calls it too, on plans in any phase.
 trait KeepAnalyzedQuery extends Command {
   def storeAnalyzedQuery(): Command
 }
@@ -577,7 +579,7 @@ trait V2CreateTableAsSelectPlan
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
   }
 
-  override lazy val resolved: Boolean = childrenResolved && {
+  override lazy val resolved: Boolean = childrenResolved && expressions.forall(_.resolved) && {
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
@@ -637,11 +639,17 @@ trait V2CreateTablePlan extends LogicalPlan {
     name.asInstanceOf[ResolvedIdentifier].identifier
   }
 
+  /** The requested write ordering, empty when the statement did not ask for one. */
+  def writeOrdering: Seq[V2SortOrder]
+
   /**
    * Creates a copy of this node with the new partitioning transforms. This method is used to
    * rewrite the partition transforms normalized according to the table schema.
    */
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
+
+  /** Creates a copy of this node with the new write ordering. */
+  def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan
 }
 
 /**
@@ -652,7 +660,10 @@ case class CreateTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    ignoreIfExists: Boolean)
+    ignoreIfExists: Boolean,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -662,6 +673,10 @@ case class CreateTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -710,13 +725,20 @@ case class CreateTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(
@@ -920,7 +942,10 @@ case class ReplaceTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    orCreate: Boolean)
+    orCreate: Boolean,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -930,6 +955,10 @@ case class ReplaceTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -946,7 +975,10 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
@@ -955,6 +987,10 @@ case class ReplaceTableAsSelect(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(

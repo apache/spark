@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
+import org.apache.spark.sql.connector.read.ScanContext;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -40,4 +41,21 @@ public interface SupportsRead extends Table {
    *                string-to-string map.
    */
   ScanBuilder newScanBuilder(CaseInsensitiveStringMap options);
+
+  /**
+   * Returns a {@link ScanBuilder} configured with read options and planning context.
+   *
+   * <p>The default implementation delegates to
+   * {@link #newScanBuilder(CaseInsensitiveStringMap)}. Data sources can override this method to use
+   * the planning context during builder creation. Calls to the options-only overload do not provide
+   * subquery context.
+   *
+   * @param context the planning context for this scan
+   * @param options the options for reading, which is an immutable case-insensitive
+   *                string-to-string map
+   * @since 4.4.0
+   */
+  default ScanBuilder newScanBuilder(ScanContext context, CaseInsensitiveStringMap options) {
+    return newScanBuilder(options);
+  }
 }

@@ -23,8 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, EvalMode, Liter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.connector.PartitionPredicateField
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
+@DataSourceV2Test
 class PushDownUtilsSuite extends SparkFunSuite {
 
   test("SPARK-59572: only a runtime partition predicate keeps a key it cannot evaluate") {

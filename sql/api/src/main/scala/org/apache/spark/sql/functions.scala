@@ -6789,6 +6789,20 @@ object functions {
   def xxh3_128(col: Column): Column = Column.fn("xxh3_128", col)
 
   /**
+   * Returns a 64-bit fingerprint of the argument, computed with the FarmHash Fingerprint64
+   * algorithm. The result matches `FARM_FINGERPRINT` in BigQuery / GoogleSQL and does not change
+   * across Spark versions. String input is hashed as its UTF-8 bytes.
+   *
+   * @param col
+   *   the column to fingerprint, which must have string or binary type.
+   * @group hash_funcs
+   * @since 4.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
+   */
+  def farm_fingerprint(col: Column): Column = Column.fn("farm_fingerprint", col)
+
+  /**
    * Returns null if the condition is true, and throws an exception otherwise.
    *
    * @param c
@@ -12601,7 +12615,8 @@ object functions {
    * @param s
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
    *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
-   *   a string, date, timestamp, or numeric.
+   *   a string, date, timestamp, or numeric. A numeric input is cast to a string and then parsed
+   *   with `fmt`.
    * @param fmt
    *   A date time pattern detailing the format of `s` when `s` is a string. A column that
    *   evaluates to a string.
@@ -12660,6 +12675,7 @@ object functions {
    *
    * @param s
    *   Column values to convert. A column that evaluates to a string, date, timestamp, or numeric.
+   *   A numeric input is cast to a string and then parsed with `format`.
    * @param format
    *   Format to use to convert timestamp values. A column that evaluates to a string.
    * @group datetime_funcs

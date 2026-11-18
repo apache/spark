@@ -83,7 +83,9 @@ options { tokenVocab = SqlBaseLexer; }
            la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
-           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
+           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN ||
+           (la == GAP && _input.LA(3) == FILL && _input.LA(4) == LEFT_PAREN &&
+            (_input.LA(5) == PARTITION || _input.LA(5) == ORDER) && _input.LA(6) == BY);
   }
 
   /**
@@ -876,6 +878,8 @@ createTableClauses
      skewSpec |
      clusterBySpec |
      bucketSpec |
+     writeDistributionSpec |
+     writeOrderingSpec |
      rowFormat |
      createFileFormat |
      locationSpec |
@@ -1307,6 +1311,40 @@ binByClause
       RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
     ;
 
+gapFillClause
+    : GAP FILL LEFT_PAREN
+        (PARTITION BY partitionCol+=multipartIdentifier
+          (COMMA partitionCol+=multipartIdentifier)*)?
+        ORDER BY timeCol=multipartIdentifier
+        BIN WIDTH binWidth=expression
+        (ALIGN TO origin=expression
+          | RANGE BETWEEN rangeStart=valueExpression AND rangeEnd=valueExpression
+          | gapFillFillClause
+          | MAX GAP maxGap=expression
+          | BIN_START (AS binStartAlias=errorCapturingIdentifier)?
+          | IS_GENERATED (AS isGeneratedAlias=errorCapturingIdentifier)?
+        )*
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
+    ;
+
+gapFillFillClause
+    : FILL LEFT_PAREN fillColumns+=gapFillColumn (COMMA fillColumns+=gapFillColumn)* RIGHT_PAREN
+    ;
+
+gapFillColumn
+    : multipartIdentifier gapFillMethod
+    ;
+
+gapFillMethod
+    : LINEAR
+    | FFILL
+    | FORWARD FILL
+    | BFILL
+    | BACKWARD FILL
+    | CONSTANT fillValue=expression
+    | NULL
+    ;
+
 lateralView
     : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
@@ -1329,6 +1367,7 @@ relationExtension
     | pivotClause
     | unpivotClause
     | binByClause
+    | gapFillClause
     ;
 
 joinRelation
@@ -1592,6 +1631,24 @@ transform
 transformArgument
     : qualifiedName
     | constant
+    ;
+
+writeDistributionSpec
+    : DISTRIBUTED BY PARTITION
+    ;
+
+writeOrderingSpec
+    : LOCALLY? ORDERED BY writeOrder
+    | UNORDERED
+    ;
+
+writeOrder
+    : fields+=writeOrderField (COMMA fields+=writeOrderField)*
+    | LEFT_PAREN fields+=writeOrderField (COMMA fields+=writeOrderField)* RIGHT_PAREN
+    ;
+
+writeOrderField
+    : transform direction=(ASC | DESC)? (NULLS nullOrder=(FIRST | LAST))?
     ;
 
 expression
@@ -2375,6 +2432,7 @@ operatorPipeRightSide
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
     | binByClause
+    | gapFillClause
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
@@ -2423,9 +2481,11 @@ ansiNonReserved
     | AT
     | ATOMIC
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2465,6 +2525,7 @@ ansiNonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONTAINS
     | CONTINUE
     | COST
@@ -2502,6 +2563,7 @@ ansiNonReserved
     | DIRECTORY
     | DISTANCE
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2524,18 +2586,22 @@ ansiNonReserved
     | EXTENDED
     | EXTERNAL
     | EXTRACT
+    | FFILL
     | FIELDS
     | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -2566,6 +2632,7 @@ ansiNonReserved
     | INTEGER
     | INTERVAL
     | INVOKER
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
@@ -2586,10 +2653,12 @@ ansiNonReserved
     | LIKE
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCATION
     | LOCK
     | LOCKS
@@ -2633,6 +2702,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTPUTFORMAT
@@ -2758,6 +2828,7 @@ ansiNonReserved
     | UNIFORM
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2842,9 +2913,11 @@ nonReserved
     | ATOMIC
     | AUTHORIZATION
     | AUTO
+    | BACKWARD
     | BEGIN
     | BERNOULLI
     | BETWEEN
+    | BFILL
     | BIGINT
     | BIN
     | BIN_DISTRIBUTE_RATIO
@@ -2893,6 +2966,7 @@ nonReserved
     | CONCATENATE
     | CONDITION
     | CONDITIONAL
+    | CONSTANT
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -2939,6 +3013,7 @@ nonReserved
     | DISTANCE
     | DISTINCT
     | DISTRIBUTE
+    | DISTRIBUTED
     | DIV
     | DO
     | DOUBLE
@@ -2967,10 +3042,12 @@ nonReserved
     | EXTRACT
     | FALSE
     | FETCH
+    | FFILL
     | FILTER
     | FIELDS
     | FILE
     | FILEFORMAT
+    | FILL
     | FIRST
     | FLOAT
     | FLOW
@@ -2979,10 +3056,12 @@ nonReserved
     | FOREIGN
     | FORMAT
     | FORMATTED
+    | FORWARD
     | FROM
     | FOUND
     | FUNCTION
     | FUNCTIONS
+    | GAP
     | GENERATED
     | GEOGRAPHY
     | GEOMETRY
@@ -3019,6 +3098,7 @@ nonReserved
     | INTO
     | INVOKER
     | IS
+    | IS_GENERATED
     | ITEMS
     | ITERATE
     | JSON
@@ -3041,10 +3121,12 @@ nonReserved
     | LONG
     | ILIKE
     | LIMIT
+    | LINEAR
     | LINES
     | LIST
     | LOAD
     | LOCAL
+    | LOCALLY
     | LOCALTIME
     | LOCATION
     | LOCK
@@ -3095,6 +3177,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDERED
     | ORDINALITY
     | OUT
     | OUTER
@@ -3234,6 +3317,7 @@ nonReserved
     | UNKNOWN
     | UNLOCK
     | UNNEST
+    | UNORDERED
     | UNPIVOT
     | UNSET
     | UNTIL

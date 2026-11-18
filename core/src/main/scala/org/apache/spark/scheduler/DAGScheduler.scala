@@ -1436,18 +1436,9 @@ private[spark] class DAGScheduler(
     val consumerRDDs = new HashSet[RDD[_]]            // RDDs that READ a pipelined shuffle
     val narrowChildren = new HashMap[RDD[_], ListBuffer[RDD[_]]]
     val reliablyCheckpointed = new HashSet[RDD[_]]     // RDDs with a reliable checkpoint pending
-    var hasNonDefaultResourceProfile = false          // any member RDD with a non-default RP
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
       if (rdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]])) {
         reliablyCheckpointed += rdd
-      }
-      // An RDD's EFFECTIVE profile is its explicit one, or the default when unset. The slot check
-      // measures capacity against the default profile (see rejectUnadmittablePipelinedGroup), so
-      // the whole group must run on the default profile; any explicit non-default profile on a
-      // member makes the group span profiles (against the default the rest use) and is rejected.
-      val rp = rdd.getResourceProfile()
-      if (rp != null && rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
-        hasNonDefaultResourceProfile = true
       }
       rdd.dependencies.foreach {
         case pd: PipelinedShuffleDependency[_, _, _] =>
@@ -1478,6 +1469,19 @@ private[spark] class DAGScheduler(
     // profile -- that both spans profiles (against the default the other members use) and would be
     // admitted against the wrong (default) capacity pool. This is a real check, not just a
     // documented assumption: nothing else enforces it.
+    //
+    // Check only the members' within-stage chains, rooted at the result stage and at each
+    // pipelined producer, the only stages this job runs. A materialized regular prefix (see
+    // JobShuffleShape) never runs, so its profile is not a member's. An RDD's EFFECTIVE profile is
+    // its explicit one, or the default when unset.
+    val usesDefaultProfile = (r: RDD[_]) => {
+      val rp = r.getResourceProfile()
+      rp == null || rp.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    }
+    val memberVisited = new HashSet[RDD[_]]
+    val hasNonDefaultResourceProfile = (Iterator.single(finalRDD) ++ producerRoots).exists {
+      root => !traverseParentRDDsWithinStage(root, usesDefaultProfile, memberVisited)
+    }
     if (hasNonDefaultResourceProfile) {
       throw pipelinedUnsupportedError(
         "a pipelined group member with a non-default resource profile (the whole group must run " +
@@ -2039,7 +2043,7 @@ private[spark] class DAGScheduler(
    * Cleanup the jobs of query execution tracked in the DAGScheduler.
    */
   def cleanupQueryJobs(executionId: Long): Unit = {
-    logInfo(s"Asked to cleanup jobs for query execution $executionId")
+    logInfo(log"Asked to cleanup jobs for query execution ${MDC(EXECUTION_ID, executionId)}")
     eventProcessLoop.post(CleanupQueryJobs(executionId))
   }
 
@@ -2821,6 +2825,18 @@ private[spark] class DAGScheduler(
           "map output to produce statistics from. This is not supported."))
       return
     }
+    // A map-stage job also runs its missing ancestor stages, and submitStage co-schedules a
+    // pipelined producer with the stage reading it, but none of handleJobSubmitted's pipelined
+    // setup applies here (shape check, gang admission, idiom checks, run epoch, group-atomic
+    // failure). A pipelined shuffle anywhere below `dependency` is the pipelined-below-regular
+    // shape that handleJobSubmitted rejects, so reject it here too, before any stage is created.
+    if (rddGraphHasPipelinedDependency(dependency.rdd)) {
+      val e = pipelinedUnsupportedError("a map-stage job that depends on a pipelined shuffle")
+      logWarning(log"Rejecting map-stage job ${MDC(JOB_ID, jobId)}: unsupported " +
+        log"pipelined-shuffle idiom", e)
+      listener.jobFailed(e)
+      return
+    }
     // Submitting this map stage might still require the creation of some parent stages, so make
     // sure that happens.
     var finalStage: ShuffleMapStage = null
@@ -3143,8 +3159,9 @@ private[spark] class DAGScheduler(
           // re-fetches them; updateMapOutput on its own only invalidates the driver-side
           // serialized cache.
           mapOutputTracker.incrementEpoch()
-          logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId after " +
-            s"$newCount downstream consumer successes")
+          logInfo(log"Test injection: corrupted mapper-0 of shuffle " +
+            log"${MDC(SHUFFLE_ID, shuffleId)} after ${MDC(COUNT, newCount)} downstream " +
+            log"consumer successes")
         }
       }
     }
@@ -3176,8 +3193,8 @@ private[spark] class DAGScheduler(
         // re-fetches them; updateMapOutput on its own only invalidates the driver-side
         // serialized cache.
         mapOutputTracker.incrementEpoch()
-        logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId before result-stage " +
-          s"submission")
+        logInfo(log"Test injection: corrupted mapper-0 of shuffle " +
+          log"${MDC(SHUFFLE_ID, shuffleId)} before result-stage submission")
       }
     }
   }
@@ -3401,6 +3418,17 @@ private[spark] class DAGScheduler(
 
         // Abort execution
         return
+      case e: OutOfMemoryError if Utils.isJavaArraySizeLimitExceeded(e) =>
+        // The task binary is too large for a Java array. Report it with a user-facing error and
+        // without the OutOfMemoryError as cause, so it is not mistaken for heap exhaustion.
+        val failure = JavaArraySizeLimitExceeded.forTaskBinary(e, stage.id)
+        logError(log"Failed to serialize the task binary of ${MDC(STAGE, stage)} because it " +
+          log"exceeded Java's maximum array size: ${MDC(ERROR, failure.jvmMessage)}")
+        abortStage(stage, failure.getMessage, Some(failure))
+        runningStages -= stage
+
+        // Abort execution
+        return
       case e: Throwable =>
         abortStage(stage, s"Task serialization failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
@@ -3501,10 +3529,12 @@ private[spark] class DAGScheduler(
       val id = updates.id
       try {
         // Find the corresponding accumulator on the driver and update it
-        val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
-          case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
-          case None =>
+        val acc: AccumulatorV2[Any, Any] = {
+          val accum = AccumulatorContext.getOrNull(id)
+          if (accum == null) {
             throw SparkCoreErrors.accessNonExistentAccumulatorError(id)
+          }
+          accum.asInstanceOf[AccumulatorV2[Any, Any]]
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
         if (acc.isInstanceOf[LastAttemptAccumulator[_, _, _]]) {
@@ -5048,11 +5078,11 @@ private[spark] class DAGScheduler(
       s"MapOutputTracker.${ex.methodName} with shuffleId=${ex.shuffleId}"
     if (stage.isDefined) {
       abortStage(stage.get, reason, Some(ex))
-      logWarning(s"Aborting stage because of $reason. It is possible that the stage is " +
-        "being cancelled.")
+      logWarning(log"Aborting stage because of ${MDC(REASON, reason)}. It is possible that " +
+        log"the stage is being cancelled.")
     } else {
-      logWarning(s"Tried aborting stage because of $reason, but the stage was not found. " +
-        "It is possible that the stage has been cancelled earlier.")
+      logWarning(log"Tried aborting stage because of ${MDC(REASON, reason)}, but the stage " +
+        log"was not found. It is possible that the stage has been cancelled earlier.")
     }
   }
 
