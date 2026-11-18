@@ -2030,6 +2030,21 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       cached.unpersist()
     }
   }
+
+  test("SPARK-61930: reordering inner joins does not move a throwable filter condition into " +
+    "a lower join") {
+    withTable("s") {
+      Seq((-1, 10), (1, 20)).toDF("id", "value").write.saveAsTable("s")
+      // The join with w removes the row whose id is -1, so raise_error is not evaluated on it.
+      val df = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |WHERE CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+    }
+  }
 }
 
 class ThreadLeakInSortMergeJoinSuite

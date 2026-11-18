@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, If, IsNull, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -125,5 +125,26 @@ class JoinOptimizationSuite extends PlanTest {
       val optimized = Optimize.execute(queryAnswerPair._1.analyze)
       comparePlans(optimized, queryAnswerPair._2.analyze)
     }
+  }
+
+  test("SPARK-61930: reorder inner joins without moving a throwable condition into a join") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val z = testRelation.subquery("z")
+
+    // A throwable condition stays above the joins, so that it is not evaluated on the rows that
+    // a join removes. The first one could go into the condition of the first join, and the
+    // second one into that of the last join.
+    def raiseUnless(cond: Expression): Expression =
+      If(cond, Literal(true), IsNull(RaiseError(Literal("boom"))))
+    val throwables = raiseUnless("x.a".attr > 0) && raiseUnless("y.d".attr === "z.c".attr)
+    val query = x.join(y).join(z)
+      .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr) && throwables)
+    val answer = x.join(z, condition = Some("x.b".attr === "z.b".attr))
+      .join(y, condition = Some("y.d".attr === "z.a".attr))
+      .where(throwables)
+      .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
+
+    comparePlans(Optimize.execute(query.analyze), answer.analyze)
   }
 }

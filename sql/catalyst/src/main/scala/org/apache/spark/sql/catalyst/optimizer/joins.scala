@@ -44,6 +44,16 @@ import org.apache.spark.util.Utils
  */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
+   * Returns whether `cond` can go into the condition of a join. A throwable condition can not:
+   * the first join that covers its references can be below the filter or the join that it is
+   * written in, where it would be evaluated on rows that a join above removes, and it may fail on
+   * them. It stays in the [[Filter]] above all the joins instead, as in
+   * [[PushPredicateThroughJoin]].
+   */
+  private def canBeJoinCondition(cond: Expression): Boolean =
+    canEvaluateWithinJoin(cond) && !cond.throwable
+
+  /**
    * Join a list of plans together and push down the conditions into them.
    *
    * The joined plan are picked from left to right, prefer those has at least one join condition.
@@ -57,7 +67,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
-      val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
+      val (joinConditions, others) = conditions.partition(canBeJoinCondition)
       val ((left, leftJoinType), (right, rightJoinType)) = (input(0), input(1))
       val innerJoinType = (leftJoinType, rightJoinType) match {
         case (Inner, Inner) => Inner
@@ -86,7 +96,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
-        e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
+        e => e.references.subsetOf(joinedRefs) && canBeJoinCondition(e))
       val joined = Join(left, right, innerJoinType,
         joinConditions.reduceLeftOption(And), JoinHint.NONE)
 
