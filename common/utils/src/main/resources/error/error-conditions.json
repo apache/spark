@@ -1250,7 +1250,7 @@
   },
   "COLUMNAR_UDF_RESULT_IS_ARGUMENT" : {
     "message" : [
-      "The columnar function <name> returned one of its argument columns, or a field of one. It must return a vector of its own, which Spark closes."
+      "The columnar function <name> returned one of its argument columns, or a vector inside one. It must return a vector of its own, which Spark closes."
     ],
     "sqlState" : "39000"
   },

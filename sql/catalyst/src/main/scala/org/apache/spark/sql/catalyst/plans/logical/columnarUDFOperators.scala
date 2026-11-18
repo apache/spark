@@ -33,6 +33,11 @@ case class EvalColumnarUDFs(
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
+  // It outputs one row per row of its child.
+  override def maxRows: Option[Long] = child.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
   final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_COLUMNAR_UDF)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): EvalColumnarUDFs =

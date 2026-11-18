@@ -30,6 +30,7 @@ import org.apache.spark.sql.columnar.ColumnarScalarFunction
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types.{DataType, StructType, UserDefinedType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
@@ -133,11 +134,19 @@ case class EvalColumnarUDFsExec(
 
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeResults()))
 
-        // Whether `vector` is `column`, or one of the fields of `column` if it is a struct.
+        // Whether `vector` is `column` or a vector inside it. A writable vector, which the
+        // vectorized readers and `RowToColumnarExec` produce, gives its children for every
+        // type that has them: the fields of a struct, the elements of an array, the keys and
+        // values of a map. Other vectors are only known to give the fields of a struct.
         private def isPartOf(column: ColumnVector, vector: ColumnVector): Boolean = {
-          (column eq vector) || (column.dataType() match {
-            case s: StructType => s.fields.indices.exists(i => isPartOf(column.getChild(i), vector))
-            case _ => false
+          (column eq vector) || (column match {
+            case w: WritableColumnVector =>
+              (0 until w.getNumChildren).exists(i => isPartOf(w.getChild(i), vector))
+            case _ => column.dataType() match {
+              case s: StructType =>
+                s.fields.indices.exists(i => isPartOf(column.getChild(i), vector))
+              case _ => false
+            }
           })
         }
 

@@ -55,7 +55,8 @@ public interface ColumnarScalarFunction extends Serializable {
    * @return a vector of the declared result type that holds at least {@code args.numRows()}
    *         values. It must be a vector of the function's own, which shares no memory with
    *         the argument columns: Spark closes it once it is done with the batch. A function
-   *         that returns an argument, or a field of one, as it is copies it into a new vector.
+   *         that returns an argument as it is, or a vector inside one (a field of a struct, the
+   *         elements of an array, the keys or the values of a map), copies it into a new vector.
    */
   ColumnVector eval(ColumnarBatch args);
 }

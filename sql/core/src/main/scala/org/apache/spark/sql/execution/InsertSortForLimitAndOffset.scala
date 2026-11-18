@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.{Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.columnar.udf.EvalColumnarUDFsExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.python.EvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
@@ -75,7 +76,9 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
     case p: UnaryExecNode if
         p.isInstanceOf[LocalLimitExec] ||
           p.isInstanceOf[WholeStageCodegenExec] ||
-          p.isInstanceOf[FilterExec] =>
+          p.isInstanceOf[FilterExec] ||
+          // It outputs every column of its child, so the ordering columns pass through it.
+          p.isInstanceOf[EvalColumnarUDFsExec] =>
       extractOrderingAndPropagateOrderingColumns(p.child) match {
         case Some((ordering, newChild)) => Some((ordering, p.withNewChildren(Seq(newChild))))
         case _ => None

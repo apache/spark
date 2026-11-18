@@ -31,10 +31,10 @@ import org.apache.spark.sql.execution.{RowToColumnarExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.MarkSingleTaskExecution
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.functions.{col, count, lit, struct, sum}
+import org.apache.spark.sql.functions.{array, col, count, lit, map, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.types.{FileType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, FileType, LongType, MapType, StringType, StructField, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -122,7 +122,7 @@ class ReturnArgumentFunction extends ColumnarScalarFunction {
   override def eval(args: ColumnarBatch): ColumnVector = args.column(0)
 }
 
-/** Returns a field of its argument column, which a function must not do. */
+/** Returns a child vector of its argument column, which a function must not do. */
 class ReturnFieldFunction extends ColumnarScalarFunction {
   override def eval(args: ColumnarBatch): ColumnVector = args.column(0).getChild(0)
 }
@@ -545,6 +545,31 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       parameters = Map("name" -> "field"))
   }
 
+  test("a function that returns the elements or the keys of one of its arguments fails") {
+    val element = ColumnarUserDefinedFunction(
+      "element", Seq(ArrayType(LongType)), LongType, Some(new ReturnFieldFunction))
+    val key = ColumnarUserDefinedFunction(
+      "key", Seq(MapType(LongType, LongType)), LongType, Some(new ReturnFieldFunction))
+    withTempPath { path =>
+      spark.range(10).select(array(col("id")).as("a"), map(col("id"), col("id")).as("m"))
+        .write.parquet(path.getCanonicalPath)
+      // Over a columnar scan, and over a row-based child.
+      Seq(
+        spark.read.parquet(path.getCanonicalPath),
+        spark.range(10).select(array(col("id")).as("a"), map(col("id"), col("id")).as("m"))
+      ).foreach { input =>
+        checkError(
+          exception = intercept[SparkRuntimeException](input.select(element(col("a"))).collect()),
+          condition = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
+          parameters = Map("name" -> "element"))
+        checkError(
+          exception = intercept[SparkRuntimeException](input.select(key(col("m"))).collect()),
+          condition = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
+          parameters = Map("name" -> "key"))
+      }
+    }
+  }
+
   test("a function that returns no vector fails") {
     val noVector = ColumnarUserDefinedFunction(
       "no_vector", Seq(LongType), LongType, Some(new NullFunction))
@@ -627,6 +652,13 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       }.get
       assert(below.exists(_.isInstanceOf[Filter]))
     }
+  }
+
+  test("the logical node has the row bounds of its child") {
+    val plan = spark.range(3).select(addOne(col("id"))).queryExecution.optimizedPlan
+    val node = plan.collectFirst { case e: EvalColumnarUDFs => e }.get
+    assert(node.maxRows.contains(3L))
+    assert(node.maxRowsPerPartition == node.child.maxRowsPerPartition)
   }
 
   test("calls in subqueries") {

@@ -949,7 +949,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Returns the number of child vectors.
    */
   public int getNumChildren() {
-    return childColumns.length;
+    return childColumns == null ? 0 : childColumns.length;
   }
 
   /**
