@@ -1052,7 +1052,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
 /**
  * Attempt to convert UDFS to Catalyst expressions.
  */
-object ConvertToCatalyst extends Rule[LogicalPlan] {
+object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     // Short circuit if there are no Transpiled Python UDFs in the plan.
     if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
@@ -1073,7 +1073,69 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         e.containsPattern(TRANSPILED_PYTHON_UDF) && e.exists(_.isInstanceOf[TranspiledPythonUDF])
       } => p
 
-      case p => convertOperator(p)
+      case p => convertOperator(keepCartesianGuard(p))
+    }
+  }
+
+  /**
+   * With `spark.sql.crossJoin.enabled=false`, hands back to Python every call that spans both
+   * sides of a join with no other condition spanning them, so CheckCartesianProducts still fails
+   * the query (SPARK-58780).
+   *
+   * Interpreted, such a call cannot be evaluated by the join, so ExtractPythonUDFFromJoinCondition
+   * pulls it out into a Filter above a join with no condition, and the check raises. Lowered, it is
+   * a native expression that reads both sides, which is all the check looks for -- but no join key
+   * can be extracted from it, so the planner still picks a CartesianProduct and the query runs
+   * quadratic in silence. Keeping the Python UDF keeps the error users asked for.
+   *
+   * Covers the call in the join's own condition and in a Filter above it (`join(...).where(...)`,
+   * or a comma join in SQL), which predicate pushdown later moves into the join. A key that only
+   * arrives from further away, e.g. a Filter above this one, is not seen here, so that call stays
+   * interpreted when it could have been lowered: slower, but no different from transpilation off.
+   */
+  private def keepCartesianGuard(p: LogicalPlan): LogicalPlan = {
+    // The join types CheckCartesianProducts checks. An explicit Cross join is allowed to be one.
+    def checked(j: Join): Boolean = j.joinType match {
+      case Inner | LeftOuter | RightOuter | FullOuter => true
+      case _ => false
+    }
+    def spans(e: Expression, j: Join): Boolean =
+      e.references.exists(j.left.outputSet.contains) &&
+        e.references.exists(j.right.outputSet.contains)
+    def keepPython(cond: Expression, joins: Seq[Join], joinConds: Seq[Expression]): Expression = {
+      val conjuncts = splitConjunctivePredicates(cond)
+      // The joins that only a Python UDF ties together, transpiled or not. Interpreted, a conjunct
+      // holding one is pulled out of the join, so it is no key to the check either way.
+      val unkeyed = joins.filter { j =>
+        !(conjuncts ++ joinConds).exists(c => spans(c, j) && !c.exists { e =>
+          isScalarPythonUDF(e) && spans(e, j)
+        })
+      }
+      // Only the call itself goes back to Python. Its arguments are left for `convertOperator`,
+      // which may still lower a nested call that reads one side.
+      def strip(e: Expression): Expression = e match {
+        case s: TranspiledPythonUDF if unkeyed.exists(spans(s, _)) => s.pythonUDFExpr
+        case other if other.containsPattern(TRANSPILED_PYTHON_UDF) => other.mapChildren(strip)
+        case other => other
+      }
+      if (unkeyed.isEmpty) cond else strip(cond)
+    }
+    if (conf.crossJoinEnabled) {
+      p
+    } else {
+      p match {
+        case j @ Join(_, _, _, Some(cond), _) if checked(j) =>
+          j.copy(condition = Some(keepPython(cond, Seq(j), Nil)))
+        case f @ Filter(cond, child) =>
+          val joins = child.collect { case j: Join if checked(j) => j }
+          if (joins.isEmpty) {
+            f
+          } else {
+            f.copy(condition = keepPython(cond, joins, joins.flatMap(_.condition)
+              .flatMap(splitConjunctivePredicates)))
+          }
+        case other => other
+      }
     }
   }
 
