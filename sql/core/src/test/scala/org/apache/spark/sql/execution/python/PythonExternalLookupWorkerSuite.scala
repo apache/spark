@@ -392,6 +392,26 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
     }
   }
 
+  test("the last row of a cursor stays readable after a close from another thread") {
+    withLookup("matches" -> "3")() { (factory, _) =>
+      val (values, ordinal, memoryAfterClose) = inTask() { _ =>
+        val before = ArrowUtils.rootAllocator.getAllocatedMemory
+        val reader = factory.createReader()
+        val cursor = reader.lookupBatch(parameterRows(Seq(-1L, 7L)))
+        assert(cursor.next())
+        val row = cursor.get()
+        // Another thread closes the reader, which frees the Arrow memory of the response.
+        ThreadUtils.awaitResult(Future(reader.close())(ExecutionContext.global), 60.seconds)
+        val memoryAfterClose = ArrowUtils.rootAllocator.getAllocatedMemory - before
+        // Spark may still read the row that get() returned last, and its ordinal, after the close.
+        ((row.getLong(0), row.getInt(3)), cursor.inputOrdinal(), memoryAfterClose)
+      }
+      assert(values === ((7L, 0)))
+      assert(ordinal === 1)
+      assert(memoryAfterClose === 0)
+    }
+  }
+
   test("a reader registers one interrupt and one completion listener") {
     withLookup()() { (factory, _) =>
       val counts = inTask() { context =>
