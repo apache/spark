@@ -7664,6 +7664,12 @@
     ],
     "sqlState" : "42K08"
   },
+  "SESSION_DEPENDENT_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` has a different meaning under the SQL configs of this session, such as `spark.sql.parser.escapedStringLiterals` or `spark.sql.ansi.doubleQuotedIdentifiers`, than under the default values of those configs, which a later write uses to read the condition. Rewrite the condition, or set these configs to their default values and run the statement again."
+    ],
+    "sqlState" : "42621"
+  },
   "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
     "message" : [
       "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
@@ -9121,6 +9127,13 @@
       "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values. Percentile must be a numeric value followed by '%', within the range 0% to 100%."
     ],
     "sqlState" : "42704"
+  },
+  "UNRESOLVABLE_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The CHECK constraint <constraintName> with condition `<checkCondition>` cannot be enforced on this write because the condition cannot be resolved:",
+      "<cause>"
+    ],
+    "sqlState" : "42621"
   },
   "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
     "message" : [
