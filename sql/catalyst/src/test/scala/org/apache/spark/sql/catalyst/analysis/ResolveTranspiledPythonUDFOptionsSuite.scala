@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.{
   ArrayType, BinaryType, BooleanType, DataType, DecimalType, DoubleType, FloatType,
-  IntegerType, LongType, MapType, StringType}
+  IntegerType, LongType, MapType, StringType, StructType, TimestampLTZNanosType,
+  TimestampNTZNanosType}
 
 /**
  * Unit tests for [[ResolveTranspiledPythonUDFOptions]], which prunes a
@@ -281,6 +282,7 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     val reason = reasons.head
     assert(reason.contains("argument(s) 0 are TIMESTAMP"), reason)
     assert(reason.contains("TIMESTAMP_NTZ only"), reason)
+    assert(reason.contains("wall-clock time in spark.sql.session.timeZone"), reason)
     // A DATE column, and a TIMESTAMP whose other argument misses too, are ordinary misses.
     assert(warningsFor($"a".date, List("timestamp", "integer")).isEmpty)
     assert(warningsFor($"a".timestamp, List("timestamp", "string")).isEmpty)
@@ -295,6 +297,27 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
       val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(a), List(List(cat)))
       val pruned = prune(node, LocalRelation(a))
       assert(pruned.transpiledOptions.isEmpty, s"$cat kept over ${a.dataType}")
+    }
+  }
+
+  test("map and array options are dropped over a map keyed by a nanosecond timestamp") {
+    // Python refuses such a map (TIMESTAMP_NANOS_PYTHON_MAP_KEY); an option over it would answer
+    // where the Python UDF raises. Nanoseconds elsewhere, e.g. as a value, are fine.
+    val ntz = TimestampNTZNanosType(9)
+    val nanosKeyed = MapType(ntz, IntegerType)
+    val structKeyed = MapType(new StructType().add("t", TimestampLTZNanosType(7)), IntegerType)
+    Seq(
+      ("map", nanosKeyed, false),
+      ("map", structKeyed, false),
+      ("map", MapType(StringType, nanosKeyed), false),
+      ("map", MapType(StringType, ntz), true),
+      ("array", ArrayType(nanosKeyed), false),
+      ("array", ArrayType(new StructType().add("m", nanosKeyed)), false),
+      ("array", ArrayType(ntz), true)).foreach { case (cat, dt, kept) =>
+      val a = AttributeReference("a", dt)()
+      val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(a), List(List(cat)))
+      val pruned = prune(node, LocalRelation(a))
+      assert(pruned.transpiledOptions.nonEmpty == kept, s"$cat over ${dt.sql}")
     }
   }
 }
