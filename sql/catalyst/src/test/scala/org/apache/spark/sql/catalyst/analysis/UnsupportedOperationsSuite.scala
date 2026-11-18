@@ -557,6 +557,24 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       OutputMode.Append(),
       Seq("is not supported without a watermark in the join keys, or a watermark on " +
         "the nullable side and an appropriate range condition"))
+
+    // A range condition bounds state only if the watermark appears with a positive sign.
+    assertSupportedInStreamingPlan(
+      s"$joinType join with stream-stream relations and an extra constant-only bound",
+      leftRelation.join(rightRelation, joinType = joinType,
+        condition = Some(attribute > timeWithWatermark + 10 && attribute > 10)),
+      OutputMode.Append())
+    Seq(
+      "constant-only bound" -> (attribute > 10),
+      "negative watermark term" -> (attribute + timeWithWatermark > 10)
+    ).foreach { case (name, condition) =>
+      assertNotSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and $name",
+        leftRelation.join(rightRelation, joinType = joinType, condition = Some(condition)),
+        OutputMode.Append(),
+        Seq("is not supported without a watermark in the join keys, or a watermark on " +
+          "the nullable side and an appropriate range condition"))
+    }
   }
 
   // multi-aggregations only supported in Append mode

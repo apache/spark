@@ -52,6 +52,13 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
+- Since Spark 4.4, a range condition of a stream-stream join bounds the state of one input only
+  if the other input's watermarked column appears in it with a positive sign, for example
+  `leftTime > rightTime - INTERVAL 5 SECONDS`. Conditions such as `CAST(leftTime AS LONG) > 10`
+  or `CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100` no longer evict state, because
+  later rows of the other input can still match it. As a result, outer and semi joins whose only
+  range condition has this form fail analysis.
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent
