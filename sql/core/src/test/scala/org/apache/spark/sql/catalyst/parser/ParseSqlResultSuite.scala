@@ -239,6 +239,18 @@ class ParseSqlResultSuite extends SparkFunSuite {
       assert(targetTableRefs(sql) === Set(Seq("t")), sql)
       assert(sourceTableRefs(sql) === Set(Seq("src")), sql)
     }
+
+    // The legacy config substitutes DELETE, UPDATE and MERGE targets with the CTE again, so the
+    // CTE shadows them. It does not change INSERT.
+    SQLConf.withExistingConf(new SQLConf) {
+      SQLConf.get.setConf(SQLConf.LEGACY_CTE_SUBSTITUTE_DML_TARGET, true)
+      otherDml.foreach { sql =>
+        assert(targetTableRefs(sql).isEmpty, sql)
+        assert(sourceTableRefs(sql) === Set(Seq("src")), sql)
+      }
+      assert(targetTableRefs(insert) === Set(Seq("t")))
+      assert(sourceTableRefs(insert) === Set(Seq("src")))
+    }
   }
 
   test("positional markers inside BEGIN END are counted once") {

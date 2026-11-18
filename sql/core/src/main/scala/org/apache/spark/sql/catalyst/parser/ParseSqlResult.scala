@@ -423,6 +423,14 @@ object ParseSqlResult {
   }
 
   /**
+   * The CTE aliases that can shadow a statement target, such as the target of DELETE, UPDATE or
+   * MERGE, given the aliases in `scope`. The analyzer never resolves such a target against a CTE,
+   * unless `spark.sql.legacy.cteSubstituteDmlTarget` restores the substitution.
+   */
+  private def targetScope(scope: CteScope): CteScope =
+    if (SQLConf.get.getConf(SQLConf.LEGACY_CTE_SUBSTITUTE_DML_TARGET)) scope else Set.empty
+
+  /**
    * Deep plan walk that hands each node the CTE aliases in scope there and the
    * table-reference role for relation nodes at that position, and covers tree
    * slots that standard `collect` / `collectWithSubqueries` miss.
@@ -452,8 +460,7 @@ object ParseSqlResult {
     val nextScope = childScope(parent, scope)
     parent match {
       case m: MergeIntoTable =>
-        // A MERGE target is never resolved against a CTE, so no alias shadows it.
-        visitPlan(m.targetTable, Set.empty, TableRefRole.Target)(f)
+        visitPlan(m.targetTable, targetScope(scope), TableRefRole.Target)(f)
         visitPlan(m.sourceTable, scope, TableRefRole.Source)(f)
       case i: UnresolvedInsert =>
         visitPlan(i.table, scope, TableRefRole.Target)(f)
@@ -496,9 +503,7 @@ object ParseSqlResult {
         statementSubqueries(parent).foreach(sq => visitPlan(sq, nextScope, TableRefRole.Source)(f))
         parent.children.foreach { child =>
           if (isTargetTableChild(parent)) {
-            // A statement target (e.g. of DELETE or UPDATE) is never resolved against a CTE, so
-            // no alias shadows it.
-            visitPlan(child, Set.empty, TableRefRole.Target)(f)
+            visitPlan(child, targetScope(nextScope), TableRefRole.Target)(f)
           } else {
             visitPlan(child, nextScope, role)(f)
           }

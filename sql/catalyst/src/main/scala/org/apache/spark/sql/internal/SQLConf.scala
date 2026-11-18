@@ -7580,6 +7580,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_CTE_SUBSTITUTE_DML_TARGET =
+    buildConf("spark.sql.legacy.cteSubstituteDmlTarget")
+      .internal()
+      .doc("When true, the unqualified target of a DELETE, UPDATE or MERGE statement resolves " +
+        "to a CTE of the same name in scope, as in Spark 4.3. A CTE whose body is a bare table " +
+        "reference, such as `WITH t AS (TABLE other)`, then makes the statement modify the " +
+        "table that the CTE reads instead of the table that the statement names, and Spark " +
+        "loads that table as a read, without the write privileges of the statement. Any other " +
+        "CTE body makes the statement fail. When false, the target of these statements is " +
+        "never resolved against a CTE, as the target of INSERT already is.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +

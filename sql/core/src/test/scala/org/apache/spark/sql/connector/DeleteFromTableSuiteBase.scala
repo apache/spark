@@ -1107,6 +1107,56 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(4, 400, "software") :: Nil)
   }
 
+  test("delete target that matches only a CTE is not found") {
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 10, 'hr'), (2, 20, 'software')")
+    // Look up the unqualified target in the namespace of the table that the CTE reads.
+    sql(s"USE cat.${namespace.mkString(".")}")
+
+    // No table or view has the name of the CTE, so the target is not found, whatever the CTE
+    // body is. The statement must not delete from the table that the CTE reads.
+    Seq(
+      s"TABLE $sourceNameAsString",
+      s"SELECT * FROM $sourceNameAsString WHERE salary > 10").foreach { cteBody =>
+      val query = s"WITH cte_only AS ($cteBody) " +
+        "DELETE FROM cte_only WHERE pk IN (SELECT pk FROM cte_only)"
+      val start = query.indexOf("DELETE FROM cte_only") + "DELETE FROM ".length
+      checkError(
+        exception = intercept[AnalysisException](sql(query)),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`cte_only`"),
+        context = ExpectedContext(fragment = "cte_only", start = start, stop = start + 7))
+    }
+    checkAnswer(
+      sql(s"SELECT * FROM $sourceNameAsString"),
+      Seq(Row(1, 10, "hr"), Row(2, 20, "software")))
+  }
+
+  test("delete target is replaced by a same-named CTE with the legacy config") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 10, 'hr'), (2, 20, 'software')")
+    // Make the unqualified table name resolve to the target table.
+    sql(s"USE cat.${namespace.mkString(".")}")
+    val target = ident.name
+
+    // With the legacy config, the statement deletes from the table that the CTE reads, not from
+    // the table it names.
+    withSQLConf(SQLConf.LEGACY_CTE_SUBSTITUTE_DML_TARGET.key -> "true") {
+      sql(
+        s"""WITH $target AS (TABLE $sourceNameAsString)
+           |DELETE FROM $target WHERE pk IN (SELECT pk FROM $target WHERE salary = 10)
+           |""".stripMargin)
+    }
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(1, 100, "hr"), Row(2, 200, "software")))
+    checkAnswer(sql(s"SELECT * FROM $sourceNameAsString"), Row(2, 20, "software") :: Nil)
+  }
+
   test("delete using view with transactional checks") {
     withView("temp_view") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
