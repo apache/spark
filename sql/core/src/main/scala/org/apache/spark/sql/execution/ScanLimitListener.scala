@@ -66,12 +66,7 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
   /** Stops tracking a root execution. */
   def unregister(rootExecutionId: Long): Unit = synchronized {
     val execution = executions.remove(rootExecutionId)
-    if (execution != null) {
-      // Leave a stage that another execution has since submitted to that execution.
-      execution.stageIds.foreach { stageId =>
-        if (stages.get(stageId).exists(_.execution eq execution)) stages.remove(stageId)
-      }
-    }
+    stages.filterInPlace((_, stage) => stage.execution ne execution)
   }
 
   /** The bytes that an execution had read when it went over its limit, if it did. */
@@ -91,7 +86,6 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
         val stage = stages.get(stageId).filter(_.execution eq execution).getOrElse {
           val newStage = new StageScanState(execution)
           stages(stageId) = newStage
-          execution.stageIds += stageId
           newStage
         }
         stage.bytesReadAccumIds +=
@@ -178,9 +172,6 @@ private class ExecutionScanState(
     val executionId: Long,
     val maxScanBytes: Long,
     val jobTag: String) {
-
-  /** The IDs of the stages of the execution, including of its nested executions. */
-  val stageIds = new mutable.ArrayBuffer[Int]()
 
   /** The bytes that the tasks of the execution have read. */
   var bytesRead = 0L
