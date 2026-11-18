@@ -480,7 +480,7 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
             assert(ExternalLookupJoinEligibility.lookupSidePlans(plan).isEmpty)
             CheckExternalLookupJoin(plan)
             assert(FormExternalLookupJoin(plan) eq plan)
-            spark.sharedState.cacheManager.useCachedData(plan)
+            spark.sharedState.cacheManager.useCachedData(plan, spark)
             plan.collectWithSubqueries { case join: Join => join }.foreach { join =>
               assert(
                 ExternalLookupJoinEligibility(join) === ExternalLookupJoinEligibility.NotLookupJoin)

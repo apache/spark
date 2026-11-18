@@ -2779,6 +2779,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  val CACHE_IGNORE_SESSION_CONTEXT_IN_PLAN_MATCHING =
+    buildConf("spark.sql.legacy.cache.ignoreSessionContextInPlanMatching")
+      .internal()
+      .doc("When false, a cached query that calls a session-context function " +
+        "(current_timezone(), current_catalog(), current_schema()/current_database(), " +
+        "current_path(), current_user()) is reused only under the session context values it " +
+        "read when cached, and is uncached rather than re-cached when a command run under " +
+        "other values invalidates it. When true, it is reused under any session context, " +
+        "returning the caching session's values; rollback only.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")

@@ -34,8 +34,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, LogicalPlan, SHUFFLE_HASH, SubqueryAlias, UnaryNode}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentPath, CurrentTimestamp, CurrentUser, Expression, LeafExpression, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, LogicalPlan, OneRowRelation, Project, SHUFFLE_HASH, SubqueryAlias, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
@@ -44,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo, SparkStrategy}
+import org.apache.spark.sql.execution.{CacheManager, ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo, SparkStrategy}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -54,7 +55,7 @@ import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitionKeyedAccumulator}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK, MEMORY_AND_DISK_2, MEMORY_ONLY}
@@ -63,6 +64,13 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
+
+/** A stand-in for a session-context function that `CacheManager` does not know. */
+private case class FakeSessionContextFunction() extends LeafExpression with Unevaluable {
+  override def dataType: DataType = StringType
+  override def nullable: Boolean = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+}
 
 /**
  * A pass-through node that counts how many times it is copied with a new child, i.e. how many
@@ -2880,6 +2888,76 @@ class CachedTableSuite extends SharedSparkSession
           }
       }
     }
+  }
+
+  test("SPARK-61570: cached query with a session-context function is not reused " +
+    "under a different session context") {
+    Seq(false, true).foreach { ignoreContext =>
+      withSQLConf(
+          SQLConf.CACHE_IGNORE_SESSION_CONTEXT_IN_PLAN_MATCHING.key -> ignoreContext.toString) {
+        withTempView("tz_cache") {
+          val query = "SELECT id, current_timezone() AS tz FROM range(3)"
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+            sql(s"CACHE TABLE tz_cache AS $query")
+            assertCached(sql(query))
+          }
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Tokyo") {
+            // Fixed: the UTC-cached entry is not reused for a Tokyo session, so tz is recomputed
+            // as 'Asia/Tokyo'. Legacy (gate on): the stale UTC entry is reused, so tz stays 'UTC'.
+            checkAnswer(
+              sql(s"SELECT count(*) FROM ($query) WHERE tz = 'Asia/Tokyo'"),
+              Row(if (ignoreContext) 0L else 3L))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61570: a cached query is uncached rather than re-cached when a command under " +
+    "another session context invalidates it") {
+    Seq(false, true).foreach { ignoreContext =>
+      withSQLConf(
+          SQLConf.CACHE_IGNORE_SESSION_CONTEXT_IN_PLAN_MATCHING.key -> ignoreContext.toString) {
+        withTable("tz_src") {
+          sql("CREATE TABLE tz_src (id INT) USING parquet")
+          sql("INSERT INTO tz_src VALUES (1)")
+          val query = "SELECT id, current_timezone() AS tz FROM tz_src"
+          def isCached: Boolean = cacheManager.lookupCachedData(sql(query)).isDefined
+          try {
+            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+              sql(query).cache()
+              // A write under the same session context re-caches the entry.
+              sql("INSERT INTO tz_src VALUES (2)")
+              assert(isCached)
+            }
+            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Tokyo") {
+              sql("INSERT INTO tz_src VALUES (3)")
+              // Fixed: the entry is dropped, not keyed with the writer's time zone. Legacy: it is
+              // re-cached in the writer's session and matched under any context.
+              assert(isCached === ignoreContext)
+            }
+            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+              assert(isCached === ignoreContext)
+            }
+          } finally {
+            cacheManager.clearCache()
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61570: session context read by a cached plan") {
+    def contextOf(expr: Expression): Map[String, String] =
+      CacheManager.sessionContextOf(spark, Project(Seq(Alias(expr, "c")()), OneRowRelation()))
+    assert(contextOf(CurrentPath()).keySet === Set("path"))
+    assert(contextOf(CurrentUser()).keySet === Set("user"))
+    // Clock functions read no session value.
+    assert(contextOf(CurrentTimestamp()).isEmpty)
+    // An unknown session-context function fails closed: its value matches no other lookup.
+    val unknown = contextOf(FakeSessionContextFunction())
+    assert(unknown.keySet === Set("unknown:FakeSessionContextFunction"))
+    assert(contextOf(FakeSessionContextFunction()) !== unknown)
   }
 
   private def cacheManager = spark.sharedState.cacheManager
