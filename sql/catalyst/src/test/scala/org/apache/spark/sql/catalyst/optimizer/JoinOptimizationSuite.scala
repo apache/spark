@@ -177,21 +177,4 @@ class JoinOptimizationSuite extends PlanTest {
     comparePlans(reordered, answer.analyze)
     assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
   }
-
-  test("SPARK-61930: createOrderedJoin does not choose the next plan by a condition kept above " +
-    "the joins") {
-    // The kept condition is the only one between x and y, so x is joined first with z, by the
-    // condition between them, and then with y.
-    val (x, y, z) = (testRelation, testRelation1, LocalRelation($"e".int, $"f".int))
-    val Seq(a, b, _) = x.output
-    val Seq(d) = y.output
-    val Seq(e, f) = z.output
-    val kept = If(a === d, Literal(true), IsNull(RaiseError(Literal("boom"))))
-    val joined = ReorderJoin.createOrderedJoin(
-      Seq((x, Inner), (y, Inner), (z, Inner)), Seq(kept, d === e, b === f), keptAbove = Seq(kept))
-    val answer = Filter(kept,
-      Join(Join(x, z, Inner, Some(b === f), JoinHint.NONE), y, Inner, Some(d === e), JoinHint.NONE))
-
-    comparePlans(joined, answer)
-  }
 }

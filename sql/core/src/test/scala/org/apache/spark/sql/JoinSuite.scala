@@ -2031,11 +2031,12 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-61930: reordering inner joins does not move a throwable filter condition into " +
+  test("SPARK-61930: reordering inner joins does not move a throwable condition into " +
     "a lower join") {
     withTable("s") {
       Seq((-1, 10), (1, 20)).toDF("id", "value").write.saveAsTable("s")
-      // The join with w removes the row whose id is -1, so raise_error is not evaluated on it.
+      // The join with w removes the row whose id is -1, so raise_error is not evaluated on it,
+      // whether the CASE WHEN is in the WHERE clause or in the ON clause of the join with w.
       val df = sql(
         """SELECT s.id FROM s
           |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
@@ -2043,6 +2044,13 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
           |WHERE CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
           |""".stripMargin)
       checkAnswer(df, Row(1))
+      val onClause = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |  AND CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(onClause, Row(1))
     }
   }
 
