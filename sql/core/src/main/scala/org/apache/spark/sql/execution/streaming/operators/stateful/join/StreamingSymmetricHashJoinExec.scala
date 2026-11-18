@@ -364,22 +364,30 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Older versions order the V4 state of an input by its event time, so their checkpoints
-    // cannot evict that state by another column.
-    if (stateFormatVersion == 4 &&
-        conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION) == 0) {
-      Seq((LeftSide, stateWatermarkPredicates.left, left.output),
-          (RightSide, stateWatermarkPredicates.right, right.output)).foreach {
-        case (side, predicate, attributes) =>
+    // Older versions and the legacy mode order the V4 state of an input by its event time (index
+    // version 0), so their checkpoints cannot evict that state by another column. Index version 1
+    // orders it by the column that the default mode picks, which the legacy mode cannot evict.
+    val indexVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION)
+    if (stateFormatVersion == 4 && (indexVersion == 0 || !allowMultipleStatefulOperators)) {
+      Seq((LeftSide, stateWatermarkPredicates.left, left.output, right.output),
+          (RightSide, stateWatermarkPredicates.right, right.output, left.output)).foreach {
+        case (side, predicate, attributes, otherAttributes) =>
           val eventTime = WatermarkSupport.findEventTimeColumnIndex(
             attributes, allowMultipleEventTimeColumns = false)
-          stateValueWatermarkColumnOrdinal(predicate, attributes)
-            .filterNot(eventTime.contains).foreach { column =>
-              throw new AnalysisException(
-                errorClass = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
-                messageParameters = Map(
-                  "side" -> side.toString, "column" -> toSQLId(attributes(column).name)))
-            }
+          val column = if (indexVersion == 0) {
+            stateValueWatermarkColumnOrdinal(predicate, attributes)
+          } else {
+            predicate.collect { case _: JoinStateValueWatermarkPredicate =>
+              StreamingJoinHelper.getStateValueWatermarkColumn(attributes,
+                AttributeSet(otherAttributes), condition.full, Some(0L))
+            }.flatten.map { case (c, _) => attributes.indexWhere(_.semanticEquals(c)) }
+          }
+          column.filterNot(eventTime.contains).foreach { i =>
+            throw new AnalysisException(
+              errorClass = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+              messageParameters = Map(
+                "side" -> side.toString, "column" -> toSQLId(attributes(i).name)))
+          }
       }
     }
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
@@ -732,26 +740,28 @@ case class StreamingSymmetricHashJoinExec(
         Predicate.create(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
     }
 
-    private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
-      case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
-        Predicate.create(expr, inputAttributes).eval _
-      case _ =>
-        Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
-    }
-
     private[this] var updatedStateRowsCount = 0
     private[this] var numRemovedFromOtherSideDuringJoinCount = 0
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
     // The join condition bounds the column that the value predicate tests, so a row with a NULL
-    // in it can never match, and the predicate never evicts it. The legacy mode tests the event
-    // time even when the condition bounds another column.
+    // in it can never match, and `column <= cutoff` never holds for it. The legacy mode tests the
+    // event time even when the condition bounds another column.
     private[this] val isEvictionColumnNull: UnsafeRow => Boolean = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _))
           if allowMultipleStatefulOperators =>
         Predicate.create(IsNull(column), inputAttributes).eval _
       case _ => _ => false
+    }
+
+    // Such a row is not stored, but an earlier version or the legacy mode can have stored one.
+    private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
+      case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
+        val predicate = Predicate.create(expr, inputAttributes)
+        (row: UnsafeRow) => predicate.eval(row) || isEvictionColumnNull(row)
+      case _ =>
+        Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
     }
 
     // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval

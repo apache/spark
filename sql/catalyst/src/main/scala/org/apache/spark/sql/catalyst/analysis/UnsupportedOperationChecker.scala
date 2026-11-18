@@ -835,23 +835,20 @@ object UnsupportedOperationChecker extends Logging {
   private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
     val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(join)
 
-    // Execution evicts the state of an input with its own watermark only by the column that
-    // getStateValueWatermarkColumn picks, such as not by a DATE column cast to TIMESTAMP.
-    def hasValidRange(input: LogicalPlan, other: LogicalPlan): Boolean =
-      if (input.output.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
-        StreamingJoinHelper.getStateValueWatermarkColumn(
-          input.output, other.outputSet, join.condition, Some(1000000)).isDefined
-      } else {
-        StreamingJoinHelper.getStateValueWatermark(
-          input.outputSet, other.outputSet, join.condition, Some(1000000)).isDefined
-      }
-
     // Check if the nullable side has a watermark, and there's a range condition which
     // implies a state value watermark on the first side.
     val hasValidWatermarkRange = join.joinType match {
-      case LeftOuter | LeftSemi => hasValidRange(join.left, join.right)
-      case RightOuter => hasValidRange(join.right, join.left)
-      case FullOuter => hasValidRange(join.left, join.right) || hasValidRange(join.right, join.left)
+      case LeftOuter | LeftSemi => StreamingJoinHelper.getStateValueWatermark(
+        join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
+      case RightOuter => StreamingJoinHelper.getStateValueWatermark(
+        join.right.outputSet, join.left.outputSet, join.condition, Some(1000000)).isDefined
+      case FullOuter =>
+        Seq((join.left.outputSet, join.right.outputSet),
+          (join.right.outputSet, join.left.outputSet)).exists {
+          case (attributesToFindStateWatermarkFor, attributesWithEventWatermark) =>
+            StreamingJoinHelper.getStateValueWatermark(attributesToFindStateWatermarkFor,
+              attributesWithEventWatermark, join.condition, Some(1000000)).isDefined
+        }
       case _ =>
         throwError(
           s"Join type ${join.joinType} is not supported with streaming DataFrame/Dataset")(join)
@@ -861,9 +858,7 @@ object UnsupportedOperationChecker extends Logging {
       throwError(
         s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
           "is not supported without a watermark in the join keys, or a watermark on " +
-          "the nullable side and an appropriate range condition. A range condition on an " +
-          "input with its own watermark must bound its event time or another TIMESTAMP " +
-          "column")(join)
+          "the nullable side and an appropriate range condition")(join)
     }
   }
 }
