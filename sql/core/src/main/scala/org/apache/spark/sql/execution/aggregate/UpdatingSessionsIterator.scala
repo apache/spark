@@ -63,13 +63,6 @@ class UpdatingSessionsIterator(
     UnsafeRowUtils.rowEqualityChecker(
       groupingWithoutSession.map(_.dataType), checkBytesFirst = true)
 
-  // Every input column except the session column, in input order: each row of a closed
-  // session keeps its own values for these columns, and only its session column is
-  // replaced with the merged session. The rows of a session can spell a collated grouping
-  // key differently, and the DISTINCT-aggregate and pandas grouped-aggregate plans that
-  // consume this iterator read the grouping columns from the rows it emits.
-  private val nonSessionExpressions: Seq[Attribute] = inputSchema.diff(Seq(sessionExpression))
-
   private[this] val sessionProjection: UnsafeProjection =
     UnsafeProjection.create(Seq(sessionExpression), inputSchema)
 
@@ -203,24 +196,37 @@ class UpdatingSessionsIterator(
 
   private val join2 = new JoinedRow
 
-  private val nonSessionProj =
-    GenerateUnsafeProjection.generate(nonSessionExpressions, inputSchema)
-  private val restoreProj = GenerateUnsafeProjection.generate(inputSchema,
-    nonSessionExpressions ++ Seq(sessionExpression.toAttribute))
+  // The merged session is read from the field appended after the row's own columns
+  // (field 0 of the right side of join2 below), an ordinal no input column occupies, so
+  // the rewrite projection cannot resolve it to a buffered row's session column.
+  private[this] val mergedSessionReference = BoundReference(
+    inputSchema.length, sessionExpression.dataType, sessionExpression.nullable)
+
+  // One projection rewrites each buffered row: every non-session column keeps its own
+  // ordinal, so each row of a session keeps its own values, including its own spelling
+  // of a collated grouping key, and only the session column takes the merged session
+  // from the appended field. The session column is matched by expression ID rather than
+  // by attribute equality: the session attribute in the grouping list can carry a
+  // qualifier that the input column lacks, as when the session window is computed in a
+  // subquery or CTE and grouped outside, and the DISTINCT-aggregate and pandas
+  // grouped-aggregate plans that consume this iterator read the grouping columns from
+  // the rows it emits.
+  private[this] val restoreProj = GenerateUnsafeProjection.generate(
+    inputSchema.map(attr =>
+      if (attr.exprId == sessionExpression.exprId) mergedSessionReference else attr),
+    inputSchema)
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
     returnRows = rowsForCurrentSession
     rowsForCurrentSession = null
 
-    // The merged session every row of this session is rewritten to. Everything else in
-    // each row is projected from the row itself, so rows of a session that mixes the
-    // spellings of a collated key keep their own spelling (see nonSessionExpressions).
+    // The merged session every row of this session is rewritten to; everything else in
+    // each row is projected from the row itself (see restoreProj).
     val mergedSession = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
     mergedSession.update(0, currentSession)
 
     val currentRowsIter = returnRows.generateIterator().map { internalRow =>
-      val rowWithoutSession = nonSessionProj(internalRow)
-      restoreProj(join2(rowWithoutSession, mergedSession)).copy()
+      restoreProj(join2(internalRow, mergedSession)).copy()
     }
 
     if (returnRowsIter != null && returnRowsIter.hasNext) {

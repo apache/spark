@@ -1180,6 +1180,40 @@ class GroupedAggPandasUDFTestsMixin:
         # each row's own spelling of the grouping column.
         assertDataFrameEqual(result, [Row(sp="FOO,foo,foo")])
 
+    def test_collation_session_window_grouped_agg_subquery(self):
+        # SPARK-58928: through a subquery, the session attribute in the grouping list
+        # carries the subquery's qualifier while the same column of the input schema
+        # does not. UpdatingSessionsIterator must find the session column by expression
+        # ID when it binds the merged session into each buffered row; matching by
+        # attribute equality leaves every row with its own per-event session.
+        from datetime import datetime
+
+        df = self.spark.createDataFrame(
+            [
+                ("foo", datetime(2026, 1, 1, 10, 0, 0), 1.0),
+                ("FOO", datetime(2026, 1, 1, 10, 5, 0), 2.0),
+                ("foo", datetime(2026, 1, 1, 10, 8, 0), 3.0),
+            ],
+            "s STRING COLLATE UTF8_LCASE, ts TIMESTAMP, v DOUBLE",
+        )
+        df.createOrReplaceTempView("t")
+
+        @pandas_udf("string")
+        def spellings(s: pd.Series) -> str:
+            return ",".join(sorted(s))
+
+        self.spark.udf.register("spellings", spellings)
+
+        result = self.spark.sql(
+            "SELECT s, sw, spellings(s) AS sp "
+            "FROM (SELECT s, session_window(ts, '10 minutes') AS sw FROM t) sub "
+            "GROUP BY s, sw"
+        ).select("sp")
+
+        # The three rows still merge into one session through the subquery, and the UDF
+        # receives each row's own spelling of the grouping column.
+        assertDataFrameEqual(result, [Row(sp="FOO,foo,foo")])
+
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
     pass

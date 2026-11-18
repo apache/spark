@@ -3626,4 +3626,57 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Row(2L) :: Row(1L) :: Nil)
     }
   }
+
+  test("session window aggregation merges sessions computed in a subquery") {
+    // UpdatingSessionsIterator binds the merged session into each buffered row through a
+    // projection that must find the session column by expression ID: through a subquery,
+    // the session attribute in the grouping list carries the subquery's qualifier while
+    // the same column of the input schema does not, and matching by attribute equality
+    // leaves the merged session unbound, so every emitted row keeps its own per-event
+    // session instead of the merged one.
+    withTable("t") {
+      sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, ts TIMESTAMP, v INT) USING PARQUET")
+      sql("""INSERT INTO t VALUES
+            |  ('foo', timestamp'2026-01-01 10:00:00', 1),
+            |  ('FOO', timestamp'2026-01-01 10:05:00', 2),
+            |  ('foo', timestamp'2026-01-01 10:08:00', 3)""".stripMargin)
+
+      // The one-distinct plan runs UpdatingSessionsExec over the subquery's output.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(sw.end AS LONG) - CAST(sw.start AS LONG) AS session_length,
+              |  count(DISTINCT v)
+              |  FROM (SELECT s, v, session_window(ts, '10 minutes') AS sw FROM t) sub
+              |  GROUP BY s, sw""".stripMargin),
+        Row(1080L, 3L) :: Nil)
+
+      // The aggregates read the grouping column from the rows the iterator emits, so
+      // this also checks that each row keeps its own spelling through the subquery.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(sw.end AS LONG) - CAST(sw.start AS LONG) AS session_length,
+              |  count(DISTINCT s COLLATE UTF8_BINARY),
+              |  sort_array(collect_list(s COLLATE UTF8_BINARY))
+              |  FROM (SELECT s, v, session_window(ts, '10 minutes') AS sw FROM t) sub
+              |  GROUP BY s, sw""".stripMargin),
+        Row(1080L, 2L, Seq("FOO", "foo", "foo")) :: Nil)
+    }
+
+    // Binary-stable keys take the same path and must keep merging through a subquery.
+    withTable("t2") {
+      sql("CREATE TABLE t2 (s STRING, ts TIMESTAMP, v INT) USING PARQUET")
+      sql("""INSERT INTO t2 VALUES
+            |  ('foo', timestamp'2026-01-01 10:00:00', 1),
+            |  ('foo', timestamp'2026-01-01 10:05:00', 2),
+            |  ('foo', timestamp'2026-01-01 10:08:00', 3)""".stripMargin)
+
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(sw.end AS LONG) - CAST(sw.start AS LONG) AS session_length,
+              |  count(DISTINCT v)
+              |  FROM (SELECT s, v, session_window(ts, '10 minutes') AS sw FROM t2) sub
+              |  GROUP BY s, sw""".stripMargin),
+        Row(1080L, 3L) :: Nil)
+    }
+  }
 }
