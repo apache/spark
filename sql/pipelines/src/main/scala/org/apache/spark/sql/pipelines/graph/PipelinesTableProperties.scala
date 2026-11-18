@@ -37,6 +37,9 @@ object PipelinesTableProperties {
   val resetAllowed: PipelineTableProperty[Boolean] =
     buildProp("pipelines.reset.allowed", default = true)
 
+  // Internal table properties: written by the pipeline and not user-settable.
+  // `validateAndCanonicalize` drops a user declaration of them.
+
   /**
    * Internal table property recording, as a sorted JSON string array (see
    * [[JsonStringArrayCodec]]), the keys of the table properties declared in the dataset definition
@@ -57,9 +60,6 @@ object PipelinesTableProperties {
    * pipeline, is never removed. A table without the record, or with one that is not a JSON string
    * array, has nothing removed; that run writes a new record. The record itself is removed once the
    * definition declares no recorded key, whether or not the keys it listed are removed with it.
-   *
-   * This key is not registered as a user-settable property, so [[validateAndCanonicalize]] drops
-   * it if a user declares it.
    */
   val declaredPropertyKeys: String = s"${pipelinesPrefix}declaredPropertyKeys"
 
