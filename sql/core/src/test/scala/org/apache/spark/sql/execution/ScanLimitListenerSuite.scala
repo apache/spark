@@ -63,7 +63,10 @@ class ScanLimitListenerSuite extends SparkFunSuite {
       SparkListenerStageSubmitted(stageInfo, jobProperties(rootExecutionId)))
   }
 
-  /** The start of a job of an execution that depends on the given stages. */
+  /**
+   * The start of a job of an execution that depends on the given stages. A stage that has been
+   * submitted has the metrics of its latest attempt.
+   */
   private def startJob(stageIds: Seq[Int], rootExecutionId: Long): Unit = {
     val stageInfos = stageIds.map { stageId =>
       new StageInfo(
@@ -74,6 +77,7 @@ class ScanLimitListenerSuite extends SparkFunSuite {
         rddInfos = Nil,
         parentIds = Nil,
         details = "",
+        taskMetrics = stageMetrics.getOrElse(stageId, null),
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     }
     listener.onJobStart(SparkListenerJobStart(0, 0L, stageInfos, jobProperties(rootExecutionId)))
@@ -195,6 +199,23 @@ class ScanLimitListenerSuite extends SparkFunSuite {
     assert(cancelledTags.toSeq == Seq(otherJobTag))
     // What the stage read before the job of the other execution started does not count for it.
     assert(listener.bytesReadOverLimit(otherExecutionId).contains(101))
+  }
+
+  test("counts a running stage that an execution without a limit submitted") {
+    listener.register(executionId, maxScanBytes = 100, jobTag)
+    submitStage(stageId = 0, rootExecutionId = executionId + 1)
+    startTask(stageId = 0, taskId = 1, partitionId = 0)
+    // A job of the execution depends on the running stage, which is not submitted again.
+    startJob(stageIds = Seq(0), rootExecutionId = executionId)
+    startTask(stageId = 0, taskId = 2, partitionId = 1)
+    heartbeat(stageId = 0, taskId = 2, bytesRead = 60)
+    // The task that was already running when the job started only counts when it ends.
+    heartbeat(stageId = 0, taskId = 1, bytesRead = 30)
+    assert(cancelledTags.isEmpty)
+
+    endTask(stageId = 0, taskId = 1, partitionId = 0, bytesRead = 41)
+    assert(cancelledTags.toSeq == Seq(jobTag))
+    assert(listener.bytesReadOverLimit(executionId).contains(101))
   }
 
   test("only tracks the registered executions") {

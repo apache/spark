@@ -45,7 +45,9 @@ import org.apache.spark.util.collection.OpenHashMap
  *
  * A job can depend on a stage that a job of another execution is already running, and that stage
  * is not submitted again. So the listener learns from the start of each job which stages it
- * depends on, and counts what a stage reads against every execution that depends on it.
+ * depends on, and counts what a stage reads against every execution that depends on it. If no
+ * execution with a limit depended on the stage before, the tasks that were already running then
+ * only count when they end.
  *
  * @param cancelJobsWithTag cancels the active jobs that have the given tag, for the given reason
  */
@@ -93,8 +95,12 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
     if (executions.isEmpty) return
     synchronized {
       executionOf(event.properties).foreach { execution =>
-        event.stageIds.foreach { stageId =>
-          stages.getOrElseUpdate(stageId, new StageScanState).executions += execution
+        event.stageInfos.foreach { stageInfo =>
+          val stage = stages.getOrElseUpdate(stageInfo.stageId, new StageScanState)
+          stage.executions += execution
+          // A running stage that was submitted for an execution without a limit was not tracked
+          // then, so its submission did not record the accumulator of its current attempt.
+          recordBytesReadAccum(stage, stageInfo)
         }
       }
     }
@@ -107,8 +113,7 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
         // A new attempt of a stage keeps what the earlier attempts read.
         val stage = stages.getOrElseUpdate(event.stageInfo.stageId, new StageScanState)
         stage.executions += execution
-        stage.bytesReadAccumIds +=
-          event.stageInfo.taskMetrics.nameToAccums(InternalAccumulator.input.BYTES_READ).id
+        recordBytesReadAccum(stage, event.stageInfo)
         // Cancelling only reaches the jobs that are active at that time, and the execution may
         // submit more of them before it fails.
         if (execution.bytesReadOverLimit.isDefined) cancel(execution)
@@ -157,6 +162,14 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
             stage, event.taskInfo.partitionId, event.taskMetrics.inputMetrics.bytesRead)
         }
       }
+    }
+  }
+
+  /** Records the accumulator of the bytes read of the stage attempt that `info` describes. */
+  private def recordBytesReadAccum(stage: StageScanState, info: StageInfo): Unit = {
+    // A stage that has not been submitted yet has no metrics.
+    Option(info.taskMetrics).foreach { metrics =>
+      stage.bytesReadAccumIds += metrics.nameToAccums(InternalAccumulator.input.BYTES_READ).id
     }
   }
 

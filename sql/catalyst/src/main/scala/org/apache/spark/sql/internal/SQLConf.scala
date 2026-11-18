@@ -2693,16 +2693,21 @@ object SQLConf {
   val MAX_SCAN_BYTES = buildConf("spark.sql.execution.maxScanBytes")
     .doc("The maximum number of bytes a query may read from its data sources, including in " +
       "its subqueries. A query that reads more is cancelled and fails with " +
-      "SCAN_BYTES_LIMIT_EXCEEDED. This is a best-effort guard rather than a hard cap. Spark " +
-      "learns how much the tasks of a query have read from the executor heartbeats " +
+      "SCAN_BYTES_LIMIT_EXCEEDED. This is a best-effort guard against mistakes rather than a " +
+      "hard cap or an enforced policy: a session can change it. Spark learns how much the " +
+      "tasks of a query have read from the executor heartbeats " +
       "(spark.executor.heartbeatInterval) and when a task ends, so a query can read more " +
-      "than the limit before it is cancelled. Only data sources that report the bytes they " +
-      "read are limited: file-based sources report the bytes they read from storage, while " +
-      "sources such as JDBC report none. Reading cached data counts the size of the cached " +
-      "blocks. Jobs that run outside the execution of a query are not limited, such as the " +
-      "jobs that infer the schema of a file source while the query is analyzed, and the jobs " +
-      "that Dataset.toLocalIterator runs as the iterator it returns is consumed. Streaming " +
-      "queries are not limited. -1 (the default) means no limit.")
+      "than the limit before it is cancelled: about what all its running tasks read in one " +
+      "heartbeat interval, which grows with the size of the cluster. Only the bytes that a " +
+      "task reads through a Hadoop FileSystem count, as its statistics report them. The " +
+      "built-in file sources read through it, while sources such as JDBC, or connectors " +
+      "with a storage client of their own, report none, and reads on threads that a source " +
+      "starts itself can be missed. Reading cached data counts the size of the cached " +
+      "blocks, although it reads no storage. Jobs that run outside the execution of a query " +
+      "are not limited, such as the jobs that infer the schema of a file source while the " +
+      "query is analyzed, the jobs that run on the RDD that Dataset.rdd returns, and the " +
+      "jobs that Dataset.toLocalIterator runs as the iterator it returns is consumed. " +
+      "Streaming queries are not limited. -1 (the default) means no limit.")
     .version("4.5.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .bytesConf(ByteUnit.BYTE)

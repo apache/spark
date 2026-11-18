@@ -130,11 +130,13 @@ private[sql] class SharedState(
 
   /**
    * The listener that enforces `spark.sql.execution.maxScanBytes`. It is created, and starts to
-   * receive events, when the first query with a limit runs.
+   * receive events, when the first query with a limit runs. It has a queue of its own on the
+   * listener bus, so that it does not slow down the listeners of the UI and they do not delay or
+   * drop its events. The events that its own queue drops when it is full still weaken the limit.
    */
   private[sql] lazy val scanLimitListener: ScanLimitListener = {
     val listener = new ScanLimitListener(sparkContext.cancelJobsWithTag(_, _))
-    sparkContext.listenerBus.addToStatusQueue(listener)
+    sparkContext.listenerBus.addToQueue(listener, "scanLimit")
     listener
   }
 
