@@ -209,6 +209,15 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
 
+    // The cutoff must rise with the watermark: `watermark + c < leftTime`. Without the watermark
+    // term, or with `-watermark`, later rightTime values can still match old leftTime values.
+    val watermarkTerms = terms.filter(_.references.exists { a =>
+      attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey)
+    })
+    if (watermarkTerms.size != 1 || watermarkTerms.head.isInstanceOf[UnaryMinus]) {
+      return None
+    }
+
     // Replace watermark attribute with watermark value, and generate the resolved expression
     // from the other terms. That is,
     // rightTime-with-watermark, c1, -c2  =>  watermark, c1, -c2  =>  watermark + c1 + (-c2)
