@@ -17,20 +17,72 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.StringWriter
 import java.time.{LocalDate, LocalDateTime}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.csv.{CSVOptions, UnivocityGenerator}
+import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val captureKey = SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS.key
 
   private val struct = CreateNamedStruct(Seq(Literal("id"),
     BoundReference(0, LongType, nullable = false), Literal("n"), Literal.create(null, IntegerType)))
+
+  for (format <- Seq("json", "csv"); mode <- Seq("explicit", "ambient", "captured")) {
+    test(s"$format file options select SQLConf fallback once only when needed: $mode") {
+      val lookups = new AtomicInteger
+      val key = if (format == "json") {
+        SQLConf.LEGACY_JSON_ENABLE_DATE_TIME_PARSING_FALLBACK.key
+      } else {
+        SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key
+      }
+      val conf = new SQLConf {
+        override def getConf[T](entry: ConfigEntry[T]): T = {
+          if (entry.key == key) lookups.incrementAndGet()
+          super.getConf(entry)
+        }
+        override def getConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
+          if (entry.key == key) lookups.incrementAndGet()
+          super.getConf(entry)
+        }
+      }
+      SQLConf.withExistingConf(conf) {
+        if (format == "json") {
+          val schema = new StructType().add("d", DateType).add("ts", TimestampType)
+          val options = new JSONOptions(if (mode == "explicit") {
+            Map("enableDateTimeParsingFallback" -> "false")
+          } else Map.empty[String, String], "UTC")
+          if (mode == "captured") {
+            new JacksonParser(schema, options, allowArrayAsStructs = false,
+              defaultEnableDateTimeParsingFallback = None)
+          } else {
+            new JacksonParser(schema, options, allowArrayAsStructs = false)
+          }
+        } else {
+          val schema = new StructType().add("n", IntegerType)
+          val options = new CSVOptions(if (mode == "explicit") {
+            Map("treatNullAsEmptyString" -> "true")
+          } else Map.empty[String, String], false, "UTC")
+          if (mode == "captured") {
+            new UnivocityGenerator(schema, new StringWriter, options,
+              defaultNullAsEmptyString = false)
+          } else {
+            new UnivocityGenerator(schema, new StringWriter, options)
+          }
+        }
+      }
+      assert(lookups.get() == (if (mode == "ambient") 1 else 0))
+    }
+  }
 
   private def assertShared(first: Expression, second: Expression): Unit = {
     assert(first.semanticEquals(second))
@@ -649,6 +701,7 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
         withSQLConf(captureKey -> "true", jsonKey -> (!creatorValue).toString,
             csvKey -> (!creatorValue).toString, fallbackKey -> (!creatorValue).toString) {
           val jsonExpected = if (creatorValue) """{"id":1,"n":null}""" else """{"id":1}"""
+          checkEvaluationWithoutCodegen(json, UTF8String.fromString(jsonExpected), create_row(1L))
           checkEvaluation(json, jsonExpected, create_row(1L))
           checkEvaluation(csv, if (creatorValue) "1," else "1,\"\"", create_row(1L))
           checkEvaluation(csv.copy(options = Map("treatNullAsEmptyString" -> null)),

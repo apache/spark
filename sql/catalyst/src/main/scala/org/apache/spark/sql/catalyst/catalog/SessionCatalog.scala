@@ -2328,8 +2328,8 @@ class SessionCatalog(
     })
     val ordered = NamedParametersSupport.defaultRearrange(
       signature, input, function.name.toString, SQLConf.get.resolver)
-    val supplied = ordered.zipWithIndex.filterNot { case (expr, index) =>
-      defaults(index).exists(_ eq expr)
+    val supplied = ordered.zip(defaults).zipWithIndex.collect {
+      case ((expr, default), index) if !default.exists(_ eq expr) => (expr, index)
     }
     val positions = supplied.map(_._2)
     val isPrefix = positions.zipWithIndex.forall { case (position, index) => position == index }

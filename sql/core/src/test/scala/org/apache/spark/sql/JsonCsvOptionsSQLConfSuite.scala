@@ -192,7 +192,116 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("omitted defaults preserve generated function column names") {
+    withUserDefinedFunction("named_args_fn" -> false) {
+      sql("CREATE FUNCTION named_args_fn(a BIGINT DEFAULT 11, b BIGINT DEFAULT 22) " +
+        "RETURNS BIGINT RETURN a + b")
+      val queries = Seq(
+        "SELECT named_args_fn()",
+        "SELECT named_args_fn(id) FROM range(3)",
+        "SELECT named_args_fn(sum(id)) FROM range(3)",
+        "SELECT named_args_fn(sum(id)) FROM range(3) GROUP BY id % 2",
+        "SELECT named_args_fn(id), count(*) FROM range(3) GROUP BY id",
+        "SELECT named_args_fn(id), count(*) FROM range(3) GROUP BY named_args_fn(id)")
+      queries.foreach { query =>
+        val expected = withSQLConf(captureKey -> "false") { sql(query).columns.toSeq }
+        withSQLConf(captureKey -> "true") {
+          assert(sql(query).columns.toSeq == expected, query)
+        }
+      }
+    }
+  }
+
   for (capture <- Seq(true, false)) {
+    for (sparse <- Seq(true, false)) {
+      test(s"named defaults match explicit grouping defaults: $capture, $sparse") {
+        withSQLConf(captureKey -> capture.toString) {
+          withUserDefinedFunction("named_args_fn" -> false) {
+            val parameters = if (sparse) {
+              "a BIGINT DEFAULT 1, b BIGINT DEFAULT 2, c BIGINT DEFAULT 3, d BIGINT DEFAULT 4"
+            } else {
+              "a BIGINT, b BIGINT DEFAULT 1"
+            }
+            val body = if (sparse) "a + b + c + d" else "a + b"
+            sql(s"CREATE FUNCTION named_args_fn($parameters) RETURNS BIGINT RETURN $body")
+            val supplied = if (sparse) {
+              "d => id, b => CAST(7 AS BIGINT), a => CAST(1 AS BIGINT), c => CAST(3 AS BIGINT)"
+            } else {
+              "a => id, b => CAST(1 AS BIGINT)"
+            }
+            val omitted = if (sparse) "b => CAST(7 AS BIGINT), d => id" else "a => id"
+            val offset = if (sparse) 11L else 1L
+            checkAnswer(sql(s"SELECT named_args_fn($supplied), count(*) FROM range(3) " +
+              s"GROUP BY named_args_fn($omitted)"), (0L to 2L).map(id => Row(id + offset, 1L)))
+          }
+        }
+      }
+    }
+
+    test(s"named omitted defaults preserve multiple supplied argument associations: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql("CREATE FUNCTION named_args_fn(a BIGINT DEFAULT 11, b BIGINT DEFAULT 22, " +
+            "c BIGINT DEFAULT 33, d BIGINT DEFAULT 44, e BIGINT DEFAULT 55) " +
+            "RETURNS STRUCT<a: BIGINT, b: BIGINT, c: BIGINT, d: BIGINT, e: BIGINT> " +
+            "RETURN named_struct('a', a, 'b', b, 'c', c, 'd', d, 'e', e)")
+          val query = "SELECT named_args_fn(e => id + 200, b => id + 100, d => id + 300) " +
+            "FROM range(3)"
+          val expected = (0L to 2L).map(id => Row(Row(11L, id + 100, 33L,
+            id + 300, id + 200)))
+          checkAnswer(sql(query), expected)
+          checkAnswer(sql(query + " GROUP BY id"), expected)
+          checkAnswer(sql("SELECT named_args_fn(e => 8L, b => CAST(NULL AS BIGINT), d => 9L)"),
+            Row(Row(11L, null, 33L, 9L, 8L)))
+        }
+      }
+    }
+
+    for (creator <- Seq(true, false)) {
+      test("named omitted defaults mix saved and supplied conversion settings: " +
+          s"$capture, $creator") {
+        val jsonKey = SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key
+        val csvKey = SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key
+        val input = "named_struct('id', 1, 'n', CAST(NULL AS INT))"
+        withSQLConf(captureKey -> "true", jsonKey -> creator.toString,
+            csvKey -> creator.toString) {
+          withUserDefinedFunction("named_args_fn" -> false) {
+            sql(s"CREATE FUNCTION named_args_fn(a STRING DEFAULT to_json($input), " +
+              s"b STRING DEFAULT '', c STRING DEFAULT to_csv($input), d STRING DEFAULT '') " +
+              "RETURNS STRUCT<a: STRING, b: STRING, c: STRING, d: STRING> " +
+              "RETURN named_struct('a', a, 'b', b, 'c', c, 'd', d)")
+            withSQLConf(captureKey -> capture.toString, jsonKey -> (!creator).toString,
+                csvKey -> (!creator).toString) {
+              def json(value: Boolean): String =
+                if (value) """{"id":1}""" else """{"id":1,"n":null}"""
+              def csv(value: Boolean): String = if (value) "1,\"\"" else "1,"
+              val saved = if (capture) creator else !creator
+              val call = s"named_args_fn(d => to_csv($input), b => to_json($input))"
+              val expected = Row(Row(json(saved), json(!creator), csv(saved), csv(!creator)))
+              checkAnswer(sql(s"SELECT $call"), expected)
+              checkAnswer(sql(s"SELECT $call FROM range(1) GROUP BY id"), expected)
+            }
+          }
+        }
+      }
+    }
+
+    test(s"named omitted defaults resolve SQL function dependencies and cycles: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("default_dep" -> false, "named_args_fn" -> false) {
+          sql("CREATE FUNCTION default_dep() RETURNS BIGINT RETURN 1")
+          sql("CREATE FUNCTION named_args_fn(a BIGINT DEFAULT default_dep(), " +
+            "b BIGINT DEFAULT 2) RETURNS BIGINT RETURN a + b")
+          checkAnswer(sql("SELECT named_args_fn(b => 3)"), Row(4L))
+          val error = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE FUNCTION default_dep() RETURNS BIGINT " +
+              "RETURN named_args_fn(b => 3)")
+          }
+          assert(error.getCondition.contains("CYCLIC_FUNCTION_REFERENCE"))
+        }
+      }
+    }
+
     test(s"named scalar arguments normalize before aggregate extraction: $capture") {
       withSQLConf(captureKey -> capture.toString) {
         withUserDefinedFunction("named_args_fn" -> false) {

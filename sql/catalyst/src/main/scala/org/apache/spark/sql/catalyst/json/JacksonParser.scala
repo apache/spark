@@ -61,7 +61,7 @@ class JacksonParser(
     charVarcharStandardSemanticsOverride: Option[Boolean] = None,
     // from_json supplies its captured default (including None) when capture mode is enabled.
     // In rollback mode, and for file scans, the default comes from the current SQLConf.
-    defaultEnableDateTimeParsingFallback: Option[Boolean] =
+    defaultEnableDateTimeParsingFallback: => Option[Boolean] =
       SQLConf.get.jsonEnableDateTimeParsingFallback) extends Logging {
 
   import JacksonUtils._
@@ -108,16 +108,16 @@ class JacksonParser(
   // Flags to signal if we need to fall back to the backward compatible behavior of parsing
   // dates and timestamps.
   // For more information, see comments for "enableDateTimeParsingFallback" option in JSONOptions.
+  private val parsingFallback =
+    options.enableDateTimeParsingFallback.orElse(defaultEnableDateTimeParsingFallback)
   private val enableParsingFallbackForTimestampType =
-    options.enableDateTimeParsingFallback
-      .orElse(defaultEnableDateTimeParsingFallback)
+    parsingFallback
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.timestampFormatInRead.isEmpty
       }
   private val enableParsingFallbackForDateType =
-    options.enableDateTimeParsingFallback
-      .orElse(defaultEnableDateTimeParsingFallback)
+    parsingFallback
       .getOrElse {
         SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.dateFormatInRead.isEmpty

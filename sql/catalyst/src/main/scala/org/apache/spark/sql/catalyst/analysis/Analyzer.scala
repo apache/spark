@@ -2841,6 +2841,49 @@ class Analyzer(
    */
   object ResolveSQLFunctions extends Rule[LogicalPlan] {
 
+    // Materialize omitted defaults before grouping compares function calls. Only defaults are
+    // analyzed in the saved context; supplied arguments have already resolved in the caller.
+    private def resolveDefaults(f: SQLFunctionExpression): SQLFunctionExpression = {
+      val params = f.function.inputParam.get
+      val positions = if (f.inputPositions.isEmpty) f.inputs.indices else f.inputPositions
+      val supplied = positions.zip(f.inputs).toMap
+      val parseConf = Analyzer.buildSQLFunctionConf(
+        function = f.function,
+        applySessionOverrides = false,
+        alwaysSetAnsiValue = true)
+      val defaults = SQLConf.withExistingConf(parseConf) {
+        params.zipWithIndex.collect {
+          case (param, index) if !supplied.contains(index) =>
+            val text = param.getDefault().getOrElse {
+              throw QueryCompilationErrors.wrongNumArgsError(
+                f.name, params.size.toString, f.inputs.size)
+            }
+            Alias(Cast(SQLFunction.parseDefault(text, v1SessionCatalog.parser), param.dataType),
+              index.toString)()
+        }
+      }
+      val newConf = Analyzer.buildSQLFunctionConf(
+        function = f.function,
+        applySessionOverrides = true,
+        alwaysSetAnsiValue = false)
+      SQLConf.withExistingConf(newConf) {
+        AnalysisContext.withAnalysisContext(f.function) {
+          val resolved = SQLFunctionContext.withSQLFunction {
+            executeSameContext(Project(defaults, OneRowRelation()))
+          }.asInstanceOf[Project]
+          SimpleAnalyzer.checkAnalysis(resolved)
+          val defaultByPosition = resolved.projectList.map {
+            case a: Alias => a.name.toInt -> a.child
+          }.toMap
+          val normalized = f.copy(inputs = params.indices.map { index =>
+            supplied.getOrElse(index, defaultByPosition(index))
+          }, inputPositions = Nil)
+          normalized.setTagValue(SQLFunctionExpression.SUPPLIED_INPUT_POSITIONS, positions)
+          normalized
+        }
+      }
+    }
+
     private def hasSQLFunctionExpression(exprs: Seq[Expression]): Boolean = {
       exprs.exists(_.exists(_.isInstanceOf[SQLFunctionExpression]))
     }
@@ -3102,10 +3145,25 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = {
       // Only rewrite SQL functions when they are not in nested function calls.
-      if (SQLFunctionContext.get.nestedSQLFunctionDepth > 0) {
+      if (SQLFunctionContext.get.nestedSQLFunctionDepth > 0 ||
+          !plan.containsPattern(SQL_FUNCTION_EXPRESSION)) {
         plan
       } else {
-        rewrite(plan)
+        // Aggregate analysis compares calls before expansion. Other calls can keep defaults
+        // inside the function plan, including the existing expansion order for nested defaults.
+        val withDefaults = if (plan.containsPattern(AGGREGATE) && conf.getConf(
+            SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS)) {
+          plan.resolveExpressionsUpWithPruning(_.containsPattern(SQL_FUNCTION_EXPRESSION)) {
+            case f: SQLFunctionExpression if f.resolved &&
+                f.function.inputParam.exists(_.size > f.inputs.size) =>
+              withPosition(f) {
+                withOrigin(f.origin) { resolveDefaults(f) }
+              }
+          }
+        } else {
+          plan
+        }
+        rewrite(withDefaults)
       }
     }
   }

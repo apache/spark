@@ -33,7 +33,7 @@ class UnivocityGenerator(
     schema: StructType,
     writer: Writer,
     options: CSVOptions,
-    defaultNullAsEmptyString: Boolean =
+    defaultNullAsEmptyString: => Boolean =
       SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)) {
   private val writerSettings = options.asWriterSettings
   writerSettings.setHeaders(schema.fieldNames: _*)

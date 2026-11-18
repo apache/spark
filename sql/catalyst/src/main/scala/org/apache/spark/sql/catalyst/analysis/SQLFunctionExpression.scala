@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SQL_FUNCTION_EXPRESSION, SQL_SCALAR_FUNCTION, TreePattern}
 import org.apache.spark.sql.types.DataType
 
@@ -37,10 +38,20 @@ case class SQLFunctionExpression(
   override def dataType: DataType = returnType.get
   override def nullable: Boolean = true
   override def prettyName: String = name
-  override def toString: String = s"$name(${children.mkString(", ")})"
+  private def displayInputs: Seq[Expression] =
+    getTagValue(SQLFunctionExpression.SUPPLIED_INPUT_POSITIONS)
+      .map(_.map(inputs)).getOrElse(inputs)
+  override def toString: String = s"$name(${displayInputs.mkString(", ")})"
+  override def sql: String = s"$prettyName(${displayInputs.map(_.sql).mkString(", ")})"
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): SQLFunctionExpression = copy(inputs = newChildren)
   final override val nodePatterns: Seq[TreePattern] = Seq(SQL_FUNCTION_EXPRESSION)
+}
+
+object SQLFunctionExpression {
+  // Expanding defaults must not change generated column names. Display metadata is excluded
+  // from expression identity, so omitted and explicitly supplied equivalent defaults still match.
+  val SUPPLIED_INPUT_POSITIONS = TreeNodeTag[Seq[Int]]("sql_function_supplied_input_positions")
 }
 
 /**
