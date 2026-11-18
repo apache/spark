@@ -22,8 +22,8 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Call, CommandResult, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Grouping, GroupingID, SubqueryExpression, WindowExpression, WindowFunction}
+import org.apache.spark.sql.catalyst.plans.logical.{Call, CommandResult, LocalRelation, LogicalPlan, PlanHelper}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
@@ -39,10 +39,14 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
   }
 
   private def invokeProcedures(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    // A CALL with an IN or correlated EXISTS subquery in an argument is left for CheckAnalysis to
-    // reject. The optimizer would rewrite the subquery into a join under the `Call`.
+    // A CALL with an IN or correlated EXISTS subquery, or an aggregate, window function,
+    // grouping function or generator, in an argument is left for the analyzer to reject. The
+    // optimizer would rewrite the subquery into a join under the `Call`, or could fold away the
+    // other expressions.
     case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess &&
-        !c.args.exists(SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
+        !c.args.exists(SubqueryExpression.hasInOrCorrelatedExistsSubquery) &&
+        PlanHelper.specialExpressionsInUnsupportedOperator(c).isEmpty &&
+        !c.args.exists(hasGroupingOrWindowFunctionWithoutOver) =>
       val procedure = c.procedure match {
         case ResolvedProcedure(_, _, p: BoundProcedure) => p
       }
@@ -60,6 +64,13 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
           // the `Call`, so the plan is still unexpected.
           throw SparkException.internalError("Unexpected plan for optimized CALL statement")
       }
+  }
+
+  // The two forms that CheckAnalysis rejects with UNSUPPORTED_GROUPING_EXPRESSION and
+  // WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE. A window function that is a whole argument is not one.
+  private def hasGroupingOrWindowFunctionWithoutOver(arg: Expression): Boolean = arg.exists {
+    case _: Grouping | _: GroupingID => true
+    case e => !e.isInstanceOf[WindowExpression] && e.children.exists(_.isInstanceOf[WindowFunction])
   }
 
   private def invoke(procedure: BoundProcedure, args: Seq[Expression], call: Call): LogicalPlan = {
