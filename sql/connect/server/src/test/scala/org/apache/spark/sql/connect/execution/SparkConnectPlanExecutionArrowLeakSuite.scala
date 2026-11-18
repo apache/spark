@@ -144,9 +144,7 @@ class SparkConnectPlanExecutionArrowLeakSuite
   /** Calls processAsArrowBatches directly; `onArrowBatch` runs for each Arrow batch sent. */
   private def runArrowBatches(df: DataFrame)(onArrowBatch: Int => Unit): Unit = {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    val holder = createDummyExecuteHolder(
-      sessionHolder,
-      proto.Command.getDefaultInstance)
+    val holder = createDummyExecuteHolder(sessionHolder, proto.Command.getDefaultInstance)
     var numBatches = 0
     val observer = new StreamObserver[proto.ExecutePlanResponse] {
       override def onNext(r: proto.ExecutePlanResponse): Unit = if (r.hasArrowBatch) {
