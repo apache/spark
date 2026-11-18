@@ -52,6 +52,50 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Find the ordinal of the equality key whose watermark evicts the state of both inputs.
+   *
+   * Join keys of both sides generate rows of the same fields, that is, same sequence of data
+   * types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
+   * then it will never consider joining keys that are < state key watermark (i.e. event time
+   * watermark). On the other side (i.e. right side), even if there is no watermark defined,
+   * there has to be an equivalent column (i.e., timestamp). And any right side data that has the
+   * timestamp < watermark will not match will not match with left side data, as the left side get
+   * filtered with the explicitly defined watermark. So, the watermark in timestamp column in
+   * left side keys effectively causes the timestamp on the right side to have a watermark.
+   * We will use the ordinal of the left timestamp in the left keys to find the corresponding
+   * right timestamp in the right keys.
+   */
+  def findJoinKeyOrdinalForWatermark(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Option[Int] = {
+    leftKeys.zipWithIndex.collectFirst {
+      case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+    } orElse {
+      rightKeys.zipWithIndex.collectFirst {
+        case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+      }
+    }
+  }
+
+  /**
+   * Whether an equality key of one input bounds, by that input's watermark, the equal key of the
+   * other input's state rows. Later rows of this input have keys above the watermark if the key
+   * is the watermarked column, or that column shifted forward by a constant. With a backward
+   * shift, they can still match state keys at or below the watermark, which eviction removes.
+   */
+  def isKeyBoundedByWatermark(key: Expression, inputAttributes: AttributeSet): Boolean = {
+    key match {
+      case a: AttributeReference => a.metadata.contains(delayKey) && inputAttributes.contains(a)
+      case _ if key.dataType == TimestampType =>
+        // Solving `stateKey >= key` at watermark 0 gives the shift less 1 ms.
+        val stateKey = AttributeReference("stateKey", TimestampType)()
+        getStateValueWatermark(AttributeSet(stateKey), inputAttributes,
+          Some(GreaterThanOrEqual(stateKey, key)), Some(0L)).exists(_ >= -1)
+      case _ => false
+    }
+  }
+
+  /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
    * given the join condition and the event time watermark. This is how it works.
    * - The condition is split into conjunctive predicates, and we find the predicates of the

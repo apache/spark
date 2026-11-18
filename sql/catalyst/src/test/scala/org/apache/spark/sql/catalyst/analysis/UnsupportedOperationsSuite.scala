@@ -24,14 +24,16 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -491,7 +493,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   assertSupportedInStreamingPlan(
     s"LeftSemi join with stream-stream relations and update mode",
     streamRelation.join(streamRelation, joinType = LeftSemi,
-      condition = Some(attributeWithWatermark === attribute)),
+      condition = Some(attribute === attributeWithWatermark)),
     OutputMode.Update())
 
   // Complete mode not allowed for stream-stream joins. The error message also indicates
@@ -513,17 +515,30 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   // Left outer, right outer, full outer, left semi joins
   Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
-    // Stream-stream allowed with join on watermark attribute
-    // Note that the attribute need not be watermarked on both sides.
+    // Stream-stream allowed with join on watermark attribute, if the watermark is on the input
+    // that does not have rows output once: the right input for left outer and left semi joins.
+    Seq(
+      ("left", attributeWithWatermark === attribute, joinType == RightOuter),
+      ("right", attribute === attributeWithWatermark, joinType == LeftOuter || joinType == LeftSemi)
+    ).foreach { case (side, condition, supported) =>
+      val name = s"$joinType join with stream-stream relations and join on attribute with " +
+        s"$side watermark"
+      val plan = streamRelation.join(streamRelation, joinType = joinType,
+        condition = Some(condition))
+      if (supported) {
+        assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
+          Seq("without a watermark on the"))
+      }
+      assertSupportedInStreamingPlan(s"$name, watermark direction check disabled", plan,
+        OutputMode.Append(),
+        SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key -> "false")
+    }
     assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and join on attribute with left watermark",
+      s"$joinType join with stream-stream relations and join on attribute with both watermarks",
       streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attributeWithWatermark === attribute)),
-      OutputMode.Append())
-    assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and join on attribute with right watermark",
-      streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attribute === attributeWithWatermark)),
+        condition = Some(attributeWithWatermark === attributeWithWatermark)),
       OutputMode.Append())
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and join on non-watermarked attribute",
@@ -543,11 +558,18 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       }
 
     // stream-stream allowed with range condition yielding state value watermark
-    assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and state value watermark",
-      leftRelation.join(rightRelation, joinType = joinType,
-        condition = Some(attribute > timeWithWatermark + 10)),
-      OutputMode.Append())
+    val rangeJoin = leftRelation.join(rightRelation, joinType = joinType,
+      condition = Some(attribute > timeWithWatermark + 10))
+    if (joinType == FullOuter) {
+      // The left input has no watermark to bound the right input's state.
+      assertNotSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and state value watermark on one side",
+        rangeJoin, OutputMode.Append(), Seq("without a watermark on the left input"))
+    } else {
+      assertSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and state value watermark",
+        rangeJoin, OutputMode.Append())
+    }
 
     // stream-stream not allowed with insufficient range condition
     assertNotSupportedInStreamingPlan(
@@ -557,6 +579,55 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       OutputMode.Append(),
       Seq("is not supported without a watermark in the join keys, or a watermark on " +
         "the nullable side and an appropriate range condition"))
+  }
+
+  {
+    val leftKey = AttributeReference("lk", IntegerType)()
+    val rightKey = AttributeReference("rk", IntegerType)()
+    val leftTime = AttributeReference("lt", TimestampType)()
+    val rightTime = AttributeReference("rt", TimestampType)()
+    def withWatermark(time: Attribute, watermark: Boolean): Attribute =
+      if (watermark) time.withMetadata(watermarkMetadata) else time
+    def shift(time: Expression, seconds: Int): Expression = {
+      val interval = new CalendarInterval(0, 0, seconds * MICROS_PER_SECOND)
+      if (seconds == 0) time else TimestampAddInterval(time, Literal(interval))
+    }
+
+    // (name, left watermark, right watermark, key shift of rightTime in seconds, supported)
+    def cases(joinType: JoinType): Seq[(String, Boolean, Boolean, Int, Boolean)] = {
+      joinType match {
+        case LeftOuter | LeftSemi => Seq(
+          ("left watermark only", true, false, 0, false),
+          ("right watermark only", false, true, 0, true),
+          ("forward shifted key", true, true, 10, true),
+          ("backward shifted key", true, true, -10, false))
+        case RightOuter => Seq(
+          ("left watermark only", true, false, 0, true),
+          ("right watermark only", false, true, 0, false))
+        case _ => Seq(
+          ("left watermark only", true, false, 0, false),
+          ("right watermark only", false, true, 0, false),
+          ("forward shifted key", true, true, 10, true),
+          ("backward shifted key", true, true, -10, false))
+      }
+    }
+
+    Seq(LeftOuter, LeftSemi, RightOuter, FullOuter).foreach { joinType =>
+      cases(joinType).foreach { case (name, leftWatermark, rightWatermark, seconds, supported) =>
+        val lt = withWatermark(leftTime, leftWatermark)
+        val rt = withWatermark(rightTime, rightWatermark)
+        val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(
+          new TestStreamingRelation(Seq(rightKey, rt)), joinType = joinType,
+          condition = Some(leftKey === rightKey && lt === shift(rt, seconds)))
+        val testName = s"$joinType join on event time with $name"
+        if (supported) {
+          assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+        } else {
+          assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+            Seq("without a watermark on the", "that bounds the state of the"))
+        }
+      }
+    }
   }
 
   // multi-aggregations only supported in Append mode
