@@ -55,6 +55,7 @@ if should_test_connect:
         WriteOperation,
     )
     from pyspark.sql.connect.readwriter import DataFrameReader
+    from pyspark.sql.connect.streaming.readwriter import DataStreamReader
     from pyspark.sql.connect.types import (
         proto_schema_to_pyspark_data_type,
         pyspark_types_to_proto_types,
@@ -63,6 +64,7 @@ if should_test_connect:
         ArrayType,
         CharType,
         DoubleType,
+        FileType,
         IntegerType,
         MapType,
         StringType,
@@ -869,6 +871,26 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
 
+    def test_streaming_table_source_name(self):
+        for source_name in (None, "orders_source"):
+            with self.subTest(source_name=source_name):
+                reader = DataStreamReader(self.connect).option("maxFilesPerTrigger", "1")
+                if source_name is not None:
+                    reader.name(source_name)
+                plan = reader.table("db.orders")._plan.to_proto(self.connect)
+                self.assertTrue(plan.root.read.is_streaming)
+                named_table = plan.root.read.named_table
+                self.assertEqual(named_table.unparsed_identifier, "db.orders")
+                self.assertEqual(dict(named_table.options), {"maxFilesPerTrigger": "1"})
+                self.assertEqual(named_table.HasField("source_name"), source_name is not None)
+                if source_name is not None:
+                    self.assertEqual(named_table.source_name, source_name)
+                self.assertEqual(proto.Plan.FromString(plan.SerializeToString()), plan)
+
+        batch_plan = DataFrameReader(self.connect).table("db.orders")._plan.to_proto(self.connect)
+        self.assertFalse(batch_plan.root.read.is_streaming)
+        self.assertFalse(batch_plan.root.read.named_table.HasField("source_name"))
+
     def test_reader_options_case_insensitive(self):
         reader = DataFrameReader(self.connect)
         df = (
@@ -1078,6 +1100,39 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         new_plan = df.to(schema)._plan.to_proto(self.connect)
         self.assertEqual(pyspark_types_to_proto_types(schema), new_plan.root.to_schema.schema)
+
+    def test_file_datatype_conversion(self):
+        for dt in [
+            FileType(),
+            FileType.external(),
+            ArrayType(FileType.external()),
+            MapType(StringType(), FileType()),
+            StructType([StructField("f", FileType.external()), StructField("g", FileType())]),
+        ]:
+            with self.subTest(dt=repr(dt)):
+                self.assertEqual(
+                    dt, proto_schema_to_pyspark_data_type(pyspark_types_to_proto_types(dt))
+                )
+
+        self.assertEqual(
+            proto.DataType.FILE_TYPE_MODE_EXTERNAL,
+            pyspark_types_to_proto_types(FileType.external()).file.mode,
+        )
+        self.assertEqual(
+            proto.DataType.FILE_TYPE_MODE_UNKNOWN,
+            pyspark_types_to_proto_types(FileType()).file.mode,
+        )
+        # A file without a mode, or with a mode this side does not know, such as the reserved
+        # value 2 or a value added later, is an unknown file.
+        for file in [
+            proto.DataType.File(),
+            proto.DataType.File(mode=2),
+            proto.DataType.File(mode=42),
+        ]:
+            with self.subTest(file=str(file)):
+                self.assertEqual(
+                    FileType(), proto_schema_to_pyspark_data_type(proto.DataType(file=file))
+                )
 
     def test_timestamp_nanos_datatype_conversion(self):
         # SPARK-57462: the nanosecond timestamp types round-trip through the DataType proto.

@@ -131,7 +131,6 @@ The following options can be used to configure the version of Hive that is used 
     <td>
       Version of the Hive metastore. Available
       options are <code>2.0.0</code> through <code>2.3.10</code>, <code>3.0.0</code> through <code>3.1.3</code>, and <code>4.0.0</code> through <code>4.2.0</code>.
-      Note: Hive 4.2 requires Java 21 or later.
     </td>
     <td>1.4.0</td>
   </tr>

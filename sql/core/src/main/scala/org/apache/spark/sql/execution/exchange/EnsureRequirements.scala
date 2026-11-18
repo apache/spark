@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -47,10 +48,13 @@ import org.apache.spark.sql.internal.SQLConf
  *                               repartition shuffles in the plan.
  * @param requiredDistribution The root required distribution we should ensure. This value is used
  *                             in AQE in case we change final stage output partitioning.
+ * @param pushDownShuffleThroughUnionEnabled Whether this AQE preparation enables union shuffle
+ *                                           push-down, requiring records of elided user layouts.
  */
 case class EnsureRequirements(
     optimizeOutRepartition: Boolean = true,
-    requiredDistribution: Option[Distribution] = None)
+    requiredDistribution: Option[Distribution] = None,
+    pushDownShuffleThroughUnionEnabled: Boolean = false)
   extends Rule[SparkPlan] {
 
   /**
@@ -351,14 +355,43 @@ case class EnsureRequirements(
   private def pickCoPartitionTarget(
       children: Seq[SparkPlan],
       specs: Seq[Option[ShuffleSpec]]): Option[CoPartitionTarget] = {
+    // A member of a child serves as the layout when it can create a partitioning, and either Spark
+    // can evaluate that partitioning or no child has to be shuffled onto it: every other
+    // co-partitioned child pairs with it as it stands, which evaluates nothing. One that cannot
+    // serve does not keep its child from being re-shuffled, so it counts towards neither the
+    // parallelism guard nor the ranking below.
+    //
+    // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
+    // winner alone does not say which member the sides agreed on. The projection pushed into a
+    // paired child and the partitioning built for a re-shuffled child both have to come from one
+    // member, otherwise the sides end up grouped on different keys, or on a key set the child does
+    // not even have. So what is picked here is the pairing, not a member per side.
+    //
+    // Per child, each member of its spec with the member each child pairs with it, in child order.
+    // The pairing compares partition keys, so it is worked out when first asked for, and once: for
+    // a member that cannot be evaluated by `canServe`, and for the winner's members below.
+    val childMembers: Seq[Seq[LeafShuffleSpec]] = specs.map(_.toSeq.flatMap(_.flatten))
+    final class Pairing(val member: LeafShuffleSpec, index: Int) {
+      lazy val paired: Seq[Option[LeafShuffleSpec]] =
+        childMembers.map(_.find(member.isCompatibleWith))
+      // `canEvaluatePartitioning` first: it is kept by the spec, while the pairing compares keys.
+      lazy val canServe: Boolean =
+        member.canCreatePartitioning && (member.canEvaluatePartitioning ||
+          paired.zip(specs).zipWithIndex.forall { case ((pairedMember, spec), j) =>
+            j == index || spec.isEmpty || pairedMember.isDefined
+          })
+    }
+    val pairings: Seq[Seq[Pairing]] = childMembers.zipWithIndex.map { case (members, index) =>
+      members.map(new Pairing(_, index))
+    }
     // Whether we should consider `spark.sql.shuffle.partitions` and ensure enough parallelism
     // during shuffle. To achieve a good trade-off between parallelism and shuffle cost, we only
     // consider the minimum parallelism iff ALL children need to be re-shuffled.
     //
     // A child needs to be re-shuffled iff either of the following is true:
-    //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false
-    //      (as for the case of `RangePartitioning`), therefore it needs to be re-shuffled
-    //      according to another child's shuffle spec.
+    //   1. It can't create partitioning by itself, i.e., no member of its spec can serve as the
+    //      layout (`canServe` above, as for the case of `RangePartitioning`), therefore it needs
+    //      to be re-shuffled according to another child's shuffle spec.
     //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
     //      introducing extra shuffle.
     //
@@ -366,17 +399,17 @@ case class EnsureRequirements(
     //   HashPartitioning(5) <-> HashPartitioning(6)
     // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
     // HashPartitioning(6).
-    val shouldConsiderMinParallelism = children.zip(specs).forall { case (child, spec) =>
-      spec.forall(!_.canCreatePartitioning) || child.isInstanceOf[ShuffleExchangeLike]
+    val shouldConsiderMinParallelism = children.zip(pairings).forall { case (child, members) =>
+      !members.exists(_.canServe) || child.isInstanceOf[ShuffleExchangeLike]
     }
     // Choose all the children whose spec can be used to shuffle other children, each with the
     // members that can serve as the layout. Any other member would build a partitioning its own
-    // child is not laid out on, or is turned away by a co-partition key requirement to avoid skew.
-    // It does not count towards the ranking below either.
-    val candidateSpecs = children.zip(specs).flatMap {
-      case (child, Some(spec)) if !shouldConsiderMinParallelism ||
+    // child is not laid out on, or is turned away by a co-partition key requirement to avoid skew,
+    // or cannot place the rows of a child shuffled onto it.
+    val candidateSpecs = children.zip(pairings).flatMap {
+      case (child, childPairings) if !shouldConsiderMinParallelism ||
           child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions =>
-        val members = spec.flatten.filter(_.canCreatePartitioning)
+        val members = childPairings.filter(_.canServe)
         if (members.nonEmpty) Some(child -> members) else None
       case _ => None
     }
@@ -387,25 +420,14 @@ case class EnsureRequirements(
     // new shuffle for A. Then the best parallelism decides, and for a collection that is the best
     // any serving member offers, since a collection has no count of its own.
     //
-    // What the winner contributes is its members, the alternatives the layout is picked from below.
-    // Empty when no child can serve as the layout.
-    val bestMembers: Seq[LeafShuffleSpec] = candidateSpecs.maxByOption { case (child, members) =>
-      (!child.isInstanceOf[ShuffleExchangeLike], members.map(_.numPartitions).max)
+    // What the winner contributes is its members, the alternatives the layout is picked from below,
+    // each with the member every child pairs with it. Empty when no child can serve as the layout.
+    val bestPairings: Seq[Pairing] = candidateSpecs.maxByOption { case (child, members) =>
+      (!child.isInstanceOf[ShuffleExchangeLike], members.map(_.member.numPartitions).max)
     }.toSeq.flatMap(_._2)
 
-    // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
-    // winner alone does not say which member the sides agreed on. The projection pushed into a
-    // paired child and the partitioning built for a re-shuffled child both have to come from one
-    // member, otherwise the sides end up grouped on different keys, or on a key set the child does
-    // not even have. So what is picked here is the pairing, not a member per side.
-    //
-    // Per member of the winner, the member each child pairs with it, in child order.
-    val childMembers: Seq[Seq[LeafShuffleSpec]] = specs.map(_.toSeq.flatMap(_.flatten))
-    val pairings: Seq[(LeafShuffleSpec, Seq[Option[LeafShuffleSpec]])] = bestMembers.map { member =>
-      member -> childMembers.map(_.find(member.isCompatibleWith))
-    }
     // Which children the winner reaches at all, over all of its serving members.
-    val reached: Seq[Boolean] = pairings.map(_._2).transpose.map(_.exists(_.isDefined))
+    val reached: Seq[Boolean] = bestPairings.map(_.paired).transpose.map(_.exists(_.isDefined))
     // The member picked has to pair with every child the winner reaches. A child it does not
     // reach, and a child that is not in the decision, are shuffled whichever member wins, so
     // neither asks for anything here. None surviving means there is no layout to align them on, so
@@ -413,14 +435,14 @@ case class EnsureRequirements(
     // two the member that reported the match serves both, and no operator has three today.
     //
     // Ranked by parallelism, preferring the finest.
-    pairings
-      .filter { case (_, paired) =>
-        paired.zip(reached).forall { case (pairedMember, isReached) =>
+    bestPairings
+      .filter { pairing =>
+        pairing.paired.zip(reached).forall { case (pairedMember, isReached) =>
           pairedMember.isDefined || !isReached
         }
       }
-      .maxByOption { case (member, _) => member.numPartitions }
-      .map { case (member, paired) => CoPartitionTarget(member, paired) }
+      .maxByOption(_.member.numPartitions)
+      .map(pairing => CoPartitionTarget(pairing.member, pairing.paired))
   }
 
   private def hasKeyedPartitioning(p: Partitioning): Boolean = p match {
@@ -807,6 +829,7 @@ case class EnsureRequirements(
       var replicateLeftSide = false
       var replicateRightSide = false
       var applyPartialClustering = false
+      var replicateSideChosen = false
 
       // This means we allow partitions that are not clustered on their values,
       // that is, multiple partitions with the same partition value. In the
@@ -829,6 +852,7 @@ case class EnsureRequirements(
           logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
             log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
         } else {
+          replicateSideChosen = true
           // The statistics and the original partition keys come from the pre-alignment plans,
           // which is what both sides already are here.
           val leftLink = rawLeft.logicalLink
@@ -913,7 +937,8 @@ case class EnsureRequirements(
         }
       }
 
-      // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
+      // Push the common partition information to the sides that need it. An identity alignment
+      // whose leaves are shuffle stages can keep its child instead (see `regroupOrIdentity` below).
       //
       // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
       // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
@@ -924,15 +949,39 @@ case class EnsureRequirements(
       // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
       // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
       // routing (`GroupPartitionsExec.distributePartitions`).
-      (
-        GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), leftReducers,
+
+      def canSkipIdentityGroup(gpe: GroupPartitionsExec): Boolean = {
+        val child = gpe.child
+        // Keep both nodes when a replicate side is chosen, including when the join type declines
+        // it, so a re-run can peel the local sorts and reproduce the choice. This also guards a
+        // plan with existing keyed shuffle stages: the planner does not create keyed shuffles when
+        // partially clustered distribution is enabled.
+        // Shuffle stages report their exchanges' fixed partitioning. Keep the node when any leaf
+        // is not a stage: if a scan is rebuilt with different partitioning after alignment, the
+        // node checks its child against the planned partitioning and fails instead of letting the
+        // join silently pair mismatched partitions and produce incorrect results.
+        !replicateSideChosen &&
+          child.collectLeaves().forall(_.isInstanceOf[ShuffleQueryStageExec]) &&
+          gpe.outputPartitioning == child.outputPartitioning
+      }
+
+      def regroupOrIdentity(
+          child: SparkPlan,
+          spec: KeyedShuffleSpec,
+          reducers: Option[Seq[Option[KeyReducer]]],
+          replicates: Boolean): SparkPlan = {
+        val gpe = GroupPartitionsExec(child, spec.joinKeyPositions,
+          Some(mergedPartitionKeys), reducers,
           ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateLeftSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)),
-        GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), rightReducers,
-          ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateRightSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)))
+            if (replicates) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN))
+        if (canSkipIdentityGroup(gpe)) {
+          child
+        } else {
+          gpe
+        }
+      }
+      (regroupOrIdentity(rawLeft, leftSpec, leftReducers, replicateLeftSide),
+        regroupOrIdentity(rawRight, rightSpec, rightReducers, replicateRightSide))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
@@ -965,11 +1014,11 @@ case class EnsureRequirements(
     // Announced here rather than where the branch runs, since the gate can still discard what it
     // built, and a log that names a pushdown should name one that happens.
     if (pushCommonValues) {
-      if (committed) {
-        logInfo("Pushing common partition values for storage-partitioned join")
-      } else {
+      if (!committed) {
         logInfo("Not storage-partitioning this join after all: the two sides no longer declare " +
           "the same partition keys once regrouped onto the merged partition values")
+      } else if ((newLeft ne rawLeft) || (newRight ne rawRight)) {
+        logInfo("Pushing common partition values for storage-partitioned join")
       }
     }
     Option.when(committed)(Seq(newLeft, newRight))
@@ -1419,15 +1468,10 @@ case class EnsureRequirements(
       case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _, _)
           if optimizeOutRepartition &&
             (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
-        def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
-          partitioning match {
-            case lower: HashPartitioning if upper.semanticEquals(lower) => true
-            case lower: PartitioningCollection =>
-              lower.partitionings.exists(hasSemanticEqualPartitioning)
-            case _ => false
+        if (PartitioningOrigin.matchesHashLayout(child.outputPartitioning, upper)) {
+          if (pushDownShuffleThroughUnionEnabled) {
+            PartitioningOrigin.record(child, upper, shuffleOrigin)
           }
-        }
-        if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
           child
         } else {
           operator

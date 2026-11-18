@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -187,6 +188,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
+  test("SPARK-60420: V2 NTZ reads retain wall-clock conversion after a legacy flag flip") {
+    val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
+    val legacyKey = SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key
+    withDefaultTimeZone(LA) {
+      val df = withSQLConf(legacyKey -> "false") {
+        val planned = sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
+        assert(planned.schema.head.dataType === TimestampNTZType)
+        planned
+      }
+      withSQLConf(legacyKey -> "true") {
+        checkAnswer(df, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
+      }
+    }
+  }
+
   test("SPARK-60420: V2 NTZ reads and writes honor per-query timestampNTZAsWallClock") {
     val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
     val ldt = LocalDateTime.of(2022, 5, 19, 0, 0, 0)
@@ -224,6 +240,40 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
           val schema = spark.table(s"$catalog.$table").schema
           assert(schema("DATE1").dataType === expected)
           assert(schema("TIME1").dataType === expected)
+      }
+    }
+  }
+
+  gridTest("SPARK-60420: V2 aggregates retain catalog timestamp mapping")(
+      Seq(false, true)) { zoneless =>
+    val catalog = s"oracle_aggregate_$zoneless"
+    withDefaultTimeZone(LA) {
+      withSQLConf(
+          SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+          SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ",
+          s"spark.sql.catalog.$catalog" -> classOf[JDBCTableCatalog].getName,
+          s"spark.sql.catalog.$catalog.url" -> db.getJdbcUrl(dockerIp, externalPort),
+          s"spark.sql.catalog.$catalog.zonelessTimestampAsNTZ" -> zoneless.toString) {
+        val table = s"$catalog.${namespaceOpt.get}.${caseConvert("datetime")}"
+        val expectedType = if (zoneless) TimestampNTZType else TimestampType
+        val schema = spark.table(table).schema
+        Seq("date1", "time1").foreach { column =>
+          assert(schema(caseConvert(column)).dataType === expectedType)
+          Seq(
+            (s"MIN($column), MAX($column)", ""),
+            (s"$column, COUNT(*)", s" GROUP BY $column")
+          ).foreach { case (projection, groupBy) =>
+            val options = s"'zonelessTimestampAsNTZ' = '${!zoneless}'"
+            val pushed = sql(s"SELECT $projection FROM $table WITH (" +
+              s"$options, 'pushDownAggregate' = 'true')$groupBy")
+            val unpushed = sql(s"SELECT $projection FROM $table WITH (" +
+              s"$options, 'pushDownAggregate' = 'false')$groupBy")
+            checkAggregateRemoved(pushed)
+            checkAggregateRemoved(unpushed, pushed = false)
+            checkAnswer(pushed, unpushed)
+          }
+        }
       }
     }
   }

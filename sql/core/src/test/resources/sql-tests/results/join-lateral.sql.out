@@ -1987,6 +1987,75 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:b) AS u
+-- !query schema
+struct<key:string,pos:int,value:string>
+-- !query output
+a	0	1
+a	1	2
+a	2	3
+
+
+-- !query
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:b) AS u
+-- !query schema
+struct<key:string,pos:int,value:string>
+-- !query output
+a	0	1
+a	1	2
+a	2	3
+
+
+-- !query
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:missing) AS u
+-- !query schema
+struct<key:string,pos:int,value:string>
+-- !query output
+a	NULL	NULL
+
+
+-- !query
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": {"c": [1, 2]}}}')) AS t,
+  LATERAL variant_explode(t.value:b.c) AS u
+-- !query schema
+struct<key:string,pos:int,value:string>
+-- !query output
+a	0	1
+a	1	2
+
+
+-- !query
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:['b']) AS u
+-- !query schema
+struct<key:string,pos:int,value:string>
+-- !query output
+a	0	1
+a	1	2
+a	2	3
+
+
+-- !query
+SELECT t.key, u.p, to_json(u.v) AS v
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:b) AS u(p, k, v)
+-- !query schema
+struct<key:string,p:int,v:string>
+-- !query output
+a	0	1
+a	1	2
+a	2	3
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

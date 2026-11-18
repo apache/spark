@@ -21,6 +21,7 @@ import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression
 import org.apache.spark.sql.connector.expressions.GetArrayItem
 import org.apache.spark.sql.connector.expressions.VariantGet
+import org.apache.spark.sql.connector.read.LookupParameter
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
@@ -38,6 +39,17 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
       inputs: Array[String]): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     s"""$funcName($distinct${inputs.mkString(", ")})"""
+  }
+
+  // A parameter has no value to repeat, so the null-safe expansion would print one parameter as
+  // three markers and misstate how many parameter fields the predicate carries.
+  override protected def visitBinaryComparison(
+      name: String, le: Expression, re: Expression): String = {
+    if (name == "<=>" && (le.isInstanceOf[LookupParameter] || re.isInstanceOf[LookupParameter])) {
+      inputToSQL(le) + " <=> " + inputToSQL(re)
+    } else {
+      super.visitBinaryComparison(name, le, re)
+    }
   }
 
   override protected def visitGetArrayItem(getArrayItem: GetArrayItem): String = {
@@ -58,6 +70,7 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
   // until StackOverflowError. Render it as a function call instead.
   override protected def visitUnexpectedExpr(expr: Expression): String = expr match {
     case e: GeneralScalarExpression => visitSQLFunction(e.name(), e.children())
+    case p: LookupParameter => p.describe()
     case _ => super.visitUnexpectedExpr(expr)
   }
 }

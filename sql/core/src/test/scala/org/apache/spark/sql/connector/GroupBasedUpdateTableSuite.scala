@@ -23,7 +23,9 @@ import org.apache.spark.sql.execution.{InSubqueryExec, ReusedSubqueryExec}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
 
   import testImplicits._
@@ -110,6 +112,45 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
     checkLastWriteLog(
       writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, -1, "hr")),
       writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
+  }
+
+  test("SPARK-61683: update of a table accepting any schema handles metadata columns correctly") {
+    withTempView("updated_id") {
+      Seq(1, 100).toDF().createOrReplaceTempView("updated_id")
+
+      // a condition with a subquery is rewritten into a plan with a union
+      Seq("id IN (1, 100)", "id IN (SELECT * FROM updated_id)").foreach { cond =>
+        withTable(tableNameAsString) {
+          createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+            """{ "pk": 1, "id": 1, "dep": "hr" }
+              |{ "pk": 2, "id": 2, "dep": "software" }
+              |{ "pk": 3, "id": 3, "dep": "hr" }
+              |""".stripMargin)
+          sql(s"ALTER TABLE $tableNameAsString SET TBLPROPERTIES ('accept-any-schema' = 'true')")
+
+          // Spark does not align the assignments for such a table, so this SET clause lists every
+          // column of the target table, including the metadata columns that AddMetadataColumns
+          // adds to it
+          sql(
+            s"""UPDATE $tableNameAsString
+               |SET pk = pk, id = -1, dep = dep, index = index, _partition = _partition
+               |WHERE $cond
+               |""".stripMargin)
+
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+          checkLastWriteInfo(
+            expectedRowSchema = table.schema,
+            expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+          checkLastWriteLog(
+            writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(1, -1, "hr")),
+            writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")))
+        }
+      }
+    }
   }
 
   test("update runtime group filtering") {
@@ -219,6 +260,51 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
         Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
       checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("SPARK-60878: update with a subquery on the group key and the group filter disabled") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      withTempView("updated_dep") {
+        createAndInitTable("id INT, salary INT, dep STRING",
+          """{ "id": 1, "salary": 300, "dep": 'hr' }
+            |{ "id": 2, "salary": 150, "dep": 'software' }
+            |{ "id": 3, "salary": 120, "dep": 'hr' }
+            |""".stripMargin)
+
+        Seq("hr").toDF().createOrReplaceTempView("updated_dep")
+
+        // dynamic partition pruning applies to the read of the updated rows only, so it must not
+        // prune the scan that the read of the copied rows shares
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep IN (SELECT * FROM updated_dep)")
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, -1, "hr") :: Nil)
+
+        checkReplacedPartitions(Seq("hr", "software"))
+      }
+    }
+  }
+
+  test("SPARK-60878: update with a NOT EXISTS subquery on the group key") {
+    withTempView("kept_dep") {
+      createAndInitTable("id INT, salary INT, dep STRING",
+        """{ "id": 1, "salary": 300, "dep": 'hr' }
+          |{ "id": 2, "salary": 150, "dep": 'software' }
+          |{ "id": 3, "salary": 120, "dep": 'hr' }
+          |""".stripMargin)
+
+      Seq("hr").toDF("d").createOrReplaceTempView("kept_dep")
+
+      sql(s"UPDATE $tableNameAsString t SET salary = -1 " +
+        "WHERE NOT EXISTS (SELECT 1 FROM kept_dep WHERE d = t.dep)")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 300, "hr") :: Row(2, -1, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("software"))
     }
   }
 

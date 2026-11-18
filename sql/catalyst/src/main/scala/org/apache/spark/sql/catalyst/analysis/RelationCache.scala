@@ -26,10 +26,15 @@ private[sql] trait RelationCache {
       catalog: CatalogPlugin,
       ident: Identifier,
       tableId: Option[String],
-      stateOptions: CaseInsensitiveStringMap,
-      resolver: Resolver): Option[LogicalPlan]
+      stateOptions: CaseInsensitiveStringMap): Option[LogicalPlan]
 }
 
 private[sql] object RelationCache {
-  val empty: RelationCache = (_, _, _, _, _) => None
+  val empty: RelationCache = (_, _, _, _) => None
 }
+
+/**
+ * A marker interface for tables whose cached relations must not be returned by shared relation
+ * cache lookups for their identifier, e.g. the built-in changelog table.
+ */
+private[sql] trait RelationCacheIneligible

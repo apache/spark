@@ -21,15 +21,20 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.duration._
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonMicroBatchStreamWithAdmissionControl, PythonStreamingSourceOffset, PythonStreamingSourceReadLimit}
 import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingV2ScanPushDown}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -581,6 +586,60 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
     q.awaitTermination()
+  }
+
+  test("Filter the stream of a data source without a batch reader") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
+         |""".stripMargin
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    // A Python data source pushes filters down with its batch reader, which this one does not
+    // have. Its table does not have the capability STREAMING_FILTER_PUSHDOWN, so the filters of
+    // a streaming query are not pushed down to it, also with the filter pushdown enabled.
+    withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val df = spark.readStream.format(dataSourceName).load().where("id > 1")
+      val table = df.queryExecution.analyzed.collectFirst {
+        case relation: StreamingRelationV2 => relation.table
+      }.get
+      assert(!table.capabilities().contains(TableCapability.STREAMING_FILTER_PUSHDOWN))
+      // The answer is the same whether the filter is pushed down or not, and a failure of the
+      // pushdown falls back to the scan of all the columns with no filter, which is logged.
+      val logs = new LogAppender("the fallback of a streaming scan")
+      val stopSignal = new CountDownLatch(1)
+      val query = df.writeStream
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          val expected = if (batchId == 0) Nil else Seq(Row(batchId * 2), Row(batchId * 2 + 1))
+          checkAnswer(df, expected)
+          if (batchId > 3) stopSignal.countDown()
+        })
+        .trigger(ProcessingTimeTrigger(0))
+      withLogAppender(logs,
+          loggerNames = Seq(StreamingV2ScanPushDown.getClass.getName.stripSuffix("$")),
+          level = Some(Level.WARN)) {
+        val q = query.start()
+        try {
+          assert(stopSignal.await(waitTimeout.toMillis, TimeUnit.MILLISECONDS), q.exception)
+        } finally {
+          q.stop()
+          q.awaitTermination()
+        }
+      }
+      assert(!logs.loggingEvents.exists(_.getMessage.getFormattedMessage
+        .contains("could not be built with")))
+    }
   }
 
   // Verify that socket between python runner and JVM doesn't timeout with large trigger interval.

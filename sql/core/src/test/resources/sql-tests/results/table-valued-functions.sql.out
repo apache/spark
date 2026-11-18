@@ -1069,3 +1069,83 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "stack(2, explode(array(1, 2, 3)))"
   } ]
 }
+
+
+-- !query
+SELECT pos, key, to_json(value) AS value FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):a)
+-- !query schema
+struct<pos:int,key:string,value:string>
+-- !query output
+0	NULL	1
+1	NULL	2
+2	NULL	3
+
+
+-- !query
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):a)
+-- !query schema
+struct<pos:int,key:string,value:string>
+-- !query output
+0	NULL	1
+1	NULL	2
+2	NULL	3
+
+
+-- !query
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):missing)
+-- !query schema
+struct<pos:int,key:string,value:string>
+-- !query output
+NULL	NULL	NULL
+
+
+-- !query
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2]}}'):a.b)
+-- !query schema
+struct<pos:int,key:string,value:string>
+-- !query output
+0	NULL	1
+1	NULL	2
+
+
+-- !query
+SELECT pos, key, to_json(value) AS value FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):['a'])
+-- !query schema
+struct<pos:int,key:string,value:string>
+-- !query output
+0	NULL	1
+1	NULL	2
+2	NULL	3
+
+
+-- !query
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode(parse_json('{"a": {"x": 1, "y": 2}}'):a)
+-- !query schema
+struct<pos:int,key:string,value:string>
+-- !query output
+0	x	1
+1	y	2
+
+
+-- !query
+SELECT p, to_json(v) AS v FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t(p, k, v)
+-- !query schema
+struct<p:int,v:string>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT t1.pos, to_json(t1.value) AS v1, t2.pos, to_json(t2.value) AS v2
+FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t1,
+  variant_explode(parse_json('{"b": [3]}'):b) AS t2
+-- !query schema
+struct<pos:int,v1:string,pos:int,v2:string>
+-- !query output
+0	1	0	3
+1	2	0	3

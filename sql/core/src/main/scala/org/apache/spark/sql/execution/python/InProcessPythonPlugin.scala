@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.ERROR
 import org.apache.spark.internal.config.Python.IN_PROCESS_SITE_PACKAGES
 
 /**
@@ -60,7 +61,7 @@ private[python] class InProcessPythonExecutorPlugin extends ExecutorPlugin with 
       logInfo("In-process Python runtime initialized successfully.")
     } catch {
       case e: InProcessPythonRuntime.LifecycleException =>
-        logError("Cannot start the in-process Python runtime: " + e.getMessage, e)
+        logError(log"Cannot start the in-process Python runtime: ${MDC(ERROR, e.getMessage)}", e)
         throw e
       case e if NonFatal(e) || e.isInstanceOf[LinkageError] =>
         val message =

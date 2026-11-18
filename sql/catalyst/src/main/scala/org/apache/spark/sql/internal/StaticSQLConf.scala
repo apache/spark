@@ -474,7 +474,8 @@ object StaticSQLConf {
         "of each installation prefix in PATH. Libraries can also be distributed in native data " +
         "source packages (.sparkpkg files), added with spark.addArtifact or under " +
         "spark.sql.dataSource.native.paths. Loading a native data source runs its native code " +
-        "in the driver and executor processes.")
+        "in the driver and executor processes. When false, spark.addArtifact adds a .sparkpkg " +
+        "file as a file of the session, without checking it as a package.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

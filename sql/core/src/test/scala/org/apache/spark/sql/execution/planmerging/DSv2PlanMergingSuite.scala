@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.catalog.{InMemoryScanMergingPartitionFilte
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * End-to-end test for the DSv2 scan-merge gap this change closes: a source whose (equal) filter is
@@ -36,6 +37,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * push-predicates call would only run the first pass, see the filter come back post-scan,
  * mis-classify it as non-strict and decline the merge (leaving two scans).
  */
+@DataSourceV2Test
 class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
   with BeforeAndAfter with V2ScanMergingTestHelper {
 
@@ -196,9 +198,9 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
   test("SPARK-58549: a scan merge preserves the sources' reported key-grouped partitioning") {
     val t = "scanmergereport.t2"
     withTable(t) {
-      // V2_BUCKETING_ENABLED is what makes the preserved report reach the physical plan (only
-      // DataSourceV2ScanExecBase.outputPartitioning reads it), which the last assertion checks; AQE
-      // is off so that `executedPlan` is the plan those assertions can walk.
+      // V2_BUCKETING_ENABLED is what makes the preserved report reach the physical plan, which the
+      // last assertion checks. DataSourceV2Strategy hands the scan its key-grouped partitioning
+      // only when it is on. AQE is off so that `executedPlan` is the plan the assertions can walk.
       withSQLConf(
           SQLConf.V2_BUCKETING_ENABLED.key -> "true",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
