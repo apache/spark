@@ -2940,8 +2940,8 @@ package object config {
       .doc("When true, RangePartitioner seeds the samples that pick its range bounds with the " +
         "RDD id, so the bounds of the same data can change on every execution. When false, the " +
         "sketch uses partition indexes and the re-sampling seed does not depend on the RDD id; " +
-        "bounds repeat when input partition membership and row order within each partition are " +
-        "unchanged.")
+        "bounds repeat when the input data, partition membership, and row order within each " +
+        "partition are unchanged.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
