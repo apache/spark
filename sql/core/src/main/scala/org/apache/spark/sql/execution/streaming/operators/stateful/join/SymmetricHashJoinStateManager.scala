@@ -277,7 +277,10 @@ class SymmetricHashJoinStateManagerV4(
       case Some(idx) =>
         val attr = inputValueAttributes(idx)
 
-        if (attr.dataType.isInstanceOf[StructType]) {
+        // A NULL event time is read as time 0, as a NULL timestamp always was.
+        if (row.isNullAt(idx)) {
+          0L
+        } else if (attr.dataType.isInstanceOf[StructType]) {
           // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
           row.getStruct(idx, 2).getLong(1)
         } else {

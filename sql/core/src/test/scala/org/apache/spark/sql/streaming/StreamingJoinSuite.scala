@@ -1157,6 +1157,26 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     df1.join(df2, expr("leftKey <=> rightKey"))
       .select("leftKey", "rightKey", "leftValue", "rightValue")
   }
+
+  test("SPARK-62022: NULL window watermark column outside the join keys") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val lt = timestamp_seconds($"t")
+    // The watermark is on a window struct that is NULL for a negative input.
+    val left = leftInput.toDF().toDF("lk", "t")
+      .select($"lk", $"t", when($"t" >= 0,
+        struct(lt.as("start"), (lt + expr("INTERVAL 10 SECONDS")).as("end"))).as("lw"))
+      .withWatermark("lw", "10 seconds")
+    val right = rightInput.toDF().toDF("rk", "s")
+    // Output the whole lw, so that nested column pruning keeps the struct in the join state.
+    val joined = left.join(right, expr("lk = rk")).select($"lk", $"t", $"lw".isNull, $"s")
+
+    testStream(joined)(
+      AddData(leftInput, (1, -1), (1, 5)),
+      CheckNewAnswer(),
+      AddData(rightInput, (1, 7)),
+      CheckNewAnswer(Row(1, -1, true, 7), Row(1, 5, false, 7)))
+  }
 }
 
 /** Adds tests that are specific to state format V1-V3 (not compatible with V4). */
