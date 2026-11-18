@@ -44,20 +44,45 @@ import org.apache.spark.util.Utils
  */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
+   * Returns the conditions that stay in the [[Filter]] above all the joins, instead of going into
+   * the condition of a join. The first join that covers the references of a condition can be
+   * below the filter or the join that the condition is written in, where it would be evaluated
+   * on rows that a join above removes. So a non-deterministic or throwable condition stays above,
+   * and so does a condition written after it that can fail: one that
+   * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans` that can
+   * fail (see `failableOutput`). It would be evaluated on rows that the condition before it may
+   * have dropped. `conditions` are in their written order, as [[ExtractFiltersAndInnerJoins]]
+   * returns them: the ones of a lower join or filter before the ones above it.
+   */
+  private def conditionsKeptAbove(
+      conditions: Seq[Expression],
+      plans: Seq[LogicalPlan]): Seq[Expression] = {
+    val (_, following) = conditions.span(cond => cond.deterministic && !cond.throwable)
+    lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
+    following.filterNot { cond =>
+      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
+    }
+  }
+
+  /**
    * Join a list of plans together and push down the conditions into them.
    *
    * The joined plan are picked from left to right, prefer those has at least one join condition.
    *
    * @param input a list of LogicalPlans to inner join and the type of inner join.
    * @param conditions a list of condition for join.
+   * @param keptAbove the conditions that do not go into the condition of a join, but stay in the
+   *                  [[Filter]] above all the joins (see `conditionsKeptAbove`).
    */
   @tailrec
   final def createOrderedJoin(
       input: Seq[(LogicalPlan, InnerLike)],
-      conditions: Seq[Expression]): LogicalPlan = {
+      conditions: Seq[Expression],
+      keptAbove: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
-      val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
+      val (joinConditions, others) =
+        conditions.partition(e => canEvaluateWithinJoin(e) && !keptAbove.contains(e))
       val ((left, leftJoinType), (right, rightJoinType)) = (input(0), input(1))
       val innerJoinType = (leftJoinType, rightJoinType) match {
         case (Inner, Inner) => Inner
@@ -77,6 +102,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
         conditions
+          .filterNot(keptAbove.contains)
           .filterNot(l => l.references.nonEmpty && canEvaluate(l, left))
           .filterNot(r => r.references.nonEmpty && canEvaluate(r, plan))
           .exists(_.references.subsetOf(refs))
@@ -85,13 +111,13 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (right, innerJoinType) = conditionalJoin.getOrElse(rest.head)
 
       val joinedRefs = left.outputSet ++ right.outputSet
-      val (joinConditions, others) = conditions.partition(
-        e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
+      val (joinConditions, others) = conditions.partition(e => e.references.subsetOf(joinedRefs) &&
+        canEvaluateWithinJoin(e) && !keptAbove.contains(e))
       val joined = Join(left, right, innerJoinType,
         joinConditions.reduceLeftOption(And), JoinHint.NONE)
 
       // should not have reference to same logical plan
-      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others)
+      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others, keptAbove)
     }
   }
 
@@ -99,16 +125,17 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
+      val keptAbove = conditionsKeptAbove(conditions, input.map(_._1))
       val reordered = if (conf.starSchemaDetection && !conf.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
-          createOrderedJoin(starJoinPlan ++ rest, conditions)
+          createOrderedJoin(starJoinPlan ++ rest, conditions, keptAbove)
         } else {
-          createOrderedJoin(input, conditions)
+          createOrderedJoin(input, conditions, keptAbove)
         }
       } else {
-        createOrderedJoin(input, conditions)
+        createOrderedJoin(input, conditions, keptAbove)
       }
 
       if (p.sameOutput(reordered)) {

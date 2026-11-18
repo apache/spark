@@ -2030,6 +2030,46 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       cached.unpersist()
     }
   }
+
+  test("SPARK-61930: reordering inner joins does not move a throwable filter condition into " +
+    "a lower join") {
+    withTable("s") {
+      Seq((-1, 10), (1, 20)).toDF("id", "value").write.saveAsTable("s")
+      // The join with w removes the row whose id is -1, so raise_error is not evaluated on it.
+      val df = sql(
+        """SELECT s.id FROM s
+          |JOIN VALUES (10), (20) AS v(value) ON s.value = v.value
+          |JOIN VALUES (20) AS w(value) ON s.value = w.value
+          |WHERE CASE WHEN s.id > 0 THEN true ELSE raise_error('boom') END
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+    }
+  }
+
+  test("SPARK-61930: reordering inner joins does not move a condition that can fail ahead of " +
+    "a non-deterministic or throwable one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // `rand(10) * 10 > 100` is false on every row, so the `AND` short-circuit keeps the
+      // division by zero on t.id = 3 from being evaluated.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id
+            |WHERE rand(10) * 10 > 100 AND 10L / (t.id - 3) > 0
+            |""".stripMargin),
+        Nil)
+      // The CASE WHEN removes the row whose id is 3, the only one where the division is by zero.
+      // The division follows the throwable CASE WHEN, so it stays above it.
+      checkAnswer(
+        sql(
+          """SELECT * FROM range(0, 10, 1, 1) t
+            |JOIN range(0, 10, 1, 1) r ON t.id = r.id
+            |  AND CASE WHEN t.id = 3 THEN false WHEN t.id < 0 THEN raise_error('neg') ELSE true END
+            |JOIN range(0, 10, 1, 1) s ON r.id = s.id AND 10L / (t.id + s.id - 6) > 0
+            |""".stripMargin),
+        (4L to 9L).map(i => Row(i, i, i)))
+    }
+  }
 }
 
 class ThreadLeakInSortMergeJoinSuite
