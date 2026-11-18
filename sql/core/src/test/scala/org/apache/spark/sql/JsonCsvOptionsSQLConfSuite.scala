@@ -298,6 +298,118 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("incompatible grouping inputs avoid comparison-only default analysis") {
+    withUserDefinedFunction("named_args_fn" -> false) {
+      sql("CREATE FUNCTION named_args_fn(a BIGINT, b STRING DEFAULT 'x') " +
+        "RETURNS BIGINT RETURN a")
+      def analyze(capture: Boolean): Long = withSQLConf(captureKey -> capture.toString) {
+        val plan = spark.sessionState.sqlParser.parsePlan(
+          "SELECT sum(named_args_fn(id)), sum(named_args_fn(id + 1)) " +
+            "FROM range(3) GROUP BY named_args_fn(id % 2), named_args_fn(id % 3)")
+        val tracker = new QueryPlanningTracker
+        QueryPlanningTracker.withTracker(tracker) {
+          spark.sessionState.analyzer.execute(plan)
+        }
+        val invocations = tracker.rules.valuesIterator.map(_.numInvocations).sum
+        assert(invocations > 0)
+        invocations
+      }
+      assert(analyze(capture = true) == analyze(capture = false))
+    }
+  }
+
+  for (capture <- Seq(true, false); caller <- Seq(true, false); reverse <- Seq(true, false)) {
+    test(s"completed grouping comparisons keep captured conversion defaults: " +
+        s"$capture, $caller, $reverse") {
+      withSQLConf(captureKey -> capture.toString,
+          SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "false") {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          val conversion = "to_json(named_struct('n', CAST(NULL AS INT)))"
+          sql(s"CREATE FUNCTION named_args_fn(a BIGINT, b STRING DEFAULT $conversion) " +
+            "RETURNS STRING RETURN concat(CAST(a AS STRING), b)")
+          withSQLConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> caller.toString) {
+            val omitted = "named_args_fn(id)"
+            val explicit = s"named_args_fn(id, CAST($conversion AS STRING))"
+            val (selected, grouped) = if (reverse) (omitted, explicit) else (explicit, omitted)
+            val query = s"SELECT $selected, count(*) FROM range(3) GROUP BY $grouped"
+            if (capture && !caller) {
+              checkAnswer(sql(query), (0L to 2L).map(id => Row(s"""$id{"n":null}""", 1L)))
+            } else {
+              val error = intercept[AnalysisException] { sql(query) }
+              assert(error.getCondition == "MISSING_AGGREGATION")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for (capture <- Seq(true, false); replaceSaved <- Seq(true, false);
+      supplied <- Seq(true, false) if capture || !supplied) {
+    test("table omitted default dependencies keep their saved path: " +
+        s"$capture, $replaceSaved, $supplied") {
+      withSQLConf(captureKey -> "true", SQLConf.PATH_ENABLED.key -> "true") {
+        withDatabase("cycle_path_a", "cycle_path_b") {
+          sql("CREATE DATABASE cycle_path_a")
+          sql("CREATE DATABASE cycle_path_b")
+          withUserDefinedFunction("cycle_path_a.named_args_fn" -> false,
+              "cycle_path_a.default_dep" -> false, "cycle_path_b.default_dep" -> false) {
+            sql("CREATE FUNCTION cycle_path_a.default_dep() RETURNS INT RETURN 11")
+            sql("CREATE FUNCTION cycle_path_b.default_dep() RETURNS INT RETURN 22")
+            try {
+              sql("USE cycle_path_a")
+              sql("SET PATH = spark_catalog.cycle_path_a, system.builtin")
+              sql("CREATE FUNCTION cycle_path_a.named_args_fn(" +
+                "x INT DEFAULT default_dep(), y INT DEFAULT 2) " +
+                "RETURNS TABLE(v INT) RETURN SELECT x + y AS v")
+              sql("SET PATH = spark_catalog.cycle_path_b, system.builtin")
+              withSQLConf(captureKey -> capture.toString) {
+                val target = if (replaceSaved) "cycle_path_a" else "cycle_path_b"
+                val args = if (supplied) "x => default_dep(), y => 3" else "y => 3"
+                val replacement = s"CREATE OR REPLACE FUNCTION $target.default_dep() " +
+                  s"RETURNS INT RETURN (SELECT v FROM cycle_path_a.named_args_fn($args))"
+                val cyclic = if (capture && supplied) !replaceSaved else replaceSaved
+                if (cyclic) {
+                  val error = intercept[AnalysisException] { sql(replacement) }
+                  assert(error.getCondition.contains("CYCLIC_FUNCTION_REFERENCE"))
+                } else {
+                  sql(replacement)
+                  val expected = if (capture && supplied) 25 else 14
+                  checkAnswer(sql(s"SELECT $target.default_dep()"), Row(expected))
+                }
+              }
+            } finally {
+              sql("USE default")
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for (capture <- Seq(true, false); clause <- Seq("filter", "within group")) {
+    test(s"cycle validation visits aggregate $clause dependencies: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("cycle_target" -> false, "cycle_caller" -> false) {
+          sql("CREATE FUNCTION cycle_target() RETURNS INT RETURN 1")
+          val aggregate = if (clause == "filter") {
+            "count(*) FILTER (WHERE cycle_target() > 0)"
+          } else {
+            "percentile_cont(0.5) WITHIN GROUP (ORDER BY cycle_target())"
+          }
+          sql(s"CREATE FUNCTION cycle_caller() RETURNS INT RETURN " +
+            s"(SELECT $aggregate FROM range(3))")
+          val error = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE FUNCTION cycle_target() RETURNS INT RETURN cycle_caller()")
+          }
+          assert(error.getCondition.contains("CYCLIC_FUNCTION_REFERENCE"))
+          checkAnswer(sql("SELECT cycle_target()"), Row(1))
+        }
+      }
+    }
+  }
+
   for ((kind, dataType, default) <- Seq(
       ("numeric", "BIGINT", "1"),
       ("true boolean", "BOOLEAN", "true"),

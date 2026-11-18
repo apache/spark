@@ -3105,15 +3105,28 @@ class Analyzer(
         lazy val aliasesByFunction = aliasMap.valuesIterator.toSeq.groupBy { alias =>
           alias.child.asInstanceOf[SQLFunctionExpression].function
         }
-        val completedAliases = mutable.HashMap.empty[SQLFunction, Map[Expression, Alias]]
+        val suppliedKeys = mutable.HashMap.empty[SQLFunctionExpression, Map[Int, Expression]]
+        def suppliedKey(f: SQLFunctionExpression): Map[Int, Expression] = {
+          suppliedKeys.getOrElseUpdate(f, {
+            val positions = if (f.inputPositions.isEmpty) f.inputs.indices else f.inputPositions
+            positions.iterator.zip(f.inputs.iterator.map(_.canonicalized)).toMap
+          })
+        }
         def lookup(f: SQLFunctionExpression): Option[Alias] = {
           aliasMap.get(f.canonicalized).orElse {
             if (aliasMap.nonEmpty &&
                 conf.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS)) {
               aliasesByFunction.get(f.function).flatMap { aliases =>
-                completedAliases.getOrElseUpdate(f.function, aliases.iterator.map { alias =>
-                  comparisonKey(alias.child.asInstanceOf[SQLFunctionExpression]) -> alias
-                }.toMap).get(comparisonKey(f))
+                val supplied = suppliedKey(f)
+                lazy val completed = comparisonKey(f)
+                aliases.iterator.filter { alias =>
+                  // Conflicting supplied positions cannot match, regardless of default values.
+                  suppliedKey(alias.child.asInstanceOf[SQLFunctionExpression]).forall {
+                    case (position, expr) => supplied.get(position).forall(_ == expr)
+                  }
+                }.find { alias =>
+                  comparisonKey(alias.child.asInstanceOf[SQLFunctionExpression]) == completed
+                }
               }
             } else {
               None

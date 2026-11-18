@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, FunctionResolution, NoSuchFunctionException, NoSuchNamespaceException, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, NamedArgumentExpression, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
@@ -513,12 +513,22 @@ case class CreateSQLFunctionCommand(
           val ident = sqlFunctionIdentifier(nameParts, tableFunction = true)
           if (ident.isDefined) {
             val funcId = ident.get
+            // The table builder inserts named defaults. Replace only supplied arguments before
+            // calling it, leaving those defaults available for traversal in the saved context.
+            val suppliedInputs = if (capturedDefaults) {
+              arguments.map {
+                case n: NamedArgumentExpression => n.copy(value = Literal(null))
+                case _ => Literal(null)
+              }
+            } else {
+              arguments
+            }
             val f = withPosition(u) {
               (if (funcId.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)) {
-                catalog.resolveTableFunctionByIdentifier(funcId, arguments)
+                catalog.resolveTableFunctionByIdentifier(funcId, suppliedInputs)
                   .getOrElse(catalog.failFunctionLookup(funcId))
               } else {
-                catalog.lookupTableFunction(funcId, arguments)
+                catalog.lookupTableFunction(funcId, suppliedInputs)
               }).asInstanceOf[SQLTableFunction]
             }
             // Check cyclic reference using qualified function names.
@@ -526,14 +536,11 @@ case class CreateSQLFunctionCommand(
             if (f.function.name == name) {
               throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
             }
-            val inputs = if (capturedDefaults) {
-              f.inputs.foreach(checkExpression(_, newPath))
-              f.inputs.map(_ => Literal(null))
-            } else {
-              f.inputs
+            if (capturedDefaults) {
+              arguments.foreach(checkExpression(_, newPath))
             }
             withFunctionContext(f.function) {
-              val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, inputs, f.output)
+              val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
               checkPlan(plan, newPath)
             }
           } else if (capturedDefaults) {
@@ -558,6 +565,8 @@ case class CreateSQLFunctionCommand(
     }
 
     def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
+      u.filter.foreach(checkExpression(_, path))
+      u.orderingWithinGroup.foreach(checkExpression(_, path))
       val ident = sqlFunctionIdentifier(u.boundOwner.getOrElse(u.nameParts), tableFunction = false)
       if (ident.isDefined) {
         val funcId = ident.get
@@ -590,7 +599,11 @@ case class CreateSQLFunctionCommand(
       }
     }
 
-    checkPlan(plan, Seq(identifier))
+    if (capturedDefaults) {
+      AnalysisContext.withNewAnalysisContext { checkPlan(plan, Seq(identifier)) }
+    } else {
+      checkPlan(plan, Seq(identifier))
+    }
   }
 
   /**
