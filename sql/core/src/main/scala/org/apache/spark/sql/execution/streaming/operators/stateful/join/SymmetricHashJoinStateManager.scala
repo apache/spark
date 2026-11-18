@@ -293,11 +293,14 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
-  // A NULL event-time key has no event time.
+  // A NULL event-time key is read as time 0, as a NULL timestamp key always was, so the first
+  // eviction that covers time 0 removes the row.
   private val extractEventTimeFnFromKey: UnsafeRow => Option[Long] = { row =>
-    joinKeyOrdinalForWatermark.filterNot(row.isNullAt).map { idx =>
+    joinKeyOrdinalForWatermark.map { idx =>
       val attr = keyAttributes(idx)
-      if (attr.dataType.isInstanceOf[StructType]) {
+      if (row.isNullAt(idx)) {
+        0L
+      } else if (attr.dataType.isInstanceOf[StructType]) {
         // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
         row.getStruct(idx, 2).getLong(1)
       } else {
@@ -442,17 +445,10 @@ class SymmetricHashJoinStateManagerV4(
   private val tsWithKey = new TsWithKeyTypeStore
 
   override def append(key: UnsafeRow, value: UnsafeRow, matched: Boolean): Unit = {
-    val eventTimeFromKey = extractEventTimeFnFromKey(key)
-    // The key eviction predicate is unknown for a NULL event-time key, so V2 and V3 never evict
-    // such a row. Store it in a random bucket without an index entry, so V4 never evicts it.
-    val isNullEventTimeKey = joinKeyOrdinalForWatermark.isDefined && eventTimeFromKey.isEmpty
-    val eventTime = eventTimeFromKey.getOrElse {
-      if (isNullEventTimeKey) random.nextInt(bucketCountForNoEventTime).toLong
-      else extractEventTimeFn(value)
-    }
+    val eventTime = extractEventTimeFnFromKey(key).getOrElse(extractEventTimeFn(value))
     // We always do blind merge for appending new value.
     keyWithTsToValues.append(key, eventTime, value, matched)
-    if (hasEventTime && !isNullEventTimeKey) {
+    if (hasEventTime) {
       tsWithKey.add(eventTime, key)
     }
   }

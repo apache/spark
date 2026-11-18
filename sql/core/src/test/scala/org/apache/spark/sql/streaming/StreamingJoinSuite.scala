@@ -2377,7 +2377,7 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
 
   Seq(true, false).foreach { windowKey =>
     val keyType = if (windowKey) "window" else "timestamp"
-    test(s"NULL $keyType event-time join key is kept in state, not evicted") {
+    test(s"NULL $keyType event-time join key") {
       val leftInput = MemoryStream[(Int, Int)]
       val rightInput = MemoryStream[(Int, Int)]
       val leftWithTime = leftInput.toDF().toDF("lk", "t")
@@ -2399,21 +2399,24 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
         .select($"lk", col(keyEnd(0)).cast("long"), $"rk", col(keyEnd(1)).cast("long"))
       // Left time 5 is in window [0, 10).
       val (matchingStart, length) = if (windowKey) (0, 10L) else (5, 0L)
+      // V4 reads the NULL key as time 0, so the first eviction outputs the row. V2 and V3 never
+      // evict it, because their key eviction predicate is unknown for NULL (SPARK-61382).
+      val isV4 = spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) == 4
+      val nullKeyRow = if (isV4) Seq(Row(null, null, 1, null)) else Nil
 
       withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
         testStream(joined)(
           StreamProgressLockedActions(Seq(
             AddData(leftInput, (1, 5)),
             AddData(rightInput, (1, -1), (1, matchingStart), (4, 20)))),
-          CheckNewAnswer(Row(1, matchingStart + length, 1, matchingStart + length)),
+          CheckNewAnswer(Row(1, matchingStart + length, 1, matchingStart + length) +:
+            nullKeyRow: _*),
           // The watermark moves to 90 seconds.
           AddData(leftInput, (2, 100)),
           CheckNewAnswer(),
-          // As in V2 and V3, the key eviction predicate is unknown for the NULL key, so the
-          // row stays.
           AddData(leftInput),
           CheckNewAnswer(Row(null, null, 4, 20 + length)),
-          assertNumStateRows(total = 2, updated = 5))
+          assertNumStateRows(total = if (isV4) 1 else 2, updated = 5))
       }
     }
   }
