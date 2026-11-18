@@ -234,6 +234,9 @@ abstract class StreamExecution(
         // of the artifacts. `SQLExecution` applies its artifact state only to run the jobs, but
         // the batches are planned before that, and some plan nodes keep the state they are built
         // with, for example the Python UDFs.
+        // TODO(SPARK-61997): Spark Connect builds the Python foreach writer on the request
+        //  thread, under the artifact state of the session that starts the query, so its Python
+        //  worker does not see the files of this stream's session yet.
         if (sparkSessionForStream.sessionState.conf.getConf(
             SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED)) {
           JobArtifactSet.withActiveJobArtifactState(sparkSessionForStream.artifactManager.state) {

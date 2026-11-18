@@ -5564,12 +5564,15 @@ object SQLConf {
     buildConf("spark.sql.streaming.propagateArtifactState.enabled")
       .internal()
       .doc("When true, a streaming query runs its stream thread with the artifact state of its " +
-        "own session, a clone of the session that started it. Its Python UDFs and the readers " +
-        "of its Python data sources, on the executors and on the driver, then see the files " +
-        "and Python files of that session, as in a batch query of the session. This only " +
-        "matters when artifact isolation is on. Set to false to restore the previous " +
-        "behavior, where these use the default files directory of the Spark context, or a " +
-        "fixed directory for the driver-side reader of a Python data source.")
+        "own session, a clone of the session that started it, so that the query uses the " +
+        "artifacts of that session, as a batch query of the session does. This covers its " +
+        "Python UDFs and other Python functions, the readers of its Python data sources on the " +
+        "executors and on the driver, the writers of its Python data sources on the executors, " +
+        "and other code that runs on the stream thread outside the execution of a batch, such " +
+        "as SparkFiles.get or SparkContext.addFile in a source or a listener. This only " +
+        "matters when artifact isolation is on. Set to false to restore the previous behavior " +
+        "for all of them, where they use the default files directory and artifacts of the " +
+        "Spark context, or a fixed directory for the driver-side reader of a Python data source.")
       .version("4.0.6")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

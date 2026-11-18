@@ -136,6 +136,47 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
 
   // Verify prefetch and cache pattern of SimpleDataSourceStreamReader handle empty
   // data batch correctly.
+  test("SimpleDataSourceStreamReader read empty batch") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderWithEmptyBatchScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def simpleStreamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      val df = spark.readStream.format(dataSourceName).load()
+
+      val stopSignal = new CountDownLatch(1)
+
+      val q = df.writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .foreachBatch((df: DataFrame, batchId: Long) => {
+          df.cache()
+          if (batchId % 2 == 0) {
+            checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+          } else {
+            assert(df.isEmpty)
+          }
+          if (batchId == 10) stopSignal.countDown()
+        })
+        .start()
+      stopSignal.await()
+      q.stop()
+      q.awaitTermination()
+    }
+  }
+
   test("SPARK-61959: Simple stream reader reads the files of the session on the driver") {
     assume(shouldTestPandasUDFs)
     val fileName = "simple_stream_reader_session_file.txt"
@@ -183,47 +224,6 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
         q.stop()
       }
       checkAnswer(session.table("simple_stream_reader_session_file"), Row("session file!!"))
-    }
-  }
-
-  test("SimpleDataSourceStreamReader read empty batch") {
-    assume(shouldTestPandasUDFs)
-    val dataSourceScript =
-      s"""
-         |from pyspark.sql.datasource import DataSource
-         |$simpleDataStreamReaderWithEmptyBatchScript
-         |
-         |class $dataSourceName(DataSource):
-         |    def schema(self) -> str:
-         |        return "id INT"
-         |    def simpleStreamReader(self, schema):
-         |        return SimpleDataStreamReader()
-         |""".stripMargin
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    spark.dataSource.registerPython(dataSourceName, dataSource)
-    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      val checkpointDir = new File(path, "checkpoint")
-      val df = spark.readStream.format(dataSourceName).load()
-
-      val stopSignal = new CountDownLatch(1)
-
-      val q = df.writeStream
-        .option("checkpointLocation", checkpointDir.getAbsolutePath)
-        .foreachBatch((df: DataFrame, batchId: Long) => {
-          df.cache()
-          if (batchId % 2 == 0) {
-            checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
-          } else {
-            assert(df.isEmpty)
-          }
-          if (batchId == 10) stopSignal.countDown()
-        })
-        .start()
-      stopSignal.await()
-      q.stop()
-      q.awaitTermination()
     }
   }
 
@@ -716,8 +716,9 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |
          |class RootDirectoryStreamReader(DataSourceStreamReader):
          |    def initialOffset(self):
+         |        import os
          |        from pyspark import SparkFiles
-         |        return {"root": SparkFiles.getRootDirectory()}
+         |        return {"root": SparkFiles.getRootDirectory(), "cwd": os.getcwd()}
          |    def latestOffset(self):
          |        return self.initialOffset()
          |    def partitions(self, start: dict, end: dict):
@@ -733,21 +734,29 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       dataSourceName, createUserDefinedPythonDataSource(dataSourceName, dataSourceScript))
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName(dataSourceName)
-    def rootDirectoryOfDriverWorker(): String = {
+    // The files root and the working directory of the driver-side worker.
+    def directoriesOfDriverWorker(): (String, String) = {
       val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
         pythonDs, dataSourceName, StructType.fromDDL("id INT"), CaseInsensitiveStringMap.empty())
       runner.init()
       try {
-        """"root": "([^"]*)"""".r.findFirstMatchIn(runner.initialOffset()).get.group(1)
+        val offset = runner.initialOffset()
+        def field(name: String): String =
+          s""""$name": "([^"]*)"""".r.findFirstMatchIn(offset).get.group(1)
+        (field("root"), field("cwd"))
       } finally {
         runner.stop()
       }
     }
     JobArtifactSet.withActiveJobArtifactState(JobArtifactState("spark-61959-state", None)) {
-      assert(rootDirectoryOfDriverWorker().endsWith(s"${File.separator}spark-61959-state"))
+      val (root, cwd) = directoriesOfDriverWorker()
+      assert(root.endsWith(s"${File.separator}spark-61959-state"))
+      assert(cwd.endsWith(s"${File.separator}spark-61959-state"))
       // The previous behavior: a fixed directory, whatever the artifact state.
       withSQLConf(SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED.key -> "false") {
-        assert(rootDirectoryOfDriverWorker().endsWith(s"${File.separator}streaming_job"))
+        val (root, cwd) = directoriesOfDriverWorker()
+        assert(root.endsWith(s"${File.separator}streaming_job"))
+        assert(!cwd.endsWith(s"${File.separator}spark-61959-state"))
       }
     }
   }

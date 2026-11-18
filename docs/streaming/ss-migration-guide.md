@@ -25,6 +25,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
+- Since Spark 4.4, with artifact isolation on (the default in Spark Connect, and in Scala and Java sessions without Hive support), a streaming query uses the artifacts of its own session, a clone of the session that started it, as a batch query of the session does. Its Python UDFs and the readers and writers of its Python data sources now see the files and Python files that the session added with `addArtifact` or `addArtifacts`. As a result, they no longer see files that are only in the default context, such as `--files` or `spark.files` entries, or files added with `SparkContext.addFile`. Python files given with `--py-files` or `spark.submit.pyFiles` are handled by [SPARK-62000](https://issues.apache.org/jira/browse/SPARK-62000). Code on the stream thread outside the execution of a batch, such as `SparkFiles.get` in a custom source or a listener, also resolves to the folder of that session. To restore the previous behavior, set `spark.sql.streaming.propagateArtifactState.enabled` to `false`. (See [SPARK-61959](https://issues.apache.org/jira/browse/SPARK-61959) for more details.)
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent
