@@ -3276,20 +3276,6 @@ class DataFrameSuite extends SharedSparkSession
           ($"d".cast("string") === "-0.0" || lit(10) / $"i" > 100) && $"d" === 0.0 && $"i" === 1,
           Seq.empty, pushed)
       }
-      // Nor where the constant of another column that can fail would end an operator that guards
-      // the cast, so that the row ("-0.0", "1") is returned, as written, and the row ("0.0", "x")
-      // fails as written, as on master, where 4.3.0 returns no row for either.
-      val guardedCast = ($"d".cast("string") === "-0.0" || ($"i" < 0 && lit(10) / $"y" > 1)) &&
-        $"d" === 0.0 && $"i" === 1
-      check(Seq(("-0.0", "1", 1.0)).toDF("s", "t", "y"), d :+ $"t".cast("int").as("i"),
-        guardedCast, Seq(Row("-0.0", true)))
-      withTempPath { dir =>
-        Seq(("0.0", "x", 1.0)).toDF("s", "t", "y").write.parquet(dir.getCanonicalPath)
-        val df = spark.read.parquet(dir.getCanonicalPath)
-          .select(d :+ $"t".cast("int").as("i") :+ rand(1).as("r"): _*)
-          .where(guardedCast).select($"s", $"r" >= 0)
-        assert(intercept[Exception](df.collect()).getMessage.contains("CAST_INVALID_INPUT"))
-      }
       // But not where `replaceConstants` reaches such an operator and `d` is the only column
       // under it, as it folds it then, nor under arithmetic, which gives the same value, or
       // fails, with either zero, so that `d` is not computed on the row ("x", 1.0) or

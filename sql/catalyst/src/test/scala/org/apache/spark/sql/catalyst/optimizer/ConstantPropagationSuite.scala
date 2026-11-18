@@ -488,12 +488,6 @@ class ConstantPropagationSuite extends PlanTest {
       val withD = projected.select($"s", $"id", $"x", $"i", $"s".cast(DoubleType).as("d"))
       checkOrdered(withD, (signed($"d") || tenDividedBy($"i") > 100.0) && $"d" === 0.0 &&
         $"i" === 1, Literal(false))
-      // But a conjunct that still reads `d` under such an operator gets none of the constants in
-      // place, so that `i = 1` does not end the AND in it that guards the cast, which a later
-      // iteration would then fold, as the cast of a -0.0 row is '-0.0'. It reads `i` as written.
-      val guarded = (signed($"d") || ($"i" < 0 && tenDividedBy($"x") > 1.0)) && $"d" === 0.0 &&
-        $"i" === 1
-      checkOrdered(withD, guarded, guarded)
       // Also a FLOAT.
       val floats = stringIds.select($"x".cast(FloatType).as("y"), $"s".cast(FloatType).as("f"))
       val signedFloat = floats.where($"f" === 0.0f && signed($"f" * $"y")).analyze

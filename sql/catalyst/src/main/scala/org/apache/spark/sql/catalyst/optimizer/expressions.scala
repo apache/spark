@@ -473,24 +473,9 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       }
       replace(b, keepsEqual = true)
     }
-    // A conjunct that still reads a zero under an operator that can tell its sign is kept as it
-    // is, with none of the constants in place, so that the constants do not end an operator in it
-    // that guards that operator, which a later iteration would then fold, e.g. `i < 0` for
-    // `(CAST(x AS STRING) = '-0.0' OR (i < 0 AND 10 / y > 1)) AND x = 0.0 AND i = 1`.
-    val signedZeros = AttributeSet(constantsMap.collect { case (a, l) if hasSignedZero(l) => a })
-    def replaceInConjuncts(e: Expression): Expression = e match {
-      case a: And => a.mapChildren(replaceInConjuncts)
-      case _ =>
-        val replaced = e.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
-          case b: BinaryComparison if !predicates.contains(b) => replaceInComparison(b)
-        }
-        if (signedZeros.nonEmpty && replaced.references.exists(signedZeros.contains)) {
-          e
-        } else {
-          replaced
-        }
+    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
+      case b: BinaryComparison if !predicates.contains(b) => replaceInComparison(b)
     }
-    replaceInConjuncts(condition)
   }
 
   /**
