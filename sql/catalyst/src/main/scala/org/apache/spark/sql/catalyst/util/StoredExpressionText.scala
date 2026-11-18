@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier, SimpleAnalyzer, StoredExpressionFunctions}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DatetimeType
 
 /**
  * Reads and analyzes the SQL text of an expression stored with a table, such as a generation
@@ -159,13 +160,24 @@ object StoredExpressionText {
    * uses the ANSI value of the session, so that it is about how the text reads.
    */
   def readsAsInSession(text: String): Boolean =
-    readsAsInSession(CatalystSqlParser, text, conf(SQLConf.get))
+    sameReading(CatalystSqlParser, text, conf(SQLConf.get), normalize)
 
   /**
    * Whether `parser` reads `text` the same under `fixed` as it does in the active session. `fixed`
-   * takes the ANSI value of the session.
+   * takes the ANSI value of the session. The values of datetime literals are not compared, since
+   * the parser reads the clock for a special value such as `TIMESTAMP 'now'`, and the settings
+   * that a datetime literal depends on, such as the session time zone, are those of the session.
    */
-  def readsAsInSession(parser: ParserInterface, text: String, fixed: SQLConf): Boolean = {
+  def readsAsInSession(parser: ParserInterface, text: String, fixed: SQLConf): Boolean =
+    sameReading(parser, text, fixed, e => normalize(e).transform {
+      case Literal(_, dataType: DatetimeType) => Literal(null, dataType)
+    })
+
+  private def sameReading(
+      parser: ParserInterface,
+      text: String,
+      fixed: SQLConf,
+      normalize: Expression => Expression): Boolean = {
     val parsedInSession = parser.parseExpression(text)
     try {
       val parsed = SQLConf.withExistingConf(withSessionAnsi(fixed)) {

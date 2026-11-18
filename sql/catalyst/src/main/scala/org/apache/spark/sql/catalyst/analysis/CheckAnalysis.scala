@@ -1339,9 +1339,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * Fails a DDL with a CHECK condition that means something else under the settings a later write
-   * reads it with. This covers a condition with a predicate too, because a connector may store only
-   * the text.
+   * Fails a DDL with a CHECK condition that the parser reads differently under the settings a
+   * later write reads it with. This covers a condition with a predicate too, because a connector
+   * may store only the text. The comparison takes the ANSI value of the session, so a write can
+   * still analyze an accepted condition differently, such as with an implicit cast under ANSI
+   * mode, or fail to resolve it.
    */
   private def failIfSessionDependent(condition: String, node: TreeNode[_]): Unit = {
     if (!conf.getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT) &&

@@ -2160,6 +2160,16 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           ExpectedContext(fragment = condition))
       }
     }
+
+    // Only the session parser replaces this placeholder, as a write does.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, s STRING) $defaultUsing")
+      withSQLConf(SQLConf.VARIABLE_SUBSTITUTE_ENABLED.key -> "false") {
+        val condition = "s <> '${spark.sql.session.timeZone}'"
+        checkRejected(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($condition)", condition,
+          ExpectedContext(fragment = condition))
+      }
+    }
   }
 
   test("SPARK-61893: accept a condition that means the same under the default configs") {
@@ -2168,7 +2178,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       nonAnsi -> "CAST(upper(s) AS INT) > 0",
       // Two parses of these differ in an expression id and in a function.
       Nil -> "struct(id AS x).x > 0",
-      Nil -> "upper(IDENTIFIER('s' || '')) <> 'X'"
+      Nil -> "upper(IDENTIFIER('s' || '')) <> 'X'",
+      // The parser reads the clock for a special datetime value.
+      Nil -> "length(s) < year(TIMESTAMP 'now')"
     ).foreach { case (session, condition) =>
       withSQLConf(session: _*) {
         withCheckConstraint(condition)(_ => ())
@@ -2205,6 +2217,26 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     val catalogKey = s"spark.sql.catalog.$catalog"
     assert(StoredExpressionText.fixedConf(SQLConf.get).getConfString(catalogKey) ==
       SQLConf.get.getConfString(catalogKey))
+  }
+
+  test("SPARK-61893: a writer with first-class CHAR/VARCHAR types reads a constraint") {
+    for {
+      config <- Seq(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO, SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
+      dataType <- Seq("CHAR(5)", "VARCHAR(5)")
+    } {
+      withSQLConf(config.key -> "true") {
+        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+          sql(s"CREATE TABLE $t (id INT, s $dataType) $defaultUsing")
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (substring(s, 1, 1) <> 'x')")
+          sql(s"INSERT INTO $t SELECT 1, 'a'")
+          val e = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t SELECT 2, 'x'")
+          }
+          assert(e.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"${config.key} $dataType")
+        }
+      }
+    }
   }
 
   test("SPARK-61893: a condition that cannot be resolved on a write names the constraint") {
