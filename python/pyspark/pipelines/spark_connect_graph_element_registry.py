@@ -92,8 +92,8 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             )
         else:
             raise PySparkTypeError(
-                errorClass="UNSUPPORTED_PIPELINES_DATASET_TYPE",
-                messageParameters={"dataset_type": type(output).__name__},
+                errorClass="UNSUPPORTED_PIPELINES_OUTPUT_TYPE",
+                messageParameters={"output_type": type(output).__name__},
             )
 
         inner_command = pb2.PipelineCommand.DefineOutput(

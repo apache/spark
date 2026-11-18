@@ -1218,6 +1218,11 @@
       "Unsupported pipelines dataset type: <dataset_type>."
     ]
   },
+  "UNSUPPORTED_PIPELINES_OUTPUT_TYPE": {
+    "message": [
+      "Unsupported pipelines output type: <output_type>."
+    ]
+  },
   "UNSUPPORTED_PLOT_BACKEND": {
     "message": [
       "`<backend>` is not supported, it should be one of the values from <supported_backends>"
