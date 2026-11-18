@@ -264,28 +264,38 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val eventTime = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         // The legacy mode with a single global watermark keeps applying a cutoff on any column of
-        // this input to the event time.
-        def solve(watermark: Option[Long]): Option[(Attribute, Long)] =
-          if (useFirstEventTimeColumn) {
+        // this input to the event time. So does the default mode when the condition bounds no
+        // TIMESTAMP column, such as through a DATE column cast to TIMESTAMP only.
+        def solve(watermark: Option[Long]): Option[(Attribute, Long)] = {
+          def wholeInput = eventTime.flatMap { e =>
             StreamingJoinHelper.getStateValueWatermark(
               attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
               attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
               condition,
-              watermark).map(eventTime.get -> _)
+              watermark).map(e -> _)
+          }
+          if (useFirstEventTimeColumn) {
+            wholeInput
           } else {
             StreamingJoinHelper.getStateValueWatermarkColumn(oneSideInputAttributes,
-              AttributeSet(otherSideInputAttributes), condition, watermark)
+              AttributeSet(otherSideInputAttributes), condition, watermark).orElse(wholeInput)
           }
+        }
         solve(eventTimeWatermarkForEviction).flatMap { case (column, stateValueWatermark) =>
           // A row can pass late-input filtering but already be eligible for eviction in this
           // batch. When the previous join-derived state cutoff is ahead of the late-input
           // watermark, a new row can fall at or below that cutoff. V4 must scan from the
           // beginning to find such rows. Late-input filtering bounds only the event time, so a
-          // cutoff on another column always scans from the beginning.
-          val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { lateWatermark =>
-            solve(Some(lateWatermark)).collect {
-              case (c, w) if eventTime.exists(_.semanticEquals(c)) && w <= lateWatermark => w
-            }
+          // cutoff on another column always scans from the beginning. The bound is solved over
+          // the whole input, as earlier versions and the legacy mode evicted only up to it.
+          val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
+            eventTime.exists(_.semanticEquals(column))
+          }.flatMap { lateWatermark =>
+            StreamingJoinHelper.getStateValueWatermark(
+              attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+              attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
+              condition,
+              Some(lateWatermark)).filter(_ <= lateWatermark)
           }
           watermarkExpression(Some(column), Some(stateValueWatermark)).map { e =>
             JoinStateValueWatermarkPredicate(e, stateValueWatermark, prevStateValueWatermark)

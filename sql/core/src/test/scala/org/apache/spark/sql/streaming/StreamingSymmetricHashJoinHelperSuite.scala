@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import java.time.Duration
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, Literal, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinSide, JoinStateKeyWatermarkPredicate, LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinSide, JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate, LeftSide, RightSide}
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
@@ -73,6 +75,22 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     Seq(LeftSide, RightSide).foreach { side =>
       assert(ordinal(side, Seq(la, lb), Seq(ra, rb), legacyMode = true) === Some(0))
     }
+  }
+
+  test("previous value watermark of an input evicted by its event time covers the whole input") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 0L).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = watermark)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+    // The cutoff on leftTime is above the late watermark, but the cutoff from expiry is not.
+    val condition = leftTime > TimestampAddInterval(rightTime, Literal(Duration.ofSeconds(10))) &&
+      rightTime <= expiry
+    val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+      Seq(leftTime, expiry), Seq(rightTime), Nil, Nil, Some(condition), Some(200000L),
+      Some(100000L), useFirstEventTimeColumn = false)
+    val predicate = predicates.left.get.asInstanceOf[JoinStateValueWatermarkPredicate]
+    assert(predicate.expr.references === AttributeSet(leftTime))
+    assert(predicate.prevStateWatermark === Some(99999L))
   }
 
   test("empty") {
