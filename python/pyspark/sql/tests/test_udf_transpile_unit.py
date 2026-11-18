@@ -3209,7 +3209,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("list[Optional[int]]", "array<integer>"),
             ("list[int | None]", "array<integer>"),
             ("list['int']", "array<integer>"),
-            ('"list[list[\'str\']]"', "array<array<string>>"),
+            ("\"list[list['str']]\"", "array<array<string>>"),
             ("Optional[list[int]]", "array<integer>"),
             ("typing.Optional[list[int]]", "array<integer>"),
             ("list[int] | None", "array<integer>"),
@@ -3261,6 +3261,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # An element-aware option is kept only for an array column whose elements
         # match, string elements only under UTF8_BINARY; anything else runs the
         # interpreted Python UDF.
+        from typing import List
+
         def int_array_plus(x: list[int], y: int):
             return y + 1
 
