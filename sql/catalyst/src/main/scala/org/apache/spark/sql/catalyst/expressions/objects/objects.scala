@@ -1177,9 +1177,10 @@ case class MapObjects private(
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
       s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
-    // Resolve framework types so that struct-backed types are copied like a StructType.
-    val genFunctionValue: String = TypeOps(lambdaFunction.dataType)
-        .flatMap(_.rowRepresentationType).getOrElse(lambdaFunction.dataType) match {
+    // Resolve UDTs and framework types so that struct-backed types are copied like a StructType.
+    val lambdaSqlType = UserDefinedType.sqlType(lambdaFunction.dataType)
+    val genFunctionValue: String = TypeOps(lambdaSqlType)
+        .flatMap(_.rowRepresentationType).getOrElse(lambdaSqlType) match {
       case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
       case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
       case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
@@ -1447,15 +1448,17 @@ case class CatalystToExternalMap private(
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
       s"$value instanceof ${clazz.getSimpleName}? $value.copy() : $value"
-    // Resolve framework types so that struct-backed types are copied like a StructType.
-    def genFunctionValue(lambdaFunction: Expression, genFunction: ExprCode) =
-      TypeOps(lambdaFunction.dataType)
-        .flatMap(_.rowRepresentationType).getOrElse(lambdaFunction.dataType) match {
+    // Resolve UDTs and framework types so that struct-backed types are copied like a StructType.
+    def genFunctionValue(lambdaFunction: Expression, genFunction: ExprCode) = {
+      val lambdaSqlType = UserDefinedType.sqlType(lambdaFunction.dataType)
+      TypeOps(lambdaSqlType)
+        .flatMap(_.rowRepresentationType).getOrElse(lambdaSqlType) match {
         case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
         case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
         case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
         case _ => genFunction.value
       }
+    }
     val genKeyFunctionValue = genFunctionValue(keyLambdaFunction, genKeyFunction)
     val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
 

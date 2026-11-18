@@ -62,9 +62,16 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
     TypeOps(dt).flatMap(_.rowRepresentationType).map(generateSafeValueConverter)
       .getOrElse(generateSafeValueConverterDefault(dt))
 
+  // A nested value (an array element, a struct field, a map key or value) may be null, which the
+  // array, struct and map converters cannot convert.
+  private def generateNullSafeValueConverter(dt: DataType): Any => Any = {
+    val converter = generateSafeValueConverter(dt)
+    v => if (v == null) null else converter(v)
+  }
+
   private def generateSafeValueConverterDefault(dt: DataType): Any => Any = dt match {
     case ArrayType(elemType, _) =>
-      val elementConverter = generateSafeValueConverter(elemType)
+      val elementConverter = generateNullSafeValueConverter(elemType)
       v => {
         val arrayValue = v.asInstanceOf[ArrayData]
         val result = new Array[Any](arrayValue.numElements())
@@ -76,7 +83,7 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
 
     case st: StructType =>
       val fieldTypes = st.fields.map(_.dataType)
-      val fieldConverters = fieldTypes.map(generateSafeValueConverter)
+      val fieldConverters = fieldTypes.map(generateNullSafeValueConverter)
       v => {
         val row = v.asInstanceOf[InternalRow]
         val ar = new Array[Any](row.numFields)
@@ -89,8 +96,8 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
       }
 
     case MapType(keyType, valueType, _) =>
-      lazy val keyConverter = generateSafeValueConverter(keyType)
-      lazy val valueConverter = generateSafeValueConverter(valueType)
+      lazy val keyConverter = generateNullSafeValueConverter(keyType)
+      lazy val valueConverter = generateNullSafeValueConverter(valueType)
       v => {
         val mapValue = v.asInstanceOf[MapData]
         val keys = mapValue.keyArray().toArray[Any](keyType)

@@ -493,33 +493,74 @@ class StructBackedFrameworkTypeSuite extends SparkFunSuite {
     }
   }
 
-  test("codegen: MapObjects copies framework type elements out of a reused UnsafeRow") {
-    val arrayType = ArrayType(testType, containsNull = false)
-    val mapObjects = MapObjects(
-      e => e, BoundReference(0, arrayType, nullable = false), testType,
-      elementNullable = false, customCollectionCls = Some(classOf[java.util.ArrayList[_]]))
-    val projection = GenerateSafeProjection.generate(Seq(mapObjects))
-    def array(name: String, value: Long): GenericArrayData =
-      new GenericArrayData(Array[Any](makeStructRow(name, value)))
-    val result = withReusedUnsafeInput(arrayType, array("one", 1L), array("two", 2L)) { input =>
-      projection(input).get(0, mapObjects.dataType).asInstanceOf[java.util.List[InternalRow]]
-    }
-    assertStruct(result.get(0), "one", 1L)
-  }
+  Seq(
+    "a struct-backed framework type" -> TestStructBackedType(),
+    "a UDT over a struct-backed framework type" -> new TestStructBackedUDT).foreach {
+    case (desc, dt) =>
+      test(s"codegen: MapObjects copies $desc out of a reused UnsafeRow") {
+        val arrayType = ArrayType(dt, containsNull = false)
+        val mapObjects = MapObjects(
+          e => e, BoundReference(0, arrayType, nullable = false), dt,
+          elementNullable = false, customCollectionCls = Some(classOf[java.util.ArrayList[_]]))
+        val projection = GenerateSafeProjection.generate(Seq(mapObjects))
+        def array(name: String, value: Long): GenericArrayData =
+          new GenericArrayData(Array[Any](makeStructRow(name, value)))
+        val result = withReusedUnsafeInput(arrayType, array("one", 1L), array("two", 2L)) {
+          input =>
+            projection(input).get(0, mapObjects.dataType)
+              .asInstanceOf[java.util.List[InternalRow]]
+        }
+        assertStruct(result.get(0), "one", 1L)
+      }
 
-  test("codegen: CatalystToExternalMap copies framework type values out of a reused UnsafeRow") {
-    val mapType = MapType(IntegerType, testType, valueContainsNull = false)
-    val toMap = CatalystToExternalMap(UnresolvedCatalystToExternalMap(
-      BoundReference(0, mapType, nullable = false), k => k, v => v,
-      classOf[scala.collection.immutable.Map[_, _]]))
-    val projection = GenerateSafeProjection.generate(Seq(toMap))
-    def map(name: String, value: Long): ArrayBasedMapData = new ArrayBasedMapData(
-      new GenericArrayData(Array[Any](1)),
-      new GenericArrayData(Array[Any](makeStructRow(name, value))))
-    val result = withReusedUnsafeInput(mapType, map("one", 1L), map("two", 2L)) { input =>
-      projection(input).get(0, toMap.dataType).asInstanceOf[Map[Int, InternalRow]]
-    }
-    assertStruct(result(1), "one", 1L)
+      test(s"codegen: CatalystToExternalMap copies $desc out of a reused UnsafeRow") {
+        val mapType = MapType(IntegerType, dt, valueContainsNull = false)
+        val toMap = CatalystToExternalMap(UnresolvedCatalystToExternalMap(
+          BoundReference(0, mapType, nullable = false), k => k, v => v,
+          classOf[scala.collection.immutable.Map[_, _]]))
+        val projection = GenerateSafeProjection.generate(Seq(toMap))
+        def map(name: String, value: Long): ArrayBasedMapData = new ArrayBasedMapData(
+          new GenericArrayData(Array[Any](1)),
+          new GenericArrayData(Array[Any](makeStructRow(name, value))))
+        val result = withReusedUnsafeInput(mapType, map("one", 1L), map("two", 2L)) { input =>
+          projection(input).get(0, toMap.dataType).asInstanceOf[Map[Int, InternalRow]]
+        }
+        assertStruct(result(1), "one", 1L)
+      }
+
+      Seq(true, false).foreach { codegen =>
+        test(s"safe projection keeps null values of $desc nested in an array, a map and a " +
+            s"struct (codegen=$codegen)") {
+          val arrayType = ArrayType(dt, containsNull = true)
+          val mapType = MapType(IntegerType, dt, valueContainsNull = true)
+          val structType = new StructType().add("f", dt, nullable = true)
+          val types = Seq[DataType](arrayType, mapType, structType)
+          val exprs = types.zipWithIndex.map { case (t, i) =>
+            BoundReference(i, t, nullable = true)
+          }
+          val projection = if (codegen) {
+            GenerateSafeProjection.generate(exprs)
+          } else {
+            InterpretedSafeProjection.createProjection(exprs)
+          }
+          val input = UnsafeProjection.create(types.toArray).apply(
+            new GenericInternalRow(Array[Any](
+              new GenericArrayData(Array[Any](makeStructRow("a", 1L), null)),
+              new ArrayBasedMapData(
+                new GenericArrayData(Array[Any](1, 2)),
+                new GenericArrayData(Array[Any](makeStructRow("m", 2L), null))),
+              new GenericInternalRow(Array[Any](null)))))
+          val result = projection(input)
+
+          val array = result.getArray(0)
+          assertStruct(array.getStruct(0, 2), "a", 1L)
+          assert(array.isNullAt(1))
+          val values = result.getMap(1).valueArray()
+          assertStruct(values.getStruct(0, 2), "m", 2L)
+          assert(values.isNullAt(1))
+          assert(result.getStruct(2, 1).isNullAt(0))
+        }
+      }
   }
 
   // ==================== Other Code Generation Helpers ====================
