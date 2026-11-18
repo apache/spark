@@ -4403,14 +4403,15 @@ object SQLConf {
     buildConf("spark.sql.streaming.join.stateFormatV4.indexVersion")
       .internal()
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .doc("How state format version 4 of stream-stream joins orders the state of an input that " +
-        "it evicts by a range condition. 0: by the event time of the input, as in 4.4 and " +
-        "earlier and with spark.sql.streaming.statefulOperator.allowMultiple set to false. 1: by " +
-        "the column that the default mode evicts the input by, which is the event time for an " +
-        "input bounded only through a column cast to TIMESTAMP. A streaming query keeps the " +
-        "version recorded in its checkpoint, and one restarted from a checkpoint without it uses " +
-        "0. With 0, the default mode fails to run a join that evicts such an input by a " +
-        "TIMESTAMP column other than its event time.")
+      .doc("How state format version 4 of stream-stream joins orders the state of an input. " +
+        "0: by the event time of the input, or by the equality key that has the first " +
+        "watermark, as in 4.4 and earlier and with " +
+        "spark.sql.streaming.statefulOperator.allowMultiple set to false. 1: by the column that " +
+        "the default mode evicts the input by, which is the event time for an input bounded " +
+        "only through a column cast to TIMESTAMP, or by the equality key that the opposite " +
+        "input's watermark bounds. A streaming query keeps the version recorded in its " +
+        "checkpoint, and one restarted from a checkpoint without it uses 0. A restart fails " +
+        "when the recorded version orders an input differently from the query.")
       .version("4.5.0")
       .intConf
       .checkValue(v => v == 0 || v == 1, "Valid versions are 0 and 1")

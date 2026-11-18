@@ -655,19 +655,25 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
+  // The watermarks are on different equality keys: la on the left and rb on the right.
+  private def crossedKeyJoin(): (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("a", "b")
+      .select(timestamp_seconds($"a").as("la"), timestamp_seconds($"b").as("lb"))
+      .withWatermark("la", "10 seconds")
+    val right = rightInput.toDF().toDF("a", "b")
+      .select(timestamp_seconds($"a").as("ra"), timestamp_seconds($"b").as("rb"))
+      .withWatermark("rb", "10 seconds")
+    val joined = left.join(right, expr("la = ra AND lb = rb"), "full_outer")
+      .select($"la".cast("int"), $"lb".cast("int"), $"ra".cast("int"), $"rb".cast("int"))
+    (leftInput, rightInput, joined)
+  }
+
   test("V4 restart from an older checkpoint fails when the opposite watermark picks another key") {
     withJoinConf(4) {
       withTempDir { checkpoint =>
-        val leftInput = MemoryStream[(Int, Int)]
-        val rightInput = MemoryStream[(Int, Int)]
-        val left = leftInput.toDF().toDF("a", "b")
-          .select(timestamp_seconds($"a").as("la"), timestamp_seconds($"b").as("lb"))
-          .withWatermark("la", "10 seconds")
-        val right = rightInput.toDF().toDF("a", "b")
-          .select(timestamp_seconds($"a").as("ra"), timestamp_seconds($"b").as("rb"))
-          .withWatermark("rb", "10 seconds")
-        val joined = left.join(right, expr("la = ra AND lb = rb"), "full_outer")
-          .select($"la".cast("int"), $"lb".cast("int"), $"ra".cast("int"), $"rb".cast("int"))
+        val (leftInput, rightInput, joined) = crossedKeyJoin()
         testStream(joined)(
           StartStream(checkpointLocation = checkpoint.getCanonicalPath),
           MultiAddData(leftInput, (5, 50))(rightInput, (80, 50)),
@@ -683,6 +689,36 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
               condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
               parameters = Map("side" -> "left", "column" -> "\"lb\""))
           })
+      }
+    }
+  }
+
+  // The legacy mode orders the state by the key that findJoinKeyOrdinalForWatermark picks.
+  for (legacyFirst <- Seq(true, false)) {
+    test("V4 restart fails when the legacy mode changes and the opposite watermark picks " +
+        s"another key, legacy first=$legacyFirst") {
+      withJoinConf(4) {
+        withTempDir { checkpoint =>
+          val (leftInput, rightInput, joined) = crossedKeyJoin()
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> (!legacyFirst).toString) {
+            testStream(joined)(
+              StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+              MultiAddData(leftInput, (5, 50))(rightInput, (80, 50)),
+              CheckNewAnswer(),
+              StopStream)
+          }
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> legacyFirst.toString) {
+            testStream(joined)(
+              StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+              AddData(rightInput, (5, 50)),
+              ExpectFailure[AnalysisException] { e =>
+                checkError(
+                  e.asInstanceOf[AnalysisException],
+                  condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+                  parameters = Map("side" -> "left", "column" -> "\"lb\""))
+              })
+          }
+        }
       }
     }
   }

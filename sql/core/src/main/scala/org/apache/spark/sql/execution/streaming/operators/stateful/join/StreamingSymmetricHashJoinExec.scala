@@ -741,6 +741,11 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
+      // A key that the opposite watermark selects can be NULL in a row that an earlier version
+      // or the legacy mode stored. Such a row can never match.
+      case Some(JoinStateKeyWatermarkPredicate(expr @ LessThanOrEqual(key, _), _, _))
+          if joinKeyOrdinalForWatermark != findJoinKeyOrdinalForWatermark(leftKeys, rightKeys) =>
+        Predicate.create(Or(expr, IsNull(key)), Seq.empty).eval _
       case Some(JoinStateKeyWatermarkPredicate(expr, _, _)) =>
         // inputSchema can be empty as expr should only have BoundReferences and does not require
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].
