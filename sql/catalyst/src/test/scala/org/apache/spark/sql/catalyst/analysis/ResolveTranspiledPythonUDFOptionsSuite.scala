@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.{
-  DecimalType, DoubleType, FloatType, LongType, MapType, StringType}
+  ArrayType, DecimalType, DoubleType, FloatType, LongType, MapType, StringType}
 
 /**
  * Unit tests for [[ResolveTranspiledPythonUDFOptions]], which prunes a
@@ -85,6 +85,27 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
       List(Concat(Seq(a, a))), List(List("string")))
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions.isEmpty)
+  }
+
+  test("keeps a map/array option only for a matching map/array column") {
+    // `def f(x: dict, y: int): return y + 1` (SPARK-55219). AttributeReference directly
+    // because the `$"a".map(...)` DSL collides with TreeNode.map.
+    val n = $"b".long
+    val opt = Add(n, Literal(1L))
+    val mapT = MapType(StringType, StringType)
+    val arrT = ArrayType(StringType)
+    Seq(("map", mapT, arrT), ("array", arrT, mapT)).foreach {
+      case (category, dt, otherDt) =>
+        def node(first: AttributeReference): TranspiledPythonUDF = TranspiledPythonUDF(
+          "udf", pyUDF(Seq(first, n)), List(opt), List(List(category, "numeric")))
+        val c = AttributeReference("a", dt)()
+        val pruned = prune(node(c), LocalRelation(c, n))
+        assert(pruned.transpiledOptions == List(opt))
+        assert(pruned.optionInputCategories.isEmpty)
+        Seq($"a".string, AttributeReference("a", otherDt)()).foreach { wrong =>
+          assert(prune(node(wrong), LocalRelation(wrong, n)).transpiledOptions.isEmpty)
+        }
+    }
   }
 
   test("leaves options untouched when categories are empty (no restriction)") {

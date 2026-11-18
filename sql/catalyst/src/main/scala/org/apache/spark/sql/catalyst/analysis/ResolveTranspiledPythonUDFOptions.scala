@@ -105,6 +105,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   not its contents, and a variety that reports "map"/"array" is responsible
   //   for the per-element lowering (an out-of-tree transpiler verifies its
   //   rewrite before serving it, so a wrong shape does not ship).
+  //   The transpiler itself refuses to lower any comparison or conditional branch over
+  //   them (SPARK-55219), so no built-in option observes an element type or its collation.
   private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
     if (categories.isEmpty) {
       true

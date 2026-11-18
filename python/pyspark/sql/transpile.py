@@ -30,8 +30,10 @@ Python's ``+`` and ``*`` are overloaded for text (concat / repeat), so an
 untyped parameter is transpiled into one option per input-type category
 (numeric and string) and the JVM picks the one matching the bound column
 types -- falling back to interpreted Python when none fit. Annotating the
-UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category and
-keeps the option matrix small; prefer doing so. To bound plan growth,
+UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category --
+numeric, string, bool, binary, or map/array for dict/list annotations --
+and keeps the option matrix small; prefer doing so. A ``Sequence``
+annotation is tried as both array and string, since a ``str`` is one too. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
@@ -464,6 +466,11 @@ class CatalystTranspiler(AbstractTranspiler):
         # (e.g. a bare ``None``) are treated as compatible and don't force this.
         body_cat = self._safe_category(params, body_node)
         else_cat = self._safe_category(params, else_node)
+        if body_cat in ("map", "array") or else_cat in ("map", "array"):
+            raise UnsupportedOperationException(
+                "if/else branches have a `map`/`array` operand; complex branches "
+                "fall back to interpreted Python"
+            )
         if body_cat is not None and else_cat is not None and body_cat != else_cat:
             # Numeric sub-categories (integer/float) are compatible: Spark widens
             # to double in the CASE WHEN expression. Truly mismatched families
@@ -498,10 +505,15 @@ class CatalystTranspiler(AbstractTranspiler):
         (bool vs bigint) -- which would break a working UDF since the option
         is type-checked before ConvertToCatalyst can drop it -- or coerces
         where Python's ``==`` is simply False. Refuse those so the UDF falls
-        back to interpreted Python. A ``None`` literal operand stays allowed
-        (the four-branch NULL handling above reproduces Python exactly).
-        Numeric sub-categories (``"integer"`` vs ``"float"``) are treated as
-        compatible; Spark widens to double in the comparison.
+        back to interpreted Python. Outside ``map`` / ``array``, a ``None``
+        literal operand stays allowed (the four-branch NULL handling above
+        reproduces Python exactly). Numeric sub-categories (``"integer"`` vs
+        ``"float"``) are treated as compatible; Spark widens to double in the
+        comparison.
+
+        A ``map`` or ``array`` operand is always refused, ``None`` comparisons
+        included: a map ``=`` fails analysis even against ``None``, and the
+        ``array`` category records neither the element type nor its collation.
 
         A NaN guard is added unless both operands are provably ``"integer"``:
         ``NaN == NaN`` is ``False`` in Python (IEEE 754), but Spark's
@@ -522,6 +534,16 @@ class CatalystTranspiler(AbstractTranspiler):
                     "Python compares across types as unequal while Spark would coerce "
                     "or fail analysis, so the transpiler falls back to interpreted Python"
                 )
+        if lc in ("map", "array") or rc in ("map", "array"):
+            # A map is not orderable, so `=` fails analysis -- even vs None, which
+            # coerces to MapType first. "array" says nothing about the element type
+            # (map elements fail the same way), nor the elements' collation,
+            # so arrays are refused too (SPARK-55219).
+            raise UnsupportedOperationException(
+                "`==`/`!=` has a `map`/`array` operand; Spark's `=` fails analysis "
+                "or diverges from Python there, so the transpiler falls back to "
+                "interpreted Python"
+            )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
@@ -600,6 +622,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"({lc} vs {rc}); Python would raise TypeError, so the "
                 "transpiler falls back to interpreted Python"
             )
+        if lc in ("map", "array"):
+            # Same reasons as `_lower_eq`, plus Python's `[None] < [1]` raises.
+            raise UnsupportedOperationException(
+                f"`{op_repr}` operands are both `{lc}`; Spark's ordering fails "
+                "analysis or diverges from Python there, so the transpiler falls "
+                "back to interpreted Python"
+            )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         if self._is_nonnull_node(params, left_node) and self._is_nonnull_node(params, right_node):
@@ -616,11 +645,12 @@ class CatalystTranspiler(AbstractTranspiler):
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
     def _category(self, params: List[str], node: ast.AST) -> str:
-        """Infer the scalar category of ``node`` under the current
+        """Infer the category of ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
 
         Returns one of ``"integer"``, ``"float"``, ``"numeric"`` (unknown
-        numeric sub-type), ``"string"``, ``"bool"``, or ``"binary"``.
+        numeric sub-type), ``"string"``, ``"bool"``, ``"binary"``, ``"map"``,
+        or ``"array"``.
 
         Drives operator selection (``+`` -> add vs concat, ``*`` -> multiply vs
         repeat) and raises ``UnsupportedOperationException`` when an operator's
@@ -1164,19 +1194,45 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     ]
 
 
-def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
-    """Map a parameter's type annotation to a category, or ``None`` when absent
-    or unrecognised (the caller then tries all numeric and string variants).
+def _annotation_name(annotation: Optional[ast.AST]) -> Optional[str]:
+    """The bare type name a parameter annotation spells, or ``None`` when the
+    annotation is absent or not a plain name.
 
-    Returns one of ``"integer"``, ``"float"``, ``"string"``, ``"bool"``, or
-    ``"binary"`` (matching the constant handling in ``_category``). ``int``
-    maps to ``"integer"`` and ``float`` maps to ``"float"`` so the JVM can
-    select the variant whose NaN semantics match the bound column type."""
-    name: Optional[str] = None
+    Peels a subscript (``dict[str, str]`` -> ``dict``) and a ``typing.``
+    qualifier (``typing.Dict`` -> ``Dict``, but not ``torch.float``), and reads
+    a quoted annotation like its unquoted spelling."""
+    if isinstance(annotation, ast.Subscript):
+        annotation = annotation.value  # dict[str, str] -> dict
     if isinstance(annotation, ast.Name):
-        name = annotation.id
-    elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-        name = annotation.value  # stringized annotation, e.g. def f(a: "int")
+        return annotation.id
+    if (
+        isinstance(annotation, ast.Attribute)
+        and isinstance(annotation.value, ast.Name)
+        and annotation.value.id == "typing"
+    ):
+        return annotation.attr  # typing.Dict -> Dict, but not torch.float
+    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        # Parse quoted subscripted and typing-qualified forms like their
+        # unquoted spellings. Anything unparseable falls out as untyped.
+        try:
+            with _syntax_warnings_suppressed():
+                parsed = ast.parse(annotation.value, mode="eval").body
+            return _annotation_name(parsed)
+        except (SyntaxError, ValueError):
+            return None
+    return None
+
+
+def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
+    """Map a parameter's type annotation to the single category it pins, or
+    ``None`` when absent, unrecognised, or not specific enough to pin one.
+
+    Returns one of ``"integer"``, ``"float"``, ``"string"``, ``"bool"``,
+    ``"binary"``, ``"map"``, or ``"array"``. Numeric annotations select the
+    variant whose NaN semantics match the bound column type. ``Sequence`` pins
+    nothing, since it admits more than one category: see
+    ``_annotation_candidates``."""
+    name = _annotation_name(annotation)
     if name == "str":
         return "string"
     if name == "int":
@@ -1187,7 +1243,26 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
         return "bool"
     if name == "bytes":
         return "binary"
+    if name in ("dict", "Dict", "Mapping"):
+        return "map"
+    if name in ("list", "List"):
+        return "array"
     return None
+
+
+def _annotation_candidates(annotation: Optional[ast.AST]) -> List[str]:
+    """The categories to try for a parameter with this annotation.
+
+    A pinning annotation yields its one category. ``Sequence`` yields both
+    ``"array"`` and ``"string"``: a ``str`` is a ``Sequence`` too, so pinning
+    it to ``"array"`` alone would drop the option a string column matches.
+    Anything else is untyped and is tried as each numeric and string variant."""
+    cat = _annotation_category(annotation)
+    if cat is not None:
+        return [cat]
+    if _annotation_name(annotation) == "Sequence":
+        return ["array", "string"]
+    return ["integer", "float", "string"]
 
 
 def _param_category_combos(
@@ -1196,34 +1271,28 @@ def _param_category_combos(
     """Per-variant maps ``{public_param_index -> category}``.
 
     A typed param (``def f(a: str, b: int)``) is pinned to its category
-    (``"integer"``/``"float"``/``"string"``/``"bool"``/``"binary"``); an
+    (``"integer"``/``"float"``/``"string"``/``"bool"``/``"binary"``/
+    ``"map"``/``"array"``); an
     untyped param is tried as ``"integer"``, ``"float"``, and ``"string"``
     separately so the JVM can select the variant that matches the bound column
-    type and apply the right NaN semantics. To cap plan growth, when more than
-    three params are untyped we collapse the untyped ones to one variant per
-    base category (encourage typing inputs to keep the matrix small) while
-    keeping every typed param pinned. A ``None`` ``function_ast`` means no
-    trustworthy source, hence no annotations: every param is untyped.
+    type and apply the right NaN semantics. A ``Sequence`` param is tried as
+    ``"array"`` and ``"string"``. To cap plan growth, when more than three
+    params are unpinned (untyped or ``Sequence``) we collapse them to one
+    variant per base category (encourage typing inputs to keep the matrix
+    small) while keeping every typed param pinned. A ``None`` ``function_ast``
+    means no trustworthy source, hence no annotations: every param is untyped.
     """
     n = len(public_params)
-    candidates: List[List[str]] = []
-    untyped = 0
     if function_ast is None:
-        candidates = [["integer", "float", "string"] for _ in range(n)]
-        untyped = n
+        candidates = [_annotation_candidates(None) for _ in range(n)]
     else:
         all_args = _positional_args(function_ast)
         public_args = all_args[len(all_args) - n :]
-        for arg in public_args:
-            cat = _annotation_category(arg.annotation)
-            if cat is None:
-                candidates.append(["integer", "float", "string"])
-                untyped += 1
-            else:
-                candidates.append([cat])
-    if untyped > 3:
-        # Cap the 3**untyped blow-up; collapse untyped params to one variant
-        # per base fill while keeping typed params pinned.
+        candidates = [_annotation_candidates(arg.annotation) for arg in public_args]
+    unpinned = sum(1 for c in candidates if len(c) > 1)
+    if unpinned > 3:
+        # Cap the blow-up of the product; collapse unpinned params to one
+        # variant per base fill while keeping typed params pinned.
         return [
             {i: c[0] if len(c) == 1 else fill for i, c in enumerate(candidates)}
             for fill in ("integer", "float", "string")
