@@ -75,8 +75,8 @@ its test, and the errors the test raises, once both branches are one expression.
 The source cannot rule that out: the call makes any two branches one by binding
 their parameters to one argument, as ``f(x, x, c)`` does for ``a if 0 < c < 10
 else b``. So in a body that takes the CASE WHEN fold, a test that can raise gets
-a third branch: ``CASE WHEN t THEN body WHEN NOT t THEN orelse ELSE
-raise_error(...) END``. ``t`` is never NULL, so the ELSE is never reached, but
+a third branch: ``CASE WHEN t THEN body WHEN NOT t THEN orelse
+ELSE raise_error(...) END``. ``t`` is never NULL, so the ELSE is never reached, but
 no branch equals it and the test stays. A test that cannot raise keeps two
 branches, since dropping it loses nothing, and the expression stays as
 pushable as its operands. An if/ternary in a body that lowered before chains did
