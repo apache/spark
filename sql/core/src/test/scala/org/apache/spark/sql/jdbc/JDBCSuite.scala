@@ -3531,7 +3531,7 @@ class JDBCSuite extends SharedSparkSession {
                 .option("timestampCalendarTimeZone", "Asia/Kolkata")
                 .save()
 
-              val rs = conn.prepareStatement(s"select t from $tableName").executeQuery()
+              val rs = conn.prepareStatement(s"""select "t" from $tableName""").executeQuery()
               assert(rs.next())
               assert(
                 rs.getObject(1, classOf[LocalDateTime]) ===
