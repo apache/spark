@@ -756,13 +756,14 @@ object DatasetManager extends Logging {
    * record that lets [[evolveTable]] remove the properties a later definition drops; that Scaladoc
    * states when the record is written and which keys are removed.
    *
-   * A table in a [[JDBCTableCatalog]] never gets the record: that catalog appends every property
-   * other than the reserved ones to the `CREATE TABLE` statement as a DDL option, so the record
+   * The record is left out for a [[JDBCTableCatalog]] (see
+   * [[PipelinesTableProperties.declaredPropertyKeys]]) because that catalog appends every property
+   * other than the reserved ones to the `CREATE TABLE` statement as a DDL option, and the record
    * would make the statement invalid. Re-runs of such a table are not supported either way: a JDBC
    * table with any table property fails on its second run, with or without the record, because
-   * `JDBCTable` reports no properties and the JDBC dialect rejects `SetProperty`. Leaving out the
-   * record only lets the first run succeed. A catalog that wraps a JDBC catalog is not detected by
-   * this check.
+   * `JDBCTable` reports no properties and the JDBC dialect rejects `SetProperty`. This check makes
+   * sql/pipelines depend on the concrete JDBCTableCatalog class, and a catalog that wraps it is not
+   * detected. Re-runs of JDBC tables with table properties are tracked in SPARK-62024.
    */
   private def resolveTableProperties(
       table: Table,
