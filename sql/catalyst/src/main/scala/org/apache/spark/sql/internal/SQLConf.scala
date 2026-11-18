@@ -7646,7 +7646,7 @@ object SQLConf {
         s"${DATETIME_JAVA8API_ENABLED.key}=false. The SQL Server dialect writes such a " +
         "literal in the session time zone either way.")
       .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 

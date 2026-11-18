@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Sum}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, FilterExec, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -2244,12 +2244,15 @@ class JDBCSuite extends SharedSparkSession {
             SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz,
             SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
           val filter = s"$col >= DATE '2026-06-26' AND $col < DATE '2026-06-27'"
-          val all = spark.read.jdbc(urlWithUserAndPass, "TEST.TS_FILTER", new Properties())
-          val pushed = checkPushdown(all.where(filter).select("ID"))
-          val expected = spark.createDataFrame(all.collect().toSeq.asJava, all.schema)
-            .where(filter).select("ID")
+          def read(pushDown: Boolean): DataFrame =
+            spark.read.option("pushDownPredicate", pushDown.toString)
+              .jdbc(urlWithUserAndPass, "TEST.TS_FILTER", new Properties())
+              .where(filter).select("ID")
+          val pushed = checkPushdown(read(pushDown = true))
+          val expected = read(pushDown = false)
+          assert(expected.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
           withClue(s"session=$sessionTz java8API=$java8Api col=$col") {
-            checkAnswer(pushed, expected.collect().toSeq)
+            checkAnswer(pushed, expected)
           }
         }
       }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.rdd.RDD
@@ -1406,11 +1404,11 @@ private[v2] trait V2JDBCTest
         val filter = s"$col >= DATE '2026-06-26' AND $col < DATE '2026-06-27'"
         val pushed = sql(s"SELECT ${caseConvert("id")} FROM $tbl WHERE $filter")
         checkFilterPushed(pushed)
-        val all = spark.table(tbl)
-        val expected = spark.createDataFrame(all.collect().toSeq.asJava, all.schema)
+        val expected = spark.read.option("pushDownPredicate", "false").table(tbl)
           .where(filter).select(caseConvert("id"))
+        checkFilterPushed(expected, pushed = false)
         withClue(s"session=$sessionTz java8API=$java8Api col=$col") {
-          checkAnswer(pushed, expected.collect().toSeq)
+          checkAnswer(pushed, expected)
         }
       }
     }
