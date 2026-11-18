@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, SuppliedRelationRegistry}
 import org.apache.spark.sql.connector.catalog.{
   Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog
 }
@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.procedures.{
   UnboundProcedure
 }
 import org.apache.spark.sql.connector.read.Scan
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.util.Utils
@@ -976,6 +976,26 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       } finally {
         sql("DROP DATABASE IF EXISTS parse_sql_per_call_c CASCADE")
       }
+    }
+  }
+
+  test("supplied relation identities are canonical under case-sensitive analysis") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      val mgr = spark.sessionState.catalogManager
+      val globalDb = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("SYSTEM", "SESSION", "v")) ===
+        Seq("system", "session", "v"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("System", "Session", "v")) ===
+        SuppliedRelationRegistry.sessionIdentity("v"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("SPARK_CATALOG", "default", "t")) ===
+        Seq("spark_catalog", "default", "t"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, Seq("GLOBAL_TEMP", "v")) ===
+        Seq(globalDb, "v"))
+      // Idempotent, so a stored identity and a looked-up identity agree.
+      val once = SuppliedRelationRegistry.canonicalize(mgr, Seq("SPARK_CATALOG", "default", "t"))
+      assert(SuppliedRelationRegistry.canonicalize(mgr, once) === once)
     }
   }
 }

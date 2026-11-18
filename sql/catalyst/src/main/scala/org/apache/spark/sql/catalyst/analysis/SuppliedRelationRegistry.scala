@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.{
   SESSION_NAMESPACE,
   SYSTEM_CATALOG_NAME
 }
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.LexicalThreadLocal
 
@@ -72,10 +73,12 @@ private[sql] object SuppliedRelationRegistry
   }
 
   /**
-   * The identity a supplied name is stored and matched under: the name parts
-   * relation resolution qualifies a persistent name to (as
-   * `CatalogAndIdentifier` does), `system.session.v` for a session-qualified
-   * name, and `global_temp.v` for a global temp view. Idempotent.
+   * The identity a supplied name is stored and matched under, spelled as the
+   * catalog's own name and the global temp database's configured name, so that
+   * a lookup under any case spelling of the same object finds it: the name parts
+   * relation resolution qualifies a persistent name to (as `CatalogAndIdentifier`
+   * does), `system.session.v` for a session-qualified name, and the global temp
+   * database name for a global temp view. Idempotent.
    */
   def canonicalize(
       catalogManager: CatalogManager,
@@ -84,12 +87,12 @@ private[sql] object SuppliedRelationRegistry
       sessionIdentity(nameParts.last)
     } else if (nameParts.length == 2 &&
         catalogManager.v1SessionCatalog.isGlobalTempViewDB(nameParts.head)) {
-      nameParts
+      Seq(SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE), nameParts.last)
     } else if (nameParts.length == 1) {
       catalogManager.currentCatalog.name() +:
         catalogManager.currentNamespace.toSeq :+ nameParts.head
     } else if (catalogManager.isCatalogRegistered(nameParts.head)) {
-      nameParts
+      catalogManager.catalog(nameParts.head).name() +: nameParts.tail
     } else {
       catalogManager.currentCatalog.name() +: nameParts
     }

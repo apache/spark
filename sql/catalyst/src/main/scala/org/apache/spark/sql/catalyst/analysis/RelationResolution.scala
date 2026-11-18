@@ -187,7 +187,8 @@ class RelationResolution(
     // system.session.v (3 parts): overlay, then local temp view by name.
     if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
       val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
-      return lookupSuppliedTempRelation(identifier, identifier).orElse(
+      return lookupSuppliedTempRelation(
+        identifier, SuppliedRelationRegistry.sessionIdentity(identifier.last)).orElse(
         resolveTempView(
           normalized,
           u.isStreaming,
@@ -218,7 +219,8 @@ class RelationResolution(
     if (identifier.length > 1) {
       val globalOverlay =
         if (identifier.length == 2 && v1SessionCatalog.isGlobalTempViewDB(identifier.head)) {
-          lookupSuppliedTempRelation(identifier, identifier)
+          lookupSuppliedTempRelation(
+            identifier, SuppliedRelationRegistry.canonicalize(catalogManager, identifier))
         } else {
           None
         }
