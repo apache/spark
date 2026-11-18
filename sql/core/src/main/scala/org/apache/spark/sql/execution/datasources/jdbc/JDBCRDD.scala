@@ -72,6 +72,16 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
+      // Must precede isObjectNotFoundException, whose default matches any 42xxx SQLSTATE.
+      case e: SQLException if dialect.isPermissionDeniedException(e) =>
+        throw new SparkException(
+          errorClass = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+          messageParameters = Map(
+            "jdbcQuery" -> fullQuery,
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+            "externalEngineSqlState" -> getSQLState(e)
+          ),
+          cause = e)
       // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
       // distinguish between the case where the table does not exist and other SQL syntax errors.
       // This order is important because when a table does not exist, the exception raised can

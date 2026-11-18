@@ -407,7 +407,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
           .executeUpdate()
       }
 
-      val postgresError = intercept[SQLException] {
+      val e = intercept[SparkException] {
         spark.read.format("jdbc")
           .option("url", restrictedJdbcUrl)
           .option("dbtable", "bar")
@@ -415,10 +415,16 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
           .option("password", restrictedPassword)
           .load()
       }
-      assertResult("42501")(postgresError.getSQLState)
-      assert(
-        postgresError.getMessage.contains("permission denied"),
-        s"Unexpected PostgreSQL error message: ${postgresError.getMessage}")
+      checkError(
+        exception = e,
+        condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+        sqlState = Some("42501"),
+        parameters = Map(
+          "jdbcQuery" -> "SELECT \\* FROM bar WHERE 1=0",
+          "externalEngineSqlState" -> "42501",
+          "externalEngineError" -> ".*permission denied.*"),
+        matchPVals = true)
+      assert(e.getCause.isInstanceOf[SQLException])
     } {
       Using.resource(getConnection()) { conn =>
         conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()

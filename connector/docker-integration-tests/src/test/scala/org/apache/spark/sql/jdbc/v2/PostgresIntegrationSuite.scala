@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import scala.util.Using
 
-import org.apache.spark.{SparkConf, SparkSQLException}
+import org.apache.spark.{SparkConf, SparkException, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.PostgresDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
+import org.apache.spark.util.Utils
 
 /**
  * To run this test suite for a specific version (e.g., postgres:18.2-alpine)
@@ -460,6 +461,43 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       assert(eqEmpty.collect().map(_.getInt(0)).toSet === Set(1))
       val neqSpace = sql(s"SELECT id FROM $table WHERE c <> ' '")
       assert(neqSpace.collect().map(_.getInt(0)).toSet === Set(1, 2))
+    }
+  }
+
+  test("SPARK-61982: loadTable reports a permission error for a restricted user") {
+    val restrictedUser = "restricted_catalog_user"
+    val restrictedPassword = "restricted_password"
+    val restrictedCatalog = "postgresql_restricted"
+    Utils.tryWithSafeFinally {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
+        conn.prepareStatement(s"CREATE USER $restrictedUser PASSWORD '$restrictedPassword'")
+          .executeUpdate()
+      }
+      withSQLConf(
+          s"spark.sql.catalog.$restrictedCatalog" -> classOf[JDBCTableCatalog].getName,
+          s"spark.sql.catalog.$restrictedCatalog.url" ->
+            s"jdbc:postgresql://$dockerIp:$externalPort/postgres",
+          s"spark.sql.catalog.$restrictedCatalog.user" -> restrictedUser,
+          s"spark.sql.catalog.$restrictedCatalog.password" -> restrictedPassword) {
+        val e = intercept[SparkException] {
+          spark.table(s"$restrictedCatalog.public.employee")
+        }
+        checkError(
+          exception = e,
+          condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+          sqlState = Some("42501"),
+          parameters = Map(
+            "jdbcQuery" -> "SELECT \\* FROM \"public\".\"employee\" WHERE 1=0",
+            "externalEngineSqlState" -> "42501",
+            "externalEngineError" -> ".*permission denied.*"),
+          matchPVals = true)
+        assert(e.getCause.isInstanceOf[SQLException])
+      }
+    } {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(s"DROP USER IF EXISTS $restrictedUser").executeUpdate()
+      }
     }
   }
 }
