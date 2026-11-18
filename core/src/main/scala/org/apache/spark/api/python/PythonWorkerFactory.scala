@@ -21,6 +21,7 @@ import java.io.{DataInputStream, DataOutputStream, EOFException, File, InputStre
 import java.net.{InetAddress, InetSocketAddress, SocketException, StandardProtocolFamily, UnixDomainSocketAddress}
 import java.net.SocketTimeoutException
 import java.nio.channels._
+import java.nio.file.Files
 import java.util.Arrays
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -140,23 +141,27 @@ private[spark] class PythonWorkerFactory(
     conf.get(PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE)
   @GuardedBy("self")
   private var lastActivityNs = 0L
-  new MonitorThread().start()
 
-  @GuardedBy("self")
-  private val simpleWorkers = new mutable.WeakHashMap[PythonWorker, Process]()
-
+  // Before the monitor thread starts, because it can fail.
   private val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""),
     globalPythonFilesPath)
 
+  new MonitorThread().start()
+
+  @GuardedBy("self")
+  private val simpleWorkers = new mutable.WeakHashMap[PythonWorker, Process]()
+
   /**
    * SPARK-62000: The Python path of the Python files that the application was started with, for
    * the workers of a session with artifact isolation, like the global JARs that the class loader
    * of such a session inherits (SPARK-51537). The workers add the session's own files in front
-   * of it. Only the files in the default files directory are used: spark-submit and
-   * `SparkContext` put them there, except on YARN, which puts them on PYTHONPATH instead.
+   * of it. It takes the copies of these files in the default files directory, where spark-submit
+   * and `SparkContext` put them outside YARN, so that it works on every host. It adds only these
+   * files, not the rest of that directory. YARN also puts them on the PYTHONPATH of its
+   * application master and executors, but not of a client-mode driver.
    */
   private def globalPythonFilesPath: String = {
     val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
@@ -169,9 +174,10 @@ private[spark] class PythonWorkerFactory(
         .map(path => new File(rootDir, new File(Utils.resolveURI(path).getPath).getName))
         .filter(_.isFile)
       val (modules, packages) = files.partition(_.getName.endsWith(".py"))
-      // A module is imported from its directory, and a package from its archive.
-      PythonUtils.mergePythonPaths(
-        packages.map(_.getPath) ++ modules.headOption.map(_ => rootDir.getPath): _*)
+      // A package is imported from its archive, and a module from a directory, which holds
+      // only the modules.
+      PythonUtils.mergePythonPaths(packages.map(_.getPath) ++
+        Option.when(modules.nonEmpty)(globalPythonModulesDirectory(conf, modules).getPath): _*)
     }
   }
 
@@ -597,4 +603,28 @@ private[spark] object PythonWorkerFactory {
   val IDLE_WORKER_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(1)  // kill idle workers after 1 minute
 
   private[spark] val defaultDaemonModule = "pyspark.daemon"
+
+  // The directory that holds copies of the application's Python modules, and their paths.
+  @GuardedBy("this")
+  private var globalPythonModules: Option[(Seq[String], File)] = None
+
+  /**
+   * Returns a directory under the local directory that holds copies of `modules`, the
+   * application's Python modules, and nothing else, like `__pyfiles__` on YARN. It is created
+   * once for each set of modules, which does not change while an application runs.
+   */
+  private def globalPythonModulesDirectory(conf: SparkConf, modules: Seq[File]): File =
+    synchronized {
+      val paths = modules.map(_.getPath)
+      globalPythonModules.collect {
+        case (cachedPaths, dir) if cachedPaths == paths && dir.isDirectory => dir
+      }.getOrElse {
+        val dir = Utils.createTempDir(Utils.getLocalDir(conf), "pyfiles")
+        modules.foreach { module =>
+          Files.copy(module.toPath, dir.toPath.resolve(module.getName))
+        }
+        globalPythonModules = Some((paths, dir))
+        dir
+      }
+    }
 }

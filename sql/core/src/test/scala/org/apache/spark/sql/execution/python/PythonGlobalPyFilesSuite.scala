@@ -35,10 +35,12 @@ import org.apache.spark.util.Utils
  */
 class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
 
+  private lazy val filesDir = Utils.createTempDir()
+
   // The application's Python files: a module, a package in a zip file, and a module whose name
   // a session can also use.
   private lazy val globalPyFiles: Seq[String] = {
-    val dir = Utils.createTempDir()
+    val dir = filesDir
     val module = new File(dir, "global_py_files_module.py")
     Files.writeString(module.toPath, "value = 'global module'")
     val clash = new File(dir, "global_py_files_clash.py")
@@ -55,10 +57,23 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
     Seq(module, clash, pkg).map(_.getAbsolutePath)
   }
 
-  // As spark-submit does with --py-files outside YARN.
+  // Other files of the application: a module that is not one of its Python files, and one
+  // named like a module of the standard library that a Python worker imports when it starts.
+  private lazy val otherFiles: Seq[String] = {
+    val unlisted = new File(filesDir, "global_py_files_unlisted.py")
+    Files.writeString(unlisted.toPath, "value = 'unlisted'")
+    val token = new File(filesDir, "token.py")
+    Files.writeString(token.toPath, "raise ImportError('shadowed the standard library')")
+    Seq(unlisted, token).map(_.getAbsolutePath)
+  }
+
+  // As spark-submit does with --py-files and --files outside YARN, except that the Python files
+  // are named by paths that do not exist: the workers must use the copies in the default files
+  // directory, as on the executors of other hosts.
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.files", globalPyFiles.mkString(","))
-    .set("spark.submit.pyFiles", globalPyFiles.mkString(","))
+    .set("spark.files", (globalPyFiles ++ otherFiles).mkString(","))
+    .set("spark.submit.pyFiles",
+      globalPyFiles.map(f => new File("/nonexistent", new File(f).getName).getPath).mkString(","))
 
   private val udtfName = "global_py_files_udtf"
 
@@ -73,6 +88,11 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
        |    def analyze():
        |        import global_py_files_module
        |        import global_py_files_pkg
+       |        try:
+       |            import global_py_files_unlisted
+       |            raise Exception("Imported a file that is not a Python file of the application")
+       |        except ModuleNotFoundError:
+       |            pass
        |        return AnalyzeResult(
        |            schema=StructType()
        |                .add("module", StringType())
@@ -83,6 +103,11 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
        |        import global_py_files_clash
        |        import global_py_files_module
        |        import global_py_files_pkg
+       |        try:
+       |            import global_py_files_unlisted
+       |            raise Exception("Imported a file that is not a Python file of the application")
+       |        except ModuleNotFoundError:
+       |            pass
        |        yield (
        |            global_py_files_module.value,
        |            global_py_files_pkg.value,
