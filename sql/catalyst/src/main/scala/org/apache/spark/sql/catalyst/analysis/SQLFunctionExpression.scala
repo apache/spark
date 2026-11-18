@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SQL_FUNCTION_EXPRESSION, SQL_SCALAR_FUNCTION, TreePattern}
 import org.apache.spark.sql.types.DataType
 
@@ -27,31 +26,41 @@ import org.apache.spark.sql.types.DataType
  * Represent a SQL function expression resolved from the catalog SQL function builder.
  *
  * @param inputPositions parameter positions for sparse named inputs; empty for a positional prefix
+ * @param defaultInputs omitted named defaults resolved in the function's saved context
  */
 case class SQLFunctionExpression(
     name: String,
     function: SQLFunction,
     inputs: Seq[Expression],
     returnType: Option[DataType],
-    inputPositions: Seq[Int] = Nil) extends Expression with Unevaluable {
+    inputPositions: Seq[Int] = Nil,
+    defaultInputs: Map[Int, Expression] = Map.empty) extends Expression with Unevaluable {
   override def children: Seq[Expression] = inputs
   override def dataType: DataType = returnType.get
   override def nullable: Boolean = true
   override def prettyName: String = name
-  private def displayInputs: Seq[Expression] =
-    getTagValue(SQLFunctionExpression.SUPPLIED_INPUT_POSITIONS)
-      .map(_.map(inputs)).getOrElse(inputs)
+  private def displayInputs: Seq[Expression] = {
+    if (defaultInputs.isEmpty) {
+      inputs
+    } else {
+      val positions = if (inputPositions.isEmpty) inputs.indices else inputPositions
+      val supplied = positions.iterator.zip(inputs.iterator).toMap
+      (0 until inputs.size + defaultInputs.size).map { index =>
+        supplied.getOrElse(index, defaultInputs(index))
+      }
+    }
+  }
   override def toString: String = s"$name(${displayInputs.mkString(", ")})"
-  override def sql: String = s"$prettyName(${displayInputs.map(_.sql).mkString(", ")})"
+  def sqlString(render: Expression => String): String =
+    s"$prettyName(${displayInputs.map(render).mkString(", ")})"
+  override def sql: String = sqlString(_.sql)
+  // Defaults belong to the saved function, rather than to the supplied argument list. Grouping
+  // can compare completed argument lists separately when differently spelled calls need to match.
+  override lazy val canonicalized: Expression =
+    copy(inputs = inputs.map(_.canonicalized), defaultInputs = Map.empty)
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): SQLFunctionExpression = copy(inputs = newChildren)
   final override val nodePatterns: Seq[TreePattern] = Seq(SQL_FUNCTION_EXPRESSION)
-}
-
-object SQLFunctionExpression {
-  // Expanding defaults must not change generated column names. Display metadata is excluded
-  // from expression identity, so omitted and explicitly supplied equivalent defaults still match.
-  val SUPPLIED_INPUT_POSITIONS = TreeNodeTag[Seq[Int]]("sql_function_supplied_input_positions")
 }
 
 /**

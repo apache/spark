@@ -20,10 +20,14 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.time.Instant
 
-import org.apache.spark.sql.catalyst.expressions.{EquivalentExpressions, Expression, JsonToStructs, StructsToCsv}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.{SQLFunctionExpression, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.expressions.{Alias, EquivalentExpressions, Expression, JsonToStructs, Literal, NamedArgumentExpression, StructsToCsv}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, OneRowRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
   private val captureKey = SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS.key
@@ -212,7 +216,118 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("named omitted defaults preserve released column names and outer references") {
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withUserDefinedFunction("named_args_fn" -> false) {
+        sql("CREATE FUNCTION named_args_fn(a INT DEFAULT 1, b INT DEFAULT 2) " +
+          "RETURNS INT RETURN a + b")
+        for (capture <- Seq(true, false)) {
+          withSQLConf(captureKey -> capture.toString) {
+            for ((args, suffix) <- Seq("b => 3" -> "named_args_fn(1, 3)",
+                "a => 3" -> "named_args_fn(3, 2)")) {
+              val name = s"spark_catalog.default.$suffix"
+              val query = s"SELECT named_args_fn($args)"
+              assert(sql(query).columns.toSeq == Seq(name))
+              val expected = if (args == "b => 3") 4 else 5
+              checkAnswer(sql(s"SELECT `$name` FROM ($query)"), Row(expected))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("omitted default column names survive function expression copies") {
+    withSQLConf(captureKey -> "true") {
+      withUserDefinedFunction("named_args_fn" -> false) {
+        sql("CREATE FUNCTION named_args_fn(a BIGINT, b BIGINT DEFAULT 22) " +
+          "RETURNS BIGINT RETURN a + b")
+        val calls = Seq(Seq(Literal(3L)), Seq(NamedArgumentExpression("a", Literal(3L))))
+          .map { inputs =>
+            spark.sessionState.catalog.lookupFunction(
+              FunctionIdentifier("named_args_fn"), inputs).asInstanceOf[SQLFunctionExpression]
+          }
+        assert(calls.head.semanticEquals(calls.last))
+        calls.foreach { call =>
+          // Leave the aggregate unresolved so the rule defers expansion to a later iteration.
+          val plan = Aggregate(Seq(UnresolvedAttribute("missing")),
+            Seq(Alias(call, "value")()), OneRowRelation())
+          val deferred = spark.sessionState.analyzer.ResolveSQLFunctions(plan)
+            .expressions.flatMap(_.collect { case f: SQLFunctionExpression => f }).head
+          val serialized = Utils.deserialize[SQLFunctionExpression](Utils.serialize(deferred))
+          Seq(deferred.copy(), serialized).foreach { copied =>
+            assert(copied.sql == deferred.sql)
+            assert(copied.toString == deferred.toString)
+          }
+        }
+      }
+    }
+  }
+
+  test("named omitted string defaults preserve pretty names and SQL quoting") {
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withUserDefinedFunction("named_args_fn" -> false) {
+        sql("CREATE FUNCTION named_args_fn(a STRING DEFAULT 'hello', b INT DEFAULT 2) " +
+          "RETURNS STRING RETURN concat(a, CAST(b AS STRING))")
+        val query = "SELECT named_args_fn(b => 3)"
+        val name = withSQLConf(captureKey -> "false") { sql(query).columns.head }
+        withSQLConf(captureKey -> "true") {
+          assert(sql(query).columns.toSeq == Seq(name))
+          checkAnswer(sql(s"SELECT `$name` FROM ($query)"), Row("hello3"))
+          val call = spark.sessionState.catalog.lookupFunction(FunctionIdentifier("named_args_fn"),
+            Seq(NamedArgumentExpression("b", Literal(3))))
+          checkAnswer(sql(s"SELECT ${call.sql}"), Row("hello3"))
+        }
+      }
+    }
+  }
+
+  test("named default dependencies preserve qualified generated column names") {
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "false") {
+      withUserDefinedFunction("default_dep" -> false, "named_args_fn" -> false) {
+        sql("CREATE FUNCTION default_dep() RETURNS STRING RETURN 'hello'")
+        sql("CREATE FUNCTION named_args_fn(a STRING DEFAULT default_dep(), b INT DEFAULT 2) " +
+          "RETURNS STRING RETURN concat(a, CAST(b AS STRING))")
+        val query = "SELECT named_args_fn(b => 3)"
+        val name = withSQLConf(captureKey -> "false") { sql(query).columns.head }
+        withSQLConf(captureKey -> "true") {
+          assert(sql(query).columns.toSeq == Seq(name))
+          checkAnswer(sql(s"SELECT `$name` FROM ($query)"), Row("hello3"))
+        }
+      }
+    }
+  }
+
   for (capture <- Seq(true, false)) {
+    test(s"an unrelated aggregate preserves a closed lambda in a positional default: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql("CREATE FUNCTION named_args_fn(a BIGINT, " +
+            "b ARRAY<INT> DEFAULT transform(array(1), x -> x + 1)) " +
+            "RETURNS BIGINT RETURN a")
+          checkAnswer(sql("SELECT named_args_fn(id) " +
+            "FROM (SELECT max(id) AS id FROM range(3))"), Row(2L))
+          checkAnswer(sql("SELECT named_args_fn(id), count(*) FROM range(3) " +
+            "GROUP BY named_args_fn(id)"), (0L to 2L).map(id => Row(id, 1L)))
+          val error = intercept[AnalysisException] {
+            sql("SELECT named_args_fn(a => CAST(2 AS BIGINT))")
+          }
+          assert(error.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF")
+        }
+      }
+    }
+
+    test(s"grouped positional calls preserve identity with an unused random default: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql("CREATE FUNCTION named_args_fn(a BIGINT, b DOUBLE DEFAULT rand()) " +
+            "RETURNS BIGINT RETURN a")
+          checkAnswer(sql("SELECT named_args_fn(id), count(*) FROM range(3) " +
+            "GROUP BY named_args_fn(id)"), (0L to 2L).map(id => Row(id, 1L)))
+        }
+      }
+    }
+
     for (sparse <- Seq(true, false)) {
       test(s"named defaults match explicit grouping defaults: $capture, $sparse") {
         withSQLConf(captureKey -> capture.toString) {

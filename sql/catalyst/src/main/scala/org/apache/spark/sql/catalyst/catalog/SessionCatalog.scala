@@ -1845,10 +1845,10 @@ class SessionCatalog(
           messageParameters = Map(
             "funcName" -> function.name.unquotedString))
       }
-      val (args, positions) = rearrangeSQLFunctionArguments(function, input)
+      val (args, positions, defaults) = rearrangeSQLFunctionArguments(function, input)
       val returnType = function.getScalarFuncReturnType
       SQLFunctionExpression(
-        function.name.unquotedString, function, args, Some(returnType), positions)
+        function.name.unquotedString, function, args, Some(returnType), positions, defaults)
     }
   }
 
@@ -1894,7 +1894,8 @@ class SessionCatalog(
       name: String,
       function: SQLFunction,
       input: Seq[Expression],
-      inputPositions: Seq[Int] = Nil): LogicalPlan = {
+      inputPositions: Seq[Int] = Nil,
+      defaultInputs: Map[Int, Expression] = Map.empty): LogicalPlan = {
     assert(!function.isTableFunc,
       "Function '" + function.name + "' is a table function. " +
       "Use makeSQLTableFunctionPlan() instead of makeSQLFunctionPlan().")
@@ -1907,13 +1908,14 @@ class SessionCatalog(
       alwaysSetAnsiValue = true)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
-      val orderedInput = if (inputPositions.isEmpty) {
+      val orderedInput = if (inputPositions.isEmpty && defaultInputs.isEmpty) {
         input
       } else {
-        val supplied = inputPositions.zip(input).toMap
+        val positions = if (inputPositions.isEmpty) input.indices else inputPositions
+        val supplied = positions.iterator.zip(input.iterator).toMap
         inputParam.get.zipWithIndex.map { case (param, index) =>
-          supplied.getOrElse(index,
-            Cast(parseDefault(param.getDefault().get, parser), param.dataType))
+          supplied.getOrElse(index, defaultInputs.getOrElse(index,
+            Cast(parseDefault(param.getDefault().get, parser), param.dataType)))
         }.toSeq
       }
       val returnType = function.getScalarFuncReturnType
@@ -1931,7 +1933,7 @@ class SessionCatalog(
       }
 
       // Check if any input contains a lambda variable
-      val hasLambdaVar = orderedInput.exists { expr =>
+      val hasLambdaVar = (input.iterator ++ defaultInputs.valuesIterator).exists { expr =>
         expr.find {
           case _: NamedLambdaVariable => true
           case _: UnresolvedNamedLambdaVariable => true
@@ -2314,10 +2316,13 @@ class SessionCatalog(
   /** Normalize supplied scalar arguments before aggregate analysis, deferring omitted defaults. */
   private def rearrangeSQLFunctionArguments(
       function: SQLFunction,
-      input: Seq[Expression]): (Seq[Expression], Seq[Int]) = {
-    if (!conf.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS) ||
-        !input.exists(_.isInstanceOf[NamedArgumentExpression])) {
-      return (rearrangeArguments(function.inputParam, input, function.name.toString), Nil)
+      input: Seq[Expression]): (Seq[Expression], Seq[Int], Map[Int, Expression]) = {
+    if (!conf.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS)) {
+      val ordered = rearrangeArguments(function.inputParam, input, function.name.toString)
+      return (ordered, Nil, Map.empty)
+    }
+    if (!input.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      return (input, Nil, Map.empty)
     }
 
     val params = function.inputParam.toSeq.flatMap(_.toSeq)
@@ -2331,9 +2336,25 @@ class SessionCatalog(
     val supplied = ordered.zip(defaults).zipWithIndex.collect {
       case ((expr, default), index) if !default.exists(_ eq expr) => (expr, index)
     }
+    if (supplied.size == params.size) {
+      return (supplied.map(_._1), Nil, Map.empty)
+    }
     val positions = supplied.map(_._2)
-    val isPrefix = positions.zipWithIndex.forall { case (position, index) => position == index }
-    (supplied.map(_._1), if (isPrefix) Nil else positions)
+    val isPrefix = positions.iterator.zipWithIndex.forall { case (position, index) =>
+      position == index
+    }
+    val suppliedPositions = positions.toSet
+    val parseConf = Analyzer.buildSQLFunctionConf(
+      function = function,
+      applySessionOverrides = false,
+      alwaysSetAnsiValue = true)
+    val parsedDefaults = SQLConf.withExistingConf(parseConf) {
+      params.iterator.zipWithIndex.collect {
+        case (param, index) if !suppliedPositions.contains(index) =>
+          index -> Cast(parseDefault(param.getDefault().get, parser), param.dataType)
+      }.toMap[Int, Expression]
+    }
+    (supplied.map(_._1), if (isPrefix) Nil else positions, parsedDefaults)
   }
 
   /**
