@@ -19,10 +19,11 @@ import os
 import select
 import socket
 import sys
-from itertools import islice
+from itertools import chain, islice
 from typing import IO, Any, Iterator, List
 
 import pyarrow as pa
+import pyarrow.compute as pc
 
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
 from pyspark.logger.worker_io import capture_outputs
@@ -86,7 +87,9 @@ class LookupServer:
     Each request holds one Arrow stream with one batch of parameter rows. The response is one
     Arrow stream whose first column is the ordinal of the parameter row that a result row
     answers, followed by the columns of the read schema. It is written batch by batch, as the
-    reader returns its results, and ends with `LOOKUP_RESPONSE_END` and the status.
+    reader returns its results, and ends with `LOOKUP_RESPONSE_END` and the status. The reader
+    returns `(ordinal, row)` pairs, or `pyarrow.RecordBatch`es whose first column is the ordinal,
+    as `DataSourceReader.read` returns rows or batches.
     """
 
     def __init__(
@@ -160,7 +163,7 @@ class LookupServer:
                         "supported_types": "iterator",
                     },
                 )
-            for batch in self.tuple_batches(results):
+            for batch in self.result_batches(results):
                 if self.cancel_requested():
                     status = STATUS_CANCELLED
                     break
@@ -238,6 +241,22 @@ class LookupServer:
             raise self.invalid_return_type(value, "int") from None
         return _clamp(ordinal, INT_MIN, INT_MAX)
 
+    def result_batches(self, results: Iterator[Any]) -> Iterator[pa.RecordBatch]:
+        """
+        The response batches of the results of one `lookup` call. As `records_to_arrow_batches`
+        does for `DataSourceReader.read`, the first result decides the form for the whole call:
+        `pyarrow.RecordBatch`es, which are checked and passed on, or `(ordinal, row)` pairs,
+        which are converted to batches.
+        """
+        try:
+            first = next(results)
+        except StopIteration:
+            return
+        if isinstance(first, pa.RecordBatch):
+            yield from self.arrow_batches(chain([first], results))
+        else:
+            yield from self.tuple_batches(chain([first], results))
+
     def tuple_batches(self, results: Iterator[Any]) -> Iterator[pa.RecordBatch]:
         """Converts the `(ordinal, row)` pairs that the reader returns to Arrow batches."""
         while True:
@@ -255,6 +274,55 @@ class LookupServer:
             yield pa.RecordBatch.from_arrays(
                 [pa.array(ordinals, pa.int32())] + values.columns, schema=self.response_schema
             )
+
+    def arrow_batches(self, results: Iterator[Any]) -> Iterator[pa.RecordBatch]:
+        """
+        Checks the `pyarrow.RecordBatch`es that the reader returns, each of them: the ordinal
+        column first, then the columns of the read schema, as `DataSourceReader.read` returns
+        them and with the checks of read. A batch keeps its size.
+        """
+        num_columns = self.rows_converter.num_cols + 1
+        for batch in results:
+            if not isinstance(batch, pa.RecordBatch):
+                raise self.invalid_return_type(batch, "`pyarrow.RecordBatch`")
+            if batch.num_columns != num_columns:
+                raise PySparkRuntimeError(
+                    errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                    messageParameters={
+                        "expected": str(num_columns),
+                        "actual": str(batch.num_columns),
+                    },
+                )
+            values = pa.RecordBatch.from_arrays(
+                batch.columns[1:], schema=pa.schema(list(batch.schema)[1:])
+            )
+            self.rows_converter.check_batch(values)
+            yield pa.RecordBatch.from_arrays(
+                [self.arrow_ordinals(batch.column(0))] + values.columns,
+                schema=self.response_schema,
+            )
+
+    def arrow_ordinals(self, ordinals: pa.Array) -> pa.Array:
+        """
+        The ordinal column of a `pyarrow.RecordBatch` result, with the rules of an ordinal of
+        the tuple form: an integer, not a bool and not null, clamped to the range of a Java int.
+        """
+        if not pa.types.is_integer(ordinals.type):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_INVALID_RETURN_TYPE",
+                messageParameters={
+                    "type": str(ordinals.type),
+                    "name": self.reader_name,
+                    "supported_types": "int",
+                },
+            )
+        if ordinals.null_count > 0:
+            raise self.invalid_return_type(None, "int")
+        if ordinals.type != pa.int32():
+            ordinals = pc.max_element_wise(pc.min_element_wise(ordinals, INT_MAX), INT_MIN).cast(
+                pa.int32()
+            )
+        return ordinals
 
 
 def disable_nagle(outfile: IO) -> None:

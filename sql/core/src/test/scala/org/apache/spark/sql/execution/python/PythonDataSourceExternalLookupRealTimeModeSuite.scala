@@ -42,7 +42,8 @@ import org.apache.spark.sql.streaming.util.GlobalSingletonManualClock
  * The lookup source stores two rows for key 1 and one row for key 2, with the schema
  * `id INT, department STRING, pid INT`, where `pid` is the process id of the Python worker that
  * returns the row. It allows `maxRows` parameter rows per request, and appends `request <n>
- * <pid>` to the file `events` in `markerDir` for each request of `n` parameter rows.
+ * <pid>` to the file `events` in `markerDir` for each request of `n` parameter rows. With the
+ * option `recordBatches`, it returns its rows as one `pyarrow.RecordBatch` per request.
  */
 class PythonDataSourceExternalLookupRealTimeModeSuite extends StreamRealTimeModeE2ESuiteBase {
   import testImplicits._
@@ -70,9 +71,18 @@ class PythonDataSourceExternalLookupRealTimeModeSuite extends StreamRealTimeMode
        |        pid = os.getpid()
        |        with open(os.path.join(self.options["markerDir"], "events"), "a") as f:
        |            f.write(f"request {len(parameters)} {pid}\\n")
-       |        for ordinal, (key,) in enumerate(parameters):
-       |            for department in DEPARTMENTS.get(key, []):
-       |                yield ordinal, (key, department, pid)
+       |        pairs = [(ordinal, (key, department, pid))
+       |                 for ordinal, (key,) in enumerate(parameters)
+       |                 for department in DEPARTMENTS.get(key, [])]
+       |        if self.options.get("recordBatches") != "true":
+       |            return iter(pairs)
+       |        import pyarrow as pa
+       |        return iter([pa.RecordBatch.from_arrays([
+       |            pa.array([o for o, _ in pairs], pa.int64()),
+       |            pa.array([r[0] for _, r in pairs], pa.int32()),
+       |            pa.array([r[1] for _, r in pairs], pa.string()),
+       |            pa.array([r[2] for _, r in pairs], pa.int32()),
+       |        ], names=["ordinal", "id", "department", "pid"])])
        |
        |class $dataSourceName(DataSource):
        |    def schema(self):
@@ -203,24 +213,29 @@ class PythonDataSourceExternalLookupRealTimeModeSuite extends StreamRealTimeMode
     }
   }
 
-  test("real-time mode sends each stream row's request to Python as it reads the row") {
-    val clock = useManualClock()
-    // The source allows two parameter rows per request, but a real-time request takes one
-    // stream row, the default, so the join sends it, and emits its output, while the batch still
-    // runs.
-    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1") {
-      withJoin("python_lookup_rtm_one_row", "maxRows" -> "2")() { (input, query, markerDir) =>
-        val ids = Seq(1, 3, 2, 4)
-        ids.indices.foreach { n =>
-          input.addData(ids(n))
-          awaitQuery(query) {
-            requests(markerDir).length == n + 1 &&
-              outputs.sorted == joinOutputs(ids.take(n + 1): _*).sorted
+  // The tuple form keeps the name of its test from before the RecordBatch form.
+  Seq(false, true).foreach { recordBatches =>
+    val form = if (recordBatches) ", in the RecordBatch form" else ""
+    test(s"real-time mode sends each stream row's request to Python as it reads the row$form") {
+      val clock = useManualClock()
+      // The source allows two parameter rows per request, but a real-time request takes one
+      // stream row, the default, so the join sends it, and emits its output, while the batch
+      // still runs.
+      withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1") {
+        withJoin(s"python_lookup_rtm_one_row_$recordBatches", "maxRows" -> "2",
+            "recordBatches" -> recordBatches.toString)() { (input, query, markerDir) =>
+          val ids = Seq(1, 3, 2, 4)
+          ids.indices.foreach { n =>
+            input.addData(ids(n))
+            awaitQuery(query) {
+              requests(markerDir).length == n + 1 &&
+                outputs.sorted == joinOutputs(ids.take(n + 1): _*).sorted
+            }
           }
+          assert(requests(markerDir).map(_._1) === Seq(1, 1, 1, 1))
+          endBatch(query, clock)
+          assert(outputs.sorted === joinOutputs(ids: _*).sorted)
         }
-        assert(requests(markerDir).map(_._1) === Seq(1, 1, 1, 1))
-        endBatch(query, clock)
-        assert(outputs.sorted === joinOutputs(ids: _*).sorted)
       }
     }
   }
