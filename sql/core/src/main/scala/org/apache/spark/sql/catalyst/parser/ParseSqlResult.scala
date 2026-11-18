@@ -193,6 +193,12 @@ object ParseSqlResult {
       session: ClassicSparkSession,
       analyzerOpt: Option[Analyzer],
       plan: LogicalPlan): LogicalPlan = {
+    // Checked here, before QueryExecution, because QueryExecution executes a script (also
+    // when named parameter markers wrap it) as soon as analysis starts. A script under a
+    // supervising command is refused by the recursive call below.
+    if (QueryExecution.isUnresolvedPlanSqlScript(plan)) {
+      throw QueryExecutionErrors.parseSqlAnalyzeUnsupportedScript()
+    }
     val toAnalyze = plan match {
       case s: SupervisingCommand =>
         s.withTransformedSupervisedPlan(inner => analyzePlan(session, analyzerOpt, inner))
@@ -330,20 +336,18 @@ object ParseSqlResult {
     }
   }
 
-  /** Analyze `plan` without executing it. Scripts never reach QueryExecution. */
+  /**
+   * Analyze `plan` without executing it. Scripts never reach QueryExecution, which runs
+   * a script when analysis starts; [[analyzePlan]] refuses them before that.
+   */
   private def analyze(
       session: ClassicSparkSession,
       analyzerOpt: Option[Analyzer],
       plan: LogicalPlan): (Option[LogicalPlan], Option[SparkThrowable with Throwable]) = {
-    plan match {
-      case _: CompoundBody =>
-        (None, Some(QueryExecutionErrors.parseSqlAnalyzeUnsupportedScript()))
-      case _ =>
-        try {
-          (Some(analyzePlan(session, analyzerOpt, plan)), None)
-        } catch {
-          case e: SparkThrowable with Throwable if !isInternalError(e) => (None, Some(e))
-        }
+    try {
+      (Some(analyzePlan(session, analyzerOpt, plan)), None)
+    } catch {
+      case e: SparkThrowable with Throwable if !isInternalError(e) => (None, Some(e))
     }
   }
 
