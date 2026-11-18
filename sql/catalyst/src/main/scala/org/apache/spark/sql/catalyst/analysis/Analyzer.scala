@@ -203,9 +203,16 @@ case class AnalysisContext(
     // analyzed again when the view is read: CREATE VIEW, ALTER VIEW ... AS, and CACHE TABLE ...
     // AS SELECT, see `AnalysisContext.definesView`. Optional references (`x?`) resolve the query,
     // including the bodies of the SQL functions that it calls, the way the stored text will
-    // resolve, so that a definition that cannot be read fails when the view is created. Only set
-    // while optional references are enabled, as nothing else reads it.
+    // resolve, so that a definition that cannot be read fails when the view is created. Also set
+    // while the session disables optional references, because a SQL function that the query calls
+    // keeps the setting with which it was created.
     isViewDefinition: Boolean = false,
+    // Whether the plan under analysis is the body of a persistent SQL function. Its optional
+    // references (`x?`) do not resolve to the session or SQL script variables of the caller,
+    // because a persistent function cannot depend on temporary objects: such a reference stays
+    // the NULL it was when the function was created, as in a persistent view. See
+    // `VariableResolution.resolveMultipartName`.
+    isPersistentSQLFunctionBody: Boolean = false,
     // The origins of the optional references (`x?`) of the plan under analysis that this analysis
     // resolved to NULL, in the order of `OptionalReferences.nullReference`. The contexts of
     // subqueries share them. A view or SQL function body gets its own, because its optional
@@ -343,6 +350,8 @@ object AnalysisContext {
       },
       isSubqueryPlan = false,
       collation = function.collation,
+      // A temporary SQL function has no database, see `SessionCatalog.registerUserDefinedFunction`.
+      isPersistentSQLFunctionBody = function.name.database.nonEmpty,
       nullReferenceOrigins = mutable.ArrayBuffer.empty)
     set(context)
     try f finally { set(originContext) }
@@ -596,7 +605,7 @@ class Analyzer(
 
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.withNewAnalysisContext {
-      val analyzed = if (conf.optionalReferencesEnabled && AnalysisContext.definesView(plan)) {
+      val analyzed = if (AnalysisContext.definesView(plan)) {
         AnalysisContext.withViewDefinition(executeSameContext(plan))
       } else {
         executeSameContext(plan)

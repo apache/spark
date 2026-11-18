@@ -84,7 +84,9 @@ class VariableResolution(
    * @param referredTempVariableNames When resolving within a view, this contains the list of
    *   variable names that the view explicitly references and should have access to.
    * @param optionalNamePartIndices The indices of the optional name parts of `nameParts`. A
-   *   missing nested field whose name part is optional resolves to a static NULL.
+   *   missing nested field whose name part is optional resolves to a static NULL. A name with
+   *   an optional part resolves to no variable in the body of a persistent SQL function, see
+   *   `AnalysisContext.isPersistentSQLFunctionBody`.
    *
    * @return Some(Expression) if a variable is successfully resolved, potentially wrapped in
    *   [[ExtractValue]] expressions for nested field access. None if no variable can be resolved
@@ -95,12 +97,15 @@ class VariableResolution(
       resolvingView: Boolean,
       referredTempVariableNames: Seq[Seq[String]],
       optionalNamePartIndices: Set[Int] = Set.empty): Option[Expression] = {
+    val canResolveToVariable =
+      optionalNamePartIndices.isEmpty || !AnalysisContext.get.isPersistentSQLFunctionBody
     var resolvedVariable: Option[Expression] = None
     // We only support temp variables for now, so the variable name can at most have 3 parts.
     var numInnerFields: Int = math.max(0, nameParts.length - 3)
     // Follow the column resolution and prefer the longest match. This makes sure that users
     // can always use fully qualified variable name to avoid name conflicts.
-    while (resolvedVariable.isEmpty && numInnerFields < nameParts.length) {
+    while (canResolveToVariable && resolvedVariable.isEmpty &&
+        numInnerFields < nameParts.length) {
       resolvedVariable = resolveVariable(
         nameParts = nameParts.dropRight(numInnerFields),
         resolvingView = resolvingView,
