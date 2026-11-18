@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.TRANSPILED_PYTHON_UDF
 import org.apache.spark.sql.types.{
-  ArrayType, BinaryType, BooleanType, DataType, DecimalType, FractionalType,
-  IntegralType, MapType, NumericType, StringType, TimestampNTZType, TimestampType}
+  AnyTimestampNanoType, ArrayType, BinaryType, BooleanType, DataType, DecimalType,
+  FractionalType, IntegralType, MapType, NumericType, StringType, StructType, TimestampNTZType,
+  TimestampType, UserDefinedType}
 
 /**
  * Prunes the per-input-type options carried by a [[TranspiledPythonUDF]] down to those whose
@@ -121,6 +122,9 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   rewrite before serving it, so a wrong shape does not ship).
   //   The transpiler itself refuses to lower any comparison or conditional branch over
   //   them (SPARK-55219), so no built-in option observes an element type or its collation.
+  //   One exception: a container holding a map keyed by a nanosecond timestamp matches
+  //   neither. Python refuses to receive such a map (TIMESTAMP_NANOS_PYTHON_MAP_KEY), so an
+  //   option over it would return a value where the Python UDF raises.
   private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
     if (categories.isEmpty) {
       true
@@ -136,11 +140,32 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
         case ("timestamp", dt) => dt.isInstanceOf[TimestampNTZType]
-        case ("map", dt) => dt.isInstanceOf[MapType]
-        case ("array", dt) => dt.isInstanceOf[ArrayType]
+        case ("map", dt: MapType) => !hasTimestampNanosMapKey(dt)
+        case ("array", dt: ArrayType) => !hasTimestampNanosMapKey(dt)
         case _ => false
       }
     }
+  }
+
+  // True when `dt` holds, at any depth, a map whose key type carries a nanosecond timestamp: the
+  // shape `EvaluatePython.toJava` refuses to hand to a Python UDF.
+  private def hasTimestampNanosMapKey(dt: DataType): Boolean = dt match {
+    case MapType(keyType, valueType, _) =>
+      carriesTimestampNanos(keyType) || hasTimestampNanosMapKey(valueType)
+    case ArrayType(elementType, _) => hasTimestampNanosMapKey(elementType)
+    case StructType(fields) => fields.exists(f => hasTimestampNanosMapKey(f.dataType))
+    case udt: UserDefinedType[_] => hasTimestampNanosMapKey(udt.sqlType)
+    case _ => false
+  }
+
+  private def carriesTimestampNanos(dt: DataType): Boolean = dt match {
+    case _: AnyTimestampNanoType => true
+    case ArrayType(elementType, _) => carriesTimestampNanos(elementType)
+    case MapType(keyType, valueType, _) =>
+      carriesTimestampNanos(keyType) || carriesTimestampNanos(valueType)
+    case StructType(fields) => fields.exists(f => carriesTimestampNanos(f.dataType))
+    case udt: UserDefinedType[_] => carriesTimestampNanos(udt.sqlType)
+    case _ => false
   }
 
   // Why no option survived, when the answer is the time-zone gate on "timestamp": some option
@@ -168,8 +193,10 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
       Some(s"argument(s) ${ltzParams.mkString(", ")} are TIMESTAMP (local time zone), but the " +
         "`timestamp` input category matches TIMESTAMP_NTZ only. A Python worker sees a TIMESTAMP " +
         "in its own local time zone while Catalyst uses spark.sql.session.timeZone, so the " +
-        "transpiled option could disagree with Python; running the Python UDF instead. Cast " +
-        "the argument to TIMESTAMP_NTZ to allow transpilation.")
+        "transpiled option could disagree with Python; running the Python UDF instead. Casting " +
+        "the argument to TIMESTAMP_NTZ allows transpilation, but it also changes what the UDF " +
+        "receives to the wall-clock time in spark.sql.session.timeZone; do so only if that is " +
+        "the intended input.")
     }
   }
 }
