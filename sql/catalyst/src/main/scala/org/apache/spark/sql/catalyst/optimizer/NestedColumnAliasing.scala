@@ -220,8 +220,26 @@ object NestedColumnAliasing {
 
   private def canAlias(ev: Expression): Boolean = {
     // we can not alias the attr from lambda variable whose expr id is not available
-    !ev.exists(_.isInstanceOf[NamedLambdaVariable]) && ev.references.size == 1
+    !ev.exists(_.isInstanceOf[NamedLambdaVariable]) && ev.references.size == 1 &&
+      // An alias is evaluated once per row of the operator's input. Below an operator that
+      // repeats input rows, such as a Join, a Generate or a Sample with replacement, a
+      // non-deterministic access would then give every row built from one input row the same
+      // value. For such an access, collectRootReferenceAndExtractValue returns only the
+      // deterministic extractions and columns below it, which the callers may alias instead.
+      (ev.deterministic || isNondeterministicOnlyThroughInputFile(ev))
   }
+
+  /**
+   * Whether the only sources of non-determinism in `e` are input file functions. These functions
+   * have one value per input row, but only before any shuffle: above a shuffle they return an
+   * empty string or -1. So an access whose non-determinism comes only from them can still be
+   * aliased, and the alias keeps the value for the row's file.
+   */
+  private def isNondeterministicOnlyThroughInputFile(e: Expression): Boolean =
+    e.transform {
+      case f @ (_: InputFileName | _: InputFileBlockStart | _: InputFileBlockLength) =>
+        Literal.default(f.dataType)
+    }.deterministic
 
   /**
    * Returns two types of expressions:

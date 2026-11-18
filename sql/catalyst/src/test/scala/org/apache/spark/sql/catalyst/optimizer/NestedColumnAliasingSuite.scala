@@ -366,11 +366,13 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val deterministicReadPair = parentAndChild(Literal(0))
     val nondeterministicReadPair = parentAndChild(Cast(Rand(Literal(0L)), IntegerType))
     // `a[rand].b` is non-deterministic, so `a[rand].b.c` is not redundant with it, while the
-    // redundant deterministic `a[0].b.c` is still dropped.
+    // redundant deterministic `a[0].b.c` is still dropped. The default extractor does not return
+    // non-deterministic reads, so this passes each read through as it is.
     assert(
       NestedColumnAliasing.getAttributeToExtractValues(
         deterministicReadPair ++ nondeterministicReadPair,
-        Seq.empty
+        Seq.empty,
+        extractor = e => Seq(e)
       )
       .values
       .toSeq == Seq(deterministicReadPair.take(1) ++ nondeterministicReadPair)
