@@ -3698,8 +3698,8 @@ class SubquerySuite extends SharedSparkSession
       // LIMIT 1 turns the DISTINCT into a Project, and a non-aggregated subquery, which becomes
       // a left single join, still gets the LIMIT into the left side of the left join below it.
       // With the domain joins that decorrelation added before, e.g. over a lower COUNT, for a
-      // non-equality correlation or for a correlation below a UNION ALL, the LIMIT still also goes
-      // into the domain joins, as on master and 4.3.0.
+      // non-equality correlation in a single aggregate or for a correlation below a UNION ALL, the
+      // LIMIT still also goes into the domain joins, as on master and 4.3.0.
       val single = "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)"
       assert(!optimizedPlan(s"SELECT o.k, $single FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
         legacyNestedAggregate = false).exists { case a: Aggregate => a.groupOnly; case _ => false })

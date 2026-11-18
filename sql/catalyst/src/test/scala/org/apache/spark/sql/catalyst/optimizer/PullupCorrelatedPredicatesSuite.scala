@@ -176,7 +176,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // Only the domain joins of a subquery that is handled in decorrelation since SPARK-60501 keep
     // a LIMIT above; the ones that decorrelation gave before do not: over a lower COUNT, and for
     // a non-equality correlation, which gets a domain join also in a single aggregate, also
-    // when change 2 or the legacy conf keeps constructLeftJoins.
+    // when sameResultOverEmptyLowerAggregate or the legacy conf keeps constructLeftJoins.
     def countOver(lower: LogicalPlan): LogicalPlan = lower.groupBy()(count(Literal(1)).as("r"))
     val nonEquality = testRelation2.where($"a" > $"c").groupBy()(max($"d").as("s"))
     assert(keepLimitAbove(countOver(correlated(max($"d")))).toSet == Set(true))
