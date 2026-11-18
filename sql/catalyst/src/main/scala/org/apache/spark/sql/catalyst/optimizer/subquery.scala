@@ -981,6 +981,14 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
 
             val aggValRef = query.output.head
 
+            // TODO(SPARK-61660): a scalar Python or external UDF in `resultWithZeroTups` (the
+            // result over zero rows) is lifted out of this branch by `ExtractPythonUDFs` /
+            // `PlanExternalUDFs` and evaluated for every outer row, as it was in
+            // DecorrelateInnerQuery before SPARK-61482, so it can fail on an outer row that has
+            // matching rows. Wrapping it in an `EvalOnlyWhen` marker here too, in CASE 2 and
+            // CASE 3 below, would evaluate it only for the rows that take that branch. CASE 3
+            // builds a `CaseWhen`, so dropping a then-redundant marker there would also need a
+            // `CaseWhen` case in the `SimplifyConditionals` rule that drops it from `If` today.
             if (havingNode.isEmpty) {
               // CASE 2: Subquery with no HAVING clause
               val subqueryResultExpr =

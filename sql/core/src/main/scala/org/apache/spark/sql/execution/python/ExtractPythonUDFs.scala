@@ -299,11 +299,27 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
   private def extract(plan: LogicalPlan): LogicalPlan = {
     val pythonUDFArrowFallbackOnUDT = conf.pythonUDFArrowFallbackOnUDT
 
-    val udfs = ExpressionSet(
+    val udfs0 = ExpressionSet(
       collectEvaluableUDFsFromExpressions(plan.expressions, pythonUDFArrowFallbackOnUDT))
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
       .toSeq.asInstanceOf[Seq[PythonUDF]]
+    // Evaluate together only the UDFs that need the same condition (see `EvalOnlyWhen`), and
+    // the others in later calls of `extract`.
+    val conditions = EvalOnlyWhen.udfConditions(
+      plan.expressions,
+      isScalarPythonUDF,
+      e => canonicalizeDeterministic(e.asInstanceOf[PythonUDF]))
+    def conditionOf(udf: PythonUDF): Option[Expression] =
+      conditions.getOrElse(canonicalizeDeterministic(udf), None)
+    val udfs = udfs0.headOption.map(conditionOf) match {
+      case Some(first) =>
+        udfs0.filter { udf =>
+          val c = conditionOf(udf)
+          c.isDefined == first.isDefined && c.forall(_.semanticEquals(first.get))
+        }
+      case None => udfs0
+    }
     if (udfs.isEmpty) {
       // If there aren't any, we are done.
       plan
@@ -332,6 +348,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
               evalTypes.mkString(","))
           }
           val evalType = evalTypes.head
+          val evalCondition = udfs.headOption.flatMap(conditionOf)
+            .filter(_.references.subsetOf(child.outputSet))
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
               if (validUdfs.exists(_.evalType != PythonEvalType.SQL_BATCHED_UDF)) {
@@ -340,7 +358,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                   log"${MDC(REASON, "UDT input or return type")}. " +
                   log"Falling back to non-Arrow-optimized UDF execution.")
               }
-              BatchEvalPython(validUdfs, child.output, resultAttrs, child)
+              BatchEvalPython(validUdfs, child.output, resultAttrs, child, evalCondition)
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF
                  | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                  | PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -351,7 +369,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
-              ArrowEvalPython(validUdfs, child.output, resultAttrs, child, evalType)
+              ArrowEvalPython(validUdfs, child.output, resultAttrs, child, evalType, evalCondition)
             case _ =>
               throw SparkException.internalError("Unexpected UDF evalType")
           }

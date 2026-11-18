@@ -86,7 +86,8 @@ case class ArrowEvalPythonExec(
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan,
-    evalType: Int)(
+    evalType: Int,
+    override val evalCondition: Option[Expression] = None)(
     val columnarInputEnabled: Boolean) extends EvalPythonExec with PythonSQLMetrics {
   if (!supportedPythonEvalTypes.contains(evalType)) {
     throw SparkException.internalError(s"Unexpected eval type $evalType")
@@ -133,7 +134,10 @@ case class ArrowEvalPythonExec(
   // carried over to its copies, so that any copy, including one that a rule makes
   // after the transitions are inserted, reads its child in the format the planner
   // prepared it for, even if the configuration changes before the plan is executed.
-  override def supportsColumnar: Boolean = columnarInputEnabled && child.supportsColumnar
+  // When a per-row evaluation condition is present (see `EvalOnlyWhen`), the row
+  // path is used so that the condition can skip rows, so columnar input is off.
+  override def supportsColumnar: Boolean =
+    columnarInputEnabled && child.supportsColumnar && evalCondition.isEmpty
 
   override def supportsRowBased: Boolean = !supportsColumnar || requiredChildOutput.nonEmpty
 
