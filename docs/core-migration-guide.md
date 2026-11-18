@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Core 4.3 to 4.4
 
-- Since Spark 4.4, `RangePartitioner`, which `sortByKey` and `sortBy` use, seeds the samples that pick its range bounds from the partition index instead of the RDD id, so the same input gets the same bounds on every execution. The bounds, and so which partition or output file a record lands in, can differ from earlier versions. To restore the previous seeds, set `spark.rdd.rangePartitioner.legacySeedWithRddId` to `true` when the application starts.
+- Since Spark 4.4, `RangePartitioner`, which `sortByKey` and `sortBy` use, seeds its per-partition sketch from each partition index instead of the RDD id. When it re-samples an oversized partition, that seed also no longer depends on the RDD id. The same range bounds repeat when the input data, partition membership, and row order within each partition are unchanged. The bounds, and so which partition or output file a record lands in, can differ from earlier versions. To restore the previous seeds, set `spark.rdd.rangePartitioner.legacySeedWithRddId` to `true` when the application starts.
 
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
 
