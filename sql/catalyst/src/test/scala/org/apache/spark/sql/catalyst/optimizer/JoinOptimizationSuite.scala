@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, If, IsNull, Literal, RaiseError}
+import org.apache.spark.sql.catalyst.expressions.{Divide, EvalMode, Expression, If, IsNull, Literal, NumericEvalContext, RaiseError, Rand}
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -146,5 +146,26 @@ class JoinOptimizationSuite extends PlanTest {
       .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
 
     comparePlans(Optimize.execute(query.analyze), answer.analyze)
+  }
+
+  test("SPARK-61930: reorder inner joins without moving a condition that can fail ahead of a " +
+    "non-deterministic one") {
+    // The divisions are built in ANSI mode, where they can fail, and so can `q`, which one of them
+    // computes. After `rand(0) > 0.1`, a condition that can fail by itself or reads `q` stays above
+    // the joins, while one that can not fail goes into a join. So does a division written before
+    // `rand(0) > 0.1`. Only ReorderJoin runs, so that this does not depend on
+    // PushPredicateThroughJoin.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val x = testRelation.select($"a", $"b", divide($"a", $"b").as("q"))
+    val z = LocalRelation($"e".int, $"f".int)
+    val query = x.join(testRelation1).join(z).where($"a" === $"d" && $"d" === $"e" &&
+      divide($"b", $"d") > 1 && Rand(0) > 0.1 && divide($"b", $"f") > 1 && $"q" > 0 &&
+      $"b" > $"f")
+    val answer = x.join(testRelation1, condition = Some($"a" === $"d" && divide($"b", $"d") > 1))
+      .join(z, condition = Some($"d" === $"e" && $"b" > $"f"))
+      .where(Rand(0) > 0.1 && divide($"b", $"f") > 1 && $"q" > 0)
+
+    comparePlans(ReorderJoin(query.analyze), answer.analyze)
   }
 }
