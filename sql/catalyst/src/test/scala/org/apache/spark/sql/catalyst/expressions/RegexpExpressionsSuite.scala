@@ -826,4 +826,30 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-60731: cannotFailPattern of LIKE and RLIKE") {
+    val str = $"s".string.at(0)
+    val lcase = BoundReference(0, StringType("UTF8_LCASE"), nullable = true)
+    val max = StringRegexExpression.MAX_CANNOT_FAIL_PATTERN_LENGTH
+    // One supplementary character, two UTF-16 code units.
+    val emoji = new String(Character.toChars(0x1F600))
+    // A null pattern makes the result null; a short pattern that compiles cannot fail, also with
+    // a non-binary collation, and for LIKE also with a parenthesis.
+    Seq[StringRegexExpression](RLike(str, Literal.create(null, StringType)),
+      Like(str, Literal.create(null, StringType), '\\'), RLike(str, Literal("^1")),
+      RLike(lcase, Literal("^1")), Like(str, Literal("(3%"), '\\'),
+      Like(lcase, Literal("A%b"), '\\'), Like(str, Literal("a\\%"), '\\'),
+      Like(str, Literal("_" * max), '\\'),
+      // The length counts UTF-16 code units: 50 supplementary characters are 100.
+      Like(str, Literal(emoji * (max / 2)), '\\'))
+      .foreach(r => assert(r.cannotFailPattern, r))
+    // Too long, an invalid escape, a pattern that does not compile, an RLIKE with `(`, `\` or `{`,
+    // and a pattern that is not a literal, also a foldable one.
+    Seq[StringRegexExpression](Like(str, Literal("_" * (max + 1)), '\\'),
+      Like(str, Literal(emoji * (max / 2 + 1)), '\\'), Like(str, Literal("%\\"), '\\'),
+      Like(str, Literal("a\\b"), '\\'), Like(str, Literal("(3%"), '%'), RLike(str, Literal("[")),
+      RLike(str, Literal("(a)")), RLike(str, Literal("a\\d")), RLike(str, Literal("a{2}")),
+      RLike(str, str), RLike(str, Upper(Literal("x"))))
+      .foreach(r => assert(!r.cannotFailPattern, r))
+  }
 }

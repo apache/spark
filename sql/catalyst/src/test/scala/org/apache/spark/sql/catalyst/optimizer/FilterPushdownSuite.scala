@@ -836,18 +836,19 @@ class FilterPushdownSuite extends PlanTest {
           .where($"j")
           .select($"a", $"f", g as "g", $"j")
           .where(Not($"g" === $"j")))
-      // Nor can a short LIKE, also with a parenthesis in the pattern, as the regex it translates
-      // to has no group, also of the longest length accepted, nor a regex with a null pattern.
+      // The same with a LIKE, which cannot fail either: one with a parenthesis in its pattern, as
+      // the regex it translates to has no group, and one of the longest length accepted; and
+      // with an RLIKE whose pattern is null.
       Seq($"e".like("(3%"), $"e".like("_" * StringRegexExpression.MAX_CANNOT_FAIL_PATTERN_LENGTH),
-        $"e".rlike(Literal.create(null, StringType))).foreach { likeJ =>
+        $"e".rlike(Literal.create(null, StringType))).foreach { cannotFailJ =>
         check(Optimize.execute(testStringRelation
-            .select($"a", f as "f", g as "g", likeJ as "j")
+            .select($"a", f as "f", g as "g", cannotFailJ as "j")
             .where($"f" && Not($"g" === $"j") && $"j")
             .analyze),
           testStringRelation
             .select($"a", $"b", $"e", f as "f")
             .where($"f")
-            .select($"a", $"b", $"e", $"f", likeJ as "j")
+            .select($"a", $"b", $"e", $"f", cannotFailJ as "j")
             .where($"j")
             .select($"a", $"f", g as "g", $"j")
             .where(Not($"g" === $"j")))
@@ -867,8 +868,9 @@ class FilterPushdownSuite extends PlanTest {
       check(Optimize.execute(two), twoAnswer)
       check(PushPredicateThroughNonJoin(two), twoAnswer)
       // Also when that alias, computed in an earlier layer, can fail: only the aliases not
-      // computed yet are inlined, as a later pass reads the computed ones as columns. One
-      // application of the rule, as later passes place the condition there too.
+      // computed yet are inlined, as a later pass reads the computed ones as columns. Checked
+      // after one application of the rule: later passes would place the condition there even if
+      // this one did not, so the whole batch cannot tell.
       val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       check(PushPredicateThroughNonJoin(testStringRelation
@@ -990,10 +992,11 @@ class FilterPushdownSuite extends PlanTest {
           .analyze)
       // An alias the layer would compute that can fail: a regex whose pattern is not a literal,
       // also a column, does not compile, or has a quantified group, `\R` or a `{}` quantifier,
-      // which can overflow the stack on a long input, a LIKE whose pattern is longer than 100
-      // characters, a regex whose input can fail, a UDF, also under an operator that cannot fail,
-      // a throwable alias, and an expression with a child that declares `NoThrow` and carries the
-      // subquery pattern, as a subquery expression with a child would.
+      // which can overflow the stack on a long input, a LIKE whose pattern is longer than
+      // `MAX_CANNOT_FAIL_PATTERN_LENGTH` characters, a regex whose input can fail, a UDF, also
+      // under an operator that cannot fail, a throwable alias, and an expression with a child
+      // that declares `NoThrow` and carries the subquery pattern, as a subquery expression with a
+      // child would.
       val udfJ = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       val udfString = ScalaUDF((s: String) => s, StringType, Seq($"e"), Seq(None),

@@ -107,8 +107,9 @@ abstract class StringRegexExpression extends BinaryExpression
    * makes the result null, or that has at most `MAX_CANNOT_FAIL_PATTERN_LENGTH` characters (UTF-16
    * code units), passes `isStackSafePattern` and compiles. Unlike `_expensivePattern`, it does not
    * evaluate a foldable pattern that is not a literal yet, such as one `ConstantFolding` has not
-   * folded. The projection split of `PushPredicateThroughNonJoin` reads it (SPARK-60731). This is
-   * not `isTotal`, which the other rules read too and which promises more than not failing.
+   * folded, as evaluating it can fail. The projection split of `PushPredicateThroughNonJoin`
+   * reads it (SPARK-60731). This is not `isTotal`, which the other rules read too and which
+   * promises more than not failing.
    */
   private[catalyst] final lazy val cannotFailPattern: Boolean = right match {
     case Literal(null, _) => true

@@ -3118,22 +3118,22 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * nothing there can fail: none of these conditions can fail over the aliases not computed yet,
    * which a later pass inlines into a condition it pushes (`cannotFail`, which also accepts LIKE
    * and RLIKE whose pattern `StringRegexExpression.cannotFailPattern` accepts), and no alias the
-   * layer computes can fail. The layer is also only added while it still leaves an expensive alias
-   * for a later one and none of the aliases it leaves shares expensive work with one it computes,
-   * which would then run twice; a condition that would break this stays above. So the layer only
-   * drops rows earlier. It can compute an alias on rows that a later rewrite of the condition
-   * ending the split, or a check inferred for it, would have dropped first, which costs time but
-   * cannot fail. For example, with `f` and `g` the only expensive aliases, LIKE or RLIKE with such
-   * a pattern under version 0 of the regex pattern cost estimate, `f != g AND f` computes `f` and
-   * filters on `f` below `f != g`, which stays above the projection. The check is conservative:
-   * when the layer would compute an alias that can fail, such as a UDF, or a condition after the
-   * one ending the split can fail, nothing is filtered on below it. Later passes split each layer
-   * the same way, so in a layer's filter a condition that cannot fail can likewise be filtered on
-   * below the first one, when that one needs every expensive alias the layer computes: with `j`
-   * expensive too, `f != g AND j AND f` filters on `f`, then on `f != g`, then on `j`. Among the
-   * conditions that cannot fail, the split does not otherwise order by cost: in this example, and
-   * in `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on `j` first would
-   * (SPARK-61680).
+   * layer computes can fail. The layer is also only added while
+   * it still leaves an expensive alias for a later one and none of the aliases it leaves shares
+   * expensive work with one it computes, which would then run twice; a condition that would break
+   * this stays above. So the layer only drops rows earlier. It can compute an alias on rows that a
+   * later rewrite of the condition ending the split, or a check inferred for it, would have dropped
+   * first, which costs time but cannot fail. For example, with `f` and `g` the only expensive
+   * aliases, LIKE or RLIKE with such a pattern under version 0 of the regex pattern cost estimate,
+   * `f != g AND f` computes `f` and filters on `f` below `f != g`, which stays above the
+   * projection. The check is conservative: when the layer would compute an alias that can fail,
+   * such as a UDF, or a condition after the one ending the split can fail, nothing is filtered on
+   * below it. Later passes split each layer the same way, so in a layer's filter a condition that
+   * cannot fail can likewise be filtered on below the first one, when that one needs every
+   * expensive alias the layer computes: with `j` expensive too, `f != g AND j AND f` filters on
+   * `f`, then on `f != g`, then on `j`. Among the conditions that cannot fail, the split does not
+   * otherwise order by cost: in this example, and in `(f || g) AND j`, it computes `f` and `g` on
+   * more rows than filtering on `j` first would (SPARK-61680).
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form and written order).
@@ -3294,7 +3294,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * Whether `e` cannot fail: `ExprUtils.canEvaluateUnconditionally`, also accepting LIKE and RLIKE
    * whose pattern `StringRegexExpression.cannotFailPattern` accepts, which version 0 of the regex
    * pattern cost estimate treats as expensive (SPARK-60731). `CombineFilters` uses the narrower
-   * `canEvaluateUnconditionally`, which accepts neither.
+   * `canEvaluateUnconditionally`, so it does not move a condition with LIKE or RLIKE ahead of a
+   * non-deterministic or throwable one.
    */
   private def cannotFail(e: Expression): Boolean = ExprUtils.canEvaluateUnconditionallyWith(e, {
     case r: StringRegexExpression => r.cannotFailPattern

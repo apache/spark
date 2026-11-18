@@ -745,11 +745,13 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(!ExprUtils.canEvaluateUnconditionally(LessThan(Rand(Literal(0L)), Literal(0.5))))
   }
 
-  test("SPARK-60731: canEvaluateUnconditionallyWith also accepts the operators given, checks " +
+  test("SPARK-60731: canEvaluateUnconditionallyWith: also accepts the operators given, checks " +
     "their children, and checks the whole tree") {
     val s = AttributeReference("s", StringType)()
     val acceptRegex: Expression => Boolean = _.isInstanceOf[StringRegexExpression]
     assert(ExprUtils.canEvaluateUnconditionallyWith(Not(RLike(s, Literal("abc"))), acceptRegex))
+    assert(ExprUtils.canEvaluateUnconditionallyWith(
+      RLike(Coalesce(Seq(s, Literal("x"))), Literal("abc")), acceptRegex))
     assert(!ExprUtils.canEvaluateUnconditionallyWith(RLike(Upper(s), Literal("abc")), acceptRegex))
     // Even when every operator is accepted, the tree must be deterministic and have no subquery.
     val acceptAll: Expression => Boolean = _ => true
