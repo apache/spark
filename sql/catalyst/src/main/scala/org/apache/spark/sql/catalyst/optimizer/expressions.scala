@@ -760,11 +760,12 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * The columns of `plan` that can fail, i.e. those that a projection at its top, or below the
    * filters, samples, limits, offsets, sorts, joins, lateral joins, unions, CTEs that are not
-   * inlined, references to them, and projections there, computes with a deterministic expression
-   * that [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads such a column, or passes
-   * such a column through, the result columns of an aggregation with grouping keys there whose
-   * expression, with each aggregate function taken as its value, is deterministic and rejected by
-   * it, and those that a serializer from objects there computes with such an expression.
+   * inlined and projections there, or, for a reference to a CTE there, in its definition, computes
+   * with a deterministic expression that [[ExprUtils.canEvaluateUnconditionally]] rejects or that
+   * reads such a column, or passes such a column through, the result columns of an aggregation
+   * with grouping keys there whose expression, with each aggregate function taken as its value, is
+   * deterministic and rejected by it, and those that a serializer from objects there computes with
+   * such an expression.
    * Under whole-stage codegen, the projection computes a deterministic column for a row only when
    * a conjunct of the filter above first reads it, unless its subexpression elimination computes
    * it up front, and `PushPredicateThroughNonJoin` pushes a conjunct below the projection with the
@@ -775,13 +776,15 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * result column of a global aggregation, which computes it for its one row up front.
    * A limit, an offset, a union in whole-stage codegen and the streamed side of a broadcast hash or
    * nested loop join pass the columns on as they are, in the same stage, and so does a sort that
-   * the physical plan removes as its input is sorted already, a `WithCTE`, which it removes, and a
-   * lateral join, which `RewriteLateralSubquery` turns into a join after this rule runs. A
-   * reference to a CTE reads the columns its definition computes, where
-   * `PushdownPredicatesAndPruneColumnsForCTEDef` copies the conditions over it to. Otherwise, e.g.
-   * below the shuffle of a limit or an offset over more than one partition, on the build side of a
-   * join, below a sort or a union outside whole-stage codegen, or a reference to a CTE where no
-   * condition is copied, the columns are computed for every row anyway, but they still count:
+   * the physical plan removes as its input is sorted already, and a `WithCTE`, which
+   * `ReplaceCTERefWithRepartition` removes. A lateral join counts as the join that
+   * `RewriteLateralSubquery` turns it into after this rule runs. A reference to a CTE reads the
+   * columns its definition computes, where `PushdownPredicatesAndPruneColumnsForCTEDef` copies the
+   * conditions over it to, as their OR, which `BooleanSimplification` can reorder when there are
+   * several. Otherwise, e.g. below the shuffle of a limit or an offset over more than one
+   * partition, on the build side of a join, below a sort or a union outside whole-stage codegen, or
+   * for a reference to a CTE where no condition is copied, the columns are computed for every row
+   * anyway, but they still count:
    * the constant of an equality over them then goes into the other conjuncts in place, as before
    * SPARK-60983, which can fail on a row where the equality does not hold, where moving the
    * equality first would not. Other operators are not looked through for the columns that can

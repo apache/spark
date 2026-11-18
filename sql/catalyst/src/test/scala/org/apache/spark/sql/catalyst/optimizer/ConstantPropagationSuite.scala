@@ -373,14 +373,15 @@ class ConstantPropagationSuite extends PlanTest {
         // a condition reading it, under whole-stage codegen.
         stringIds.select($"s", $"id", $"x", Literal(1).as("i")).union(projected),
         projected.union(stringIds.select($"s", $"id", $"x", Literal(1).as("i"))),
-        // And from a lateral join, which `RewriteLateralSubquery` turns into a join after this rule
-        // runs, from the plan of a CTE that is not inlined, and from its definition through a
-        // reference to it.
-        projected.lateralJoin(LocalRelation($"k".long)),
-        WithCTE(projected, Nil),
         projected.join(LocalRelation($"k".long), Inner, Some($"x" === $"k")),
         LocalRelation($"k".long).join(projected, Inner, Some($"x" === $"k")),
-        stringIds.groupBy($"s", $"id")($"s", $"id", castS.as("i"))
+        stringIds.groupBy($"s", $"id")($"s", $"id", castS.as("i")),
+        // And from either side of a lateral join, which `RewriteLateralSubquery` turns into a join
+        // after this rule runs, and from the plan of a CTE that is not inlined (for a reference to
+        // one, see below).
+        projected.lateralJoin(LocalRelation($"k".long)),
+        LocalRelation($"k".long).lateralJoin(projected),
+        WithCTE(projected, Nil)
       ).foreach(child => checkOrdered(child, written, expected))
     }
   }
@@ -887,8 +888,9 @@ class ConstantPropagationSuite extends PlanTest {
   test("SPARK-61437: A column that can fail through a reference to a CTE that is not inlined") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val definition = CTERelationDef(projected.analyze)
-      val reference =
-        CTERelationRef(definition.id, _resolved = true, definition.output, isStreaming = false)
+      // A reference has attributes of its own, mapped to those of the definition by position.
+      val reference = CTERelationRef(definition.id, _resolved = true,
+        definition.output.map(_.newInstance()), isStreaming = false)
       val written = $"id" > 5L && timesId($"i") > 0L && $"i" === 1
       val expected = $"id" > 5L && Literal(1L) * $"id" > 0L && $"i" === 1
       val optimized = Optimize.execute(WithCTE(reference.where(written).analyze, Seq(definition)))
@@ -896,6 +898,11 @@ class ConstantPropagationSuite extends PlanTest {
       comparePlans(optimized, expectedPlan)
       assert(optimized.collectFirst { case f: Filter => conjuncts(f) } ==
         expectedPlan.collectFirst { case f: Filter => conjuncts(f) })
+      // Only the columns of the definition that can fail count: `id = 7` goes first.
+      val moved = WithCTE(reference.where($"id" > 0L && $"i" > 0 && $"id" === 7L).analyze,
+        Seq(definition))
+      assert(Optimize.execute(moved).collectFirst { case f: Filter => conjuncts(f) } ==
+        Some(conjuncts(reference.where($"id" === 7L && $"i" > 0).analyze)))
       // Without the definition, the reference reads columns that can not fail, as before.
       checkOrdered(reference, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
     }
