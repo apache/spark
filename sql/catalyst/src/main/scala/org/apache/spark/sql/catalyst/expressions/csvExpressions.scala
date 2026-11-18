@@ -335,25 +335,28 @@ case class StructsToCsv(
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(3)
 
   override lazy val canonicalized: Expression = {
-    val parameters = CaseInsensitiveMap(options)
-    val explicitDefault = parameters.get(CSVOptions.TREAT_NULL_AS_EMPTY_STRING).exists { value =>
-      value != null && Set("true", "false").contains(value.toLowerCase(Locale.ROOT))
-    }
-    def nonNullableFields: Boolean = child.resolved && (child.dataType match {
-      case schema: StructType => schema.forall(!_.nullable)
-      case _ => false
-    })
-    // With only an ASCII alphanumeric nullValue, default writer settings render a literal marker
-    // and an actual null identically: neither quoting nor whitespace processing changes it.
-    // Further marker/settings equivalences are deferred; keep their keys conservative without
-    // constructing a writer or validating options during canonicalization.
-    def plainNullMarker: Boolean = parameters.sizeCompare(1) == 0 &&
-      parameters.get(CSVOptions.NULL_VALUE).exists { marker =>
-        marker != null && marker.nonEmpty && marker.forall { c =>
-          (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-        }
+    // The default captured pair is unchanged by relevance normalization.
+    val relevant = (nullValueWrittenAsQuotedEmptyString || !useCapturedOptionDefaults) && {
+      val parameters = CaseInsensitiveMap(options)
+      val explicitDefault = parameters.get(CSVOptions.TREAT_NULL_AS_EMPTY_STRING).exists { value =>
+        value != null && Set("true", "false").contains(value.toLowerCase(Locale.ROOT))
       }
-    val relevant = !explicitDefault && !plainNullMarker && !nonNullableFields
+      def nonNullableFields: Boolean = child.resolved && (child.dataType match {
+        case schema: StructType => schema.forall(!_.nullable)
+        case _ => false
+      })
+      // With only an ASCII alphanumeric nullValue, default writer settings render a literal marker
+      // and an actual null identically: neither quoting nor whitespace processing changes it.
+      // Further marker/settings equivalences are deferred; keep their keys conservative without
+      // constructing a writer or validating options during canonicalization.
+      def plainNullMarker: Boolean = parameters.sizeCompare(1) == 0 &&
+        parameters.get(CSVOptions.NULL_VALUE).exists { marker =>
+          marker != null && marker.nonEmpty && marker.forall { c =>
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+          }
+        }
+      !explicitDefault && !plainNullMarker && !nonNullableFields
+    }
     copy(
       child = child.canonicalized,
       nullValueWrittenAsQuotedEmptyString = relevant && useCapturedOptionDefaults &&

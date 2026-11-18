@@ -293,6 +293,31 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("default CSV canonicalization avoids scanning a shared wide schema") {
+    val inspections = new AtomicInteger
+    val fields = (0 until 128).map { i =>
+      StructField(s"n$i", LongType, nullable = false)
+    }.toArray
+    val schema = new StructType(fields) {
+      override def iterator: Iterator[StructField] = super.iterator.map { field =>
+        inspections.incrementAndGet()
+        field
+      }
+    }
+    for (options <- Seq(Map.empty[String, String], Map("quoteAll" -> "false"));
+        ordinal <- 0 until 4) {
+      val child = BoundReference(ordinal, schema, nullable = false)
+      val canonicalChild = child.canonicalized
+      val csv = StructsToCsv(options, child, Some("UTC"),
+        nullValueWrittenAsQuotedEmptyString = false, useCapturedOptionDefaults = true)
+      val canonical = csv.canonicalized.asInstanceOf[StructsToCsv]
+      assert(canonical.child eq canonicalChild)
+      assert(!canonical.nullValueWrittenAsQuotedEmptyString)
+      assert(canonical.useCapturedOptionDefaults)
+    }
+    assert(inspections.get() == 0)
+  }
+
   test("CSV conversions share when every top-level field is nonnullable") {
     val schemas = Seq(new StructType().add("id", LongType, nullable = false),
       new StructType().add("nested", ArrayType(IntegerType), nullable = false))
