@@ -239,6 +239,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               useMaterializedThreshold = false))
           case _ => None
         }
+      // The bloom filter's subquery reads a DSv2 scan again, so only a scan marked with
+      // `repeatableRead` counts. A pushed limit, for example, lets the source pick other rows on a
+      // second read.
+      case scan: DataSourceV2ScanRelation if !scan.repeatableRead => None
       case _: LeafNode if hasHitSelectiveFilter =>
         Some(FilterCreationSide(
           targetKey,
