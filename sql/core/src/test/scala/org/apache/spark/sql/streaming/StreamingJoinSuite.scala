@@ -2374,6 +2374,49 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
       assertNumStateRows(total = 15, updated = 7)
     )
   }
+
+  Seq(true, false).foreach { windowKey =>
+    val keyType = if (windowKey) "window" else "timestamp"
+    test(s"NULL $keyType event-time join key is kept in state, not evicted") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val leftWithTime = leftInput.toDF().toDF("lk", "t")
+        .select($"lk", timestamp_seconds($"t").as("lt"))
+        .withWatermark("lt", "10 seconds")
+      val rightWithInput = rightInput.toDF().toDF("rk", "s")
+      // The right key has no watermark and is NULL for a negative input.
+      val rightTime = when($"s" >= 0, timestamp_seconds($"s"))
+      val (left, right) = if (windowKey) {
+        (leftWithTime.select($"lk", window($"lt", "10 seconds").as("lw")),
+          rightWithInput.select($"rk", when($"s" >= 0, struct(rightTime.as("start"),
+            (rightTime + expr("INTERVAL 10 SECONDS")).as("end"))).as("rw")))
+      } else {
+        (leftWithTime.select($"lk", $"lt".as("lw")),
+          rightWithInput.select($"rk", rightTime.as("rw")))
+      }
+      val keyEnd = if (windowKey) Seq("lw.end", "rw.end") else Seq("lw", "rw")
+      val joined = left.join(right, expr("lk = rk AND lw = rw"), "full_outer")
+        .select($"lk", col(keyEnd(0)).cast("long"), $"rk", col(keyEnd(1)).cast("long"))
+      // Left time 5 is in window [0, 10).
+      val (matchingStart, length) = if (windowKey) (0, 10L) else (5, 0L)
+
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 5)),
+            AddData(rightInput, (1, -1), (1, matchingStart), (4, 20)))),
+          CheckNewAnswer(Row(1, matchingStart + length, 1, matchingStart + length)),
+          // The watermark moves to 90 seconds.
+          AddData(leftInput, (2, 100)),
+          CheckNewAnswer(),
+          // As in V2 and V3, the key eviction predicate is unknown for the NULL key, so the
+          // row stays.
+          AddData(leftInput),
+          CheckNewAnswer(Row(null, null, 4, 20 + length)),
+          assertNumStateRows(total = 2, updated = 5))
+      }
+    }
+  }
 }
 
 /** No V3-specific tests for full outer joins. */
