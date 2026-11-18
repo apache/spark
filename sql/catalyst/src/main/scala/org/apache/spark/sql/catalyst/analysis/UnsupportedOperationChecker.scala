@@ -762,17 +762,27 @@ object UnsupportedOperationChecker extends Logging {
       val boundedByKey = keyOrdinal.exists { ordinal =>
         StreamingJoinHelper.isKeyBoundedByWatermark(otherKeys(ordinal), other.outputSet)
       }
+      // TODO: [SPARK-62002] [SPARK-61989] With a watermarked equality key, eviction uses the key
+      //  and ignores the range, yet this arm still accepts an input that a range condition
+      //  bounds. Make this arm precise for such keyed joins.
       lazy val boundedByRange = StreamingJoinHelper.getStateValueWatermark(
         state.outputSet, other.outputSet, join.condition, Some(1000000)).isDefined
       if (!boundedByKey && !boundedByRange) {
         val confKey = SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key
+        // Without a watermarked equality key, only a range condition evicts this input.
+        val reason = if (keyOrdinal.isDefined) {
+          s"a later row of the $otherSide input can match a $stateSide row that the join " +
+            "already evicted"
+        } else {
+          s"the join never evicts the $stateSide input's state, so its unmatched rows are " +
+            "never output"
+        }
         throwError(
           s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
             s"is not supported without a watermark on the $otherSide input that bounds the " +
             s"state of the $stateSide input, through an equality on the $otherSide input's " +
-            "event-time column or a range condition. Otherwise, a later row of the " +
-            s"$otherSide input can match a $stateSide row that the join already evicted. To " +
-            s"skip this check, set $confKey to false.")(join)
+            s"event-time column or a range condition. Otherwise, $reason. To skip this " +
+            s"check, set $confKey to false.")(join)
       }
     }
 

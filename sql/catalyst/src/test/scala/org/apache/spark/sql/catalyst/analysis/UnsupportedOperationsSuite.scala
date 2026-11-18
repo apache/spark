@@ -529,8 +529,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       if (supported) {
         assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
       } else {
+        // The rejected input is the one whose key has the watermark.
+        val otherSide = if (side == "left") "right" else "left"
         assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
-          Seq("without a watermark on the"))
+          Seq(s"without a watermark on the $otherSide input that bounds the state of the " +
+            s"$side input"))
       }
       assertSupportedInStreamingPlan(s"$name, watermark direction check disabled", plan,
         OutputMode.Append(),
@@ -565,7 +568,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       // The left input has no watermark to bound the right input's state.
       assertNotSupportedInStreamingPlan(
         s"$joinType join with stream-stream relations and state value watermark on one side",
-        rangeJoin, OutputMode.Append(), Seq("without a watermark on the left input"))
+        rangeJoin, OutputMode.Append(), Seq("without a watermark on the left input",
+          "the join never evicts the right input's state"))
     } else {
       assertSupportedInStreamingPlan(
         s"$joinType join with stream-stream relations and state value watermark",
@@ -621,11 +625,19 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           new TestStreamingRelation(Seq(rightKey, rt)), joinType = joinType,
           condition = Some(leftKey === rightKey && lt === shift(rt, seconds)))
         val testName = s"$joinType join on event time with $name"
+        // A full outer join checks the left input first, which needs the right key bounded.
+        val stateSide = joinType match {
+          case RightOuter => "right"
+          case FullOuter if rightWatermark && seconds >= 0 => "right"
+          case _ => "left"
+        }
+        val otherSide = if (stateSide == "left") "right" else "left"
         if (supported) {
           assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
         } else {
           assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
-            Seq("without a watermark on the", "that bounds the state of the"))
+            Seq(s"without a watermark on the $otherSide input that bounds the state of the " +
+              s"$stateSide input", "can match a", "that the join already evicted"))
         }
       }
     }
@@ -637,10 +649,18 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     val rw = AttributeReference("rw", windowType)().withMetadata(watermarkMetadata)
     def backward(interval: Expression): Expression =
       Cast(DatetimeSub(rt, interval, TimestampAddInterval(rt, UnaryMinus(interval))), TimestampType)
+    val rightQuantity = AttributeReference("rq", IntegerType)()
     Seq(
       ("TIMESTAMPADD forward", TimestampAdd("SECOND", Literal(10), rt), true),
       ("TIMESTAMPADD backward", TimestampAdd("SECOND", Literal(-10), rt), false),
       ("month interval forward", TimestampAddYMInterval(rt, Literal(Period.ofMonths(1))), true),
+      ("resolved month interval subtraction", DatetimeSub(rt, Literal(Period.ofMonths(1)),
+        TimestampAddYMInterval(rt, UnaryMinus(Literal(Period.ofMonths(1))))), false),
+      ("calendar interval of -1 day",
+        TimestampAddInterval(rt, Literal(new CalendarInterval(0, -1, 0))), false),
+      ("calendar interval of -1 month",
+        TimestampAddInterval(rt, Literal(new CalendarInterval(-1, 0, 0))), false),
+      ("TIMESTAMPADD by a column", TimestampAdd("SECOND", rightQuantity, rt), false),
       ("window end", GetStructField(rw, 1, Some("end")), true),
       ("window start", GetStructField(rw, 0, Some("start")), false),
       ("resolved interval addition",
