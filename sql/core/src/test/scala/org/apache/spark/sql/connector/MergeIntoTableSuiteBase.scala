@@ -2470,6 +2470,50 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-61934: merge writes NULL for a Scala UDF with a primitive input on NULL") {
+    withTempView("source") {
+      withUserDefinedFunction("plus1" -> true) {
+        // the UDF is not nullable, but it returns NULL for NULL input as its input is primitive
+        spark.udf.register("plus1", (x: Int) => x + 1)
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin)
+
+        Seq((1, None), (2, Some(201)), (3, None)).toDF("pk", "salary")
+          .createOrReplaceTempView("source")
+
+        // delta-based tables write only the rows that the MATCHED UPDATE produces
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET salary = plus1(s.salary)
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, null, "hr") :: Row(2, 202, "software") :: Nil)
+
+        // multiple NOT MATCHED clauses are rewritten into an append of merged rows
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED AND s.salary < 0 THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'invalid')
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, plus1(s.salary), 'new')
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, null, "hr") :: Row(2, 202, "software") :: Row(3, null, "new") :: Nil)
+      }
+    }
+  }
+
   test("unsupported merge into conditions") {
     withTempView("source") {
       createTable("pk INT NOT NULL, salary INT, dep STRING")
