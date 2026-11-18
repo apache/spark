@@ -870,6 +870,110 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       parameters = Map("plugin" -> "testcat"))
   }
 
+  test("SHOW lowering preserves the owning rule's V1 command configuration") {
+    val owner = new SQLConf
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    val command = ShowTables(ResolvedNamespace(v2SessionCatalog, Seq("db")), Some("t*"))
+    Seq(false, true).foreach { useV1 =>
+      owner.setConf(SQLConf.LEGACY_USE_V1_COMMAND, useV1)
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> (!useV1).toString) {
+        reads = 0
+        val resolved = rule(command)
+        if (useV1) {
+          comparePlans(resolved, ShowTablesCommand(Some("db"), Some("t*"), command.output))
+        } else {
+          assert(resolved eq command)
+        }
+        assert(resolved.output.map(_.exprId) == command.output.map(_.exprId))
+        assert(reads == 1)
+      }
+    }
+  }
+
+  test("SHOW lowering preserves the owning rule's legacy output configuration") {
+    val owner = new SQLConf
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    val command = ShowTablesExtended(ResolvedNamespace(v2SessionCatalog, Seq("db")), "t*")
+    Seq(false, true).foreach { legacy =>
+      owner.setConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA, legacy)
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> (!legacy).toString) {
+        reads = 0
+        val resolved = rule(command).asInstanceOf[ShowTablesCommand]
+        assert(resolved.isExtended)
+        assert(resolved.output.head.name == (if (legacy) "database" else "namespace"))
+        assert(resolved.output.map(_.exprId) == command.output.map(_.exprId))
+        assert(reads == 1)
+      }
+    }
+  }
+
+  test("SHOW lowering defers the owning rule's configuration until it is needed") {
+    val owner = new SQLConf
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin") {
+      val targets = Seq(UnresolvedNamespace(Seq("db")), ResolvedNamespace(testCat, Seq("db")))
+      targets.foreach { target =>
+        val commands = Seq(
+          ShowTables(target, None),
+          ShowTablesExtended(target, "*"),
+          ShowFunctions(target, userScope = true, systemScope = true, pattern = None))
+        commands.foreach { command =>
+          reads = 0
+          assert(rule(command) eq command)
+          assert(reads == 0)
+        }
+      }
+      val namespace = ResolvedNamespace(v2SessionCatalog, Seq("db"))
+      val commands = Seq(
+        ShowViews(namespace, None),
+        ShowFunctions(namespace, userScope = true, systemScope = true, pattern = None))
+      commands.foreach { command =>
+        reads = 0
+        rule(command)
+        assert(reads == 0)
+      }
+      Seq(Seq.empty[String], Seq("a", "b")).foreach { name =>
+        val target = ResolvedNamespace(v2SessionCatalog, name)
+        Seq(ShowTables(target, None), ShowTablesExtended(target, "*")).foreach { command =>
+          reads = 0
+          checkError(
+            exception = intercept[AnalysisException] { rule(command) },
+            condition = if (name.isEmpty) {
+              "MISSING_DATABASE_FOR_V1_SESSION_CATALOG"
+            } else {
+              "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG"
+            },
+            parameters = if (name.isEmpty) Map.empty[String, String] else {
+              Map("namespace" -> "`a`.`b`")
+            })
+          assert(reads == 0)
+        }
+      }
+    }
+  }
+
   test("drop table") {
     val tableName1 = "db.v1Table"
     val tableIdent1 = ResolvedIdentifier(v2SessionCatalog, Identifier.of(Array("db"), "v1Table"))

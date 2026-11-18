@@ -216,7 +216,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
     case command @ (_: ShowTables | _: ShowTablesExtended | _: ShowViews | _: ShowFunctions) =>
-      ShowCommandHelper.rewrite(command)
+      ShowCommandHelper.rewrite(command, conf)
 
     case ShowTablePartition(
         ResolvedTable(catalog, _, table: V1Table, _),
