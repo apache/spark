@@ -218,6 +218,18 @@ class ScanLimitListenerSuite extends SparkFunSuite {
     assert(listener.bytesReadOverLimit(executionId).contains(101))
   }
 
+  test("counts a waiting stage that an execution without a limit submits later") {
+    listener.register(executionId, maxScanBytes = 100, jobTag)
+    // A job of the execution depends on a stage that has not been submitted yet.
+    startJob(stageIds = Seq(0), rootExecutionId = executionId)
+    // An earlier job of another execution, without a limit, depends on it too and submits it.
+    submitStage(stageId = 0, rootExecutionId = executionId + 1)
+    startTask(stageId = 0, taskId = 1, partitionId = 0)
+    heartbeat(stageId = 0, taskId = 1, bytesRead = 101)
+    assert(cancelledTags.toSeq == Seq(jobTag))
+    assert(listener.bytesReadOverLimit(executionId).contains(101))
+  }
+
   test("only tracks the registered executions") {
     listener.register(executionId, maxScanBytes = 100, jobTag)
     // A stage of another execution.

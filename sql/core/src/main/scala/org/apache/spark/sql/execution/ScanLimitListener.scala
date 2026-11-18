@@ -109,15 +109,18 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
     if (executions.isEmpty) return
     synchronized {
-      executionOf(event.properties).foreach { execution =>
-        // A new attempt of a stage keeps what the earlier attempts read.
-        val stage = stages.getOrElseUpdate(event.stageInfo.stageId, new StageScanState)
-        stage.executions += execution
-        recordBytesReadAccum(stage, event.stageInfo)
-        // Cancelling only reaches the jobs that are active at that time, and the execution may
-        // submit more of them before it fails.
-        if (execution.bytesReadOverLimit.isDefined) cancel(execution)
+      val stageId = event.stageInfo.stageId
+      val execution = executionOf(event.properties)
+      // A new attempt of a stage keeps what the earlier attempts read.
+      execution.foreach { e =>
+        stages.getOrElseUpdate(stageId, new StageScanState).executions += e
       }
+      // A stage is submitted for the earliest active job that depends on it. That job may be of
+      // an execution without a limit, while a job of an execution with one waits for the stage.
+      stages.get(stageId).foreach(recordBytesReadAccum(_, event.stageInfo))
+      // Cancelling only reaches the jobs that are active at that time, and the execution may
+      // submit more of them before it fails.
+      execution.filter(_.bytesReadOverLimit.isDefined).foreach(cancel)
     }
   }
 

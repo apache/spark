@@ -2707,7 +2707,9 @@ object SQLConf {
       "are not limited, such as the jobs that infer the schema of a file source while the " +
       "query is analyzed, the jobs that run on the RDD that Dataset.rdd returns, and the " +
       "jobs that Dataset.toLocalIterator runs as the iterator it returns is consumed. " +
-      "Streaming queries are not limited. -1 (the default) means no limit.")
+      "Streaming queries are not limited, but under Spark Connect the queries that a Python " +
+      "foreachBatch function runs are queries of their own, which are limited. -1 (the " +
+      "default) means no limit.")
     .version("4.5.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .bytesConf(ByteUnit.BYTE)
