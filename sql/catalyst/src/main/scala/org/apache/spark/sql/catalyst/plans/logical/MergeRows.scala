@@ -34,7 +34,7 @@ case class MergeRows(
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode with SupportsNonDeterministicExpression {
 
-  // A single insert instruction evaluates each output once per inserted row.
+  // A single insert may retain nondeterministic values when constant folding requires MergeRows.
   override def allowNonDeterministicExpression: Boolean = this match {
     case MergeRows(TrueLiteral, FalseLiteral, Nil, Seq(Keep(Insert, _, _)), Nil, false, _, _) =>
       true

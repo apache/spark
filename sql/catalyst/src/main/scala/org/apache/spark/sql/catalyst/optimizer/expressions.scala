@@ -48,8 +48,7 @@ import org.apache.spark.util.ArrayImplicits._
  * equivalent [[Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
-  // This tag is for avoid repeatedly evaluating expression inside conditional expression
-  // which has already failed to evaluate before.
+  // Avoid retrying failed constant folds in conditional expressions and MERGE instructions.
   private[sql] val FAILED_TO_EVALUATE = TreeNodeTag[Unit]("FAILED_TO_EVALUATE")
 
   private def hasNoSideEffect(e: Expression): Boolean = e match {
@@ -78,9 +77,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       Literal.create(expr.freshCopyIfContainsStatefulExpression().eval(EmptyRow), expr.dataType)
     } catch {
       case NonFatal(_) if isConditionalBranch =>
-        // When doing constant folding inside conditional expressions, we should not fail
-        // during expression evaluation, as the branch we are evaluating may not be reached at
-        // runtime, and we shouldn't fail the query, to match the original behavior.
+        // Defer failures in expressions that may not be evaluated at runtime.
         expr.setTagValue(FAILED_TO_EVALUATE, ())
         expr
     }
@@ -93,6 +90,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       c.mapChildren(constantFolding(_, isConditionalBranch = true))
 
     case i: MergeRows.Instruction =>
+      // MERGE evaluates one instruction list per row and stops at the first match.
       i.mapChildren(constantFolding(_, isConditionalBranch = true))
 
     // Skip redundant folding of literals. This rule is technically not necessary. Placing this

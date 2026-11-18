@@ -137,7 +137,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeIn,
         OptimizeRand,
         ConstantFolding,
-        OptimizeInsertOnlyMerge,
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,

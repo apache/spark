@@ -4304,6 +4304,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def nonBooleanMergeCondition(cond: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      messageParameters = Map(
+        "sqlExpr" -> toSQLExpr(cond),
+        "filter" -> toSQLExpr(cond),
+        "type" -> toSQLType(cond.dataType)),
+      origin = cond.origin)
+  }
+
   def nonDeterministicMergeCondition(condName: String, cond: Expression): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_MERGE_CONDITION.NON_DETERMINISTIC",

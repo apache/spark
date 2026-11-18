@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, MergeRows}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
@@ -48,9 +48,19 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
       // For an Attribute used by the current LogicalPlan, if it is from its children,
       // we fix the nullable field by using the nullability setting of the corresponding
       // output Attribute from the children.
-      p.transformExpressions {
+      val updated = p.transformExpressions {
         case attr: Attribute if nullabilities.contains(attr.exprId) =>
           attr.withNullability(nullabilities(attr.exprId))
+      }
+      updated match {
+        case m: MergeRows =>
+          // UDF null handling can make instruction outputs nullable after MERGE is rewritten.
+          val outputs = m.outputs.map(_.toIndexedSeq)
+          val attrs = m.output.zipWithIndex.map { case (attr, index) =>
+            attr.withNullability(outputs.exists(_(index).nullable))
+          }
+          m.copy(output = attrs)
+        case other => other
       }
   }
 }

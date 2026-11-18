@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, ExternalLookupJoin, LogicalPlan, PlanHelper, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Call, Command, CreateVariable, ExternalLookupJoin, LogicalPlan, MergeRows, PlanHelper, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, CURRENT_LIKE, WITH_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
@@ -458,6 +458,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             }
             refToExpr(ref.id)
         }
+
+      case i: MergeRows.Instruction =>
+        // Instructions may be skipped, so their definitions must not be projected below MERGE.
+        inlineWithsThatGainNothing(i)
 
       case c: ConditionalExpression =>
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
