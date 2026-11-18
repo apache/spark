@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.util.control.NonFatal
 
+// jackson-databind is not declared in this module; it comes through json4s-jackson.
 import com.fasterxml.jackson.databind.DeserializationFeature
 import org.json4s.JsonAST.{JArray, JString, JValue}
 import org.json4s.jackson.JsonMethods
