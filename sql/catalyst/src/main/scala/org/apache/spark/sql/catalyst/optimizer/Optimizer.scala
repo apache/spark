@@ -974,6 +974,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
   // Whether a scalar subquery of `project` has domain joins that PullupCorrelatedPredicates adds
   // for the count bug since SPARK-60501 (see COUNT_BUG_DOMAIN_JOIN), which
   // RewriteCorrelatedScalarSubquery rewrites into joins that compute the input of `project` again.
+  // The domain joins of a subquery nested in that plan take their domain from that plan instead.
   private def hasCountBugDomainJoins(project: Project): Boolean =
     project.projectList.exists(_.exists {
       case s: ScalarSubquery => s.plan.exists {
