@@ -3679,4 +3679,89 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Row(1080L, 3L) :: Nil)
     }
   }
+
+  test("session window aggregation keeps distinct collated keys in separate sessions") {
+    // The other session tests hold a single collation group, so the collation branch of
+    // the iterators' group-equality check only ever answers true there. Here a second
+    // collation group ('bar'/'BAR') overlaps the 'foo' session in time, so a checker
+    // that wrongly treated keys differing under the collation as equal, or compared
+    // only some fields of a multi-column key, would merge the sessions of distinct keys
+    // or hit the iterators' sortedness guard.
+    withTable("t") {
+      sql("CREATE TABLE t (s STRING COLLATE UTF8_LCASE, ts TIMESTAMP, v INT) USING PARQUET")
+      sql("""INSERT INTO t VALUES
+            |  ('foo', timestamp'2026-01-01 10:00:00', 1),
+            |  ('FOO', timestamp'2026-01-01 10:05:00', 2),
+            |  ('foo', timestamp'2026-01-01 10:08:00', 3),
+            |  ('bar', timestamp'2026-01-01 10:02:00', 4),
+            |  ('BAR', timestamp'2026-01-01 10:06:00', 5)""".stripMargin)
+
+      // 'foo' merges 10:00 to 10:18 (18 minutes) and 'bar' 10:02 to 10:16 (14 minutes);
+      // the reported spelling is the first row of each group in session-start order.
+      checkAnswer(
+        sql("""SELECT s,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(*) FROM t
+              |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
+        Row("foo", 1080L, 3L) :: Row("bar", 840L, 2L) :: Nil)
+
+      // The one-distinct plan exercises UpdatingSessionsIterator over the same data.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT v) FROM t
+              |  GROUP BY s, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 3L) :: Row(840L, 2L) :: Nil)
+    }
+
+    // Struct key: the second collation group sits inside the struct field.
+    withTable("t3") {
+      sql("""CREATE TABLE t3 (st STRUCT<s: STRING COLLATE UTF8_LCASE>, ts TIMESTAMP, v INT)
+            |  USING PARQUET""".stripMargin)
+      sql("""INSERT INTO t3 VALUES
+            |  (named_struct('s', 'foo'), timestamp'2026-01-01 10:00:00', 1),
+            |  (named_struct('s', 'FOO'), timestamp'2026-01-01 10:05:00', 2),
+            |  (named_struct('s', 'foo'), timestamp'2026-01-01 10:08:00', 3),
+            |  (named_struct('s', 'bar'), timestamp'2026-01-01 10:02:00', 4),
+            |  (named_struct('s', 'BAR'), timestamp'2026-01-01 10:06:00', 5)""".stripMargin)
+
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(*) FROM t3
+              |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 3L) :: Row(840L, 2L) :: Nil)
+
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT v) FROM t3
+              |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1080L, 3L) :: Row(840L, 2L) :: Nil)
+    }
+
+    // Two-column key: the rows with i = 1 merge (10:00 to 10:15) and the row with i = 2
+    // is a different group even though its collated key matches, so it forms its own
+    // session. Only i is asserted, not the reported spelling of s.
+    withTable("t4") {
+      sql("""CREATE TABLE t4 (s STRING COLLATE UTF8_LCASE, i INT, ts TIMESTAMP, v INT)
+            |  USING PARQUET""".stripMargin)
+      sql("""INSERT INTO t4 VALUES
+            |  ('foo', 1, timestamp'2026-01-01 10:00:00', 1),
+            |  ('FOO', 1, timestamp'2026-01-01 10:05:00', 2),
+            |  ('FOO', 2, timestamp'2026-01-01 10:06:00', 3)""".stripMargin)
+
+      checkAnswer(
+        sql("""SELECT i,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(*) FROM t4
+              |  GROUP BY s, i, session_window(ts, '10 minutes')""".stripMargin),
+        Row(1, 900L, 2L) :: Row(2, 600L, 1L) :: Nil)
+    }
+  }
 }
