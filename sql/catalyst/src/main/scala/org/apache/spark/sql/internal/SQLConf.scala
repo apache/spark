@@ -2699,7 +2699,10 @@ object SQLConf {
       "than the limit before it is cancelled. Only data sources that report the bytes they " +
       "read are limited: file-based sources report the bytes they read from storage, while " +
       "sources such as JDBC report none. Reading cached data counts the size of the cached " +
-      "blocks. Streaming queries are not limited. -1 (the default) means no limit.")
+      "blocks. Jobs that run outside the execution of a query are not limited, such as the " +
+      "jobs that infer the schema of a file source while the query is analyzed, and the jobs " +
+      "that Dataset.toLocalIterator runs as the iterator it returns is consumed. Streaming " +
+      "queries are not limited. -1 (the default) means no limit.")
     .version("4.5.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .bytesConf(ByteUnit.BYTE)

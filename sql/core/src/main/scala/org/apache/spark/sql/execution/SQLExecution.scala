@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.exception.ExceptionUtils
+
 import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
@@ -200,6 +202,14 @@ object SQLExecution extends Logging {
     }
   }
 
+  /** Whether `e`, or one of its causes, is the failure of a job that was cancelled. */
+  private def isCausedByJobCancellation(e: Throwable): Boolean = {
+    ExceptionUtils.getThrowableList(e).asScala.exists {
+      case st: SparkThrowable => st.getCondition == "SPARK_JOB_CANCELLED"
+      case _ => false
+    }
+  }
+
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
@@ -321,14 +331,13 @@ object SQLExecution extends Logging {
             } catch {
               case e: Throwable =>
                 // A query that went over its scan limit fails with the error of a cancelled job.
-                // Fail it with the error that names the limit instead.
-                val error = e match {
-                  case NonFatal(_) =>
-                    scanLimitListener.flatMap(_.bytesReadOverLimit(executionId))
-                      .map(QueryExecutionErrors.scanBytesLimitExceededError(_, maxScanBytes, e))
-                      .getOrElse(e)
-                  case _ => e
-                }
+                // Fail it with the error that names the limit instead. Any other error is kept:
+                // the query may have failed for another reason after it went over the limit.
+                val error = scanLimitListener
+                  .flatMap(_.bytesReadOverLimit(executionId))
+                  .filter(_ => NonFatal(e) && isCausedByJobCancellation(e))
+                  .map(QueryExecutionErrors.scanBytesLimitExceededError(_, maxScanBytes, e))
+                  .getOrElse(e)
                 ex = Some(error)
                 throw error
             } finally {

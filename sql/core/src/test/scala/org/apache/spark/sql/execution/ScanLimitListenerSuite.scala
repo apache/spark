@@ -59,9 +59,30 @@ class ScanLimitListenerSuite extends SparkFunSuite {
       details = "",
       taskMetrics = stageMetrics(stageId),
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    listener.onStageSubmitted(
+      SparkListenerStageSubmitted(stageInfo, jobProperties(rootExecutionId)))
+  }
+
+  /** The start of a job of an execution that depends on the given stages. */
+  private def startJob(stageIds: Seq[Int], rootExecutionId: Long): Unit = {
+    val stageInfos = stageIds.map { stageId =>
+      new StageInfo(
+        stageId = stageId,
+        attemptId = 0,
+        name = "",
+        numTasks = 2,
+        rddInfos = Nil,
+        parentIds = Nil,
+        details = "",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    }
+    listener.onJobStart(SparkListenerJobStart(0, 0L, stageInfos, jobProperties(rootExecutionId)))
+  }
+
+  private def jobProperties(rootExecutionId: Long): Properties = {
     val properties = new Properties()
     properties.setProperty(SQLExecution.EXECUTION_ROOT_ID_KEY, rootExecutionId.toString)
-    listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo, properties))
+    properties
   }
 
   private def taskInfo(taskId: Long, partitionId: Int): TaskInfo = {
@@ -156,6 +177,24 @@ class ScanLimitListenerSuite extends SparkFunSuite {
 
     submitStage(stageId = 1)
     assert(cancelledTags.toSeq == Seq(jobTag, jobTag))
+  }
+
+  test("counts a stage against every execution that depends on it") {
+    val otherExecutionId = executionId + 1
+    val otherJobTag = "execution-8"
+    listener.register(executionId, maxScanBytes = 100, jobTag)
+    listener.register(otherExecutionId, maxScanBytes = 100, otherJobTag)
+    submitStage(stageId = 0)
+    startTask(stageId = 0, taskId = 1, partitionId = 0)
+    heartbeat(stageId = 0, taskId = 1, bytesRead = 50)
+    // A job of the other execution depends on the running stage, which is not submitted again.
+    startJob(stageIds = Seq(0, 1), rootExecutionId = otherExecutionId)
+    // The first execution ends, and the stage goes on running for the other one.
+    listener.unregister(executionId)
+    heartbeat(stageId = 0, taskId = 1, bytesRead = 151)
+    assert(cancelledTags.toSeq == Seq(otherJobTag))
+    // What the stage read before the job of the other execution started does not count for it.
+    assert(listener.bytesReadOverLimit(otherExecutionId).contains(101))
   }
 
   test("only tracks the registered executions") {

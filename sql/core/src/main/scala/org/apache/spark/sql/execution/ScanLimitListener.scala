@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
@@ -42,6 +43,10 @@ import org.apache.spark.util.collection.OpenHashMap
  * again. To keep that from counting against the limit, the listener keeps one value per
  * partition of a stage, the largest that any attempt reported.
  *
+ * A job can depend on a stage that a job of another execution is already running, and that stage
+ * is not submitted again. So the listener learns from the start of each job which stages it
+ * depends on, and counts what a stage reads against every execution that depends on it.
+ *
  * @param cancelJobsWithTag cancels the active jobs that have the given tag, for the given reason
  */
 private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit)
@@ -66,7 +71,10 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
   /** Stops tracking a root execution. */
   def unregister(rootExecutionId: Long): Unit = synchronized {
     val execution = executions.remove(rootExecutionId)
-    stages.filterInPlace((_, stage) => stage.execution ne execution)
+    stages.filterInPlace { (_, stage) =>
+      stage.executions -= execution
+      stage.executions.nonEmpty
+    }
   }
 
   /** The bytes that an execution had read when it went over its limit, if it did. */
@@ -74,20 +82,31 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
     Option(executions.get(rootExecutionId)).flatMap(_.bytesReadOverLimit)
   }
 
-  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
-    if (executions.isEmpty || event.properties == null) return
-    val rootExecutionId = event.properties.getProperty(SQLExecution.EXECUTION_ROOT_ID_KEY)
-    if (rootExecutionId == null) return
+  /** The registered execution of a job with the given properties, if any. */
+  private def executionOf(properties: Properties): Option[ExecutionScanState] = {
+    Option(properties)
+      .flatMap(p => Option(p.getProperty(SQLExecution.EXECUTION_ROOT_ID_KEY)))
+      .flatMap(rootExecutionId => Option(executions.get(rootExecutionId.toLong)))
+  }
+
+  override def onJobStart(event: SparkListenerJobStart): Unit = {
+    if (executions.isEmpty) return
     synchronized {
-      val execution = executions.get(rootExecutionId.toLong)
-      if (execution != null) {
-        val stageId = event.stageInfo.stageId
-        // A new attempt of a stage keeps what the earlier attempts read.
-        val stage = stages.get(stageId).filter(_.execution eq execution).getOrElse {
-          val newStage = new StageScanState(execution)
-          stages(stageId) = newStage
-          newStage
+      executionOf(event.properties).foreach { execution =>
+        event.stageIds.foreach { stageId =>
+          stages.getOrElseUpdate(stageId, new StageScanState).executions += execution
         }
+      }
+    }
+  }
+
+  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    if (executions.isEmpty) return
+    synchronized {
+      executionOf(event.properties).foreach { execution =>
+        // A new attempt of a stage keeps what the earlier attempts read.
+        val stage = stages.getOrElseUpdate(event.stageInfo.stageId, new StageScanState)
+        stage.executions += execution
         stage.bytesReadAccumIds +=
           event.stageInfo.taskMetrics.nameToAccums(InternalAccumulator.input.BYTES_READ).id
         // Cancelling only reaches the jobs that are active at that time, and the execution may
@@ -143,17 +162,19 @@ private[sql] class ScanLimitListener(cancelJobsWithTag: (String, String) => Unit
 
   /** Records the bytes that an attempt of a task has read so far. */
   private def recordBytesRead(stage: StageScanState, partitionId: Int, bytesRead: Long): Unit = {
-    val execution = stage.execution
     val previous = stage.partitionBytes.get(partitionId).getOrElse(0L)
-    if (bytesRead > previous && execution.bytesReadOverLimit.isEmpty) {
+    if (bytesRead > previous) {
       stage.partitionBytes(partitionId) = bytesRead
-      execution.bytesRead += bytesRead - previous
-      if (execution.bytesRead > execution.maxScanBytes) {
-        logWarning(log"Cancelling SQL execution ${MDC(EXECUTION_ID, execution.executionId)}: " +
-          log"it read ${MDC(NUM_BYTES, execution.bytesRead)} bytes, more than the limit of " +
-          log"${MDC(NUM_BYTES_MAX, execution.maxScanBytes)} bytes set by " +
-          log"${MDC(CONFIG, SQLConf.MAX_SCAN_BYTES.key)}.")
-        cancel(execution)
+      stage.executions.filter(_.bytesReadOverLimit.isEmpty).foreach { execution =>
+        execution.bytesRead += bytesRead - previous
+        if (execution.bytesRead > execution.maxScanBytes) {
+          logWarning(log"Cancelling SQL execution " +
+            log"${MDC(EXECUTION_ID, execution.executionId)}: it read " +
+            log"${MDC(NUM_BYTES, execution.bytesRead)} bytes, more than the limit of " +
+            log"${MDC(NUM_BYTES_MAX, execution.maxScanBytes)} bytes set by " +
+            log"${MDC(CONFIG, SQLConf.MAX_SCAN_BYTES.key)}.")
+          cancel(execution)
+        }
       }
     }
   }
@@ -183,7 +204,10 @@ private class ExecutionScanState(
 }
 
 /** What the tasks of a stage have read, over all the attempts of the stage. */
-private class StageScanState(val execution: ExecutionScanState) {
+private class StageScanState {
+
+  /** The executions that depend on the stage. What the stage reads counts against each. */
+  val executions = new mutable.HashSet[ExecutionScanState]()
 
   /**
    * The ID of the accumulator of the bytes read, of each attempt of the stage. A heartbeat

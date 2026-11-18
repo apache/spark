@@ -71,6 +71,24 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("a query that fails for another reason after it read more than the limit keeps its error") {
+    withData { path =>
+      withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1") {
+        val df = spark.read.parquet(path)
+        val e = intercept[IllegalStateException] {
+          SQLExecution.withNewExecutionId(df.queryExecution) {
+            df.queryExecution.executedPlan.executeCollect()
+            // The listener learns that the query read more than the limit after its job ended,
+            // so there is nothing to cancel.
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            throw new IllegalStateException("unrelated")
+          }
+        }
+        assert(e.getMessage == "unrelated")
+      }
+    }
+  }
+
   test("the limit of a query covers its nested executions") {
     withData { path =>
       withTempView("blocking") {
