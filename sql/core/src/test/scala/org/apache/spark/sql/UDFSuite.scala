@@ -1286,6 +1286,34 @@ class UDFSuite extends SharedSparkSession {
       Row(null) :: Row(3) :: Nil)
   }
 
+  test("SPARK-61935: grouping sets, CTE and generator over a ScalaUDF with a primitive input") {
+    withTempView("gs") {
+      withUserDefinedFunction("plus1" -> true) {
+        spark.udf.register("plus1", (x: Int) => x + 1)
+        Seq((1, None), (2, Some(201)), (3, None)).toDF("pk", "salary")
+          .createOrReplaceTempView("gs")
+
+        checkAnswer(
+          sql("SELECT plus1(salary) AS k, count(*) FROM gs " +
+            "GROUP BY GROUPING SETS ((plus1(salary)))"),
+          Row(null, 2) :: Row(202, 1) :: Nil)
+
+        // a CTE that is not inlined
+        checkAnswer(
+          sql(
+            """WITH c AS (SELECT pk, plus1(salary) AS k, rand() AS r FROM gs)
+              |SELECT a.pk, a.k, a.k IS NULL FROM c a JOIN c b ON a.pk = b.pk
+              |""".stripMargin),
+          Row(1, null, true) :: Row(2, 202, false) :: Row(3, null, true) :: Nil)
+
+        val df = sql("SELECT explode(array(plus1(a), plus1(b))) AS v " +
+          "FROM VALUES (1, 2), (NULL, 3) AS t(a, b)")
+        assert(df.schema("v").nullable)
+        checkAnswer(df, Row(2) :: Row(3) :: Row(null) :: Row(4) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-52819: Support using Kryo to encode BUF in Aggregator") {
     val kryoBufUDAF = udaf(KryoBufAggregator())
     val input = Seq(1L, 2L, 3L).toDF("value")

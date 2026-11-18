@@ -45,7 +45,9 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   Spark 4.3 that keeps such a column in its state, for example as a grouping key of a streaming
   aggregation, fails to restart with `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new
   checkpoint location, or set `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note
-  that the state of such a query can hold wrong keys, such as `-1` or `0`, for NULL inputs.
+  that the state of such a query can hold wrong keys, such as `-1` or `0`, for NULL inputs. The
+  same holds for a query started on Spark 4.3 or later, which restarts and then puts new NULL
+  inputs under a separate NULL key. To drop such keys, use a new checkpoint location.
 
 ## Upgrading from Structured Streaming 4.2 to 4.3
 
