@@ -22,9 +22,11 @@ license: |
 * Table of contents
 {:toc}
 
-## Upgrading from Core 4.3 to 4.4
+## Upgrading from Core 4.4 to 4.5
 
-- Since Spark 4.4, with artifact isolation on (the default in Spark Connect), the Python workers of a session also import the Python files that the application was started with (`--py-files` or `spark.submit.pyFiles`), after the session's own Python files and before installed packages. Before, they could import these files only on the executors on YARN. As a result, a module from these files can now take the place of an installed package with the same name. To restore the previous behavior, set `spark.python.isolatedSession.globalPyFiles.enabled` to `false` when starting the application. (See [SPARK-62000](https://issues.apache.org/jira/browse/SPARK-62000) for more details.)
+- Since Spark 4.5, with artifact isolation on (the default in Spark Connect), the Python workers of a session also import the Python files that the application was started with (`--py-files` or `spark.submit.pyFiles`), after the session's own Python files and before installed packages. Before, they could import these files only on YARN's application master and executors. The Python workers of a YARN client-mode driver still cannot import them. As a result, a module from these files can now take the place of an installed package with the same name. To restore the previous behavior, set `spark.python.isolatedSession.globalPyFiles.enabled` to `false` when starting the application. (See [SPARK-62000](https://issues.apache.org/jira/browse/SPARK-62000) for more details.)
+
+## Upgrading from Core 4.3 to 4.4
 
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
 

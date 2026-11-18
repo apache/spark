@@ -69,11 +69,13 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
 
   // As spark-submit does with --py-files and --files outside YARN, except that the Python files
   // are named by paths that do not exist: the workers must use the copies in the default files
-  // directory, as on the executors of other hosts.
+  // directory, as on the executors of other hosts. The list also names a module twice, and a
+  // module that has no copy in that directory, as on YARN.
   override protected def sparkConf: SparkConf = super.sparkConf
     .set("spark.files", (globalPyFiles ++ otherFiles).mkString(","))
     .set("spark.submit.pyFiles",
-      globalPyFiles.map(f => new File("/nonexistent", new File(f).getName).getPath).mkString(","))
+      (globalPyFiles :+ globalPyFiles.head :+ "global_py_files_without_copy.py")
+        .map(f => new File("/nonexistent", new File(f).getName).getPath).mkString(","))
 
   private val udtfName = "global_py_files_udtf"
 

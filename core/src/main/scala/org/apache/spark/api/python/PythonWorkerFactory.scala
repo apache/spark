@@ -172,6 +172,7 @@ private[spark] class PythonWorkerFactory(
       val rootDir = new File(SparkFiles.getRootDirectory()).getAbsoluteFile
       val files = conf.get(SUBMIT_PYTHON_FILES)
         .map(path => new File(rootDir, new File(Utils.resolveURI(path).getPath).getName))
+        .distinct
         .filter(_.isFile)
       val (modules, packages) = files.partition(_.getName.endsWith(".py"))
       // A package is imported from its archive, and a module from a directory, which holds

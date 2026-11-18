@@ -99,13 +99,14 @@ private[spark] object Python {
       .internal()
       .doc("When true, the Python workers of a session with artifact isolation, such as a " +
         "Spark Connect session, can also import the Python files that the application was " +
-        "started with (--py-files or spark.submit.pyFiles), after the session's own files. " +
-        "Only these files are added, not the other files of the default files directory. Set " +
-        "to false when starting the application to restore the previous behavior, where these " +
-        "workers can only import the session's own Python files, except on the application " +
-        "master and executors on YARN, which puts the application's Python files on their " +
+        "started with (--py-files or spark.submit.pyFiles), after the session's own files, " +
+        "except the workers of a YARN client-mode driver, which gets no copies of these " +
+        "files. Only these files are added, not the other files of the default files " +
+        "directory. Set to false when starting the application to restore the previous " +
+        "behavior, where these workers can only import the session's own Python files, except " +
+        "on YARN's application master and executors, which YARN gives these files on their " +
         "PYTHONPATH.")
-      .version("4.0.6")
+      .version("4.5.0")
       .booleanConf
       .createWithDefault(true)
 

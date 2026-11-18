@@ -198,6 +198,10 @@ class GlobalPyFilesTestsMixin:
             with open(path, "w") as f:
                 f.write(f"value = {value!r}")
             paths.append(path)
+        package = os.path.join(cls.global_py_files_dir, "global_py_files_pkg.zip")
+        with zipfile.ZipFile(package, "w") as zf:
+            zf.writestr("global_py_files_pkg/__init__.py", "value = 'global package'")
+        paths.append(package)
         # As spark-submit does with --py-files outside YARN.
         return conf.set("spark.files", ",".join(paths)).set("spark.submit.pyFiles", ",".join(paths))
 
@@ -223,6 +227,17 @@ class GlobalPyFilesTestsMixin:
         func = self.global_py_files_udf()
         rows = self.spark.range(1).select(func("id")).collect()
         self.assertEqual([r[0] for r in rows], ["global module, global clash"])
+
+    def test_global_py_files_batch_udf_package(self):
+        # A package is imported from its archive, also on executors in their own JVMs.
+        @udf("string")
+        def func(x):
+            import global_py_files_pkg
+
+            return global_py_files_pkg.value
+
+        rows = self.spark.range(1).select(func("id")).collect()
+        self.assertEqual([r[0] for r in rows], ["global package"])
 
     def test_global_py_files_streaming_udf(self):
         func = self.global_py_files_udf()
