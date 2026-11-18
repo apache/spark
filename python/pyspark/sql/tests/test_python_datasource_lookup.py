@@ -40,7 +40,7 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import SPARK_HOME, ReusedSQLTestCase
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 
 if have_pyarrow:
@@ -800,6 +800,35 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
         subprocess.run([sys.executable, "-c", code], check=True, env=env)
 
 
+LOOKUP_JOIN_EXAMPLE = os.path.join(
+    SPARK_HOME, "examples/src/main/python/sql/streaming/structured_python_lookup_join.py"
+)
+
+# The output of the example, as its docstring shows it.
+EXAMPLE_OUTPUT = [
+    (1, "gold", 2, "gold-1"),
+    (1, "gold", 6, "gold-1"),
+    (1, "gold", 6, "gold-5"),
+    (2, None, 6, "no-segment"),
+    (3, "gold", 6, None),
+    (4, "gold", 6, None),
+    (5, "gold", 6, None),
+]
+
+
+def load_lookup_join_example():
+    """
+    Loads the lookup join example as a module. It is not in `sys.modules`, so its classes are
+    pickled by value, as the classes of a script that `spark-submit` runs.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("lookup_join_example", LOOKUP_JOIN_EXAMPLE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class BasePythonDataSourceLookupTestsMixin:
     """
     End-to-end tests of streaming lookup joins with Python data sources. The lookup source holds
@@ -859,13 +888,17 @@ class BasePythonDataSourceLookupTestsMixin:
 
         self.spark.dataSource.register(LookupTestSource)
 
-    def run_lookup_join(self, ids, how="inner"):
-        """Joins a stream of the ids with the lookup source, and returns the sorted rows."""
+    def run_lookup_join(self, ids, how="inner", lookup=None):
+        """
+        Joins a stream of the ids, in one partition and in this order, with the lookup source,
+        or with the DataFrame `lookup`, and returns the sorted rows.
+        """
         with tempfile.TemporaryDirectory(prefix="lookup_stream") as stream_dir:
             with open(os.path.join(stream_dir, "ids.json"), "w") as f:
                 f.writelines(json.dumps({"sid": i}) + "\n" for i in ids)
             stream = self.spark.readStream.schema("sid BIGINT").json(stream_dir)
-            lookup = self.spark.read.format("lookup_test").load()
+            if lookup is None:
+                lookup = self.spark.read.format("lookup_test").load()
             joined = stream.join(lookup, stream.sid == lookup.id, how)
             name = f"lookup_join_{abs(hash((tuple(ids), how)))}"
             query = (
@@ -909,6 +942,127 @@ class BasePythonDataSourceLookupTestsMixin:
             noon = datetime.datetime(2026, 1, 1, 12, tzinfo=datetime.timezone.utc)
             self.assertEqual(inner[0].ts, noon.astimezone().replace(tzinfo=None))
 
+    def ship_file(self, path):
+        """Ships the file to the executors, as `SparkFiles.get` finds it there."""
+        self.spark.addArtifacts(path, file=True)
+
+    def test_lookup_reads_a_file_added_as_an_artifact(self):
+        with tempfile.TemporaryDirectory(prefix="lookup_artifacts") as files_dir:
+            path = os.path.join(files_dir, "lookup_artifact.txt")
+            with open(path, "w") as f:
+                f.write("from an artifact")
+            self.spark.addArtifacts(path, file=True)
+
+            def lookup_value(reader, key):
+                from pyspark import SparkFiles
+
+                with open(SparkFiles.get("lookup_artifact.txt")) as f:
+                    return f"{f.read()} for {key}"
+
+            with self.sql_conf({"spark.sql.python.externalLookup.enabled": "true"}):
+                self.register_lookup_source(lookup_value)
+                rows = self.run_lookup_join([4, 5])
+        self.assertEqual(
+            [r.extra for r in rows], ["from an artifact for 4", "from an artifact for 5"]
+        )
+
+    def test_hint_mode_and_the_cache_option_of_the_hint(self):
+        from pyspark.sql.datasource import DataSource, DataSourceReader, EqualTo
+
+        class HintLookupReader(DataSourceLookupReader):
+            def __init__(self, marker_dir):
+                self.marker_dir = marker_dir
+
+            def selectLookupPredicates(self, candidates):
+                return [i for i, c in enumerate(candidates) if isinstance(c, EqualTo)][:1]
+
+            def maxParameterRowsPerRequest(self):
+                return 1
+
+            def lookup(self, parameters):
+                with open(os.path.join(self.marker_dir, "requests"), "a") as f:
+                    f.write(f"{parameters[0][0]}\n")
+                for ordinal, (key,) in enumerate(parameters):
+                    yield ordinal, (key, "lookup")
+
+        class HintBatchReader(DataSourceReader):
+            def read(self, partition):
+                yield from [(1, "read"), (2, "read")]
+
+        class HintTestSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "lookup_hint_test"
+
+            def schema(self):
+                return "id BIGINT, name STRING"
+
+            def reader(self, schema):
+                return HintBatchReader()
+
+            def lookupReader(self, schema):
+                return HintLookupReader(self.options["markerDir"])
+
+        self.spark.dataSource.register(HintTestSource)
+
+        def run(*hint_parameters):
+            with tempfile.TemporaryDirectory(prefix="lookup_markers") as marker_dir:
+                lookup = (
+                    self.spark.read.format("lookup_hint_test")
+                    .option("markerDir", marker_dir)
+                    .load()
+                )
+                if hint_parameters:
+                    lookup = lookup.hint(*hint_parameters)
+                rows = self.run_lookup_join([1, 2, 1], lookup=lookup)
+                requests_file = os.path.join(marker_dir, "requests")
+                requests = []
+                if os.path.exists(requests_file):
+                    with open(requests_file) as f:
+                        requests = f.read().split()
+                return [(r.sid, r.name) for r in rows], requests
+
+        with self.sql_conf({"spark.sql.python.externalLookup.enabled": "true"}):
+            expected = [(1, "lookup"), (1, "lookup"), (2, "lookup")]
+            # A source with a batch reader is read by lookups only with the hint.
+            self.assertEqual(run(), ([(1, "read"), (1, "read"), (2, "read")], []))
+            # The lookup cache of the task serves the second row of key 1.
+            self.assertEqual(run("EXTERNAL_LOOKUP"), (expected, ["1", "2"]))
+            # The hint option turns the cache off for this join, so key 1 is looked up again.
+            self.assertEqual(
+                run("EXTERNAL_LOOKUP", "cache_enabled=false"), (expected, ["1", "2", "1"])
+            )
+
+    @unittest.skipIf(
+        not os.path.exists(LOOKUP_JOIN_EXAMPLE), "The lookup join example is not available."
+    )
+    def test_sqlite_example(self):
+        # examples/src/main/python/sql/streaming/structured_python_lookup_join.py, run in this
+        # session with each setting of its options.
+        example = load_lookup_join_example()
+        with tempfile.TemporaryDirectory(prefix="lookup_example") as root:
+            db, events_dir = example.build_demo_files(root)
+            self.ship_file(db)
+            with self.sql_conf(
+                {
+                    "spark.sql.python.externalLookup.enabled": "true",
+                    "spark.sql.python.filterPushdown.enabled": "true",
+                }
+            ):
+                for select_range in (True, False):
+                    for arrow in (False, True):
+                        with self.subTest(select_range=select_range, arrow=arrow):
+                            rows = example.enrich_events(
+                                self.spark, events_dir, select_range=select_range, arrow=arrow
+                            ).collect()
+                            self.assertEqual([tuple(r) for r in rows], EXAMPLE_OUTPUT)
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class PythonDataSourceLookupTests(BasePythonDataSourceLookupTestsMixin, ReusedSQLTestCase):
+    def ship_file(self, path):
+        self.spark.sparkContext.addFile(path)
+
     def test_lookup_sees_its_task_files_and_accumulators(self):
         accumulator = self.spark.sparkContext.accumulator(0)
         with tempfile.TemporaryDirectory(prefix="lookup_files") as files_dir:
@@ -932,11 +1086,6 @@ class BasePythonDataSourceLookupTestsMixin:
             self.assertRegex(row.extra, r"^from a file in partition \d+$")
         # The updates of the accumulator reach the driver when the readers close.
         self.assertEqual(accumulator.value, 2)
-
-
-@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class PythonDataSourceLookupTests(BasePythonDataSourceLookupTestsMixin, ReusedSQLTestCase):
-    pass
 
 
 if __name__ == "__main__":
