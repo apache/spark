@@ -21,14 +21,14 @@ name: "Branch-4.1 CI Scheduler"
 
 on:
   schedule:
-    - cron: &java17_cron '17 0 1-28/3 * *'
-    - cron: &maven_cron '17 0 3-31/3 * *'
-    - cron: &non_ansi_cron '17 14 1-28/3 * *'
-    - cron: &maven_java21_cron '17 17 2-31/3 * *'
-    - cron: &python_3_14_cron '17 17 3-31/3 * *'
-    - cron: &python_pypy3_10_cron '17 2 2-31/3 * *'
-    - cron: &python_3_11_cron '17 22 3-31/3 * *'
-    - cron: &java21_cron '17 7 3-31/3 * *'
+    - cron: &java17_cron '17 15 * * 0'
+    - cron: &python_pypy3_10_cron '17 15 * * 4'
+    - cron: &python_3_11_cron '17 21 * * 0'
+    - cron: &non_ansi_cron '17 21 * * 1'
+    - cron: &maven_java21_cron '17 21 * * 3'
+    - cron: &python_3_14_cron '17 3 * * 6'
+    - cron: &maven_cron '17 9 * * 2'
+    - cron: &java21_cron '17 9 * * 5'
   workflow_dispatch:
     inputs:
       target:
@@ -51,6 +51,7 @@ jobs:
   schedule:
     if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_CRON: *maven_cron

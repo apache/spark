@@ -362,6 +362,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // Check MATERIALIZED CTE relations on the original plan, as `inlinedPlan` has them inlined.
     // This runs after `checkAnalysis0`, so that resolution errors are reported first.
     MaterializedCTECheck(plan)
+    // So are the lookup sides of external lookup joins that read MATERIALIZED CTEs.
+    CheckExternalLookupJoin.checkKeptCTEs(plan)
     plan.setAnalyzed()
   }
 
@@ -517,6 +519,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case r: V2Reference =>
         throw SparkException.internalError(
           s"V2Reference should be resolved during analysis: ${r.name}")
+
+      // ResolveGapFill runs only in the Resolution batch. With the gate on, an input that
+      // resolves in a later batch leaves the node here.
+      case _: UnresolvedGapFill =>
+        throw QueryCompilationErrors.gapFillNotSupportedError()
 
       case u: UnresolvedInlineTable
           if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&

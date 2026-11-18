@@ -1072,6 +1072,92 @@ class UDFInHigherOrderFunctionTestsMixin:
             [([2, 3, 4],), ([],), (None,), ([11, 21],), ([6],)],
         )
 
+    def test_scalar_arrow_udf_result_cast_is_safe(self):
+        # A lifted Arrow UDF casts its result to the declared type safely, as the same UDF does
+        # outside a lambda, whatever spark.sql.execution.pandas.convertToArrowArraySafely says
+        # (that setting applies to pandas UDFs and Arrow-optimized Python UDFs, not to Arrow
+        # UDFs). A value that does not fit the declared type raises instead of silently
+        # overflowing or being truncated.
+        from typing import Iterator
+
+        import pyarrow as pa
+
+        from pyspark.errors import PythonException
+        from pyspark.sql.functions import arrow_udf
+
+        conf = "spark.sql.execution.pandas.convertToArrowArraySafely"
+        df = self.spark.createDataFrame([([1, 2],)], "values array<long>")
+
+        @arrow_udf(IntegerType())
+        def add_max_int(a: pa.Array) -> pa.Array:
+            return pa.compute.add(a, 2147483647)
+
+        @arrow_udf(IntegerType())
+        def add_max_int_iter(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                yield pa.compute.add(a, 2147483647)
+
+        @arrow_udf(IntegerType())
+        def add_half(a: pa.Array) -> pa.Array:
+            return pa.compute.add(a, 0.5)
+
+        # With the setting off, the same UDF raises outside a lambda, so the lifted one must raise
+        # too. The base Arrow UDF paths ignore the setting, so the outside query runs only here.
+        with self.sql_conf({conf: False}):
+            for f in [add_max_int, add_max_int_iter, add_half]:
+                with self.subTest(safecheck=False, udf=f.__name__):
+                    with self.assertRaisesRegex(PythonException, "RESULT_COLUMN_TYPES_MISMATCH"):
+                        df.select(f(df.values[0])).collect()
+                    with self.assertRaisesRegex(PythonException, "RESULT_COLUMN_TYPES_MISMATCH"):
+                        df.select(sf.transform("values", lambda x: f(x))).collect()
+        with self.sql_conf({conf: True}):
+            for f in [add_max_int, add_max_int_iter]:
+                with self.subTest(safecheck=True, udf=f.__name__):
+                    with self.assertRaisesRegex(PythonException, "RESULT_COLUMN_TYPES_MISMATCH"):
+                        df.select(sf.transform("values", lambda x: f(x))).collect()
+
+    def test_scalar_pandas_udf_result_cast_follows_setting(self):
+        # A lifted pandas UDF casts its result to the declared type as the same UDF does outside
+        # a lambda, following spark.sql.execution.pandas.convertToArrowArraySafely: with the
+        # setting off, a value that does not fit the declared type overflows in both places, and
+        # with it on, both raise.
+        from typing import Iterator
+
+        import pandas as pd
+
+        from pyspark.errors import PythonException
+        from pyspark.sql.functions import pandas_udf
+
+        conf = "spark.sql.execution.pandas.convertToArrowArraySafely"
+        df = self.spark.createDataFrame([([1, 2],)], "values array<long>")
+
+        @pandas_udf(IntegerType())
+        def add_max_int(s: pd.Series) -> pd.Series:
+            return s + 2147483647
+
+        @pandas_udf(IntegerType())
+        def add_max_int_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 2147483647
+
+        error = "with type 'int64' to Arrow type 'int32'. It can be caused by overflows"
+        for f in [add_max_int, add_max_int_iter]:
+            # Each query is built under its setting, so that no planned query is reused.
+            with self.subTest(safecheck=False, udf=f.__name__):
+                with self.sql_conf({conf: False}):
+                    # 1 + 2147483647 and 2 + 2147483647 wrap around in int.
+                    assertDataFrameEqual(df.select(f(df.values[0])), [(-2147483648,)])
+                    assertDataFrameEqual(
+                        df.select(sf.transform("values", lambda x: f(x))),
+                        [([-2147483648, -2147483647],)],
+                    )
+            with self.subTest(safecheck=True, udf=f.__name__):
+                with self.sql_conf({conf: True}):
+                    with self.assertRaisesRegex(PythonException, error):
+                        df.select(f(df.values[0])).collect()
+                    with self.assertRaisesRegex(PythonException, error):
+                        df.select(sf.transform("values", lambda x: f(x))).collect()
+
     def test_scalar_pandas_iter_udf_multiple_arguments_differ_in_type(self):
         # A two-argument iterator UDF whose arguments have different element types: the array
         # element (int) and an outer column (string) that the rewrite repeats into an aligned
