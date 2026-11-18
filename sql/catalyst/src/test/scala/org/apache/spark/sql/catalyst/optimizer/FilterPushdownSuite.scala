@@ -1227,6 +1227,28 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
+  test("SPARK-61924: joins: do not push a condition that can fail ahead of a " +
+    "non-deterministic one") {
+    // The divisions and the addition are built in ANSI mode, where they can fail, and so can `q`
+    // and `p`, which the divisions compute. After `rand(0) > 0.1`, a condition that can fail by
+    // itself or reads `q` or `p` stays above the join. The addition over both sides is not moved
+    // into the join condition either, so the join has none. A condition over `a`, which can not
+    // fail, is pushed. So is a division written before `rand(0) > 0.1`.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val addOne = Add($"a", Literal(1), NumericEvalContext(EvalMode.ANSI))
+    val left = testRelation.select($"a", $"b", divide($"a", $"b").as("q"))
+    val right = testRelation1.select($"d", divide($"d", Literal(2)).as("p"))
+    val originalQuery = left.join(right).where(divide($"a", $"b") > 1 && Rand(0) > 0.1 &&
+      divide($"b", $"a") > 1 && $"q" > 0 && $"p" > 0 && addOne === $"d" && $"a" > 1)
+
+    val correctAnswer = left.where(divide($"a", $"b") > 1 && $"a" > 1).join(right)
+      .where(Rand(0) > 0.1 && divide($"b", $"a") > 1 && $"q" > 0 && $"p" > 0 && addOne === $"d")
+      .analyze
+
+    comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
