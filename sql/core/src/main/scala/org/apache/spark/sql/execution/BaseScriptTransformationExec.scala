@@ -124,15 +124,12 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
    * signal, is unblocked by killing the process and the processes that it started.
    */
   protected def startWriterThread(writerThread: BaseScriptTransformationWriterThread): Unit = {
-    val context = writerThread.taskContext
     TaskInputThread.start(
-        context,
+        writerThread.taskContext,
         writerThread,
         gracePeriodMs = TimeUnit.SECONDS.toMillis(
           conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_EXIT_TIMEOUT)),
-        awaitDone = Some(writerThread.awaitInputRead)) { force =>
-      writerThread.stopOnTaskCompletion(context.isFailed(), force)
-    }
+        awaitDone = Some(writerThread.awaitInputRead))(writerThread.stopOnTaskCompletion)
   }
 
   protected def processIterator(
@@ -369,14 +366,14 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
   }
 
   /**
-   * Stops this thread from reading the input rows once the task completes, failed if
-   * `taskFailed`, and destroys the process if it is still alive and the task did not read its
-   * whole output. With `force`, when this thread still reads the input rows after the time that
-   * a script gets to exit, it kills the process and the processes that it started, also if the
-   * task read its whole output: this thread is then blocked in a write to a process that does
-   * not read its input.
+   * Stops this thread from reading the input rows once the task completes, and destroys the
+   * process if it is still alive and the task did not read its whole output. With `force`, when
+   * this thread still reads the input rows after the time that a script gets to exit, it kills
+   * the process and the processes that it started, also if the task read its whole output: this
+   * thread is then blocked in a write to a process that does not read its input.
    */
-  private[execution] def stopOnTaskCompletion(taskFailed: Boolean, force: Boolean): Unit = {
+  private[execution] def stopOnTaskCompletion(force: Boolean): Unit = {
+    val taskFailed = taskContext.isFailed()
     stoppedOnTaskCompletion = true
     if (force) {
       // Also once the process is gone: the processes that it started may live on.
