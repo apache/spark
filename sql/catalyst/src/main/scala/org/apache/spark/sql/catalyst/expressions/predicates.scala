@@ -257,8 +257,8 @@ trait PredicateHelper extends AliasHelper with Logging {
    *    keys and aggregate functions of an aggregation, computed on every row it gets.
    *  - The columns through any other operator, e.g. a `Union`, `Generate`, `Deduplicate`,
    *    `Sort`, `Window` or `Repartition`, whose input rows get every column computed.
-   *    `FinishAnalysis`, the first batch of the optimizer, removes `SubqueryAlias` and
-   *    `ResolvedHint`, and a `Tail` is only at the top of a plan.
+   *    `FinishAnalysis` removes `SubqueryAlias` and `ResolvedHint` before the rules that call
+   *    this run, and a `Tail` is only at the top of a plan.
    */
   protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
     case Project(projectList, child) =>
