@@ -22,7 +22,7 @@ import java.util.{Collections, Optional, OptionalLong}
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, PredicateHelper, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
@@ -258,7 +258,15 @@ object ExternalLookupRelations {
  *                             ahead of those operations, see [[SupportsStorageFilters]]. Default
  *                             false: a pushed limit, offset, top-N, sample, aggregate or join
  *                             decides which rows the scan returns, and a build site that does not
- *                             set it keeps storage filters away from its scan.
+ *                             set it keeps storage filters away from its scan. It requires
+ *                             `repeatableRead`.
+ * @param repeatableRead whether reading the scan again returns the same rows, as a runtime bloom
+ *                       filter's subquery does. Unlike `onlyRowWisePushdowns`, it holds for a
+ *                       pushed aggregate or join and the target read of a copy-on-write operation,
+ *                       unless a limit, offset, top-N or sample is pushed too. Default false: those
+ *                       let the source pick other rows, and a build site that does not set it keeps
+ *                       its scan from being a bloom filter's creation side. It holds whenever
+ *                       `onlyRowWisePushdowns` does.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -269,7 +277,14 @@ case class DataSourceV2ScanRelation(
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false,
-    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
+    onlyRowWisePushdowns: Boolean = false,
+    repeatableRead: Boolean = false)
+  extends LeafNode with NamedRelation with PredicateHelper {
+
+  // A scan whose pushed operations all work on each row by itself returns the same rows when read
+  // again, so DPP and the runtime bloom filter, which read different flags, agree on it.
+  require(!onlyRowWisePushdowns || repeatableRead,
+    "A scan with only row-wise pushdowns must set repeatableRead")
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -278,6 +293,17 @@ case class DataSourceV2ScanRelation(
   // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
+
+  /**
+   * Whether a rule that reads this scan again in a subquery, as DPP and a runtime bloom filter
+   * do, can count its pushed filters as a selective `Filter` above it: one of them is likely
+   * selective, and every operation pushed into the scan works on each row by itself. A filter
+   * the scan took in fully leaves no `Filter` above it, where V1 keeps one, unless the scan's
+   * `reflectsFullyPushedDownFilters` is false: then `V2ScanRelationPushDown` can put the filter
+   * back above it to adjust its statistics.
+   */
+  def hasSelectivePushedFilters: Boolean =
+    onlyRowWisePushdowns && pushedFilters.exists(isLikelySelective)
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via

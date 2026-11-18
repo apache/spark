@@ -36,12 +36,15 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
+  // `checkedAggregate` is the bloom filter aggregate of a side that the search already checked
+  // with `bloomFilterAggregate` and the caller's `takes`.
   private case class FilterCreationSide(
       key: Expression,
       plan: LogicalPlan,
       useMaterializedThreshold: Boolean,
       materializedRowCount: Option[BigInt] = None,
-      materializedSizeInBytes: Option[BigInt] = None)
+      materializedSizeInBytes: Option[BigInt] = None,
+      checkedAggregate: Option[LogicalPlan] = None)
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
@@ -58,6 +61,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSide: FilterCreationSide): LogicalPlan = {
+    filterCreationSide.checkedAggregate.orElse(bloomFilterAggregate(filterCreationSide)).map {
+      aggregate =>
+        val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
+        val filter = BloomFilterMightContain(bloomFilterSubquery,
+          new XxHash64(Seq(filterApplicationSideKey)))
+        Filter(filter, filterApplicationSidePlan)
+    }.getOrElse(filterApplicationSidePlan)
+  }
+
+  // The aggregate that builds the bloom filter from `filterCreationSide`, unless one of the checks
+  // below rejects the creation side.
+  private def bloomFilterAggregate(filterCreationSide: FilterCreationSide): Option[LogicalPlan] = {
     val filterCreationSideKey = filterCreationSide.key
     val filterCreationSidePlan = filterCreationSide.plan
     val creationSideThreshold = if (filterCreationSide.useMaterializedThreshold) {
@@ -68,7 +83,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     // Skip if the filter creation side is too big
     if (filterCreationSide.materializedSizeInBytes
         .getOrElse(filterCreationSidePlan.stats.sizeInBytes) > creationSideThreshold) {
-      return filterApplicationSidePlan
+      return None
     }
     val rowCount = filterCreationSide.materializedRowCount
       .orElse(filterCreationSidePlan.stats.rowCount)
@@ -85,31 +100,32 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     // Runtime filters are introduced after subquery optimization, so Python and external UDFs in
     // a new creation-side subquery cannot be extracted into their evaluation operators.
     if (aggregate.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)) {
-      return filterApplicationSidePlan
+      return None
     }
     // The subquery evaluates the creation side again, apart from the join. A non-deterministic
     // filter or key can give it different keys than the join sees. This check does not see into
     // a leaf that returns other rows when read again, like a cache whose plan is not repeatable.
     if (!aggregate.deterministic) {
-      return filterApplicationSidePlan
+      return None
     }
-    val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
-    val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new XxHash64(Seq(filterApplicationSideKey)))
-    Filter(filter, filterApplicationSidePlan)
+    Some(aggregate)
   }
 
   /**
    * Extracts either a safely materialized leaf with accurate statistics or a simple selective
-   * filter over a scan. Filter conditions and the expressions they reference must remain simple,
-   * so the runtime-filter subquery does not introduce expensive computation. The extracted plan
-   * must produce a superset of the creation side's join keys.
+   * filter over a scan, or in a DSv2 scan that took it in fully. Filter conditions and the
+   * expressions they reference must remain simple, so the runtime-filter subquery does not
+   * introduce expensive computation. The extracted plan must produce a superset of the creation
+   * side's join keys. A side found only through the filters that a DSv2 scan took in is returned
+   * only if `bloomFilterAggregate` and `takes` take it, so that a join above can still take its
+   * other side.
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideKey: Expression,
       allowMaterializedCache: Boolean,
       applicationDistinctCount: => Option[BigInt],
+      takes: FilterCreationSide => Boolean,
       onMaterializedLeaf: => Unit = ()): Option[FilterCreationSide] = {
     def extract(
         p: LogicalPlan,
@@ -239,11 +255,26 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               useMaterializedThreshold = false))
           case _ => None
         }
-      case _: LeafNode if hasHitSelectiveFilter =>
-        Some(FilterCreationSide(
-          targetKey,
-          currentPlan,
-          useMaterializedThreshold = false))
+      // The bloom filter's subquery reads a DSv2 scan again, so only a scan marked with
+      // `repeatableRead` counts, with or without a selective `Filter` above it. A pushed limit, for
+      // example, lets the source pick other rows on a second read. The pushed filters it records
+      // must be simple, as the condition of a `Filter` must.
+      case scan: DataSourceV2ScanRelation
+          if !scan.repeatableRead || !scan.pushedFilters.forall(isSimpleExpression) => None
+      // A filter that a DSv2 scan took in fully leaves no `Filter` for it, as a built-in file scan
+      // does with its partition filters, so a selective one counts as a selective `Filter` does.
+      // If the scan's `reflectsFullyPushedDownFilters` is false, `V2ScanRelationPushDown` can put
+      // a pushed filter back above it to adjust its statistics.
+      // The size check of `bloomFilterAggregate` uses the scan's estimate, which for a V2 file
+      // scan covers all its partitions.
+      case leaf: LeafNode if hasHitSelectiveFilter || hasSelectivePushedFilters(leaf) =>
+        val side = FilterCreationSide(targetKey, currentPlan, useMaterializedThreshold = false)
+        if (hasHitSelectiveFilter) {
+          Some(side)
+        } else {
+          bloomFilterAggregate(side).filter(_ => takes(side))
+            .map(aggregate => side.copy(checkedAggregate = Some(aggregate)))
+        }
       case _ => None
     }
 
@@ -253,6 +284,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     } else {
       None
     }
+  }
+
+  private def hasSelectivePushedFilters(leaf: LeafNode): Boolean = leaf match {
+    case scan: DataSourceV2ScanRelation => scan.hasSelectivePushedFilters
+    case _ => false
   }
 
   private def isSimpleExpression(e: Expression): Boolean = {
@@ -315,12 +351,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * - The filter creation side has a selective predicate, or its exact materialized row count
    *   is smaller than the application side's distinct join-key count
    * - The max filterApplicationSide scan size is greater than a configurable threshold
+   *
+   * `takes` is the caller's check on the creation side, see `extractSelectiveFilterOverScan`.
    */
   private def extractBeneficialFilterCreatePlan(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideKey: Expression,
-      filterCreationSideKey: Expression): Option[FilterCreationSide] = {
+      filterCreationSideKey: Expression,
+      takes: FilterCreationSide => Boolean): Option[FilterCreationSide] = {
     if (UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
       UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType) &&
       findExpressionAndTrackLineageDown(
@@ -365,6 +404,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         filterCreationSideKey,
         allowMaterializedCache = false,
         applicationDistinctCount = None,
+        takes = takes,
         onMaterializedLeaf = { sawMaterializedLeaf = true })
       selectiveCreationSide
         .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
@@ -374,7 +414,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               filterCreationSide,
               filterCreationSideKey,
               allowMaterializedCache = true,
-              applicationDistinctCount = applicationDistinctCount)
+              applicationDistinctCount = applicationDistinctCount,
+              takes = takes)
           } else {
             selectiveCreationSide
           }
@@ -432,12 +473,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // reference hides the determinism of its plan, a cache only if Spark can tell that scanning it
   // again gives the same rows, and a V2 scan only if every operation pushed into it works on each
   // row by itself. A pushed limit or top-N, for example, lets the source pick other rows on a
-  // second read. It must not read a file metadata column either, such as
+  // second read. A scan with a pushed aggregate or join, or the target read of a copy-on-write
+  // operation, records no pushed filters for `cannotFail` below to check, so it does not count
+  // here even if it is `repeatableRead`. It must not read a file metadata column either, such as
   // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
-  // split them differently. Its filters, and the projections that the key and the filters need,
-  // must pass `cannotFail`, which takes only expressions that are deterministic in the subquery
-  // and do not fail there. A part of the join side outside that plan can only drop rows from the
-  // join, so the bloom filter still holds every key that the join sees.
+  // split them differently. Its filters, including those pushed into a V2 scan, and the projections
+  // that the key and the filters need, must pass `cannotFail`, which takes only expressions that
+  // are deterministic in the subquery and do not fail there. A part of the join side outside that
+  // plan can only drop rows from the join, so the bloom filter still holds every key that the join
+  // sees.
   private def canEvaluateAgain(creationSide: FilterCreationSide): Boolean = {
     val evaluated =
       ColumnPruning(Project(Seq(Alias(creationSide.key, "key")()), creationSide.plan))
@@ -447,7 +491,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       case Project(projectList, _) => !projectList.forall(e => cannotFail(trimAliases(e)))
       case Filter(condition, _) => !splitConjunctivePredicates(condition).forall(cannotFail)
       case _: CTERelationRef => true
-      case scan: DataSourceV2ScanRelation => !scan.onlyRowWisePushdowns
+      case scan: DataSourceV2ScanRelation =>
+        !scan.onlyRowWisePushdowns || !scan.pushedFilters.forall(cannotFail)
       case leaf: MaterializedLeafNode => !leaf.isOutputRepeatable
       case _: LeafNode => false
       case _ => true
@@ -559,12 +604,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                 side: LogicalPlan,
                 key: Expression,
                 other: LogicalPlan,
-                otherKey: Expression): Option[FilterCreationSide] =
+                otherKey: Expression): Option[FilterCreationSide] = {
+              // The search can call `takes` for more than one creation side, so the part that does
+              // not depend on `c` is computed once.
+              lazy val keyCanTake =
+                UnsafeRowUtils.isBinaryStable(key.dataType) && canPushDown(key, side)
+              def takes(c: FilterCreationSide): Boolean =
+                keyDpps.isEmpty || (keyCanTake && canEvaluateAgain(c))
               extractBeneficialFilterCreatePlan(
-                side, withoutDppFilters(other, keyDpps.contains), key, otherKey).filter { c =>
-                keyDpps.isEmpty || (UnsafeRowUtils.isBinaryStable(key.dataType) &&
-                  canPushDown(key, side) && canEvaluateAgain(c))
-              }
+                side, withoutDppFilters(other, keyDpps.contains), key, otherKey, takes)
+                .filter(c => c.checkedAggregate.isDefined || takes(c))
+            }
             // Check if:
             // 1. The current join type supports prune the left side with runtime filter
             // 2. The current join is a shuffle join or a broadcast join that

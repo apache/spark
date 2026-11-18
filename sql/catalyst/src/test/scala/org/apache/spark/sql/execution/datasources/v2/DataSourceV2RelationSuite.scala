@@ -363,6 +363,14 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-61173: a scan with only row-wise pushdowns must set repeatableRead") {
+    val scan = scanRel(Seq(AttributeReference("id", IntegerType)()),
+      newStatsScan(v2Statistics(rows = OptionalLong.of(1L))))
+    assert(scan.copy(onlyRowWisePushdowns = true, repeatableRead = true).onlyRowWisePushdowns)
+    assert(scan.copy(repeatableRead = true).repeatableRead)
+    intercept[IllegalArgumentException](scan.copy(onlyRowWisePushdowns = true))
+  }
+
   test("DataSourceV2ScanRelation.computeStats uses non-empty scan stats with CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
