@@ -808,6 +808,16 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assert(states.forall(_.contains(streamState)), states)
   }
 
+  test("SPARK-61959: Streaming query plans with no artifact state without propagation") {
+    val session = spark.newSession()
+    session.conf.set(SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED.key, "false")
+    val (query, states) = artifactStatesWhilePlanningStream(session)
+    // The previous behavior: the stream thread has no artifact state, even with isolation on.
+    assert(query.sparkSessionForStream.artifactManager.state !== null)
+    assert(states.nonEmpty)
+    assert(states.forall(_.isEmpty), states)
+  }
+
   test("SPARK-61959: Streaming query without artifact isolation plans with no artifact state") {
     val session = spark.newSession()
     session.conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, "false")

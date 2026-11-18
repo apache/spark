@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFacto
 import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.nextStreamId
 import org.apache.spark.sql.execution.python.streaming.PythonStreamingSourceRunner
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.{PythonStreamBlockId, StorageLevel}
@@ -83,7 +84,12 @@ abstract class PythonMicroBatchStreamBase(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+    val jobArtifactUUID =
+      if (SQLConf.get.getConf(SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED)) {
+        JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+      } else {
+        None
+      }
     new PythonStreamingPartitionReaderFactory(
       ds.source, readInfo.func, outputSchema, jobArtifactUUID, None)
   }

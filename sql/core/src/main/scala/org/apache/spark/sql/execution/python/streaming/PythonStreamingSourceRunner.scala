@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{JobArtifactSet, SparkEnv}
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.PYTHON_EXEC
@@ -108,6 +108,15 @@ class PythonStreamingSourceRunner(
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
+    // The stream thread creates the source under the artifact state of the stream's session, so
+    // that this worker sees the files of that session, as its executor-side readers do.
+    val jobArtifactUUID =
+      if (SQLConf.get.getConf(SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED)) {
+        JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+      } else {
+        None
+      }
+    jobArtifactUUID.foreach(envVars.put("SPARK_JOB_ARTIFACT_UUID", _))
 
     val workerFactory =
       new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
@@ -122,7 +131,8 @@ class PythonStreamingSourceRunner(
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
 
     val pythonIncludes = func.pythonIncludes.asScala.toSet
-    PythonWorkerUtils.writeSparkFiles(Some("streaming_job"), pythonIncludes, dataOut)
+    PythonWorkerUtils.writeSparkFiles(
+      jobArtifactUUID.orElse(Some("streaming_job")), pythonIncludes, dataOut)
 
     // Send the user function to python process
     PythonWorkerUtils.writePythonFunction(func, dataOut)

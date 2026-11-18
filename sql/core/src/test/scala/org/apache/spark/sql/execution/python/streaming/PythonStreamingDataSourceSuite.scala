@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkException
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -136,6 +136,56 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
 
   // Verify prefetch and cache pattern of SimpleDataSourceStreamReader handle empty
   // data batch correctly.
+  test("SPARK-61959: Simple stream reader reads the files of the session on the driver") {
+    assume(shouldTestPandasUDFs)
+    val fileName = "simple_stream_reader_session_file.txt"
+    val moduleName = "simple_stream_reader_session_module"
+    val sourceName = "SessionFileSimpleDataSource"
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, SimpleDataSourceStreamReader
+         |
+         |class FileSimpleStreamReader(SimpleDataSourceStreamReader):
+         |    def initialOffset(self):
+         |        return {"offset": 0}
+         |    def read(self, start: dict):
+         |        return (self.readBetweenOffsets(start, {"offset": 1}), {"offset": 1})
+         |    def readBetweenOffsets(self, start: dict, end: dict):
+         |        from pyspark import SparkFiles
+         |        import $moduleName
+         |        if start["offset"] == end["offset"]:
+         |            return iter([])
+         |        with open(SparkFiles.get("$fileName")) as f:
+         |            return iter([(f.read() + $moduleName.suffix,)])
+         |
+         |class $sourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "value STRING"
+         |    def simpleStreamReader(self, schema):
+         |        return FileSimpleStreamReader()
+         |""".stripMargin
+    // A new session, so that its files are not visible to the other tests.
+    val session = spark.newSession()
+    withTempDir { dir =>
+      val file = new File(dir, fileName)
+      Files.writeString(file.toPath, "session file")
+      val module = new File(dir, s"$moduleName.py")
+      Files.writeString(module.toPath, "suffix = '!!'")
+      session.artifactManager.addArtifact(Paths.get(s"files/$fileName"), file.toPath, None)
+      session.artifactManager.addArtifact(Paths.get(s"pyfiles/$moduleName.py"), module.toPath, None)
+      session.dataSource.registerPython(
+        sourceName, createUserDefinedPythonDataSource(sourceName, dataSourceScript))
+      val q = session.readStream.format(sourceName).load()
+        .writeStream.format("memory").queryName("simple_stream_reader_session_file").start()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+      checkAnswer(session.table("simple_stream_reader_session_file"), Row("session file!!"))
+    }
+  }
+
   test("SimpleDataSourceStreamReader read empty batch") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
@@ -589,8 +639,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     q.awaitTermination()
   }
 
-  test("SPARK-61959: Stream reader reads the files of the session") {
-    assume(shouldTestPandasUDFs)
+  /**
+   * Reads a file of a new session with the executor-side reader of a streaming Python data
+   * source, and returns the rows that the query wrote.
+   */
+  private def readSessionFileWithStreamReader(propagateArtifactState: Boolean): Seq[Row] = {
     val fileName = "stream_reader_session_file.txt"
     val sourceName = "SessionFileDataSource"
     val dataSourceScript =
@@ -619,6 +672,9 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |""".stripMargin
     // A new session, so that its file is not visible to the other tests.
     val session = spark.newSession()
+    session.conf.set(
+      SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED.key, propagateArtifactState.toString)
+    var rows: Seq[Row] = Nil
     withTempDir { dir =>
       val file = new File(dir, fileName)
       Files.writeString(file.toPath, "session file")
@@ -632,7 +688,67 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       } finally {
         q.stop()
       }
-      checkAnswer(session.table("stream_reader_session_file"), Row("session file"))
+      rows = session.table("stream_reader_session_file").collect().toSeq
+    }
+    rows
+  }
+
+  test("SPARK-61959: Stream reader reads the files of the session") {
+    assume(shouldTestPandasUDFs)
+    assert(readSessionFileWithStreamReader(propagateArtifactState = true) ===
+      Seq(Row("session file")))
+  }
+
+  test("SPARK-61959: Stream reader misses the files of the session without propagation") {
+    assume(shouldTestPandasUDFs)
+    // The previous behavior: the reader looks in the default files directory.
+    val e = intercept[StreamingQueryException] {
+      readSessionFileWithStreamReader(propagateArtifactState = false)
+    }
+    assert(e.getMessage.contains("FileNotFoundError"), e.getMessage)
+  }
+
+  test("SPARK-61959: Driver-side worker of a stream reader uses the current artifact state") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamReader
+         |
+         |class RootDirectoryStreamReader(DataSourceStreamReader):
+         |    def initialOffset(self):
+         |        from pyspark import SparkFiles
+         |        return {"root": SparkFiles.getRootDirectory()}
+         |    def latestOffset(self):
+         |        return self.initialOffset()
+         |    def partitions(self, start: dict, end: dict):
+         |        return []
+         |    def read(self, partition):
+         |        yield (0,)
+         |
+         |class $dataSourceName(DataSource):
+         |    def streamReader(self, schema):
+         |        return RootDirectoryStreamReader()
+         |""".stripMargin
+    spark.dataSource.registerPython(
+      dataSourceName, createUserDefinedPythonDataSource(dataSourceName, dataSourceScript))
+    val pythonDs = new PythonDataSourceV2
+    pythonDs.setShortName(dataSourceName)
+    def rootDirectoryOfDriverWorker(): String = {
+      val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+        pythonDs, dataSourceName, StructType.fromDDL("id INT"), CaseInsensitiveStringMap.empty())
+      runner.init()
+      try {
+        """"root": "([^"]*)"""".r.findFirstMatchIn(runner.initialOffset()).get.group(1)
+      } finally {
+        runner.stop()
+      }
+    }
+    JobArtifactSet.withActiveJobArtifactState(JobArtifactState("spark-61959-state", None)) {
+      assert(rootDirectoryOfDriverWorker().endsWith(s"${File.separator}spark-61959-state"))
+      // The previous behavior: a fixed directory, whatever the artifact state.
+      withSQLConf(SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED.key -> "false") {
+        assert(rootDirectoryOfDriverWorker().endsWith(s"${File.separator}streaming_job"))
+      }
     }
   }
 

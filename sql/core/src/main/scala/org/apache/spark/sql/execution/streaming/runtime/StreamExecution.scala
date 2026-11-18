@@ -234,7 +234,12 @@ abstract class StreamExecution(
         // of the artifacts. `SQLExecution` applies its artifact state only to run the jobs, but
         // the batches are planned before that, and some plan nodes keep the state they are built
         // with, for example the Python UDFs.
-        JobArtifactSet.withActiveJobArtifactState(sparkSessionForStream.artifactManager.state) {
+        if (sparkSessionForStream.sessionState.conf.getConf(
+            SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED)) {
+          JobArtifactSet.withActiveJobArtifactState(sparkSessionForStream.artifactManager.state) {
+            runStream()
+          }
+        } else {
           runStream()
         }
       }

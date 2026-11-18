@@ -5560,6 +5560,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED =
+    buildConf("spark.sql.streaming.propagateArtifactState.enabled")
+      .internal()
+      .doc("When true, a streaming query runs its stream thread with the artifact state of its " +
+        "own session, a clone of the session that started it. Its Python UDFs and the readers " +
+        "of its Python data sources, on the executors and on the driver, then see the files " +
+        "and Python files of that session, as in a batch query of the session. This only " +
+        "matters when artifact isolation is on. Set to false to restore the previous " +
+        "behavior, where these use the default files directory of the Spark context, or a " +
+        "fixed directory for the driver-side reader of a Python data source.")
+      .version("4.0.6")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
     buildConf("spark.sql.thriftserver.shuffleDependency.fileCleanup.enabled")
       .doc("When enabled, shuffle files will be cleaned up at the end of Thrift server " +

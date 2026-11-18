@@ -26,6 +26,7 @@ import zlib
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import assert_true, lit, udf
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
+from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.util import is_remote_only
 
 if should_test_connect:
@@ -217,6 +218,9 @@ class ArtifactTestsMixin:
         # A streaming query plans its micro-batches in its own thread, which must still see the
         # files of the session.
         self.check_add_file_streaming(self.spark, use_arrow=False)
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_add_file_streaming_arrow(self):
         self.check_add_file_streaming(self.spark, use_arrow=True)
 
     def test_add_pyfile_streaming(self):
@@ -237,6 +241,7 @@ class ArtifactTestsMixin:
             df = self.streaming_input(self.spark, input_dir).select(func("id"))
             self.assertEqual(self.collect_streaming_query(df), [(10,)])
 
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_add_file_python_streaming_data_source(self):
         from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
 
@@ -345,6 +350,55 @@ class ArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
         conf = super().conf()
         conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
         return conf
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_add_file_python_simple_streaming_data_source(self):
+        from pyspark.sql.datasource import DataSource, SimpleDataSourceStreamReader
+
+        file_name = "my_simple_streaming_source_file.txt"
+
+        # The read methods of a simple stream reader run on the driver. Not in the mixin: without
+        # artifact isolation, as in Spark Classic, the driver-side worker keeps its own folder.
+        class FileSimpleStreamReader(SimpleDataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start):
+                return iter(self.readBetweenOffsets(start, {"offset": 1})), {"offset": 1}
+
+            def readBetweenOffsets(self, start, end):
+                import my_simple_streaming_source_pyfile
+
+                from pyspark import SparkFiles
+
+                if start["offset"] == end["offset"]:
+                    return iter([])
+                with open(SparkFiles.get(file_name), "r") as my_file:
+                    value = my_file.read().strip() + my_simple_streaming_source_pyfile.suffix
+                return iter([(value,)])
+
+        class FileSimpleDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "artifact_file_simple_stream"
+
+            def schema(self):
+                return "value STRING"
+
+            def simpleStreamReader(self, schema):
+                return FileSimpleStreamReader()
+
+        with tempfile.TemporaryDirectory(prefix="test_add_file_python_simple_streaming_ds") as d:
+            with open(os.path.join(d, file_name), "w") as f:
+                f.write("Hello simple source")
+            pyfile_path = os.path.join(d, "my_simple_streaming_source_pyfile.py")
+            with open(pyfile_path, "w") as f:
+                f.write('suffix = "!!"')
+            self.spark.addArtifacts(os.path.join(d, file_name), file=True)
+            self.spark.addArtifacts(pyfile_path, pyfile=True)
+            self.spark.dataSource.register(FileSimpleDataSource)
+            df = self.spark.readStream.format("artifact_file_simple_stream").load()
+            self.assertEqual(self.collect_streaming_query(df), [("Hello simple source!!",)])
 
     def test_basic_requests(self):
         file_name = "smallJar"
