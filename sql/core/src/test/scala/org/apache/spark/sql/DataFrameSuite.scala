@@ -3103,6 +3103,18 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61924: a filter condition that can fail is not pushed through a join ahead of " +
+    "a non-deterministic one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The first conjunct of the filter is false on every row, so the `AND` short-circuit keeps
+      // the division by zero on `l` = 3 from being evaluated.
+      val df = spark.range(0, 10, 1, 1).toDF("l")
+        .join(spark.range(0, 10, 1, 1).toDF("r"), $"l" === $"r")
+        .where(rand(10) * 10 > 100 && lit(10L) / ($"l" - 3) > 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
   test("SPARK-60528: collect a nested empty struct") {
     val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
     checkAnswer(df, Row(0L, Row(Row())))
