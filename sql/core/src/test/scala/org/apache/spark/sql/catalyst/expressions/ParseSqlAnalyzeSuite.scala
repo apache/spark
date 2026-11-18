@@ -364,6 +364,37 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE qualifies created temp views, table-valued builtins and temp functions") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTempView("parse_sql_q_v") {
+        sql("CREATE TEMPORARY FUNCTION parse_sql_q_f(x INT) RETURNS INT RETURN x + 1")
+        sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN x + 100")
+        try {
+          val created = evalStatement("CREATE TEMP VIEW parse_sql_q_v AS SELECT 1 AS a")
+          assert(created \ "analyze_success" === JBool(true))
+          assert(created \ "target_table_references" === JArray(List(
+            ref("system", "session", "parse_sql_q_v"))))
+
+          val tvf = evalStatement("SELECT * FROM range(3)")
+          assert(tvf \ "function_references" === JArray(List(
+            ref("system", "builtin", "range"))))
+
+          val tempFn = evalStatement("SELECT parse_sql_q_f(1) AS y")
+          assert(tempFn \ "function_references" === JArray(List(
+            ref("system", "session", "parse_sql_q_f"))))
+
+          // Under the default function resolution order a builtin wins over a temp function.
+          val shadowed = evalStatement("SELECT abs(-1) AS z")
+          assert(shadowed \ "function_references" === JArray(List(
+            ref("system", "builtin", "abs"))))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION IF EXISTS parse_sql_q_f")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS abs")
+        }
+      }
+    }
+  }
+
   test("ANALYZE reports range as system.builtin and de-duplicates count") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       withTable("parse_sql_dedup_t") {
