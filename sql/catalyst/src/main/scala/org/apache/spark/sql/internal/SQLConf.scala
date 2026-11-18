@@ -2690,6 +2690,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val MAX_SCAN_BYTES = buildConf("spark.sql.execution.maxScanBytes")
+    .doc("The maximum number of bytes a query may read from its data sources, including in " +
+      "its subqueries. A query that reads more is cancelled and fails with " +
+      "SCAN_BYTES_LIMIT_EXCEEDED. This is a best-effort guard rather than a hard cap. Spark " +
+      "learns how much the tasks of a query have read from the executor heartbeats " +
+      "(spark.executor.heartbeatInterval) and when a task ends, so a query can read more " +
+      "than the limit before it is cancelled. Only data sources that report the bytes they " +
+      "read are limited: file-based sources report the bytes they read from storage, while " +
+      "sources such as JDBC report none. Reading cached data counts the size of the cached " +
+      "blocks. Streaming queries are not limited. -1 (the default) means no limit.")
+    .version("4.5.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .bytesConf(ByteUnit.BYTE)
+    .checkValue(_ >= -1, "The maximum scan bytes must be -1 (no limit) or non-negative.")
+    .createWithDefault(-1L)
+
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = buildConf("spark.sql.thriftserver.scheduler.pool")
     .doc("Set a Fair Scheduler pool for a JDBC client session.")

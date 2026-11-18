@@ -30,10 +30,12 @@ import org.apache.spark.internal.LogKeys.{EXECUTION_ID, SHUFFLE_ID}
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.streaming.runtime.IncrementalExecution
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -237,6 +239,18 @@ object SQLExecution extends Logging {
       val interruptOnCancel = sparkSession.sessionState.conf.getConf(SQLConf.INTERRUPT_ON_CANCEL)
       sc.setInterruptOnCancel(interruptOnCancel)
     }
+    // A root execution with a scan limit is tracked by the listener that enforces the limit. The
+    // jobs of its nested executions have its root execution ID and its job tag, so they count
+    // towards the same limit. Streaming queries are not limited.
+    val maxScanBytes = sparkSession.sessionState.conf.getConf(SQLConf.MAX_SCAN_BYTES)
+    val scanLimitListener = if (existingRootId == null && maxScanBytes >= 0 &&
+        !queryExecution.isInstanceOf[IncrementalExecution]) {
+      val listener = sparkSession.sharedState.scanLimitListener
+      listener.register(executionId, maxScanBytes, executionIdJobTag(sparkSession, executionId))
+      Some(listener)
+    } else {
+      None
+    }
     try {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
@@ -306,8 +320,17 @@ object SQLExecution extends Logging {
               }
             } catch {
               case e: Throwable =>
-                ex = Some(e)
-                throw e
+                // A query that went over its scan limit fails with the error of a cancelled job.
+                // Fail it with the error that names the limit instead.
+                val error = e match {
+                  case NonFatal(_) =>
+                    scanLimitListener.flatMap(_.bytesReadOverLimit(executionId))
+                      .map(QueryExecutionErrors.scanBytesLimitExceededError(_, maxScanBytes, e))
+                      .getOrElse(e)
+                  case _ => e
+                }
+                ex = Some(error)
+                throw error
             } finally {
               // `SparkContext.stop()` nulls `dagScheduler` before it stops the listener bus, so the
               // end event may still be posted after the scheduler is unavailable. Keep observation
@@ -383,6 +406,7 @@ object SQLExecution extends Logging {
         }
       }
     } finally {
+      scanLimitListener.foreach(_.unregister(executionId))
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
       sc.setLocalProperty(QUERY_ID_KEY, oldQueryId)

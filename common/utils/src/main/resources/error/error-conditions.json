@@ -7615,6 +7615,12 @@
     ],
     "sqlState" : "21000"
   },
+  "SCAN_BYTES_LIMIT_EXCEEDED" : {
+    "message" : [
+      "The query was cancelled because it read <scannedBytes> from its data sources, more than the limit of <limit> set by <config>. Make the query read less data, for example by filtering on a partition column, or increase <config>."
+    ],
+    "sqlState" : "53400"
+  },
   "SCHEDULER_BACKEND_SHUTDOWN_FAILED" : {
     "message" : [
       "Failed to shut down the scheduler backend while the application was terminating:"

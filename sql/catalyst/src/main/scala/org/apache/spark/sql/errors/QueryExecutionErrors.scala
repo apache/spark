@@ -2362,6 +2362,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def scanBytesLimitExceededError(
+      scannedBytes: Long, maxScanBytes: Long, cause: Throwable): SparkException = {
+    new SparkException(
+      errorClass = "SCAN_BYTES_LIMIT_EXCEEDED",
+      messageParameters = Map(
+        "scannedBytes" -> Utils.bytesToString(scannedBytes),
+        "limit" -> Utils.bytesToString(maxScanBytes),
+        "config" -> toSQLConf(SQLConf.MAX_SCAN_BYTES.key)),
+      cause = cause)
+  }
+
   def notEnoughMemoryToBuildAndBroadcastTableError(
       oe: OutOfMemoryError, tables: Seq[TableIdentifier]): Throwable = {
     val analyzeTblMsg = if (tables.nonEmpty) {

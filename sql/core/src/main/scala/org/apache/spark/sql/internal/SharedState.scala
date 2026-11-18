@@ -34,7 +34,7 @@ import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, PATH, VALUE}
 import org.apache.spark.sql.catalyst.analysis.RelationCache
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.{CacheManager, ScanLimitListener}
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -126,6 +126,16 @@ private[sql] class SharedState(
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
+  }
+
+  /**
+   * The listener that enforces `spark.sql.execution.maxScanBytes`. It is created, and starts to
+   * receive events, when the first query with a limit runs.
+   */
+  private[sql] lazy val scanLimitListener: ScanLimitListener = {
+    val listener = new ScanLimitListener(sparkContext.cancelJobsWithTag(_, _))
+    sparkContext.listenerBus.addToStatusQueue(listener)
+    listener
   }
 
   /**
