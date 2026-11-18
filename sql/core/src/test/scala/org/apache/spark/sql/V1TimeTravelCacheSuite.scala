@@ -132,6 +132,166 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("write-driven recacheTableOrView rebuilds a pinned cache with a live subquery read") {
+    withPinnedCacheWithLiveSubqueryRead { (cached, _, _, _) =>
+      spark.sharedState.cacheManager.recacheTableOrView(
+        spark,
+        cachedTableNameParts,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = false)
+    }
+  }
+
+  test("write-driven recacheByPath rebuilds a pinned cache with a live subquery read") {
+    withPinnedCacheWithLiveSubqueryRead { (cached, rootPath, pinnedIndex, liveIndex) =>
+      val fs = rootPath.getFileSystem(spark.sessionState.newHadoopConf())
+      spark.sharedState.cacheManager.recacheByPath(
+        spark,
+        rootPath,
+        fs,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = false)
+      assert(pinnedIndex.refreshCount === 0)
+      assert(liveIndex.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes a main-plan and a subquery live V1 FileIndex") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val mainIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      val subqueryIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("main_read" -> mainIndex, "subquery_read" -> subqueryIndex),
+        "SELECT * FROM main_read WHERE id IN (SELECT id FROM subquery_read)")
+
+      assert(mainIndex.refreshCount === 1)
+      assert(subqueryIndex.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes live V1 FileIndexes in two subqueries") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex1 = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      val liveIndex2 = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("pinned" -> pinnedIndex, "live1" -> liveIndex1, "live2" -> liveIndex2),
+        "SELECT * FROM pinned WHERE id IN (SELECT id FROM live1) AND " +
+          "id IN (SELECT id FROM live2)")
+
+      assert(pinnedIndex.refreshCount === 0)
+      assert(liveIndex1.refreshCount === 1)
+      assert(liveIndex2.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes a FileIndex read in the main plan and subquery once") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("live" -> liveIndex),
+        "SELECT * FROM live WHERE id IN (SELECT id FROM live)")
+
+      assert(liveIndex.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes two live V1 FileIndexes read in one plan tree") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val liveIndex1 = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      val liveIndex2 = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("live1" -> liveIndex1, "live2" -> liveIndex2),
+        "SELECT * FROM live1 UNION ALL SELECT * FROM live2")
+
+      assert(liveIndex1.refreshCount === 1)
+      assert(liveIndex2.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes a FileIndex shared by two cache entries once") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val indexX = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      val indexY = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("x" -> indexX, "y" -> indexY),
+        "SELECT * FROM x WHERE id IN (SELECT id FROM y)",
+        "SELECT * FROM y")
+
+      assert(indexX.refreshCount === 1)
+      assert(indexY.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes a FileIndex read by subqueries of two entries once") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("pinned" -> pinnedIndex, "live" -> liveIndex),
+        "SELECT * FROM pinned WHERE id IN (SELECT id FROM live)",
+        "SELECT * FROM pinned WHERE id NOT IN (SELECT id FROM live)")
+
+      assert(pinnedIndex.refreshCount === 0)
+      assert(liveIndex.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheByPath refreshes a FileIndex read in a nested subquery") {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      assertWriteDrivenRecacheByPathClearsCache(
+        rootPath,
+        Seq("pinned" -> pinnedIndex, "live" -> liveIndex),
+        "SELECT * FROM pinned WHERE id IN " +
+          "(SELECT id FROM pinned WHERE id IN (SELECT id FROM live))")
+
+      assert(pinnedIndex.refreshCount === 0)
+      assert(liveIndex.refreshCount === 1)
+    }
+  }
+
+  test("write-driven recacheTableOrView keeps a cache whose subquery reads only a pinned version") {
+    withPinnedOnlyCacheWithSubquery { (cached, _, _) =>
+      spark.sharedState.cacheManager.recacheTableOrView(
+        spark,
+        cachedTableNameParts,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = true)
+    }
+  }
+
+  test("write-driven recacheByPath keeps a cache whose subquery reads only a pinned version") {
+    withPinnedOnlyCacheWithSubquery { (cached, rootPath, pinnedIndex) =>
+      val fs = rootPath.getFileSystem(spark.sessionState.newHadoopConf())
+      spark.sharedState.cacheManager.recacheByPath(
+        spark,
+        rootPath,
+        fs,
+        includeTimeTravel = false)
+
+      assertCacheLoading(cached, expected = true)
+      assert(pinnedIndex.refreshCount === 0)
+    }
+  }
+
   test("V1 file write preserves a time travel cache and refreshes a live cache") {
     withTempPath { path =>
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
@@ -161,6 +321,33 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
         } finally {
           pinned.unpersist(blocking = true)
           live.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
+  test("V1 file write refreshes both path reads of a cached query, one inside a subquery") {
+    withTempPath { path =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+        val dataPath = path.getCanonicalPath
+        spark.range(2).write.parquet(dataPath)
+        withTempView("main_read", "subquery_read") {
+          // Each path read creates its own file index.
+          spark.read.parquet(dataPath).createOrReplaceTempView("main_read")
+          spark.read.parquet(dataPath).createOrReplaceTempView("subquery_read")
+          val query = "SELECT id FROM main_read WHERE id IN (SELECT id FROM subquery_read)"
+          val cached = spark.sql(query).persist()
+          try {
+            checkAnswer(cached, Seq(Row(0L), Row(1L)))
+
+            spark.range(2, 4).write.mode("append").parquet(dataPath)
+            checkAnswer(spark.sql(query), (0L until 4L).map(Row(_)))
+
+            spark.range(10, 12).write.mode("overwrite").parquet(dataPath)
+            checkAnswer(spark.sql(query), Seq(Row(10L), Row(11L)))
+          } finally {
+            cached.unpersist(blocking = true)
+          }
         }
       }
     }
@@ -301,6 +488,91 @@ class V1TimeTravelCacheSuite extends QueryTest with SharedSparkSession {
         assert(fileIndex.refreshCount === (if (expectedToRecache) 1 else 0))
       } finally {
         df.unpersist(blocking = true)
+      }
+    }
+  }
+
+  /**
+   * Caches a query that reads the table at a pinned version and reads it live only inside an IN
+   * subquery, then passes the materialized cache, the root path, and both file indexes to `f`.
+   */
+  private def withPinnedCacheWithLiveSubqueryRead(
+      f: (ClassicDataset[_], Path, TestFileIndex, TestFileIndex) => Unit): Unit = {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      val liveIndex = new TestFileIndex(isTimeTravel = false, rootPaths = Seq(rootPath))
+      withTempView("pinned", "live") {
+        ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(pinnedIndex), tableMetadata))
+          .createOrReplaceTempView("pinned")
+        ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(liveIndex), tableMetadata))
+          .createOrReplaceTempView("live")
+        val cached = spark.sql("SELECT * FROM pinned WHERE id IN (SELECT id FROM live)").persist()
+        try {
+          cached.count()
+          assertCacheLoading(cached, expected = true)
+          f(cached, rootPath, pinnedIndex, liveIndex)
+        } finally {
+          cached.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
+  /**
+   * Creates a temp view over each file index, caches and materializes each of `queries`, and
+   * checks that one write-driven `recacheByPath` on `rootPath` clears all of their caches.
+   */
+  private def assertWriteDrivenRecacheByPathClearsCache(
+      rootPath: Path,
+      views: Seq[(String, TestFileIndex)],
+      queries: String*): Unit = {
+    withTempView(views.map(_._1): _*) {
+      views.foreach { case (name, fileIndex) =>
+        ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(fileIndex), tableMetadata))
+          .createOrReplaceTempView(name)
+      }
+      val cached = queries.map(spark.sql(_).persist())
+      try {
+        cached.foreach { dataset =>
+          dataset.count()
+          assertCacheLoading(dataset, expected = true)
+        }
+
+        val fs = rootPath.getFileSystem(spark.sessionState.newHadoopConf())
+        spark.sharedState.cacheManager.recacheByPath(
+          spark,
+          rootPath,
+          fs,
+          includeTimeTravel = false)
+
+        cached.foreach(assertCacheLoading(_, expected = false))
+      } finally {
+        cached.foreach(_.unpersist(blocking = true))
+      }
+    }
+  }
+
+  /**
+   * Caches a query that reads the table only at a pinned version, in its main plan and inside an
+   * IN subquery, then passes the materialized cache, the root path, and the file index to `f`.
+   */
+  private def withPinnedOnlyCacheWithSubquery(
+      f: (ClassicDataset[_], Path, TestFileIndex) => Unit): Unit = {
+    withTempDir { dir =>
+      val rootPath = new Path(dir.toURI)
+      val pinnedIndex = new TestFileIndex(isTimeTravel = true, rootPaths = Seq(rootPath))
+      withTempView("pinned") {
+        ClassicDataset.ofRows(spark, LogicalRelation(newFileRelation(pinnedIndex), tableMetadata))
+          .createOrReplaceTempView("pinned")
+        val cached = spark.sql("SELECT * FROM pinned WHERE id IN (SELECT id FROM pinned)").persist()
+        try {
+          cached.count()
+          assertCacheLoading(cached, expected = true)
+          f(cached, rootPath, pinnedIndex)
+        } finally {
+          cached.unpersist(blocking = true)
+        }
       }
     }
   }
