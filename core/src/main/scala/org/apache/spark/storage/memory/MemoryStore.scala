@@ -367,7 +367,24 @@ private[spark] class MemoryStore(
     val valuesHolder = new SerializedValuesHolder[T](blockId, chunkSize, classTag,
       memoryMode, serializerManager, checksum)
 
-    val res = putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
+    val putResult = try {
+      putIterator(blockId, values, classTag, memoryMode, valuesHolder)
+    } catch {
+      case t: Throwable =>
+        // Purposefully not using NonFatal: errors it does not match, such as an
+        // InterruptedException from a task kill, fail the task without killing the executor,
+        // so the holder's resources must be released for them too.
+        // On a normal return, ownership of the stream and buffers passes to the memory entry or
+        // to the PartiallySerializedBlock instead.
+        try {
+          valuesHolder.closeOnFailure()
+        } catch {
+          case cleanupError: Throwable if cleanupError ne t => t.addSuppressed(cleanupError)
+        }
+        throw t
+    }
+
+    val res = putResult match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         Left(new PartiallySerializedBlock(
@@ -759,14 +776,47 @@ private class SerializedValuesHolder[T](
     bbos.size
   }
 
+  // Whether `serializationStream` has been closed, so that `closeOnFailure()` does not close it
+  // again after `getBuilder()` did.
+  private[this] var serializationStreamClosed = false
+  // Whether the buffers in `bbos` have been handed to a memory entry or disposed of.
+  private[this] var buffersReleased = false
+
   override def getBuilder(): MemoryEntryBuilder[T] = new MemoryEntryBuilder[T] {
     // We successfully unrolled the entirety of this block
     serializationStream.close()
+    serializationStreamClosed = true
 
     override def preciseSize: Long = bbos.size
 
-    override def build(): MemoryEntry[T] =
+    override def build(): MemoryEntry[T] = {
+      buffersReleased = true
       SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
+    }
+  }
+
+  /**
+   * Releases the resources held by this holder after unrolling failed with an exception: closes
+   * the serialization stream, which frees resources such as native compression contexts, and
+   * disposes of the buffers written so far. It is a no-op for resources already handed off by
+   * `getBuilder()` or `build()`. It must not be called once this holder's stream and buffers have
+   * been handed to a [[PartiallySerializedBlock]].
+   */
+  def closeOnFailure(): Unit = {
+    try {
+      if (!serializationStreamClosed) {
+        serializationStreamClosed = true
+        // close() might write buffered data or end-of-stream markers, so discard that output.
+        redirectableStream.setOutputStream(OutputStream.nullOutputStream())
+        serializationStream.close()
+      }
+    } finally {
+      if (!buffersReleased) {
+        buffersReleased = true
+        bbos.close()
+        bbos.toChunkedByteBuffer.dispose()
+      }
+    }
   }
 }
 
