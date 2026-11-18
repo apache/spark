@@ -54,7 +54,7 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 // scalastyle:off nonascii
 @ExpressionDescription(
-  usage = """_FUNC_(sqlStmt[, mode[, current_catalog[, current_schema[, variables[, relations[, parameter_markers]]]]]]) - Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
+  usage = """_FUNC_(sqlStmt[, mode[, current_catalog[, current_schema[, current_path[, variables[, relations[, parameter_markers]]]]]]]) - Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
     returns a JSON array describing them so callers can inspect SQL text (lineage, statement
     kind, select-list types) without running the statements. Each object has 1-based
     character `start` and character `length` (Unicode code points; a single-code-point
@@ -94,6 +94,9 @@ import org.apache.spark.unsafe.types.UTF8String
       * current_schema - Optional schema for `ANALYZE` of this call only. Must be a constant
         string. NULL or omitted keeps the invoker's schema (or the catalog default when
         `current_catalog` is given). A schema that does not exist fails the outer query.
+      * current_path - Optional SQL path for `ANALYZE` of this call only, as in `SET PATH`.
+        Must be a constant string. NULL or omitted keeps the invoker's path. A blank path
+        uses the conf default path. The path feature is enabled for this call only.
       * variables - Optional constant array of `named_struct('name', ..., 'type', ...)`
         entries. Each name is a session variable that `ANALYZE` treats as declared with
         the DDL type; the variable is not created.
@@ -147,6 +150,7 @@ case class ParseSql(
     mode: Expression,
     currentCatalog: Expression,
     currentSchema: Expression,
+    currentPath: Expression,
     variables: Expression,
     relations: Expression,
     parameterMarkers: Expression)
@@ -165,6 +169,7 @@ case class ParseSql(
       mode,
       currentCatalog,
       currentSchema,
+      ParseSql.nullPath,
       ParseSql.nullVariables,
       ParseSql.nullRelations,
       ParseSql.nullParameterMarkers)
@@ -177,7 +182,9 @@ case class ParseSql(
   override def prettyName: String = "parse_sql"
 
   override def children: Seq[Expression] =
-    Seq(sqlStmt, mode, currentCatalog, currentSchema, variables, relations, parameterMarkers)
+    Seq(
+      sqlStmt, mode, currentCatalog, currentSchema, currentPath,
+      variables, relations, parameterMarkers)
 
   // Omit trailing NULL context arguments, so the generated column name for a call that
   // gives no context is unchanged. The defaults are NULL literals, possibly implicitly cast,
@@ -203,7 +210,7 @@ case class ParseSql(
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(4)(StringTypeWithCollation(supportsTrimCollation = true)) ++
+    Seq.fill(5)(StringTypeWithCollation(supportsTrimCollation = true)) ++
       Seq(ParseSql.variablesType, ParseSql.relationsType, ParseSql.parameterMarkersType)
 
   // ANALYZE reads the session catalog, so results are not context-independent.
@@ -297,6 +304,7 @@ case class ParseSql(
           ParseSqlAnalyzeContext(
             catalog = utf8Option(currentCatalog.eval(input)),
             schema = utf8Option(currentSchema.eval(input)),
+            path = utf8Option(currentPath.eval(input)),
             variables = ParseSql.decodeNameSpecArray(
               variables.eval(input), "variables", "type"),
             relations = ParseSql.decodeNameSpecArray(
@@ -320,9 +328,10 @@ case class ParseSql(
       mode = newChildren(1),
       currentCatalog = newChildren(2),
       currentSchema = newChildren(3),
-      variables = newChildren(4),
-      relations = newChildren(5),
-      parameterMarkers = newChildren(6))
+      currentPath = newChildren(4),
+      variables = newChildren(5),
+      relations = newChildren(6),
+      parameterMarkers = newChildren(7))
 }
 
 object ParseSql extends ExpressionBuilder {
@@ -339,6 +348,8 @@ object ParseSql extends ExpressionBuilder {
   val relationsType: DataType = ArrayType(relationEntryType, containsNull = false)
 
   val parameterMarkersType: DataType = variablesType
+
+  def nullPath: Expression = Literal.create(null, StringType)
 
   def nullVariables: Expression = Literal.create(null, variablesType)
 
@@ -382,7 +393,7 @@ object ParseSql extends ExpressionBuilder {
 
   /** Argument names in order, as they appear in error messages. */
   val parameterNames: Seq[String] = Seq(
-    "sqlStmt", "mode", "current_catalog", "current_schema",
+    "sqlStmt", "mode", "current_catalog", "current_schema", "current_path",
     "variables", "relations", "parameter_markers")
 
   override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
@@ -390,12 +401,13 @@ object ParseSql extends ExpressionBuilder {
     InputParameter("mode", Some(Literal("PARSE"))),
     InputParameter("current_catalog", Some(Literal.create(null, StringType))),
     InputParameter("current_schema", Some(Literal.create(null, StringType))),
+    InputParameter("current_path", Some(Literal.create(null, StringType))),
     InputParameter("variables", Some(nullVariables)),
     InputParameter("relations", Some(nullRelations)),
     InputParameter("parameter_markers", Some(nullParameterMarkers)))))
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    assert(expressions.size == 7)
+    assert(expressions.size == 8)
     ParseSql(
       expressions(0),
       expressions(1),
@@ -403,7 +415,8 @@ object ParseSql extends ExpressionBuilder {
       expressions(3),
       expressions(4),
       expressions(5),
-      expressions(6))
+      expressions(6),
+      expressions(7))
   }
 
   /** Register the builtin with a session function registry and the global builtin set. */

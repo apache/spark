@@ -38,7 +38,8 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryConte
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
 import org.apache.spark.sql.connector.catalog.{
-  AnalysisCatalogManager, CatalogManager, FunctionCatalog, Identifier, SupportsNamespaces
+  AnalysisCatalogManager, CatalogManager, FunctionCatalog, Identifier, PathElement,
+  SupportsNamespaces
 }
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -88,11 +89,12 @@ object ParseSqlMode {
 case class ParseSqlAnalyzeContext(
     catalog: Option[String] = None,
     schema: Option[String] = None,
+    path: Option[String] = None,
     variables: Seq[(String, String)] = Nil,
     relations: Seq[(String, String)] = Nil,
     parameterMarkers: Seq[(String, String)] = Nil) {
-  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty && variables.isEmpty &&
-    relations.isEmpty && parameterMarkers.isEmpty
+  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty && path.isEmpty &&
+    variables.isEmpty && relations.isEmpty && parameterMarkers.isEmpty
 }
 
 object ParseSqlAnalyzeContext {
@@ -181,11 +183,12 @@ object ParseSqlResult {
     }
     val session = ClassicSparkSession.getActiveSession
       .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
-    val analyzerOpt =
-      if (context.catalog.isEmpty && context.schema.isEmpty) {
-        None
+    val (analyzerOpt, callConf) =
+      if (context.catalog.isEmpty && context.schema.isEmpty && context.path.isEmpty) {
+        (None, None)
       } else {
-        Some(contextAnalyzer(session, context))
+        val (analyzer, conf) = contextAnalyzer(session, context)
+        (Some(analyzer), conf)
       }
     // Overlay names are canonicalized by the catalog manager the batch analyzes with.
     val analysisMgr = analyzerOpt.map(_.catalogManager)
@@ -215,7 +218,9 @@ object ParseSqlResult {
                 // Caller-supplied overlays eclipse the real objects for this statement only.
                 val (analyzed, error) = SuppliedVariableRegistry.create(variables).runWith {
                   SuppliedRelationRegistry.create(relations).runWith {
-                    analyze(session, analyzerOpt, plan, markers)
+                    inCallConf(callConf) {
+                      analyze(session, analyzerOpt, plan, markers)
+                    }
                   }
                 }
                 successJson(plan, analyzed, error, Some(session), span)
@@ -249,12 +254,22 @@ object ParseSqlResult {
   }
 
   /**
-   * The analyzer for one ANALYZE call with `current_catalog` / `current_schema` overrides.
-   * The session is not changed: the call gets its own catalog manager and v1 catalog.
+   * Run `f` under the call's conf when the call gives its own SQL path. The copy enables the
+   * path feature for this call only; the invoker's conf is not changed.
+   */
+  private def inCallConf[T](conf: Option[SQLConf])(f: => T): T = conf match {
+    case Some(c) => SQLConf.withExistingConf(c)(f)
+    case None => f
+  }
+
+  /**
+   * The analyzer for one ANALYZE call with `current_catalog` / `current_schema` /
+   * `current_path` overrides, and the conf to run it under when the call gives a path.
+   * The session is not changed: the call gets its own catalog manager, v1 catalog and conf.
    */
   private def contextAnalyzer(
       session: ClassicSparkSession,
-      context: ParseSqlAnalyzeContext): Analyzer = {
+      context: ParseSqlAnalyzeContext): (Analyzer, Option[SQLConf]) = {
     val state = session.sessionState
     val mgr = state.catalogManager
     val invokerCatalog = mgr.currentCatalog.name()
@@ -276,8 +291,46 @@ object ParseSqlResult {
     }
     val v1 = perCallSessionCatalog(session)
     if (isSession) v1.setCurrentDatabase(namespace.head)
-    state.analyzer.withCatalogManager(
-      new AnalysisCatalogManager(mgr, catalogName, namespace, v1))
+    val callConf = context.path.map { _ =>
+      val copy = state.conf.clone()
+      copy.setConf(SQLConf.PATH_ENABLED, true)
+      copy
+    }
+    val pathOverride = (context.path, callConf) match {
+      case (Some(path), Some(conf)) =>
+        // Expansion reads the call's own catalog and namespace, so it uses a manager for them.
+        val expansionMgr =
+          new AnalysisCatalogManager(mgr, catalogName, namespace, v1, Some(None))
+        callPathOverride(path, conf, expansionMgr)
+      case _ => None
+    }
+    val analyzer = state.analyzer.withCatalogManager(
+      new AnalysisCatalogManager(mgr, catalogName, namespace, v1, pathOverride))
+    (analyzer, callConf)
+  }
+
+  /**
+   * The SQL path of one call. A blank path clears it to the conf default, as `SET PATH`
+   * does. A path that expands to nothing does the same.
+   */
+  private def callPathOverride(
+      path: String,
+      conf: SQLConf,
+      mgr: CatalogManager): Option[Option[Seq[CatalogManager.SessionPathEntry]]] = {
+    if (path.trim.isEmpty) {
+      Some(None)
+    } else {
+      val elements = try {
+        parser.get().parsePathElements(path)
+      } catch {
+        case _: ParseException =>
+          throw QueryExecutionErrors.invalidParseSqlContext("current_path", path)
+      }
+      val expanded = PathElement.validateNoStaticDuplicates(
+        PathElement.expand(elements, conf, mgr),
+        conf.caseSensitiveAnalysis)
+      if (expanded.isEmpty) Some(None) else Some(Some(expanded))
+    }
   }
 
   private def checkedContextValue(parameter: String, value: String): String = {

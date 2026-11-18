@@ -395,6 +395,93 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE current_path override is restored on the invoker") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.PATH_ENABLED.key -> "true") {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val before = spark.sql("SELECT current_path()").head().getString(0)
+        val json = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT 1 AS a',
+            |  'ANALYZE',
+            |  current_path => 'system.builtin, spark_catalog.default')""".stripMargin)
+          .head().getString(0)
+        val analyzed = parse(json) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(analyzed \ "analyze_success" === JBool(true))
+        assert(spark.sql("SELECT current_path()").head().getString(0) === before)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("ANALYZE unqualified session variables follow the SQL path") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.PATH_ENABLED.key -> "true") {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val missedJson = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT v AS x',
+            |  'ANALYZE',
+            |  current_path => 'spark_catalog.default, system.builtin',
+            |  variables => array(named_struct(
+            |    'name', 'system.session.v',
+            |    'type', 'INT')))
+            |""".stripMargin).head().getString(0)
+        val miss = parse(missedJson) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(miss \ "analyze_success" === JBool(false))
+
+        val hitJson = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT v AS x',
+            |  'ANALYZE',
+            |  current_path => 'system.session, spark_catalog.default, system.builtin',
+            |  variables => array(named_struct(
+            |    'name', 'system.session.v',
+            |    'type', 'INT')))
+            |""".stripMargin).head().getString(0)
+        val hit = parse(hitJson) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(hit \ "analyze_success" === JBool(true))
+        assert(hit \ "select_list" === JArray(List(
+          JObject("name" -> JArray(List(JString("x"))), "type" -> jsonInt))))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("ANALYZE current_path does not change the path feature or the invoker's path") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val pathEnabled = spark.conf.get(SQLConf.PATH_ENABLED.key)
+      val before = spark.sql("SELECT current_path()").head().getString(0)
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT abs(-1) AS x',
+          |  'ANALYZE',
+          |  current_path => 'system.builtin')""".stripMargin).head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "analyze_success" === JBool(true))
+      assert(spark.conf.get(SQLConf.PATH_ENABLED.key) === pathEnabled)
+      assert(spark.sql("SELECT current_path()").head().getString(0) === before)
+    }
+  }
+
   test("ANALYZE reports range as system.builtin and de-duplicates count") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       withTable("parse_sql_dedup_t") {
