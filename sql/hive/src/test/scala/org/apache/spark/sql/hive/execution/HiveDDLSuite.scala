@@ -3674,6 +3674,41 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-57670: V2SessionCatalog alterTable keeps the collation on a Hive catalog") {
+    val v2SessionCatalog = new V2SessionCatalog(spark.sessionState.catalog)
+    withTable("t1") {
+      val identifier = Identifier.of(Array("default"), "t1")
+      v2SessionCatalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(Map(TableCatalog.PROP_COLLATION -> "UTF8_LCASE").asJava)
+          .withColumns(CatalogV2Util.structTypeToV2Columns(new StructType().add("a", IntegerType)))
+          .withPartitions(Array.empty)
+          .build()
+      )
+      val created = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(created.collation.contains("UTF8_LCASE"))
+      // Like the comment, Spark moves the collation out of the table parameters when it reads the
+      // table, so a property-only alter must not drop it.
+      assert(!created.properties.contains(TableCatalog.PROP_COLLATION))
+
+      v2SessionCatalog.alterTable(identifier, TableChange.setProperty("foo", "bar"))
+      val afterSet = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(afterSet.collation.contains("UTF8_LCASE"))
+      assert(afterSet.properties.get("foo").contains("bar"))
+
+      v2SessionCatalog.alterTable(identifier, TableChange.removeProperty("foo"))
+      val afterRemove = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      assert(afterRemove.collation.contains("UTF8_LCASE"))
+      assert(!afterRemove.properties.contains("foo"))
+
+      // A change that names the collation still applies.
+      v2SessionCatalog.alterTable(
+        identifier, TableChange.removeProperty(TableCatalog.PROP_COLLATION))
+      assert(spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1")).collation.isEmpty)
+    }
+  }
+
   test("SPARK-57835: read persisted nanos-typed tables when the preview flag is off") {
     withTable("nanos_ddl_tbl") {
       // Create the table with the preview flag on (the test default via Utils.isTesting).
