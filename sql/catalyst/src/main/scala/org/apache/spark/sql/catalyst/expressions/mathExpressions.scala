@@ -868,9 +868,15 @@ case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p,
   since = "1.4.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
+case class Rint(child: Expression) extends UnaryMathExpression(MathUtils.rint, "ROUND") {
   override def funcName: String = "rint"
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rint")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$mathUtils.rint($c)")
+  }
+
   override protected def withNewChildInternal(newChild: Expression): Rint = copy(child = newChild)
 }
 

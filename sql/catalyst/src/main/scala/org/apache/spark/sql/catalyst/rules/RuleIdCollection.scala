@@ -90,6 +90,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveEventTimeWatermark" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveExternalLookupHint" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveGroupByAll" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
@@ -102,6 +103,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveCursors" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveFetchCursor" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveBinBy" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveGapFill" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveAsOfJoin" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::

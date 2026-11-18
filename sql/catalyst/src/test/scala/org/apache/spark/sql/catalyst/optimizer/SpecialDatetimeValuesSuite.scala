@@ -139,4 +139,16 @@ class SpecialDatetimeValuesSuite extends PlanTest {
       testSpecialTs(TimestampNTZType, expected, zoneId)
     }
   }
+
+  test("SPARK-60032: a cast of a special value reads the current date unless it is 'epoch'") {
+    Seq(DateType, TimestampType, TimestampNTZType).foreach { dt =>
+      Seq("now", " Today ", "TOMORROW", "yesterday", "tomorrow CET").foreach { s =>
+        assert(SpecialDatetimeValues.readsCurrentDate(UTF8String.fromString(s), dt), s"$s $dt")
+      }
+      Seq("epoch", "now UTC", "2020-01-01", "12:00:00", "", "abc").foreach { s =>
+        assert(!SpecialDatetimeValues.readsCurrentDate(UTF8String.fromString(s), dt), s"$s $dt")
+      }
+    }
+    assert(!SpecialDatetimeValues.readsCurrentDate(UTF8String.fromString("now"), StringType))
+  }
 }

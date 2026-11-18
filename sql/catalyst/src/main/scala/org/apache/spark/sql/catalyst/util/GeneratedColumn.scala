@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, Table, TableCapability,
-  TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LogicalPlan}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, Table,
+  TableCapability, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField, StructType}
 
 /**
@@ -110,6 +113,26 @@ object GeneratedColumn {
   }
 
   /**
+   * Returns the generation expression of the V2 column `col`, if it is a generated column. A
+   * connector can implement only the legacy SQL getter [[Column.generationExpression]], which
+   * auto-fill reads as well, so fall back to it. Also retain that SQL when the new getter provides
+   * only a modeled expression.
+   */
+  def columnGenerationExpression(col: Column): Option[GenerationExpression] = {
+    Option(col.columnGenerationExpression())
+      .map { expression =>
+        if (expression.getSql != null) {
+          expression
+        } else {
+          Option(col.generationExpression())
+            .map(sql => new GenerationExpression(sql, expression.getExpression))
+            .getOrElse(expression)
+        }
+      }
+      .orElse(Option(col.generationExpression()).map(new GenerationExpression(_)))
+  }
+
+  /**
    * Whether the table supports generated columns on write (see
    * [[supportsGeneratedColumnsOnWrite]]) and the given columns include at least one generated
    * column.
@@ -118,33 +141,68 @@ object GeneratedColumn {
       table: Table,
       columns: Array[Column]): Boolean = {
     supportsGeneratedColumnsOnWrite(table) &&
-      columns.exists(_.columnGenerationExpression() != null)
+      columns.exists(columnGenerationExpression(_).isDefined)
   }
 
   /**
-   * Returns `relation`'s output with every generated column's generation expression recorded in
-   * the attribute's metadata, which is where [[TableOutputResolver]] looks when it auto-fills the
-   * generated columns a write does not provide a value for.
-   *
-   * Generation expressions are internal metadata: they should neither surface in a DataFrame's
-   * schema nor propagate into tables created from it. A table's V2 columns are the persisted form
-   * and the source of truth, so the write path copies the expression into plan attribute metadata
-   * only for as long as resolving the write takes.
-   *
-   * The output is returned unchanged if the table does not ask Spark to handle generated columns.
+   * Reads a generation expression for both auto-fill and validation. Convert the modeled expression
+   * once, falling back to SQL text when it is absent or cannot be converted, as defaults and CHECK
+   * constraints do. Conversion is deferred so presence checks do not read either form.
    */
-  def attachGenerationExpressions(relation: DataSourceV2Relation): Seq[AttributeReference] = {
-    if (!supportsGeneratedColumnsOnWrite(relation.table)) {
-      return relation.output
+  private[sql] class ExpressionReader(
+      relation: DataSourceV2Relation,
+      colName: String,
+      genExpr: GenerationExpression) {
+    private lazy val modeledExpression = Option(genExpr.getExpression).flatMap { expression =>
+      SQLConf.withExistingConf(StoredExpressionText.fixedConf(SQLConf.get)) {
+        V2ExpressionUtils.toCatalyst(expression)
+      }
     }
-    val genExprs = relation.table.columns()
-      .flatMap(col => Option(col.generationExpression()).map(col.name -> _))
-      .toMap
-    relation.output.map { attr =>
-      genExprs.get(attr.name) match {
-        case Some(genExpr) =>
-          withMetadataEntry(attr, GENERATION_EXPRESSION_METADATA_KEY, genExpr)
-        case None => attr
+
+    def toCatalyst(readSql: String => Expression = StoredExpressionText.parse): Expression = {
+      modeledExpression.orElse(Option(genExpr.getSql).map(readSql))
+        .getOrElse {
+          val operation = s"a value for the generated column ${toSQLId(colName)}, because " +
+            s"Spark cannot convert its expression ${genExpr.getExpression}"
+          // A relation of a TableProvider has no catalog and no identifier.
+          throw ((relation.catalog, relation.identifier) match {
+            case (Some(catalog), Some(ident)) =>
+              QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, operation)
+            case _ =>
+              QueryCompilationErrors.unsupportedTableOperationError(relation.table, operation)
+          })
+        }
+    }
+
+    def sql: String = modeledExpression.map(_.sql).getOrElse(genExpr.getSql)
+
+    /** Only SQL text may fall back to analysis under the writing session's settings. */
+    def analyze[E <: Expression](
+        expr: E,
+        inSession: => E,
+        input: Seq[Attribute],
+        analyzer: LogicalPlan => LogicalPlan): E = {
+      if (modeledExpression.isEmpty) {
+        StoredExpressionText.analyze(expr, inSession, input, analyzer)
+      } else {
+        try {
+          StoredExpressionText.analyzeStrict(expr, input, analyzer)
+        } catch {
+          case error: AnalysisException =>
+            val tableName = (relation.catalog, relation.identifier) match {
+              case (Some(catalog), Some(ident)) =>
+                toSQLId(Seq(catalog.name) ++ ident.namespace.toSeq :+ ident.name)
+              case _ => toSQLId(relation.table.name())
+            }
+            throw new AnalysisException(
+              errorClass = "INVALID_GENERATED_COLUMN_EXPRESSION",
+              messageParameters = Map(
+                "tableName" -> tableName,
+                "columnName" -> toSQLId(colName),
+                "expression" -> sql,
+                "reason" -> error.getMessage),
+              cause = Some(error))
+        }
       }
     }
   }

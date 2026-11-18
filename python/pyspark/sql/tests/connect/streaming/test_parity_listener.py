@@ -323,6 +323,54 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 q.stop()
 
 
+class StreamingListenerSessionStopTests(ReusedConnectTestCase):
+    @classmethod
+    def conf(cls):
+        conf = super().conf()
+        # ReusedConnectTestCase makes the server end every stream after 1 second or 123 bytes,
+        # so that the client reattaches. A reattach of the event stream after stop() fails for
+        # the released session, and the handler thread then clears the listeners itself before
+        # close() runs. With the defaults, the release ends the event stream, as on a server of
+        # the default configurations, and close() still has the listeners to remove.
+        conf.set("spark.connect.execute.reattachable.senderMaxStreamDuration", "2m")
+        conf.set("spark.connect.execute.reattachable.senderMaxStreamSize", "1g")
+        return conf
+
+    def test_stopped_session_with_listeners_is_collected_without_a_warning(self):
+        # stop() releases the session, which removes its server side listener, ends the event
+        # stream and the handler thread, and closes the client. SparkSession.__del__ then closes
+        # the listener bus, which must send no removal on the closed client, and so warn
+        # nothing, whatever the number of listeners is: close() removes every listener, and the
+        # removal of the last one is the one that would warn.
+        import gc
+        import os
+        import warnings
+        import weakref
+        from unittest import mock
+
+        for num_listeners in [1, 2]:
+            with self.subTest(num_listeners=num_listeners):
+                session = self.spark.newSession()
+                for _ in range(num_listeners):
+                    session.streams.addListener(TestListenerLocalV1())
+                thread = session.streams._sqlb._execution_thread
+                collected = weakref.ref(session)
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    with mock.patch.dict(os.environ):
+                        # In the local mode, stop() stops the local Connect server of this
+                        # suite too. Release only this session, and keep the server.
+                        os.environ.pop("SPARK_LOCAL_REMOTE", None)
+                        session.stop()
+                    thread.join(timeout=60)
+                    self.assertFalse(thread.is_alive())
+                    del session
+                    gc.collect()
+                    self.assertIsNone(collected())
+                messages = [str(w.message) for w in caught]
+                self.assertEqual([m for m in messages if "Failed to remove the listener" in m], [])
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 

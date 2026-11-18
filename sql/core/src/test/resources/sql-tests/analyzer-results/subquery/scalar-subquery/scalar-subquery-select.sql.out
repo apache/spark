@@ -513,6 +513,361 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 
 
 -- !query
+CREATE TEMPORARY VIEW t2_sketch AS SELECT t2a,
+    hll_sketch_agg(t2d) hll_sketch,
+    theta_sketch_agg(t2d) theta_sketch,
+    kll_sketch_agg_bigint(t2d) kll_sketch,
+    tuple_sketch_agg_double(t2d, t2f) tuple_sketch,
+    approx_top_k_accumulate(t2d) top_k_state
+FROM t2 GROUP BY t2a
+-- !query analysis
+CreateViewCommand `t2_sketch`, SELECT t2a,
+    hll_sketch_agg(t2d) hll_sketch,
+    theta_sketch_agg(t2d) theta_sketch,
+    kll_sketch_agg_bigint(t2d) kll_sketch,
+    tuple_sketch_agg_double(t2d, t2f) tuple_sketch,
+    approx_top_k_accumulate(t2d) top_k_state
+FROM t2 GROUP BY t2a, false, false, LocalTempView, UNSUPPORTED, true
+   +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+      +- SubqueryAlias t2
+         +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+            +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+               +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+                  +- SubqueryAlias t2
+                     +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+
+
+-- !query
+SELECT t1a,
+    (SELECT hll_sketch_estimate(hll_sketch_agg(t2d)) FROM t2 WHERE t2a = t1a) hll_sketch_agg,
+    (SELECT hll_sketch_estimate(hll_union_agg(hll_sketch)) FROM t2_sketch WHERE t2a = t1a)
+      hll_union_agg,
+    (SELECT count(s) FROM (SELECT hll_sketch_agg(t2d) s FROM t2 WHERE t2a = t1a)) nested_count
+FROM (SELECT DISTINCT t1a FROM t1)
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS hll_sketch_agg#xL, scalar-subquery#x [t1a#x] AS hll_union_agg#xL, scalar-subquery#x [t1a#x] AS nested_count#xL]
+:  :- Aggregate [hll_sketch_estimate(hll_sketch_agg(t2d#xL, 12, 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(t2d, 12))#xL]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :- Aggregate [hll_sketch_estimate(hll_union_agg(hll_sketch#x, false, 0, 0)) AS hll_sketch_estimate(hll_union_agg(hll_sketch, false))#xL]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2_sketch
+:  :        +- View (`t2_sketch`, [t2a#x, hll_sketch#x, theta_sketch#x, kll_sketch#x, tuple_sketch#x, top_k_state#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(hll_sketch#x as binary) AS hll_sketch#x, cast(theta_sketch#x as binary) AS theta_sketch#x, cast(kll_sketch#x as binary) AS kll_sketch#x, cast(tuple_sketch#x as binary) AS tuple_sketch#x, cast(top_k_state#x as struct<sketch:binary,maxItemsTracked:int,itemDataType:bigint,itemDataTypeDDL:string>) AS top_k_state#x]
+:  :              +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :                       +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :                          +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                             +- SubqueryAlias t2
+:  :                                +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  +- Aggregate [count(s#x) AS count(s)#xL]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Aggregate [hll_sketch_agg(t2d#xL, 12, 0, 0) AS s#x]
+:           +- Filter (t2a#x = outer(t1a#x))
+:              +- SubqueryAlias t2
+:                 +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:                    +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                       +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                          +- SubqueryAlias t2
+:                             +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Project [t1a#x]
+         +- SubqueryAlias t1
+            +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+               +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+                  +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+                     +- SubqueryAlias t1
+                        +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
+SELECT t1a,
+    (SELECT theta_sketch_estimate(theta_sketch_agg(t2d)) FROM t2 WHERE t2a = t1a)
+      theta_sketch_agg,
+    (SELECT theta_sketch_estimate(theta_union_agg(theta_sketch)) FROM t2_sketch WHERE t2a = t1a)
+      theta_union_agg,
+    (SELECT theta_sketch_estimate(theta_intersection_agg(theta_sketch))
+      FROM t2_sketch WHERE t2a = t1a) theta_intersection_agg
+FROM (SELECT DISTINCT t1a FROM t1)
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS theta_sketch_agg#xL, scalar-subquery#x [t1a#x] AS theta_union_agg#xL, scalar-subquery#x [t1a#x] AS theta_intersection_agg#xL]
+:  :- Aggregate [theta_sketch_estimate(theta_sketch_agg(t2d#xL, 12, 0, 0)) AS theta_sketch_estimate(theta_sketch_agg(t2d, 12))#xL]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :- Aggregate [theta_sketch_estimate(theta_union_agg(theta_sketch#x, 12, 0, 0)) AS theta_sketch_estimate(theta_union_agg(theta_sketch, 12))#xL]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2_sketch
+:  :        +- View (`t2_sketch`, [t2a#x, hll_sketch#x, theta_sketch#x, kll_sketch#x, tuple_sketch#x, top_k_state#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(hll_sketch#x as binary) AS hll_sketch#x, cast(theta_sketch#x as binary) AS theta_sketch#x, cast(kll_sketch#x as binary) AS kll_sketch#x, cast(tuple_sketch#x as binary) AS tuple_sketch#x, cast(top_k_state#x as struct<sketch:binary,maxItemsTracked:int,itemDataType:bigint,itemDataTypeDDL:string>) AS top_k_state#x]
+:  :              +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :                       +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :                          +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                             +- SubqueryAlias t2
+:  :                                +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  +- Aggregate [theta_sketch_estimate(theta_intersection_agg(theta_sketch#x, 0, 0)) AS theta_sketch_estimate(theta_intersection_agg(theta_sketch))#xL]
+:     +- Filter (t2a#x = outer(t1a#x))
+:        +- SubqueryAlias t2_sketch
+:           +- View (`t2_sketch`, [t2a#x, hll_sketch#x, theta_sketch#x, kll_sketch#x, tuple_sketch#x, top_k_state#x])
+:              +- Project [cast(t2a#x as string) AS t2a#x, cast(hll_sketch#x as binary) AS hll_sketch#x, cast(theta_sketch#x as binary) AS theta_sketch#x, cast(kll_sketch#x as binary) AS kll_sketch#x, cast(tuple_sketch#x as binary) AS tuple_sketch#x, cast(top_k_state#x as struct<sketch:binary,maxItemsTracked:int,itemDataType:bigint,itemDataTypeDDL:string>) AS top_k_state#x]
+:                 +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:                          +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                             +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                                +- SubqueryAlias t2
+:                                   +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Project [t1a#x]
+         +- SubqueryAlias t1
+            +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+               +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+                  +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+                     +- SubqueryAlias t1
+                        +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
+SELECT t1a,
+    (SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t2d)) FROM t2 WHERE t2a = t1a)
+      kll_sketch_agg_bigint,
+    (SELECT kll_sketch_get_n_float(kll_sketch_agg_float(t2e)) FROM t2 WHERE t2a = t1a)
+      kll_sketch_agg_float,
+    (SELECT kll_sketch_get_n_double(kll_sketch_agg_double(t2f)) FROM t2 WHERE t2a = t1a)
+      kll_sketch_agg_double,
+    (SELECT kll_sketch_get_n_bigint(kll_merge_agg_bigint(kll_sketch))
+      FROM t2_sketch WHERE t2a = t1a) kll_merge_agg_bigint
+FROM (SELECT DISTINCT t1a FROM t1)
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS kll_sketch_agg_bigint#xL, scalar-subquery#x [t1a#x] AS kll_sketch_agg_float#xL, scalar-subquery#x [t1a#x] AS kll_sketch_agg_double#xL, scalar-subquery#x [t1a#x] AS kll_merge_agg_bigint#xL]
+:  :- Aggregate [kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t2d#xL, None, 0, 0)) AS kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t2d))#xL]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :- Aggregate [kll_sketch_get_n_float(kll_sketch_agg_float(t2e#x, None, 0, 0)) AS kll_sketch_get_n_float(kll_sketch_agg_float(t2e))#xL]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :- Aggregate [kll_sketch_get_n_double(kll_sketch_agg_double(t2f#x, None, 0, 0)) AS kll_sketch_get_n_double(kll_sketch_agg_double(t2f))#xL]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  +- Aggregate [kll_sketch_get_n_bigint(kll_merge_agg_bigint(kll_sketch#x, None, 0, 0)) AS kll_sketch_get_n_bigint(kll_merge_agg_bigint(kll_sketch))#xL]
+:     +- Filter (t2a#x = outer(t1a#x))
+:        +- SubqueryAlias t2_sketch
+:           +- View (`t2_sketch`, [t2a#x, hll_sketch#x, theta_sketch#x, kll_sketch#x, tuple_sketch#x, top_k_state#x])
+:              +- Project [cast(t2a#x as string) AS t2a#x, cast(hll_sketch#x as binary) AS hll_sketch#x, cast(theta_sketch#x as binary) AS theta_sketch#x, cast(kll_sketch#x as binary) AS kll_sketch#x, cast(tuple_sketch#x as binary) AS tuple_sketch#x, cast(top_k_state#x as struct<sketch:binary,maxItemsTracked:int,itemDataType:bigint,itemDataTypeDDL:string>) AS top_k_state#x]
+:                 +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:                          +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                             +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                                +- SubqueryAlias t2
+:                                   +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Project [t1a#x]
+         +- SubqueryAlias t1
+            +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+               +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+                  +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+                     +- SubqueryAlias t1
+                        +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
+SELECT t1a,
+    (SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(t2d, t2f)) FROM t2 WHERE t2a = t1a)
+      tuple_sketch_agg_double,
+    (SELECT tuple_sketch_estimate_double(tuple_union_agg_double(tuple_sketch))
+      FROM t2_sketch WHERE t2a = t1a) tuple_union_agg_double,
+    (SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(tuple_sketch))
+      FROM t2_sketch WHERE t2a = t1a) tuple_intersection_agg_double
+FROM (SELECT DISTINCT t1a FROM t1)
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS tuple_sketch_agg_double#x, scalar-subquery#x [t1a#x] AS tuple_union_agg_double#x, scalar-subquery#x [t1a#x] AS tuple_intersection_agg_double#x]
+:  :- Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(t2d, t2f, 12, sum))#x]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :- Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(tuple_sketch#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(tuple_sketch, 12, sum))#x]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2_sketch
+:  :        +- View (`t2_sketch`, [t2a#x, hll_sketch#x, theta_sketch#x, kll_sketch#x, tuple_sketch#x, top_k_state#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(hll_sketch#x as binary) AS hll_sketch#x, cast(theta_sketch#x as binary) AS theta_sketch#x, cast(kll_sketch#x as binary) AS kll_sketch#x, cast(tuple_sketch#x as binary) AS tuple_sketch#x, cast(top_k_state#x as struct<sketch:binary,maxItemsTracked:int,itemDataType:bigint,itemDataTypeDDL:string>) AS top_k_state#x]
+:  :              +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :                       +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :                          +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                             +- SubqueryAlias t2
+:  :                                +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  +- Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(tuple_sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(tuple_sketch, sum))#x]
+:     +- Filter (t2a#x = outer(t1a#x))
+:        +- SubqueryAlias t2_sketch
+:           +- View (`t2_sketch`, [t2a#x, hll_sketch#x, theta_sketch#x, kll_sketch#x, tuple_sketch#x, top_k_state#x])
+:              +- Project [cast(t2a#x as string) AS t2a#x, cast(hll_sketch#x as binary) AS hll_sketch#x, cast(theta_sketch#x as binary) AS theta_sketch#x, cast(kll_sketch#x as binary) AS kll_sketch#x, cast(tuple_sketch#x as binary) AS tuple_sketch#x, cast(top_k_state#x as struct<sketch:binary,maxItemsTracked:int,itemDataType:bigint,itemDataTypeDDL:string>) AS top_k_state#x]
+:                 +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:                          +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                             +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                                +- SubqueryAlias t2
+:                                   +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Project [t1a#x]
+         +- SubqueryAlias t1
+            +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+               +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+                  +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+                     +- SubqueryAlias t1
+                        +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
+SELECT t1a,
+    (SELECT size(approx_top_k(t2d)) FROM t2 WHERE t2a = t1a) approx_top_k,
+    (SELECT size(approx_top_k_estimate(approx_top_k_accumulate(t2d))) FROM t2 WHERE t2a = t1a)
+      approx_top_k_accumulate,
+    (SELECT size(approx_top_k_estimate(approx_top_k_combine(top_k_state)))
+      FROM t2_sketch WHERE t2a = t1a) approx_top_k_combine
+FROM (SELECT DISTINCT t1a FROM t1)
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS approx_top_k#x, scalar-subquery#x [t1a#x] AS approx_top_k_accumulate#x, scalar-subquery#x [t1a#x] AS approx_top_k_combine#x]
+:  :- Aggregate [size(approx_top_k(t2d#xL, 5, 10000, 0, 0), false) AS size(approx_top_k(t2d, 5, 10000))#x]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :- Aggregate [size(approx_top_k_estimate(approx_top_k_accumulate(t2d#xL, 10000, 0, 0), 5), false) AS size(approx_top_k_estimate(approx_top_k_accumulate(t2d, 10000), 5))#x]
+:  :  +- Filter (t2a#x = outer(t1a#x))
+:  :     +- SubqueryAlias t2
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  :                 +- SubqueryAlias t2
+:  :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:  +- Aggregate [size(approx_top_k_estimate(approx_top_k_combine(top_k_state#x, -1, 0, 0), 5), false) AS size(approx_top_k_estimate(approx_top_k_combine(top_k_state, -1), 5))#x]
+:     +- Filter (t2a#x = outer(t1a#x))
+:        +- SubqueryAlias t2_sketch
+:           +- View (`t2_sketch`, [t2a#x, hll_sketch#x, theta_sketch#x, kll_sketch#x, tuple_sketch#x, top_k_state#x])
+:              +- Project [cast(t2a#x as string) AS t2a#x, cast(hll_sketch#x as binary) AS hll_sketch#x, cast(theta_sketch#x as binary) AS theta_sketch#x, cast(kll_sketch#x as binary) AS kll_sketch#x, cast(tuple_sketch#x as binary) AS tuple_sketch#x, cast(top_k_state#x as struct<sketch:binary,maxItemsTracked:int,itemDataType:bigint,itemDataTypeDDL:string>) AS top_k_state#x]
+:                 +- Aggregate [t2a#x], [t2a#x, hll_sketch_agg(t2d#xL, 12, 0, 0) AS hll_sketch#x, theta_sketch_agg(t2d#xL, 12, 0, 0) AS theta_sketch#x, kll_sketch_agg_bigint(t2d#xL, None, 0, 0) AS kll_sketch#x, tuple_sketch_agg_double(t2d#xL, t2f#x, 12, sum, 0, 0) AS tuple_sketch#x, approx_top_k_accumulate(t2d#xL, 10000, 0, 0) AS top_k_state#x]
+:                    +- SubqueryAlias t2
+:                       +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:                          +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                             +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                                +- SubqueryAlias t2
+:                                   +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Project [t1a#x]
+         +- SubqueryAlias t1
+            +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+               +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+                  +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+                     +- SubqueryAlias t1
+                        +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
+SELECT t1a,
+    (SELECT schema_of_variant_agg(parse_json(CAST(t2d AS STRING))) FROM t2 WHERE t2a = t1a)
+      schema_of_variant_agg
+FROM (SELECT DISTINCT t1a FROM t1)
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS schema_of_variant_agg#x]
+:  +- Aggregate [schema_of_variant_agg(parse_json(cast(t2d#xL as string), true), 0, 0) AS schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))#x]
+:     +- Filter (t2a#x = outer(t1a#x))
+:        +- SubqueryAlias t2
+:           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:              +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                    +- SubqueryAlias t2
+:                       +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Distinct
+      +- Project [t1a#x]
+         +- SubqueryAlias t1
+            +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+               +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+                  +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+                     +- SubqueryAlias t1
+                        +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
+SELECT count(DISTINCT t2a), count(DISTINCT t2b),
+    hll_sketch_estimate(hll_sketch_agg(t2d)),
+    schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))
+FROM t2 WHERE t2a = 'none'
+-- !query analysis
+Aggregate [count(distinct t2a#x) AS count(DISTINCT t2a)#xL, count(distinct t2b#x) AS count(DISTINCT t2b)#xL, hll_sketch_estimate(hll_sketch_agg(t2d#xL, 12, 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(t2d, 12))#xL, schema_of_variant_agg(parse_json(cast(t2d#xL as string), true), 0, 0) AS schema_of_variant_agg(parse_json(CAST(t2d AS STRING)))#x]
++- Filter (t2a#x = none)
+   +- SubqueryAlias t2
+      +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+         +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+            +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+               +- SubqueryAlias t2
+                  +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+
+
+-- !query
+SELECT t1a, (SELECT hll_sketch_agg(t2d, 30) FROM t2 WHERE t2a = t1a) FROM t1 WHERE false
+-- !query analysis
+Project [t1a#x, scalar-subquery#x [t1a#x] AS scalarsubquery(t1a)#x]
+:  +- Aggregate [hll_sketch_agg(t2d#xL, 30, 0, 0) AS hll_sketch_agg(t2d, 30)#x]
+:     +- Filter (t2a#x = outer(t1a#x))
+:        +- SubqueryAlias t2
+:           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
+:              +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
+:                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
+:                    +- SubqueryAlias t2
+:                       +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
++- Filter false
+   +- SubqueryAlias t1
+      +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
+         +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
+            +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+               +- SubqueryAlias t1
+                  +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
+
+
+-- !query
 SELECT t1c, (SELECT t1c) FROM t1
 -- !query analysis
 Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#x]

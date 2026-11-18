@@ -20,7 +20,9 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.InSubquery
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   import testImplicits._

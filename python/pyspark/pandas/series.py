@@ -57,7 +57,7 @@ from pandas.api.types import (
 )
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
 from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
-from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
+from pandas.tseries.offsets import DateOffset
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark._globals import _NoValue, _NoValueType
