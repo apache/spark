@@ -66,6 +66,10 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // SQL Server rounds MONEY and SMALLMONEY (read as DECIMAL) when casting to an integral type.
+  // ROUND with a nonzero third argument truncates instead.
+  override def truncateFractionalValue(expr: String): String = s"ROUND($expr, 0, 1)"
+
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
     override protected def predicateToIntSQL(input: String): String =
       "IIF(" + input + ", 1, 0)"

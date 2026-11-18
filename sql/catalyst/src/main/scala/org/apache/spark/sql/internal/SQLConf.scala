@@ -7775,6 +7775,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN =
+    buildConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled")
+      .internal()
+      .doc("When true, casts pushed down to a JDBC data source compile to the SQL that Spark 4.3 " +
+        "sent. A cast from a fractional type to an integral type then follows the database's own " +
+        "semantics, so databases that round it return different results than Spark, which " +
+        "truncates toward zero. Casts from datetime types to integral types are pushed down " +
+        "again, although databases convert them differently than Spark. Casts that the database " +
+        "rejects fail again, or, in an aggregate, are evaluated by Spark.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_JDBC_TIME_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.jdbc.timeMapping.enabled")
       .internal()
@@ -10301,6 +10315,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyJdbcTimeMappingEnabled: Boolean =
     getConf(LEGACY_JDBC_TIME_MAPPING_ENABLED)
+
+  def legacyJdbcRoundIntegralCastPushdown: Boolean =
+    getConf(LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
     getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)

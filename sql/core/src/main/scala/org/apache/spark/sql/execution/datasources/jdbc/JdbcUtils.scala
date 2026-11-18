@@ -1255,4 +1255,21 @@ object JdbcUtils extends Logging with SQLConfHelper {
       conn.close()
     }
   }
+
+  private val scopedLegacyIntegralCastPushdown = new ThreadLocal[Option[Boolean]] {
+    override def initialValue: Option[Boolean] = None
+  }
+
+  // Whether pushed casts compile to the SQL Spark 4.3 sent. Inside
+  // `withLegacyIntegralCastPushdown`, the value passed there instead of the conf.
+  private[sql] def legacyIntegralCastPushdown: Boolean =
+    scopedLegacyIntegralCastPushdown.get.getOrElse(conf.legacyJdbcRoundIntegralCastPushdown)
+
+  // Tasks compile pushed predicates under the value pushdown used, so none drops out of the
+  // WHERE clause.
+  private[sql] def withLegacyIntegralCastPushdown[T](value: Boolean)(f: => T): T = {
+    val old = scopedLegacyIntegralCastPushdown.get
+    scopedLegacyIntegralCastPushdown.set(Some(value))
+    try f finally scopedLegacyIntegralCastPushdown.set(old)
+  }
 }

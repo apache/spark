@@ -78,6 +78,14 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
+  override def roundsIntegralCast: Boolean = true
+
+  // Only DECIMAL to BIGINT casts always fit MySQL's SIGNED.
+  override def pushesIntegralCast(col: String, target: String): Boolean =
+    col == "decimal_col" && target == "BIGINT"
+
+  // MySQL has no INTEGER or BIGINT CAST target.
+  override def acceptsLegacyIntegralCast(target: String): Boolean = false
 
   case class JdbcClientTypes(INTEGER: String, STRING: String)
 

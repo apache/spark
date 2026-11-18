@@ -40,6 +40,9 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new PostgresDatabaseOnDocker
+  override def roundsIntegralCast: Boolean = true
+  // Spark 4.3 spelled a BIGINT cast target `long`, which Postgres rejects.
+  override def acceptsLegacyIntegralCast(target: String): Boolean = target != "BIGINT"
 
   object JdbcClientTypes {
     val INTEGER = "int4"

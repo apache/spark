@@ -459,10 +459,41 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      val databaseTypeDefinition =
-        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
-      s"CAST($expr AS $databaseTypeDefinition)"
+      val mappedType = getJDBCType(dataType).map(_.databaseTypeDefinition)
+      val legacyIntegralCastPushdown = JdbcUtils.legacyIntegralCastPushdown
+      if (!legacyIntegralCastPushdown && exprDataType.isInstanceOf[DatetimeType] &&
+          dataType.isInstanceOf[IntegralType]) {
+        // Spark and databases convert datetimes to numbers differently.
+        cannotPushCast(exprDataType, dataType)
+      }
+      if (!legacyIntegralCastPushdown && isFractionalToIntegral(exprDataType, dataType)) {
+        val databaseTypeDefinition = mappedType.getOrElse(dataType match {
+          // Spark's names `short` and `long` aren't valid SQL types. TINYINT isn't portable either,
+          // so ByteType keeps Spark's name.
+          case ShortType => "SMALLINT"
+          case IntegerType => "INTEGER"
+          case LongType => "BIGINT"
+          case _ => dataType.typeName
+        })
+        s"CAST(${truncateFraction(expr, exprDataType)} AS $databaseTypeDefinition)"
+      } else {
+        s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
+      }
     }
+
+    protected def isFractionalToIntegral(from: DataType, to: DataType): Boolean =
+      from.isInstanceOf[FractionalType] && to.isInstanceOf[IntegralType]
+
+    // `expr`, of fractional type `from`, truncated toward zero for a cast to an integral type.
+    // Spark truncates the fraction, but many databases round.
+    protected def truncateFraction(expr: String, from: DataType): String = from match {
+      case d: DecimalType if d.scale == 0 => expr
+      case _ => truncateFractionalValue(expr)
+    }
+
+    protected def cannotPushCast(from: DataType, to: DataType): Nothing =
+      throw new UnsupportedOperationException(
+        s"Cannot cast $from to $to without changing the result")
 
     override def visitSQLFunction(funcName: String, inputs: Array[Expression]): String = {
       if (isSupportedFunction(funcName)) {
@@ -543,6 +574,17 @@ abstract class JdbcDialect extends Serializable with Logging {
       }
     }
   }
+
+  /**
+   * Truncates `expr` toward zero, so that a cast from a fractional type to an integral type that
+   * is pushed down matches Spark, which truncates rather than rounds. Dialects for databases that
+   * round such casts override this with the database's truncating function. The default returns
+   * `expr` unchanged, for databases whose cast already truncates like Spark.
+   * @param expr The SQL string of the value being cast.
+   * @return The SQL string to cast instead of `expr`.
+   */
+  @Since("4.4.0")
+  def truncateFractionalValue(expr: String): String = expr
 
   /**
    * Returns whether the database supports function.
