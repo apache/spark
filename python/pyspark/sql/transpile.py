@@ -627,10 +627,7 @@ class CatalystTranspiler(AbstractTranspiler):
             # the same category (checked above) or a None literal -- not an operand
             # whose category is merely unknown, which could be anything.
             other = right_node if _is_complex_cat(lc) else left_node
-            if not (
-                _is_equatable_array_cat(lc or rc)
-                and (lc == rc or _is_none_literal(other))
-            ):
+            if not (_is_equatable_array_cat(lc or rc) and (lc == rc or _is_none_literal(other))):
                 raise UnsupportedOperationException(
                     f"`==`/`!=` has a `map`/`array` operand ({lc} vs {rc}); Spark's "
                     "`=` fails analysis or diverges from Python there, so the "
