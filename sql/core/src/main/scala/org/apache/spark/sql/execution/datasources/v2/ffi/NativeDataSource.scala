@@ -1434,7 +1434,8 @@ private[ffi] object NativeTask {
    *             task ended: an engine may read the stream of a partition then, and a thread that
    *             the task does not wait for may be in get_next once it completes, as with
    *             `PipedRDD`. `is_interrupted` then also reports that the task failed, or that it
-   *             started to complete, which is when the task may wait for such a thread, and the
+   *             started to complete, which is when the task may stop and wait for a thread that
+   *             reads its input on its own, such as the writer of a pipelined Python UDF, and the
    *             context does not keep the task alive. A data writer only runs within its task,
    *             whose kill `is_interrupted` reports. Outside of a task, it reports nothing. The
    *             reader of a read can also make it true, see `NativeLibrary.Task.stop`.
