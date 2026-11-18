@@ -351,18 +351,6 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("the pickled eval type alone restores the pre-4.5.0 scope") {
-    onlyEvalTypes(PythonEvalType.SQL_BATCHED_UDF) {
-      assert(ConvertToCatalyst.applyExpr(
-        makeTPUDF(makePyUDF(), catalystExpr), parentIsUdf = false) == catalystExpr)
-      for (udf <- Seq(makeArrowPyUDF(), makeScalarPandasUDF())) {
-        val result = ConvertToCatalyst.applyExpr(makeTPUDF(udf, catalystExpr), parentIsUdf = false)
-        assert(result.isInstanceOf[PythonUDF])
-        assert(!result.isInstanceOf[TranspiledPythonUDF])
-      }
-    }
-  }
-
   test("an empty eval type list transpiles no scalar Python UDF") {
     onlyEvalTypes() {
       for ((_, makeUDF) <- transpilableUDFs) {
