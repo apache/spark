@@ -40,8 +40,7 @@ object PipelinesTableProperties {
   /**
    * Internal table property recording, as a sorted JSON string array (see
    * [[JsonStringArrayCodec]]), the keys of the table properties declared in the dataset definition
-   * (SQL `TBLPROPERTIES`, Python `table_properties`) as of the latest materialization. This is the
-   * one place that states the removal rule; other code and docs point here.
+   * (SQL `TBLPROPERTIES`, Python `table_properties`) as of the latest materialization.
    *
    * What is recorded: the declared keys, except the reserved catalog properties other than
    * `comment` (`provider`, `location`, `owner`, ...; the SQL parser rejects them in
