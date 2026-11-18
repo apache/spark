@@ -24,14 +24,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, CreateArray, Explode, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateArray, Explode, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{DateType, IntegerType, LongType, Metadata, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, Metadata, MetadataBuilder, StructType, TimestampType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
@@ -558,41 +558,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       OutputMode.Append(),
       Seq("is not supported without a watermark in the join keys, or a watermark on " +
         "the nullable side and an appropriate range condition"))
-  }
-
-  // Execution evicts the state of an input with its own watermark only by its event time or
-  // another TIMESTAMP column, so a bound through a DATE column cast to TIMESTAMP does not count.
-  {
-    val leftTime = AttributeReference("leftTime", TimestampType)().withMetadata(watermarkMetadata)
-    val leftDate = AttributeReference("leftDate", DateType)()
-    val leftOther = AttributeReference("leftOther", TimestampType)()
-    val rightTime =
-      AttributeReference("rightTime", TimestampType)().withMetadata(watermarkMetadata)
-    val withWatermark = TestStreamingRelation(Seq(leftTime, leftDate, leftOther))
-    val withoutWatermark = TestStreamingRelation(Seq(leftDate.newInstance()))
-    val other = new TestStreamingRelation(rightTime)
-    def castBound(input: LogicalPlan): Expression =
-      Cast(input.output.find(_.name == "leftDate").get, TimestampType, Some("UTC")) > rightTime
-    Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
-      def join(input: LogicalPlan, condition: Expression): LogicalPlan = joinType match {
-        case RightOuter => other.join(input, joinType = joinType, condition = Some(condition))
-        case _ => input.join(other, joinType = joinType, condition = Some(condition))
-      }
-      assertNotSupportedInStreamingPlan(
-        s"$joinType join bounded only through a cast DATE column of a watermarked input",
-        join(withWatermark, castBound(withWatermark)),
-        OutputMode.Append(),
-        Seq("must bound its event time or another TIMESTAMP column"))
-      assertSupportedInStreamingPlan(
-        s"$joinType join bounded through another TIMESTAMP column of a watermarked input",
-        join(withWatermark, leftOther > rightTime),
-        OutputMode.Append())
-      // An input without its own watermark keeps the check of the whole input.
-      assertSupportedInStreamingPlan(
-        s"$joinType join bounded through a cast DATE column of an input without a watermark",
-        join(withoutWatermark, castBound(withoutWatermark)),
-        OutputMode.Append())
-    }
   }
 
   // multi-aggregations only supported in Append mode

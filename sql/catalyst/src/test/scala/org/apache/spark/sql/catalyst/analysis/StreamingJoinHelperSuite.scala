@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Cast, Expression, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, LongType, MetadataBuilder, TimestampNTZType, TimestampType}
 
 class StreamingJoinHelperSuite extends AnalysisTest {
 
@@ -73,6 +73,21 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     }
     assert(!logAppender.loggingEvents.exists(
       _.getMessage.getFormattedMessage.contains("Error trying to extract state constraint")))
+  }
+
+  test("state value watermark column prefers the event time and takes only TIMESTAMP columns") {
+    val metadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 1000).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = metadata)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val leftNtz = AttributeReference("leftNtz", TimestampNTZType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = metadata)()
+    def column(condition: Expression): Option[Attribute] =
+      StreamingJoinHelper.getStateValueWatermarkColumn(Seq(expiry, leftTime, leftNtz),
+        AttributeSet(Seq(rightTime)), Some(condition), Some(10000L)).map(_._1)
+    // expiry comes first in input order, but state format 4 probes by the event time.
+    assert(column(expiry > rightTime && leftTime > rightTime) === Some(leftTime))
+    assert(column(expiry > rightTime) === Some(expiry))
+    assert(column(Cast(leftNtz, TimestampType, Some("UTC")) > rightTime) === None)
   }
 
   test("extract watermark from time condition") {

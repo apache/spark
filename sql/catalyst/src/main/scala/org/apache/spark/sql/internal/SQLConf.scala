@@ -4405,9 +4405,10 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("How state format version 4 of stream-stream joins orders the state of an input that " +
         "it evicts by a range condition. 0: by the event time of the input, as in 4.3 and " +
-        "earlier. 1: by the column that the condition bounds. A streaming query keeps the " +
-        "version recorded in its checkpoint, and one restarted from a checkpoint without it uses " +
-        "0, which fails for a join whose condition bounds another column.")
+        "earlier and with spark.sql.streaming.statefulOperator.allowMultiple set to false. 1: by " +
+        "the column that the condition bounds. A streaming query keeps the version recorded in " +
+        "its checkpoint, and one restarted from a checkpoint without it uses 0. With 0, a join " +
+        "whose condition does not bound the event time of such an input fails to restart.")
       .version("4.4.0")
       .intConf
       .checkValue(v => v == 0 || v == 1, "Valid versions are 0 and 1")

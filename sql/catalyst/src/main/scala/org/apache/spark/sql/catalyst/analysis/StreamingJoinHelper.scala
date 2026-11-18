@@ -129,8 +129,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       joinCondition: Option[Expression],
       eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
     val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
+    val references = joinCondition.map(_.references).getOrElse(AttributeSet.empty)
     val candidates = eventTime.toSeq ++ inputAttributes.filter { a =>
-      a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a))
+      a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a)) &&
+        references.contains(a)
     }
     candidates.iterator.flatMap { a =>
       getStateValueWatermark(AttributeSet(a), attributesWithEventWatermark, joinCondition,
