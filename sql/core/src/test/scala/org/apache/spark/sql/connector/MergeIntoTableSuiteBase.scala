@@ -2484,6 +2484,60 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-61935: merge checks NOT NULL for a Scala UDF with a primitive input") {
+    withTempView("source") {
+      withUserDefinedFunction("plus1" -> true) {
+        // the UDF is not nullable, but it returns NULL for NULL input as its input is primitive
+        spark.udf.register("plus1", (x: Int) => x + 1)
+        createAndInitTable("pk INT NOT NULL, salary INT NOT NULL, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin)
+
+        Seq((1, None), (2, Some(201)), (3, Some(301))).toDF("pk", "salary")
+          .createOrReplaceTempView("source")
+
+        // the only inserted row has a non-NULL input
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, plus1(s.salary), 'new')
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, 100, "hr") :: Row(2, 200, "software") :: Row(3, 302, "new") :: Nil)
+
+        val e = intercept[SparkRuntimeException] {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = plus1(s.salary)
+               |""".stripMargin)
+        }
+        assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+
+        // with ANSI off, the implicit cast of a malformed string to the primitive input is NULL
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          val e2 = intercept[SparkRuntimeException] {
+            sql(
+              s"""MERGE INTO $tableNameAsString t
+                 |USING source s
+                 |ON t.pk = s.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET salary = plus1('x')
+                 |""".stripMargin)
+          }
+          assert(e2.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+        }
+      }
+    }
+  }
+
   test("merge with NOT NULL checks") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
