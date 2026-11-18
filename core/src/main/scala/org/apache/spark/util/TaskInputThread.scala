@@ -172,15 +172,7 @@ private[spark] object TaskInputThread extends Logging {
       try {
         tryStop(force = false)
         if (wasStarted) {
-          if (thread eq Thread.currentThread()) {
-            // The thread that marks a task completed runs its pre-completion listeners, so this
-            // should not happen. If it does, the thread can only stop after this returns.
-            logError(log"The listeners of ${MDC(TASK_NAME, taskName)} run on the thread " +
-              log"${MDC(THREAD_NAME, thread.getName)}, which reads the input of the task; not " +
-              log"waiting for it, which may lead to a use-after-free.")
-          } else {
-            await()
-          }
+          await()
         }
       } finally {
         Thread.interrupted()
