@@ -237,6 +237,9 @@ abstract class StreamExecution(
         // TODO(SPARK-61997): Spark Connect builds the Python foreach writer on the request
         //  thread, under the artifact state of the session that starts the query, so its Python
         //  worker does not see the files of this stream's session yet.
+        // TODO(SPARK-61998): With artifact isolation on, each run gives its Python workers its
+        //  own artifact UUID, so each executor that runs its Python tasks keeps one more Python
+        //  worker pool until it stops.
         if (sparkSessionForStream.sessionState.conf.getConf(
             SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED)) {
           JobArtifactSet.withActiveJobArtifactState(sparkSessionForStream.artifactManager.state) {
