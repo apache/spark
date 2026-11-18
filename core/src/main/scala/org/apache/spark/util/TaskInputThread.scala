@@ -222,8 +222,14 @@ private[spark] object TaskInputThread extends Logging {
             tryStop(force = true)
             interruptThread()
           } else if (untilWarning <= 0) {
-            warn(startNs, withStackTrace = !warned)
-            warned = true
+            if (warned) {
+              logWarning(stillReading(startNs))
+            } else {
+              val stack = new Exception(s"Stack trace of thread ${thread.getName}")
+              stack.setStackTrace(thread.getStackTrace)
+              logWarning(stillReading(startNs), stack)
+              warned = true
+            }
             interruptThread()
             lastWarningNs = System.nanoTime()
           } else {
@@ -249,16 +255,6 @@ private[spark] object TaskInputThread extends Logging {
       log"The thread ${MDC(THREAD_NAME, thread.getName)} still reads the input of " +
         log"${MDC(TASK_NAME, taskName)} ${MDC(TOTAL_TIME, waitedMs)} ms after the task " +
         log"completed, which waits for it before its completion listeners run."
-    }
-
-    private def warn(startNs: Long, withStackTrace: Boolean): Unit = {
-      if (withStackTrace) {
-        val stack = new Exception(s"Stack trace of thread ${thread.getName}")
-        stack.setStackTrace(thread.getStackTrace)
-        logWarning(stillReading(startNs), stack)
-      } else {
-        logWarning(stillReading(startNs))
-      }
     }
   }
 }
