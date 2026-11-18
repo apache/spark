@@ -2629,15 +2629,10 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     // Combining a condition written after a non-deterministic or throwable one evaluates it ahead
     // of that one, so it must also be unable to fail. `throwable` does not report e.g. a division
     // by zero in ANSI mode, which the condition before it may have kept from being evaluated.
-    // Nor may it read a column that can fail (see `failableOutput`).
+    // Nor may it read a column that can fail (see `splitMovable`).
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (leading, following) =
-        splitConjunctivePredicates(fc).span(p => p.deterministic && !p.throwable)
-      lazy val failable = failableOutput(grandChild)
-      val (cannotFail, rest) = following.partition { p =>
-        ExprUtils.canEvaluateUnconditionally(p) && !p.references.exists(failable.contains)
-      }
-      val mergedFilter = (ExpressionSet(leading ++ cannotFail) --
+      val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild))
+      val mergedFilter = (ExpressionSet(movable) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
