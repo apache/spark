@@ -2261,20 +2261,27 @@ case class JsonToStructs(
     } else {
       ALL_FALLBACK
     }
+    // Irrelevant implicit defaults also use true as their comparison key. Enabled fallback,
+    // including automatic fallback without formats, therefore needs no schema relevance walk.
+    val enabledFallback = useCapturedOptionDefaults && !explicitFallback &&
+      (enableDateTimeParsingFallback.contains(true) ||
+        (enableDateTimeParsingFallback.isEmpty && formattedTypes == 0))
     // Usually the first DATE/TIMESTAMP establishes relevance. For an unset capture with just
     // one format, keep searching until that formatted type is found or the schema is exhausted.
-    val types = if (explicitFallback) 0 else {
+    val types = if (explicitFallback || enabledFallback) 0 else {
       fallbackTypes(schema, if (formattedTypes == 0) ALL_FALLBACK else formattedTypes)
     }
-    val relevant = types != 0
+    val relevant = enabledFallback || types != 0
     val capturedFallback = if (relevant && useCapturedOptionDefaults) {
       // Automatic fallback and true agree if no present sensitive type has its own format.
       // Normalize only the comparison key, preserving the original execution snapshot.
-      if ((types & formattedTypes) == 0) {
+      if (enabledFallback || (types & formattedTypes) == 0) {
         enableDateTimeParsingFallback.orElse(Some(true))
       } else {
         enableDateTimeParsingFallback
       }
+    } else if (!relevant && !explicitFallback) {
+      Some(true)
     } else {
       None
     }

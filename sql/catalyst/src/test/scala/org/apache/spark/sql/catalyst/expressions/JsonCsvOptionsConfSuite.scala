@@ -177,6 +177,26 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("default JSON fallback canonicalization avoids scanning a shared wide schema") {
+    val inspections = new AtomicInteger
+    val fields = (0 until 128).map(i => StructField(s"n$i", LongType)).toArray
+    val schema = new StructType(fields) {
+      override def iterator: Iterator[StructField] = super.iterator.map { field =>
+        inspections.incrementAndGet()
+        field
+      }
+    }
+    val options = Seq(Map.empty[String, String], Map("mode" -> "PERMISSIVE"))
+    for (parameters <- options; fallback <- Seq(None, Some(true)); ordinal <- 0 until 4) {
+      val parser = JsonToStructs(schema, parameters,
+        BoundReference(ordinal, StringType, nullable = false), Some("UTC"),
+        enableDateTimeParsingFallback = fallback, useCapturedOptionDefaults = true)
+      parser.semanticHash()
+      assert(parser.enableDateTimeParsingFallback == fallback)
+    }
+    assert(inspections.get() == 0)
+  }
+
   test("ineffective from_json defaults preserve conversion sharing") {
     val input = BoundReference(0, StringType, nullable = false)
     val schema = new StructType().add("ts", TimestampType)
@@ -191,11 +211,16 @@ class JsonCsvOptionsConfSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(equivalents.getCommonSubexpressions.size == 1)
 
     val independentTypes = Seq(IntegerType, TimestampNTZType, new ExampleBaseTypeUDT)
-    independentTypes.foreach { dataType =>
+    val formats = Seq(Map.empty[String, String], Map("dateFormat" -> "yyyy/MM/dd"),
+      Map("timestampFormat" -> "yyyy/MM/dd HH:mm:ss"))
+    for (dataType <- independentTypes; options <- formats) {
       val nested = new StructType().add("v", ArrayType(MapType(StringType, dataType)))
-      val parser = JsonToStructs(nested, Map.empty, input, Some("UTC"))
-      assert(parser.copy(enableDateTimeParsingFallback = Some(true)).semanticEquals(
-        parser.copy(enableDateTimeParsingFallback = Some(false))))
+      val parser = JsonToStructs(nested, options, input, Some("UTC"),
+        enableDateTimeParsingFallback = None, useCapturedOptionDefaults = true)
+      for (fallback <- Seq(None, Some(true), Some(false)); mode <- Seq(true, false)) {
+        assertShared(parser, parser.copy(enableDateTimeParsingFallback = fallback,
+          useCapturedOptionDefaults = mode))
+      }
     }
 
     class TimestampUDT extends UserDefinedType[java.sql.Timestamp] {
