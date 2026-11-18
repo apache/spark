@@ -118,6 +118,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     connection.prepareStatement(
       "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
       .executeUpdate()
+    connection.prepareStatement(
+      "CREATE TABLE ts_filter (id INT, dt DATETIME, ts TIMESTAMP NULL)").executeUpdate()
+    timestampFilterRows.foreach { case (id, ts) =>
+      connection.prepareStatement(
+        s"INSERT INTO ts_filter VALUES ($id, '$ts', '$ts+00:00')").executeUpdate()
+    }
   }
 
   override def dataPreparation(connection: Connection): Unit = {
@@ -198,6 +204,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def supportListIndexes: Boolean = true
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
+
+  override def timestampFilterColumns: Seq[String] = Seq("dt", "ts")
 
   test("SPARK-42943: Use LONGTEXT instead of TEXT for StringType for effective length") {
     val tableName = catalogName + ".t1"

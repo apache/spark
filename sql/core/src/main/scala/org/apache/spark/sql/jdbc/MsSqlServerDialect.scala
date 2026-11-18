@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.SQLException
+import java.time.Instant
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -51,6 +52,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def compileValue(value: Any): Any = value match {
     case booleanValue: Boolean => if (booleanValue) 1 else 0
     case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("0x", "", "")
+    // datetimeoffset reads zoneless text as UTC and datetime2 as JVM wall clock; the literal
+    // cannot tell them apart, so keep the session-zone text.
+    case instantValue: Instant => compileInstantInSessionZone(instantValue)
     case other => super.compileValue(other)
   }
 

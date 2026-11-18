@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import java.util
 import java.util.Locale
 import java.util.ServiceLoader
@@ -399,16 +399,23 @@ abstract class JdbcDialect extends Serializable with Logging {
       val timestampFormatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
       s"'${timestampFormatter.format(timestampValue)}'"
+    case timestampValue: Instant if SQLConf.get.legacyJdbcSessionZoneTimestampLiteral =>
+      compileInstantInSessionZone(timestampValue)
     case timestampValue: Instant =>
-      val timestampFormatter = TimestampFormatter.getFractionFormatter(
-        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"'${timestampFormatter.format(timestampValue)}'"
+      // JVM-zone wall clock, the zone JDBC drivers use for zoneless values (as with java8API off).
+      compileInstant(timestampValue, ZoneId.systemDefault())
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("X'", "", "'")
     case _ => value
   }
+
+  private[jdbc] def compileInstantInSessionZone(value: Instant): String =
+    compileInstant(value, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+
+  private def compileInstant(value: Instant, zoneId: ZoneId): String =
+    s"'${TimestampFormatter.getFractionFormatter(zoneId).format(value)}'"
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     // SPARK-53454: Produce portable SQL for AlwaysTrue/AlwaysFalse predicates.

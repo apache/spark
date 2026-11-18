@@ -134,6 +134,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     connection.prepareStatement(
         "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
       .executeUpdate()
+    connection.prepareStatement(
+      "CREATE TABLE ts_filter (id NUMBER(10), tstz TIMESTAMP WITH TIME ZONE)").executeUpdate()
+    timestampFilterRows.foreach { case (id, ts) =>
+      connection.prepareStatement(
+        s"INSERT INTO ts_filter VALUES ($id, TIMESTAMP '$ts +00:00')").executeUpdate()
+    }
   }
 
   override def dataPreparation(connection: Connection): Unit = {
@@ -187,6 +193,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  override def timestampFilterColumns: Seq[String] = Seq("TSTZ")
 
   test("SPARK-60420: V2 NTZ reads retain wall-clock conversion after a legacy flag flip") {
     val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"

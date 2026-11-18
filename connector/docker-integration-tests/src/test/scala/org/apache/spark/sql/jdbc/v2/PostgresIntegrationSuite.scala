@@ -157,6 +157,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       .executeUpdate()
     connection.prepareStatement("INSERT INTO unsupported_array_of_array_of_int " +
       "VALUES (array[array[1],array[2]]), (array[3])").executeUpdate()
+
+    connection.prepareStatement(
+      "CREATE TABLE ts_filter (id INTEGER, tstz TIMESTAMPTZ, ts TIMESTAMP)").executeUpdate()
+    timestampFilterRows.foreach { case (id, ts) =>
+      connection.prepareStatement(
+        s"INSERT INTO ts_filter VALUES ($id, '$ts+00', '$ts')").executeUpdate()
+    }
   }
 
   test("Test multi-dimensional column types") {
@@ -252,6 +259,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   override def supportsIndex: Boolean = true
 
   override def indexOptions: String = "FILLFACTOR=70"
+
+  override def timestampFilterColumns: Seq[String] = Seq("tstz", "ts")
 
   test("SPARK-42964: SQLState: 42P07 - duplicated table") {
     val t1 = s"$catalogName.t1"

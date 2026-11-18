@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Sum}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, FilterExec, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -2197,6 +2197,68 @@ class JDBCSuite extends SharedSparkSession {
       assert(rows(0).getAs[LocalDate](1) === LocalDate.parse("1996-01-01"))
       // 8 hour difference since saved time was America/Los_Angeles and Instant is GMT
       assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543543Z"))
+    }
+  }
+
+  test("SPARK-61543: compileValue formats an Instant in the JVM time zone") {
+    val instant = Instant.parse("2026-06-26T05:00:00Z")
+    // The suite's JVM zone is America/Los_Angeles; the session zone must differ from it.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Chicago") {
+      // No trailing ".0": Teradata TIMESTAMP(0) columns reject it.
+      Seq("jdbc:", "jdbc:postgresql:", "jdbc:mysql:", "jdbc:db2:", "jdbc:h2:", "jdbc:derby:",
+          "jdbc:teradata:").foreach { url =>
+        assert(JdbcDialects.get(url).compileValue(instant) === "'2026-06-25 22:00:00'", url)
+      }
+      assert(JdbcDialects.get("jdbc:oracle:").compileValue(instant) ===
+        "{ts '2026-06-25 22:00:00'}")
+      val nanosInstant = Instant.parse("2026-06-26T05:00:00.123456789Z")
+      assert(JdbcDialects.get("jdbc:").compileValue(nanosInstant) ===
+        "'2026-06-25 22:00:00.123456789'")
+      assert(JdbcDialects.get("jdbc:oracle:").compileValue(nanosInstant) ===
+        "{ts '2026-06-25 22:00:00.123456789'}")
+      // SQL Server keeps the session zone: datetimeoffset reads zoneless text as UTC.
+      assert(JdbcDialects.get("jdbc:sqlserver:").compileValue(instant) ===
+        "'2026-06-26 00:00:00'")
+      withSQLConf(SQLConf.LEGACY_JDBC_SESSION_ZONE_TIMESTAMP_LITERAL.key -> "true") {
+        assert(JdbcDialects.get("jdbc:").compileValue(instant) === "'2026-06-26 00:00:00'")
+        assert(JdbcDialects.get("jdbc:oracle:").compileValue(instant) === instant)
+      }
+    }
+  }
+
+  test("SPARK-61543: pushed timestamp filters match Spark's own evaluation") {
+    val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+    try {
+      conn.createStatement().execute(
+        "CREATE TABLE TEST.TS_FILTER (ID INT, TS TIMESTAMP, TSTZ TIMESTAMP WITH TIME ZONE)")
+      Seq("2026-06-25 20:00:00", "2026-06-26 02:00:00", "2026-06-26 05:00:00",
+          "2026-06-26 12:00:00", "2026-06-26 20:00:00", "2026-06-26 23:00:00",
+          "2026-06-27 03:00:00", "2026-06-27 05:00:00").zipWithIndex.foreach { case (ts, id) =>
+        conn.createStatement().execute(s"INSERT INTO TEST.TS_FILTER VALUES " +
+          s"($id, TIMESTAMP '$ts', TIMESTAMP WITH TIME ZONE '$ts+00:00')")
+      }
+      // H2 keeps the JVM zone it saw first (America/Los_Angeles), so only the session zone varies.
+      for (sessionTz <- Seq("UTC", "America/Chicago"); java8Api <- Seq(true, false);
+           col <- Seq("TS", "TSTZ")) {
+        withSQLConf(
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz,
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+          val filter = s"$col >= DATE '2026-06-26' AND $col < DATE '2026-06-27'"
+          def read(pushDown: Boolean): DataFrame =
+            spark.read.option("pushDownPredicate", pushDown.toString)
+              .jdbc(urlWithUserAndPass, "TEST.TS_FILTER", new Properties())
+              .where(filter).select("ID")
+          val pushed = checkPushdown(read(pushDown = true))
+          val expected = read(pushDown = false)
+          assert(expected.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]))
+          withClue(s"session=$sessionTz java8API=$java8Api col=$col") {
+            checkAnswer(pushed, expected)
+          }
+        }
+      }
+    } finally {
+      conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_FILTER")
+      conn.close()
     }
   }
 

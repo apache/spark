@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -470,6 +471,19 @@ private[v2] trait V2JDBCTest
   def supportsTableSample: Boolean = false
 
   def supportsTableSampleSystem: Boolean = false
+
+  /**
+   * Columns of the `ts_filter` table that Spark reads as TimestampType. A suite that returns a
+   * non-empty list must create `ts_filter (id, <columns>)` holding [[timestampFilterRows]] as UTC
+   * instants (zoned columns) or UTC wall-clock values (zoneless columns).
+   */
+  def timestampFilterColumns: Seq[String] = Nil
+
+  /** (id, UTC wall clock) rows of `ts_filter`, spread across the UTC, Chicago and LA day edges. */
+  protected val timestampFilterRows: Seq[(Int, String)] = Seq(
+    "2026-06-25 20:00:00", "2026-06-26 02:00:00", "2026-06-26 05:00:00",
+    "2026-06-26 12:00:00", "2026-06-26 20:00:00", "2026-06-26 23:00:00",
+    "2026-06-27 03:00:00", "2026-06-27 05:00:00").zipWithIndex.map(_.swap)
 
   test("SPARK-48172: Test CONTAINS") {
     val df1 = spark.sql(
@@ -1373,6 +1387,28 @@ private[v2] trait V2JDBCTest
         sql(s"SELECT * FROM $invalidTableName")
       }
       assert(e.getCondition !== "FAILED_JDBC.TABLE_EXISTS")
+    }
+  }
+
+  test("SPARK-61543: pushed timestamp filters match Spark's own evaluation") {
+    assume(timestampFilterColumns.nonEmpty)
+    val tbl = s"$catalogAndNamespace.${caseConvert("ts_filter")}"
+    // The test JVM zone is America/Los_Angeles, so both session zones differ from it.
+    for (sessionTz <- Seq("UTC", "America/Chicago"); java8Api <- Seq(true, false);
+         col <- timestampFilterColumns) {
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> sessionTz,
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        val filter = s"$col >= DATE '2026-06-26' AND $col < DATE '2026-06-27'"
+        val pushed = sql(s"SELECT ${caseConvert("id")} FROM $tbl WHERE $filter")
+        checkFilterPushed(pushed)
+        val expected = spark.read.option("pushDownPredicate", "false").table(tbl)
+          .where(filter).select(caseConvert("id"))
+        checkFilterPushed(expected, pushed = false)
+        withClue(s"session=$sessionTz java8API=$java8Api col=$col") {
+          checkAnswer(pushed, expected)
+        }
+      }
     }
   }
 }
