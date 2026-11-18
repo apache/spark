@@ -49,11 +49,6 @@ object SchemaMergingUtils {
    * Like [[mergeSchemas]], but on a field present in both schemas (at any nesting level), the
    * field's metadata (comment, default value, etc.) is taken from `dataSchema` rather than from
    * `tableSchema`. Fields present only in `tableSchema` keep their metadata.
-   *
-   * Used for additive schema evolution of an existing streaming table, where `tableSchema` is the
-   * table's current schema and `dataSchema` is the declared or inferred one: column metadata
-   * changes in the desired schema (including a removed comment) must survive the merge so that
-   * they can be applied to the table, the same way they are when the desired schema is used as-is.
    */
   def mergeSchemasWithDataMetadata(
       tableSchema: StructType,

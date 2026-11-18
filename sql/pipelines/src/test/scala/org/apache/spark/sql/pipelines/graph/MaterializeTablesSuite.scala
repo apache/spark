@@ -1239,67 +1239,60 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     )
   }
 
-  test("SPARK-59268: re-materializing a streaming table applies column comment changes") {
-    withRecordingCatalog {
-      materializeStreamingTable("t", commentedSchema("x1", "y1", "a1"), Map.empty)
-      assert(recordingCatalog.recordedAlters.isEmpty)
+  private def withKeepExistingColumnMetadata(enabled: Boolean)(body: => Unit): Unit =
+    withSQLConf(
+      SQLConf.LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA.key -> enabled.toString)(body)
 
-      // Change one comment, remove another, and change a nested one.
-      materializeStreamingTable("t", commentedSchema("x2", null, "a2"), Map.empty)
-      assert(recordingCatalog.recordedAlters.size == 1)
-      val comments = recordingCatalog.recordedAlters.flatten.collect {
-        case c: TableChange.UpdateColumnComment =>
-          c.fieldNames().mkString(".") -> Option(c.newComment())
-      }.toMap
-      assert(comments == Map("x" -> Some("x2"), "y" -> None, "s.a" -> Some("a2")))
+  Seq(false, true).foreach { keepExisting =>
+    test("SPARK-59268: re-materializing a streaming table with column comment changes " +
+      s"(keepExistingColumnMetadata=$keepExisting)") {
+      withKeepExistingColumnMetadata(keepExisting) {
+        withRecordingCatalog {
+          materializeStreamingTable("t", commentedSchema("x1", "y1", "a1"), Map.empty)
+          assert(recordingCatalog.recordedAlters.isEmpty)
 
-      assertPersistedColumns("t", commentedSchema("x2", null, "a2"))
-    }
-  }
-
-  test("SPARK-59268: a comment change under consecutive arrays fails a streaming table update " +
-    "with a comment-specific error") {
-    withRecordingCatalog {
-      materializeStreamingTable("t", nestedArrayCommentSchema("c1"), Map.empty)
-      assert(recordingCatalog.recordedAlters.isEmpty)
-
-      // The comment change on `arr.element.element.a` is carried into the diff, but cannot be
-      // applied in place (SPARK-59188). The update fails naming the field, before any alter.
-      val ex = intercept[TableMaterializationException] {
-        materializeStreamingTable("t", nestedArrayCommentSchema("c2"), Map.empty)
-      }
-      checkError(
-        exception = ex.cause.asInstanceOf[SparkThrowable],
-        condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
-        parameters = Map("columnPath" -> "arr.element.element.a"))
-      assert(recordingCatalog.recordedAlters.isEmpty)
-      assertPersistedColumns("t", nestedArrayCommentSchema("c1"))
-    }
-  }
-
-  test("SPARK-59268: with the legacy setting, re-materializing a streaming table keeps the " +
-    "table's column comments") {
-    withSQLConf(SQLConf.LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA.key -> "true") {
-      withRecordingCatalog {
-        materializeStreamingTable("t", commentedSchema("x1", "y1", "a1"), Map.empty)
-
-        // Change one comment, remove another, and change a nested one: none of them is applied.
-        materializeStreamingTable("t", commentedSchema("x2", null, "a2"), Map.empty)
-        assert(recordingCatalog.recordedAlters.isEmpty)
-        assertPersistedColumns("t", commentedSchema("x1", "y1", "a1"))
+          // Change one comment, remove another, and change a nested one.
+          materializeStreamingTable("t", commentedSchema("x2", null, "a2"), Map.empty)
+          if (keepExisting) {
+            assert(recordingCatalog.recordedAlters.isEmpty)
+            assertPersistedColumns("t", commentedSchema("x1", "y1", "a1"))
+          } else {
+            assert(recordingCatalog.recordedAlters.size == 1)
+            val comments = recordingCatalog.recordedAlters.flatten.collect {
+              case c: TableChange.UpdateColumnComment =>
+                c.fieldNames().mkString(".") -> Option(c.newComment())
+            }.toMap
+            assert(comments == Map("x" -> Some("x2"), "y" -> None, "s.a" -> Some("a2")))
+            assertPersistedColumns("t", commentedSchema("x2", null, "a2"))
+          }
+        }
       }
     }
-  }
 
-  test("SPARK-59268: with the legacy setting, a comment change under consecutive arrays does " +
-    "not fail a streaming table update") {
-    withSQLConf(SQLConf.LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA.key -> "true") {
-      withRecordingCatalog {
-        materializeStreamingTable("t", nestedArrayCommentSchema("c1"), Map.empty)
+    test("SPARK-59268: a comment change under consecutive arrays in a streaming table update " +
+      s"(keepExistingColumnMetadata=$keepExisting)") {
+      withKeepExistingColumnMetadata(keepExisting) {
+        withRecordingCatalog {
+          materializeStreamingTable("t", nestedArrayCommentSchema("c1"), Map.empty)
+          assert(recordingCatalog.recordedAlters.isEmpty)
 
-        materializeStreamingTable("t", nestedArrayCommentSchema("c2"), Map.empty)
-        assert(recordingCatalog.recordedAlters.isEmpty)
-        assertPersistedColumns("t", nestedArrayCommentSchema("c1"))
+          if (keepExisting) {
+            // The table's comment is kept, so there is nothing to apply.
+            materializeStreamingTable("t", nestedArrayCommentSchema("c2"), Map.empty)
+          } else {
+            // The comment change on `arr.element.element.a` cannot be applied in place
+            // (SPARK-59188). The update fails naming the field, before any alter.
+            val ex = intercept[TableMaterializationException] {
+              materializeStreamingTable("t", nestedArrayCommentSchema("c2"), Map.empty)
+            }
+            checkError(
+              exception = ex.cause.asInstanceOf[SparkThrowable],
+              condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
+              parameters = Map("columnPath" -> "arr.element.element.a"))
+          }
+          assert(recordingCatalog.recordedAlters.isEmpty)
+          assertPersistedColumns("t", nestedArrayCommentSchema("c1"))
+        }
       }
     }
   }
