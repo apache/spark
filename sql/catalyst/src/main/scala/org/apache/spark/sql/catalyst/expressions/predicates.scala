@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -249,14 +249,18 @@ trait PredicateHelper extends AliasHelper with Logging {
    *  - [[LocalLimit]], [[GlobalLimit]] and [[Offset]]. A global limit or an offset passes them
    *    through only when its input has a single partition; otherwise the exchange below it
    *    computes every column, and this is conservative.
-   *  - [[Join]], from both sides. Only the streamed side of a hash join passes them through, so
-   *    this is conservative for the others.
+   *  - [[Sort]]. It passes them through only when the physical plan removes it as redundant, as
+   *    when its child is already sorted; otherwise it computes every column, and this is
+   *    conservative.
+   *  - [[Join]], from both sides. Only the streamed side of a broadcast hash join passes them
+   *    through; a build side, a shuffled hash join or a sort-merge join computes every column, so
+   *    this is conservative for them.
    *
    * Other columns and operators do not count:
    *  - A non-deterministic column, computed for every row the operator outputs, and the grouping
    *    keys and aggregate functions of an aggregation, computed on every row it gets.
    *  - The columns through any other operator, e.g. a `Union`, `Generate`, `Deduplicate`,
-   *    `Sort`, `Window` or `Repartition`, whose input rows get every column computed.
+   *    `Window` or `Repartition`, whose input rows get every column computed.
    *    `FinishAnalysis` removes `SubqueryAlias` and `ResolvedHint` before the rules that call
    *    this run, and a `Tail` is only at the top of a plan.
    */
@@ -281,7 +285,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         case _ => None
       })
     case j: Join => failableOutput(j.left) ++ failableOutput(j.right)
-    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset =>
+    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort =>
       failableOutput(plan.children.head)
     case _ => AttributeSet.empty
   }
