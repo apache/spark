@@ -24,9 +24,9 @@ import org.apache.arrow.vector.ValueVector
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue}
-import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalBooleanType, PhysicalByteType, PhysicalDataType, PhysicalFloatType, PhysicalIntegerType, PhysicalMapType, PhysicalShortType, PhysicalStructType}
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
-import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Server-side (catalyst) type operations for the Types Framework.
@@ -68,11 +68,9 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  * IMPLEMENTATION - to add a new type to the framework:
  *   1. Create a case class extending the matching `*TypeApiOps` and mixing in `TypeOps`
  *      (e.g., `case class FooTypeOps(...) extends FooTypeApiOps(...) with TypeOps`)
- *   2. Implement getPhysicalType and getElementSize. A struct-, array- or map-backed type
- *      also overrides rowRepresentationType with the built-in type matching its physical
- *      type. Without it, the logical-type sites treat its values as opaque objects: they are
- *      not copied out of reused UnsafeRow buffers, and equality and unsafe projection code
- *      generation fail.
+ *   2. Implement getPhysicalType. getElementSize and rowRepresentationType are derived from
+ *      it, so a struct-, array- or map-backed type reaches the logical-type sites without
+ *      declaring its layout again.
  *   3. Register it in TypeOps.apply() below - single registration point
  *
  * Column vectors (WritableColumnVector, ConstantColumnVector) do not yet build child vectors
@@ -97,7 +95,7 @@ trait TypeOps extends TypeApiOps {
    *
    * For struct-backed types, return PhysicalStructType(fields) where fields describes the
    * physical struct layout. The internal representation will be InternalRow, and
-   * [[rowRepresentationType]] must return StructType(fields).
+   * [[rowRepresentationType]] is StructType(fields).
    *
    * @return
    *   PhysicalDataType (e.g., PhysicalLongType for TimeType, PhysicalStructType for a
@@ -156,12 +154,18 @@ trait TypeOps extends TypeApiOps {
    * 4 for int/float, 8 for long/double).
    *
    * Consumed by [[org.apache.spark.sql.catalyst.expressions.InterpretedUnsafeProjection]]
-   * when writing arrays or maps that contain framework type elements.
+   * when writing arrays or maps that contain framework type elements. Derived from
+   * [[getPhysicalType]], matching the slot size that code generation uses.
    *
    * @return
    *   element size in bytes
    */
-  def getElementSize: Int
+  def getElementSize: Int = getPhysicalType match {
+    case PhysicalBooleanType | PhysicalByteType => 1
+    case PhysicalShortType => 2
+    case PhysicalIntegerType | PhysicalFloatType => 4
+    case _ => 8
+  }
 
   /**
    * Returns an equivalent built-in DataType for infrastructure dispatch.
@@ -178,16 +182,20 @@ trait TypeOps extends TypeApiOps {
    * expressions, proto serialization, and error messages. This is solely a dispatch
    * hint for row infrastructure internals.
    *
-   * IMPORTANT: Must return a built-in DataType (StructType, ArrayType, MapType) - never
-   * another framework type. Some sites look the representation up only once, so they would
-   * treat a framework type returned here as an opaque object and skip its copy. Must also be
-   * consistent with [[getPhysicalType]] - e.g., if getPhysicalType returns
-   * PhysicalStructType(fields), rowRepresentationType must return StructType(fields), whose
-   * physical type is the same.
+   * Derived from [[getPhysicalType]]: PhysicalStructType(fields) is StructType(fields), and
+   * PhysicalArrayType and PhysicalMapType are the matching ArrayType and MapType. The result is
+   * always a built-in DataType, never another framework type, as some sites look the
+   * representation up only once.
    *
    * @return Some(DataType) for complex-backed types, None for primitive-backed types
    */
-  def rowRepresentationType: Option[DataType] = None
+  def rowRepresentationType: Option[DataType] = getPhysicalType match {
+    case PhysicalStructType(fields) => Some(StructType(fields))
+    case PhysicalArrayType(elementType, containsNull) => Some(ArrayType(elementType, containsNull))
+    case PhysicalMapType(keyType, valueType, valueContainsNull) =>
+      Some(MapType(keyType, valueType, valueContainsNull))
+    case _ => None
+  }
 
   // ==================== Literal Creation ====================
 

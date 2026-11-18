@@ -360,6 +360,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     case NullType => ""
 
+    case udt: UserDefinedType[_] => writeElement(ctx, input, index, udt.sqlType, writer)
+
     case _ => s"$writer.write($index, $input);"
   }
 

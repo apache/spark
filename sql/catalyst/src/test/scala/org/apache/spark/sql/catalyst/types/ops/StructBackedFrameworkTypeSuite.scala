@@ -71,13 +71,6 @@ case class TestStructBackedTypeOps(override val dataType: TestStructBackedType)
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
     (row, v) => row.update(ordinal, v)
 
-  // 8 bytes: struct is variable-length, stored as offset+size pointer in UnsafeArrayData.
-  override def getElementSize: Int = 8
-
-  // Struct-backed: infrastructure code recurses through StructType branches for this type.
-  override def rowRepresentationType: Option[DataType] =
-    Some(StructType(TestStructBackedType.FIELDS))
-
   override def getDefaultLiteral: Literal =
     Literal.create(
       new GenericInternalRow(Array[Any](UTF8String.fromString(""), 0L)),
@@ -403,9 +396,13 @@ class StructBackedFrameworkTypeSuite extends SparkFunSuite {
     assert(result.getUTF8String(0).toString === "mutable")
     assert(result.getLong(1) === 7L)
   }
-  // ==================== Layout Declarations ====================
 
-  test("registered framework types declare a consistent layout") {
+  // ==================== Derived Layout ====================
+
+  test("the row representation and the element size are derived from the physical type") {
+    assert(TypeOps(testType).get.rowRepresentationType ===
+      Some(StructType(TestStructBackedType.FIELDS)))
+    assert(TypeOps(TimeType(6)).get.rowRepresentationType.isEmpty)
     val types = Seq(TimeType(6), TimestampNTZNanosType(9), TimestampLTZNanosType(9), testType)
     types.foreach { dt =>
       val ops = TypeOps(dt).get
@@ -473,6 +470,17 @@ class StructBackedFrameworkTypeSuite extends SparkFunSuite {
           input => projection(input)
         }
         assertStruct(target.getStruct(0, 2), "one", 1L)
+      }
+
+      test(s"unsafe projection round-trips $desc as a column (codegen=$codegen)") {
+        val exprs = Seq(BoundReference(0, dt, nullable = true))
+        val projection = if (codegen) {
+          GenerateUnsafeProjection.generate(exprs)
+        } else {
+          InterpretedUnsafeProjection.createProjection(exprs)
+        }
+        val result = projection(new GenericInternalRow(Array[Any](makeStructRow("c", 3L))))
+        assertStruct(result.getStruct(0, 2), "c", 3L)
       }
 
       test(s"unsafe projection round-trips an array of $desc (codegen=$codegen)") {

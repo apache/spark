@@ -59,10 +59,6 @@ trait TimestampNanosTypeOps extends TypeOps {
 
   override def getMutableValue: MutableValue = new MutableTimestampNanos
 
-  // TimestampNanosVal is a variable-length 16-byte payload, so array elements use an 8-byte
-  // offset+size pointer in the fixed-size region.
-  override def getElementSize: Int = 8
-
   // ==================== Literal Creation ====================
 
   override def getDefaultLiteral: Literal = Literal.create(TimestampNanosVal.ZERO, dataType)
