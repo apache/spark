@@ -752,12 +752,12 @@ case class Join(
 
   override lazy val maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter
           if left.maxRows.isDefined && right.maxRows.isDefined =>
         val leftMaxRows = BigInt(left.maxRows.get)
         val rightMaxRows = BigInt(right.maxRows.get)
         val minRows = joinType match {
-          case LeftOuter | LeftSingle => leftMaxRows
+          case LeftOuter => leftMaxRows
           case RightOuter => rightMaxRows
           case FullOuter => leftMaxRows + rightMaxRows
           case _ => BigInt(0)
@@ -769,7 +769,7 @@ case class Join(
           None
         }
 
-      case LeftSemi | LeftAnti =>
+      case LeftSemi | LeftAnti | LeftSingle =>
         left.maxRows
 
       case _ =>
