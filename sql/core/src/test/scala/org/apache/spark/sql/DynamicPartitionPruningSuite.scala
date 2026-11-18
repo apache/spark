@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExc
   ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.metric.SQLLastAttemptMetrics
+import org.apache.spark.sql.execution.python.EvalPythonExec
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
@@ -2007,6 +2008,55 @@ abstract class DynamicPartitionPruningSuiteBase
       checkAnswer(df, Row(4, 1300, "California") :: Row(1, 1000, "North-Holland") :: Nil)
       // CleanupDynamicPruningFilters should remove DPP in first child of union
       assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+    }
+  }
+
+  // These tests drop their function themselves, as `withUserDefinedFunction` checks the drop with
+  // a lookup that fails in the V2 suites, whose default catalog has no functions.
+  test("SPARK-62052: no DPP filter on a pruning key with a Python UDF") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    try {
+      registerTestUDF(TestPythonUDF("pyudf"), spark)
+      Seq(
+        "fact_sk f JOIN dim_store s ON pyudf(f.store_id) = s.store_id",
+        "(SELECT date_id, pyudf(store_id) AS store_id FROM fact_sk) f " +
+          "JOIN dim_store s ON f.store_id = s.store_id").foreach { join =>
+        val df = sql(s"SELECT f.date_id, f.store_id FROM $join WHERE s.country = 'NL'")
+        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+        // A scan cannot evaluate the UDF to prune partitions, so a DPP filter would only filter
+        // rows, above another evaluation of the UDF.
+        assert(!checkUnpushedFilters(df), df.queryExecution)
+        val evals = collect(df.queryExecution.executedPlan) { case e: EvalPythonExec => e }
+        assert(evals.size === 1, df.queryExecution)
+      }
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS pyudf")
+    }
+  }
+
+  test("SPARK-62052: no DPP filter on a pruning key with an external UDF") {
+    // No public API builds a scalar external UDF yet, so the test registers one as a function.
+    // Planning it needs a static conf, which the test sets only for itself.
+    val unifiedUDFExecution = conf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED)
+    conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, true)
+    try {
+      spark.sessionState.functionRegistry.createOrReplaceTempFunction("ext",
+        children => ExternalUserDefinedFunction(Some("ext"),
+          UDFWorkerSpecification.getDefaultInstance, Array.emptyByteArray, IntegerType, children,
+          udfDeterministic = true, udfNullable = true),
+        "scala_udf")
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON ext(f.store_id) = s.store_id AND s.country = 'NL'
+        """.stripMargin)
+      val dpps = df.queryExecution.optimizedPlan.flatMap(_.expressions).flatMap(
+        _.collect { case d: DynamicPruningSubquery => d })
+      assert(dpps.isEmpty, df.queryExecution)
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS ext")
+      conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
     }
   }
 }
