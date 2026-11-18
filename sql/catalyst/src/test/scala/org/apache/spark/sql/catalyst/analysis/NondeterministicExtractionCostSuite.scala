@@ -30,6 +30,71 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, J
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
+  private case class OutputReadCounted(
+      fields: Seq[Attribute], reads: AtomicInteger)
+      extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+    override def output: Seq[Attribute] = {
+      reads.incrementAndGet()
+      fields
+    }
+  }
+
+  test("KLL retirement skips unrelated nonempty forwarded demand") {
+    for (depth <- Seq(32, 64)) {
+      val reads = new AtomicInteger
+      val fields = (1 to 64).map(i => AttributeReference(s"a$i",
+        org.apache.spark.sql.types.LongType)())
+      val source = OutputReadCounted(fields, reads)
+      val chain = (1 to depth).foldLeft[
+          org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](source) { (child, _) =>
+        org.apache.spark.sql.catalyst.plans.logical.Filter(Literal.TrueLiteral, child)
+      }
+      val dead = Literal(1L).as("dead")
+      val sibling = Project(Seq(dead), OneRowRelation())
+      val plan = Project(Seq(fields.head), Join(chain, sibling, Inner, None, JoinHint.NONE))
+      plan.treePatternBits
+      reads.set(0)
+      val result = KllAggregatePreparation.retireUnchosenOutputs(plan, Set(dead.exprId))
+      assert(result.output == Seq(fields.head))
+      assert(reads.get <= 8, s"depth=$depth repeated cold output reads=${reads.get}")
+    }
+  }
+
+  test("guarded scalar liveness visits shared ordinary prefixes once per mode") {
+    val visits = new AtomicInteger
+    val common = (1 to 64).foldLeft[Expression](Rand(0)) { (child, _) =>
+      Counted(child, visits)
+    }
+    val roots = (1 to 32).map(i => Add(common, Literal(i.toDouble)))
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+        .toAggregateExpression()).as("n")))
+    val guarded = If(GreaterThan(Rand(1), Literal(0D)), scalar, Literal(0L))
+    val expressions = roots :+ guarded
+    expressions.foreach { e => e.treePatternBits; e.deterministic; e.canonicalized }
+    visits.set(0)
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(
+      expressions, keys)
+    assert(bindings.size() == 2)
+    assert(keys.liveOrdinaryBindings.nonEmpty)
+    assert(visits.get <= 64 * 8, s"shared ordinary prefix visits=${visits.get}")
+  }
+
+  test("legacy restoration preserves unchanged Count chains beside restored inputs") {
+    val binding = $"binding".long
+    val ordinary = Count(Literal(1L)).toAggregateExpression()
+    val wrapped = (1 to 64).foldLeft[Expression](ordinary) { (child, _) =>
+      Add(child, Literal(1L))
+    }
+    val changed = Count(binding).toAggregateExpression()
+    val original = CreateArray(Seq(wrapped, changed))
+    val restored = NondeterministicExpressionCollection.restoreBindingReferences(
+      original, Map(binding.exprId -> Literal(3L)), stripFilterGuards = true)
+    assert(restored.children.head eq wrapped)
+    assert(restored.children(1) != changed)
+  }
+
   private case class UnionHashCounted(
       name: String,
       hashes: AtomicInteger,

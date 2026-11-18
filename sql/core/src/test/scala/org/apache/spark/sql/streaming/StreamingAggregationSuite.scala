@@ -64,8 +64,29 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
+  private def assertKllReaderBoundary(
+      checkpoint: File,
+      required: Boolean,
+      payloadVersion: Int = 1,
+      afterBatch: Long = -1L): Long = {
+    val directory = new File(checkpoint, "offsets")
+    val log = new OffsetSeqLog(spark, directory.getAbsolutePath)
+    val (batchId, offsets) = log.getLatest().get
+    assert(batchId > afterBatch)
+    assert(offsets.version == payloadVersion)
+    val lines = java.nio.file.Files.readAllLines(new File(directory, batchId.toString).toPath,
+      java.nio.charset.StandardCharsets.UTF_8)
+    if (required) {
+      intercept[IllegalStateException] { log.validateVersion(lines.get(0), 2) }
+      assert(lines.get(1) == s"v$payloadVersion")
+    } else {
+      assert(log.validateVersion(lines.get(0), 2) == payloadVersion)
+    }
+    batchId
+  }
+
   testWithAllStateVersions("KLL corrected checkpoints reject historical offset readers") {
-    for (legacy <- Seq(false, true); kll <- Seq(true, false)) {
+    for (legacy <- Seq(false, true); kll <- Seq(true, false); offsetVersion <- Seq(1, 2)) {
       withTempDir { checkpoint =>
         val input = MemoryStream[(Int, Long, Long)]
         val data = input.toDF().toDF("key", "x", "y")
@@ -82,29 +103,20 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
         testStream(query, Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
-            additionalConfs = Map(sharing -> legacy.toString)),
+            additionalConfs = Map(sharing -> legacy.toString,
+              SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> offsetVersion.toString)),
           AddData(input, (0, 1L, 101L), (0, 2L, 102L)),
           CheckLastBatch(Row(0, 101L, 2L)), StopStream)
 
-        val logPath = new File(checkpoint, "offsets")
-        val log = new OffsetSeqLog(spark, logPath.getAbsolutePath)
-        val (batchId, _) = log.getLatest().get
-        val header = java.nio.file.Files.readAllLines(
-          new File(logPath, batchId.toString).toPath,
-          java.nio.charset.StandardCharsets.UTF_8).get(0)
-        // Historical readers support offset versions through v2. They must reject this
-        // corrected state before assigning [x, y] buffers to the historical [y, x] order.
-        if (kll && !legacy) {
-          intercept[IllegalStateException] { log.validateVersion(header, 2) }
-        } else {
-          assert(log.validateVersion(header, 2) <= 2)
-        }
+        val batchId = assertKllReaderBoundary(checkpoint, kll && !legacy, offsetVersion)
 
         testStream(query, Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
-            additionalConfs = Map(sharing -> (!legacy).toString)),
+            additionalConfs = Map(sharing -> (!legacy).toString,
+              SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> offsetVersion.toString)),
           AddData(input, (0, 3L, 103L)),
           CheckLastBatch(Row(0, 101L, 3L)), StopStream)
+        assertKllReaderBoundary(checkpoint, kll && !legacy, offsetVersion, afterBatch = batchId)
       }
     }
   }
@@ -259,7 +271,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           val first = if (shape == "split") s"IF(TRUE, value, $scalar)"
             else s"((value + $scalar) + value) + value"
           val second = if (shape == "split") "value" else s"(value + $scalar) + (value + value)"
-          val filter = "abs(abs(value)) > 0"
+          val filter = "abs(abs(value)) > 1"
           def query(legacy: Boolean): DataFrame = withSQLConf(
               SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
             val result = sql(s"""SELECT sum($first) FILTER (WHERE $filter) AS x, count(*) AS n,
@@ -279,12 +291,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           testStream(query(legacy = true), Complete)(
             StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
             AddData(input, 1L, 2L),
-            CheckLastBatch(if (shape == "split") Row(3L, 2L, 3L) else Row(15L, 2L, 15L)),
+            CheckLastBatch(if (shape == "split") Row(2L, 2L, 2L) else Row(9L, 2L, 9L)),
             checkBuffers, StopStream)
           testStream(query(legacy = false), Complete)(
             StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
-            AddData(input, 3L),
-            CheckLastBatch(if (shape == "split") Row(6L, 3L, 6L) else Row(27L, 3L, 27L)),
+            AddData(input, 1L, 3L),
+            CheckLastBatch(if (shape == "split") Row(5L, 4L, 5L) else Row(21L, 4L, 21L)),
             checkBuffers, StopStream)
         }
       }
@@ -308,6 +320,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         StartStream(checkpointLocation = checkpoint.getAbsolutePath,
           additionalConfs = Map(sharing -> "false")),
         AddData(input, 1, 2), CheckLastBatch(Row(6L, 6L)), StopStream)
+      val batchId = assertKllReaderBoundary(checkpoint, required = true)
       val resumed = query(legacy = true)
       val cached = withSQLConf(rollback -> "true") { sql(body).cache() }
       try {
@@ -316,9 +329,70 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(sharing -> "false")),
           AddData(input, 3), CheckLastBatch(Row(9L, 9L)), StopStream)
+        assertKllReaderBoundary(checkpoint, required = true, afterBatch = batchId)
       } finally {
         cached.unpersist()
       }
+    }
+  }
+
+  testWithAllStateVersions("KLL checkpoint reader requirement survives removal of its producer") {
+    withTempDir { checkpoint =>
+      val input = MemoryStream[Int]
+      val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+          |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin
+      def query(value: org.apache.spark.sql.Column): DataFrame =
+        input.toDF().select(value.as("n")).agg(sum("n").as("total"))
+      val initial = query(expr(scalar))
+      val resumed = query(lit(3L))
+      assert(initial.schema == resumed.schema)
+      assert(!resumed.queryExecution.analyzed.containsPattern(
+        org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE))
+      val mode = Map(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "false")
+      testStream(initial, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+        AddData(input, 1, 2), CheckLastBatch(Row(6L)), StopStream)
+      val batchId = assertKllReaderBoundary(checkpoint, required = true)
+      testStream(resumed, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+        AddData(input, 3), CheckLastBatch(Row(9L)), StopStream)
+      assertKllReaderBoundary(checkpoint, required = true, afterBatch = batchId)
+    }
+  }
+
+  testWithAllStateVersions("KLL primitive UDF keys retain intrinsically random scalar inputs") {
+    withTempDir { checkpoint =>
+      val input = MemoryStream[Int]
+      val scalar = """coalesce((SELECT
+          |kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) + CAST(rand(17) AS BIGINT)
+          |FROM VALUES (0L), (1L), (2L) AS t(id)), 0L)""".stripMargin
+      val identity = udf((n: Long) => n).asNondeterministic()
+      def query(legacy: Boolean): DataFrame = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        input.toDF().groupBy(identity(expr(scalar)).as("a"),
+          identity(expr(scalar)).as("b")).count()
+      }
+      val keys = AssertOnQuery { q =>
+        assert(q.lastExecution.executedPlan.collectFirst {
+          case save: StateStoreSaveExec => save.keyExpressions.size
+        }.contains(2), q.lastExecution.toString)
+        val udfs = q.lastExecution.normalized.flatMap(_.expressions.flatMap(_.collect {
+          case udf: org.apache.spark.sql.catalyst.expressions.ScalaUDF => udf
+        }))
+        assert(udfs.count(udf => udf.children.forall(!_.nullable) && udf.exists {
+          case scalar: org.apache.spark.sql.catalyst.expressions.ScalarSubquery =>
+            !scalar.deterministic
+          case _ => false
+        }) == 2)
+        true
+      }
+      val mode = Map(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "true")
+      testStream(query(legacy = true), Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+        AddData(input, 1, 2), CheckLastBatch(Row(3L, 3L, 2L)), keys, StopStream)
+      testStream(query(legacy = false), Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath, additionalConfs = mode),
+        AddData(input, 3), CheckLastBatch(Row(3L, 3L, 3L)), keys, StopStream)
     }
   }
 

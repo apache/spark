@@ -61,6 +61,7 @@ object NondeterministicExpressionCollection {
         inputs match {
           case Seq(input: KllCountAggregateInput) =>
             count.copy(children = input.children)
+          case _ if count.children.lazyZip(inputs).forall(_ eq _) => count
           case _ => count.copy(children = inputs)
         }
       case attribute: Attribute => bindings.getOrElse(attribute.exprId, attribute)
@@ -261,11 +262,17 @@ object NondeterministicExpressionCollection {
       keys: ExpressionKeys): Unit = {
     val live = mutable.HashSet.empty[ExprId]
     val pending = mutable.Queue.empty[NamedExpression]
+    val visitedHosts = new IdentityHashMap[Expression, java.lang.Boolean]
+    val visitedDependencies = new IdentityHashMap[Expression, java.lang.Boolean]
     def demand(binding: NamedExpression): Unit = {
       if (live.add(binding.exprId)) pending.enqueue(binding)
     }
     def visit(expression: Expression, host: Boolean): Unit = {
       if (expression.deterministic) return
+      // A host consumes its whole expression; dependencies observe their evaluation guards.
+      // Shared prefixes need one visit in each mode, with the original first-visit ordering.
+      val visited = if (host) visitedHosts else visitedDependencies
+      if (visited.put(expression, true) != null) return
       val binding = bindingFor(expression, bindings, keys)
       if (binding != null) demand(binding) else if (host) {
         expression.children.foreach(visit(_, host = true))

@@ -103,6 +103,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Operator push down
         PushProjectionThroughUnion,
         PushProjectionThroughLimitAndOffset,
+        PushDownKllSubqueryBindings,
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,

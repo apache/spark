@@ -660,8 +660,9 @@ class MicroBatchExecution(
     populateStartOffsets(execCtx, sparkSessionForStream)
 
     // Older executables ignore the sharing mode and can accept identical BinaryType schemas
-    // with different aggregate buffer identities. Require their existing log-version rejection
-    // before any corrected state is written. Keep the boundary when a checkpoint is restarted.
+    // with different aggregate buffer identities. Install the reader requirement for subsequent
+    // offset writes and retain it on restart. Normal micro-batches log offsets before execution;
+    // real-time execution persists offsets after processing and committing state.
     val needsKllReader = initialLatestOffsetSeq.flatMap(_._2.metadataOpt)
       .exists(OffsetSeqLog.requiresKllReader) ||
       (!sparkSessionForStream.sessionState.conf

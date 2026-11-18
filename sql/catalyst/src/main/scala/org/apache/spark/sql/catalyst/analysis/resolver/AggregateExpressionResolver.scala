@@ -210,8 +210,9 @@ class AggregateExpressionResolver(
           throwNestedAggregateFunction(aggregateExpression)
         }
 
+        val determinism = new ExprUtils.SubqueryExtractionDeterminism
         aggregateExpression.aggregateFunction.children.foreach { child =>
-          if (!ExprUtils.isDeterministicAfterSubqueryExtraction(child)) {
+          if (!determinism(child)) {
             throwAggregateFunctionWithNondeterministicExpression(
               aggregateExpression,
               child

@@ -33,6 +33,74 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL aggregate bindings preserve scalar results outside the updater") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+      val query = sql("""SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS n
+          |FROM range(3)""".stripMargin)
+      val value = org.apache.spark.sql.classic.ClassicConversions.column(
+        org.apache.spark.sql.classic.ColumnConversions.expression(query.scalar()))
+      checkAnswer(spark.range(2).agg((org.apache.spark.sql.functions.sum(value) + value).as("v")),
+        Row(9L))
+      val identity = udf((n: Long) => n).asNondeterministic()
+      for ((key, expectedKey) <- Seq(
+          (value + org.apache.spark.sql.functions.lit(1L), 4L), (identity(value), 3L))) {
+        checkAnswer(spark.range(2).groupBy(key.as("key")).agg(
+          org.apache.spark.sql.functions.sum(value).as("total"), value.as("outside")),
+          Row(expectedKey, 6L, 3L))
+      }
+    }
+  }
+
+  test("selected KLL scalar bytes stay above shuffled membership joins") {
+    withTempView("kll_project_fact", "kll_project_members") {
+      spark.sparkContext.parallelize(0L until 32L).toDF("key")
+        .createOrReplaceTempView("kll_project_fact")
+      spark.sparkContext.parallelize(Seq(3L)).toDF("member")
+        .createOrReplaceTempView("kll_project_members")
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        for (negation <- Seq("", "NOT ")) {
+          val query = sql(s"""SELECT key, sketch FROM
+              |(SELECT key, (SELECT kll_sketch_agg_bigint(id)
+              |FROM VALUES (0L), (1L), (2L) AS t(id)) AS sketch FROM kll_project_fact) q
+              |WHERE key ${negation}IN (SELECT member FROM kll_project_members)""".stripMargin)
+          val joins = query.queryExecution.executedPlan.collect { case join: SortMergeJoinExec =>
+            join
+          }
+          assert(joins.size == 1, query.queryExecution.toString)
+          assert(joins.head.left.output.forall(
+            _.dataType != org.apache.spark.sql.types.BinaryType), query.queryExecution.toString)
+          val rows = query.collect().toSeq
+          val expected = (0L until 32L).filter(k => (k == 3L) == negation.isEmpty)
+          assert(rows.map(_.getLong(0)).sorted == expected)
+          assert(rows.forall(_.getAs[Array[Byte]](1).nonEmpty))
+        }
+      }
+    }
+  }
+
+  test("KLL alternatives retain live public outputs across CTE and UNION boundaries") {
+    for (singlePass <- Seq(false, true); legacy <- Seq(false, true)) {
+      val queries = withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val aggregate = """SELECT kll_sketch_agg_bigint(id) AS s FROM
+            |VALUES (0L), (1L), (2L), (3L), (4L), (5L), (6L), (7L), (8L), (9L) AS t(id)
+            |HAVING kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) > 0""".stripMargin
+        val cte = sql(s"WITH c AS ($aggregate) SELECT kll_sketch_get_n_bigint(s) FROM c")
+        val union = sql(s"""SELECT kll_sketch_get_n_bigint(s) FROM
+            |(($aggregate) UNION ALL ($aggregate)) AS u""".stripMargin)
+        Seq(cte, union).foreach(_.queryExecution.assertAnalyzed())
+        (cte, union)
+      }
+      // The query itself is analyzed strictly; the Row test encoder still needs fallback.
+      checkAnswer(queries._1, Row(10L))
+      checkAnswer(queries._2, Seq(Row(10L), Row(10L)))
+    }
+  }
+
   for (operator <- Seq("/", "DIV", "%")) {
     test(s"KLL membership retains the non-ANSI zero divisor guard: $operator") {
       for (legacy <- Seq(false, true)) {
@@ -1148,6 +1216,26 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val query = sql(s"""SELECT a.id, b.id FROM kll_a a CROSS JOIN kll_b b
             |JOIN kll_c c ON a.id = c.id AND b.id + $scalar = c.id""".stripMargin)
+        assert(!query.queryExecution.executedPlan.exists(_.nodeName == "CartesianProduct"),
+          query.queryExecution.toString)
+        checkAnswer(query, Row(3L, 0L))
+      }
+    }
+  }
+
+  test("KLL scalar placement crosses a pruned random projection") {
+    withTempView("kll_a", "kll_b", "kll_c") {
+      spark.sparkContext.parallelize(0L until 100L).toDF("a_id")
+        .createOrReplaceTempView("kll_a")
+      spark.sparkContext.parallelize(0L until 100L).toDF("b_id")
+        .createOrReplaceTempView("kll_b")
+      spark.sparkContext.parallelize(Seq(3L)).toDF("c_id")
+        .createOrReplaceTempView("kll_c")
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val query = sql(s"""SELECT a_id, b_id FROM
+            |(SELECT a_id, b_id, rand(0) AS unused FROM kll_a CROSS JOIN kll_b) ab
+            |JOIN kll_c c ON a_id = c_id AND b_id + $scalar = c_id""".stripMargin)
         assert(!query.queryExecution.executedPlan.exists(_.nodeName == "CartesianProduct"),
           query.queryExecution.toString)
         checkAnswer(query, Row(3L, 0L))

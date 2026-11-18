@@ -40,16 +40,26 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // LeftSemi/LeftAnti over Project
     case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-        if pList.forall(_.deterministic) &&
-        !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
+        if !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
-      if (joinCond.isEmpty) {
+      val independent = new ValidateSubqueryExpression.KllSubqueryIndependence
+      val conditionReferences = joinCond.map(_.references).getOrElse(AttributeSet.empty)
+      def selectedScalar(expression: NamedExpression): Boolean = expression match {
+        case alias @ Alias(scalar: ScalarSubquery, _) =>
+          !conditionReferences.contains(alias.toAttribute) && independent(scalar)
+        case _ => false
+      }
+      if (!pList.forall(e => e.deterministic || selectedScalar(e))) {
+        j
+      } else if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
       } else {
         val aliasMap = getAliasMap(p)
         // Do not push complex join condition
-        if (aliasMap.forall(_._2.child.children.isEmpty)) {
+        if (aliasMap.forall { case (_, alias) =>
+            alias.child.children.isEmpty || selectedScalar(alias)
+          }) {
           val newJoinCond = if (aliasMap.nonEmpty) {
             Option(replaceAlias(joinCond.get, aliasMap))
           } else {

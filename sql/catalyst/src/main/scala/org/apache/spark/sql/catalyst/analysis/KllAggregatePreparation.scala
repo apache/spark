@@ -79,11 +79,25 @@ private[sql] object KllAggregatePreparation {
             }
         }
       }
-      val forwarded = if (required.isEmpty) AttributeSet.empty else {
-        current.inputSet.intersect(required)
+      // Only candidate identities can affect deletion. Avoid recursive output/inputSet reads
+      // for ordinary forwarded columns, especially through long chains of filters.
+      val forwarded = required.filter(a => candidates.contains(a.exprId))
+      val needed = current.references.filter(a => candidates.contains(a.exprId)) ++ forwarded
+      current match {
+        case _: Project | _: Aggregate | _: Filter | _: Sort | _: SubqueryAlias | _: Join |
+            _: Repartition | _: RepartitionByExpression | _: RebalancePartitions |
+            _: GlobalLimit | _: LocalLimit | _: Offset | _: Window | _: Deduplicate |
+            _: Distinct | _: CTERelationDef =>
+          current.mapChildren(child => visit(child, needed))
+        case _ =>
+          // CTE definitions and positional set-operation branches need not share their
+          // consumer's ExprIds. Preserve exposed candidate outputs at unmapped boundaries;
+          // precise inner Projects can still retire their unused auxiliary producers.
+          current.mapChildren { child =>
+            val exposed = child.output.filter(a => candidates.contains(a.exprId))
+            visit(child, needed ++ AttributeSet(exposed))
+          }
       }
-      val needed = current.references ++ forwarded
-      current.mapChildren(child => visit(child, needed))
     }
     visit(plan, plan.outputSet)
   }

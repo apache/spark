@@ -41,7 +41,9 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   Corrected-mode checkpoints for queries containing KLL aggregates use a version 3 offset-log
   wrapper. Older binaries reject this version before reading the state: they ignore the sharing
   setting and could otherwise assign valid binary state fields to different KLL outputs.
-  Legacy-mode checkpoints and queries without KLL aggregates keep their existing log format.
+  Legacy-mode checkpoints and new checkpoints for queries without KLL aggregates keep their
+  existing log format. An existing corrected checkpoint retains its reader requirement even if
+  the current query no longer contains a KLL aggregate.
   If rollback to an older binary is needed,
   select legacy sharing (`true`) before creating the checkpoint, subject to the usual
   cross-version compatibility requirements, or plan a replay with a fresh checkpoint.

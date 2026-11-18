@@ -70,9 +70,24 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
             expressionsToExtract, keys)
         val newChild =
           NondeterministicExpressionCollection.project(guarded.child, nondeterToAttr, keys)
-        val deterministicAggregate = guarded.mapExpressionsWithReferenceEquality { expression =>
+        def replace(expression: Expression): Expression =
           NondeterministicExpressionCollection.replaceBindings(expression, nondeterToAttr, keys)
-        }.copy(child = newChild)
+        val grouping = guarded.groupingExpressions.map(replace)
+        val groupingBindings = guarded.groupingExpressions.zip(grouping).collect {
+          case (original, rewritten) if !original.deterministic => keys(original) -> rewritten
+        }.toMap
+        def replaceResult(expression: Expression): Expression = expression match {
+          case aggregate: AggregateExpression => replace(aggregate)
+          case other if !other.deterministic =>
+            val grouped = if (groupingBindings.isEmpty) None else groupingBindings.get(keys(other))
+            grouped.getOrElse(other.mapChildrenWithReferenceEquality(replaceResult))
+          case other => other
+        }
+        // An input binding belongs to the updater/FILTER. Outside it, replace complete grouping
+        // expressions only: exposing a scalar dependency can manufacture an ungrouped attribute.
+        val deterministicAggregate = guarded.copy(groupingExpressions = grouping,
+          aggregateExpressions = guarded.aggregateExpressions.map(e =>
+            replaceResult(e).asInstanceOf[NamedExpression]), child = newChild)
 
         deterministicAggregate.groupingExpressions.foreach(expr => if (!expr.deterministic) {
           throw SparkException.internalError(
@@ -137,24 +152,10 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         LogicalPlan, java.util.IdentityHashMap[AttributeSet, java.lang.Integer]]
       val membershipDestinations = new java.util.IdentityHashMap[
         LogicalPlan, mutable.Map[AttributeSet, Int]]
-      val forwarding = new java.util.IdentityHashMap[Project, java.lang.Boolean]
-      val safeComputed = new java.util.IdentityHashMap[Project, java.lang.Boolean]
-      def forwardsAttributes(project: Project): Boolean = {
-        val cached = forwarding.get(project)
-        if (cached != null) cached.booleanValue() else {
-          val result = project.projectList.forall(_.isInstanceOf[Attribute])
-          forwarding.put(project, result)
-          result
-        }
-      }
-      def safeProjection(project: Project): Boolean = safeComputed.computeIfAbsent(project,
-        p => p.projectList.forall(e => e.deterministic && !e.throwable)).booleanValue()
-      def mayDescend(project: Project, references: AttributeSet): Boolean =
-        forwardsAttributes(project) ||
-          (safeProjection(project) && references.subsetOf(project.child.outputSet))
+      val placement = new KllSubqueryBindingPlacement
       def destination(child: LogicalPlan, references: AttributeSet): Int = child match {
         case alias: SubqueryAlias => destination(alias.child, references)
-        case projection: Project if mayDescend(projection, references) =>
+        case projection: Project if placement.mayDescend(projection, references) =>
           destination(projection.child, references)
         case inner: Join
             if inner.joinType.isInstanceOf[org.apache.spark.sql.catalyst.plans.InnerLike] &&
@@ -238,35 +239,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val uses = referenceSets.iterator.map { case (id, sets) =>
         id -> AttributeSet.fromAttributeSets(sets.toSeq)
       }.toMap
-      def project(child: LogicalPlan, bindings: Iterable[NamedExpression]): LogicalPlan = {
-        if (bindings.isEmpty) child else child match {
-          case alias: SubqueryAlias => alias.copy(child = project(alias.child, bindings))
-          case projection: Project if forwardsAttributes(projection) =>
-            projection.copy(projectList = projection.projectList ++ bindings.map(_.toAttribute),
-              child = project(projection.child, bindings))
-          case projection: Project if safeProjection(projection) =>
-            val (lower, here) = bindings.partition { binding =>
-              mayDescend(projection, uses(binding.exprId))
-            }
-            val updated = if (lower.isEmpty) projection else {
-              projection.copy(projectList = projection.projectList ++ lower.map(_.toAttribute),
-                child = project(projection.child, lower))
-            }
-            if (here.isEmpty) updated else Project(updated.output ++ here.toSeq, updated)
-          // Independent scalars can be attached within an unhinted inner component. Keeping
-          // its relations visible lets both join-ordering rules choose selective joins first.
-          case inner: Join
-              if inner.joinType.isInstanceOf[org.apache.spark.sql.catalyst.plans.InnerLike]
-              && inner.hint == JoinHint.NONE =>
-            val rightOutput = inner.right.outputSet
-            val (right, left) = bindings.partition { binding =>
-              val references = uses(binding.exprId)
-              references.nonEmpty && references.subsetOf(rightOutput)
-            }
-            inner.copy(left = project(inner.left, left), right = project(inner.right, right))
-          case _ => Project(child.output ++ bindings.toSeq, child)
-        }
-      }
+      def project(child: LogicalPlan, bindings: Iterable[NamedExpression]): LogicalPlan =
+        placement.project(child, bindings.toSeq, uses)
       Project(join.output, join.copy(left = project(join.left, leftBindings.values),
         right = project(join.right, rightBindings.values), condition = condition))
 
@@ -292,7 +266,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       Project(p.output, newPlan.withNewChildren(newChild :: Nil))
   }
 
-  private def safeKllCount(getter: KllSketchGetNBase): Boolean = getter.child match {
+  private[sql] def safeKllCount(getter: KllSketchGetNBase): Boolean = getter.child match {
     case scalar: ScalarSubquery if !scalar.deterministic && !scalar.isCorrelated =>
       // Hoisting an arbitrary decoder can expose an invalid buffer in an untaken CASE branch,
       // or before a join produces any candidate row. Only a matching aggregate's direct result

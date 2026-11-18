@@ -169,6 +169,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.PullUpProjectAliasThroughWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownJoinThroughUnion" ::
+      "org.apache.spark.sql.catalyst.optimizer.PushDownKllSubqueryBindings" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
