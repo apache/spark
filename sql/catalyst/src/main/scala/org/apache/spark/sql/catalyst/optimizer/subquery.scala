@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -467,16 +466,6 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   * TODO: Look to merge this rule with RewritePredicateSubquery.
   */
 object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper {
-  /**
-   * Marks the domain joins of a correlated scalar subquery whose count bug this rule handles in
-   * [[DecorrelateInnerQuery]] only since SPARK-60501, i.e. without a lower Aggregate without
-   * GROUP BY with an aggregate function with a default result. These domain joins compute the
-   * outer input again, so LimitPushDown keeps a LIMIT above such a subquery (see
-   * mayMoveIntoOuterInput). The other domain joins, which this rule added before too, are not
-   * marked, so the plans of those subqueries do not change.
-   */
-  val COUNT_BUG_DOMAIN_JOIN = TreeNodeTag[Unit]("countBugDomainJoin")
-
    /**
     * Returns the correlated predicates and a updated plan that removes the outer references.
     */
@@ -714,7 +703,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * builds the domain joins: PushDownPredicates can push a filter or join condition there. The
    * check is conservative and looks at all of `root`. Of the cases of LimitPushDown for a Project,
    * the ones into a join and, for a LIMIT 1, through a group-only Aggregate keep the LIMIT above
-   * a Project with a scalar subquery with the domain joins marked with COUNT_BUG_DOMAIN_JOIN;
+   * a Project with a scalar subquery with a domain join with keepLimitAbove;
    * the ones over UDF evaluation nodes or a UnionLoop occur only after the rewrite or in inputs
    * that repeatableInput rejects. A correlated scalar subquery in a grouping expression is in a
    * Project below the Aggregate by then (PullOutGroupingExpressions).
@@ -816,23 +805,22 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           } || sameResultOverEmptyLowerAggregate(agg)
           case _ => false
         })
-        val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
-        // The choice before SPARK-60501, which looked only for a lower Aggregate without GROUP BY
-        // with an aggregate function with a default result (see COUNT_BUG_DOMAIN_JOIN).
-        lazy val handledInDecorrelateBefore = conf.decorrelateInnerQueryEnabled &&
-          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+        val (decorrelatedPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
+        // Whether the count bug is handled in DecorrelateInnerQuery only since SPARK-60501: before,
+        // that needed a lower Aggregate without GROUP BY with an aggregate function with a default
+        // result (see DomainJoin.keepLimitAbove).
+        lazy val handledInDecorrelateSinceSpark60501 = sub match {
           case agg: Aggregate => !agg.child.exists {
-            case lowerAgg: Aggregate => lowerAgg.groupingExpressions.isEmpty &&
-              hasDefaultResult(lowerAgg)
+            case lowerAgg: Aggregate =>
+              lowerAgg.groupingExpressions.isEmpty && hasDefaultResult(lowerAgg)
             case _ => false
           }
           case _ => false
-        })
-        if (handleCountBugInDecorrelate && !handledInDecorrelateBefore) {
-          newPlan.foreach {
-            case d: DomainJoin => d.setTagValue(COUNT_BUG_DOMAIN_JOIN, ())
-            case _ =>
-          }
+        }
+        val newPlan = if (handleCountBugInDecorrelate && handledInDecorrelateSinceSpark60501) {
+          decorrelatedPlan.transform { case d: DomainJoin => d.copy(keepLimitAbove = true) }
+        } else {
+          decorrelatedPlan
         }
         val mayHaveCountBug = if (mayHaveCountBugOld.isDefined) {
           // For idempotency, we must save this variable the first time this rule is run, because

@@ -141,6 +141,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     (subqueries.head.mayHaveCountBug, countBugDomainJoin)
   }
 
+  // DomainJoin.keepLimitAbove of each domain join of the subquery COUNT(*) over `lower`.
+  private def keepLimitAbove(lower: LogicalPlan): Seq[Boolean] = {
+    val subPlan = lower.groupBy()(count(Literal(1)).as("r"))
+    val optimized = Optimize.execute(testRelation.select(ScalarSubquery(subPlan).as("sq")).analyze)
+    optimized.expressions.flatMap(_.collect { case s: ScalarSubquery => s })
+      .flatMap(_.plan.collect { case d: DomainJoin => d.keepLimitAbove })
+  }
+
   private def correlated(agg: Expression): LogicalPlan =
     testRelation2.where($"a" === $"c").groupBy()(agg.as("s"))
 
@@ -166,10 +174,16 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // A lower aggregate with a function with a default result is handled in decorrelation, as
     // before, also when it is uncorrelated.
     assert(countBugHandling(uncorrelated(count($"d"))) == (Some(false), true))
+    // Only the domain joins of a subquery that is handled in decorrelation since SPARK-60501 keep
+    // a LIMIT above; the ones that a lower COUNT gave before do not.
+    assert(keepLimitAbove(correlated(max($"d"))).toSet == Set(true))
+    assert(keepLimitAbove(correlated(count($"d"))).toSet == Set(false))
+    assert(keepLimitAbove(uncorrelated(count($"d"))).forall(!_))
     withSQLConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key -> "true") {
       assert(countBugHandling(correlated(max($"d"))) == (Some(true), false))
       assert(countBugHandling(correlated(count($"d"))) == (Some(false), true))
       assert(countBugHandling(uncorrelated(count($"d"))) == (Some(false), true))
+      assert(keepLimitAbove(correlated(max($"d"))).forall(!_))
     }
     // A streaming outer query keeps the legacy behavior.
     val streamingOuter = testRelation.copy(isStreaming = true)
@@ -258,8 +272,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       IsNotNull(ScalarSubquery(testRelation2.select(Literal(1).as("col")).limit(1)))
     assert(countBugHandling(correlated(max($"d")), outer = testRelation.where(uncorrelatedExists))
       == inDecorrelation)
-    // LimitPushDown pushes a LIMIT other than 1 neither below an aggregate nor into an inner join
-    // with a condition.
+    // A LIMIT above does not matter for any outer input: LimitPushDown keeps it above a Project
+    // with a scalar subquery with a domain join with keepLimitAbove (see LimitPushdownSuite).
     assert(countBugHandling(correlated(max($"d")), outer = groupedOuter, above = _.limit(21)) ==
       inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), outer = groupedOuter, above = _.limit(1)) ==

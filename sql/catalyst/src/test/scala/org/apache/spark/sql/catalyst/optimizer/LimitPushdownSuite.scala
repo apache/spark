@@ -359,11 +359,10 @@ class LimitPushdownSuite extends PlanTest {
     val Seq(d, e, _) = testRelation2.output
     val agg = testRelation2.groupBy()(max(e).as("m")).analyze
     def withDomainJoin(marked: Boolean): NamedExpression = {
-      val domainJoin = DomainJoin(Seq(d), testRelation2)
-      if (marked) domainJoin.setTagValue(PullupCorrelatedPredicates.COUNT_BUG_DOMAIN_JOIN, ())
+      val domainJoin = DomainJoin(Seq(d), testRelation2, keepLimitAbove = marked)
       ScalarSubquery(domainJoin.groupBy()(max(e).as("m")), outerAttrs = Seq(a)).as("s")
     }
-    // The domain joins that PullupCorrelatedPredicates adds for the count bug since SPARK-60501
+    // The joins that RewriteCorrelatedScalarSubquery builds for a domain join with keepLimitAbove
     // compute the input of the Project again, so a limit there could keep other rows.
     val join = testRelation.join(testRelation2, LeftOuter, Some(a === d))
     val groupOnly = testRelation.groupBy(a)(a)
@@ -372,8 +371,8 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(keptAbove), keptAbove)
     val limitOneKeptAbove = Project(Seq(a, withDomainJoin(marked = true)), groupOnly).limit(1)
     comparePlans(Optimize.execute(limitOneKeptAbove), limitOneKeptAbove)
-    // Other scalar subqueries, also correlated ones and ones with domain joins that it added
-    // before, keep the pushdown of before.
+    // Other scalar subqueries, also correlated ones and ones with domain joins without
+    // keepLimitAbove, keep the pushdown of before.
     Seq(withDomainJoin(marked = false), ScalarSubquery(agg, outerAttrs = Seq(a)).as("s"),
         ScalarSubquery(agg).as("s")).foreach { s =>
       comparePlans(

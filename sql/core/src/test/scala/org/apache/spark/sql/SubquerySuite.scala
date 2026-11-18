@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Ex
   ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
   PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalLimit, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
@@ -83,13 +83,6 @@ class SubquerySuite extends SharedSparkSession
     val df = sql(query)
     df.queryExecution.executedPlan
     val e = intercept[T](df.collect())
-    assert(e.getCondition === condition)
-  }
-
-  private def checkFailsWhileOptimized[T <: SparkThrowable : ClassTag](
-      query: String,
-      condition: String): Unit = withClue(query) {
-    val e = intercept[T](sql(query).queryExecution.executedPlan)
     assert(e.getCondition === condition)
   }
 
@@ -3436,6 +3429,13 @@ class SubquerySuite extends SharedSparkSession
       Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
       // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows. The query
       // is still optimized and planned, and fails when it runs.
+      def checkFailsWhileOptimized[T <: SparkThrowable : ClassTag](
+          query: String,
+          condition: String): Unit = withClue(query) {
+        val e = intercept[T](sql(query).queryExecution.executedPlan)
+        assert(e.getCondition === condition)
+      }
+
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         // Every outer row has matching rows, so the result on zero rows is not used, and the
         // queries must not fail while the subquery is rewritten.
@@ -3582,10 +3582,9 @@ class SubquerySuite extends SharedSparkSession
         "WHERE t1.a1 = t2.b1))"
       // The golden file has these queries too, but cannot tell when they fail. The value over no
       // rows is computed for t1.a1 = 1, which has no matching rows, also in the second query,
-      // whose WHERE removes that row, as master does for a lower COUNT. In the last query, every
-      // outer row has matching rows. The legacy conf gives the results of before. A regular
-      // session also runs ConvertToLocalRelation, which the test session excludes, over the
-      // views.
+      // whose WHERE removes that row. In the last query, every outer row has matching rows. The
+      // legacy conf gives the results of before. A regular session also runs
+      // ConvertToLocalRelation, which the test session excludes, over the views.
       val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
       Seq(Nil, Seq(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "")).foreach { sessionConfs =>
         withSQLConf((SQLConf.ANSI_ENABLED.key -> "true") +: sessionConfs: _*) {
@@ -3700,7 +3699,8 @@ class SubquerySuite extends SharedSparkSession
       // LIMIT 1 turns the DISTINCT into a Project, and a non-aggregated subquery, which becomes
       // a left single join, still gets the LIMIT into the left side of the left join below it.
       // With the domain joins that decorrelation added before, e.g. over a lower COUNT or for a
-      // correlation below a UNION ALL, the LIMIT also still goes into the domain joins.
+      // correlation below a UNION ALL, the LIMIT still also goes into the domain joins, as on
+      // master and 4.3.0.
       val single = "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)"
       assert(!optimizedPlan(s"SELECT o.k, $single FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
         legacyNestedAggregate = false).exists { case a: Aggregate => a.groupOnly; case _ => false })
@@ -3711,6 +3711,7 @@ class SubquerySuite extends SharedSparkSession
           assert(limitsInLeftOuterRight(optimizedPlan(query, legacyNestedAggregate = false)) > 0)
         }
       }
+      // Pins the default, under which a non-aggregated subquery becomes a left single join.
       withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
         val nonAggregate = "(SELECT b.v FROM b WHERE b.k = o.k)"
         val unionAll = "(SELECT u.v FROM (SELECT b.v FROM b WHERE b.k = o.k UNION ALL " +
@@ -3721,7 +3722,17 @@ class SubquerySuite extends SharedSparkSession
             assert(limitedLeftOuterJoin(optimizedPlan(query, legacyNestedAggregate = false)))
           }
         }
+        val query = s"SELECT o.k, $unionAll FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10"
+        assert(optimizedPlan(query, legacyNestedAggregate = false).collect {
+          case Join(_, right, LeftSingle, _, _) => limits(right)
+        }.sum > 0, query)
       }
+      // In a nested subquery, OptimizeSubqueries keeps the LIMIT above the inner subquery too.
+      val nested = s"SELECT (SELECT SUM(c) FROM (SELECT o.k, $subquery c FROM o " +
+        "LEFT JOIN b d ON o.k = d.k LIMIT 10)) FROM b WHERE b.k = 0"
+      val inner = optimizedPlan(nested, legacyNestedAggregate = false).flatMap(_.expressions)
+        .flatMap(_.collect { case s: SubqueryExpression => s.plan })
+      assert(inner.nonEmpty && inner.forall(limitsInLeftOuterRight(_) == 0), nested)
     }
   }
 
