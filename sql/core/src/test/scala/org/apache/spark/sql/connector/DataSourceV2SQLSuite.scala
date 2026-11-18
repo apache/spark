@@ -1579,6 +1579,29 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-61935: insert checks NOT NULL for a Scala UDF with a primitive input") {
+    import testImplicits._
+    val t = "testcat.tbl"
+    withTable(t) {
+      withTempView("source") {
+        withUserDefinedFunction("plus1" -> true) {
+          // the UDF is not nullable, but it returns NULL for NULL input as its input is primitive
+          spark.udf.register("plus1", (x: Int) => x + 1)
+          sql(s"CREATE TABLE $t (id INT NOT NULL, data INT NOT NULL) USING foo")
+          Seq((1, Some(10)), (2, None)).toDF("id", "data").createOrReplaceTempView("source")
+
+          sql(s"INSERT INTO $t SELECT id, plus1(data) FROM source WHERE id = 1")
+          checkAnswer(spark.table(t), Row(1, 11))
+
+          val e = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t SELECT id, plus1(data) FROM source")
+          }
+          assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+        }
+      }
+    }
+  }
+
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM a.b"),

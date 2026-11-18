@@ -386,7 +386,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
         inputEncoders = Seq(None, Option(encoderFor(StringEncoder))),
         outputEncoder = Option(encoderFor(StringEncoder)),
         udfName = None,
-        nullable = false,
+        udfNullable = false,
         udfDeterministic = false))
   }
 
