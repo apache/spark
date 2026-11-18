@@ -210,7 +210,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     }
 
     // The cutoff must rise with the watermark: `watermark + c < leftTime`. Without the watermark
-    // term, or with `-watermark`, later rightTime values can still match old leftTime values.
+    // term, the cutoff never rises and caps the other conjuncts' cutoffs. With `-watermark`, the
+    // cutoff falls, and later rightTime values can still match old leftTime values.
     val watermarkTerms = terms.filter(_.references.exists { a =>
       attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey)
     })

@@ -559,7 +559,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Seq("is not supported without a watermark in the join keys, or a watermark on " +
         "the nullable side and an appropriate range condition"))
 
-    // A range condition bounds state only if the watermark appears with a positive sign.
+    // A range condition bounds state only if it can be rearranged to `attribute > watermark + c`.
     assertSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and an extra constant-only bound",
       leftRelation.join(rightRelation, joinType = joinType,
