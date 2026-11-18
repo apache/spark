@@ -159,7 +159,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val childColumns = new ChildColumns
+    val childColumns = new ChildColumns(plan)
     plan.transformUpWithPruning(
       _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
       case f: Filter =>
@@ -736,9 +736,13 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * What one application of the rule finds for each plan below a filter, as the filters above it
    * look at it too: the columns that can fail, and the foldable ones, each only once asked for.
    */
-  private class ChildColumns {
+  private class ChildColumns(plan: LogicalPlan) {
     val failable = new java.util.IdentityHashMap[LogicalPlan, AttributeSet]()
     val foldable = new java.util.IdentityHashMap[LogicalPlan, AttributeMap[Expression]]()
+    /** The definitions of the CTEs that are not inlined, by their ids. */
+    lazy val cteDefs: Map[Long, CTERelationDef] = plan.collectWithSubqueries {
+      case w: WithCTE => w.cteDefs
+    }.flatten.map(d => d.id -> d).toMap
   }
 
   private def cached[T](cache: java.util.IdentityHashMap[LogicalPlan, T], plan: LogicalPlan)(
@@ -755,11 +759,12 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * The columns of `plan` that can fail, i.e. those that a projection at its top, or below the
-   * filters, samples, limits, offsets, sorts, joins, unions and projections there, computes with
-   * a deterministic expression that [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads
-   * such a column, or passes such a column through, and the result columns of an aggregation with
-   * grouping keys there whose expression, with each aggregate function taken as its value, is
-   * deterministic and rejected by it.
+   * filters, samples, limits, offsets, sorts, joins, lateral joins, unions, CTEs that are not
+   * inlined, references to them, and projections there, computes with a deterministic expression
+   * that [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads such a column, or passes
+   * such a column through, the result columns of an aggregation with grouping keys there whose
+   * expression, with each aggregate function taken as its value, is deterministic and rejected by
+   * it, and those that a serializer from objects there computes with such an expression.
    * Under whole-stage codegen, the projection computes a deterministic column for a row only when
    * a conjunct of the filter above first reads it, unless its subexpression elimination computes
    * it up front, and `PushPredicateThroughNonJoin` pushes a conjunct below the projection with the
@@ -768,14 +773,19 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    * keys computes the same way. A non-deterministic column is computed on every row the projection
    * gets, and no filter is pushed through a projection with one, so it does not count; nor does a
    * result column of a global aggregation, which computes it for its one row up front.
-   * A limit, an offset, a union and the streamed side of a broadcast hash join pass the columns on
-   * as they are, in the same stage, and so does a sort that the physical plan removes as its input
-   * is sorted already. Otherwise, e.g. below the shuffle of a limit or an offset over more than one
-   * partition, on the build side of a join or below a sort, the columns are computed for every row
-   * anyway, but they still count: the constant of an equality over them then goes into the other
-   * conjuncts in place, as before SPARK-60983, which can fail on a row where the equality does not
-   * hold, where moving the equality first would not. Other operators are not looked through for
-   * the columns that can fail.
+   * A limit, an offset, a union in whole-stage codegen and the streamed side of a broadcast hash or
+   * nested loop join pass the columns on as they are, in the same stage, and so does a sort that
+   * the physical plan removes as its input is sorted already, a `WithCTE`, which it removes, and a
+   * lateral join, which `RewriteLateralSubquery` turns into a join after this rule runs. A
+   * reference to a CTE reads the columns its definition computes, where
+   * `PushdownPredicatesAndPruneColumnsForCTEDef` copies the conditions over it to. Otherwise, e.g.
+   * below the shuffle of a limit or an offset over more than one partition, on the build side of a
+   * join, below a sort or a union outside whole-stage codegen, or a reference to a CTE where no
+   * condition is copied, the columns are computed for every row anyway, but they still count:
+   * the constant of an equality over them then goes into the other conjuncts in place, as before
+   * SPARK-60983, which can fail on a row where the equality does not hold, where moving the
+   * equality first would not. Other operators are not looked through for the columns that can
+   * fail.
    */
   private def failableColumnsOf(plan: LogicalPlan, cache: ChildColumns): AttributeSet =
     cached(cache.failable, plan) {
@@ -795,6 +805,21 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
         case o: Offset => failableColumnsOf(o.child, cache)
         case s: Sort => failableColumnsOf(s.child, cache)
         case j: Join => failableColumnsOf(j.left, cache) ++ failableColumnsOf(j.right, cache)
+        case l: LateralJoin =>
+          failableColumnsOf(l.left, cache) ++ failableColumnsOf(l.right.plan, cache)
+        case w: WithCTE => failableColumnsOf(w.plan, cache)
+        case r: CTERelationRef if !r.recursive =>
+          cache.cteDefs.get(r.cteId).map { d =>
+            val failable = failableColumnsOf(d.child, cache)
+            AttributeSet(r.output.zip(d.output).collect {
+              case (a, b) if failable.contains(b) => a
+            })
+          }.getOrElse(AttributeSet.empty)
+        case s: SerializeFromObject =>
+          AttributeSet(s.serializer.collect {
+            case a: Alias if a.child.deterministic &&
+                !ExprUtils.canEvaluateUnconditionally(a.child) => a.toAttribute
+          })
         case u: Union =>
           val children = u.children.map(c => (c.output, failableColumnsOf(c, cache)))
           AttributeSet(u.output.zipWithIndex.collect {

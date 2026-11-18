@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSingle, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Expand, Filter, LocalRelation, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType}
@@ -373,6 +373,11 @@ class ConstantPropagationSuite extends PlanTest {
         // reading it under whole-stage codegen.
         stringIds.select($"s", $"id", $"x", Literal(1).as("i")).union(projected),
         projected.union(stringIds.select($"s", $"id", $"x", Literal(1).as("i"))),
+        // And from a lateral join, which `RewriteLateralSubquery` turns into a join after this rule
+        // runs, from the plan of a CTE that is not inlined, and from its definition through a
+        // reference to it.
+        projected.lateralJoin(LocalRelation($"k".long)),
+        WithCTE(projected, Nil),
         projected.join(LocalRelation($"k".long), Inner, Some($"x" === $"k")),
         LocalRelation($"k".long).join(projected, Inner, Some($"x" === $"k")),
         stringIds.groupBy($"s", $"id")($"s", $"id", castS.as("i"))
@@ -876,6 +881,23 @@ class ConstantPropagationSuite extends PlanTest {
           $"id" === 7L),
         Not($"id" === 7L) || Not(If($"id" > 7L, $"x" > 1L, Literal(null, BooleanType))) ||
           Not($"u" === "A"))
+    }
+  }
+
+  test("SPARK-61437: A column that can fail through a reference to a CTE that is not inlined") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val definition = CTERelationDef(projected.analyze)
+      val reference =
+        CTERelationRef(definition.id, _resolved = true, definition.output, isStreaming = false)
+      val written = $"id" > 5L && timesId($"i") > 0L && $"i" === 1
+      val expected = $"id" > 5L && Literal(1L) * $"id" > 0L && $"i" === 1
+      val optimized = Optimize.execute(WithCTE(reference.where(written).analyze, Seq(definition)))
+      val expectedPlan = WithCTE(reference.where(expected).analyze, Seq(definition))
+      comparePlans(optimized, expectedPlan)
+      assert(optimized.collectFirst { case f: Filter => conjuncts(f) } ==
+        expectedPlan.collectFirst { case f: Filter => conjuncts(f) })
+      // Without the definition, the reference reads columns that can not fail, as before.
+      checkOrdered(reference, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
     }
   }
 

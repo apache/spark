@@ -3158,6 +3158,27 @@ class DataFrameSuite extends SharedSparkSession
               .select($"*", rand(1).as("r")).where($"id" > 5 && $"i" * $"id" > 0 && $"i" === 1)
               .select($"s", $"id", $"r" >= 0), Row("1", 7L, true))
           }
+          // And above a lateral join, a CTE that is not inlined, also through a reference to it,
+          // and the serializer of a typed operation, whose decimal can overflow.
+          withTempView("spark61437_two", "spark61437_k") {
+            spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("spark61437_two")
+            Seq(7L, 0L).toDF("k").createOrReplaceTempView("spark61437_k")
+            val written = "id > 5 AND i * id > 0 AND i = 1"
+            checkAnswer(sql("SELECT s, id FROM (SELECT s, id, cast(s AS INT) AS i, rand(1) AS r " +
+              "FROM spark61437_two) l, LATERAL (SELECT max(k) AS m FROM spark61437_k " +
+              s"WHERE spark61437_k.k = l.id) WHERE $written"), Row("1", 7L))
+            checkAnswer(sql("WITH t AS (SELECT s, id, cast(s AS INT) AS i, rand(1) AS r " +
+              s"FROM spark61437_two) SELECT s, id FROM t WHERE $written " +
+              s"UNION ALL SELECT s, id FROM t WHERE $written"), Seq(Row("1", 7L), Row("1", 7L)))
+            checkAnswer(sql("WITH c AS (SELECT s, id, rand(2) AS r0 FROM spark61437_two) " +
+              "SELECT c1.s, c1.id, cast(c1.s AS INT) AS i, rand(1) AS r " +
+              "FROM c c1 JOIN c c2 ON c1.id = c2.id").where(written).select($"s", $"id"),
+              Row("1", 7L))
+          }
+          checkAnswer(spark.range(0, 10, 1, 1).as[Long]
+            .map(x => (x, if (x == 3) BigDecimal("1e30") else BigDecimal(1)))
+            .select($"*", rand(1).as("r")).where($"_1" > 5 && $"_2" * $"_1" > 0 && $"_2" === 1)
+            .select($"_1"), (6L to 9L).map(Row(_)))
           val sorted = spark.range(0, 10, 1, 1).toDF()
             .select($"id", expr("10 div (id - 3)").as("i")).orderBy($"id")
             .select($"id", $"i", rand(1).as("r"))
