@@ -4748,6 +4748,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT =
+    buildConf("spark.sql.legacy.useCurrentConfigsForCheckConstraint")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a CHECK constraint under the " +
+        "SQL configs of the current active SparkSession, instead of the default values of the " +
+        "configs that change how the text reads, and a DDL does not reject a condition that " +
+        "reads differently under those default values.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val STORE_ANALYZED_PLAN_FOR_VIEW =
     buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
       .internal()

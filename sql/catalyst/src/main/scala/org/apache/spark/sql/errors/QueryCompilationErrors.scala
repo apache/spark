@@ -5361,4 +5361,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION",
       messageParameters = Map.empty)
   }
+
+  def unresolvableCheckConstraintError(
+      constraintName: String,
+      condition: String,
+      cause: AnalysisException): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVABLE_CHECK_CONSTRAINT",
+      messageParameters = Map(
+        "constraintName" -> constraintName,
+        "checkCondition" -> condition,
+        "cause" -> cause.getSimpleMessage),
+      cause = Some(cause))
+  }
 }
