@@ -22,11 +22,12 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DateType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VarcharType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DataTypeTestUtils, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampFamily, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class TransformExpressionSuite extends SparkFunSuite {
 
@@ -207,7 +208,8 @@ class TransformExpressionSuite extends SparkFunSuite {
 
   test("SPARK-60027: an argument is taken as it is when it is stored as the declared type is") {
     // A function declaring `declared` reads a value of `argumentType` as it is, field by field and
-    // by position, when the two are stored alike, as it did before the input type check. The
+    // by position, when the two are stored alike, as it did before the input type check, apart
+    // from two datetime or interval types, see `TransformExpression.datetimeCastKeepsValue`. The
     // value is read from an unsafe row, as a one-side shuffle reads it, since that is where a
     // nested decimal is stored by its precision.
     class IntUDT extends UserDefinedType[Integer] {
@@ -276,7 +278,20 @@ class TransformExpressionSuite extends SparkFunSuite {
       ("a field of another physical type", struct("d", DateType), struct("d", LongType),
         InternalRow(5), structField, false),
       ("a struct with another number of fields", struct("a", IntegerType),
-        struct("a", IntegerType).add("b", IntegerType), InternalRow(5), structField, false)
+        struct("a", IntegerType).add("b", IntegerType), InternalRow(5), structField, false),
+      // SPARK-60813 and SPARK-61650, see `TransformExpression.datetimeCastKeepsValue`.
+      ("a TIME against a TIMESTAMP", TimeType(), TimestampType, 5L, structField, false),
+      ("a nested TIME against a nested TIMESTAMP", struct("t", TimeType()),
+        struct("t", TimestampType), InternalRow(5L), structField, false),
+      ("a TIMESTAMP_NTZ against a TIMESTAMP", TimestampNTZType, TimestampType, 5L, structField,
+        false),
+      ("a nested TIMESTAMP_NTZ against a nested TIMESTAMP", struct("t", TimestampNTZType),
+        struct("t", TimestampType), InternalRow(5L), structField, false),
+      ("a TIME of a coarser precision", TimeType(3), TimeType(6), 5000000L,
+        (row: InternalRow) => (row.getLong(1) / 1000000L).toInt, true),
+      ("a TIME of a finer precision", TimeType(6), TimeType(3), 5000L, structField, false),
+      ("a DAY TO SECOND interval against a DAY TO HOUR one", DayTimeIntervalType(),
+        DayTimeIntervalType(0, 1), 5L, structField, false)
     ).foreach { case (what, argumentType, declared, value, read, taken) =>
       val argument = BoundReference(0, argumentType, nullable = true)
       val transform = TransformExpression(function(declared)(read), Seq(argument), Some(4))
@@ -285,6 +300,65 @@ class TransformExpressionSuite extends SparkFunSuite {
         val unsafe = UnsafeProjection.create(Seq(argument)).apply(InternalRow(value))
         assert(transform.eval(unsafe) == 1, what)
       }
+    }
+  }
+
+  test("SPARK-61650: a datetime or interval value goes as another type only as its cast keeps it") {
+    // The write path can cast an argument to the declared type, so a datetime or interval value a
+    // function takes as it is has to be the value that cast gives, in a session time zone other
+    // than UTC too, or the two place a row in different partitions. A datetime or interval value
+    // against the integer it is held as is taken as it is too, though a cast between them would
+    // change it, e.g. a `TIMESTAMP` to its seconds: no implicit cast exists between them, in
+    // either mode, so the write path passes it as it is as well.
+    val zones = Seq("UTC", "America/Los_Angeles", "Asia/Kolkata")
+    val types: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType, TimeType(6)) ++
+      DataTypeTestUtils.timestampNanosTypes ++ DataTypeTestUtils.timeTypes ++
+      DataTypeTestUtils.yearMonthIntervalTypes ++ DataTypeTestUtils.dayTimeIntervalTypes
+    def value(dataType: DataType): Any = dataType match {
+      case DateType => 5
+      case TimestampType | TimestampNTZType => 3600123456L
+      case t @ (_: TimestampNTZNanosType | _: TimestampLTZNanosType) =>
+        DateTimeUtils.truncateTimestampNanosToPrecision(
+          TimestampNanosVal.fromParts(3600123456L, 789.toShort),
+          TimestampFamily.fractionalPrecision(t).get)
+      case TimeType(precision) => DateTimeUtils.truncateTimeToPrecision(3600123456789L, precision)
+      case YearMonthIntervalType(_, end) =>
+        IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(14), end)
+      case DayTimeIntervalType(_, end) =>
+        IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(90061123456L), end)
+    }
+    def taken(from: DataType, to: DataType): Boolean = TransformExpression(
+      new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(to)
+        override def resultType(): DataType = IntegerType
+        override def name(): String = "years"
+        override def canonicalName(): String = "test.years"
+        override def produceResult(input: InternalRow): Int = 0
+      }, Seq(BoundReference(0, from, nullable = true))).evaluableFunction.isDefined
+    val takenPairs = for (from <- types; to <- types if from != to && taken(from, to))
+      yield (from, to)
+    takenPairs.foreach { case (from, to) =>
+      val raw = value(from)
+      zones.foreach { zone =>
+        assert(Cast(Literal(raw, from), to, Some(zone)).eval() == raw, s"$from against $to, $zone")
+      }
+    }
+    assert(takenPairs.contains((TimeType(3), TimeType(6))) &&
+      takenPairs.contains((DayTimeIntervalType(0, 1), DayTimeIntervalType(0, 3))) &&
+      takenPairs.contains((TimestampNTZNanosType(7), TimestampNTZNanosType(9))) &&
+      !takenPairs.contains((TimestampNTZType, TimestampType)), takenPairs)
+
+    Seq[(DataType, DataType)](
+      (DateType, IntegerType), (TimestampType, LongType), (TimestampNTZType, LongType),
+      (TimeType(), LongType), (YearMonthIntervalType(), IntegerType),
+      (DayTimeIntervalType(), LongType), (IntegerType, DateType), (LongType, TimestampType),
+      (LongType, TimestampNTZType), (LongType, TimeType()), (IntegerType, YearMonthIntervalType()),
+      (LongType, DayTimeIntervalType())
+    ).foreach { case (from, to) =>
+      assert(taken(from, to), s"$from against $to")
+      val argument = BoundReference(0, from, nullable = true)
+      assert(TypeCoercion.implicitCast(argument, to).isEmpty, s"$from to $to")
+      assert(AnsiTypeCoercion.implicitCast(argument, to).isEmpty, s"$from to $to, ANSI")
     }
   }
 
@@ -338,6 +412,22 @@ class TransformExpressionSuite extends SparkFunSuite {
     assert(transform.eval(InternalRow(5)) == 1)
   }
 
+  test("SPARK-60813: a transform's plan string names its reduction and its key marker when set") {
+    // An unset `reducedWith` or `storedKey` stays out of the plan string, so the ordinary form is
+    // unchanged, and a set one prints, since it changes how the call resolves or what the
+    // transform equals.
+    val transform = bucket(new NamedFunction("test.bucket"), a)
+    val marked = transform.copy(storedKey = true)
+    assert(marked.toString == transform.toString.stripSuffix(")") + ", storedKey)",
+      marked.toString)
+    assert(!transform.toString.contains("None") && !transform.toString.contains("false"),
+      transform.toString)
+    // A set `reducedWith` prints as master printed it.
+    val reduced = transform.reducedTogetherWith(bucket(new NamedFunction("other"), a, 2))
+    assert(reduced.toString.endsWith(", Some(TransformFunctionId(other,Some(2))))"),
+      reduced.toString)
+  }
+
   test("SPARK-60027: cogroup keys are stored alike when their key rows compare alike") {
     // A cogroup pairs the groups of its two sides by comparing their key rows, so a key shuffled
     // onto a layout has to be stored as the layout's column is: apart from nullability and field
@@ -353,6 +443,8 @@ class TransformExpressionSuite extends SparkFunSuite {
       (IntegerType, IntegerType, true),
       (DateType, IntegerType, true),
       (TimestampNTZType, TimestampType, true),
+      (ArrayType(TimestampNTZType), ArrayType(TimestampType), true),
+      (TimeType(3), TimeType(6), true),
       (StringType, VarcharType(5), true),
       (new IntUDT, IntegerType, true),
       (new StructType().add("x", IntegerType, nullable = false),
@@ -370,6 +462,10 @@ class TransformExpressionSuite extends SparkFunSuite {
       (StringType, StringType("UTF8_LCASE"), false),
       (DecimalType(10, 2), DecimalType(20, 2), false),
       (DecimalType(10, 2), DecimalType(10, 3), false),
+      // Datetime and interval keys by their storage alone, as the hash shuffle compares them.
+      (TimeType(), TimestampType, true),
+      (YearMonthIntervalType(), DateType, true),
+      (DayTimeIntervalType(), TimestampType, true),
       (new StructType().add("x", IntegerType), new StructType().add("x", LongType), false),
       (ArrayType(IntegerType), ArrayType(LongType), false),
       (new StructType().add("x", IntegerType),
