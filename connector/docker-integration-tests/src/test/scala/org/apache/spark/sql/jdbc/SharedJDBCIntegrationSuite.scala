@@ -86,6 +86,26 @@ abstract class SharedJDBCIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
+  test("SPARK-61982: Wrap external engine permission error") {
+    withRestrictedUser { restrictedUrl =>
+      val ex = intercept[SparkException] {
+        spark.read.format("jdbc")
+          .option("url", restrictedUrl)
+          .option("dbtable", "tbl_shared").load()
+      }
+      checkError(
+        exception = ex,
+        condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+        sqlState = Some("42501"),
+        parameters = Map(
+          "jdbcQuery" -> "SELECT \\* FROM tbl_shared WHERE 1=0",
+          "externalEngineError" -> "[\\s\\S]+",
+          "externalEngineSqlState" -> ".+"),
+        matchPVals = true)
+      assert(ex.getCause.isInstanceOf[SQLException])
+    }
+  }
+
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
     val dfSingle = spark.read.format("jdbc")
       .option("url", jdbcUrl)
