@@ -249,10 +249,10 @@ object UnsafeRowUtils {
    * ordering, and is only observable for non-binary-stable keys: byte-identical rows
    * compare equal under every collation and SQL ordering, so a byte-first check answers
    * same-spelling keys with one byte comparison, while every check whose bytes differ
-   * pays a failed byte comparison before the same ordering comparison. It pays off where
-   * most checks see keys spelled alike, such as rows compared against the first row of
-   * the current group; where that trade-off has not been measured for a site, pass
-   * `false` and compare collated keys with the ordering alone.
+   * pays a failed byte comparison before the same ordering comparison. Both forms group
+   * keys the same way, so the choice only moves cost between checks of identically
+   * spelled keys and all other checks; each call site's comment says why it passes the
+   * value it does.
    */
   def rowEqualityChecker(
       dataTypes: Seq[DataType],
