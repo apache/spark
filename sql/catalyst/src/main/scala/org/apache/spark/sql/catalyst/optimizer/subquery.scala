@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, KLL_AGGREGATE, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
@@ -138,17 +138,6 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           }
         }
       case _ => false
-    }
-  }
-
-  private def hasKllMembershipOutsideAggregate(expression: Expression): Boolean = {
-    if (!expression.containsPattern(KLL_AGGREGATE)) return false
-    expression match {
-      // Aggregate arguments run on input rows; only result guards need the aggregate host.
-      case _: AggregateExpression => false
-      case in: InSubquery if !in.query.isCorrelated &&
-          in.query.plan.containsPattern(KLL_AGGREGATE) => true
-      case other => other.children.exists(hasKllMembershipOutsideAggregate)
     }
   }
 
@@ -325,8 +314,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // which are still performed in the Aggregate node (sum(col2#18) and sum(col3#19)).
     case p @ PhysicalAggregation(
         groupingExpressions, aggregateExpressions, resultExpressions, child)
-        if exprsContainsAggregateInSubquery(p.expressions) ||
-          p.expressions.exists(hasKllMembershipOutsideAggregate) =>
+        if exprsContainsAggregateInSubquery(p.expressions) =>
       val aggExprs = aggregateExpressions.map(
         ae => Alias(ae, "_aggregateexpression")(ae.resultId))
       val aggExprIds = aggExprs.map(_.exprId).toSet
@@ -416,125 +404,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     plan: LogicalPlan): (Option[Expression], LogicalPlan, Seq[Attribute]) = {
     var newPlan = plan
     val introducedAttrs = ArrayBuffer.empty[Attribute]
-    var guardOutput = Option.empty[Vector[Attribute]]
-    final class TryDomain(var succeeded: Expression)
-    var tryDomain = Option.empty[TryDomain]
-    val memberships = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
-    def hasKllMembership(expression: Expression): Boolean = memberships.computeIfAbsent(expression,
-      current => current match {
-        case in: InSubquery => in.query.plan.containsPattern(KLL_AGGREGATE) ||
-          in.values.exists(hasKllMembership)
-        case other => other.children.exists(hasKllMembership)
-      }).booleanValue()
-    def guardedMemberships(expression: Expression, domain: Expression): Expression = {
-      if (!hasKllMembership(expression)) return expression
-      def rawBind(value: Expression): Attribute = {
-        val alias = Alias(value, "_subquery_guard")()
-        val attribute = alias.toAttribute
-        val output = guardOutput.getOrElse(newPlan.output.toVector)
-        newPlan = Project(output :+ alias, newPlan)
-        guardOutput = Some(output :+ attribute)
-        introducedAttrs += attribute
-        attribute
-      }
-      def bind(value: Expression): Expression = tryDomain match {
-        case Some(context) =>
-          // A non-null struct distinguishes a successful NULL value from a caught exception.
-          // Later bindings and the final TRY value must stop after the first failed input.
-          val result = CreateStruct(Seq(value))
-          val attempted = rawBind(TryEval(If(context.succeeded, result,
-            Literal.create(null, result.dataType))))
-          context.succeeded = rawBind(And(context.succeeded, IsNotNull(attempted)))
-          GetStructField(attempted, 0)
-        case None => rawBind(value)
-      }
-      def condition(value: Expression): Expression = {
-        val rewritten = guardedMemberships(value, domain)
-        bind(if (domain == Literal.TrueLiteral) rewritten else {
-          If(domain, rewritten, Literal.create(null, value.dataType))
-        })
-      }
-      def when(value: Expression): Expression = And(domain, value)
-      expression match {
-        case TryEval(child) =>
-          val enclosing = tryDomain
-          val context = new TryDomain(enclosing.map(c => And(domain, c.succeeded))
-            .getOrElse(domain))
-          tryDomain = Some(context)
-          val rewritten = guardedMemberships(child, domain)
-          tryDomain = enclosing
-          If(context.succeeded, TryEval(rewritten), Literal.create(null, child.dataType))
-        case If(predicate, positive, negative) =>
-          val predicateRef = condition(predicate)
-          val isTrue = EqualNullSafe(predicateRef, Literal.TrueLiteral)
-          If(predicateRef, guardedMemberships(positive, when(isTrue)),
-            guardedMemberships(negative, when(Not(isTrue))))
-        case CaseWhen(branches, otherwise) =>
-          var remaining = domain
-          val guarded = branches.map { case (predicate, value) =>
-            val predicateRef = bind(guardedMemberships(
-              If(remaining, predicate, Literal.create(null, BooleanType)), Literal.TrueLiteral))
-            val isTrue = EqualNullSafe(predicateRef, Literal.TrueLiteral)
-            val result = guardedMemberships(value, And(remaining, isTrue))
-            remaining = bind(And(remaining, Not(isTrue)))
-            (predicateRef: Expression, result)
-          }
-          CaseWhen(guarded, otherwise.map(guardedMemberships(_, remaining)))
-        case Coalesce(children) =>
-          var remaining = domain
-          val predecessors = children.dropRight(1).map { child =>
-            val rewritten = guardedMemberships(child, remaining)
-            val reference = bind(If(remaining, rewritten, Literal.create(null, child.dataType)))
-            remaining = bind(And(remaining, IsNull(reference)))
-            reference
-          }
-          Coalesce(predecessors :+ guardedMemberships(children.last, remaining))
-        case And(left, right) =>
-          val leftRef = condition(left)
-          And(leftRef, guardedMemberships(right,
-            when(Not(EqualNullSafe(leftRef, Literal.FalseLiteral)))))
-        case Or(left, right) =>
-          val leftRef = condition(left)
-          Or(leftRef, guardedMemberships(right,
-            when(Not(EqualNullSafe(leftRef, Literal.TrueLiteral)))))
-        case in: InSubquery =>
-          val values = in.values.map(guardedMemberships(_, domain))
-          val guardedValues = if (domain != Literal.TrueLiteral &&
-              in.query.plan.containsPattern(KLL_AGGREGATE)) {
-            values.map(value => If(domain, value, Literal.create(null, value.dataType)))
-          } else values
-          in.copy(values = if (tryDomain.nonEmpty) guardedValues.map(bind) else guardedValues)
-        case other if other.nullIntolerant && other.children.sizeCompare(1) > 0 =>
-          val children = other.children.toArray
-          // Division evaluates its divisor first; the usual null-safe evaluator goes left first.
-          val order = other match {
-            case _: DivModLike => Seq(1, 0)
-            case _ => children.indices
-          }
-          var remaining = domain
-          val lastMembership = order.lastIndexWhere(i => hasKllMembership(children(i)))
-          order.zipWithIndex.foreach { case (index, position) =>
-            val child = children(index)
-            val rewritten = guardedMemberships(child, remaining)
-            if (position < lastMembership) {
-              val reference = bind(If(remaining, rewritten, Literal.create(null, child.dataType)))
-              children(index) = reference
-              remaining = rawBind(And(remaining, IsNotNull(reference)))
-            } else children(index) = rewritten
-          }
-          other.withNewChildren(children.toIndexedSeq)
-        case other => other.mapChildrenWithReferenceEquality(guardedMemberships(_, domain))
-      }
-    }
     val newExprs = exprs.map { e =>
-      // Existence joins from an earlier expression can add outputs between guard batches.
-      guardOutput = None
-      // Existence joins evaluate their IN operands outside the original expression. Keep
-      // conditional KLL membership operands under their original, once-evaluated guards.
-      val guarded = if (e.containsPattern(KLL_AGGREGATE)) {
-        guardedMemberships(e, Literal.TrueLiteral)
-      } else e
-      guarded.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
+      e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
         case Exists(sub, _, _, conditions, subHint) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val existenceJoin = ExistenceJoin(exists)

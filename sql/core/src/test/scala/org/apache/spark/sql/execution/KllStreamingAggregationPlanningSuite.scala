@@ -39,6 +39,56 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
 
+  test("checkpoint retirement shares outer-reference scans for repeated nested plans") {
+    def work(candidateReference: Boolean): Int = {
+      val visits = new AtomicInteger
+      val corrected = Alias(Literal(1L), "corrected")()
+      val legacy = Alias(Literal(2L), "legacy")()
+      val counted = (1 to 64).foldLeft[Expression](OuterReference(
+        if (candidateReference) legacy.toAttribute else corrected.toAttribute)) {
+        (child, _) => NormalizationCounted(child, visits)
+      }
+      val shared = Project(Seq(Alias(counted, "n")()), LocalRelation())
+      val alternatives = KllAggregateResolution(
+        corrected.toAttribute, corrected.toAttribute, legacy.toAttribute)
+      val queries = (1 to 32).map { i =>
+        val outer = if (candidateReference) legacy.toAttribute else corrected.toAttribute
+        Alias(Exists(shared, Seq(outer)), s"q$i")()
+      }
+      val plan = Project(Seq(Alias(alternatives, "selected")(), legacy.toAttribute) ++ queries,
+        Project(Seq(corrected, legacy), LocalRelation()))
+      plan.treePatternBits
+      visits.set(0)
+      org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        plan, plan, legacySharing = false)
+      visits.get
+    }
+    val extra = work(candidateReference = true) - work(candidateReference = false)
+    assert(extra <= 512, s"additional shared outer-reference visits=$extra")
+  }
+
+  test("corrected checkpoints retain an exported HAVING call distinct from SELECT") {
+    withTempView("kll_outer_identity") {
+      val original = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "true",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
+        MemoryStream[Long](spark).toDF().createOrReplaceTempView("kll_outer_identity")
+        sql("""SELECT kll_sketch_agg_bigint(t.value, 8) AS s FROM kll_outer_identity t
+            |HAVING EXISTS (SELECT 1 WHERE kll_sketch_agg_bigint(t.value, 8) != s)""".stripMargin)
+          .queryExecution.analyzed
+      }
+      val selected = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        original, original, legacySharing = false)
+      val ids = selected.flatMap(_.expressions).flatMap(_.collect {
+        case query: Exists => query.plan.flatMap(_.expressions).flatMap(_.collect {
+          case OuterReference(a: Attribute) => a.exprId
+        })
+      }).flatten.distinct
+      assert(ids.size == 2, selected.treeString)
+    }
+  }
+
   test("checkpoint retirement shares full-output nested-plan demands") {
     def work(retire: Boolean): Int = {
       val visits = new AtomicInteger

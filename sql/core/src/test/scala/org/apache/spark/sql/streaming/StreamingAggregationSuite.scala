@@ -368,6 +368,39 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
+  testWithAllStateVersions(
+      "KLL legacy checkpoints restore split primitive nondeterministic UDF keys") {
+    withTempDir { checkpoint =>
+      val input = MemoryStream[Int]
+      val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+          |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+      val identity = udf((n: Long) => n).asNondeterministic()
+      def query(legacy: Boolean): DataFrame = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val result = input.toDF().groupBy(identity(expr(scalar)).as("a"),
+          identity(expr(scalar)).as("b")).count()
+        result.queryExecution.assertAnalyzed()
+        result
+      }
+      val historical = query(legacy = true)
+      val current = query(legacy = false)
+      val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+      val oneKey = AssertOnQuery { q =>
+        q.lastExecution.executedPlan.collectFirst {
+          case save: StateStoreSaveExec => save.keyExpressions.size
+        }.contains(1)
+      }
+      testStream(historical, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "true")),
+        AddData(input, 1, 2), CheckLastBatch(Row(3L, 3L, 2L)), oneKey, StopStream)
+      testStream(current, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "false")),
+        AddData(input, 3), CheckLastBatch(Row(3L, 3L, 3L)), oneKey, StopStream)
+    }
+  }
+
   testWithAllStateVersions("KLL UDF checkpoint bindings preserve distinct inputs and randomness") {
     for (legacySharing <- Seq(false, true)) {
       withTempDir { checkpoint =>

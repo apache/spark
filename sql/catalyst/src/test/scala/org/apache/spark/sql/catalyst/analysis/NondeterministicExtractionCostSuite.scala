@@ -259,6 +259,29 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     }
   }
 
+  test("outer KLL resolution retains its original implicit alias name") {
+    val name = "kll_sketch_agg_bigint(outer(t.id))"
+    val references = (1 to 3).map { i =>
+      val reference = OuterReference(AttributeReference(s"producer$i", DoubleType)())
+      reference.setTagValue(OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, name)
+      reference
+    }
+    val carrier = KllAggregateResolution(references(0), references(1), references(2))
+    val resolved = AliasResolution.resolve(UnresolvedAlias(carrier)).asInstanceOf[Alias]
+    assert(resolved.name == name, resolved)
+  }
+
+  test("aggregate-only outer KLL helpers do not index unused grouping expressions") {
+    val hashes = new AtomicInteger
+    val groups = (1 to 64).map(i => SemanticHashCounted(Literal(i), hashes))
+    val call = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+    val extractor = outputExtractor(Aggregate(groups, Seq(call.as("s")), OneRowRelation()))
+    hashes.set(0)
+    extractor.collectOuterAggregateExpression(call, Some(false))
+    extractor.collectOuterAggregateExpression(call, Some(true))
+    assert(hashes.get == 0, s"unused grouping-index hashes=${hashes.get}")
+  }
+
   test("KLL aggregate resolution consumes List alternatives sequentially") {
     val visits = new AtomicInteger
     val values = (1 to 128).map(_ => KllSketchAggBigint(Literal(1L),

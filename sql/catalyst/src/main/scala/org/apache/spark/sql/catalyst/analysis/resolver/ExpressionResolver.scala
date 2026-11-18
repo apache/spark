@@ -592,6 +592,8 @@ class ExpressionResolver(
    */
   private def aliasOuterReferenceIfNeeded(resolvedElement: Expression): Expression =
     resolvedElement match {
+      case resolution: KllAggregateResolution if resolution.batch.isInstanceOf[OuterReference] =>
+        aliasOuterReferenceIfNeeded(resolution.batch).withNewChildren(Seq(resolution))
       case outerReference: OuterReference =>
         val aliasName = outerReference
           .getTagValue(OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE)

@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.streaming.runtime
 
 import scala.collection.mutable.{Map => MutableMap, Set => MutableSet}
 
-import org.apache.spark.sql.catalyst.analysis.{NondeterministicExpressionCollection, PullOutNondeterministic}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Exists, Expression, ExprId, ExternalUserDefinedFunction, KllAggregateResolution, LateralSubquery, ListQuery, NamedExpression, ScalarSubquery, SubExprUtils, SubqueryExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.analysis.{KllAggregatePreparation, NondeterministicExpressionCollection, PullOutNondeterministic}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -42,12 +42,7 @@ private[sql] object KllCheckpointPreparation {
     } else preOptimized.transformAllExpressionsWithSubqueries {
       case resolution: KllAggregateResolution =>
         val chosen = if (legacySharing) resolution.legacy else resolution.corrected
-        unchosen ++= (resolution.references -- chosen.references).map(_.exprId)
-        if (resolution.containsPattern(OUTER_REFERENCE)) {
-          val outer = AttributeSet(SubExprUtils.getOuterReferences(resolution))
-          val chosenOuter = AttributeSet(SubExprUtils.getOuterReferences(chosen))
-          unchosen ++= (outer -- chosenOuter).map(_.exprId)
-        }
+        unchosen ++= KllAggregatePreparation.unchosenOutputs(resolution, chosen)
         chosen
       case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>
         kllChanged = true
@@ -77,7 +72,7 @@ private[sql] object KllCheckpointPreparation {
     // Alternative resolution outputs are compiler-owned state demands. Retire those that
     // the selected consumer no longer uses even when optional ColumnPruning is disabled.
     val adjusted = if (unchosen.isEmpty) selected else {
-      retireUnchosenOutputs(selected, unchosen.toSet)
+      KllAggregatePreparation.retireUnchosenOutputs(selected, unchosen.toSet)
     }
     // Retain original compiler identities even if custom normalization replaces a producer
     // or its provenance before checkpoint preparation.
@@ -101,6 +96,16 @@ private[sql] object KllCheckpointPreparation {
           NondeterministicExpressionCollection.restoreBindingReferences(
             expression, bindings, stripFilterGuards = true)
         }
+        def isUdfBinding(expression: Expression): Boolean = expression match {
+          case _: UserDefinedExpression | _: ExternalUserDefinedFunction => true
+          case If(check, Literal(null, _), udf: ScalaUDF) =>
+            // HandleNullInputsForUDF wraps nullable primitive inputs after binding extraction.
+            // Recognize its exact NULL guard before recovering historical UDF key sharing.
+            udf.inputPrimitives.zip(udf.children).collect {
+              case (true, KnownNotNull(child)) => IsNull(child): Expression
+            }.reduceLeftOption(Or).exists(_.semanticEquals(check))
+          case _ => false
+        }
         def visit(plan: LogicalPlan): LogicalPlan = plan match {
           case project: Project =>
             val child = visit(project.child)
@@ -116,8 +121,7 @@ private[sql] object KllCheckpointPreparation {
                     bindings(alias.exprId) = alias.child
                     None
                   case alias: Alias if alias.isNondeterministicSubqueryBinding &&
-                      (alias.child.isInstanceOf[UserDefinedExpression] ||
-                        alias.child.isInstanceOf[ExternalUserDefinedFunction]) &&
+                      isUdfBinding(alias.child) &&
                       !alias.child.exists(e =>
                         e.isInstanceOf[SubqueryExpression] && !e.deterministic) =>
                     // Restoring deterministic scalar inputs can make UDF bindings canonically
@@ -195,45 +199,5 @@ private[sql] object KllCheckpointPreparation {
       adjusted
     }
     optimizerInput
-  }
-
-  private def retireUnchosenOutputs(plan: LogicalPlan, candidates: Set[ExprId]): LogicalPlan = {
-    val nestedPlans = new java.util.IdentityHashMap[LogicalPlan, LogicalPlan]
-    def visit(input: LogicalPlan, required: AttributeSet): LogicalPlan = {
-      def keep(expression: NamedExpression): Boolean =
-        !candidates.contains(expression.exprId) || required.contains(expression.toAttribute)
-      val trimmed = input match {
-        case aggregate: Aggregate =>
-          aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.filter(keep))
-        case project: Project => project.copy(projectList = project.projectList.filter(keep))
-        case other => other
-      }
-      val current = trimmed.mapExpressionsWithReferenceEquality { expression =>
-        expression.transformDownWithReferenceEquality {
-          case query: SubqueryExpression =>
-            val nested = nestedPlans.computeIfAbsent(query.plan,
-              child => visit(child, child.outputSet))
-            val updated = query.withNewPlan(nested)
-            query match {
-              case _: ScalarSubquery | _: Exists | _: ListQuery | _: LateralSubquery
-                  if query.references.exists(a => candidates.contains(a.exprId)) =>
-                val referenced = AttributeSet(SubExprUtils.getOuterReferences(nested))
-                val outer = query.getOuterAttrs.filterNot {
-                  case attribute: Attribute => candidates.contains(attribute.exprId) &&
-                    !referenced.contains(attribute)
-                  case _ => false
-                }
-                updated.withNewOuterAttrs(outer)
-              case _ => updated
-            }
-        }
-      }
-      val forwarded = if (required.isEmpty) AttributeSet.empty else {
-        current.inputSet.intersect(required)
-      }
-      val needed = current.references ++ forwarded
-      current.mapChildren(child => visit(child, needed))
-    }
-    visit(plan, plan.outputSet)
   }
 }

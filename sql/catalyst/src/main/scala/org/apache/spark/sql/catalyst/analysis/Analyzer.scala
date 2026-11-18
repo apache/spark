@@ -4674,22 +4674,42 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
 
   private def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
-      refExprs: Seq[Expression]): LogicalPlan = {
+      refExprs: Seq[Expression],
+      outerAttrs: Seq[Expression]): LogicalPlan = {
+    // Each resolution alternative exports its own attributes for these original dependencies.
+    // Match by result identity before examining the host's other, semantically equal producers.
+    val kllOutputs = if (!plan.containsAllPatterns(KLL_AGGREGATE, OUTER_REFERENCE)) {
+      Map.empty[ExprId, Attribute]
+    } else {
+      SubExprUtils.getOuterReferences(plan).zip(outerAttrs).collect {
+        case (aggregate: AggregateExpression, attribute: Attribute)
+            if aggregate.containsPattern(KLL_AGGREGATE) => aggregate.resultId -> attribute
+      }.toMap
+    }
     plan resolveExpressions {
       case e if e.containsPattern(OUTER_REFERENCE) =>
         val reference = stripOuterReference(e)
-        val outerAlias = refExprs.find { alias =>
+        val bound: Option[Expression] = reference match {
+          case aggregate: AggregateExpression => kllOutputs.get(aggregate.resultId)
+          case _ => None
+        }
+        val outerAlias = bound.orElse(refExprs.find { alias =>
           val value = stripAlias(alias)
           // Exported aggregate dependencies are already bound by result identity. Independent
           // randomized calls may have equal syntax and must not bind to an earlier SELECT alias.
           (value, reference) match {
             case (bound: AggregateExpression, exported: AggregateExpression)
+                if bound.containsPattern(KLL_AGGREGATE) ||
+                  exported.containsPattern(KLL_AGGREGATE) =>
+              bound.resultId == exported.resultId
+            case (bound: AggregateExpression, exported: AggregateExpression)
                 if bound.resultId == exported.resultId => true
             case _ => value.semanticEquals(reference)
           }
-        }
+        })
         outerAlias match {
           case Some(a: Alias) => OuterReference(a.toAttribute)
+          case Some(a: Attribute) => OuterReference(a)
           case _ => e
         }
     }
@@ -4704,7 +4724,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             // Collect the aliases from output of aggregate.
             val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
             // Update the subquery plan to record the OuterReference to point to outer query plan.
-            s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
+            s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases, s.getOuterAttrs))
       }
     }
   }

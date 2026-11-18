@@ -82,7 +82,7 @@ class GroupingAndAggregateExpressionsExtractor(
     result
   }
 
-  private val groupingExpressionsSemanticComparator = new SemanticComparator(
+  private lazy val groupingExpressionsSemanticComparator = new SemanticComparator(
     aggregate.groupingExpressions
   )
 
