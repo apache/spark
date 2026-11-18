@@ -90,9 +90,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   watermark when the other input's watermark and a range condition bound one of its TIMESTAMP
   columns, for example `leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime +
   INTERVAL 5 SECONDS` with a watermark only on `rightTime`. Earlier versions kept such state
-  forever and never emitted the unmatched rows of an outer join. Such a join with state format
-  version 4 cannot restart from a checkpoint of an earlier version; start it with a new
-  checkpoint. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
+  forever and never emitted the unmatched rows of an outer join. With state format version 4, an
+  outer join that emits the unmatched rows of such an input cannot restart from a checkpoint of an
+  earlier version, or after a change of `spark.sql.streaming.statefulOperator.allowMultiple`;
+  start it with a new checkpoint. Other joins restart and keep the rows stored before the
+  restart. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
   the earlier behavior.
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected

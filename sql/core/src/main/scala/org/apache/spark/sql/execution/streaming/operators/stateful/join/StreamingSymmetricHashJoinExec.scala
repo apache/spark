@@ -368,7 +368,9 @@ case class StreamingSymmetricHashJoinExec(
     // checkpoints cannot evict that state by another column. Index version 1 orders it by the
     // column that the default mode picks, which the legacy mode cannot evict. A checkpoint of an
     // earlier version passes: it restores index version 0, and the join output watermark check as
-    // false, for which the default mode keeps the event time.
+    // false, for which the default mode keeps the event time. Index version 0 keeps the rows of an
+    // input without an event time out of the index. Such rows are never evicted, which only an
+    // outer join that emits the unmatched rows of that input cannot accept.
     val indexVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION)
     if (stateFormatVersion == 4 && (indexVersion == 0 || !allowMultipleStatefulOperators)) {
       Seq((LeftSide, stateWatermarkPredicates.left, left.output, right.output),
@@ -384,7 +386,14 @@ case class StreamingSymmetricHashJoinExec(
                 conf.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK))
             }.flatten.map { case (c, _) => attributes.indexWhere(_.semanticEquals(c)) }
           }
-          column.filterNot(eventTime.contains).foreach { i =>
+          val emitsUnmatchedRows = joinType match {
+            case LeftOuter => side == LeftSide
+            case RightOuter => side == RightSide
+            case FullOuter => true
+            case _ => false
+          }
+          column.filterNot(eventTime.contains)
+            .filter(_ => eventTime.isDefined || emitsUnmatchedRows).foreach { i =>
             throw new AnalysisException(
               errorClass = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
               messageParameters = Map(

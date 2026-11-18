@@ -655,34 +655,51 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
-  test("V4 restart from an older checkpoint fails for an input without its own watermark") {
-    withJoinConf(4) {
-      withTempDir { checkpoint =>
-        val leftInput = MemoryStream[(Int, Long)]
-        val rightInput = MemoryStream[(Int, Long)]
-        val left = leftInput.toDF().toDF("leftKey", "time")
-          .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
-        val right = rightInput.toDF().toDF("rightKey", "time")
-          .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
-          .withWatermark("rightTime", "10 seconds")
-        val joined = left.join(right, expr("leftKey = rightKey AND " +
-          "leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime + INTERVAL 5 SECONDS"),
-          "left_outer").select($"leftKey", $"rightKey")
-        testStream(joined)(
-          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-          AddData(leftInput, (1, 5L)),
-          CheckNewAnswer(),
-          StopStream)
-        removeIndexVersion(checkpoint)
-        testStream(joined)(
-          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-          AddData(rightInput, (2, 30L)),
-          ExpectFailure[AnalysisException] { e =>
-            checkError(
-              e.asInstanceOf[AnalysisException],
-              condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
-              parameters = Map("side" -> "left", "column" -> "`leftTime`"))
-          })
+  // An earlier version kept the rows of an input without its own watermark out of the V4 index.
+  // Outer joins would never emit them, while inner and left semi joins still find them.
+  for (joinType <- Seq("left_outer", "right_outer", "inner", "left_semi")) {
+    test(s"V4 restart from an older checkpoint for an input without its own watermark, $joinType") {
+      withJoinConf(4) {
+        withTempDir { checkpoint =>
+          val leftInput = MemoryStream[(Int, Long)]
+          val rightInput = MemoryStream[(Int, Long)]
+          val left = leftInput.toDF().toDF("leftKey", "time")
+            .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+          val right = rightInput.toDF().toDF("rightKey", "time")
+            .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+          val (stateInput, watermarkInput, joined) = if (joinType == "right_outer") {
+            (rightInput, leftInput, left.withWatermark("leftTime", "10 seconds").join(right,
+              expr("leftKey = rightKey AND rightTime BETWEEN " +
+                "leftTime - INTERVAL 5 SECONDS AND leftTime + INTERVAL 5 SECONDS"),
+              joinType).select($"rightKey"))
+          } else {
+            (leftInput, rightInput, left.join(right.withWatermark("rightTime", "10 seconds"),
+              expr("leftKey = rightKey AND leftTime BETWEEN " +
+                "rightTime - INTERVAL 5 SECONDS AND rightTime + INTERVAL 5 SECONDS"),
+              joinType).select($"leftKey"))
+          }
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(stateInput, (1, 5L)),
+            CheckNewAnswer(),
+            StopStream)
+          removeIndexVersion(checkpoint)
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(watermarkInput, (1, 8L)),
+            if (joinType.endsWith("outer")) {
+              ExpectFailure[AnalysisException] { e =>
+                val (side, column) =
+                  if (joinType == "right_outer") ("right", "rightTime") else ("left", "leftTime")
+                checkError(
+                  e.asInstanceOf[AnalysisException],
+                  condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+                  parameters = Map("side" -> side, "column" -> s"`$column`"))
+              }
+            } else {
+              CheckNewAnswer(Row(1))
+            })
+        }
       }
     }
   }
