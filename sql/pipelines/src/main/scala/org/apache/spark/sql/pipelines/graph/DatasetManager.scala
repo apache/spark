@@ -415,8 +415,10 @@ object DatasetManager extends Logging {
           mergeWithExistingSchema = isTableIncrementallyUpdated,
           // On the incremental path, shared columns take the declared or inferred schema's
           // metadata, so that a changed or removed column comment reaches the table as it does on
-          // the non-merging paths (materialized views and full refreshes).
-          mergeWithDesiredMetadata = true,
+          // the non-merging paths (materialized views and full refreshes). The legacy setting
+          // restores keeping the table's metadata for users who relied on it.
+          mergeWithDesiredMetadata =
+            !context.spark.sessionState.conf.legacyPipelinesKeepStreamingTableColumnMetadata,
           caseSensitive = effectiveCaseSensitive
         )
       case None =>
@@ -712,6 +714,18 @@ object DatasetManager extends Logging {
     // non-merging paths (materialized views, full refresh), `targetSchema` is the declared schema
     // as-is, where exact-name matching keeps a case-only rename visible as a schema change.
     val columnChanges = diffSchemas(currentSchema, targetSchema)
+    // A comment change can remove a comment that was set directly on the table, which the
+    // pipeline cannot restore, so record which columns had theirs changed.
+    val columnsWithCommentChange = columnChanges.collect {
+      case c: TableChange.UpdateColumnComment => c.fieldNames().mkString(".")
+    }
+    if (columnsWithCommentChange.nonEmpty) {
+      logInfo(
+        log"Updating the comments of columns " +
+        log"${MDC(LogKeys.COLUMN_NAMES, columnsWithCommentChange.mkString(", "))} of table " +
+        log"${MDC(LogKeys.TABLE_NAME, tableIdentifier)} to match the pipeline's schema."
+      )
+    }
 
     val existingProperties = existingTable.properties()
 
