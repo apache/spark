@@ -353,8 +353,8 @@ class LimitPushdownSuite extends PlanTest {
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
   }
 
-  test("SPARK-60501: keep a limit above a Project with a scalar subquery with count bug domain " +
-      "joins") {
+  test("SPARK-60501: keep a limit above a Project with a scalar subquery with a domain join " +
+      "with keepLimitAbove") {
     val Seq(a, _, _) = testRelation.output
     val Seq(d, e, _) = testRelation2.output
     val agg = testRelation2.groupBy()(max(e).as("m")).analyze

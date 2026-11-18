@@ -974,7 +974,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
   // Whether a scalar subquery of `project` has a domain join with keepLimitAbove, which
   // RewriteCorrelatedScalarSubquery rewrites into joins that compute the input of `project` again.
   // The domain joins of a subquery nested in that plan take their domain from that plan instead.
-  private def hasCountBugDomainJoins(project: Project): Boolean =
+  private def hasKeepLimitAboveDomainJoin(project: Project): Boolean =
     project.projectList.exists(_.exists {
       case s: ScalarSubquery => s.plan.exists {
         case d: DomainJoin => d.keepLimitAbove
@@ -1032,17 +1032,17 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(exp, join: Join) =>
       LocalLimit(exp, pushLocalLimitThroughJoin(exp, join))
     // There is a Project between LocalLimit and Join if they do not have the same output.
-    // A limit is kept above a Project with a scalar subquery with such domain joins: the joins
-    // that RewriteCorrelatedScalarSubquery builds for them compute the input of the Project
-    // again, and a limit in it could keep other rows there.
+    // A limit is kept above a Project with a scalar subquery with a domain join with
+    // keepLimitAbove: the joins that RewriteCorrelatedScalarSubquery builds for it compute the
+    // input of the Project again, and a limit in it could keep other rows there.
     case LocalLimit(exp, project @ Project(_, join: Join))
-        if !hasCountBugDomainJoins(project) =>
+        if !hasKeepLimitAboveDomainJoin(project) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
       Limit(le, pushLimitOneThroughGroupOnlyAggregate(le, a))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate))
-        if a.groupOnly && !hasCountBugDomainJoins(p) =>
+        if a.groupOnly && !hasKeepLimitAboveDomainJoin(p) =>
       Limit(le, p.copy(child = pushLimitOneThroughGroupOnlyAggregate(le, a)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>

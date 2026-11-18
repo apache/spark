@@ -3427,8 +3427,7 @@ class SubquerySuite extends SharedSparkSession
       Seq(1, 2, 3).toDF("k").createOrReplaceTempView("o2")
       Seq.empty[Int].toDF("k").createOrReplaceTempView("e")
       Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
-      // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows. The query
-      // is still optimized and planned, and fails when it runs.
+      // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows.
       def checkFailsWhileOptimized[T <: SparkThrowable : ClassTag](
           query: String,
           condition: String): Unit = withClue(query) {
@@ -3698,15 +3697,17 @@ class SubquerySuite extends SharedSparkSession
       // Other correlated subqueries keep the pushdown of before: without domain joins, the
       // LIMIT 1 turns the DISTINCT into a Project, and a non-aggregated subquery, which becomes
       // a left single join, still gets the LIMIT into the left side of the left join below it.
-      // With the domain joins that decorrelation added before, e.g. over a lower COUNT or for a
-      // correlation below a UNION ALL, the LIMIT still also goes into the domain joins, as on
-      // master and 4.3.0.
+      // With the domain joins that decorrelation added before, e.g. over a lower COUNT, for a
+      // non-equality correlation or for a correlation below a UNION ALL, the LIMIT still also goes
+      // into the domain joins, as on master and 4.3.0.
       val single = "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)"
       assert(!optimizedPlan(s"SELECT o.k, $single FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
         legacyNestedAggregate = false).exists { case a: Aggregate => a.groupOnly; case _ => false })
       val lowerCount = "(SELECT SUM(c) FROM (SELECT COUNT(*) c FROM b WHERE b.k = o.k))"
+      val nonEquality = "(SELECT MAX(b.v) FROM b WHERE b.k > o.k)"
       Seq(s"SELECT o.k, $lowerCount FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10",
-          s"SELECT o.k, $lowerCount FROM (SELECT DISTINCT k FROM o) o LIMIT 1").foreach { query =>
+          s"SELECT o.k, $lowerCount FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
+          s"SELECT o.k, $nonEquality FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10").foreach { query =>
         withClue(query) {
           assert(limitsInLeftOuterRight(optimizedPlan(query, legacyNestedAggregate = false)) > 0)
         }
@@ -3727,12 +3728,18 @@ class SubquerySuite extends SharedSparkSession
           case Join(_, right, LeftSingle, _, _) => limits(right)
         }.sum > 0, query)
       }
-      // In a nested subquery, OptimizeSubqueries keeps the LIMIT above the inner subquery too.
+      // In a nested subquery, LimitPushDown, which OptimizeSubqueries runs on its plan, keeps the
+      // LIMIT above the inner subquery too, which gets the domain joins.
       val nested = s"SELECT (SELECT SUM(c) FROM (SELECT o.k, $subquery c FROM o " +
         "LEFT JOIN b d ON o.k = d.k LIMIT 10)) FROM b WHERE b.k = 0"
-      val inner = optimizedPlan(nested, legacyNestedAggregate = false).flatMap(_.expressions)
-        .flatMap(_.collect { case s: SubqueryExpression => s.plan })
-      assert(inner.nonEmpty && inner.forall(limitsInLeftOuterRight(_) == 0), nested)
+      def innerPlans(legacy: Boolean): Seq[LogicalPlan] =
+        optimizedPlan(nested, legacyNestedAggregate = legacy).flatMap(_.expressions)
+          .flatMap(_.collect { case s: SubqueryExpression => s.plan })
+      val (inner, innerLegacy) = (innerPlans(legacy = false), innerPlans(legacy = true))
+      withClue(nested) {
+        assert(inner.nonEmpty && inner.forall(limitsInLeftOuterRight(_) == 0))
+        assert(inner.map(joins).sum > innerLegacy.map(joins).sum)
+      }
     }
   }
 

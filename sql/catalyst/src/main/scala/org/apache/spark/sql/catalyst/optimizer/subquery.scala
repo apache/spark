@@ -775,10 +775,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         lazy val onlyDefaultResultSelectsDecorrelation =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
             !domainJoinsWork
-        def mayHaveCountBugAgg(a: Aggregate): Boolean = {
-          a.groupingExpressions.isEmpty && (hasDefaultResult(a) ||
-            (SubExprUtils.hasOuterReferences(a) && !onlyDefaultResultSelectsDecorrelation))
-        }
+        // The lower Aggregates that selected decorrelation before SPARK-60501.
+        def defaultResultCountBugAgg(a: Aggregate): Boolean =
+          a.groupingExpressions.isEmpty && hasDefaultResult(a)
+        def mayHaveCountBugAgg(a: Aggregate): Boolean = defaultResultCountBugAgg(a) ||
+          (a.groupingExpressions.isEmpty && SubExprUtils.hasOuterReferences(a) &&
+            !onlyDefaultResultSelectsDecorrelation)
 
         // The below logic controls handling count bug for scalar subqueries in
         // [[DecorrelateInnerQuery]], and if we don't handle it here, we handle it in
@@ -806,18 +808,16 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           case _ => false
         })
         val (decorrelatedPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
-        // Whether the count bug is handled in DecorrelateInnerQuery only since SPARK-60501: before,
-        // that needed a lower Aggregate without GROUP BY with an aggregate function with a default
-        // result (see DomainJoin.keepLimitAbove).
-        lazy val handledInDecorrelateSinceSpark60501 = sub match {
+        // With handleCountBugInDecorrelate, this says that the count bug is handled in
+        // DecorrelateInnerQuery only since SPARK-60501 (see DomainJoin.keepLimitAbove).
+        lazy val noDefaultResultCountBugAgg = sub match {
           case agg: Aggregate => !agg.child.exists {
-            case lowerAgg: Aggregate =>
-              lowerAgg.groupingExpressions.isEmpty && hasDefaultResult(lowerAgg)
+            case lowerAgg: Aggregate => defaultResultCountBugAgg(lowerAgg)
             case _ => false
           }
           case _ => false
         }
-        val newPlan = if (handleCountBugInDecorrelate && handledInDecorrelateSinceSpark60501) {
+        val newPlan = if (handleCountBugInDecorrelate && noDefaultResultCountBugAgg) {
           decorrelatedPlan.transform { case d: DomainJoin => d.copy(keepLimitAbove = true) }
         } else {
           decorrelatedPlan
