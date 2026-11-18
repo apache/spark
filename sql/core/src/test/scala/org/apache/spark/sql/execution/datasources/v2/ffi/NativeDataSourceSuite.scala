@@ -66,7 +66,7 @@ import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{TaskInputThreads, ThreadUtils, Utils}
 
 /**
  * Tests native data sources with the library in `native-datasource/test_native_datasource.cc`,
@@ -2878,6 +2878,73 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       failed.close()
     }
+  }
+
+  nativeTest("SPARK-62031: free the buffers of a reader closed in a task, unless a thread that " +
+    "the task does not wait for reads its input") {
+    val session = newSession(defaultPackage)
+    // The ids 0-3, 4-7 and 8-9. The scan is planned outside of the tasks, on the driver.
+    val batch = scan(
+      range(session, "end" -> "10", "partitions" -> "1", "batch_size" -> "4").select("id")).toBatch
+    val (factory, partition) = (batch.createReaderFactory(), batch.planInputPartitions().head)
+    // Reads a batch in a task and closes the reader before the end of its stream, as the
+    // completion listener of `DataSourceRDD` does for a query that stops early. Returns whether
+    // the close freed the buffers of the batch.
+    def freedAtClose(
+        beforeReader: TaskContext => Unit = _ => (),
+        beforeClose: TaskContext => Unit = _ => ()): Boolean = {
+      val context = TaskContext.empty()
+      TaskContext.setTaskContext(context)
+      try {
+        beforeReader(context)
+        val allocators = readerAllocators()
+        val reader = factory.createColumnarReader(partition)
+        try {
+          val allocator = (readerAllocators() -- allocators).head
+          assert(reader.next())
+          val ids = reader.get()
+          assert((0 until ids.numRows()).map(ids.column(0).getLong) === (0L until 4L))
+          beforeClose(context)
+          reader.close()
+          val freed = !readerAllocators().contains(allocator)
+          if (freed) {
+            // The batch then has no rows, so that it is not read at the freed addresses.
+            assert(ids.numRows() == 0)
+          } else {
+            // The batch can still be read.
+            assert(allocator.getAllocatedMemory > 0)
+            assert((0 until ids.numRows()).map(ids.column(0).getLong) === (0L until 4L))
+          }
+          freed
+        } finally {
+          reader.close()
+        }
+      } finally {
+        TaskContext.unset()
+        context.markTaskCompleted(None)
+      }
+    }
+    // The consumers of a task without such a thread are done with the batch when the reader is
+    // closed, which frees the buffers at once: the test still references the reader and the
+    // batch, which a Cleaner would wait for.
+    assert(freedAtClose())
+    // Such a thread may still read the batch, whether it is registered before the reader is
+    // created, as the stdin writer thread of PipedRDD, which creates the reader, or after, as the
+    // writer thread of script transformation, whose first batch the task thread gets. nativeTest
+    // checks that a Cleaner frees the buffers once the reader is unreachable.
+    assert(!freedAtClose(beforeReader = TaskInputThreads.registerUnawaited))
+    assert(!freedAtClose(beforeClose = TaskInputThreads.registerUnawaited))
+  }
+
+  nativeTest("SPARK-62031: free the buffers of a scan when its task completes before its end") {
+    val session = newSession(defaultPackage)
+    val readers = readerAllocators()
+    // The task of a query that stops before the end of a partition closes the reader when it
+    // completes, which frees the buffers of the batch that it read last, without a garbage
+    // collection.
+    val ids = range(session, "end" -> "100", "partitions" -> "1", "batch_size" -> "4")
+    checkRows(ids.select("id").limit(1), Seq(Row(0L)))
+    assert((readerAllocators() -- readers).isEmpty)
   }
 
   nativeTest("load libraries that export the same functions side by side") {
