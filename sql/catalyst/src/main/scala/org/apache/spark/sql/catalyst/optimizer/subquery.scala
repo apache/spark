@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -466,6 +467,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   * TODO: Look to merge this rule with RewritePredicateSubquery.
   */
 object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Marks the domain joins of a correlated scalar subquery whose count bug this rule handles in
+   * [[DecorrelateInnerQuery]] only since SPARK-60501, i.e. without a lower Aggregate without
+   * GROUP BY with an aggregate function with a default result. These domain joins compute the
+   * outer input again, so LimitPushDown keeps a LIMIT above such a subquery (see
+   * mayMoveIntoOuterInput). The other domain joins, which this rule added before too, are not
+   * marked, so the plans of those subqueries do not change.
+   */
+  val COUNT_BUG_DOMAIN_JOIN = TreeNodeTag[Unit]("countBugDomainJoin")
+
    /**
     * Returns the correlated predicates and a updated plan that removes the outer references.
     */
@@ -678,7 +689,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   // associative, so neither a SUM of floating-point values nor an AVG of anything but decimals
   // and ANSI intervals, which AVG adds up as DOUBLE, nor a CentralMomentAgg qualifies; and a SUM
   // or AVG of decimals becomes NULL on an overflow that depends on the order unless in ANSI
-  // mode, where the overflow fails the query, as does try_sum or try_avg of any type.
+  // mode, where the overflow fails the query; try_sum and try_avg become NULL on an overflow in
+  // any mode.
   private def orderIrrelevant(f: AggregateFunction): Boolean = f match {
     case _: Min | _: Max | _: Count | _: BitAndAgg | _: BitOrAgg | _: BitXorAgg => true
     case s: Sum => s.child.dataType match {
@@ -700,12 +712,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
    * OptimizeSubqueries optimizes it), may put something into its outer input that gives other
    * rows when computed again, through the rules that run before RewriteCorrelatedScalarSubquery
    * builds the domain joins: PushDownPredicates can push a filter or join condition there. The
-   * check is conservative and looks at all of `root`. LimitPushDown pushes a LIMIT below a
-   * Project only into a join or, for a LIMIT 1, a group-only Aggregate, and keeps it above a
-   * Project with a subquery with domain joins; its other cases for a Project, over UDF evaluation
-   * nodes or a UnionLoop, occur only after the rewrite or in inputs that repeatableInput rejects.
-   * A correlated scalar subquery in a grouping expression is in a Project below the Aggregate by
-   * then (PullOutGroupingExpressions).
+   * check is conservative and looks at all of `root`. Of the cases of LimitPushDown for a Project,
+   * the ones into a join and, for a LIMIT 1, through a group-only Aggregate keep the LIMIT above
+   * a Project with a scalar subquery with the domain joins marked with COUNT_BUG_DOMAIN_JOIN;
+   * the ones over UDF evaluation nodes or a UnionLoop occur only after the rewrite or in inputs
+   * that repeatableInput rejects. A correlated scalar subquery in a grouping expression is in a
+   * Project below the Aggregate by then (PullOutGroupingExpressions).
    */
   private def mayMoveIntoOuterInput(root: LogicalPlan, exprId: ExprId): Boolean =
     root.exists {
@@ -805,6 +817,24 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           case _ => false
         })
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBugInDecorrelate)
+        // The choice before SPARK-60501, which looked only for a lower Aggregate without GROUP BY
+        // with an aggregate function with a default result (see COUNT_BUG_DOMAIN_JOIN).
+        lazy val handledInDecorrelateBefore = conf.decorrelateInnerQueryEnabled &&
+          !conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING) && !(sub match {
+          case agg: Aggregate => !agg.child.exists {
+            case lowerAgg: Aggregate => lowerAgg.groupingExpressions.isEmpty &&
+              hasDefaultResult(lowerAgg)
+            case _ => false
+          }
+          case _ => false
+        })
+        if (mayHaveCountBugOld.isEmpty && handleCountBugInDecorrelate &&
+            !handledInDecorrelateBefore) {
+          newPlan.foreach {
+            case d: DomainJoin => d.setTagValue(COUNT_BUG_DOMAIN_JOIN, ())
+            case _ =>
+          }
+        }
         val mayHaveCountBug = if (mayHaveCountBugOld.isDefined) {
           // For idempotency, we must save this variable the first time this rule is run, because
           // decorrelation introduces a GROUP BY is if one wasn't already present.

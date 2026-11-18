@@ -248,6 +248,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
           assert(countBugHandling(correlated(max($"d")), outer = outer) ==
             (if (ansi) inDecorrelation else inLegacy), (ansi, agg))
         }
+        Seq(Sum($"x", NumericEvalContext(EvalMode.TRY)), Average($"x", EvalMode.TRY)).foreach { f =>
+          val outer = decimals.groupBy($"a")($"a", f.toAggregateExpression().as("s"))
+          assert(countBugHandling(correlated(max($"d")), outer = outer) == inLegacy, (ansi, f))
+        }
       }
     }
     val uncorrelatedExists =
@@ -273,9 +277,10 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val innerOuter = testRelation.join(testRelation2, Inner, Some($"a" === $"c"))
     assert(countBugHandling(correlated(max($"d")), outer = innerOuter, above = _.limit(21)) ==
       inDecorrelation)
-    // Above the subquery: a LIMIT, which LimitPushDown keeps above an operator with a correlated
-    // scalar subquery, does not matter, but a filter with a subquery that may give other rows,
-    // which PushDownPredicates can push, does, unlike a deterministic filter.
+    // Above the subquery: a LIMIT, which LimitPushDown keeps above a Project with a scalar
+    // subquery with the domain joins that this subquery gets in decorrelation, does not matter,
+    // but a filter with a subquery that may give other rows, which PushDownPredicates can push,
+    // does, unlike a deterministic filter.
     assert(countBugHandling(correlated(max($"d")), outer = Distinct(testRelation.select($"a")),
       above = _.limit(1)) == inDecorrelation)
     assert(countBugHandling(correlated(max($"d")), others = Seq($"a"),

@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow, NamedExpression, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -353,25 +353,29 @@ class LimitPushdownSuite extends PlanTest {
       GlobalLimit(1, Offset(2, LocalLimit(3, testRelation))).analyze)
   }
 
-  test("SPARK-60501: keep a limit above a Project with a scalar subquery with domain joins") {
+  test("SPARK-60501: keep a limit above a Project with a scalar subquery with count bug domain " +
+      "joins") {
     val Seq(a, _, _) = testRelation.output
     val Seq(d, e, _) = testRelation2.output
     val agg = testRelation2.groupBy()(max(e).as("m")).analyze
-    // The domain joins that RewriteCorrelatedScalarSubquery builds for a subquery with a
-    // DomainJoin compute the input of the Project again, so a limit there could keep other rows.
-    val withDomainJoins = ScalarSubquery(
-      DomainJoin(Seq(d), testRelation2).groupBy()(max(e).as("m")), outerAttrs = Seq(a)).as("s")
-    // Not analyzed, since the analyzer would recompute the outer references from the plan.
-    val correlated = ScalarSubquery(agg, outerAttrs = Seq(a)).as("s")
-    val uncorrelated = ScalarSubquery(agg).as("s")
+    def withDomainJoin(marked: Boolean): NamedExpression = {
+      val domainJoin = DomainJoin(Seq(d), testRelation2)
+      if (marked) domainJoin.setTagValue(PullupCorrelatedPredicates.COUNT_BUG_DOMAIN_JOIN, ())
+      ScalarSubquery(domainJoin.groupBy()(max(e).as("m")), outerAttrs = Seq(a)).as("s")
+    }
+    // The domain joins that PullupCorrelatedPredicates adds for the count bug since SPARK-60501
+    // compute the input of the Project again, so a limit there could keep other rows.
     val join = testRelation.join(testRelation2, LeftOuter, Some(a === d))
-    val keptAbove = Project(Seq(a, withDomainJoins), join).limit(2)
-    comparePlans(Optimize.execute(keptAbove), keptAbove)
     val groupOnly = testRelation.groupBy(a)(a)
-    val limitOneKeptAbove = Project(Seq(a, withDomainJoins), groupOnly).limit(1)
+    // Not analyzed, since the analyzer would recompute the outer references from the plan.
+    val keptAbove = Project(Seq(a, withDomainJoin(marked = true)), join).limit(2)
+    comparePlans(Optimize.execute(keptAbove), keptAbove)
+    val limitOneKeptAbove = Project(Seq(a, withDomainJoin(marked = true)), groupOnly).limit(1)
     comparePlans(Optimize.execute(limitOneKeptAbove), limitOneKeptAbove)
-    // Other scalar subqueries, also correlated ones, do not compute the input again.
-    Seq(correlated, uncorrelated).foreach { s =>
+    // Other scalar subqueries, also correlated ones and ones with domain joins that it added
+    // before, keep the pushdown of before.
+    Seq(withDomainJoin(marked = false), ScalarSubquery(agg, outerAttrs = Seq(a)).as("s"),
+        ScalarSubquery(agg).as("s")).foreach { s =>
       comparePlans(
         Optimize.execute(Project(Seq(a, s), join).limit(2)),
         Project(Seq(a, s),

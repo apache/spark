@@ -93,6 +93,12 @@ class SubquerySuite extends SharedSparkSession
     assert(e.getCondition === condition)
   }
 
+  private def optimizedPlan(query: String, legacyNestedAggregate: Boolean): LogicalPlan =
+    withSQLConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key ->
+        legacyNestedAggregate.toString) {
+      sql(query).queryExecution.optimizedPlan
+    }
+
   private def checkNumJoins(plan: LogicalPlan, numJoins: Int): Unit = {
     val joins = plan.collect { case j: Join => j }
     assert(joins.size == numJoins)
@@ -3430,7 +3436,6 @@ class SubquerySuite extends SharedSparkSession
       Seq((1, 100), (1, 200), (2, 300)).toDF("k", "v").createOrReplaceTempView("i")
       // The outer row k = 3 of o2 has no matching rows and uses the result on zero rows. The query
       // is still optimized and planned, and fails when it runs.
-
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         // Every outer row has matching rows, so the result on zero rows is not used, and the
         // queries must not fail while the subquery is rewritten.
@@ -3578,15 +3583,22 @@ class SubquerySuite extends SharedSparkSession
       // The golden file has these queries too, but cannot tell when they fail. The value over no
       // rows is computed for t1.a1 = 1, which has no matching rows, also in the second query,
       // whose WHERE removes that row, as master does for a lower COUNT. In the last query, every
-      // outer row has matching rows. ConvertToLocalRelation, which the test session excludes,
-      // turns the views into local relations in a regular session.
-      Seq(Nil, Seq(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "")).foreach { regularSession =>
-        withSQLConf((SQLConf.ANSI_ENABLED.key -> "true") +: regularSession: _*) {
-          Seq(s"SELECT a1, $subquery FROM t1",
-              s"SELECT a1 FROM t1 WHERE a1 = 0 AND $subquery IS NOT NULL").foreach {
+      // outer row has matching rows. The legacy conf gives the results of before. A regular
+      // session also runs ConvertToLocalRelation, which the test session excludes, over the
+      // views.
+      val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
+      Seq(Nil, Seq(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "")).foreach { sessionConfs =>
+        withSQLConf((SQLConf.ANSI_ENABLED.key -> "true") +: sessionConfs: _*) {
+          val all = s"SELECT a1, $subquery FROM t1"
+          val filtered = s"SELECT a1 FROM t1 WHERE a1 = 0 AND $subquery IS NOT NULL"
+          Seq(all, filtered).foreach {
             checkFailsAtRuntime[SparkArithmeticException](_, "DIVIDE_BY_ZERO")
           }
           checkAnswer(sql(s"SELECT a1, $subquery FROM t1 WHERE a1 = 0"), Row(0, 10.0 / 3))
+          withSQLConf(legacyKey -> "true") {
+            checkAnswer(sql(all), Seq(Row(0, 10.0 / 3), Row(1, null)))
+            checkAnswer(sql(filtered), Row(0))
+          }
         }
       }
     }
@@ -3642,14 +3654,9 @@ class SubquerySuite extends SharedSparkSession
       // A LIMIT without a total order can keep other rows when computed again, so with one in
       // the outer input, the plan is the one of before, without the domain joins.
       val subquery = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))"
-      val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
-      def counts(query: String, legacy: Boolean): (Int, Int) =
-          withSQLConf(legacyKey -> legacy.toString) {
-        val plan = sql(query).queryExecution.optimizedPlan
-        (plan.collect { case j: Join => j }.size, plan.collect { case l: LocalLimit => l }.size)
-      }
       val inInput = s"SELECT o.k, $subquery FROM (SELECT * FROM o LIMIT 100) o"
-      assert(counts(inInput, legacy = false) == counts(inInput, legacy = true))
+      comparePlans(optimizedPlan(inInput, legacyNestedAggregate = false),
+        optimizedPlan(inInput, legacyNestedAggregate = true))
     }
   }
 
@@ -3659,15 +3666,21 @@ class SubquerySuite extends SharedSparkSession
       spark.range(1000).selectExpr("id k", "id v").createOrReplaceTempView("b")
       spark.range(1000).selectExpr("id k").createOrReplaceTempView("o")
       val subquery = "(SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b WHERE b.k = o.k))"
-      val legacyKey = SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.key
-      def plan(query: String, legacy: Boolean): LogicalPlan =
-        withSQLConf(legacyKey -> legacy.toString)(sql(query).queryExecution.optimizedPlan)
+      def joins(plan: LogicalPlan): Int = plan.collect { case j: Join => j }.size
       def limits(plan: LogicalPlan): Int = plan.collect { case l: LocalLimit => l }.size
+      def limitsInLeftOuterRight(plan: LogicalPlan): Int =
+        plan.collect { case Join(_, right, LeftOuter, _, _) => limits(right) }.sum
+      def limitedLeftOuterJoin(plan: LogicalPlan): Boolean = plan.exists {
+        case Join(LocalLimit(_, _), _, LeftOuter, _, _) => true
+        case _ => false
+      }
       // LimitPushDown keeps the LIMIT above the Project with the subquery until the domain joins
       // are built, also when other rules move a filter or a join condition first, and for a
-      // LIMIT 1 over a DISTINCT or over a GROUP BY with the subquery in it: the subquery gets the
-      // domain joins, but no more LocalLimits than with the legacy conf, and none in the right
-      // side of a left outer join, where the domain joins are.
+      // LIMIT 1 over a DISTINCT. For a LIMIT 1 over a GROUP BY with the subquery,
+      // PullOutGroupingExpressions puts the subquery into a Project below the Aggregate, and the
+      // LIMIT 1 stops above that Project. The subquery gets the domain joins, but no more
+      // LocalLimits than with the legacy conf, and none in the right side of a left outer join,
+      // where the domain joins are.
       val limitAbove = Seq(
         s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k LIMIT 100",
         s"SELECT o.k, $subquery FROM o LEFT JOIN b ON o.k = b.k WHERE o.k > 0 LIMIT 100",
@@ -3675,24 +3688,40 @@ class SubquerySuite extends SharedSparkSession
         s"SELECT o.k, $subquery FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
         s"SELECT o.k, $subquery c FROM (SELECT DISTINCT k FROM o) o GROUP BY ALL LIMIT 1")
       limitAbove.foreach { query =>
-        val (fixed, legacy) = (plan(query, legacy = false), plan(query, legacy = true))
-        val limitsInRight = fixed.collect { case Join(_, right, LeftOuter, _, _) =>
-          limits(right) }.sum
-        assert(fixed.collect { case j: Join => j }.size > legacy.collect { case j: Join => j }.size
-          && limits(fixed) == limits(legacy) && limitsInRight == 0, query)
+        val fixed = optimizedPlan(query, legacyNestedAggregate = false)
+        val legacy = optimizedPlan(query, legacyNestedAggregate = true)
+        withClue(query) {
+          assert(joins(fixed) > joins(legacy))
+          assert(limits(fixed) === limits(legacy))
+          assert(limitsInLeftOuterRight(fixed) === 0)
+        }
       }
-      // A correlated subquery without domain joins keeps the pushdown of before: the LIMIT 1
-      // turns the DISTINCT into a Project, and the LIMIT goes into the left side of the join.
+      // Other correlated subqueries keep the pushdown of before: without domain joins, the
+      // LIMIT 1 turns the DISTINCT into a Project, and a non-aggregated subquery, which becomes
+      // a left single join, still gets the LIMIT into the left side of the left join below it.
+      // With the domain joins that decorrelation added before, e.g. over a lower COUNT or for a
+      // correlation below a UNION ALL, the LIMIT also still goes into the domain joins.
       val single = "(SELECT MAX(b.v) FROM b WHERE b.k = o.k)"
-      assert(!plan(s"SELECT o.k, $single FROM (SELECT DISTINCT k FROM o) o LIMIT 1", false)
-        .exists { case a: Aggregate => a.groupOnly; case _ => false })
-      val nonAggregate = "(SELECT b.v FROM b WHERE b.k = o.k)"
-      val leftJoin = plan(
-        s"SELECT o.k, $nonAggregate FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10", legacy = false)
-      assert(leftJoin.exists {
-        case Join(LocalLimit(_, _), _, LeftOuter, _, _) => true
-        case _ => false
-      })
+      assert(!optimizedPlan(s"SELECT o.k, $single FROM (SELECT DISTINCT k FROM o) o LIMIT 1",
+        legacyNestedAggregate = false).exists { case a: Aggregate => a.groupOnly; case _ => false })
+      val lowerCount = "(SELECT SUM(c) FROM (SELECT COUNT(*) c FROM b WHERE b.k = o.k))"
+      Seq(s"SELECT o.k, $lowerCount FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10",
+          s"SELECT o.k, $lowerCount FROM (SELECT DISTINCT k FROM o) o LIMIT 1").foreach { query =>
+        withClue(query) {
+          assert(limitsInLeftOuterRight(optimizedPlan(query, legacyNestedAggregate = false)) > 0)
+        }
+      }
+      withSQLConf(SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        val nonAggregate = "(SELECT b.v FROM b WHERE b.k = o.k)"
+        val unionAll = "(SELECT u.v FROM (SELECT b.v FROM b WHERE b.k = o.k UNION ALL " +
+          "SELECT c.v FROM b c WHERE c.k = o.k) u)"
+        Seq(nonAggregate, unionAll).foreach { s =>
+          val query = s"SELECT o.k, $s FROM o LEFT JOIN b c ON o.k = c.k LIMIT 10"
+          withClue(query) {
+            assert(limitedLeftOuterJoin(optimizedPlan(query, legacyNestedAggregate = false)))
+          }
+        }
+      }
     }
   }
 
