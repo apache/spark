@@ -2063,6 +2063,103 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  private val legacyNullFieldOrWideDecimalDefault =
+    SQLConf.LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT
+
+  // Creates a table in `format` with two old rows, then adds columns whose existence defaults
+  // have a NULL field, a NULL array element, a NULL nested struct or a decimal whose unscaled
+  // value overflows a long, at the top level or in a struct and array (d, e, f, w); compact and
+  // wide decimals that fit in a long (i, l, c); and maps, also nested in a struct, with a NULL or
+  // an overflowing decimal value (m, md, sm), which keep the old error.
+  private def withNullFieldAndWideDecimalDefaults(format: String)(f: => Unit): Unit = {
+    val wide = "99999999999999999999999999999999999999"
+    withSQLConf(
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+      SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true",
+      SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+      withTable("t") {
+        // The table and its defaults are written with the legacy flag on (the reader's old
+        // behavior); the flag changes nothing the writer persists.
+        withSQLConf(legacyNullFieldOrWideDecimalDefault.key -> "true") {
+          sql(s"create table t(id int) using $format")
+          sql("insert into t values (1), (2)")
+          sql("alter table t add columns (" +
+            "s struct<tier: int, nickname: string> " +
+            "default named_struct('tier', 1, 'nickname', cast(null as string)), " +
+            "a struct<tier: int, scores: array<int>> " +
+            "default named_struct('tier', 1, 'scores', array(1, null, 3)), " +
+            "n struct<x: int, inner: struct<y: int>> " +
+            "default named_struct('x', 1, 'inner', cast(null as struct<y: int>)), " +
+            s"d decimal(38, 0) default $wide, " +
+            "e decimal(19, 0) default -9999999999999999999, " +
+            "f decimal(38, 30) default 1.5, " +
+            "i decimal(9, 2) default 1.25, " +
+            "l decimal(18, 0) default 999999999999999999, " +
+            "c decimal(38, 10) default 123.5, " +
+            "w struct<v: decimal(38, 0), vs: array<decimal(38, 0)>> " +
+            s"default named_struct('v', $wide, 'vs', array($wide)), " +
+            "m map<string, int> default map('a', cast(null as int), 'b', 2), " +
+            s"md map<string, decimal(38, 0)> default map('a', $wide), " +
+            "sm struct<m: map<string, decimal(38, 0)>> " +
+            s"default named_struct('m', map('a', $wide)))")
+        }
+        f
+      }
+    }
+  }
+
+  private val fixedColumns = Seq("s", "a", "n", "d", "e", "f", "w")
+  private val mapColumns = Seq("m", "md", "sm")
+  private val controlColumns = Seq("i", "l", "c")
+  private val controlValues =
+    Seq(BigDecimal("1.25"), BigDecimal("999999999999999999"), BigDecimal("123.5"))
+
+  // Asserts that reading `column` fails with FAILED_READ_FILE caused by the old reader error.
+  private def assertOldReadError(column: String, clue: String): Unit = {
+    val e = intercept[SparkException](sql(s"select id, $column from t").collect())
+    assert(e.getCondition.startsWith("FAILED_READ_FILE"), clue)
+    val causes = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).mkString("\n")
+    assert(causes.contains("BigInteger out of long range") ||
+      causes.contains("Cannot assign default column value"), clue)
+  }
+
+  test("vectorized readers fill existence defaults with NULL fields and wide decimals") {
+    Seq("parquet", "orc").foreach { format =>
+      withNullFieldAndWideDecimalDefaults(format) {
+        withSQLConf(legacyNullFieldOrWideDecimalDefault.key -> "false") {
+          val wide = BigDecimal("99999999999999999999999999999999999999")
+          val expected = Seq(Row(1, null), Row(1, Seq(1, null, 3)), Row(1, null), wide,
+            BigDecimal("-9999999999999999999"), BigDecimal("1.5"),
+            // checkAnswer does not convert decimals inside arrays to Scala BigDecimal.
+            Row(wide, Seq(wide.bigDecimal))) ++
+            controlValues
+          val columns = (fixedColumns ++ controlColumns).mkString(", ")
+          checkAnswer(sql(s"select id, $columns from t"),
+            Seq(Row(1 +: expected: _*), Row(2 +: expected: _*)))
+          // Maps keep the old error: their branch does not give each row its own entries yet.
+          mapColumns.foreach(column => assertOldReadError(column, s"$format.$column"))
+        }
+      }
+    }
+  }
+
+  test("vectorized readers fill existence defaults with NULL fields and wide decimals " +
+    "(legacy flag reproduces the old failure)") {
+    Seq("parquet", "orc").foreach { format =>
+      withNullFieldAndWideDecimalDefaults(format) {
+        withSQLConf(legacyNullFieldOrWideDecimalDefault.key -> "true") {
+          (fixedColumns ++ mapColumns).foreach { column =>
+            assertOldReadError(column, s"$format.$column")
+          }
+          // The control columns' defaults fit in a long, so the old code reads them too.
+          checkAnswer(sql(s"select id, ${controlColumns.mkString(", ")} from t"),
+            Seq(Row(1 +: controlValues: _*), Row(2 +: controlValues: _*)))
+        }
+      }
+    }
+  }
+
   test("SPARK-39985 Enable implicit DEFAULT column values in inserts from DataFrames") {
     // Negative test: explicit column "default" references are not supported in write operations
     // from DataFrames: since the operators are resolved one-by-one, any .select referring to

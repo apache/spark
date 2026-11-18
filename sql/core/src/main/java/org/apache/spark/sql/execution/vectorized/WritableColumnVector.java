@@ -802,9 +802,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType
-            || c.type instanceof CalendarIntervalType
-            || c.type instanceof AnyTimestampNanoType) {
+        if (isStructLike(c.type)) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -816,6 +814,39 @@ public abstract class WritableColumnVector extends ColumnVector {
     return elementsAppended;
   }
 
+  // Types whose NULL values must be appended with appendStruct(true), which also appends a NULL
+  // to every child column.
+  private static boolean isStructLike(DataType type) {
+    return type instanceof StructType || type instanceof VariantType
+        || type instanceof CalendarIntervalType
+        || type instanceof AnyTimestampNanoType;
+  }
+
+  // Whether `value` holds a NULL or a decimal of precision > 18 outside any map: the values that
+  // appendObjects fills only when the legacy failure behavior is disabled.
+  private static boolean hasNullOrWideDecimal(Object value) {
+    if (value == null) {
+      return true;
+    }
+    if (value instanceof Decimal decimal) {
+      return decimal.precision() > Decimal.MAX_LONG_DIGITS();
+    }
+    Object[] elements = null;
+    if (value instanceof GenericArrayData arrayData) {
+      elements = arrayData.array();
+    } else if (value instanceof GenericInternalRow row) {
+      elements = row.values();
+    }
+    if (elements != null) {
+      for (Object element : elements) {
+        if (hasNullOrWideDecimal(element)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /**
    * Appends multiple copies of a Java Object to the vector using the corresponding append* method
    * above.
@@ -825,6 +856,30 @@ public abstract class WritableColumnVector extends ColumnVector {
    * or Optional.empty() otherwise.
    */
   public Optional<Integer> appendObjects(int length, Object value) {
+    boolean fillNullsAndWideDecimals = hasNullOrWideDecimal(value) &&
+      !(Boolean) SQLConf.get().getConf(
+        SQLConf.LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT());
+    return appendObjects(length, value, fillNullsAndWideDecimals);
+  }
+
+  // Fills NULLs and decimals that overflow a long only when `fillNullsAndWideDecimals`. Map entries
+  // keep the old behavior: the map branch does not give each row its own entries yet.
+  private Optional<Integer> appendObjects(
+      int length, Object value, boolean fillNullsAndWideDecimals) {
+    if (value == null) {
+      // A NULL field or element nested in a struct or array default value.
+      if (!fillNullsAndWideDecimals) {
+        return Optional.empty();
+      }
+      if (isStructLike(type)) {
+        for (int i = 0; i < length; ++i) {
+          appendStruct(true);
+        }
+      } else {
+        appendNulls(length);
+      }
+      return Optional.of(length);
+    }
     if (value instanceof Boolean) {
       return Optional.of(appendBooleans(length, (Boolean) value));
     }
@@ -832,12 +887,15 @@ public abstract class WritableColumnVector extends ColumnVector {
       return Optional.of(appendBytes(length, (Byte) value));
     }
     if (value instanceof Decimal decimal) {
-      long unscaled = decimal.toUnscaledLong();
       if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
-        return Optional.of(appendInts(length, (int) unscaled));
+        return Optional.of(appendInts(length, (int) decimal.toUnscaledLong()));
       } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
-        return Optional.of(appendLongs(length, unscaled));
+        return Optional.of(appendLongs(length, decimal.toUnscaledLong()));
       } else {
+        if (!fillNullsAndWideDecimals) {
+          // The old code called toUnscaledLong() first, which throws when the value overflows.
+          decimal.toUnscaledLong();
+        }
         BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
         byte[] bytes = integer.toByteArray();
         int result = 0;
@@ -875,7 +933,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (int i = 0; i < length; ++i) {
         appendArray(arrayData.numElements());
         for (Object element : arrayData.array()) {
-          if (arrayData().appendObjects(1, element).isEmpty()) {
+          if (arrayData().appendObjects(1, element, fillNullsAndWideDecimals).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -889,7 +947,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         appendStruct(false);
         for (int j = 0; j < row.values().length; ++j) {
           Object element = row.values()[j];
-          if (childColumns[j].appendObjects(1, element).isEmpty()) {
+          if (childColumns[j].appendObjects(1, element, fillNullsAndWideDecimals).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -902,12 +960,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         for (Object key : data.keyArray().array()) {
-          if (childColumns[0].appendObjects(1, key).isEmpty()) {
+          if (childColumns[0].appendObjects(1, key, false).isEmpty()) {
             return Optional.empty();
           }
         }
         for (Object val: data.valueArray().array()) {
-          if (childColumns[1].appendObjects(1, val).isEmpty()) {
+          if (childColumns[1].appendObjects(1, val, false).isEmpty()) {
             return Optional.empty();
           }
         }
