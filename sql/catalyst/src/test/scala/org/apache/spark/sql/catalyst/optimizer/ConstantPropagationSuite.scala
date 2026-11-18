@@ -369,8 +369,8 @@ class ConstantPropagationSuite extends PlanTest {
         projected.orderBy($"id".asc).select($"s", $"id", $"i"),
         projected.select($"s", $"id", $"i".as("j")).select($"s", $"id", $"j".as("i")),
         // Also from any child of a union, either side of a join, and an aggregation with grouping
-        // keys, which computes a result column over them only for the rows that reach a condition
-        // reading it under whole-stage codegen.
+        // keys, which computes a result column over its grouping keys only for the rows that reach
+        // a condition reading it, under whole-stage codegen.
         stringIds.select($"s", $"id", $"x", Literal(1).as("i")).union(projected),
         projected.union(stringIds.select($"s", $"id", $"x", Literal(1).as("i"))),
         // And from a lateral join, which `RewriteLateralSubquery` turns into a join after this rule
