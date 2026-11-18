@@ -3115,6 +3115,37 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61921: an inferred filter over a column that can fail is not evaluated ahead of " +
+    "the condition through a limit, a join or an aggregate") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      // As in the SPARK-61823 test, `id > 5` keeps `q`, a division by zero on id 3, from being
+      // evaluated, unless a filter `q > 0` inferred from `q = k AND k > 0` goes ahead of it. Under
+      // whole-stage codegen, the limit and the broadcast hash join hand `q` on without computing
+      // it, and the aggregation computes its result `q` only when the filter first reads it.
+      def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
+      val projected =
+        df.select($"id", (lit(10L) / ($"id" - 3)).as("q"), $"id".cast("double").as("k"))
+      val condition = $"id" > 5 && $"q" === $"k" && $"k" > 0
+      checkAnswer(projected.limit(8).where(condition).select($"id"), Nil)
+      // The non-deterministic `r` keeps the condition above the join.
+      checkAnswer(
+        projected.join(broadcast(df.toDF("j")), $"id" === $"j")
+          .select($"id", $"q", $"k", rand(2).as("r"))
+          .where(condition)
+          .select($"id", $"r" >= 0),
+        Nil)
+      checkAnswer(
+        df.groupBy($"id")
+          .agg(max($"id").as("m"), (lit(10L) / (max($"id") - 3)).as("q"),
+            max($"id").cast("double").as("k"))
+          .where($"m" > 5 && $"q" === $"k" && $"k" > 0)
+          .select($"id"),
+        Nil)
+    }
+  }
+
   test("SPARK-60528: collect a nested empty struct") {
     val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
     checkAnswer(df, Row(0L, Row(Row())))

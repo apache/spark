@@ -27,9 +27,10 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedPlanId
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project, Sample, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -233,12 +234,17 @@ trait PredicateHelper extends AliasHelper with Logging {
   /**
    * The output columns of `plan` that can fail to compute: the deterministic columns of a
    * [[Project]] whose expression [[ExprUtils.canEvaluateUnconditionally]] rejects or reads such a
-   * column of its child, looking through [[Filter]] and [[Sample]]. A condition over such a column
-   * can fail as its expression does: under whole-stage codegen, the projection computes a
-   * deterministic column for a row only when a condition above first reads it, and
+   * column of its child, and the result columns of an [[Aggregate]] whose expression, with each
+   * aggregate function taken as its value, is deterministic and rejected by it. A [[Filter]],
+   * [[Sample]], [[LocalLimit]], [[GlobalLimit]], [[Offset]] or [[Join]] passes such columns of
+   * its children through. A condition over such a column can fail as its expression does: under
+   * whole-stage codegen, the projection or aggregation computes a deterministic column for a row
+   * only when a condition above first reads it, also through those operators, and
    * `PushPredicateThroughNonJoin` pushes a condition below the projection with the expression
-   * substituted. A non-deterministic column is computed on every row the projection gets, so it
-   * does not count. Other operators are not looked through.
+   * substituted. A non-deterministic column is computed for every row the operator outputs, and
+   * an aggregation computes its grouping keys and aggregate functions on every row it gets, so
+   * they do not count. Other operators are not looked through, e.g. a `Union`, `Sort` or `Window`,
+   * whose input rows get every column computed.
    */
   protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
     case Project(projectList, child) =>
@@ -249,8 +255,20 @@ trait PredicateHelper extends AliasHelper with Logging {
               a.child.references.exists(below.contains)) => a.toAttribute
         case a: Attribute if below.contains(a) => a
       })
-    case Filter(_, child) => failableOutput(child)
-    case s: Sample => failableOutput(s.child)
+    case agg: Aggregate =>
+      AttributeSet(agg.aggregateExpressions.flatMap {
+        case a: Alias =>
+          val result = a.child.transform { case e: AggregateExpression => e.resultAttribute }
+          if (result.deterministic && !ExprUtils.canEvaluateUnconditionally(result)) {
+            Some(a.toAttribute)
+          } else {
+            None
+          }
+        case _ => None
+      })
+    case j: Join => failableOutput(j.left) ++ failableOutput(j.right)
+    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset =>
+      failableOutput(plan.children.head)
     case _ => AttributeSet.empty
   }
 
