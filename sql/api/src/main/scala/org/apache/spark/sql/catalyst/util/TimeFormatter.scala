@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.text.ParsePosition
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAccessor
 import java.util.Locale
 
 import scala.util.control.NonFatal
@@ -32,7 +33,8 @@ sealed trait TimeFormatter extends Serializable {
 
   // A non-throwing variant of `parse`, returning None instead of throwing when the input cannot be
   // parsed. Used by schema inference to probe the time type without paying an exception per
-  // non-time value; subclasses override it with a more efficient, exception-free implementation.
+  // non-time value. Subclasses override it to return None without throwing for input that does
+  // not match the time format; out-of-range fields may still raise an exception caught internally.
   def parseOptional(s: String): Option[Long] =
     try {
       Some(parse(s))
@@ -58,6 +60,9 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
   protected lazy val formatter: DateTimeFormatter =
     getOrCreateFormatter(pattern, locale, isParsing)
 
+  @transient
+  private lazy val parsingFormat = formatter.toFormat
+
   override def parse(s: String): Long = {
     val localTime = toLocalTime(formatter.parse(s))
     localTimeToNanos(localTime)
@@ -66,11 +71,10 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
   override def parseOptional(s: String): Option[Long] = {
     try {
       val parsePosition = new ParsePosition(0)
-      val parsed = formatter.parseUnresolved(s, parsePosition)
-      if (parsed != null && s.length == parsePosition.getIndex) {
-        Some(localTimeToNanos(toLocalTime(parsed)))
-      } else {
-        None
+      parsingFormat.parseObject(s, parsePosition) match {
+        case parsed: TemporalAccessor if s.length == parsePosition.getIndex =>
+          Some(localTimeToNanos(toLocalTime(parsed)))
+        case _ => None
       }
     } catch {
       case NonFatal(_) => None
