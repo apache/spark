@@ -20,7 +20,10 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
-import org.apache.spark.{SparkArithmeticException, SparkConf, SparkThrowable}
+import scala.concurrent.duration._
+
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException, SparkThrowable}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{BinByExec, FilterExec, InputAdapter, ProjectExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.functions.{col, expr, lit}
@@ -716,6 +719,91 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       }
   }
 
+  gridTest("BIN BY stops at a top-level LIMIT after the bins it returns")(Seq(false, true)) {
+    codegen =>
+      withSQLConf(
+          SQLConf.BIN_BY_ENABLED.key -> "true",
+          SQLConf.ENABLE_BIN_BY_CODEGEN.key -> codegen.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // One input row spans 1000 one-minute bins. The LIMIT runs outside the generated stage,
+        // so the bins go to the stage output.
+        val df = sql(
+          """SELECT bin_start FROM VALUES
+            |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 16:40:00', 100.0D)
+            |  AS t(ts_start, ts_end, value)
+            |BIN BY (
+            |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' MINUTE
+            |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
+            |LIMIT 20""".stripMargin)
+        assert(df.collect().length == 20)
+        val plan = df.queryExecution.executedPlan
+        assert(binByCodegenStage(plan).isDefined == codegen, plan)
+        val binBy = plan.collectFirst { case b: BinByExec => b }
+          .getOrElse(fail(s"No BinByExec in plan:\n$plan"))
+        assert(binBy.metrics("numOutputRows").value == 20L)
+      }
+  }
+
+  test("BIN BY returns the bins a LIMIT takes before a later bin boundary overflows") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      withTempView("bin_by_overflow") {
+        val rangeStart = DateTimeUtils.microsToLocalDateTime(Long.MaxValue - 3L)
+        Seq((rangeStart, DateTimeUtils.microsToLocalDateTime(Long.MaxValue), 1.0d))
+          .toDF("ts_start", "ts_end", "value")
+          .createOrReplaceTempView("bin_by_overflow")
+        // The end of the third bin is not representable. LIMIT 1 reads only the first bin.
+        val df = sql(
+          """SELECT bin_start FROM bin_by_overflow BIN BY (
+            |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '0.000001' SECOND
+            |  ALIGN TO TIMESTAMP_NTZ '1969-12-31 23:59:59.999999'
+            |  DISTRIBUTE UNIFORM (value))
+            |LIMIT 1""".stripMargin)
+        checkAnswer(df, Row(rangeStart))
+      }
+    }
+  }
+
+  test("BIN BY codegen checks for a task kill while it expands one row") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ENABLE_BIN_BY_CODEGEN.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // Cancel the stage after its task starts to expand the row. Then only the kill check in the
+      // bin loop can stop the task.
+      val listener = new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          val stageId = taskStart.stageId
+          new Thread(() => {
+            Thread.sleep(2000)
+            sparkContext.cancelStage(stageId)
+          }).start()
+        }
+      }
+      sparkContext.addSparkListener(listener)
+      try {
+        // One input row spans about 10^15 one-microsecond bins. The aggregate in the same stage
+        // takes every bin, so the loop does not return between bins.
+        val ex = intercept[SparkException] {
+          sql(
+            """SELECT count(*) FROM VALUES
+              |  (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2030-01-01 00:00:00', 1.0D)
+              |  AS t(ts_start, ts_end, value)
+              |BIN BY (
+              |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '0.000001' SECOND
+              |  DISTRIBUTE UNIFORM (value))""".stripMargin).collect()
+        }
+        assert(Option(ex.getCause).getOrElse(ex).getMessage.contains("cancelled"), ex)
+        sparkContext.listenerBus.waitUntilEmpty(20.seconds.toMillis)
+        eventually(timeout(20.seconds)) {
+          assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+        }
+      } finally {
+        sparkContext.removeSparkListener(listener)
+      }
+    }
+  }
+
   test("ORDER BY on a column BIN BY re-outputs without its qualifier is rejected") {
     // BIN BY re-outputs its input columns without the original qualifier, so `ORDER BY t.value`
     // cannot resolve against them; hidden-output insertion appends the column to an operator whose
@@ -1001,8 +1089,20 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 }
 
-/** Runs [[BinBySuite]] with BIN BY code-gen disabled, so BIN BY emits one bin at a time. */
+/**
+ * Runs [[BinBySuite]] with BIN BY code-gen disabled. It skips the tests that set the BIN BY
+ * code-gen config themselves.
+ */
 class BinByWithoutCodegenSuite extends BinBySuite {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ENABLE_BIN_BY_CODEGEN.key, "false")
+
+  override protected def excluded: Seq[String] = Seq(
+    "BIN BY codegen fuses wide output and bin filtering (false)",
+    "BIN BY codegen fuses wide output and bin filtering (true)",
+    "BIN BY stops expanding a row at a LIMIT in the same stage (false)",
+    "BIN BY stops expanding a row at a LIMIT in the same stage (true)",
+    "BIN BY stops at a top-level LIMIT after the bins it returns (false)",
+    "BIN BY stops at a top-level LIMIT after the bins it returns (true)",
+    "BIN BY codegen checks for a task kill while it expands one row")
 }

@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, NamedExpression, UnsafeProjection}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode}
 import org.apache.spark.sql.catalyst.plans.logical.BinBy
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, MathUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -91,26 +91,39 @@ case class BinByExec(
 
   override def supportCodegen: Boolean = conf.getConf(SQLConf.ENABLE_BIN_BY_CODEGEN)
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].inputRDDs()
-  }
+  // BIN BY starts its generated stage and reads the child rows through an iterator.
+  override def inputRDDs(): Seq[RDD[InternalRow]] = child.execute() :: Nil
 
-  override protected def doProduce(ctx: CodegenContext): String = {
-    child.asInstanceOf[CodegenSupport].produce(ctx, this)
-  }
+  // The loop returns after each output row that reaches the stage output, so the row needs no copy.
+  override def needCopyResult: Boolean = false
 
-  // Evaluate child expressions once per input row, before expanding it into bins.
-  override def usedInputs: AttributeSet = child.outputSet
-
-  // One input row makes many output rows, so each output row needs a copy.
-  override def needCopyResult: Boolean = true
-
-  // The bin loop stops at a LIMIT fused above it.
+  // The bin loop reads the stage's input, so it stops at a LIMIT fused above it.
   override protected def canCheckLimitNotReached: Boolean = true
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val start = input(bindOrdinal(rangeStart))
-    val end = input(bindOrdinal(rangeEnd))
+  /**
+   * Generates the bin loop. The current input row and the state of its next bin are fields, so the
+   * loop can return after any bin and continue with the next bin on the next call.
+   */
+  override protected def doProduce(ctx: CodegenContext): String = {
+    val input = ctx.addMutableState(
+      javaType = "scala.collection.Iterator",
+      variableName = "input",
+      initFunc = v => s"$v = inputs[0];",
+      forceInline = true
+    )
+    val row = ctx.addMutableState("InternalRow", "binByRow", forceInline = true)
+    val hasMoreBins =
+      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "hasMoreBins", forceInline = true)
+    val nullRange = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "nullRange", forceInline = true)
+    val start = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rangeStart", forceInline = true)
+    val end = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rangeEnd", forceInline = true)
+    val total = ctx.addMutableState(CodeGenerator.JAVA_LONG, "total", forceInline = true)
+    val index = ctx.addMutableState(CodeGenerator.JAVA_LONG, "binIndex", forceInline = true)
+    val nextStart = ctx.addMutableState(CodeGenerator.JAVA_LONG, "nextStart", forceInline = true)
+    val binsSinceKillCheck =
+      ctx.addMutableState(CodeGenerator.JAVA_INT, "binsSinceKillCheck", forceInline = true)
+    val rsIdx = bindOrdinal(rangeStart)
+    val reIdx = bindOrdinal(rangeEnd)
     val zone = timeZoneId.map(DateTimeUtils.getZoneId).getOrElse(ZoneOffset.UTC)
     val zoneRef = ctx.addReferenceObj(
       objName = "zoneId", obj = zone, className = classOf[ZoneId].getName)
@@ -125,53 +138,50 @@ case class BinByExec(
       initFunc = v => s"$v = TaskContext.get();",
       forceInline = true
     )
-    // A long expansion of one input row checks for a task kill every this many bins.
+    // The loop checks for a task kill every this many bins, across input rows.
     val killCheckInterval = 1024
     val dateTimeUtils = DateTimeUtils.getClass.getName.stripSuffix("$")
     val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
-    val nullRange = ctx.freshName("nullRange")
-    val total = ctx.freshName("total")
     val bucket = ctx.freshName("bucket")
-    val index = ctx.freshName("index")
-    val nextStart = ctx.freshName("nextStart")
     val binStart = ctx.freshName("binStart")
     val binEnd = ctx.freshName("binEnd")
     val ratio = ctx.freshName("ratio")
-    val hasNext = ctx.freshName("hasNext")
-    val binsSinceKillCheck = ctx.freshName("binsSinceKillCheck")
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val appended = Seq(binStart, binEnd, ratio).zip(appendedAttributes).map {
       case (value, attr) =>
-        ExprCode(JavaCode.isNullVariable(nullRange), JavaCode.variable(value, attr.dataType))
+        ExprCode(JavaCode.isNullGlobal(nullRange), JavaCode.variable(value, attr.dataType))
     }
-    ctx.currentVars = input ++ appended
-    val outputVars = buildOutputExpressions(childLen = input.length, ratioNullable = true)
+    ctx.INPUT_ROW = row
+    ctx.currentVars = Seq.fill(child.output.length)(null) ++ appended
+    val outputVars = buildOutputExpressions(childLen = child.output.length, ratioNullable = true)
       .map(_.genCode(ctx))
 
+    // The state of the next bin changes before `consume`, because the parent code can skip the
+    // rest of the loop body with `continue`.
     s"""
-       |boolean $nullRange = ${start.isNull} || ${end.isNull};
-       |long $total = 0L;
-       |long $index = 0L;
-       |long $nextStart = 0L;
-       |if (!$nullRange) {
-       |  if (${start.value} > ${end.value}) {
-       |    throw (RuntimeException) $errors.binByInvalidRangeError(
-       |      $formatter.format(${start.value}), $formatter.format(${end.value}));
+       |while ($limitNotReachedCond ($hasMoreBins || $input.hasNext())) {
+       |  if (!$hasMoreBins) {
+       |    $row = (InternalRow) $input.next();
+       |    $nullRange = $row.isNullAt($rsIdx) || $row.isNullAt($reIdx);
+       |    if (!$nullRange) {
+       |      $start = $row.getLong($rsIdx);
+       |      $end = $row.getLong($reIdx);
+       |      if ($start > $end) {
+       |        throw (RuntimeException) $errors.binByInvalidRangeError(
+       |          $formatter.format($start), $formatter.format($end));
+       |      }
+       |      try {
+       |        $total = java.lang.Math.subtractExact($end, $start);
+       |        scala.Tuple2 $bucket = $dateTimeUtils.timeBucketFromTimestampDTInterval(
+       |          ${binWidthMicros}L, $start, ${originMicros}L, $zoneRef);
+       |        $index = $bucket._1$$mcJ$$sp();
+       |        $nextStart = $bucket._2$$mcJ$$sp();
+       |      } catch (java.lang.ArithmeticException e) {
+       |        throw $errors.binByOverflowError();
+       |      }
+       |    }
        |  }
-       |  try {
-       |    $total = java.lang.Math.subtractExact(${end.value}, ${start.value});
-       |    scala.Tuple2 $bucket = $dateTimeUtils.timeBucketFromTimestampDTInterval(
-       |      ${binWidthMicros}L, ${start.value}, ${originMicros}L, $zoneRef);
-       |    $index = $bucket._1$$mcJ$$sp();
-       |    $nextStart = $bucket._2$$mcJ$$sp();
-       |  } catch (java.lang.ArithmeticException e) {
-       |    throw $errors.binByOverflowError();
-       |  }
-       |}
-       |boolean $hasNext = true;
-       |int $binsSinceKillCheck = 0;
-       |while ($limitNotReachedCond $hasNext) {
        |  if (++$binsSinceKillCheck == $killCheckInterval) {
        |    $binsSinceKillCheck = 0;
        |    $taskContext.killTaskIfInterrupted();
@@ -188,13 +198,14 @@ case class BinByExec(
        |      throw $errors.binByOverflowError();
        |    }
        |    $ratio = $total == 0L ? 1.0D :
-       |      (double) (java.lang.Math.min(${end.value}, $binEnd) -
-       |        java.lang.Math.max(${start.value}, $binStart)) / (double) $total;
+       |      (double) (java.lang.Math.min($end, $binEnd) -
+       |        java.lang.Math.max($start, $binStart)) / (double) $total;
        |    $nextStart = $binEnd;
        |  }
-       |  $hasNext = !$nullRange && $total != 0L && $nextStart < ${end.value};
+       |  $hasMoreBins = !$nullRange && $total != 0L && $nextStart < $end;
        |  $numOutput.add(1);
        |  ${consume(ctx, outputVars)}
+       |  $shouldStopCheckCode
        |}
      """.stripMargin
   }
