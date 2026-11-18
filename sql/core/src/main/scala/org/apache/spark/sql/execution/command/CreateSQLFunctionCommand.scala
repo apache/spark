@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisContext, Analyzer, FunctionResolution, NoSuchFunctionException, NoSuchNamespaceException, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
 import org.apache.spark.sql.internal.SQLConf
@@ -181,7 +181,7 @@ case class CreateSQLFunctionCommand(
         }
 
         // Check cyclic function reference before running the analyzer.
-        checkCyclicFunctionReference(catalog, name, plan)
+        checkCyclicFunctionReference(catalog, analyzer, name, plan)
 
         // Check the function body can be analyzed correctly.
         val (analyzed, referredTempVarsUnderIdentifier) =
@@ -207,7 +207,7 @@ case class CreateSQLFunctionCommand(
           throw UserDefinedFunctionErrors.bodyIsNotAQueryForSqlTableUdf(name.funcName)
         }
         // Check cyclic function reference before running the analyzer.
-        checkCyclicFunctionReference(catalog, name, query.get)
+        checkCyclicFunctionReference(catalog, analyzer, name, query.get)
 
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
@@ -443,56 +443,150 @@ case class CreateSQLFunctionCommand(
    */
   private def checkCyclicFunctionReference(
       catalog: SessionCatalog,
+      analyzer: Analyzer,
       identifier: FunctionIdentifier,
       plan: LogicalPlan): Unit = {
+
+    val capturedDefaults = conf.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS)
+    lazy val functionResolution =
+      new FunctionResolution(analyzer.catalogManager, analyzer.getRelationResolution)
+
+    // Follow the same unqualified-name path as analysis, without expanding or evaluating defaults.
+    def sqlFunctionIdentifier(
+        nameParts: Seq[String],
+        tableFunction: Boolean): Option[FunctionIdentifier] = {
+      if (!capturedDefaults || nameParts.length != 1) {
+        val ident = nameParts.asFunctionIdentifier
+        return Option.when(isSQLFunction(catalog.lookupFunctionInfo(ident).getClassName))(ident)
+      }
+      for (entry <- functionResolution.sqlResolutionPathEntriesForAnalysis) {
+        try {
+          catalog.identifierFromSystemNameParts(entry ++ nameParts) match {
+            case Some(ident) =>
+              val info = catalog.lookupFunctionInfoByIdentifier(ident, tableFunction)
+              if (info.isDefined) {
+                return info.filter(i => isSQLFunction(i.getClassName)).map(_ => ident)
+              }
+              if (catalog.lookupFunctionInfoByIdentifier(ident, !tableFunction).isDefined) {
+                return None
+              }
+            case None if entry.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME) =>
+              if (entry.length != 2) {
+                throw QueryCompilationErrors.requiresSinglePartNamespaceError(
+                  entry.tail ++ nameParts)
+              }
+              val ident = FunctionIdentifier(nameParts.head, Some(entry.last),
+                Some(CatalogManager.SESSION_CATALOG_NAME))
+              val info = catalog.lookupPersistentFunction(ident)
+              return Option.when(isSQLFunction(info.getClassName))(ident)
+            case None =>
+              val otherCatalog = analyzer.catalogManager.catalog(entry.head).asFunctionCatalog
+              if (otherCatalog.functionExists(Identifier.of(entry.tail.toArray, nameParts.head))) {
+                return None
+              }
+          }
+        } catch {
+          case _: NoSuchFunctionException | _: NoSuchNamespaceException |
+               _: CatalogNotFoundException =>
+          case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+        }
+      }
+      None
+    }
+
+    // Arguments belong to the caller; placeholders keep them out of the saved-context traversal.
+    def withFunctionContext[A](function: SQLFunction)(f: => A): A = {
+      if (capturedDefaults) {
+        val newConf = Analyzer.buildSQLFunctionConf(
+          function = function, applySessionOverrides = true, alwaysSetAnsiValue = false)
+        SQLConf.withExistingConf(newConf) {
+          AnalysisContext.withAnalysisContext(function)(f)
+        }
+      } else {
+        f
+      }
+    }
 
     def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
       plan.foreach {
         case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
-          val funcId = nameParts.asFunctionIdentifier
-          val info = catalog.lookupFunctionInfo(funcId)
-          if (isSQLFunction(info.getClassName)) {
+          val ident = sqlFunctionIdentifier(nameParts, tableFunction = true)
+          if (ident.isDefined) {
+            val funcId = ident.get
             val f = withPosition(u) {
-              catalog.lookupTableFunction(funcId, arguments).asInstanceOf[SQLTableFunction]
+              (if (funcId.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)) {
+                catalog.resolveTableFunctionByIdentifier(funcId, arguments)
+                  .getOrElse(catalog.failFunctionLookup(funcId))
+              } else {
+                catalog.lookupTableFunction(funcId, arguments)
+              }).asInstanceOf[SQLTableFunction]
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
             if (f.function.name == name) {
               throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
             }
-            val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
-            checkPlan(plan, newPath)
-        }
+            val inputs = if (capturedDefaults) {
+              f.inputs.foreach(checkExpression(_, newPath))
+              f.inputs.map(_ => Literal(null))
+            } else {
+              f.inputs
+            }
+            withFunctionContext(f.function) {
+              val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, inputs, f.output)
+              checkPlan(plan, newPath)
+            }
+          } else if (capturedDefaults) {
+            arguments.foreach(checkExpression(_, path))
+          }
         case p: LogicalPlan =>
           p.expressions.foreach(checkExpression(_, path))
       }
     }
 
     def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
-      expression.foreach {
-        case s: SubqueryExpression => checkPlan(s.plan, path)
+      expression match {
+        case s: SubqueryExpression =>
+          checkPlan(s.plan, path)
+          s.children.foreach(checkExpression(_, path))
         case u: UnresolvedFunction => checkFunction(u, path)
         // A routed JSON constructor is a call a SQL function may own.
         case j: UnresolvedJsonConstructor if j.routeThroughResolution =>
           checkFunction(j.toUnresolvedFunction, path)
-        case _ =>
+        case e => e.children.foreach(checkExpression(_, path))
       }
     }
 
     def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
-      val funcId = u.nameParts.asFunctionIdentifier
-      val info = catalog.lookupFunctionInfo(funcId)
-      if (isSQLFunction(info.getClassName)) {
+      val ident = sqlFunctionIdentifier(u.boundOwner.getOrElse(u.nameParts), tableFunction = false)
+      if (ident.isDefined) {
+        val funcId = ident.get
         val f = withPosition(u) {
-          catalog.lookupFunction(funcId, u.arguments).asInstanceOf[SQLFunctionExpression]
+          (if (funcId.catalog.contains(CatalogManager.SYSTEM_CATALOG_NAME)) {
+            catalog.resolveScalarFunctionByIdentifier(funcId, u.arguments)
+              .getOrElse(catalog.failFunctionLookup(funcId))
+          } else {
+            catalog.lookupFunction(funcId, u.arguments)
+          }).asInstanceOf[SQLFunctionExpression]
         }
         // Check cyclic reference using qualified function names.
         val newPath = path :+ f.function.name
         if (f.function.name == name) {
           throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
         }
-        val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
-        checkPlan(plan, newPath)
+        val inputs = if (capturedDefaults) {
+          f.inputs.foreach(checkExpression(_, newPath))
+          f.inputs.map(_ => Literal(null))
+        } else {
+          f.inputs
+        }
+        withFunctionContext(f.function) {
+          val plan = catalog.makeSQLFunctionPlan(
+            f.name, f.function, inputs, f.inputPositions, f.defaultInputs)
+          checkPlan(plan, newPath)
+        }
+      } else {
+        u.arguments.foreach(checkExpression(_, path))
       }
     }
 

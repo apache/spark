@@ -5004,6 +5004,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS =
+    buildConf("spark.sql.jsonCsvExpressions.useCapturedOptionDefaults")
+      .doc("When true, to_json, to_csv and from_json capture the SQL configuration defaults " +
+        "for ignoreNullFields, treatNullAsEmptyString and enableDateTimeParsingFallback " +
+        "during analysis. Omitted defaults on named scalar SQL-function calls also use the " +
+        "function's saved SQL configuration. When false, restore lazy generator/parser " +
+        "defaults and the previous caller-context binding for named defaults. " +
+        "Explicit function options take " +
+        "precedence in either mode. This control follows the querying session for saved views " +
+        "and SQL functions; changing it requires reanalyzing existing plans. This control " +
+        "does not cover JSON_ARRAY and JSON_OBJECT nested-value writers or from_csv's " +
+        "CSV datetime fallback.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val JSON_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
       .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +

@@ -378,6 +378,13 @@ object Analyzer {
     key.startsWith("spark.sql.catalog.") || SQLConf.isSessionBindingPolicy(key)
   }
 
+  /** This rollback policy follows the caller even when ordinary body overrides are disabled. */
+  def retainJsonCsvExpressionDefaultBinding(newConf: SQLConf, existingConf: SQLConf): Unit = {
+    val entry = SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS
+    // Copy the effective default too: an unset caller must not inherit a saved rollback value.
+    newConf.setConf(entry, existingConf.getConf(entry))
+  }
+
   /**
    * In case ANSI value wasn't persisted for a view or a UDF, we set it to `true` in case Spark
    * version used to create the view is 4.0.0 or higher (ANSI SQL mode became the default in
@@ -418,6 +425,7 @@ object Analyzer {
         conf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION)) {
       retainResolutionConfigsForAnalysis(newConf = functionConf, existingConf = conf)
     }
+    retainJsonCsvExpressionDefaultBinding(newConf = functionConf, existingConf = conf)
     functionConf
   }
 }
@@ -2550,7 +2558,7 @@ class Analyzer(
             } else if (!u.childrenResolved) {
               u
             } else {
-              functionResolution.resolveFunction(u)
+              resolveFunction(u)
             }
 
           case j: UnresolvedJsonConstructor =>
@@ -2585,7 +2593,7 @@ class Analyzer(
             }
           }
 
-          case u: UnresolvedFunction => functionResolution.resolveFunction(u)
+          case u: UnresolvedFunction => resolveFunction(u)
 
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             // Check if this is a call to a Python user-defined table function whose polymorphic
@@ -2607,6 +2615,16 @@ class Analyzer(
               newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments)
           }
         }
+    }
+
+    private def resolveFunction(u: UnresolvedFunction): Expression = {
+      functionResolution.resolveFunction(u) match {
+        case f: SQLFunctionExpression if f.defaultInputs.nonEmpty =>
+          // Resolve named omissions before deriving aliases, and carry them separately from
+          // caller inputs. Expansion reuses them, including nested function names and seeds.
+          f.copy(defaultInputs = ResolveSQLFunctions.resolveDefaultInputs(f))
+        case other => other
+      }
     }
 
     private def resolveHigherOrderFunction(u: UnresolvedFunction): Expression = withPosition(u) {
@@ -2833,6 +2851,70 @@ class Analyzer(
    */
   object ResolveSQLFunctions extends Rule[LogicalPlan] {
 
+    def resolveDefaultInputs(f: SQLFunctionExpression): Map[Int, Expression] = {
+      val parsed = if (f.defaultInputs.nonEmpty) {
+        f.defaultInputs
+      } else {
+        val params = f.function.inputParam.get
+        val positions = if (f.inputPositions.isEmpty) f.inputs.indices else f.inputPositions
+        val suppliedPositions = positions.toSet
+        val parseConf = Analyzer.buildSQLFunctionConf(
+          function = f.function,
+          applySessionOverrides = false,
+          alwaysSetAnsiValue = true)
+        SQLConf.withExistingConf(parseConf) {
+          params.iterator.zipWithIndex.collect {
+            case (param, index) if !suppliedPositions.contains(index) =>
+              val text = param.getDefault().getOrElse {
+                throw QueryCompilationErrors.wrongNumArgsError(
+                  f.name, params.size.toString, f.inputs.size)
+              }
+              index -> Cast(SQLFunction.parseDefault(text, v1SessionCatalog.parser), param.dataType)
+          }.toMap
+        }
+      }
+      // Numeric casts and non-string atomic identity casts need no analyzer transformations.
+      // Other resolved expressions can still require rewrites, so retain their analysis below.
+      if (parsed.valuesIterator.forall {
+          case c @ Cast(l: Literal, target, _, _) if c.resolved =>
+            (l.dataType.isInstanceOf[NumericType] && target.isInstanceOf[NumericType]) ||
+              (l.dataType == target && target.isInstanceOf[AtomicType] &&
+                !target.isInstanceOf[StringType])
+          case _ => false
+        }) {
+        return parsed
+      }
+      val defaults = parsed.toSeq.sortBy(_._1).map { case (index, expr) =>
+        Alias(expr, index.toString)()
+      }
+      val newConf = Analyzer.buildSQLFunctionConf(
+        function = f.function,
+        applySessionOverrides = true,
+        alwaysSetAnsiValue = false)
+      SQLConf.withExistingConf(newConf) {
+        AnalysisContext.withAnalysisContext(f.function) {
+          val resolved = SQLFunctionContext.withSQLFunction {
+            executeSameContext(Project(defaults, OneRowRelation()))
+          }.asInstanceOf[Project]
+          SimpleAnalyzer.checkAnalysis(resolved)
+          resolved.projectList.map {
+            case a: Alias => a.name.toInt -> a.child
+          }.toMap
+        }
+      }
+    }
+
+    // Positional omissions remain inside normal expansion. Only resolve a comparison copy when
+    // a differently spelled grouping call must match; identical supplied arguments match directly.
+    private def resolveDefaults(f: SQLFunctionExpression): SQLFunctionExpression = {
+      val positions = if (f.inputPositions.isEmpty) f.inputs.indices else f.inputPositions
+      val supplied = positions.iterator.zip(f.inputs.iterator).toMap
+      val defaults = if (f.defaultInputs.nonEmpty) f.defaultInputs else resolveDefaultInputs(f)
+      f.copy(inputs = f.function.inputParam.get.indices.map { index =>
+        supplied.getOrElse(index, defaults(index))
+      }, inputPositions = Nil, defaultInputs = Map.empty)
+    }
+
     private def hasSQLFunctionExpression(exprs: Seq[Expression]): Boolean = {
       exprs.exists(_.exists(_.isInstanceOf[SQLFunctionExpression]))
     }
@@ -2860,7 +2942,8 @@ class Analyzer(
     private def resolve(f: SQLFunctionExpression): LogicalPlan = {
       // Validate the SQL function input.
       checkFunctionInput(f)
-      val plan = v1SessionCatalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
+      val plan = v1SessionCatalog.makeSQLFunctionPlan(
+        f.name, f.function, f.inputs, f.inputPositions, f.defaultInputs)
       val resolved = SQLFunctionContext.withSQLFunction {
         // Resolve the SQL function plan using its context.
         val newConf = Analyzer.buildSQLFunctionConf(
@@ -2963,10 +3046,9 @@ class Analyzer(
      */
     private def replaceSQLFunctionWithAttr[T <: Expression](
         expr: T,
-        aliasMap: mutable.HashMap[Expression, Alias]): T = {
+        lookup: SQLFunctionExpression => Option[Alias]): T = {
       expr.transform {
-        case f: SQLFunctionExpression if aliasMap.contains(f.canonicalized) =>
-          aliasMap(f.canonicalized).toAttribute
+        case f: SQLFunctionExpression => lookup(f).map(_.toAttribute).getOrElse(f)
       }.asInstanceOf[T]
     }
 
@@ -3004,8 +3086,42 @@ class Analyzer(
               alias.toAttribute
           }
         }
+
+        // Identical supplied arguments already match, without analyzing any defaults. Only
+        // compare completed argument lists when a differently spelled call needs to match a
+        // grouping call. These resolved copies are comparison keys and never enter the plan.
+        val comparisonKeys = mutable.HashMap.empty[Expression, Expression]
+        def comparisonKey(f: SQLFunctionExpression): Expression = {
+          if (f.function.inputParam.exists(_.size > f.inputs.size)) {
+            comparisonKeys.getOrElseUpdate(f.canonicalized, {
+              withPosition(f) {
+                withOrigin(f.origin) { resolveDefaults(f).canonicalized }
+              }
+            })
+          } else {
+            f.canonicalized
+          }
+        }
+        lazy val aliasesByFunction = aliasMap.valuesIterator.toSeq.groupBy { alias =>
+          alias.child.asInstanceOf[SQLFunctionExpression].function
+        }
+        val completedAliases = mutable.HashMap.empty[SQLFunction, Map[Expression, Alias]]
+        def lookup(f: SQLFunctionExpression): Option[Alias] = {
+          aliasMap.get(f.canonicalized).orElse {
+            if (aliasMap.nonEmpty &&
+                conf.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS)) {
+              aliasesByFunction.get(f.function).flatMap { aliases =>
+                completedAliases.getOrElseUpdate(f.function, aliases.iterator.map { alias =>
+                  comparisonKey(alias.child.asInstanceOf[SQLFunctionExpression]) -> alias
+                }.toMap).get(comparisonKey(f))
+              }
+            } else {
+              None
+            }
+          }
+        }
         val aggregateExpressions = a.aggregateExpressions.map(
-          replaceSQLFunctionWithAttr(_, aliasMap))
+          replaceSQLFunctionWithAttr(_, lookup))
 
         // Rewrite SQL functions in the aggregate expressions that are not wrapped in
         // aggregate functions. They need to be extracted into a project list above the
@@ -3093,7 +3209,8 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = {
       // Only rewrite SQL functions when they are not in nested function calls.
-      if (SQLFunctionContext.get.nestedSQLFunctionDepth > 0) {
+      if (SQLFunctionContext.get.nestedSQLFunctionDepth > 0 ||
+          !plan.containsPattern(SQL_FUNCTION_EXPRESSION)) {
         plan
       } else {
         rewrite(plan)

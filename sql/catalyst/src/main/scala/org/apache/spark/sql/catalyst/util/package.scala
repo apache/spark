@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TempResolvedColumn}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, SQLFunctionExpression, TempResolvedColumn}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.InvokeLike
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
@@ -137,6 +137,9 @@ package object util extends Logging {
       )
     case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
+    case f: SQLFunctionExpression if f.defaultInputs.nonEmpty =>
+      PrettyAttribute(
+        f.sqlString(toPrettySQL(_, shouldTrimTempResolvedColumn)), f.dataType)
     // A V2 function's magic method registered under a function name, e.g. by `CREATE FUNCTION`.
     case i: InvokeLike if i.getTagValue(FunctionRegistry.FUNC_ALIAS).isDefined =>
       val args = i.arguments.map(toPrettySQL(_, shouldTrimTempResolvedColumn))

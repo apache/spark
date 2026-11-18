@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.SQLFunction.{padArgumentsWithDefaults, parseDefault}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, Literal, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.expressions.NamedLambdaVariable
 import org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
@@ -1845,10 +1845,10 @@ class SessionCatalog(
           messageParameters = Map(
             "funcName" -> function.name.unquotedString))
       }
-      val args = rearrangeArguments(function.inputParam, input, function.name.toString)
+      val (args, positions, defaults) = rearrangeSQLFunctionArguments(function, input)
       val returnType = function.getScalarFuncReturnType
       SQLFunctionExpression(
-        function.name.unquotedString, function, args, Some(returnType))
+        function.name.unquotedString, function, args, Some(returnType), positions, defaults)
     }
   }
 
@@ -1893,7 +1893,9 @@ class SessionCatalog(
   def makeSQLFunctionPlan(
       name: String,
       function: SQLFunction,
-      input: Seq[Expression]): LogicalPlan = {
+      input: Seq[Expression],
+      inputPositions: Seq[Int] = Nil,
+      defaultInputs: Map[Int, Expression] = Map.empty): LogicalPlan = {
     assert(!function.isTableFunc,
       "Function '" + function.name + "' is a table function. " +
       "Use makeSQLTableFunctionPlan() instead of makeSQLFunctionPlan().")
@@ -1906,6 +1908,16 @@ class SessionCatalog(
       alwaysSetAnsiValue = true)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
+      val orderedInput = if (inputPositions.isEmpty && defaultInputs.isEmpty) {
+        input
+      } else {
+        val positions = if (inputPositions.isEmpty) input.indices else inputPositions
+        val supplied = positions.iterator.zip(input.iterator).toMap
+        inputParam.get.zipWithIndex.map { case (param, index) =>
+          supplied.getOrElse(index, defaultInputs.getOrElse(index,
+            Cast(parseDefault(param.getDefault().get, parser), param.dataType)))
+        }.toSeq
+      }
       val returnType = function.getScalarFuncReturnType
       val (expression, query) = function.getExpressionAndQuery(parser, isTableFunc = false)
       assert(expression.isDefined || query.isDefined,
@@ -1915,13 +1927,13 @@ class SessionCatalog(
 
       // Check function arguments
       val paramSize = inputParam.map(_.size).getOrElse(0)
-      if (input.size > paramSize) {
+      if (orderedInput.size > paramSize) {
         throw QueryCompilationErrors.wrongNumArgsError(
-          name, paramSize.toString, input.size)
+          name, paramSize.toString, orderedInput.size)
       }
 
       // Check if any input contains a lambda variable
-      val hasLambdaVar = input.exists { expr =>
+      val hasLambdaVar = (input.iterator ++ defaultInputs.valuesIterator).exists { expr =>
         expr.find {
           case _: NamedLambdaVariable => true
           case _: UnresolvedNamedLambdaVariable => true
@@ -1940,7 +1952,7 @@ class SessionCatalog(
         // function name as a qualifier. E.G.:
         // `create function foo(a int) returns int return foo.a`
         val qualifier = Seq(funcName)
-        val paddedInput = padArgumentsWithDefaults(input, param, name, parser)
+        val paddedInput = padArgumentsWithDefaults(orderedInput, param, name, parser)
 
         val funcInputMetadata = new MetadataBuilder()
           .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)
@@ -2301,13 +2313,58 @@ class SessionCatalog(
       makeSQLTableFunctionBuilder(function))
   }
 
+  /** Normalize supplied scalar arguments before aggregate analysis, deferring omitted defaults. */
+  private def rearrangeSQLFunctionArguments(
+      function: SQLFunction,
+      input: Seq[Expression]): (Seq[Expression], Seq[Int], Map[Int, Expression]) = {
+    if (!conf.getConf(SQLConf.JSON_CSV_EXPRESSION_USE_CAPTURED_OPTION_DEFAULTS)) {
+      val ordered = rearrangeArguments(function.inputParam, input, function.name.toString)
+      return (ordered, Nil, Map.empty)
+    }
+    if (!input.exists(_.isInstanceOf[NamedArgumentExpression])) {
+      return (input, Nil, Map.empty)
+    }
+
+    val params = function.inputParam.toSeq.flatMap(_.toSeq)
+    // These placeholders only validate and reorder supplied arguments. They never enter a plan.
+    val defaults = params.map(p => p.getDefault().map(_ => Literal(null, p.dataType)))
+    val signature = FunctionSignature(params.iterator.zip(defaults.iterator).map {
+      case (param, default) =>
+        InputParameter(param.name, default)
+    }.toVector)
+    val ordered = NamedParametersSupport.defaultRearrange(
+      signature, input, function.name.toString, SQLConf.get.resolver)
+    val supplied = ordered.iterator.zip(defaults.iterator).zipWithIndex.collect {
+      case ((expr, default), index) if !default.exists(_ eq expr) => (expr, index)
+    }.toVector
+    if (supplied.size == params.size) {
+      return (supplied.map(_._1), Nil, Map.empty)
+    }
+    val positions = supplied.map(_._2)
+    val isPrefix = positions.iterator.zipWithIndex.forall { case (position, index) =>
+      position == index
+    }
+    val suppliedPositions = positions.toSet
+    val parseConf = Analyzer.buildSQLFunctionConf(
+      function = function,
+      applySessionOverrides = false,
+      alwaysSetAnsiValue = true)
+    val parsedDefaults = SQLConf.withExistingConf(parseConf) {
+      params.iterator.zipWithIndex.collect {
+        case (param, index) if !suppliedPositions.contains(index) =>
+          index -> Cast(parseDefault(param.getDefault().get, parser), param.dataType)
+      }.toMap[Int, Expression]
+    }
+    (supplied.map(_._1), if (isPrefix) Nil else positions, parsedDefaults)
+  }
+
   /**
    * Rearranges the arguments of a UDF into positional order.
    */
   private def rearrangeArguments(
       inputParams: Option[StructType],
       expressions: Seq[Expression],
-      functionName: String) : Seq[Expression] = {
+      functionName: String): Seq[Expression] = {
     val firstNamedArgumentExpressionIdx =
       expressions.indexWhere(_.isInstanceOf[NamedArgumentExpression])
     if (firstNamedArgumentExpressionIdx == -1) {

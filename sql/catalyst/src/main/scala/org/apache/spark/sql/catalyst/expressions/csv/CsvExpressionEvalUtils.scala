@@ -49,6 +49,8 @@ case class CsvToStructsEvaluator(
     result
   }
 
+  // TODO: Capture the CSV datetime fallback default for saved definitions. Keep its existing
+  // lazy binding here until capture support is extended to from_csv.
   @transient
   private lazy val parser = {
     // 'lineSep' is a plan-wise option so we set a noncharacter, according to
