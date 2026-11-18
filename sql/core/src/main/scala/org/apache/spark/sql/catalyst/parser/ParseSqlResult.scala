@@ -522,11 +522,16 @@ object ParseSqlResult {
     if (used.isEmpty) {
       plan
     } else {
+      // The bound values are built during constant folding of parse_sql, so they would
+      // otherwise inherit the outer call's origin. Build them without one, so an error on a
+      // marker does not report the outer query text as its context.
+      def nullValue(dataType: DataType): Literal =
+        CurrentOrigin.withOrigin(Origin()) { Literal.create(null, dataType) }
       val namedArgs = markers.collect {
-        case (name, dataType) if name != "?" => name -> Literal.create(null, dataType)
+        case (name, dataType) if name != "?" => name -> nullValue(dataType)
       }
       val posArgs = markers.collect {
-        case ("?", dataType) => Literal.create(null, dataType)
+        case ("?", dataType) => nullValue(dataType)
       }
       val usesNamed = used.exists(m => (m \ "named") != JNothing)
       val usesPos = used.exists(m => (m \ "unnamed_count") != JNothing)

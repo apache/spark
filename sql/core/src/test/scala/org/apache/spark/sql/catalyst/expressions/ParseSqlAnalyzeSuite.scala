@@ -482,6 +482,24 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE errors on a bound parameter marker do not report the outer parse_sql call") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql('SELECT * FROM range(10) LIMIT :n', 'ANALYZE',
+          |  parameter_markers => array(named_struct('name', 'n', 'type', 'INT')))""".stripMargin)
+        .head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "analyze_success" === JBool(false), json)
+      assert(analyzed \ "error" \ "errorClass" ===
+        JString("INVALID_LIMIT_LIKE_EXPRESSION.IS_NULL"), json)
+      // The context must not be the outer parse_sql(...) call text.
+      assert((analyzed \ "error" \ "queryContext").children.isEmpty, json)
+    }
+  }
+
   test("ANALYZE DDL does not see caller-supplied relations and keeps later statements") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       val json = spark.sql(
