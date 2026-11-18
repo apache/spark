@@ -190,20 +190,13 @@ _TRANSPILABLE_EVAL_TYPES = frozenset(
 # alone is the scope transpilation had before the Arrow-optimized and scalar pandas eval
 # types were admitted.
 #
-# The default is repeated here, rather than read from the JVM, for the same reason the
-# transpile flag is read with one: see ``_conf_is_true`` in ``UserDefinedFunction.__init__``.
-# pyspark.sql.tests.arrow.test_arrow_python_udf_transpile checks it against the conf's
-# registered default, and ConvertToCatalyst re-checks the conf, since it can be narrowed
-# after a UDF was built.
+# ConvertToCatalyst re-checks the conf, since it can be narrowed after a UDF was built.
 _TRANSPILE_EVAL_TYPES_CONF = "spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes"
 _TRANSPILABLE_EVAL_TYPE_NAMES = {
     PythonEvalType.SQL_BATCHED_UDF: "SQL_BATCHED_UDF",
     PythonEvalType.SQL_ARROW_BATCHED_UDF: "SQL_ARROW_BATCHED_UDF",
     PythonEvalType.SQL_SCALAR_PANDAS_UDF: "SQL_SCALAR_PANDAS_UDF",
 }
-_TRANSPILE_EVAL_TYPES_DEFAULT = ",".join(
-    _TRANSPILABLE_EVAL_TYPE_NAMES[evalType] for evalType in sorted(_TRANSPILABLE_EVAL_TYPES)
-)
 
 
 class UserDefinedFunction:
@@ -325,14 +318,10 @@ class UserDefinedFunction:
                 value = session.conf.get(key, default)
             return value is not None and value.lower() == "true"
 
-        # Whether the rollback conf still lists this eval type. Only called for a member of
-        # ``_TRANSPILABLE_EVAL_TYPES``, and only once the flag is known to be on.
+        # Whether the rollback conf still lists this eval type. Only reached for a member of
+        # ``_TRANSPILABLE_EVAL_TYPES`` once the flag is known to be on, so there is a session.
         def _eval_type_is_enabled() -> bool:
-            if session is None:
-                return False
-            listed = session.conf.get(_TRANSPILE_EVAL_TYPES_CONF, _TRANSPILE_EVAL_TYPES_DEFAULT)
-            if listed is None:
-                return False
+            listed = session.conf.get(_TRANSPILE_EVAL_TYPES_CONF) or ""  # type: ignore[union-attr]
             names = {name.strip().upper() for name in listed.split(",")}
             return _TRANSPILABLE_EVAL_TYPE_NAMES[evalType] in names
 

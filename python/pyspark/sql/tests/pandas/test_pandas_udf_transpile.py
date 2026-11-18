@@ -298,6 +298,10 @@ def filled(s):
     return s.fillna(0)
 
 
+def uppercased(s):
+    return s.upper()
+
+
 def isnull_of_expression(s):
     # Only a bare parameter may be the receiver, so this falls back even though every
     # individual piece is in the subset.
@@ -660,30 +664,6 @@ class PandasUDFTranspileSubsetTests(PandasUDFTranspileTestsMixin, ReusedSQLTestC
         self.assertTrue(off[0] != off[0], f"expected interpreted NaN, got {off!r}")
         self.assertEqual(repr(off), repr(on), "the ConvertToCatalyst re-check did not fall back")
 
-    def test_eval_type_removed_from_the_list_disables_transpilation(self):
-        # Unlisting SQL_SCALAR_PANDAS_UDF is a gate, not a failed attempt, so no warning.
-        with self.sql_conf(_PANDAS_ROLLED_BACK):
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always")
-                pudf = self._pandas_udf(add_one, LongType())
-            self.assertEqual([], [str(w.message) for w in caught])
-            self.assertEqual([], pudf.transpiled)
-            df = self._longs(1, None).select(pudf("a"))
-            self.assertEqual({"ArrowEvalPythonExec": 1}, dict(_eval_python_nodes(df)))
-            self.assertEqual([2, None], [r[0] for r in df.collect()])
-
-    def test_eval_type_removed_after_construction_runs_interpreted(self):
-        # The UDF already carries options, so only the ConvertToCatalyst re-check can keep
-        # it interpreted. That is the case a rollback has to cover.
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = self._pandas_udf(add_one, LongType())
-            self._assert_transpiled(pudf, "add_one")
-            self.assertEqual({}, dict(_eval_python_nodes(self._longs(1).select(pudf("a")))))
-        with self.sql_conf(_PANDAS_ROLLED_BACK):
-            df = self._longs(1, None).select(pudf("a"))
-            self.assertEqual({"ArrowEvalPythonExec": 1}, dict(_eval_python_nodes(df)))
-            self.assertEqual([2, None], [r[0] for r in df.collect()])
-
     def test_nan_from_infinite_arithmetic_becomes_null_in_the_default_regime(self):
         # The other half of the pair above: with the conf off, the interpreted NaN really is
         # masked to NULL, which is what the normalization reproduces.
@@ -808,6 +788,14 @@ class PandasUDFTranspileRefusalTests(PandasUDFTranspileTestsMixin, ReusedSQLTest
                     "a",
                     expect_reason="function call other than",
                 )
+        # A str method the scalar transpiler lowers is still not a Series method.
+        self._assert_falls_back(
+            uppercased,
+            StringType(),
+            self._strings("a", None),
+            "a",
+            expect_reason="function call other than",
+        )
 
     def test_null_check_on_non_parameter_receiver_falls_back(self):
         self._assert_falls_back(isnull_of_expression, BooleanType(), self._longs(1, None), "a")

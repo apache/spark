@@ -744,13 +744,12 @@ object SQLConf {
         "spark.sql.execution.pandas.convertToArrowArraySafely is false. Other " +
         "vectorized UDFs (arrow_udf, the iterator forms, grouped map/agg) are never " +
         "transpiled. A transpiled expression can be non-nullable where the Python UDF it " +
-        "replaces is always nullable. Stateful streaming operators store a nullable state " +
-        "schema either way, so a streaming query can be restarted from its checkpoint after " +
-        "transpilation is turned on or off. That does not hold for a query started with " +
-        "spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled=false: restart " +
-        "it with the same transpilation settings, because once its state has been written " +
-        "with a transpiled UDF in a key, a restart that no longer transpiles that UDF fails " +
-        "with STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE. " +
+        "replaces is always nullable. Streaming state schemas are stored nullable either " +
+        "way, so a stateful query can be restarted after transpilation settings change, " +
+        "unless it was started with " +
+        "spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled=false: such a " +
+        "query must be restarted with the same transpilation settings, or it can fail with " +
+        "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE. " +
         "This initial version only works with non-Connect Spark; Spark Connect " +
         "support is to follow. This is an *experimental* feature."
     )

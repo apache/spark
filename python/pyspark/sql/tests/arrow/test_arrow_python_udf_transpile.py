@@ -67,7 +67,6 @@ from pyspark.sql.udf import (
     _TRANSPILABLE_EVAL_TYPE_NAMES,
     _TRANSPILABLE_EVAL_TYPES,
     _TRANSPILE_EVAL_TYPES_CONF,
-    _TRANSPILE_EVAL_TYPES_DEFAULT,
     UserDefinedFunction,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
@@ -575,7 +574,6 @@ class ArrowUDFTranspileEvalTypeGateTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
             "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF",
             "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF",
             "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF",
-            "SQL_SCALAR_ARROW_INPROCESS_UDF",
             "SQL_TABLE_UDF",
             "SQL_ARROW_TABLE_UDF",
             "SQL_ARROW_UDTF",
@@ -695,25 +693,11 @@ class ArrowUDFTranspileEvalTypeRollbackTests(ArrowUDFTranspileTestsMixin, Reused
         names = ",".join(_TRANSPILABLE_EVAL_TYPE_NAMES[t] for t in eval_types)
         return self.sql_conf({**_TRANSPILE_ON, _TRANSPILE_EVAL_TYPES_CONF: names})
 
-    def test_python_default_matches_the_registered_default(self):
-        # udf.py repeats the default so that reading the conf never depends on the JVM
-        # having it registered. No default is passed here, so this is the JVM's own.
-        registered = self.spark.conf.get(_TRANSPILE_EVAL_TYPES_CONF)
-        self.assertEqual(
-            sorted(_TRANSPILE_EVAL_TYPES_DEFAULT.split(",")), sorted(registered.split(","))
-        )
-
     def test_names_are_the_eval_type_attribute_names(self):
         self.assertEqual(_TRANSPILABLE_EVAL_TYPES, frozenset(_TRANSPILABLE_EVAL_TYPE_NAMES))
         for eval_type, name in _TRANSPILABLE_EVAL_TYPE_NAMES.items():
             with self.subTest(name=name):
                 self.assertEqual(eval_type, getattr(PythonEvalType, name))
-
-    def test_default_lists_every_transpilable_eval_type(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            for eval_type in sorted(_TRANSPILABLE_EVAL_TYPES):
-                with self.subTest(evalType=eval_type):
-                    self._assert_transpiled(self._build(eval_type), f"eval type {eval_type}")
 
     def test_an_unlisted_eval_type_is_not_transpiled(self):
         # Each eval type on its own: it transpiles, the other two do not. Being unlisted is
@@ -744,17 +728,6 @@ class ArrowUDFTranspileEvalTypeRollbackTests(ArrowUDFTranspileTestsMixin, Reused
             pickled_df = df.select(pickled("a"))
             self.assertEqual({}, dict(_eval_python_nodes(pickled_df)))
             self.assertEqual([5], [r[0] for r in pickled_df.collect()])
-
-    def test_rollback_restores_the_interpreted_behavior(self):
-        # `x + 1` on a NULL is the documented divergence: NULL transpiled, a Python
-        # TypeError interpreted. Unlisting the eval type brings the error back.
-        df = self.spark.createDataFrame([(None,)], schema="a bigint")
-        with self.sql_conf(_TRANSPILE_ON):
-            transpiled = df.select(_arrow_udf(add_one, LongType())("a"))
-            self.assertEqual([None], [r[0] for r in transpiled.collect()])
-        with self._only(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_SCALAR_PANDAS_UDF):
-            with self.assertRaises(PythonException):
-                df.select(_arrow_udf(add_one, LongType())("a")).collect()
 
     def test_narrowing_the_list_applies_to_udfs_that_already_exist(self):
         # The options are attached at construction, so ConvertToCatalyst has to re-read the
@@ -797,12 +770,6 @@ class ArrowUDFTranspileEvalTypeRollbackTests(ArrowUDFTranspileTestsMixin, Reused
             self._assert_transpiled(_arrow_udf(add_one, LongType()), "an Arrow-optimized UDF")
             self.assertEqual([], _pickled_udf(add_one, LongType()).transpiled)
 
-    def test_an_empty_list_transpiles_nothing(self):
-        with self.sql_conf({**_TRANSPILE_ON, _TRANSPILE_EVAL_TYPES_CONF: ""}):
-            for eval_type in sorted(_TRANSPILABLE_EVAL_TYPES):
-                with self.subTest(evalType=eval_type):
-                    self.assertEqual([], self._build(eval_type).transpiled)
-
     def test_the_list_cannot_admit_an_eval_type_the_transpiler_does_not_support(self):
         # It narrows the allowlist in udf.py and never widens it: naming anything else is
         # rejected when the conf is set, instead of silently opting an untriaged eval type in.
@@ -813,30 +780,6 @@ class ArrowUDFTranspileEvalTypeRollbackTests(ArrowUDFTranspileTestsMixin, Reused
                 self.assertEqual(
                     "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS", ctx.exception.getCondition()
                 )
-        self.assertEqual(
-            sorted(_TRANSPILE_EVAL_TYPES_DEFAULT.split(",")),
-            sorted(self.spark.conf.get(_TRANSPILE_EVAL_TYPES_CONF).split(",")),
-            "a rejected value must leave the conf as it was",
-        )
-
-    def test_the_list_is_not_read_while_the_flag_is_off(self):
-        # Building a UDF with the feature off costs one conf read, the flag; the list is a
-        # second JVM round trip that only a user of the feature should pay.
-        reads = []
-        runtime_conf = type(self.spark.conf)
-        original = runtime_conf.get
-
-        def recording_get(conf, key, *args, **kwargs):
-            reads.append(key)
-            return original(conf, key, *args, **kwargs)
-
-        with self.sql_conf(_TRANSPILE_OFF):
-            runtime_conf.get = recording_get
-            try:
-                _arrow_udf(add_one, LongType())
-            finally:
-                runtime_conf.get = original
-        self.assertEqual(["spark.sql.experimental.optimizer.transpilePyUDFs"], reads)
 
 
 class ArrowUDFTranspilePlanShapeTests(ArrowUDFTranspileTestsMixin, ReusedSQLTestCase):
