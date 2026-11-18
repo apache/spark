@@ -94,6 +94,44 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-61572: cast wide DECIMAL to integral truncates the exact value") {
+    // A Decimal built from a BigDecimal keeps it at any precision, which selects the exact branch.
+    def dec(v: String, precision: Int, scale: Int): Decimal =
+      Decimal(BigDecimal(v), precision, scale)
+    val wide = dec("0.999999999999999999", 38, 18)
+    val narrow = dec("0.999999999999999999", 18, 18)
+    val negative = dec("-0.999999999999999999", 38, 18)
+    val qty = dec("999999.999999999999", 30, 12)
+    val intMax = dec("2147483647.999999999999", 38, 12)
+    val intMin = dec("-2147483648.999999999999", 38, 12)
+    // Default: the exact value is truncated toward zero.
+    Seq(wide, narrow, negative).foreach { d =>
+      checkEvaluation(cast(d, IntegerType), 0)
+      checkEvaluation(cast(d, ShortType), 0.toShort)
+      checkEvaluation(cast(d, ByteType), 0.toByte)
+    }
+    checkEvaluation(cast(qty, IntegerType), 999999)
+    checkEvaluation(cast(intMax, IntegerType), Int.MaxValue)
+    checkEvaluation(cast(intMin, IntegerType), Int.MinValue)
+    checkEvaluation(cast(dec("32767.999999999999999999", 38, 18), ShortType), Short.MaxValue)
+    checkEvaluation(cast(dec("127.9999999999999999999", 38, 19), ByteType), Byte.MaxValue)
+    Seq(dec("128", 38, 0) -> ByteType, dec("-129", 38, 0) -> ByteType,
+        dec("32768", 38, 0) -> ShortType).foreach { case (d, t) =>
+      checkExceptionInExpression[ArithmeticException](cast(d, t), "overflow")
+    }
+    // Legacy: the value goes through a Double first, so 0.999999999999999999 rounds to 1.
+    withSQLConf(SQLConf.LEGACY_CAST_DECIMAL_TO_INTEGRAL_TYPE_VIA_DOUBLE.key -> "true") {
+      Seq(wide, narrow).foreach { d =>
+        checkEvaluation(cast(d, IntegerType), 1)
+        checkEvaluation(cast(d, ShortType), 1.toShort)
+        checkEvaluation(cast(d, ByteType), 1.toByte)
+      }
+      checkEvaluation(cast(negative, IntegerType), -1)
+      checkEvaluation(cast(qty, IntegerType), 1000000)
+      checkExceptionInExpression[ArithmeticException](cast(intMax, IntegerType), "overflow")
+    }
+  }
+
   test("ANSI mode: Throw exception on casting out-of-range value to byte type") {
     testIntMaxAndMin(ByteType)
     Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
