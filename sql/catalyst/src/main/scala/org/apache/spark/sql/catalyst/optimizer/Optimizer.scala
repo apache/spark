@@ -2623,13 +2623,9 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     _.containsPattern(FILTER), ruleId)(applyLocally)
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    // The query execution/optimization does not guarantee the expressions are evaluated in order.
-    // We only can combine them if and only if both are deterministic and the outer condition is not
-    // throwable (inner can be throwable as it was going to be evaluated first anyways).
-    // Combining a condition written after a non-deterministic or throwable one evaluates it ahead
-    // of that one, so it must also be unable to fail. `throwable` does not report e.g. a division
-    // by zero in ANSI mode, which the condition before it may have kept from being evaluated.
-    // Nor may it read a column that can fail (see `splitMovable`).
+    // Combines the conjuncts of the outer condition that may be evaluated ahead of the others
+    // (see `splitMovable`) into the inner filter, and keeps the rest in a filter above it. The
+    // inner condition must be deterministic.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
       val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild))
       val mergedFilter = (ExpressionSet(movable) --
