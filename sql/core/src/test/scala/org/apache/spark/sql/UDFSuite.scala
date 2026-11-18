@@ -1276,6 +1276,16 @@ class UDFSuite extends SharedSparkSession {
     checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
   }
 
+  test("SPARK-61935: ScalaUDF null handling of a column made nullable by an outer join") {
+    val f = udf[Int, Int](_ + 1)
+    val ds1 = Seq(1, 2).toDS()
+    val ds2 = Seq(2).toDS()
+    // `ds2("value")` is resolved as non-nullable, and becomes nullable after resolution
+    checkAnswer(
+      ds1.join(ds2, ds1("value") === ds2("value"), "left_outer").select(f(ds2("value"))),
+      Row(null) :: Row(3) :: Nil)
+  }
+
   test("SPARK-52819: Support using Kryo to encode BUF in Aggregator") {
     val kryoBufUDAF = udaf(KryoBufAggregator())
     val input = Seq(1L, 2L, 3L).toDF("value")

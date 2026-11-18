@@ -38,6 +38,15 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   To recover, write to a new table location with a new checkpoint location, or rewrite the
   committed files with the partition columns of the table.
 
+- Since Spark 4.4, a column derived from a typed Scala UDF with a primitive parameter is nullable
+  when the input of the parameter can be null, as the UDF returns NULL for a NULL input.
+  Previously, some of these columns, for example the output of a generator such as `explode` over
+  an array of the UDF results, were non-nullable. As a result, an existing query started before
+  Spark 4.3 that keeps such a column in its state, for example as a grouping key of a streaming
+  aggregation, fails to restart with `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, use a new
+  checkpoint location, or set `spark.sql.streaming.stateStore.stateSchemaCheck` to `false`. Note
+  that the state of such a query can hold wrong keys, such as `-1` or `0`, for NULL inputs.
+
 ## Upgrading from Structured Streaming 4.2 to 4.3
 
 - Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query, matching classic `foreachBatch`. This runs the batch under the configuration the streaming engine pins on the clone rather than the root session's. As a result, the batch DataFrame can no longer be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such work through the batch DataFrame's own session (`batch_df.sparkSession`) instead, and pass results out through a table or a global temporary view rather than a session-local temporary view. To restore the previous behavior, set `spark.sql.connect.streaming.foreachBatch.useClonedSession` to `false`.

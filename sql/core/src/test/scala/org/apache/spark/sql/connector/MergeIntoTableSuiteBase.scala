@@ -2461,6 +2461,20 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                |""".stripMargin)
         }
         assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+
+        // with ANSI off, the implicit cast of a malformed string to the primitive input is NULL
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          val e2 = intercept[SparkRuntimeException] {
+            sql(
+              s"""MERGE INTO $tableNameAsString t
+                 |USING source s
+                 |ON t.pk = s.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET salary = plus1('x')
+                 |""".stripMargin)
+          }
+          assert(e2.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+        }
       }
     }
   }
