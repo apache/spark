@@ -867,10 +867,10 @@ private[sql] object GroupPartitionsExec {
  *
  * Unlike Spark's default coalescer which tries to minimize data movement, this coalescer
  * groups partitions based on their partition keys to maintain the grouping semantics
- * required for storage-partitioned operations. A group names a location only when it has several
- * partitions, shares none of them with another group, is not over persisted data, and more of its
- * partitions prefer one host than any other host. Every other group leaves its location to the
- * scheduler.
+ * required for storage-partitioned operations. When nothing in the parent's narrow lineage is
+ * persisted, a group names a location if it has several partitions, shares none of them with
+ * another group, and more of its partitions prefer one host than any other host. Every other
+ * group leaves its location to the scheduler.
  *
  * @param groupedPartitions Sequence where each element is a sequence of input partition
  *                         indices that should be grouped together. Only the driver reads it,
@@ -894,23 +894,27 @@ class GroupedPartitionCoalescer(
     lazy val persisted =
       (parent +: parent.getNarrowAncestors).exists(_.getStorageLevel != StorageLevel.NONE)
     groupedPartitions.map { partitionIndices =>
+      // Read the partitions before the vote: otherwise the scheduler would compute them while it
+      // holds its cache-location map, against the lock order that `DAGScheduler` documents.
+      val partitions = partitionIndices.map(parent.partitions(_))
       // A group of one leaves its location to the scheduler, which then offers every location of
       // its partition. The checks above run only for groups of several partitions.
       val votes = partitionIndices.size > 1 && !partitionIndices.exists(shared) && !persisted
       val partitionGroup =
         new PartitionGroup(if (votes) preferredLocation(parent, partitionIndices) else None)
-      partitionGroup.partitions ++= partitionIndices.map(parent.partitions(_))
+      partitionGroup.partitions ++= partitions
       partitionGroup
     }.toArray
   }
 
   /**
    * The host that more of the given partitions prefer than any other host, or the only location
-   * that they name on it, such as an executor. With no host ahead it is None: naming one of the
-   * tied hosts would only narrow what the scheduler offers, the locations of the first partition
-   * that has any. As in `DefaultPartitionCoalescer`, a partition's locations are the ones the
-   * scheduler would use for it, found through the parent's lineage, since a parent such as a
-   * scan's mapped RDD reports none of its own.
+   * that they name on it, such as an executor. With no host ahead it is None, and the scheduler
+   * offers the locations of the first partition that has any. Naming a tied host would mostly
+   * narrow that offer, though in a group of three or more that partition can miss them. As in
+   * `DefaultPartitionCoalescer`, a partition's locations are the ones the scheduler would use
+   * for it, found through the parent's lineage, since a parent such as a scan's mapped RDD
+   * reports none of its own.
    */
   private def preferredLocation(parent: RDD[_], partitionIndices: Seq[Int]): Option[String] = {
     val locations = partitionIndices.map(parent.context.getPreferredLocs(parent, _))
