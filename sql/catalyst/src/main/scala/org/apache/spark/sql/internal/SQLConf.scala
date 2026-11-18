@@ -4211,8 +4211,11 @@ object SQLConf {
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
-      .doc("When true, Spark will validate if renamed checkpoint file exists.")
-      .internal()
+      .doc("When true, after renaming a checkpoint file from its temporary file, Spark " +
+        "verifies that the renamed file exists and fails the write if it does not, instead " +
+        "of committing a batch whose checkpoint file is missing. This adds one existence " +
+        "check per checkpoint file written. Consider enabling it when the checkpoint " +
+        "location is on an object store whose rename is not guaranteed to be atomic.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
