@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, S
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -3124,6 +3125,21 @@ class DataFrameSuite extends SharedSparkSession
               .select($"s", $"id", $"s".cast("int").as("i")).limit(5)
               .select($"*", rand(1).as("r")).where(condition).select($"s", $"id", $"r" >= 0),
               Row("1", 7L, true))
+            // And above an aggregation with grouping keys, or the streamed side of a broadcast
+            // hash join, which compute `i` only for the rows that reach a condition reading it.
+            Seq(
+              spark.read.parquet(dir.getCanonicalPath).groupBy($"s", $"id")
+                .agg($"s".cast("int").as("i")) -> classOf[HashAggregateExec],
+              projected.join(broadcast(Seq(7L, 0L).toDF("k")), $"id" === $"k")
+                .select($"s", $"id", $"i") -> classOf[BroadcastHashJoinExec]
+            ).foreach { case (child, operator) =>
+              val df = child.select($"*", rand(1).as("r")).where(condition)
+                .select($"s", $"id", $"r" >= 0)
+              checkAnswer(df, Row("1", 7L, true))
+              assert(collect(df.queryExecution.executedPlan) {
+                case p if operator.isInstance(p) => p
+              }.nonEmpty)
+            }
           }
           // As on 4.3.0, `i = 1` makes the condition FALSE, so the filter is pruned,
           // and `i` is not computed for the row ("x", 0).

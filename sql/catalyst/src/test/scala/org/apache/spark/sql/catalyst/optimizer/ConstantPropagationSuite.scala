@@ -366,7 +366,14 @@ class ConstantPropagationSuite extends PlanTest {
         projected.where($"id" > 1L).select($"s", $"id", $"i"),
         projected.sample(0.0, 0.5, withReplacement = false, 1L).select($"s", $"id", $"i"),
         projected.limit(5).select($"s", $"id", $"i"),
-        projected.select($"s", $"id", $"i".as("j")).select($"s", $"id", $"j".as("i"))
+        projected.offset(1).select($"s", $"id", $"i"),
+        projected.select($"s", $"id", $"i".as("j")).select($"s", $"id", $"j".as("i")),
+        // Also from either side of a join, and from an aggregation, whose result columns over
+        // its grouping keys are computed only for the rows that reach a condition reading them,
+        // with grouping keys under whole-stage codegen.
+        projected.join(LocalRelation($"k".long), Inner, Some($"x" === $"k")),
+        LocalRelation($"k".long).join(projected, Inner, Some($"x" === $"k")),
+        stringIds.groupBy($"s", $"id")($"s", $"id", castS.as("i"))
       ).foreach(child => checkOrdered(child, written, expected))
     }
   }
@@ -885,6 +892,14 @@ class ConstantPropagationSuite extends PlanTest {
       // row that operator gets.
       val shuffled = stringIds.select($"id", castS.as("i")).repartition(2).select($"id", $"i")
       checkOrdered(shuffled, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
+      // And the result of an aggregate function, whose input an aggregation computes for every
+      // row it gets, and a grouping key.
+      Seq(
+        stringIds.groupBy($"id")($"id", max(castS).as("i")),
+        stringIds.select($"id", castS.as("i")).groupBy($"i")($"i", max($"id").as("id"))
+      ).foreach { child =>
+        checkOrdered(child, $"id" > 0L && $"i" > 0 && $"id" === 7L, $"i" > 0 && $"id" === 7L)
+      }
       // And one that stands for a cast that can not fail.
       val widened = stringIds.select($"s", $"id", $"x", $"id".cast(DoubleType).as("k"))
       checkOrdered(widened, $"k" > 0.0 && tenDividedBy($"x") > 0.0 && $"k" === 3.0,
