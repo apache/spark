@@ -49,11 +49,11 @@ object PushDownKllSubqueryBindings extends Rule[LogicalPlan] with PredicateHelpe
             case (attribute, _) => bindingIds.contains(attribute.exprId)
           })
           val expanded = consumers.map(replaceAlias(_, aliases))
-          val uses = mutable.HashMap.empty[ExprId, AttributeSet]
+          val contributions = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
           def collect(expression: Expression, references: AttributeSet): Unit = expression match {
             case attribute: Attribute if bindingIds.contains(attribute.exprId) =>
-              uses(attribute.exprId) = uses.getOrElse(attribute.exprId, AttributeSet.empty) ++
-                AttributeSet(references.filterNot(a => bindingIds.contains(a.exprId)))
+              contributions.getOrElseUpdate(attribute.exprId, mutable.ArrayBuffer.empty) +=
+                references.filter(a => !bindingIds.contains(a.exprId))
             case comparison: BinaryComparison => comparison.children.foreach { operand =>
               val local = AttributeSet(
                 operand.references.filterNot(a => bindingIds.contains(a.exprId)))
@@ -64,6 +64,9 @@ object PushDownKllSubqueryBindings extends Rule[LogicalPlan] with PredicateHelpe
           expanded.foreach { expression =>
             splitConjunctivePredicates(expression).foreach(e => collect(e, e.references))
           }
+          val uses = contributions.iterator.map { case (id, sets) =>
+            id -> AttributeSet.fromAttributeSets(sets)
+          }.toMap
           val placement = new KllSubqueryBindingPlacement
           val movable = bindings.filter { binding =>
             uses.contains(binding.exprId) &&

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.ValidateSubqueryExpression
+import org.apache.spark.sql.catalyst.analysis.{PullOutNondeterministic, ValidateSubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -44,12 +44,16 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
       val independent = new ValidateSubqueryExpression.KllSubqueryIndependence
       val conditionReferences = joinCond.map(_.references).getOrElse(AttributeSet.empty)
-      def selectedScalar(expression: NamedExpression): Boolean = expression match {
+      def selectedBinding(expression: NamedExpression): Boolean = expression match {
         case alias @ Alias(scalar: ScalarSubquery, _) =>
           !conditionReferences.contains(alias.toAttribute) && independent(scalar)
+        case alias @ Alias(getter: KllSketchGetNBase, _)
+            if alias.isNondeterministicSubqueryBinding =>
+          !conditionReferences.contains(alias.toAttribute) &&
+            PullOutNondeterministic.safeKllCount(getter)
         case _ => false
       }
-      if (!pList.forall(e => e.deterministic || selectedScalar(e))) {
+      if (!pList.forall(e => e.deterministic || selectedBinding(e))) {
         j
       } else if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
@@ -58,7 +62,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         val aliasMap = getAliasMap(p)
         // Do not push complex join condition
         if (aliasMap.forall { case (_, alias) =>
-            alias.child.children.isEmpty || selectedScalar(alias)
+            alias.child.children.isEmpty || selectedBinding(alias)
           }) {
           val newJoinCond = if (aliasMap.nonEmpty) {
             Option(replaceAlias(joinCond.get, aliasMap))
@@ -73,10 +77,10 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
 
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
-        if (agg.aggregateExpressions.forall(_.deterministic) ||
+        if agg.groupingExpressions.nonEmpty &&
+          (agg.aggregateExpressions.forall(_.deterministic) ||
             ValidateSubqueryExpression.deterministicWithoutKllRandomness(
               agg.aggregateExpressions)) &&
-          agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
           canPushThroughCondition(agg.children, joinCond, rightOp) &&
           canPlanAsBroadcastHashJoin(join, conf) =>
@@ -98,8 +102,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&
-          (deterministic || normalizationSafe(replaced)) &&
-          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
+          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet) &&
+          (deterministic || normalizationSafe(replaced))
       }
       val makeJoinCondition = (predicates: Seq[Expression]) => {
         replaceAlias(predicates.reduce(And), aliasMap)

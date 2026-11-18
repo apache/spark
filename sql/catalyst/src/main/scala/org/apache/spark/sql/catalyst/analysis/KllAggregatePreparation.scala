@@ -38,11 +38,26 @@ private[sql] object KllAggregatePreparation {
     // Streaming startup/micro-batches own their checkpoint choice and perform the same retirement.
     if (plan.isStreaming || !plan.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) return plan
     val unchosen = mutable.Set.empty[ExprId]
-    val selected = plan.transformAllExpressionsWithSubqueries {
-      case resolution: KllAggregateResolution =>
-        unchosen ++= unchosenOutputs(resolution, resolution.batch)
-        resolution.batch
+    def selectExpression(expression: Expression): Expression = {
+      if (!expression.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) return expression
+      expression match {
+        case resolution: KllAggregateResolution =>
+          unchosen ++= unchosenOutputs(resolution, resolution.batch)
+          selectExpression(resolution.batch)
+        case query: SubqueryExpression =>
+          val children = query.mapChildrenWithReferenceEquality(selectExpression)
+            .asInstanceOf[SubqueryExpression]
+          val nested = selectPlan(query.plan)
+          if (nested eq query.plan) children else children.withNewPlan(nested)
+        case other => other.mapChildrenWithReferenceEquality(selectExpression)
+      }
     }
+    def selectPlan(input: LogicalPlan): LogicalPlan = {
+      if (!input.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) return input
+      input.mapChildrenWithReferenceEquality(selectPlan)
+        .mapExpressionsWithReferenceEquality(selectExpression)
+    }
+    val selected = selectPlan(plan)
     if (unchosen.isEmpty) selected else retireUnchosenOutputs(selected, unchosen.toSet)
   }
 
@@ -54,8 +69,15 @@ private[sql] object KllAggregatePreparation {
         !candidates.contains(expression.exprId) || required.contains(expression.toAttribute)
       val trimmed = input match {
         case aggregate: Aggregate =>
-          aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.filter(keep))
-        case project: Project => project.copy(projectList = project.projectList.filter(keep))
+          val retained = aggregate.aggregateExpressions.filter(keep)
+          if (retained.size == aggregate.aggregateExpressions.size) aggregate else {
+            aggregate.copy(aggregateExpressions = retained)
+          }
+        case project: Project =>
+          val retained = project.projectList.filter(keep)
+          if (retained.size == project.projectList.size) project else {
+            project.copy(projectList = retained)
+          }
         case other => other
       }
       val current = trimmed.mapExpressionsWithReferenceEquality { expression =>
@@ -63,7 +85,7 @@ private[sql] object KllAggregatePreparation {
           case query: SubqueryExpression =>
             val nested = nestedPlans.computeIfAbsent(query.plan,
               child => visit(child, child.outputSet))
-            val updated = query.withNewPlan(nested)
+            val updated = if (nested eq query.plan) query else query.withNewPlan(nested)
             query match {
               case _: ScalarSubquery | _: Exists | _: ListQuery | _: LateralSubquery
                   if query.references.exists(a => candidates.contains(a.exprId)) =>
@@ -74,7 +96,9 @@ private[sql] object KllAggregatePreparation {
                     !referenced.contains(attribute)
                   case _ => false
                 }
-                updated.withNewOuterAttrs(outer)
+                if (outer.size == query.getOuterAttrs.size) updated else {
+                  updated.withNewOuterAttrs(outer)
+                }
               case _ => updated
             }
         }
@@ -88,12 +112,12 @@ private[sql] object KllAggregatePreparation {
             _: Repartition | _: RepartitionByExpression | _: RebalancePartitions |
             _: GlobalLimit | _: LocalLimit | _: Offset | _: Window | _: Deduplicate |
             _: Distinct | _: CTERelationDef =>
-          current.mapChildren(child => visit(child, needed))
+          current.mapChildrenWithReferenceEquality(child => visit(child, needed))
         case _ =>
           // CTE definitions and positional set-operation branches need not share their
           // consumer's ExprIds. Preserve exposed candidate outputs at unmapped boundaries;
           // precise inner Projects can still retire their unused auxiliary producers.
-          current.mapChildren { child =>
+          current.mapChildrenWithReferenceEquality { child =>
             val exposed = child.output.filter(a => candidates.contains(a.exprId))
             visit(child, needed ++ AttributeSet(exposed))
           }

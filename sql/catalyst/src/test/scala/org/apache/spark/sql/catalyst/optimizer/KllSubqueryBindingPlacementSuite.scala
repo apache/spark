@@ -31,44 +31,55 @@ class KllSubqueryBindingPlacementSuite extends PlanTest {
   private val b = $"b".long
   private val c = $"c".long
   private def component = Join(LocalRelation(a), LocalRelation(b), Cross, None, JoinHint.NONE)
-  private def binding = Alias(ScalarSubquery(OneRowRelation().groupBy()(
-    KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
-      .toAggregateExpression().as("s"))), "binding")().asNondeterministicSubqueryBinding
-
-  test("relocation preserves binding identity and reaches a fixed point") {
-    val value = binding
-    val projected = Project(component.output :+ value, component)
-    val condition = And(EqualTo(a, c), EqualTo(Add(b, KllSketchGetNBigint(value.toAttribute)), c))
-    val original = Join(projected, LocalRelation(c), Inner, Some(condition), JoinHint.NONE)
-    val actual = PushDownKllSubqueryBindings(original)
-    val aliases = actual.collect { case project: Project =>
-      project.projectList.collect { case alias: Alias if alias.exprId == value.exprId => alias }
-    }.flatten
-    assert(aliases.size == 1)
-    assert(aliases.head.child eq value.child)
-    assert(actual.exists {
-      case Project(fields, child: LocalRelation) =>
-        fields.exists(_.exprId == value.exprId) && child.output == Seq(b)
-      case _ => false
-    })
-    actual.foreach(p => assert(p.missingInput.isEmpty, p))
-    comparePlans(PushDownKllSubqueryBindings(actual), actual)
+  private def binding(numeric: Boolean): Alias = {
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+        .toAggregateExpression().as("s")))
+    Alias(if (numeric) KllSketchGetNBigint(scalar) else scalar, "binding")()
+      .asNondeterministicSubqueryBinding
   }
 
-  test("live random and throwing projections and non-inner hinted joins remain boundaries") {
-    val inner = component
-    val hinted = inner.copy(hint = JoinHint(Some(HintInfo(strategy = Some(BROADCAST))), None))
-    val random = Project(inner.output :+ Rand(0).as("live"), inner)
-    val throwing = Project(inner.output :+
-      Cast(RaiseError(Literal("live")), LongType).as("live"), inner)
-    for (barrier <- Seq(random, throwing, hinted, inner.copy(joinType = LeftOuter))) {
-      val value = binding
-      val child = Project(barrier.output :+ value, barrier)
-      val original = Join(child, LocalRelation(c), Inner,
-        Some(EqualTo(Add(b, KllSketchGetNBigint(value.toAttribute)), c)), JoinHint.NONE)
-      comparePlans(PushDownKllSubqueryBindings(original), original)
-      val destination = new KllSubqueryBindingPlacement().destination(barrier, AttributeSet(Seq(b)))
-      assert(destination eq barrier)
+  private def count(value: Alias, numeric: Boolean): Expression =
+    if (numeric) value.toAttribute else KllSketchGetNBigint(value.toAttribute)
+
+  for (numeric <- Seq(false, true)) {
+
+    test(s"relocation preserves binding identity and reaches a fixed point: numeric=$numeric") {
+      val value = binding(numeric)
+      val projected = Project(component.output :+ value, component)
+      val condition = And(EqualTo(a, c), EqualTo(Add(b, count(value, numeric)), c))
+      val original = Join(projected, LocalRelation(c), Inner, Some(condition), JoinHint.NONE)
+      val actual = PushDownKllSubqueryBindings(original)
+      val aliases = actual.collect { case project: Project =>
+        project.projectList.collect { case alias: Alias if alias.exprId == value.exprId => alias }
+      }.flatten
+      assert(aliases.size == 1)
+      assert(aliases.head.child eq value.child)
+      assert(actual.exists {
+        case Project(fields, child: LocalRelation) =>
+          fields.exists(_.exprId == value.exprId) && child.output == Seq(b)
+        case _ => false
+      })
+      actual.foreach(p => assert(p.missingInput.isEmpty, p))
+      comparePlans(PushDownKllSubqueryBindings(actual), actual)
+    }
+
+    test(s"random, throwing, outer and hinted relocation boundaries: numeric=$numeric") {
+      val inner = component
+      val hinted = inner.copy(hint = JoinHint(Some(HintInfo(strategy = Some(BROADCAST))), None))
+      val random = Project(inner.output :+ Rand(0).as("live"), inner)
+      val throwing = Project(inner.output :+
+        Cast(RaiseError(Literal("live")), LongType).as("live"), inner)
+      for (barrier <- Seq(random, throwing, hinted, inner.copy(joinType = LeftOuter))) {
+        val value = binding(numeric)
+        val child = Project(barrier.output :+ value, barrier)
+        val original = Join(child, LocalRelation(c), Inner,
+          Some(EqualTo(Add(b, count(value, numeric)), c)), JoinHint.NONE)
+        comparePlans(PushDownKllSubqueryBindings(original), original)
+        val destination =
+          new KllSubqueryBindingPlacement().destination(barrier, AttributeSet(Seq(b)))
+        assert(destination eq barrier)
+      }
     }
   }
 }

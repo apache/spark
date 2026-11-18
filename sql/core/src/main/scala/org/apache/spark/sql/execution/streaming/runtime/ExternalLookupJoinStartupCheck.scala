@@ -89,8 +89,10 @@ private[sql] object ExternalLookupJoinStartupCheck extends Logging {
           // another one, is skipped.
           if (analyzes(session, rewritten)) {
             val normalized = QueryExecution.normalize(session, rewritten)
+            val prepared = KllCheckpointPreparation(normalized, plan,
+              SQLConf.get.getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING))
             session.sessionState.optimizer.execute(
-              StreamingV2ScanPushDown.forStartup(normalized, withStartupValues = false))
+              StreamingV2ScanPushDown.forStartup(prepared, withStartupValues = false))
           }
         }
       } catch {

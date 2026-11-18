@@ -245,7 +245,15 @@ class PullOutNondeterministicSuite extends AnalysisTest {
       val pulled = PullOutNondeterministic(plan)
       assert(pulled.output == plan.output)
       val join = pulled.collectFirst { case j: Join => j }.get
+      assert(join.joinType == joinType)
       assert(join.condition.get.deterministic)
+      val aliases = join.left.asInstanceOf[Project].projectList.collect {
+        case alias: Alias if alias.isNondeterministicSubqueryBinding =>
+          alias.exprId -> alias.child
+      }.toMap
+      val restored = NondeterministicExpressionCollection.restoreBindingReferences(
+        join.condition.get, aliases)
+      assert(restored == plan.condition.get, s"$joinType: $restored")
       val projected = join.left.asInstanceOf[Project].projectList.collect {
         case Alias(s: ScalarSubquery, _) => s.exprId
       }

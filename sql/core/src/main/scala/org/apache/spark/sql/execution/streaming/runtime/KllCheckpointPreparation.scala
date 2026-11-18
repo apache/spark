@@ -31,6 +31,12 @@ private[sql] object KllCheckpointPreparation {
       preOptimized: LogicalPlan,
       original: LogicalPlan,
       legacySharing: Boolean): LogicalPlan = {
+    // Ordinary scalar/UDF extraction also creates compiler bindings. Their provenance alone
+    // does not require KLL restoration. Check both inputs before normalization can hide a producer.
+    if (!preOptimized.containsAnyPattern(KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE) &&
+        !original.containsAnyPattern(KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE)) {
+      return preOptimized
+    }
     // Checkpoints encode aggregate buffers by ordinal. Their recorded sharing mode takes
     // precedence over the analysis/batch rollback setting captured on KLL expressions.
     var needsExtraction = false

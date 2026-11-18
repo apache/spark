@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AnalysisHelper}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
@@ -200,11 +200,17 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     // Rewrite each expression once. A recursive transform at each IN operand would walk
     // rejected descendants again even if their Boolean result had already been memoized.
     val checked = new java.util.IdentityHashMap[Expression, Expression]
+    private lazy val legacyKll = new ValidateSubqueryExpression.LegacyKllDeterminism
     def rewritten(expr: Expression): Expression = {
       val cached = checked.get(expr)
       if (cached != null) return cached
       val result = if (expr.deterministic) expr else expr match {
-        case scalar: ScalarSubquery if extractScalars =>
+        case scalar: ScalarSubquery if extractScalars &&
+            (!scalar.isCorrelated || AnalysisHelper.allowInvokingTransformsInAnalyzer {
+              legacyKll.expression(scalar).deterministic
+            }) =>
+          // Decorrelation can share one result across duplicate outer keys. Do not admit a
+          // newly staged correlated producer with ordinary volatility into aggregate inputs.
           Literal.create(null, scalar.dataType)
         case _: Exists => Literal.TrueLiteral
         case in: InSubquery =>

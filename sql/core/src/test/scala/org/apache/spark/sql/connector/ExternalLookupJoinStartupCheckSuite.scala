@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.{ExternalLookupJoinStartupCheck,
   MemoryStream, MicroBatchExecution, StreamingQueryCheckpointMetadata, StreamingQueryWrapper,
   StreamingV2ScanPushDown}
@@ -124,6 +125,71 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
       intercept[StreamingQueryException](query.processAllAvailable())
     } finally {
       query.stop()
+    }
+  }
+
+  for (recorded <- Seq(None, Some(true), Some(false))) {
+    test(s"KLL lookup startup uses checkpoint-owned scalar semantics: recorded=$recorded") {
+      val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+      val legacy = recorded.getOrElse(true)
+      withTempDir { checkpoint =>
+        withTempView("kll_startup_stream", "kll_startup_lookup") {
+          val input = MemoryStream[Int]
+          input.toDF().toDF("id").createOrReplaceTempView("kll_startup_stream")
+          lookupOnly.createOrReplaceTempView("kll_startup_lookup")
+          val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+              |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin
+          val key = "s.id = lk.id"
+          // Legacy equality folds to true, exposing the filter-supplied lookup key. A corrected
+          // checkpoint retains independent scalars, so its control has a direct key as well.
+          val condition = if (legacy) s"IF($scalar <=> $scalar, $key, false)"
+            else s"$key AND ($scalar <=> $scalar)"
+          def analyzed(rollback: Boolean, directKey: Boolean = false): DataFrame = withSQLConf(
+              SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> rollback.toString) {
+            val predicate = if (directKey) s"$key AND ($scalar <=> $scalar)" else condition
+            val query = sql(s"""SELECT lk.department FROM kll_startup_stream s
+                |JOIN kll_startup_lookup lk ON true WHERE $predicate""".stripMargin)
+            query.queryExecution.analyzed
+            query
+          }
+          val rows = new ConcurrentLinkedQueue[Row]()
+          def run(query: DataFrame, next: Int, mode: Boolean): Unit = withSQLConf(
+              sharing -> mode.toString) {
+            val running = query.writeStream.option("checkpointLocation", checkpoint.getAbsolutePath)
+              .foreachBatch { (batch: DataFrame, _: Long) =>
+                rows.addAll(batch.collect().toSeq.asJava)
+                ()
+              }.start()
+            try {
+              awaitInitialization(running)
+              assert(running.isActive && running.exception.isEmpty)
+              input.addData(next)
+              running.processAllAvailable()
+              assert(running.exception.isEmpty)
+            } finally {
+              running.stop()
+            }
+          }
+          run(analyzed(legacy, directKey = true), 1, legacy)
+          if (recorded.isEmpty) {
+            val logPath = new java.io.File(checkpoint, "offsets").getAbsolutePath
+            val log = new OffsetSeqLog(spark, logPath)
+            val (batchId, entry) = log.getLatest().get
+            val offsets = entry.asInstanceOf[OffsetSeq]
+            val historical = offsets.copy(metadataOpt = offsets.metadataOpt.map { metadata =>
+              metadata.copy(conf = metadata.conf - sharing)
+            })
+            val path = new org.apache.hadoop.fs.Path(logPath, batchId.toString)
+            assert(path.getFileSystem(spark.sessionState.newHadoopConf()).delete(path, false))
+            assert(log.add(batchId, historical))
+          }
+          // Reanalyze in the opposite mode and change the session setting. The saved checkpoint
+          // owns startup and micro-batch decisions in both cases, including a missing old key.
+          run(analyzed(!legacy), 3, !legacy)
+          assert(rows.asScala.toSeq.map(_.getString(0)).sorted == Seq("engineering", "research"))
+          assert(SimpleExternalLookupDataSource.readerCount.get() > 0)
+        }
+      }
     }
   }
 

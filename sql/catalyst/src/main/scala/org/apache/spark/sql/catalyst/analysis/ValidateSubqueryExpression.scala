@@ -389,7 +389,7 @@ object ValidateSubqueryExpression
     case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
   }
 
-  private[analysis] final class LegacyKllDeterminism {
+  private[sql] final class LegacyKllDeterminism {
     private val expressions = new java.util.IdentityHashMap[Expression, Expression]
     private val plans = new java.util.IdentityHashMap[LogicalPlan, LogicalPlan]
 

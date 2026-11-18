@@ -53,23 +53,30 @@ object NondeterministicExpressionCollection {
       expression: Expression,
       bindings: scala.collection.Map[ExprId, Expression],
       stripFilterGuards: Boolean = false): Expression = {
-    if (bindings.isEmpty && !stripFilterGuards) expression else expression match {
-      case guard: KllFilteredAggregateInput if stripFilterGuards && guard.deterministic =>
-        restoreBindingReferences(guard.input, bindings, stripFilterGuards)
-      case count: Count if stripFilterGuards =>
-        val inputs = count.children.map(restoreBindingReferences(_, bindings, stripFilterGuards))
-        inputs match {
-          case Seq(input: KllCountAggregateInput) =>
-            count.copy(children = input.children)
-          case _ if count.children.lazyZip(inputs).forall(_ eq _) => count
-          case _ => count.copy(children = inputs)
-        }
-      case attribute: Attribute => bindings.getOrElse(attribute.exprId, attribute)
-      // Values are expanded child-first. Returning a bound value directly avoids revisiting it
-      // once for every reference, and preserves its evaluation identity.
-      case other => other.mapChildrenWithReferenceEquality(
-        restoreBindingReferences(_, bindings, stripFilterGuards))
+    if (bindings.isEmpty && !stripFilterGuards) return expression
+    // The caller's binding map is fixed for this invocation but can grow between calls. Only
+    // unchanged results are reusable: changed occurrences retain their own evaluation identities.
+    val unchanged = new IdentityHashMap[Expression, java.lang.Boolean]
+    def restore(value: Expression): Expression = {
+      if (unchanged.containsKey(value)) return value
+      val result = value match {
+        case guard: KllFilteredAggregateInput if stripFilterGuards && guard.deterministic =>
+          restore(guard.input)
+        case count: Count if stripFilterGuards =>
+          val inputs = count.children.map(restore)
+          inputs match {
+            case Seq(input: KllCountAggregateInput) => count.copy(children = input.children)
+            case _ if count.children.lazyZip(inputs).forall(_ eq _) => count
+            case _ => count.copy(children = inputs)
+          }
+        // Values are already expanded child-first. Keep bound replacements opaque.
+        case attribute: Attribute => bindings.getOrElse(attribute.exprId, attribute)
+        case other => other.mapChildrenWithReferenceEquality(restore)
+      }
+      if (result eq value) unchanged.put(value, true)
+      result
     }
+    restore(expression)
   }
 
   private[analysis] final class SubqueryIdentities private (
@@ -308,6 +315,7 @@ object NondeterministicExpressionCollection {
       keys: ExpressionKeys): LogicalPlan = {
     val levels = mutable.HashMap.empty[ExprId, Int]
     val rewritten = mutable.HashMap.empty[ExprId, NamedExpression]
+    val unchangedLiveArms = new IdentityHashMap[Expression, java.lang.Boolean]
 
     def stage(binding: NamedExpression): Int = levels.getOrElseUpdate(binding.exprId, {
       var level = 0
@@ -341,15 +349,19 @@ object NondeterministicExpressionCollection {
               // Reuse only ordinary producers already consumed by the host or an unconditional
               // dependency. Collected but unused descendants of ordinary UDFs are not live.
               def reuseLive(value: Expression): Expression = {
-                if (value.deterministic) return value
+                if (value.deterministic || unchangedLiveArms.containsKey(value)) return value
                 val dependency = bindingFor(value, bindings, keys)
-                if (dependency != null && keys.liveOrdinaryBindings.contains(dependency.exprId)) {
+                val result = if (dependency != null &&
+                    keys.liveOrdinaryBindings.contains(dependency.exprId)) {
                   level = math.max(level, stage(dependency) + 1)
                   dependency.toAttribute
                 } else value match {
                   case _: SubqueryExpression => value
                   case other => other.mapChildrenWithReferenceEquality(reuseLive)
                 }
+                // Changed arms must still update each binding's dependency level on every use.
+                if (result eq value) unchangedLiveArms.put(value, true)
+                result
               }
               if (keys.liveOrdinaryBindings.isEmpty) expression else {
                 expression.mapChildrenWithReferenceEquality(reuseLive)

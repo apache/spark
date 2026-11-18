@@ -39,6 +39,62 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
 
+  test("ordinary legacy compiler bindings skip KLL checkpoint restoration") {
+    val visits = new AtomicInteger
+    val value = AttributeReference("value", LongType)()
+    val counted = (1 to 64).foldLeft[Expression](value) { (child, _) =>
+      NormalizationCounted(child, visits)
+    }
+    val random = ScalarSubquery(Project(Seq(Alias(Rand(0), "random")()), LocalRelation()))
+    val binding = Alias(ScalaUDF((n: java.lang.Double) => n,
+      org.apache.spark.sql.types.DoubleType, Seq(random)), "binding")()
+      .asNondeterministicSubqueryBinding
+    val source = Project(Seq(Alias(counted, "ordinary")(), binding), LocalRelation(value))
+    val plan = Aggregate(Seq(binding.toAttribute), Seq(binding.toAttribute), source)
+    plan.foreach { p =>
+      p.treePatternBits
+      p.expressions.foreach { e => e.treePatternBits; e.deterministic }
+    }
+    visits.set(0)
+    val prepared = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+      plan, plan, legacySharing = true)
+    assert(prepared eq plan)
+    assert(visits.get == 0, s"unrelated compatibility restoration visits=${visits.get}")
+  }
+
+  test("KLL checkpoint relevance considers both sides of custom normalization") {
+    withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false") {
+      val original = sql("""SELECT sum((SELECT kll_sketch_get_n_bigint(
+          |kll_sketch_agg_bigint(id)) FROM VALUES (0L), (1L), (2L) AS i(id)))
+          |FROM VALUES (1), (2) AS o(k)""".stripMargin).queryExecution.analyzed
+      val bindings = org.apache.spark.sql.catalyst.analysis.NondeterministicExpressionCollection
+        .extractedBindingIds(original)
+      assert(bindings.nonEmpty)
+      // A normalization rule can substitute an independent producer and remove every KLL node.
+      val removed = original.transformAllExpressionsWithSubqueries {
+        case alias: Alias if bindings.contains(alias.exprId) => alias.copy(child = Literal(3L))(
+          alias.exprId, alias.qualifier, alias.explicitMetadata, alias.nonInheritableMetadataKeys,
+          alias.nondeterministicSubqueryOrigin)
+      }
+      assert(!removed.containsPattern(
+        org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE))
+      val restored = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        removed, original, legacySharing = true)
+      assert(org.apache.spark.sql.catalyst.analysis.NondeterministicExpressionCollection
+        .extractedBindingIds(restored).isEmpty)
+      assert(restored.collect { case p => p.expressions.flatMap(_.collect {
+        case a: Attribute if bindings.contains(a.exprId) => a
+      }) }.flatten.isEmpty)
+      // Conversely, a rule may introduce KLL into a plan whose original form had none.
+      val introduced = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        original, LocalRelation(), legacySharing = true)
+      val modes = introduced.collectWithSubqueries { case p => p.expressions.flatMap(_.collect {
+        case k: KllSketchAggBigint => k.legacyDeterministic
+      }) }.flatten
+      assert(modes.nonEmpty && modes.forall(identity))
+    }
+  }
+
   test("checkpoint retirement shares outer-reference scans for repeated nested plans") {
     def work(candidateReference: Boolean): Int = {
       val visits = new AtomicInteger

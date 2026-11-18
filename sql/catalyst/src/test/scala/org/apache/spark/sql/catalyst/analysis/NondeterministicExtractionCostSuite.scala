@@ -39,6 +39,175 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     }
   }
 
+  test("relocation collects growing binding reference contributions once") {
+    def work(width: Int): Int = {
+      val hashes = new AtomicInteger
+      val attributes = (1 to width).map(i => UnionHashCounted(s"a$i", hashes))
+      val target = $"target".double
+      val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+        KllSketchGetNBigint(KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+          .toAggregateExpression()).as("n")))
+      val binding = Alias(scalar, "binding")().asNondeterministicSubqueryBinding
+      val component = Join(LocalRelation(attributes.take(width / 2)),
+        LocalRelation(attributes.drop(width / 2)), Inner, None, JoinHint.NONE)
+      val projected = Project(component.output :+ binding, component)
+      val condition = attributes.map(a => EqualTo(Add(a, binding.toAttribute), target))
+        .reduceLeft[Expression](And)
+      val plan = Join(projected, LocalRelation(target), Inner, Some(condition), JoinHint.NONE)
+      plan.treePatternBits
+      plan.foreach(_.outputSet)
+      condition.foreach { e => e.references; e.deterministic; e.canonicalized }
+      hashes.set(0)
+      val result = org.apache.spark.sql.catalyst.optimizer.PushDownKllSubqueryBindings(plan)
+      assert(result.output.map(_.exprId) == plan.output.map(_.exprId))
+      assert(result.asInstanceOf[Join].condition.get eq condition)
+      hashes.get
+    }
+    val small = work(32)
+    val large = work(128)
+    assert(large <= small * 6, s"width32=$small width128=$large attribute hashes")
+  }
+
+  test("global membership aggregates reject before legacy KLL proof reconstruction") {
+    val copies = new AtomicInteger
+    val value = (1 to 64).foldLeft[Expression](KllSketchAggBigint(Literal(1L),
+      legacyDeterministic = false).toAggregateExpression()) { (child, _) =>
+      ProofCopyCounted(child, copies)
+    }
+    val aggregate = OneRowRelation().groupBy()(value.as("s")).asInstanceOf[Aggregate]
+    val member = $"member".long
+    val plan = Join(aggregate, LocalRelation(member),
+      org.apache.spark.sql.catalyst.plans.LeftSemi, None, JoinHint.NONE)
+    plan.treePatternBits
+    aggregate.aggregateExpressions.foreach(_.deterministic)
+    copies.set(0)
+    assert(org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin(plan) eq plan)
+    assert(copies.get == 0, s"unnecessary global proof copies=${copies.get}")
+  }
+
+  test("aggregate-result membership rejection skips floating prefix canonicalization") {
+    val visits = new AtomicInteger
+    val key = $"key".double
+    val member = $"member".double
+    val sketch = KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+      .toAggregateExpression().as("s")
+    val ordinary = Count(Literal(1L)).toAggregateExpression().as("n")
+    val aggregate = Aggregate(Seq(key), Seq(key, sketch, ordinary), LocalRelation(key))
+    val expression = (1 to 64).foldLeft[Expression](Cast(ordinary.toAttribute, DoubleType)) {
+      (child, _) => Add(CanonicalizationCounted(child, visits), Literal(1D))
+    }
+    val condition = And(EqualTo(key, member), GreaterThan(expression, member))
+    val plan = Join(aggregate, LocalRelation(member),
+      org.apache.spark.sql.catalyst.plans.LeftSemi, Some(condition), JoinHint.NONE)
+    plan.treePatternBits
+    aggregate.stats
+    plan.right.stats
+    condition.references
+    visits.set(0)
+    assert(org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin(plan) eq plan)
+    assert(visits.get == 0, s"rejected prefix canonicalizations=${visits.get}")
+  }
+
+  test("restoration visits unchanged shared arms once per invocation") {
+    for (strip <- Seq(false, true)) {
+      val visits = new AtomicInteger
+      val value = $"value".double
+      val shared = (1 to 64).foldLeft[Expression](value) { (child, _) =>
+        Counted(child, visits)
+      }
+      val binding = $"binding".double
+      val expressions = CreateArray(Seq.fill(32)(shared) :+ binding)
+      expressions.foreach { e => e.treePatternBits; e.deterministic }
+      val bindings = scala.collection.mutable.Map[ExprId, Expression](binding.exprId -> Literal(1D))
+      visits.set(0)
+      val restored = NondeterministicExpressionCollection.restoreBindingReferences(
+        expressions, bindings, strip)
+      assert(restored.children.take(32).forall(_ eq shared))
+      assert(restored.children.last == Literal(1D))
+      assert(visits.get <= 64 * 2, s"strip=$strip shared restoration visits=${visits.get}")
+      bindings(value.exprId) = Literal(2D)
+      val changed = NondeterministicExpressionCollection.restoreBindingReferences(
+        expressions, bindings, strip)
+      assert(!changed.children.head.exists(_.isInstanceOf[Attribute]))
+      assert(!(changed.children.head eq changed.children(1)))
+    }
+  }
+
+  test("guarded staging shares unchanged arms with live ordinary dependencies") {
+    val visits = new AtomicInteger
+    val live = Rand(0)
+    val common = (1 to 64).foldLeft[Expression](Rand(1)) { (child, _) =>
+      Counted(child, visits)
+    }
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+        .toAggregateExpression()).as("n")))
+    val value = $"value".long
+    val roots = (1 to 32).map(i => If(EqualTo(value, Literal(i.toLong)),
+      Add(common, Cast(scalar, DoubleType)), live)) :+ live
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    val bindings = NondeterministicExpressionCollection.getNondeterministicToAttributes(roots, keys)
+    assert(keys.liveOrdinaryBindings.nonEmpty)
+    visits.set(0)
+    val projected = NondeterministicExpressionCollection.project(
+      LocalRelation(value), bindings, keys)
+    assert(projected.output.size == bindings.size() + 1)
+    assert(visits.get <= 64 * 4, s"shared guarded arm visits=${visits.get}")
+    val projects = projected.collect { case p: Project => p }
+    assert(projects.size >= 2)
+    projected.foreach(p => assert(p.missingInput.isEmpty, p))
+    visits.set(0)
+    NondeterministicExpressionCollection.project(LocalRelation(value), bindings, keys)
+    assert(visits.get >= 64, "a new construction must start with an empty traversal cache")
+  }
+
+  private case class ComparisonCountedPlan(
+      child: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
+      comparisons: AtomicInteger)
+      extends org.apache.spark.sql.catalyst.plans.logical.UnaryNode {
+    override def output: Seq[Attribute] = child.output
+    override def equals(other: Any): Boolean = {
+      comparisons.incrementAndGet()
+      other match {
+        case that: ComparisonCountedPlan => child == that.child
+        case _ => false
+      }
+    }
+    override def hashCode(): Int = child.hashCode()
+    override protected def withNewChildInternal(
+        newChild: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
+        : org.apache.spark.sql.catalyst.plans.logical.LogicalPlan = copy(child = newChild)
+  }
+
+  test("KLL selection and retirement bound rebuilt plan suffix comparisons") {
+    for (depth <- Seq(32, 64); select <- Seq(false, true)) {
+      val comparisons = new AtomicInteger
+      val first = Literal(1L).as("first")
+      val second = Literal(2L).as("second")
+      val producer = Project(Seq(first, second), OneRowRelation())
+      val resolution = KllAggregateResolution(
+        first.toAttribute, first.toAttribute, second.toAttribute)
+      val chosen = if (select) resolution else first.toAttribute
+      val consumer = Project(Seq(chosen.as("selected")), producer)
+      val plan = (1 to depth).foldLeft[
+          org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](consumer) { (child, _) =>
+        ComparisonCountedPlan(child, comparisons)
+      }
+      plan.treePatternBits
+      plan.outputSet
+      comparisons.set(0)
+      val result = if (select) KllAggregatePreparation.selectBatch(plan) else {
+        KllAggregatePreparation.retireUnchosenOutputs(plan, Set(second.exprId))
+      }
+      assert(result.output.map(_.name) == Seq("selected"))
+      assert(comparisons.get <= depth * 4,
+        s"select=$select depth=$depth suffix comparisons=${comparisons.get}")
+    }
+    val unchanged = Project(Seq(Literal(1L).as("a")), OneRowRelation())
+    assert(KllAggregatePreparation.retireUnchosenOutputs(unchanged,
+      Set(NamedExpression.newExprId)) eq unchanged)
+  }
+
   test("KLL retirement skips unrelated nonempty forwarded demand") {
     for (depth <- Seq(32, 64)) {
       val reads = new AtomicInteger
@@ -749,6 +918,17 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     val values = bindings.values().toArray.toSeq.map(_.asInstanceOf[Alias].child)
     assert(values.exists(_.isInstanceOf[KllFilteredAggregateInput]))
     assert(values.exists(_.isInstanceOf[If]))
+    val legacy = new ValidateSubqueryExpression.LegacyKllDeterminism
+    val restored = values.map { value =>
+      NondeterministicExpressionCollection.restoreBindingReferences(
+        legacy.expression(value), Map(predicate.exprId -> Literal.FalseLiteral),
+        stripFilterGuards = true)
+    }
+    assert(restored.count(_.isInstanceOf[ScalarSubquery]) == 1)
+    val Seq(conditional: If) = restored.filter(_.isInstanceOf[If]): @unchecked
+    assert(conditional.predicate == Literal.FalseLiteral)
+    assert(conditional.falseValue == Literal.create(null, scalar.dataType))
+    assert(conditional.eval(org.apache.spark.sql.catalyst.InternalRow.empty) == null)
   }
 
   test("equal join reference memberships reuse completed destination walks") {

@@ -33,6 +33,140 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("aggregate admission rejects residual correlated scalar volatility") {
+    val outcomes = for (singlePass <- Seq(false, true); legacy <- Seq(false, true);
+        filter <- Seq(false, true)) yield {
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val correlated = "(SELECT uuid() FROM VALUES (1) AS i(k) WHERE i.k = o.k)"
+        val aggregate = if (filter) s"count(*) FILTER (WHERE $correlated IS NOT NULL)"
+          else s"count(DISTINCT $correlated)"
+        val text = s"SELECT $aggregate FROM VALUES (1), (1) AS o(k)"
+        val expected = if (filter) "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC"
+          else "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION"
+        val actual = try {
+          val query = sql(text)
+          query.queryExecution.analyzed
+          val result = query.queryExecution.executedPlan.executeCollect().map(_.getLong(0)).toSeq
+          s"ACCEPTED result=$result: ${query.queryExecution.optimizedPlan}"
+        } catch {
+          case e: AnalysisException => e.getCondition
+        }
+        (singlePass, legacy, filter, actual, expected)
+      }
+    }
+    assert(outcomes.forall { case (_, _, _, actual, expected) => actual == expected },
+      outcomes.mkString("\n"))
+  }
+
+  test("aggregate correlated admission retains deterministic and KLL-only inputs") {
+    for (singlePass <- Seq(false, true); legacy <- Seq(false, true)) {
+      val queries = withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val deterministic = "(SELECT i.k FROM VALUES (1L), (2L) AS i(k) WHERE i.k = o.k)"
+        val correlated = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(i.k))
+            |FROM VALUES (1L), (2L) AS i(k) WHERE i.k = o.k)""".stripMargin
+        val source = "FROM VALUES (1L), (1L), (2L) AS o(k)"
+        val cases = Seq(
+          s"SELECT count(DISTINCT $deterministic) $source" -> Row(2L),
+          s"SELECT count(*) FILTER (WHERE $deterministic > 0) $source" -> Row(3L),
+          s"SELECT sum($correlated) $source" -> Row(3L),
+          s"SELECT count(*) FILTER (WHERE $correlated > 0) $source" -> Row(3L),
+          s"SELECT sum($scalar) $source" -> Row(9L))
+        cases.map { case (text, expected) =>
+          val query = sql(text)
+          val analyzed = query.queryExecution.analyzed
+          def modes(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan) =
+            plan.collectWithSubqueries { case p => p.expressions.flatMap(_.collect {
+              case k: org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint =>
+                k.legacyDeterministic
+            }) }.flatten
+          assert(modes(analyzed).forall(_ == legacy))
+          val prepared = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+            analyzed, analyzed, legacySharing = !legacy)
+          assert(modes(prepared).forall(_ == !legacy))
+          query -> expected
+        }
+      }
+      queries.foreach { case (query, expected) => checkAnswer(query, expected) }
+    }
+  }
+
+  test("two exported HAVING dependencies retain their asymmetric value association") {
+    for (singlePass <- Seq(false, true); legacy <- Seq(false, true)) {
+      val queries = withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val all = "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t.id))"
+        val half = "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(IF(t.id < 5L, t.id, NULL)))"
+        val source = (0 until 10).map(i => s"(${i}L)").mkString(", ")
+        Seq(">", "<").map { comparison =>
+          val query = sql(s"""SELECT min(t.id) AS ordinary_key, count(*) AS ordinary_count
+              |FROM VALUES $source AS t(id)
+              |HAVING EXISTS (SELECT 1 WHERE $all $comparison $half)""".stripMargin)
+          query.queryExecution.analyzed
+          query -> comparison
+        }
+      }
+      queries.foreach { case (query, comparison) =>
+        checkAnswer(query, if (comparison == ">") Seq(Row(0L, 10L)) else Nil)
+      }
+    }
+  }
+
+  test("ordinary KLL scalar joins retain outer rows and semi anti inclusion") {
+    val source = "VALUES (1), (2), (3) AS l(id)"
+    val right = "VALUES (1, 1L), (2, 0L) AS r(id, allowed)"
+    val condition = s"l.id = r.id AND r.allowed = $scalar - 2L"
+    checkAnswer(sql(s"SELECT l.id, r.id FROM $source LEFT OUTER JOIN $right ON $condition"),
+      Seq(Row(1, 1), Row(2, null), Row(3, null)))
+    checkAnswer(sql(s"SELECT l.id FROM $source LEFT SEMI JOIN $right ON $condition"), Row(1))
+    checkAnswer(sql(s"SELECT l.id FROM $source LEFT ANTI JOIN $right ON $condition"),
+      Seq(Row(2), Row(3)))
+  }
+
+  test("safe numeric KLL bindings keep partition membership below a live Window") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val binary = """(SELECT kll_sketch_agg_bigint(id)
+          |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin
+      for (join <- Seq("SEMI", "ANTI")) {
+        val query = sql(s"""SELECT f.p, f.rn, d.id FROM
+            |(SELECT id, p, row_number() OVER (PARTITION BY p ORDER BY id) AS rn
+            | FROM VALUES (0L, 0), (1L, 1), (2L, 0), (3L, 1) AS facts(id, p)) f
+            |JOIN VALUES (3L), (4L), (5L), (6L) AS d(id)
+            |ON f.id + kll_sketch_get_n_bigint($binary) = d.id
+            |LEFT $join JOIN VALUES (1) AS members(p) ON f.p = members.p""".stripMargin)
+        val plan = query.queryExecution.optimizedPlan
+        assert(plan.exists {
+          case window: org.apache.spark.sql.catalyst.plans.logical.Window =>
+            window.child.exists {
+              case j: org.apache.spark.sql.catalyst.plans.logical.Join =>
+                j.joinType == (if (join == "SEMI") org.apache.spark.sql.catalyst.plans.LeftSemi
+                  else org.apache.spark.sql.catalyst.plans.LeftAnti)
+              case _ => false
+            }
+          case _ => false
+        }, plan)
+        assert(plan.collect { case p: org.apache.spark.sql.catalyst.plans.logical.Project =>
+          p.projectList.collect {
+            case a: org.apache.spark.sql.catalyst.expressions.Alias
+                if a.isNondeterministicSubqueryBinding => a.dataType
+          }
+        }.flatten.contains(org.apache.spark.sql.types.LongType), plan)
+        checkAnswer(query, if (join == "SEMI") Seq(Row(1, 1, 4L), Row(1, 2, 6L))
+          else Seq(Row(0, 1, 3L), Row(0, 2, 5L)))
+      }
+    }
+  }
+
   test("KLL aggregate bindings preserve scalar results outside the updater") {
     withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {

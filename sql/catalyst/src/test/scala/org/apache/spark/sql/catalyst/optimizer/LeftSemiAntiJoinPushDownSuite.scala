@@ -47,6 +47,44 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   val testRelation1 = LocalRelation($"d".int)
   val testRelation2 = LocalRelation($"e".int)
 
+  test("unused safe KLL count bindings let membership reach a live Window") {
+    val key = $"key".long
+    val member = $"member".long
+    val rowNumber = WindowExpression(RowNumber(), WindowSpecDefinition(Seq(key),
+      Seq(SortOrder(key, Ascending)),
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
+    val window = Window(Seq(rowNumber), Seq(key), Seq(SortOrder(key, Ascending)),
+      LocalRelation(key))
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint(
+        Literal(1L), legacyDeterministic = false).toAggregateExpression().as("s")))
+    val safe = Alias(KllSketchGetNBigint(scalar), "n")()
+      .asNondeterministicSubqueryBinding
+    val unsafe = Alias(KllSketchGetNDouble(scalar), "unsafe")()
+      .asNondeterministicSubqueryBinding
+    val user = Alias(KllSketchGetNBigint(scalar), "user")()
+    for (joinType <- Seq(LeftSemi, LeftAnti)) {
+      val project = Project(window.output :+ safe, window)
+      val plan = Join(project, LocalRelation(member), joinType,
+        Some(EqualTo(key, member)), JoinHint.NONE)
+      val result = Optimize.execute(plan)
+      assert(result.exists {
+        case w: Window => w.child.isInstanceOf[Join]
+        case _ => false
+      }, result)
+      assert(result.collect { case p: Project => p.projectList }.flatten
+        .collect { case a: Alias if a.exprId == safe.exprId => a.child }
+        .exists(_.collect { case s: ScalarSubquery => s.exprId }.contains(scalar.exprId)))
+      for (barrier <- Seq(unsafe, user, Rand(0).as("random"),
+          Cast(RaiseError(Literal("live")), org.apache.spark.sql.types.LongType).as("throwing"))) {
+        val blocked = plan.copy(left = Project(window.output :+ barrier, window))
+        comparePlans(PushDownLeftSemiAntiJoin(blocked), blocked)
+      }
+      val used = plan.copy(condition = Some(EqualTo(safe.toAttribute, member)))
+      comparePlans(PushDownLeftSemiAntiJoin(used), used)
+    }
+  }
+
   for (joinType <- Seq(LeftSemi, LeftAnti)) {
     test(s"floating equality below live KLL outputs retains $joinType pushdown") {
       val key = $"key".double
