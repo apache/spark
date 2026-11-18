@@ -38,8 +38,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 /** Tests the pushdowns to the scans of the streaming sources of real-time queries. */
+@DataSourceV2Test
 class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
 
   import testImplicits._
