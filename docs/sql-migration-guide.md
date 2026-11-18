@@ -41,7 +41,11 @@ license: |
   subqueries as the same grouping value can now fail analysis; compute the value once and reuse
   its alias instead. Correlated lateral queries with KLL aggregates are rejected when the outer
   input can contain multiple rows, because decorrelation can share independent invocations.
-  To restore the previous analysis and batch optimizer behavior, set
+  Conditional `IN` and `NOT IN` expressions containing these aggregates also preserve their
+  `IF`, `CASE`, and `COALESCE` evaluation guards, including nested membership values. Previously,
+  an inactive operand could still be evaluated and raise an error. This guard correction applies
+  in both determinism modes.
+  To restore the previous aggregate determinism analysis and batch optimizer behavior, set
   `spark.sql.legacy.kllAggregateDeterministic.enabled` to `true` before the query is analyzed.
   This also restores the old assumptions that can duplicate randomized CTE evaluations or share
   independent aggregates. The default is `false`; resolved KLL expressions retain their captured

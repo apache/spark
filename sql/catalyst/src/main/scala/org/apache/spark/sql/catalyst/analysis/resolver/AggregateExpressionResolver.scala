@@ -265,23 +265,14 @@ class AggregateExpressionResolver(
         aggregateExpression
       }
 
-    resolvedOuterAggregateExpression match {
-      case outerReference: OuterReference =>
-        val name = toPrettySQL(aggregateExpression)
-        outerReference.setTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE, name)
-        outerReference.setTagValue(
-          OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE,
-          name
-        )
-        outerReference
-      case other => other
-    }
+    resolvedOuterAggregateExpression
   }
 
   private def extractOuterAggregateExpression(
       aggregateExpression: AggregateExpression,
       aggregateExpressionsExtractor: GroupingAndAggregateExpressionsExtractor): Expression = {
     val expression = SubExprUtils.stripOuterReference(aggregateExpression)
+    val name = toPrettySQL(aggregateExpression)
     def resolve(sharing: Option[Boolean]): OuterReference = {
       val scope = subqueryRegistry.currentScope
       val attribute = scope.getExtractedAggregateExpression(expression, sharing) match {
@@ -297,7 +288,6 @@ class AggregateExpressionResolver(
           }
       }
       val reference = OuterReference(attribute)
-      val name = toPrettySQL(aggregateExpression)
       reference.setTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE, name)
       reference.setTagValue(OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, name)
       reference

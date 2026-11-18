@@ -141,6 +141,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def hasKllMembershipOutsideAggregate(expression: Expression): Boolean = {
+    if (!expression.containsPattern(KLL_AGGREGATE)) return false
+    expression match {
+      // Aggregate arguments run on input rows; only result guards need the aggregate host.
+      case _: AggregateExpression => false
+      case in: InSubquery if !in.query.isCorrelated &&
+          in.query.plan.containsPattern(KLL_AGGREGATE) => true
+      case other => other.children.exists(hasKllMembershipOutsideAggregate)
+    }
+  }
+
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(EXISTS_SUBQUERY, LIST_SUBQUERY)) {
@@ -314,7 +325,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // which are still performed in the Aggregate node (sum(col2#18) and sum(col3#19)).
     case p @ PhysicalAggregation(
         groupingExpressions, aggregateExpressions, resultExpressions, child)
-        if exprsContainsAggregateInSubquery(p.expressions) =>
+        if exprsContainsAggregateInSubquery(p.expressions) ||
+          p.expressions.exists(hasKllMembershipOutsideAggregate) =>
       val aggExprs = aggregateExpressions.map(
         ae => Alias(ae, "_aggregateexpression")(ae.resultId))
       val aggExprIds = aggExprs.map(_.exprId).toSet
@@ -404,20 +416,24 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     plan: LogicalPlan): (Option[Expression], LogicalPlan, Seq[Attribute]) = {
     var newPlan = plan
     val introducedAttrs = ArrayBuffer.empty[Attribute]
+    var guardOutput = Option.empty[Vector[Attribute]]
     val memberships = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
     def hasKllMembership(expression: Expression): Boolean = memberships.computeIfAbsent(expression,
       current => current match {
-        case in: InSubquery => !in.query.isCorrelated &&
-          in.query.plan.containsPattern(KLL_AGGREGATE)
+        case in: InSubquery => (!in.query.isCorrelated &&
+          in.query.plan.containsPattern(KLL_AGGREGATE)) || in.values.exists(hasKllMembership)
         case other => other.children.exists(hasKllMembership)
       }).booleanValue()
     def guardedMemberships(expression: Expression, domain: Expression): Expression = {
       if (!hasKllMembership(expression)) return expression
       def bind(value: Expression): Attribute = {
         val alias = Alias(value, "_subquery_guard")()
-        newPlan = Project(newPlan.output :+ alias, newPlan)
-        introducedAttrs += alias.toAttribute
-        alias.toAttribute
+        val attribute = alias.toAttribute
+        val output = guardOutput.getOrElse(newPlan.output.toVector)
+        newPlan = Project(output :+ alias, newPlan)
+        guardOutput = Some(output :+ attribute)
+        introducedAttrs += attribute
+        attribute
       }
       def condition(value: Expression): Attribute = {
         val rewritten = guardedMemberships(value, domain)
@@ -435,15 +451,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case CaseWhen(branches, otherwise) =>
           var remaining = domain
           val guarded = branches.map { case (predicate, value) =>
-            val predicateRef = guardedMemberships(
-              If(remaining, predicate, Literal.create(null, BooleanType)), Literal.TrueLiteral)
-            val alias = Alias(predicateRef, "_subquery_guard")()
-            newPlan = Project(newPlan.output :+ alias, newPlan)
-            introducedAttrs += alias.toAttribute
-            val isTrue = EqualNullSafe(alias.toAttribute, Literal.TrueLiteral)
+            val predicateRef = bind(guardedMemberships(
+              If(remaining, predicate, Literal.create(null, BooleanType)), Literal.TrueLiteral))
+            val isTrue = EqualNullSafe(predicateRef, Literal.TrueLiteral)
             val result = guardedMemberships(value, And(remaining, isTrue))
             remaining = bind(And(remaining, Not(isTrue)))
-            (alias.toAttribute: Expression, result)
+            (predicateRef: Expression, result)
           }
           CaseWhen(guarded, otherwise.map(guardedMemberships(_, remaining)))
         case Coalesce(children) =>
@@ -463,14 +476,19 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val leftRef = condition(left)
           Or(leftRef, guardedMemberships(right,
             when(Not(EqualNullSafe(leftRef, Literal.TrueLiteral)))))
-        case in: InSubquery if domain != Literal.TrueLiteral && !in.query.isCorrelated &&
-            in.query.plan.containsPattern(KLL_AGGREGATE) =>
-          in.copy(values = in.values.map(value =>
-            If(domain, value, Literal.create(null, value.dataType))))
+        case in: InSubquery =>
+          val values = in.values.map(guardedMemberships(_, domain))
+          val guardedValues = if (domain != Literal.TrueLiteral && !in.query.isCorrelated &&
+              in.query.plan.containsPattern(KLL_AGGREGATE)) {
+            values.map(value => If(domain, value, Literal.create(null, value.dataType)))
+          } else values
+          in.copy(values = guardedValues)
         case other => other.mapChildrenWithReferenceEquality(guardedMemberships(_, domain))
       }
     }
     val newExprs = exprs.map { e =>
+      // Existence joins from an earlier expression can add outputs between guard batches.
+      guardOutput = None
       // Existence joins evaluate their IN operands outside the original expression. Keep
       // conditional KLL membership operands under their original, once-evaluated guards.
       val guarded = if (e.containsPattern(KLL_AGGREGATE)) {

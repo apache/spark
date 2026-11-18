@@ -28,7 +28,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.analysis.ValidateSubqueryExpression
@@ -1552,7 +1552,16 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     testStream(df)(
       StartStream(),
       AddData(input, (0L, "a"), (1L, "b")),
-      CheckAnswer(Row("a", 2L), Row("b", 2L)))
+      CheckAnswer(Row("a", 2L), Row("b", 2L)),
+      AddData(input, (-1L, "negative")),
+      ExpectFailure[SparkRuntimeException] { error =>
+        var cause: Throwable = error
+        while (cause.getCause != null) cause = cause.getCause
+        assert(cause.isInstanceOf[SparkRuntimeException], cause)
+        val raised = cause.asInstanceOf[SparkRuntimeException]
+        assert(raised.getCondition == "USER_RAISED_EXCEPTION")
+        assert(raised.getMessageParameters.get("errorMessage") == "negative input")
+      })
     assert(table.pushed.nonEmpty)
   }
 

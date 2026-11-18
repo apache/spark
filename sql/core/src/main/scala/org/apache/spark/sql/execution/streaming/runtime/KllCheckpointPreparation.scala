@@ -226,7 +226,10 @@ private[sql] object KllCheckpointPreparation {
             }
         }
       }
-      val needed = current.references ++ current.inputSet.intersect(required)
+      val forwarded = if (required.isEmpty) AttributeSet.empty else {
+        current.inputSet.intersect(required)
+      }
+      val needed = current.references ++ forwarded
       current.mapChildren(child => visit(child, needed))
     }
     visit(plan, plan.outputSet)

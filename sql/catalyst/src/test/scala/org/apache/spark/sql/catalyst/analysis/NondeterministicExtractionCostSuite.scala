@@ -30,6 +30,130 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, J
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
+  private case class UnionHashCounted(
+      name: String,
+      hashes: AtomicInteger,
+      exprId: ExprId = NamedExpression.newExprId) extends Attribute with Unevaluable {
+    override def dataType: DataType = DoubleType
+    override def nullable: Boolean = false
+    override def qualifier: Seq[String] = Nil
+    override def withNullability(value: Boolean): Attribute = this
+    override def withQualifier(value: Seq[String]): Attribute = this
+    override def withName(value: String): Attribute = copy(name = value)
+    override def withMetadata(value: org.apache.spark.sql.types.Metadata): Attribute = this
+    override def withExprId(value: ExprId): Attribute = copy(exprId = value)
+    override def withDataType(value: DataType): Attribute = this
+    override def newInstance(): Attribute = copy(exprId = NamedExpression.newExprId)
+    override def equals(other: Any): Boolean = other match {
+      case that: UnionHashCounted =>
+        name == that.name && hashes == that.hashes && exprId == that.exprId
+      case _ => false
+    }
+    override def hashCode(): Int = {
+      hashes.incrementAndGet()
+      exprId.hashCode()
+    }
+  }
+
+  test("join scalar bindings union nonadjacent shared reference sets once") {
+    val hashes = new AtomicInteger
+    val width = 32
+    val attributes = (1 to width * 2).map(i => UnionHashCounted(s"a$i", hashes))
+    val target = $"target".double
+    val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+    val operands = attributes.grouped(width).map { group =>
+      Add(group.reduceLeft[Expression]((left, right) => Add(left, right)), scalar)
+    }.toSeq
+    val condition = (0 until 64).map(i => EqualTo(operands(i % 2), target))
+      .reduceLeft[Expression](And)
+    val plan = Join(LocalRelation(attributes), LocalRelation(target), Inner,
+      Some(condition), JoinHint.NONE)
+    plan.treePatternBits
+    plan.left.outputSet
+    plan.right.outputSet
+    condition.foreach { expression =>
+      expression.references
+      expression.deterministic
+      expression.canonicalized
+    }
+    hashes.set(0)
+    PullOutNondeterministic(plan)
+    assert(hashes.get <= width * 16, s"repeated shared-reference hashing=${hashes.get}")
+  }
+
+  test("membership guard Projects do not remap forwarded output attributes") {
+    for (coalesce <- Seq(false, true)) {
+      val conversions = new AtomicInteger
+      val value = new AttributeReference("value", org.apache.spark.sql.types.LongType)() {
+        override def toAttribute: Attribute = {
+          conversions.incrementAndGet()
+          this
+        }
+      }
+      val query = ListQuery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+        KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+          .toAggregateExpression()).as("n")), numCols = 1)
+      val membership = InSubquery(Seq(value), query)
+      val expression = if (coalesce) {
+        Coalesce(Seq.fill(31)(GreaterThan(Rand(0), Literal(1D))) :+ membership)
+      } else {
+        CaseWhen((1 to 32).map(i =>
+          (GreaterThan(value, Literal(i.toLong)): Expression, Literal.FalseLiteral: Expression)),
+          Some(membership))
+      }
+      val plan = Project(Seq(Alias(expression, "member")()), LocalRelation(value))
+      plan.treePatternBits
+      conversions.set(0)
+      org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery(plan)
+      assert(conversions.get <= 4,
+        s"coalesce=$coalesce forwarded output conversions=${conversions.get}")
+    }
+  }
+
+  private case class TypeReadCounted(child: Expression, reads: AtomicInteger)
+      extends Expression with Unevaluable {
+    override def children: Seq[Expression] = Seq(child)
+    override def dataType: DataType = {
+      reads.incrementAndGet()
+      child.dataType
+    }
+    override def nullable: Boolean = false
+    override protected def withNewChildrenInternal(children: IndexedSeq[Expression]): Expression =
+      copy(child = children.head)
+  }
+
+  test("semi join grouping safety defers unused types and indexes sensitive keys") {
+    for (kll <- Seq(false, true)) {
+      val work = new AtomicInteger
+      val attributes = (1 to 64).map(i => AttributeReference(s"float$i", DoubleType)())
+      val keys = attributes.map { attribute =>
+        if (kll) EqualityCounted(attribute, work) else TypeReadCounted(attribute, work)
+      }
+      val tenant = $"tenant".long
+      val member = $"member".long
+      val input = LocalRelation(attributes :+ tenant)
+      val function = if (kll) {
+        KllSketchAggBigint(tenant, legacyDeterministic = false).toAggregateExpression()
+      } else Count(Literal(1L)).toAggregateExpression()
+      val aggregate = Aggregate(keys :+ tenant,
+        keys.zipWithIndex.map { case (key, i) => Alias(key, s"key$i")() } ++
+          Seq(tenant, Alias(function, "value")()), input)
+      val predicates = (1 to 32).map(i => GreaterThan(Add(tenant, Literal(i.toLong)), Literal(0L)))
+      val condition = And(EqualTo(tenant, member), predicates.reduceLeft[Expression](And))
+      val plan = Join(aggregate, LocalRelation(member),
+        org.apache.spark.sql.catalyst.plans.LeftSemi, Some(condition), JoinHint.NONE)
+      plan.treePatternBits
+      plan.stats
+      condition.references
+      work.set(0)
+      val rewritten = org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin(plan)
+      assert(rewritten.isInstanceOf[Aggregate])
+      // Alias indexing still reads each key's type. The normalization proof must add no scan.
+      assert(work.get <= (if (kll) keys.size * 8 else keys.size * 2),
+        s"kll=$kll repeated grouping metadata work=${work.get}")
+    }
+  }
+
   test("guarded staging skips reuse traversal when no ordinary bindings are live") {
     val visits = new AtomicInteger
     val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(

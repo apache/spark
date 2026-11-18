@@ -72,13 +72,23 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
           canPlanAsBroadcastHashJoin(join, conf) =>
       val aliasMap = getAliasMap(agg)
       val deterministic = agg.aggregateExpressions.forall(_.deterministic)
-      val normalizedKeys = agg.groupingExpressions.filter(e =>
-        NormalizeFloatingNumbers.needNormalize(e.dataType))
+      lazy val normalizedKeys = ExpressionSet(agg.groupingExpressions.filter(e =>
+        NormalizeFloatingNumbers.needNormalize(e.dataType)))
+      def equalityOperandSafe(expression: Expression): Boolean =
+        normalizedKeys.contains(expression) || !expression.exists(normalizedKeys.contains)
+      def normalizationSafe(expression: Expression): Boolean = {
+        if (normalizedKeys.isEmpty) true else expression match {
+          // SQL equality observes the same NaN and signed-zero equivalence as grouping.
+          // Derived representations such as CAST(key AS STRING) still retain the barrier.
+          case EqualTo(left, right) => equalityOperandSafe(left) && equalityOperandSafe(right)
+          case EqualNullSafe(left, right) => equalityOperandSafe(left) && equalityOperandSafe(right)
+          case other => !other.exists(normalizedKeys.contains)
+        }
+      }
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&
-          (deterministic || !replaced.exists(e =>
-            normalizedKeys.exists(_.semanticEquals(e)))) &&
+          (deterministic || normalizationSafe(replaced)) &&
           replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
       }
       val makeJoinCondition = (predicates: Seq[Expression]) => {

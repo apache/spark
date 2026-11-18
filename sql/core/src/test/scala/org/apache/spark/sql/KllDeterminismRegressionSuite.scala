@@ -33,6 +33,124 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("KLL membership guards retain their aggregate host") {
+    for (singlePass <- Seq(false, true); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+        val membership = s"1L IN (SELECT $scalar)"
+        for (value <- Seq(s"IF(sum(id) > 0, $membership, false)",
+            s"CASE WHEN sum(id) > 0 THEN $membership ELSE false END",
+            s"sum(id) <= 0 OR $membership",
+            s"coalesce(IF(sum(id) > 0, CAST(NULL AS BOOLEAN), false), $membership)")) {
+          val query = withSQLConf(
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+              SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+            val result = sql(s"SELECT $value FROM VALUES (0L), (1L), (2L) t(id)")
+            result.queryExecution.analyzed
+            result
+          }
+          checkAnswer(query, Row(false))
+        }
+      }
+    }
+  }
+
+  test("KLL count-only HAVING retains every outer alternative") {
+    for (legacy <- Seq(false, true); singlePass <- Seq(false, true)) {
+      val query = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val result = sql("""SELECT count(*) FROM VALUES (0L), (1L), (2L) t(id)
+            |HAVING EXISTS (SELECT 1 WHERE
+            |kll_sketch_get_n_bigint(kll_sketch_agg_bigint(t.id)) > 0)""".stripMargin)
+        result.queryExecution.analyzed
+        result
+      }
+      checkAnswer(query, Row(3L))
+    }
+  }
+
+  test("KLL membership grouping guards observe normalized keys") {
+    checkAnswer(sql(s"""SELECT IF(CAST(k AS STRING) = '-0.0', true,
+        |1L IN (SELECT $scalar)) FROM VALUES
+        |(CAST('-0.0' AS DOUBLE)), (CAST('0.0' AS DOUBLE)) t(k) GROUP BY k""".stripMargin),
+      Row(false))
+    for (legacy <- Seq(false, true)) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        checkAnswer(sql(s"""SELECT count(IF(id IN (SELECT $scalar), 1, NULL))
+            |FROM VALUES (0L), (3L) t(id)""".stripMargin), Row(1L))
+      }
+    }
+  }
+
+  test("floating membership pushdown preserves KLL groups for NaNs and signed zeros") {
+    withTempView("kll_float_groups", "kll_float_members") {
+      Seq((-0.0D, 1D), (0D, 2D), (Double.NaN, 3D), (Double.NaN, 4D), (2D, 5D))
+        .toDF("k", "v").createOrReplaceTempView("kll_float_groups")
+      Seq(0D, Double.NaN).toDF("k").createOrReplaceTempView("kll_float_members")
+      for (codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val source = """(SELECT k,
+              |kll_sketch_get_n_double(kll_sketch_agg_double(v)) AS n
+              |FROM kll_float_groups GROUP BY k) a""".stripMargin
+          checkAnswer(sql(s"SELECT /*+ BROADCAST(r) */ a.k, a.n FROM $source " +
+            "LEFT SEMI JOIN kll_float_members r ON a.k = r.k"),
+            Seq(Row(0D, 2L), Row(Double.NaN, 2L)))
+          checkAnswer(sql(s"SELECT /*+ BROADCAST(r) */ a.k, a.n FROM $source " +
+            "LEFT ANTI JOIN kll_float_members r ON a.k <=> r.k"), Row(2D, 1L))
+        }
+      }
+    }
+  }
+
+  test("KLL nested membership values preserve conditional demand") {
+    withTempView("kll_nested_membership") {
+      spark.sparkContext.parallelize(Seq(3L), 1).toDF("id")
+        .createOrReplaceTempView("kll_nested_membership")
+      for (legacy <- Seq(false, true); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY");
+          polarity <- Seq("IN", "NOT IN")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val danger = s"CAST(raise_error(CAST(id AS STRING)) AS BIGINT) " +
+            s"$polarity (SELECT $scalar)"
+          checkAnswer(sql(s"SELECT IF(id < 0, $danger, true) IN (SELECT true) " +
+            "FROM kll_nested_membership"), Row(true))
+          checkAnswer(sql(s"SELECT IF(id > 0, IF(id < 0, $danger, true) " +
+            s"IN (SELECT $scalar > 0), true) FROM kll_nested_membership"), Row(true))
+          checkAnswer(sql(s"SELECT IF(id < 0, IF(id > 0, $danger, true) " +
+            s"IN (SELECT $scalar > 0), true) FROM kll_nested_membership"), Row(true))
+          val error = intercept[Exception] {
+            sql(s"SELECT IF(id > 0, $danger, true) IN (SELECT true) " +
+              "FROM kll_nested_membership").collect()
+          }
+          assert(error.toString.contains("USER_RAISED_EXCEPTION"))
+        }
+      }
+    }
+  }
+
+  test("KLL later CASE predicates preserve their remaining domain") {
+    withTempView("kll_later_case") {
+      spark.sparkContext.parallelize(Seq(3L), 1).toDF("id")
+        .createOrReplaceTempView("kll_later_case")
+      for (codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY"); polarity <- Seq("IN", "NOT IN")) {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val danger = s"CAST(raise_error(CAST(id AS STRING)) AS BIGINT) " +
+            s"$polarity (SELECT $scalar)"
+          checkAnswer(sql(s"SELECT CASE WHEN id > 0 THEN 1 WHEN $danger THEN 2 ELSE 3 END " +
+            "FROM kll_later_case"), Row(1))
+          val error = intercept[Exception] {
+            sql(s"SELECT CASE WHEN id < 0 THEN 1 WHEN $danger THEN 2 ELSE 3 END " +
+              "FROM kll_later_case").collect()
+          }
+          assert(error.toString.contains("USER_RAISED_EXCEPTION"))
+        }
+      }
+    }
+  }
+
   test("KLL membership preserves Coalesce demand") {
     withTempView("kll_coalesce_input") {
       spark.sparkContext.parallelize(Seq((Some(true), Some(1L))), 1).toDF("flag", "id")
@@ -346,6 +464,26 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
               s"legacy=$legacy codegen=$codegen row=$row")
           }
         }
+      }
+    }
+  }
+
+  test("guarded KLL grouping does not reuse a collected-only random descendant") {
+    for (codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false",
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+        val random = org.apache.spark.sql.functions.rand(0L)
+        val identity = udf((value: Double) => value).asNondeterministic()
+        val selected = $"id" % 2 === 0
+        val ordinary = identity(
+          org.apache.spark.sql.functions.when(selected, random).otherwise(0D))
+        val guarded = org.apache.spark.sql.functions.when(selected,
+          random + expr(s"($scalar - 3)")).otherwise(0D)
+        val rows = spark.range(0, 8, 1, 1).groupBy($"id", ordinary.as("ordinary"),
+          guarded.as("guarded")).count().orderBy("id").collect()
+        assert(rows.length == 8)
+        rows.foreach(row => assert(row.getDouble(1) == row.getDouble(2),
+          s"codegen=$codegen row=$row"))
       }
     }
   }

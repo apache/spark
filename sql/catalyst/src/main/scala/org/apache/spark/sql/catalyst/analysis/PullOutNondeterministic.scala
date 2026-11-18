@@ -187,6 +187,8 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val rightBindings = mutable.LinkedHashMap.empty[
         (NondeterministicExpressionCollection.ExpressionKey, Int), NamedExpression]
       val referenceSets = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
+      val seenReferenceSets = mutable.HashMap.empty[
+        ExprId, java.util.IdentityHashMap[AttributeSet, java.lang.Boolean]]
       val rightOutput = join.right.outputSet
       val rightMemberships = new java.util.IdentityHashMap[AttributeSet, java.lang.Boolean]
       def rewrite(expression: Expression, references: AttributeSet): Expression = expression match {
@@ -206,7 +208,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
             alias
           })
           val sets = referenceSets.getOrElseUpdate(binding.exprId, mutable.ArrayBuffer.empty)
-          if (sets.isEmpty || !(sets.last eq references)) sets += references
+          val seen = seenReferenceSets.getOrElseUpdate(binding.exprId,
+            new java.util.IdentityHashMap[AttributeSet, java.lang.Boolean])
+          if (seen.put(references, true) == null) sets += references
           binding.toAttribute
         case comparison: BinaryComparison =>
           comparison.mapChildrenWithReferenceEquality { operand =>

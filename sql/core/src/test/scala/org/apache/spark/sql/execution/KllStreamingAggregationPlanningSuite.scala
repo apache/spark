@@ -24,7 +24,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, Project, Repartition}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream, WatermarkPropagator}
@@ -39,14 +39,42 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
 
+  test("empty checkpoint retirement demand skips cold forwarding outputs") {
+    val visits = new AtomicInteger
+    val depth = 64
+    val input = (1 to depth).foldLeft[LogicalPlan](LocalRelation(
+      AttributeReference("unused", LongType)())) { (child, _) =>
+      new Repartition(1, shuffle = false, child) {
+        override def output: Seq[Attribute] = {
+          visits.incrementAndGet()
+          super.output
+        }
+      }
+    }
+    val corrected = Alias(Literal(1L), "corrected")()
+    val legacy = Alias(Literal(2L), "legacy")()
+    val alternatives = KllAggregateResolution(
+      corrected.toAttribute, corrected.toAttribute, legacy.toAttribute)
+    val plan = Project(Seq(Alias(alternatives, "selected")()),
+      Project(Seq(corrected, legacy), input))
+    plan.treePatternBits
+    visits.set(0)
+    val selected = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+      plan, plan, legacySharing = false)
+    assert(visits.get <= depth * 3, s"cold forwarding output visits=${visits.get}")
+    assert(selected.asInstanceOf[Project].child.asInstanceOf[Project].projectList.size == 1)
+  }
+
   test("outer HAVING exports retain both checkpoint sharing choices") {
-    for (singlePass <- Seq(false, true); analysisLegacy <- Seq(false, true)) {
+    for (singlePass <- Seq(false, true); analysisLegacy <- Seq(false, true);
+        selectKll <- Seq(false, true)) {
       val original = withSQLConf(
           SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString,
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
           SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
-        spark.sql("""SELECT kll_sketch_agg_bigint(t.id) AS s
+        val output = if (selectKll) "kll_sketch_agg_bigint(t.id) AS s" else "count(*) AS n"
+        spark.sql(s"""SELECT $output
             |FROM VALUES (1L), (2L) t(id) HAVING EXISTS (SELECT 1 WHERE
             |kll_sketch_agg_bigint(t.id) = kll_sketch_agg_bigint(t.id))""".stripMargin)
           .queryExecution.analyzed
@@ -57,10 +85,13 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
         val aggregates = selected.collect { case a: Aggregate => a }.head
         val functions = org.apache.spark.sql.catalyst.planning.PhysicalAggregation
           .unapply(aggregates).get._2
-        assert(functions.size == (if (legacy) 1 else 3), selected.treeString)
-        assert(aggregates.aggregateExpressions.size == (if (legacy) 1 else 3),
+        val expected = if (legacy) { if (selectKll) 1 else 2 } else 3
+        assert(functions.size == expected, selected.treeString)
+        assert(aggregates.aggregateExpressions.size == expected,
           selected.treeString)
-        assert(functions.forall(_.deterministic == legacy), selected.treeString)
+        assert(functions.filter(_.containsPattern(
+          org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE))
+          .forall(_.deterministic == legacy), selected.treeString)
         assert(!selected.containsPattern(
           org.apache.spark.sql.catalyst.trees.TreePattern.KLL_CHECKPOINT_ALTERNATIVE))
         val subqueries = selected.flatMap(_.expressions).flatMap(_.collect {
