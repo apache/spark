@@ -48,12 +48,8 @@ private[spark] object TaskInputThreads {
    * reads its input. A reader keeps the flag rather than the context, which a batch that
    * outlives its task then does not keep alive.
    */
-  def unawaitedFlag(context: TaskContext): AtomicBoolean = {
-    Option(unawaited.get(context)).getOrElse {
-      val flag = new AtomicBoolean(false)
-      Option(unawaited.putIfAbsent(context, flag)).getOrElse(flag)
-    }
-  }
+  def unawaitedFlag(context: TaskContext): AtomicBoolean =
+    unawaited.computeIfAbsent(context, _ => new AtomicBoolean(false))
 
   /**
    * Tells that a thread that the task of `context` does not wait for reads its input, before
