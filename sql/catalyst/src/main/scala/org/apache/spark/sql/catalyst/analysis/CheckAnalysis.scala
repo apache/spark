@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COLUMNAR_UDF, LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StoredExpressionText, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -520,6 +522,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         throw SparkException.internalError(
           s"V2Reference should be resolved during analysis: ${r.name}")
 
+      // ResolveGapFill runs only in the Resolution batch. With the gate on, an input that
+      // resolves in a later batch leaves the node here.
+      case _: UnresolvedGapFill =>
+        throw QueryCompilationErrors.gapFillNotSupportedError()
+
       case u: UnresolvedInlineTable
           if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
             unresolvedInlineTableContainsScalarSubquery(u) =>
@@ -1006,6 +1013,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case create: V2CreateTablePlan =>
             CreateTableValidation.validateV2CreateTablePlan(create, SQLConf.get)
+            val constraints = create match {
+              case CreateTable(_, _, _, s: TableSpec, _, _, _) => s.constraints
+              case ReplaceTable(_, _, _, s: TableSpec, _, _, _) => s.constraints
+              case _ => Nil
+            }
+            constraints.foreach {
+              case c: Check => failIfSessionDependent(c.predicateSql, create)
+              case _ =>
+            }
 
           // A view can hold a FILE without a qualifier, which a table cannot store. When the
           // target and source are both in the session catalog, `ResolveSessionCatalog` has
@@ -1014,12 +1030,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case CreateTableLike(_: ResolvedIdentifier, source, _, _, _, _, _) =>
             source match {
               case ResolvedTable(_, _, table, _) =>
-                TypeUtils.checkNoUnknownFileTypeInTableSchema(
+                TypeUtils.checkNoUnknownFileTypeWrite(
                   CatalogV2Util.v2ColumnsToStructType(table.columns))
               case view: ResolvedPersistentView =>
-                TypeUtils.checkNoUnknownFileTypeInTableSchema(view.info.schema)
+                TypeUtils.checkNoUnknownFileTypeWrite(view.info.schema)
               case ResolvedTempView(_, metadata) =>
-                TypeUtils.checkNoUnknownFileTypeInTableSchema(metadata.schema)
+                TypeUtils.checkNoUnknownFileTypeWrite(metadata.schema)
               case _ =>
             }
 
@@ -1034,6 +1050,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case a: AddCheckConstraint =>
             a.checkConstraint.failIfCallsUserDefinedFunction()
+            failIfSessionDependent(a.checkConstraint.condition, a.checkConstraint.child)
 
           case alter: AlterTableCommand =>
             AlterTableValidation.validate(alter, this)
@@ -1329,6 +1346,23 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       })
     }
     check(plan)
+  }
+
+  /**
+   * Fails a DDL with a CHECK condition that the parser reads differently under the settings a
+   * later write reads it with. This covers a condition with a predicate too, because a connector
+   * may store only the text. The comparison takes the ANSI value of the session, so a write can
+   * still analyze an accepted condition differently, such as with an implicit cast under ANSI
+   * mode, or fail to resolve it.
+   */
+  private def failIfSessionDependent(condition: String, node: TreeNode[_]): Unit = {
+    if (!conf.getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT) &&
+        !StoredExpressionText.readsAsInSession(catalogManager.v1SessionCatalog.parser, condition,
+          StoredExpressionText.fixedConf(conf))) {
+      node.failAnalysis(
+        errorClass = "SESSION_DEPENDENT_CHECK_CONSTRAINT",
+        messageParameters = Map("checkCondition" -> condition))
+    }
   }
 
   private def unresolvedInlineTableContainsScalarSubquery(

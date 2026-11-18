@@ -1893,6 +1893,65 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-61920: merge evaluates BETWEEN only for rows that reach its clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq((1, 0), (2, 20)).toDF("pk", "x").createOrReplaceTempView("source")
+
+      // the row with x = 0 is deleted by the first clause, so it never reaches the division
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED AND s.x = 0 THEN
+             | DELETE
+             |WHEN MATCHED AND (100 DIV s.x) BETWEEN 1 AND 10 THEN
+             | UPDATE SET salary = s.x
+             |""".stripMargin)
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(2, 20, "software"), // update
+          Row(3, 300, "hr"))) // unchanged
+    }
+  }
+
+  test("SPARK-61920: merge evaluates NULLIF only for rows that select its clause") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      Seq((1, 0), (2, 20)).toDF("pk", "x").createOrReplaceTempView("source")
+
+      // the row with x = 0 does not select the clause, so its assignment is never evaluated
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED AND s.x > 0 THEN
+             | UPDATE SET salary = nullif(100 DIV s.x, 0)
+             |""".stripMargin)
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged
+          Row(2, 5, "software"))) // update
+    }
+  }
+
   test("merge resolves and aligns columns by name") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -2467,6 +2526,50 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              |""".stripMargin)
       }
       assert(e3.getCondition == "NOT_NULL_ASSERT_VIOLATION")
+    }
+  }
+
+  test("SPARK-61934: merge writes NULL for a Scala UDF with a primitive input on NULL") {
+    withTempView("source") {
+      withUserDefinedFunction("plus1" -> true) {
+        // the UDF is not nullable, but it returns NULL for NULL input as its input is primitive
+        spark.udf.register("plus1", (x: Int) => x + 1)
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin)
+
+        Seq((1, None), (2, Some(201)), (3, None)).toDF("pk", "salary")
+          .createOrReplaceTempView("source")
+
+        // delta-based tables write only the rows that the MATCHED UPDATE produces
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET salary = plus1(s.salary)
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, null, "hr") :: Row(2, 202, "software") :: Nil)
+
+        // multiple NOT MATCHED clauses are rewritten into an append of merged rows
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED AND s.salary < 0 THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'invalid')
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, plus1(s.salary), 'new')
+             |""".stripMargin)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, null, "hr") :: Row(2, 202, "software") :: Row(3, null, "new") :: Nil)
+      }
     }
   }
 
