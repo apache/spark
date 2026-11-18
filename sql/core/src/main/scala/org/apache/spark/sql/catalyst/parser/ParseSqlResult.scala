@@ -28,16 +28,18 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.catalog.{
+  AnalysisCatalogManager, CatalogManager, FunctionCatalog, Identifier, SupportsNamespaces
+}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.exceptions.SqlScriptingException
-import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
+import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{
   AlterViewAsCommand,
   CreateDataSourceTableAsSelectCommand,
@@ -57,8 +59,7 @@ import org.apache.spark.sql.execution.datasources.{
   InsertIntoHadoopFsRelationCommand, LogicalRelation
 }
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SparkUDFExpressionBuilder, SQLConf, StaticSQLConf}
 import org.apache.spark.sql.metricview.logical.ResolvedMetricView
 
 /**
@@ -74,6 +75,20 @@ object ParseSqlMode {
     case Analyze => Some(Analyze)
     case _ => None
   }
+}
+
+/**
+ * Optional ANALYZE-only context for [[ParseSqlResult.fromSql]]. `None` inherits the
+ * invoker session. A value applies to one call and never changes the session.
+ */
+case class ParseSqlAnalyzeContext(
+    catalog: Option[String] = None,
+    schema: Option[String] = None) {
+  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty
+}
+
+object ParseSqlAnalyzeContext {
+  val empty: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext()
 }
 
 /**
@@ -121,12 +136,13 @@ object ParseSqlResult {
   /** Parse `sql` as a batch and render the JSON result array. */
   def fromSql(
       sql: String,
-      mode: String = ParseSqlMode.Parse): String = {
+      mode: String = ParseSqlMode.Parse,
+      context: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext.empty): String = {
     val split = parser.get().splitStatementsWithPositions(sql)
     val statements = split.completeStatements ++ split.partialStatement
     val spans = statementSpans(sql, statements)
     val json = if (mode == ParseSqlMode.Analyze) {
-      analyzeBatch(statements, spans)
+      analyzeBatch(statements, spans, context)
     } else {
       JArray(statements.zip(spans).map { case (segment, span) =>
         parsePlanOrError(segment, span) match {
@@ -150,12 +166,14 @@ object ParseSqlResult {
    */
   private def analyzeBatch(
       statements: Seq[PositionedSqlStatement],
-      spans: Seq[StatementSpan]): JArray = {
+      spans: Seq[StatementSpan],
+      context: ParseSqlAnalyzeContext): JArray = {
     val parsed = statements.zip(spans).map { case (segment, span) =>
       parsePlanOrError(segment, span)
     }
     val session = ClassicSparkSession.getActiveSession
       .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
+    val analyzerOpt = if (context.isEmpty) None else Some(contextAnalyzer(session, context))
     // The batch is analyzed on its own: a SQL script that calls parse_sql does
     // not lend it its locals, and CALL is not run.
     SqlScriptingContextManager.create(null).runWith {
@@ -163,7 +181,7 @@ object ParseSqlResult {
         JArray(parsed.zip(spans).map {
           case (ParseFailed(errorObj), _) => errorObj
           case (Parsed(plan), span) =>
-            val (analyzed, error) = analyze(session, plan)
+            val (analyzed, error) = analyze(session, analyzerOpt, plan)
             successJson(plan, analyzed, error, Some(session), span)
         }.toList)
       }
@@ -173,13 +191,87 @@ object ParseSqlResult {
   /** Analyze `plan`, including nested EXPLAIN / DESCRIBE QUERY payloads. */
   private def analyzePlan(
       session: ClassicSparkSession,
+      analyzerOpt: Option[Analyzer],
       plan: LogicalPlan): LogicalPlan = {
     val toAnalyze = plan match {
       case s: SupervisingCommand =>
-        s.withTransformedSupervisedPlan(inner => analyzePlan(session, inner))
+        s.withTransformedSupervisedPlan(inner => analyzePlan(session, analyzerOpt, inner))
       case other => other
     }
-    session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
+    new QueryExecution(
+      session,
+      toAnalyze,
+      mode = CommandExecutionMode.SKIP,
+      analyzerOpt = analyzerOpt).analyzed
+  }
+
+  /**
+   * The analyzer for one ANALYZE call with `current_catalog` / `current_schema` overrides.
+   * The session is not changed: the call gets its own catalog manager and v1 catalog.
+   */
+  private def contextAnalyzer(
+      session: ClassicSparkSession,
+      context: ParseSqlAnalyzeContext): Analyzer = {
+    val state = session.sessionState
+    val mgr = state.catalogManager
+    val invokerCatalog = mgr.currentCatalog.name()
+    val catalogName = context.catalog.map(checkedContextValue("current_catalog", _))
+      .getOrElse(invokerCatalog)
+    val isSession = catalogName == CatalogManager.SESSION_CATALOG_NAME
+    val switched = catalogName != invokerCatalog
+    val target = mgr.catalog(catalogName)
+    val namespace: Array[String] = context.schema match {
+      case Some(schema) => checkedNamespace(schema, isSession)
+      case None if switched =>
+        if (isSession) Array(state.conf.defaultDatabase) else target.defaultNamespace()
+      case None => mgr.currentNamespace
+    }
+    target match {
+      case ns: SupportsNamespaces if !isSession && !ns.namespaceExists(namespace) =>
+        throw QueryCompilationErrors.noSuchNamespaceError(catalogName +: namespace)
+      case _ =>
+    }
+    val v1 = perCallSessionCatalog(session)
+    if (isSession) v1.setCurrentDatabase(namespace.head)
+    state.analyzer.withCatalogManager(
+      new AnalysisCatalogManager(mgr, catalogName, namespace, v1))
+  }
+
+  private def checkedContextValue(parameter: String, value: String): String = {
+    if (value.trim.isEmpty) {
+      throw QueryExecutionErrors.invalidParseSqlContext(parameter, value)
+    }
+    value
+  }
+
+  /** A `current_schema` value as a namespace. The session catalog takes one part. */
+  private def checkedNamespace(schema: String, isSession: Boolean): Array[String] = {
+    val parts = try {
+      parser.get().parseMultipartIdentifier(checkedContextValue("current_schema", schema))
+    } catch {
+      case _: ParseException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
+    }
+    if (parts.isEmpty || (isSession && parts.length != 1)) {
+      throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
+    }
+    parts.toArray
+  }
+
+  /** A v1 catalog copy with the invoker's temp views and current database. */
+  private def perCallSessionCatalog(session: ClassicSparkSession): SessionCatalog = {
+    val state = session.sessionState
+    val catalog = new SessionCatalog(
+      () => session.sharedState.externalCatalog,
+      () => session.sharedState.globalTempViewManager,
+      state.functionRegistry,
+      state.tableFunctionRegistry,
+      state.newHadoopConf(),
+      state.sqlParser,
+      state.resourceLoader,
+      new SparkUDFExpressionBuilder)
+    state.catalog.copyStateTo(catalog)
+    catalog
   }
 
   /** INTERNAL_ERROR / SQLSTATE XX are Spark bugs, not analysis results. */
@@ -241,13 +333,14 @@ object ParseSqlResult {
   /** Analyze `plan` without executing it. Scripts never reach QueryExecution. */
   private def analyze(
       session: ClassicSparkSession,
+      analyzerOpt: Option[Analyzer],
       plan: LogicalPlan): (Option[LogicalPlan], Option[SparkThrowable with Throwable]) = {
     plan match {
       case _: CompoundBody =>
         (None, Some(QueryExecutionErrors.parseSqlAnalyzeUnsupportedScript()))
       case _ =>
         try {
-          (Some(analyzePlan(session, plan)), None)
+          (Some(analyzePlan(session, analyzerOpt, plan)), None)
         } catch {
           case e: SparkThrowable with Throwable if !isInternalError(e) => (None, Some(e))
         }

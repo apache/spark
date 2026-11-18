@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
@@ -184,14 +184,15 @@ class RelationResolution(
     val isTimeTravel = finalTimeTravelSpec.isDefined || hasTimeTravelWriteOptions
     val identifier = u.multipartIdentifier
 
-    // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
+    // system.session.v (3 parts): overlay, then local temp view by name.
     if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
       val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
-      return resolveTempView(
-        normalized,
-        u.isStreaming,
-        isTimeTravel
-      )
+      return lookupSuppliedTempRelation(identifier, identifier).orElse(
+        resolveTempView(
+          normalized,
+          u.isStreaming,
+          isTimeTravel
+        ))
     }
 
     // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
@@ -199,8 +200,10 @@ class RelationResolution(
     if (identifier.length == 2 &&
         identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
       val viewNameOnly = Seq(identifier.last)
+      val sessionIdent = SuppliedRelationRegistry.sessionIdentity(identifier.last)
       val tempSession = () =>
-        resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel)
+        lookupSuppliedTempRelation(identifier, sessionIdent).orElse(
+          resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel))
       val persistentSessionDb = () =>
         tryResolvePersistent(u, identifier, finalTimeTravelSpec)
       return if (conf.prioritizeSystemCatalog) {
@@ -210,14 +213,18 @@ class RelationResolution(
       }
     }
 
-    // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
-    // persistent.
+    // Multi-part (but not session-qualified): overlay and temp view (e.g. global_temp.tbl1),
+    // then persistent.
     if (identifier.length > 1) {
-      return resolveTempView(
-        identifier,
-        u.isStreaming,
-        isTimeTravel
-      ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
+      val globalOverlay =
+        if (identifier.length == 2 && v1SessionCatalog.isGlobalTempViewDB(identifier.head)) {
+          lookupSuppliedTempRelation(identifier, identifier)
+        } else {
+          None
+        }
+      return globalOverlay
+        .orElse(resolveTempView(identifier, u.isStreaming, isTimeTravel))
+        .orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
     }
 
     // 1-part name: try each step in [[relationResolutionSteps]] order (from
@@ -226,13 +233,39 @@ class RelationResolution(
     for (step <- steps) {
       val result = step match {
         case SessionScopeStep =>
-          resolveTempView(identifier, u.isStreaming, isTimeTravel)
+          lookupSuppliedTempRelation(
+            identifier, SuppliedRelationRegistry.sessionIdentity(identifier.head)).orElse(
+            resolveTempView(identifier, u.isStreaming, isTimeTravel))
         case PersistentCatalogStep(prefix) =>
           tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
       }
       if (result.isDefined) return result
     }
     None
+  }
+
+  /**
+   * [[lookupSuppliedRelation]] for a temp view `identity` referenced as `name`.
+   * Like [[lookupTempView]], a persistent view body only sees the temp views it
+   * referred to when it was created.
+   */
+  def lookupSuppliedTempRelation(
+      name: Seq[String],
+      identity: Seq[String]): Option[LogicalPlan] = {
+    if (isResolvingView && !isReferredTempViewName(name)) None
+    else lookupSuppliedRelation(identity)
+  }
+
+  /**
+   * Schema-only stand-in for a caller-supplied relation identity. Eclipses the
+   * real object of that identity for this analysis.
+   */
+  def lookupSuppliedRelation(identity: Seq[String]): Option[LogicalPlan] = {
+    SuppliedRelationRegistry.lookup(identity, conf.resolver).map { schema =>
+      val local = LocalRelation(schema)
+      local.setTagValue(SuppliedRelationRegistry.IDENTITY_TAG, identity)
+      SubqueryAlias(identity, local)
+    }
   }
 
   /**
@@ -244,6 +277,8 @@ class RelationResolution(
       finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
+        val nameParts = ident.toQualifiedNameParts(catalog)
+        lookupSuppliedRelation(nameParts).orElse {
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
         val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
         val finalOptions = u.clearWritePrivileges.options
@@ -347,7 +382,6 @@ class RelationResolution(
             } yield {
               val updatedRelation = cached.copy(options = finalOptions)
               updatedRelation.copyTagsFrom(cached)
-              val nameParts = ident.toQualifiedNameParts(catalog)
               val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
               tableCache.update(tableKey, cached.table)
               relationCache.update(key, aliasedRelation)
@@ -372,6 +406,7 @@ class RelationResolution(
               loaded.map(cloneWithPlanId(_, planId))
             }
           }
+        }
       case _ => None
     }
   }

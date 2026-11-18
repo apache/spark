@@ -123,3 +123,17 @@ case class LocalRelation(
 
   override val nodePatterns: Seq[TreePattern] = Seq(LOCAL_RELATION)
 }
+
+/**
+ * INSERT whose target resolved to a caller-supplied overlay relation. Analysis
+ * only: the statement is not executed.
+ */
+case class InsertIntoSuppliedRelation(
+    table: LocalRelation,
+    query: LogicalPlan) extends UnaryCommand {
+  override def child: LogicalPlan = query
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): InsertIntoSuppliedRelation = {
+    copy(query = newChild)
+  }
+}

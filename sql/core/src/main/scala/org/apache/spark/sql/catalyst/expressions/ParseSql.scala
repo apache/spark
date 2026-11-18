@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{
 }
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.parser.{ParseSqlMode, ParseSqlResult}
+import org.apache.spark.sql.catalyst.parser.{ParseSqlAnalyzeContext, ParseSqlMode, ParseSqlResult}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARSE_SQL, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -126,17 +126,31 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:on line.size.limit
 case class ParseSql(
     sqlStmt: Expression,
-    mode: Expression)
+    mode: Expression,
+    currentCatalog: Expression,
+    currentSchema: Expression)
   extends Expression
   with ImplicitCastInputTypes
   with CodegenFallback
   with QueryErrorsBase {
 
+  def this(sqlStmt: Expression, mode: Expression) =
+    this(sqlStmt, mode, Literal.create(null, StringType), Literal.create(null, StringType))
+
   def this(sqlStmt: Expression) = this(sqlStmt, Literal("PARSE"))
 
   override def prettyName: String = "parse_sql"
 
-  override def children: Seq[Expression] = Seq(sqlStmt, mode)
+  override def children: Seq[Expression] = Seq(sqlStmt, mode, currentCatalog, currentSchema)
+
+  // Omit trailing NULL context arguments, so the generated column name for a call that
+  // gives no context is unchanged. The defaults are NULL literals, possibly implicitly cast,
+  // and the name is taken after pretty-printing, which shows a NULL literal as NULL.
+  override def sql: String = {
+    val isDefault: Expression => Boolean = e => e.sql == "NULL" || (e.foldable && e.eval() == null)
+    val shown = children.take(2) ++ children.drop(2).reverse.dropWhile(isDefault).reverse
+    s"$prettyName(${shown.map(_.sql).mkString(", ")})"
+  }
 
   override def nullable: Boolean = sqlStmt.nullable || mode.nullable
 
@@ -146,12 +160,14 @@ case class ParseSql(
 
   override val nodePatterns: Seq[TreePattern] = Seq(PARSE_SQL)
 
-  override def nullIntolerant: Boolean = true
+  // A NULL current_catalog or current_schema is valid, so null propagation must not
+  // rewrite the call. eval returns NULL itself for a NULL statement or mode.
+  override def nullIntolerant: Boolean = false
 
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(2)(StringTypeWithCollation(supportsTrimCollation = true))
+    Seq.fill(4)(StringTypeWithCollation(supportsTrimCollation = true))
 
   // ANALYZE reads the session catalog, so results are not context-independent.
   override def contextIndependentFoldable: Boolean = false
@@ -183,20 +199,33 @@ case class ParseSql(
             throw QueryCompilationErrors.invalidParseSqlMode(mode)
           }
         }
-        // ANALYZE needs the session, which only the driver has, so sqlStmt
-        // must fold. PARSE may take a column of statement text.
-        if (parsedMode.contains(ParseSqlMode.Analyze) && !sqlStmt.foldable) {
-          DataTypeMismatch(
-            errorSubClass = "NON_FOLDABLE_INPUT",
-            messageParameters = Map(
-              "inputName" -> toSQLId("sqlStmt"),
-              "inputType" -> toSQLType(sqlStmt.dataType),
-              "inputExpr" -> toSQLExpr(sqlStmt)))
-        } else {
-          TypeCheckResult.TypeCheckSuccess
+        // ANALYZE needs the session, which only the driver has, so every argument must
+        // fold for the call to run there. PARSE may take a column of statement text.
+        val nonFoldable = ParseSql.parameterNames.zip(children).find(c => !constantArg(c._2))
+        (parsedMode, nonFoldable) match {
+          case (Some(ParseSqlMode.Analyze), Some((name, child))) =>
+            DataTypeMismatch(
+              errorSubClass = "NON_FOLDABLE_INPUT",
+              messageParameters = Map(
+                "inputName" -> toSQLId(name),
+                "inputType" -> toSQLType(child.dataType),
+                "inputExpr" -> toSQLExpr(child)))
+          case _ => TypeCheckResult.TypeCheckSuccess
         }
       }
     }
+  }
+
+  /**
+   * True if `e` is known on the driver before execution. A scalar subquery is not constant
+   * even when its children are, because it reads the data it selects from.
+   */
+  private def constantArg(e: Expression): Boolean = e match {
+    case _: SubqueryExpression => false
+    case _ if e.foldable => true
+    case _: CurrentDatabase | _: CurrentCatalog | _: CurrentPath | _: CurrentUser => true
+    case _: LeafExpression => false
+    case other => other.deterministic && other.children.forall(constantArg)
   }
 
   /**
@@ -227,13 +256,27 @@ case class ParseSql(
       case None => null
       case Some(parsedMode) =>
         val sqlText = sqlInput.asInstanceOf[UTF8String].toString
-        UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode))
+        val context = if (parsedMode == ParseSqlMode.Analyze) {
+          ParseSqlAnalyzeContext(
+            catalog = utf8Option(currentCatalog.eval(input)),
+            schema = utf8Option(currentSchema.eval(input)))
+        } else {
+          ParseSqlAnalyzeContext.empty
+        }
+        UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode, context))
     }
   }
 
+  private def utf8Option(value: Any): Option[String] =
+    Option(value).map(_.asInstanceOf[UTF8String].toString)
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): ParseSql =
-    copy(sqlStmt = newChildren(0), mode = newChildren(1))
+    copy(
+      sqlStmt = newChildren(0),
+      mode = newChildren(1),
+      currentCatalog = newChildren(2),
+      currentSchema = newChildren(3))
 }
 
 object ParseSql extends ExpressionBuilder {
@@ -241,13 +284,18 @@ object ParseSql extends ExpressionBuilder {
 
   def apply(sqlStmt: Expression, mode: Expression): ParseSql = new ParseSql(sqlStmt, mode)
 
+  /** Argument names in order, as they appear in error messages. */
+  val parameterNames: Seq[String] = Seq("sqlStmt", "mode", "current_catalog", "current_schema")
+
   override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
     InputParameter("sqlStmt"),
-    InputParameter("mode", Some(Literal("PARSE"))))))
+    InputParameter("mode", Some(Literal("PARSE"))),
+    InputParameter("current_catalog", Some(Literal.create(null, StringType))),
+    InputParameter("current_schema", Some(Literal.create(null, StringType))))))
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    assert(expressions.size == 2)
-    ParseSql(expressions(0), expressions(1))
+    assert(expressions.size == 4)
+    ParseSql(expressions(0), expressions(1), expressions(2), expressions(3))
   }
 
   /** Register the builtin with a session function registry and the global builtin set. */

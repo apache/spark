@@ -25,6 +25,7 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.{
   Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog
 }
@@ -921,6 +922,62 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+
+  test("ANALYZE current_schema applies to one call and leaves the session unchanged") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_a")
+      sql("CREATE DATABASE parse_sql_per_call_b")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_a.t (a INT) USING parquet")
+        sql("CREATE TABLE parse_sql_per_call_b.t (a STRING) USING parquet")
+        val before = spark.catalog.currentDatabase
+        val inA = evalCall(
+          "SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, 'parse_sql_per_call_a')")
+        val inB = evalCall(
+          "SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, 'parse_sql_per_call_b')")
+        assert(inA.head \ "analyze_success" === JBool(true))
+        assert(inA.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_a", "t"))))
+        assert(inA.head \ "select_list" === typedColumns("a" -> jsonInt))
+        assert(inB.head \ "analyze_success" === JBool(true))
+        assert(inB.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_b", "t"))))
+        assert(inB.head \ "select_list" === typedColumns("a" -> jsonString))
+        assert(spark.catalog.currentDatabase === before)
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_a CASCADE")
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_b CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE of a missing current_schema is an error and keeps the session") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val before = spark.catalog.currentDatabase
+      intercept[NoSuchNamespaceException] {
+        spark.sql("SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, " +
+          "'parse_sql_per_call_missing')").collect()
+      }
+      assert(spark.catalog.currentDatabase === before)
+    }
+  }
+
+  test("ANALYZE current_schema does not change the invoker's later resolution") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_c")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_c.t (a INT) USING parquet")
+        val overridden = evalCall(
+          "SELECT parse_sql('SELECT a FROM t', 'ANALYZE', NULL, 'parse_sql_per_call_c')")
+        assert(overridden.head \ "analyze_success" === JBool(true))
+        // A later call with no context still resolves against the invoker's database.
+        val inherited = evalStatement("SELECT a FROM t")
+        assert(inherited \ "analyze_success" === JBool(false))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_c CASCADE")
+      }
+    }
+  }
 }
 
 object ParseSqlAnalyzeSuite {
