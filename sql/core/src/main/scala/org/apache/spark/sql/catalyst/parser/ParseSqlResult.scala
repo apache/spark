@@ -452,7 +452,8 @@ object ParseSqlResult {
     val nextScope = childScope(parent, scope)
     parent match {
       case m: MergeIntoTable =>
-        visitPlan(m.targetTable, scope, TableRefRole.Target)(f)
+        // A MERGE target is never resolved against a CTE, so no alias shadows it.
+        visitPlan(m.targetTable, Set.empty, TableRefRole.Target)(f)
         visitPlan(m.sourceTable, scope, TableRefRole.Source)(f)
       case i: UnresolvedInsert =>
         visitPlan(i.table, scope, TableRefRole.Target)(f)
@@ -494,9 +495,13 @@ object ParseSqlResult {
       case _ =>
         statementSubqueries(parent).foreach(sq => visitPlan(sq, nextScope, TableRefRole.Source)(f))
         parent.children.foreach { child =>
-          val childRole =
-            if (isTargetTableChild(parent)) TableRefRole.Target else role
-          visitPlan(child, nextScope, childRole)(f)
+          if (isTargetTableChild(parent)) {
+            // A statement target (e.g. of DELETE or UPDATE) is never resolved against a CTE, so
+            // no alias shadows it.
+            visitPlan(child, Set.empty, TableRefRole.Target)(f)
+          } else {
+            visitPlan(child, nextScope, role)(f)
+          }
         }
     }
   }

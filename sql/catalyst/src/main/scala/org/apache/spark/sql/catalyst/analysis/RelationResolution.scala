@@ -162,7 +162,7 @@ class RelationResolution(
   def resolveRelation(
       u: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
-    val isWriteTarget = u.options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+    val isWriteTarget = u.isWriteTarget
     val hasTimeTravelWriteOptions =
       isWriteTarget && CatalogV2Util.containsTimeTravelOptions(u.options)
     val timeTravelSpecFromOptions = if (hasTimeTravelWriteOptions) {

@@ -1314,6 +1314,47 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("merge target is not replaced by a same-named CTE") {
+    withTable(sourceNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 10, 'hr'), (3, 30, 'hr')")
+      // Make the unqualified table name resolve to the target table.
+      sql(s"USE cat.${namespace.mkString(".")}")
+      val target = ident.name
+
+      // The CTE shadows the target table name only in the MERGE source. The statement must merge
+      // into the table it names, not into the table that the CTE reads.
+      sql(
+        s"""WITH $target AS (TABLE $sourceNameAsString)
+           |MERGE INTO $target t
+           |USING (SELECT pk, salary + 1 AS salary, dep FROM $target) s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN UPDATE SET salary = s.salary
+           |WHEN NOT MATCHED THEN INSERT *
+           |""".stripMargin)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, 11, "hr"), Row(2, 200, "software"), Row(3, 31, "hr")))
+      checkAnswer(
+        sql(s"SELECT * FROM $sourceNameAsString"),
+        Seq(Row(1, 10, "hr"), Row(3, 30, "hr")))
+
+      // A CTE body that is not a bare table reference.
+      sql(
+        s"""WITH $target AS (SELECT * FROM $tableNameAsString WHERE dep = 'hr')
+           |MERGE INTO $target t
+           |USING (SELECT pk FROM $target) s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN DELETE
+           |""".stripMargin)
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 200, "software") :: Nil)
+    }
+  }
+
   test("merge with cached source and transactional checks") {
     withTable(sourceNameAsString) {
       // create target table

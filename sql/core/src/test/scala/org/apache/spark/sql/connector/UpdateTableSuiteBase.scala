@@ -1324,6 +1324,47 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, 300, "hr"))) // unchanged (no matching pk in source)
   }
 
+  test("update target is not replaced by a same-named CTE") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 10, 'hr'), (2, 20, 'software')")
+    // Make the unqualified table name resolve to the target table.
+    sql(s"USE cat.${namespace.mkString(".")}")
+    val target = ident.name
+
+    // The CTE shadows the target table name only inside the subquery. The statement must update
+    // the table it names, not the table that the CTE reads.
+    sql(
+      s"""WITH $target AS (TABLE $sourceNameAsString)
+         |UPDATE $target SET salary = -1 WHERE pk IN (SELECT pk FROM $target WHERE salary = 10)
+         |""".stripMargin)
+    // The same holds for a target named by a non-literal IDENTIFIER clause.
+    sql(
+      s"""WITH $target AS (TABLE $sourceNameAsString)
+         |UPDATE IDENTIFIER(concat('$target', '')) SET salary = -2
+         |WHERE pk IN (SELECT pk FROM $target WHERE salary = 20)
+         |""".stripMargin)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(1, -1, "hr"), Row(2, -2, "software"), Row(3, 300, "hr")))
+    checkAnswer(
+      sql(s"SELECT * FROM $sourceNameAsString"),
+      Seq(Row(1, 10, "hr"), Row(2, 20, "software")))
+
+    // A CTE body that is not a bare table reference, and a target with a table alias.
+    sql(
+      s"""WITH $target AS (SELECT * FROM $tableNameAsString WHERE dep = 'hr')
+         |UPDATE $target AS t SET t.salary = t.salary + 1 WHERE t.pk IN (SELECT pk FROM $target)
+         |""".stripMargin)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(1, 0, "hr"), Row(2, -2, "software"), Row(3, 301, "hr")))
+  }
+
   test("update with subquery on source table and transactional checks") {
     // create target table
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

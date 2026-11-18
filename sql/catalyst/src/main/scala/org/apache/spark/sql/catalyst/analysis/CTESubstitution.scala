@@ -379,7 +379,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteRelations: Seq[(String, CTERelationDef)],
       recursiveCTERelation: Option[(String, CTERelationDef)],
       unresolvedRelation: UnresolvedRelation): LogicalPlan = {
-    if (recursiveCTERelation.isDefined && conf.resolver(recursiveCTERelation.get._1, table)) {
+    if (unresolvedRelation.isWriteTarget) {
+      // A CTE cannot be written to, so a write target, such as the target of a DELETE, UPDATE
+      // or MERGE, never refers to a same-named CTE in scope. As with an INSERT target, the rest
+      // of the statement still sees the CTE.
+      unresolvedRelation
+    } else if (recursiveCTERelation.isDefined &&
+        conf.resolver(recursiveCTERelation.get._1, table)) {
       // self-reference is found
       recursiveCTERelation.map {
         case (_, d) =>
