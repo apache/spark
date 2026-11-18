@@ -190,6 +190,40 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("SPARK-61885: an argument with an invalid subquery") {
+    // `CheckAnalysis` rejects these subqueries, as for `EXPLAIN CALL`. The procedure must not be
+    // invoked before that, and `NonExecutableSum` throws if it is.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundNonExecutableSum)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CALL cat.ns.sum((SELECT 1, 2), 3)")
+      },
+      condition = "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+      parameters = Map("number" -> "2"),
+      context = ExpectedContext(fragment = "(SELECT 1, 2)", start = 16, stop = 28))
+    // The optimizer can remove the invalid `max(1)` and fold the argument.
+    Seq(
+      "(SELECT 1 WHERE true OR max(1) > 0)" -> 17,
+      "CAST(EXISTS (SELECT 1 WHERE true OR max(1) > 0) AS INT)" -> 29).foreach {
+      case (arg, start) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CALL cat.ns.sum($arg, 2)")
+          },
+          condition = "INVALID_WHERE_CONDITION",
+          parameters = Map(
+            "condition" -> "\"(true OR (max(1) > 0))\"",
+            "expressionList" -> "max(1)"),
+          context = ExpectedContext(
+            fragment = "SELECT 1 WHERE true OR max(1) > 0", start = start, stop = start + 32))
+    }
+  }
+
+  test("SPARK-61885: an argument with a valid uncorrelated EXISTS subquery") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkAnswer(sql("CALL cat.ns.sum(CAST(EXISTS (SELECT 1) AS INT), 2)"), Row(3) :: Nil)
+  }
+
   test("type coercion") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
     checkAnswer(sql("CALL cat.ns.sum(1, 2)"), Row(3) :: Nil)
