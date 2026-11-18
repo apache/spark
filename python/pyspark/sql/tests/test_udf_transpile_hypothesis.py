@@ -436,6 +436,28 @@ def mixed_chain(x: int, y: int, z: int) -> bool:
     return x <= y > z
 
 
+def str_upper(s):
+    # Exercises str.upper (SPARK-59816). No None guard, so a NULL input runs
+    # through the transpiler's raise guard and Python's AttributeError.
+    return s.upper()
+
+
+def str_lower(s):
+    # Sister of ``str_upper`` for str.lower.
+    return s.lower()
+
+
+def str_startswith(s, p):
+    # Exercises str.startswith (SPARK-59816) with a column prefix, so a NULL
+    # on either side runs through the raise guard.
+    return s.startswith(p)
+
+
+def str_endswith(s, p):
+    # Sister of ``str_startswith`` for str.endswith.
+    return s.endswith(p)
+
+
 # A lambda captured at module scope so ``inspect.getsource`` can read
 # its definition. Exercises the ``ast.Lambda`` branch in
 # ``_get_function_from_ast``.
@@ -805,6 +827,38 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             self.assertEqual(
                 transpiled, interpreted, f"mixed_chain mismatch on ({x!r}, {y!r}, {z!r})"
             )
+
+        @_hyp_settings
+        @given(value=_case_str_strategy)
+        @_seed_examples(_STR_EDGES)
+        def test_str_upper_matches_python(self, value):
+            df = self._single_arg_df(value, StringType())
+            transpiled, interpreted = self._run(str_upper, StringType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"str_upper mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_case_str_strategy)
+        @_seed_examples(_STR_EDGES)
+        def test_str_lower_matches_python(self, value):
+            df = self._single_arg_df(value, StringType())
+            transpiled, interpreted = self._run(str_lower, StringType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"str_lower mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(pair=_str_pair_strategy)
+        @_seed_examples(_STR_PAIR_EDGES, key="pair")
+        def test_str_startswith_matches_python(self, pair):
+            df = self.spark.createDataFrame([pair], "a string, b string")
+            transpiled, interpreted = self._run(str_startswith, BooleanType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"str_startswith mismatch on {pair!r}")
+
+        @_hyp_settings
+        @given(pair=_str_pair_strategy)
+        @_seed_examples(_STR_PAIR_EDGES, key="pair")
+        def test_str_endswith_matches_python(self, pair):
+            df = self.spark.createDataFrame([pair], "a string, b string")
+            transpiled, interpreted = self._run(str_endswith, BooleanType(), df, "a", "b")
+            self.assertEqual(transpiled, interpreted, f"str_endswith mismatch on {pair!r}")
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):
