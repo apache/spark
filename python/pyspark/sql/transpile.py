@@ -242,6 +242,11 @@ class AbstractTranspiler(object):
         Decline with plain ``None``, not a tuple; a malformed return is refused
         so the UDF falls back to interpreted Python rather than breaking at
         call time.
+
+        An override may declare only a leading prefix of these parameters (at
+        least through ``param_categories``): it is passed just the ones it
+        declares, so one written for the original source-only signature keeps
+        working. Such an override is skipped when there is no source form.
         """
         pass
 
@@ -1229,6 +1234,34 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     ]
 
 
+# The fewest and most positional arguments ``_transpile_from_ast`` takes after
+# ``self``: the original source-only hook stopped at ``param_categories``, and
+# ``held_code``, ``code_owner`` and ``udf_callable`` were appended after it.
+_HOOK_ARGS_SOURCE_ONLY = 6
+_HOOK_ARGS_ALL = 9
+
+
+def _hook_arity(hook: Callable) -> int:
+    """How many leading hook arguments a bound ``_transpile_from_ast`` accepts.
+
+    Lets an override written for an earlier, shorter signature keep working
+    instead of raising ``TypeError`` for the arguments added since. Read from the
+    signature, never by retrying on ``TypeError``, which the override itself may
+    raise.
+    """
+    try:
+        parameters = inspect.signature(hook).parameters.values()
+    except (TypeError, ValueError):
+        return _HOOK_ARGS_ALL
+    count = 0
+    for p in parameters:
+        if p.kind is p.VAR_POSITIONAL:
+            return _HOOK_ARGS_ALL
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD):
+            count += 1
+    return max(_HOOK_ARGS_SOURCE_ONLY, min(count, _HOOK_ARGS_ALL))
+
+
 def _annotation_name(annotation: Optional[ast.AST]) -> Optional[str]:
     """The bare type name a parameter annotation spells, or ``None`` when the
     annotation is absent or not a plain name.
@@ -1386,8 +1419,15 @@ def _held_code(func: Callable) -> Any:
 
     Used to ask whether we are holding a lambda, and handed to transpiler
     varieties that work from bytecode.
+
+    Read only off a real function or method. Any other ``__call__`` entry (a custom
+    descriptor, a property) could serve ``__code__`` from user code, which must not
+    run while the UDF is being built; such an entry is refused later anyway.
     """
-    return getattr(_code_owner(func), "__code__", None)
+    owner = _code_owner(func)
+    if not (inspect.isfunction(owner) or inspect.ismethod(owner)):
+        return None
+    return owner.__code__
 
 
 _WARNINGS_LOCK = threading.Lock()
@@ -1845,12 +1885,19 @@ def _transpile_func(
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
         for transpiler in transpilers:
+            arity = _hook_arity(transpiler._transpile_from_ast)
+            if function_ast is None and arity <= _HOOK_ARGS_SOURCE_ONLY:
+                errors.append(
+                    f"transpiler {transpiler.variety!r} takes no bytecode and there is "
+                    "no trustworthy source to give it"
+                )
+                continue
             # A self-typing variety returns the same categories for every combo;
             # one option per distinct category list is enough.
             seen: set = set()
             for combo in combos:
                 try:
-                    result = transpiler._transpile_from_ast(
+                    hook_args = (
                         src,
                         ast_info,
                         function_ast,
@@ -1861,6 +1908,7 @@ def _transpile_func(
                         code_owner,
                         func,
                     )
+                    result = transpiler._transpile_from_ast(*hook_args[:arity])
                     if result is not None:
                         column, categories = _variety_option(result, combo, len(public_params))
                         if tuple(categories) not in seen:
