@@ -18,9 +18,9 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Expression, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Explode, Expression, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, KeyedPartitioning, ROUTING_LOST}
@@ -33,6 +33,8 @@ import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, MergingSessi
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.execution.window.{Final, Partial => WGLPartial, WindowExec, WindowGroupLimitExec}
+import org.apache.spark.sql.expressions.{Aggregator, Window}
+import org.apache.spark.sql.functions.{col, udaf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StringType}
 
@@ -76,6 +78,7 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
     withSQLConf(Seq(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") ++ confs: _*)(f)
   }
@@ -84,8 +87,6 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
   private def run(query: String, expected: Seq[Row]): SparkPlan = {
     val df = sql(query)
     checkAnswer(df, expected)
-    // `checkAnswer` runs a copy; execute `df` itself so its adaptive plan is final.
-    df.collect()
     val plan = df.queryExecution.executedPlan
     assert(ValidateRequirements.validate(stripAQEPlan(plan)), s"plan does not validate:\n$plan")
     plan
@@ -650,6 +651,172 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
       expectedShuffles = 2)
   }
 
+  test("the rewrite removes the stage AQE uses to broadcast the join") {
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("bucketed", cols, Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.bucketed VALUES (0, 'a'), (1, 'b'), (2, 'c'), (3, 'd')")
+    createTable(purchases, purchasesColumns, Array.empty)
+    val values = (0 until 20).map(i =>
+      s"(${i % 2}, ${i + 1}.0, cast('2020-01-0${i % 9 + 1}' as timestamp))")
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " + values.mkString(", "))
+    val query =
+      s"""SELECT b.id, p.total FROM testcat.ns.bucketed b
+         |JOIN (
+         |  SELECT item_id, sum(price) AS total
+         |  FROM testcat.ns.$purchases GROUP BY item_id
+         |) p ON b.id = p.item_id""".stripMargin
+    val expected = Seq(Row(0L, 100.0f), Row(1L, 110.0f))
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        // Above the final aggregate's output and below the partial aggregate's.
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "300",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      // The keyed stage above the aggregate reports the final output, which fits the threshold.
+      val defaultPlan = run(query, expected)
+      assert(collect(defaultPlan) { case _: BroadcastHashJoinExec => true }.nonEmpty,
+        defaultPlan)
+      // With the rewrite the only stage reports the partial output, which does not fit.
+      val rewritten = withSQLConf(SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true") {
+        run(query, expected)
+      }
+      assert(collect(rewritten) { case _: BroadcastHashJoinExec => true }.isEmpty, rewritten)
+      assert(shuffles(rewritten).size == 1, rewritten)
+    }
+  }
+
+  test("a recorded user repartition layout refuses the rewrite") {
+    loadData()
+    val query =
+      s"""SELECT i.id, p.total FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT /*+ REPARTITION(item_id) */ item_id, sum(price) AS total
+         |  FROM testcat.ns.$purchases GROUP BY item_id
+         |) p ON i.id = p.item_id""".stripMargin
+    val expected = aggregateJoinAnswer
+    // `EnsureRequirements` records the elided repartition's layout on the aggregate only when
+    // union shuffle push-down is enabled, and the rewrite then refuses to replace it.
+    check(query, expected, expectedShuffles = 2,
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true")
+    check(query, expected, expectedShuffles = 1,
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "false")
+  }
+
+  private object SumAgg extends Aggregator[Long, Long, Long] {
+    override def zero: Long = 0L
+    override def reduce(buffer: Long, input: Long): Long = buffer + input
+    override def merge(b1: Long, b2: Long): Long = b1 + b2
+    override def finish(reduction: Long): Long = reduction
+    override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+    override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+  }
+
+  test("a non-deterministic window function ends the walk") {
+    loadData()
+    def query(nondeterministic: Boolean): DataFrame = {
+      val f = if (nondeterministic) udaf(SumAgg).asNondeterministic() else udaf(SumAgg)
+      val windowed = spark.table(s"testcat.ns.$purchases")
+        .select(col("item_id"),
+          f(col("price").cast("long")).over(Window.partitionBy("item_id")).as("w"))
+      spark.table(s"testcat.ns.$items")
+        .join(windowed, col("id") === col("item_id"))
+        .select(col("id"), col("item_id"), col("w"))
+    }
+    withPushDownConf() {
+      val deterministic = query(nondeterministic = false)
+      checkAnswer(deterministic,
+        Seq(Row(1L, 1L, 40L), Row(1L, 1L, 40L), Row(2L, 2L, 10L), Row(3L, 3L, 25L)))
+      assert(shuffles(deterministic.queryExecution.executedPlan).size == 1,
+        deterministic.queryExecution.executedPlan)
+
+      val nondeterministic = query(nondeterministic = true)
+      nondeterministic.collect()
+      assert(shuffles(nondeterministic.queryExecution.executedPlan).size == 2,
+        nondeterministic.queryExecution.executedPlan)
+    }
+  }
+
+  test("a non-deterministic generator ends the walk") {
+    loadData()
+    def query(generator: String): String =
+      s"""SELECT i.id, g.x FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id, $generator AS x
+         |  FROM (
+         |    SELECT item_id, sum(price) AS total
+         |    FROM testcat.ns.$purchases GROUP BY item_id)
+         |) g ON i.id = g.item_id""".stripMargin
+    check(query("explode(array(total, total))"),
+      Seq(Row(1L, 40.0), Row(1L, 40.0), Row(1L, 40.0), Row(1L, 40.0),
+        Row(2L, 10.0), Row(2L, 10.0), Row(3L, 25.5), Row(3L, 25.5)),
+      expectedShuffles = 1)
+    withPushDownConf() {
+      val df = sql(query("explode(array(total, rand(1)))"))
+      df.collect()
+      assert(shuffles(df.queryExecution.executedPlan).size == 2,
+        df.queryExecution.executedPlan)
+    }
+  }
+
+  test("a non-deterministic projection above a filter ends the walk") {
+    loadData()
+    def query(column: String): String =
+      s"""SELECT i.id, p.total, p.r FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id, total, $column AS r FROM (
+         |    SELECT item_id, sum(price) AS total
+         |    FROM testcat.ns.$purchases GROUP BY item_id HAVING sum(price) > 15)
+         |) p ON i.id = p.item_id""".stripMargin
+    check(query("total * 2"),
+      Seq(Row(1L, 40.0, 80.0), Row(1L, 40.0, 80.0), Row(3L, 25.5, 51.0)),
+      expectedShuffles = 1)
+    withPushDownConf() {
+      val df = sql(query("rand(1)"))
+      df.collect()
+      assert(shuffles(df.queryExecution.executedPlan).size == 2,
+        df.queryExecution.executedPlan)
+    }
+  }
+
+  test("a generate's own output cannot take the layout") {
+    val a = AttributeReference("a", LongType)()
+    val g = AttributeReference("g", LongType)()
+    def plan(layoutOn: Expression): SparkPlan = {
+      val scan = new LocalTableScanExec(Seq(a), Seq(InternalRow(1L)), None, false)
+      val hash = ShuffleExchangeExec(HashPartitioning(Seq(a), 2), scan, ENSURE_REQUIREMENTS)
+      val generate = GenerateExec(Explode(a), Seq(a), false, Seq(g), hash)
+      ShuffleExchangeExec(
+        KeyedPartitioning(Seq(layoutOn), Seq(InternalRow(1L), InternalRow(2L))), generate,
+        ENSURE_REQUIREMENTS)
+    }
+    val rule = PushDownKeyedShuffleExchange(EnsureRequirements(), queryContainsSubqueries = false)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true") {
+      // The generator's output exists only above the Generate, so the shuffle cannot place rows
+      // by it.
+      val generatorKey = plan(g)
+      assert(rule.apply(generatorKey) eq generatorKey, generatorKey)
+      val childKey = plan(a)
+      assert(rule.apply(childKey) ne childKey, childKey)
+    }
+  }
+
+  test("a window over a user repartition keeps the repartition") {
+    loadData()
+    check(
+      s"""SELECT i.id, p.rn FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id,
+         |    row_number() OVER (PARTITION BY item_id ORDER BY price) AS rn
+         |  FROM (SELECT /*+ REPARTITION(2, item_id) */ item_id, price
+         |        FROM testcat.ns.$purchases)
+         |) p ON i.id = p.item_id""".stripMargin,
+      Seq(Row(1L, 1), Row(1L, 1), Row(2L, 1), Row(3L, 1)),
+      expectedShuffles = 2)
+  }
+
   test("outer joins") {
     loadData()
     check(
@@ -739,6 +906,7 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       // The prepared non-adaptive plan places the keyed shuffle above the aggregate and the hash
