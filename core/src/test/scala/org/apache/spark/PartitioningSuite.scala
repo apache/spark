@@ -184,6 +184,23 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     assert(rdd.partitionBy(asc).join(rdd.partitionBy(desc)).count() === n)
   }
 
+  test("SPARK-61561: one-partition RangePartitioners reuse existing partitioning") {
+    val rdd = sc.parallelize(0 until 10000, 4).map(x => (x, x))
+    def ordering: Ordering[Int] = new Ordering[Int] {
+      override def compare(x: Int, y: Int): Int = java.lang.Integer.compare(x, y)
+    }
+    val first = new RangePartitioner(1, rdd)(ordering, implicitly)
+    val second = new RangePartitioner(1, rdd)(ordering, implicitly)
+
+    assert(first.getPartition(0) === 0)
+    assert(second.getPartition(9999) === 0)
+    assert(first === second)
+    assert(first.hashCode === second.hashCode)
+
+    val partitioned = rdd.partitionBy(first)
+    assert(partitioned.partitionBy(second) eq partitioned)
+  }
+
   test("RangePartitioner should return a single partition for empty RDDs") {
     val empty1 = sc.emptyRDD[(Int, Double)]
     val partitioner1 = new RangePartitioner(0, empty1)

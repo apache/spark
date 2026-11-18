@@ -272,10 +272,10 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   override def equals(other: Any): Boolean = other match {
     case r: RangePartitioner[_, _] =>
-      // getPartition also depends on the ordering, and stable sample seeds let partitioners with
-      // different orderings pick the same bounds over the same input.
+      // Nonempty bounds can route differently under distinct orderings; empty bounds always route
+      // every key to partition 0.
       r.rangeBounds.sameElements(rangeBounds) && r.ascending == ascending &&
-        r.ordering == ordering
+        (rangeBounds.isEmpty || r.ordering == ordering)
     case _ =>
       false
   }
