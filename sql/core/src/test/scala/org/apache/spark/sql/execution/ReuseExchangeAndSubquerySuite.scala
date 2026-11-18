@@ -17,20 +17,112 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Final
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.BaseJoinExec
+import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions.{col, first}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 class ReuseExchangeAndSubquerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
+  import ReuseExchangeAndSubquerySuite._
 
   val tableFormat: String = "parquet"
+
+  test("SPARK-48486: memoize recursive entries with distinct roots sharing nested children") {
+    withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> "true",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      val depth = 8
+      val scan = LocalTableScanExec(Seq(AttributeReference("k", LongType)()), Nil, None)
+      var visits = 0L
+      val plan = (1 to depth).foldLeft[SparkPlan](scan) { (child, level) =>
+        val first = SubqueryExec(s"dpp-$level", child)
+        val second = first.copy()
+        CountingExec(And(
+          InSubqueryExec(Literal(1L), first, NamedExpression.newExprId),
+          InSubqueryExec(Literal(2L), second, NamedExpression.newExprId)), scan)(
+          () => visits += 1)
+      }
+      val canonical = plan.canonicalized
+      // Exclude lazy canonicalization and hash calculation from the traversal count.
+      canonical.hashCode()
+      for (_ <- 0 until 2) {
+        visits = 0
+        val result = ReuseExchangeAndSubquery(plan)
+        val traversalVisits = visits
+        assert(traversalVisits > 0, "the traversal cache must not survive a rule invocation")
+        assert(traversalVisits <= 16L * depth, s"depth=$depth, visits=$traversalVisits")
+        assert(result.canonicalized == canonical)
+      }
+    }
+  }
+
+  test("recursive traversal cache respects subquery reuse independently of exchange reuse") {
+    for (subqueryReuse <- Seq(false, true); exchangeReuse <- Seq(false, true)) {
+      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> subqueryReuse.toString,
+          SQLConf.EXCHANGE_REUSE_ENABLED.key -> exchangeReuse.toString) {
+        val scan = LocalTableScanExec(Seq(AttributeReference("k", LongType)()), Nil, None)
+        val exchange = ShuffleExchangeExec(SinglePartition, scan)
+        val producer = SubqueryExec("dpp", exchange.copy())
+        val plan = FilterExec(And(
+          InSubqueryExec(Literal(1L), producer, NamedExpression.newExprId),
+          InSubqueryExec(Literal(2L), producer, NamedExpression.newExprId)), exchange)
+        val result = ReuseExchangeAndSubquery(plan)
+        val references = result.expressions.flatMap(_.collect {
+          case sub: InSubqueryExec => sub.plan
+        })
+        assert(references.size == 2)
+        if (exchangeReuse && !subqueryReuse) {
+          assert(references.head ne references.last)
+          assert(references.forall(_.child.isInstanceOf[ReusedExchangeExec]))
+        } else {
+          val producers = references.map {
+            case reused: ReusedSubqueryExec => reused.child
+            case other => other
+          }
+          assert(producers.head eq producers.last)
+        }
+        if (!exchangeReuse && !subqueryReuse) {
+          assert(result eq plan)
+        }
+      }
+    }
+  }
+
+  test("recursive traversal cache distinguishes equal but different input objects") {
+    withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> "true") {
+      val scan = LocalTableScanExec(Seq(AttributeReference("k", LongType)()), Nil, None)
+      val inner = InSubqueryExec(
+        Literal(1L), SubqueryExec("inner", scan), NamedExpression.newExprId)
+      var firstVisits = 0
+      var secondVisits = 0
+      val first = CountingExec(inner, scan)(() => firstVisits += 1)
+      val second = CountingExec(inner, scan)(() => secondVisits += 1)
+      val firstProducer = SubqueryExec("dpp", first)
+      val secondProducer = SubqueryExec("dpp", second)
+      assert(firstProducer == secondProducer)
+      assert(firstProducer ne secondProducer)
+      val plan = FilterExec(And(
+        InSubqueryExec(Literal(1L), firstProducer, NamedExpression.newExprId),
+        InSubqueryExec(Literal(2L), secondProducer, NamedExpression.newExprId)), scan)
+      plan.canonicalized.hashCode()
+      firstVisits = 0
+      secondVisits = 0
+      ReuseExchangeAndSubquery(plan)
+      assert(firstVisits > 0)
+      assert(secondVisits > 0)
+    }
+  }
 
   private def sortAggregateConf: Seq[(String, String)] = Seq(
     SQLConf.USE_HASH_AGG.key -> "false",
@@ -254,5 +346,20 @@ class ReuseExchangeAndSubquerySuite extends SharedSparkSession with AdaptiveSpar
         }
       }
     }
+  }
+}
+
+private object ReuseExchangeAndSubquerySuite {
+  case class CountingExec(condition: Expression, child: SparkPlan)(visit: () => Unit)
+      extends SparkPlan {
+    override def otherCopyArgs: Seq[AnyRef] = Seq(visit)
+    override def children: Seq[SparkPlan] = {
+      visit()
+      Seq(child)
+    }
+    override def output: Seq[Attribute] = child.output
+    override protected def withNewChildrenInternal(children: IndexedSeq[SparkPlan]): SparkPlan =
+      copy(child = children.head)(visit)
+    override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   }
 }

@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
+import org.apache.spark.sql.execution.dynamicpruning.DynamicPruningSubqueryCache
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
@@ -1306,6 +1307,9 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
+  private[execution] val dynamicPruningSubqueryCache =
+    new DynamicPruningSubqueryCache(session)
+
   /**
    * Whether the query contains an adaptive subquery. Derived from the pre-preparation physical
    * plan, which still carries the subquery expressions, so it does not depend on `apply` running

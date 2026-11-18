@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.reuse
 
+import java.util.IdentityHashMap
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -39,9 +41,16 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
     if (conf.exchangeReuseEnabled || conf.subqueryReuseEnabled) {
       val exchanges = mutable.Map.empty[SparkPlan, Exchange]
       val subqueries = mutable.Map.empty[SparkPlan, BaseSubqueryExec]
+      // Memoize completed recursive results by identity within this rule invocation, avoiding
+      // repeated visits to shared subquery roots when subquery reuse is enabled.
+      val rewrittenPlans = new IdentityHashMap[SparkPlan, SparkPlan]
 
       def reuse(plan: SparkPlan): SparkPlan = {
-        plan.transformUpWithPruning(_.containsAnyPattern(EXCHANGE, PLAN_EXPRESSION)) {
+        if (conf.subqueryReuseEnabled) {
+          val cached = rewrittenPlans.get(plan)
+          if (cached != null) return cached
+        }
+        val result = plan.transformUpWithPruning(_.containsAnyPattern(EXCHANGE, PLAN_EXPRESSION)) {
           case exchange: Exchange if conf.exchangeReuseEnabled =>
             val cachedExchange = exchanges.getOrElseUpdate(exchange.canonicalized, exchange)
             if (cachedExchange.ne(exchange)) {
@@ -67,6 +76,10 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
                 sub.withNewPlan(newSubquery)
             }
         }
+        if (conf.subqueryReuseEnabled) {
+          rewrittenPlans.put(plan, result)
+        }
+        result
       }
 
       reuse(plan)
