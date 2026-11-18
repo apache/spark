@@ -65,9 +65,15 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
   private def gatherPredicatesAndAttributes(plan: LogicalPlan, cteMap: CTEMap): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        cteDefs.zipWithIndex.foreach { case (cteDef, precedence) =>
+        cteDefs.foreach { cteDef =>
           gatherPredicatesAndAttributes(cteDef.child, cteMap)
-          cteMap.put(cteDef.id, (cteDef, precedence, Seq.empty, AttributeSet.empty))
+          // The precedence is the visiting order across all scopes, not the index within
+          // this WithCTE: a definition visited later is either a later sibling (a real
+          // forward reference) or lives in a nested scope, and an earlier definition
+          // cannot see either. (A definition nested in an earlier sibling sorts lower
+          // yet is also invisible, but no reference site can see both it and the
+          // current definition, so that case never reaches the guard.)
+          cteMap.put(cteDef.id, (cteDef, cteMap.size, Seq.empty, AttributeSet.empty))
         }
         gatherPredicatesAndAttributes(child, cteMap)
 
@@ -86,7 +92,8 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] with
               case r: CTERelationRef =>
                 // If the ref's ID does not exist in the map or if ref's corresponding precedence
                 // is bigger than that of the current CTE we are pushing predicates for, it
-                // indicates a forward reference and we should exclude this predicate.
+                // indicates a forward reference (a later sibling, or a definition in a nested
+                // scope) and we should exclude this predicate.
                 !cteMap.contains(r.cteId) || cteMap(r.cteId)._2 >= precedence
               case _ => false
             }.nonEmpty
