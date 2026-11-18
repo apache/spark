@@ -218,8 +218,8 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(watermarkFrom("cast(rightTime AS DOUBLE) < rightOther") === None)  // non-time attributes
     assert(watermarkFrom("leftTime > rightTime + interval 1 month") === None) // month not allowed
 
-    // A cutoff needs the opposite watermark with a positive sign; otherwise later
-    // rightTime values can still match old leftTime values.
+    // A cutoff needs a conjunct that can be rearranged to `leftTime > rightTime + c`, so that
+    // it rises with the opposite watermark.
     assert(watermarkFrom("cast(leftTime AS LONG) > 10") === None)
     assert(watermarkFrom("CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100") === None)
     assert(watermarkFrom("100 < CAST(rightTime AS LONG) + CAST(leftTime AS LONG)") === None)

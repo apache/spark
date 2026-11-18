@@ -24,8 +24,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Range conditions of stream-stream joins only bound the state of one input when the other
- * input's watermark appears in them with a positive sign.
+ * Range conditions of stream-stream joins only bound the state of one input when they can be
+ * rearranged to `stateTime > otherTime + c`, where otherTime is the other input's watermark.
  */
 class StreamingJoinRangeCutoffSuite extends StreamTest {
   import testImplicits._
