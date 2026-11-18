@@ -40,7 +40,7 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
   override protected def readSchema: String = "id INT, name STRING"
 
   // Parquet has authoritative per-file schemas and only unions under `mergeSchema`, so it opts out
-  // of the by-name default-inference union (covered instead by the mergeSchema test below).
+  // of the by-name default-inference union (covered by the shared localize-path tests instead).
   override protected def supportsSchemaMerge: Boolean = false
 
   // Parquet samples one part-file for non-merge inference (SPARK-11500).
@@ -55,10 +55,8 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
     Some(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key)
 
   test("inference skips a missing archive among good ones (ignoreMissingFiles)") {
-    // Exercised on ParquetFileFormat.inferSchema(files) directly: inference now runs on the
-    // executor, so a hand-built missing status reaches the archive open and throws
-    // FileNotFoundException at task time. The public read path re-lists and drops the missing path
-    // before inference, so the missing-at-open window is only reachable through this entry point. A
+    // Calls ParquetFileFormat.inferSchema(files) directly: the public read path re-lists and drops
+    // a missing path before inference, so a missing archive at open is reachable only here. A
     // missing archive is governed by ignoreMissingFiles, not ignoreCorruptFiles.
     withArchiveFile() { good =>
       writeArchive(good, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))))

@@ -150,22 +150,20 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
     def u16(v: Int): Unit = this.u16(out, v)
     def u32(v: Long): Unit = this.u32(out, v)
     val size = data.length.toLong
-    // Local file header (sig 0x04034b50): version, GP flags = 0x0001 (bit 0 = encrypted), STORED
-    // method (0), mod time/date, crc, compressed & uncompressed sizes, name & extra lengths.
+    // Local file header: GP flags = 0x0001 (bit 0 = encrypted), STORED method.
     val localHeaderOffset = out.size()
     u32(0x04034b50L); u16(10); u16(0x0001); u16(0); u16(0); u16(0)
     u32(crc); u32(size); u32(size)
     u16(nameBytes.length); u16(0)
     out.write(nameBytes); out.write(data)
-    // Central directory record (sig 0x02014b50): mirrors the header, same 0x0001 encrypted flag,
-    // and points back at the local header offset.
+    // Central directory, with the same encrypted flag.
     val cdOffset = out.size()
     u32(0x02014b50L); u16(20); u16(10); u16(0x0001); u16(0); u16(0); u16(0)
     u32(crc); u32(size); u32(size)
     u16(nameBytes.length); u16(0); u16(0); u16(0); u16(0); u32(0); u32(localHeaderOffset.toLong)
     out.write(nameBytes)
     val cdSize = out.size() - cdOffset
-    // End of central directory (sig 0x06054b50): 1 entry, directory size and offset.
+    // End of central directory.
     u32(0x06054b50L); u16(0); u16(0); u16(1); u16(1)
     u32(cdSize.toLong); u32(cdOffset.toLong); u16(0)
     val fos = new FileOutputStream(file)
@@ -332,8 +330,7 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       writeTar(tar, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b"), textEntry("c.csv", "c")))
 
       val opened = ArrayBuffer[String]()
-      // parseEntry yields a single element without reading the stream, so each invocation maps to
-      // exactly one consumed output element -- letting us observe when the next entry is opened.
+      // parseEntry yields one element per entry, so `opened` shows when each entry is opened.
       val it = SupportsArchiveFormat.readArchiveEntries(
         new Path(tar.toURI), new Configuration(), archivePathFilter = None) {
         (entry, _) =>
@@ -341,8 +338,7 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
           Iterator.single(entry.getName)
       }
 
-      // Construction opens only the first entry; later entries open on demand as iteration
-      // crosses each entry boundary (never all upfront).
+      // Construction opens only the first entry; later entries open on demand.
       assert(opened.toList == List("a.csv"))
       assert(it.hasNext)
       assert(it.next() == "a.csv")
@@ -415,7 +411,7 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
           (entry, _) => Iterator.single(entry.getName)
         }
         assert(it.hasNext)
-        it.next() // open the archive and register the completion listener
+        it.next()
         // Simulate task completion without exhausting/closing the iterator.
         ctx.markTaskCompleted(None)
       } finally {
@@ -565,17 +561,13 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
   test("readArchiveEntries: an encrypted zip entry that is skipped does not throw") {
     withTempDir { dir =>
       val zip = new File(dir, "encrypted-dotfile.zip")
-      // The encrypted entry has a dotfile name the engine filters out, so it is never read; its
-      // readability must not be checked (else it would throw CANNOT_READ_ZIP_ENTRY on a skip).
+      // The dotfile name is filtered out, so the entry's readability must never be checked.
       writeEncryptedEntry(zip, "._skipped.csv", "secret")
       assert(collect(zip).isEmpty)
     }
   }
 
   // ----- 7z -----------------------------------------------------------------
-  // 7z keeps its entry index at the end of the file, so the reader seeks rather than streaming
-  // forward like tar and zip. These cases confirm the `.7z` dispatch and that the seek-based
-  // container surfaces entries through the same engine.
 
   test("readArchiveEntries: empty 7z yields empty iterator") {
     withTempDir { dir =>
@@ -635,7 +627,6 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
         textEntry("sub/a.csv", "a"),
         textEntry("sub/b.csv", "b"),
         textEntry("other/c.csv", "c")))
-      // The glob matches the entry's full path, so `sub/*` selects only the `sub/` entries.
       assert(collectFiltered(tar, "sub/*") == Seq("sub/a.csv", "sub/b.csv"))
     }
   }

@@ -72,7 +72,7 @@ private[sql] class AvroFileFormat extends FileFormat
       path: Path): Boolean = {
     val parsedOptions = new AvroOptions(options, sparkSession.sessionState.newHadoopConf())
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
-      // A tar archive is read as one sequential stream (entry by entry), so it is never split.
+      // An archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
     true
@@ -103,9 +103,6 @@ private[sql] class AvroFileFormat extends FileFormat
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
       if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
-        // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
-        // archive reads are enabled; otherwise the file is read directly. The V2 data source has
-        // no archive support, so this dispatch lives here.
         readArchive(file, conf, parsedOptions, dataSchema, requiredSchema, filters)
       } else {
       val userProvidedSchema = parsedOptions.schema
@@ -176,7 +173,7 @@ private[sql] class AvroFileFormat extends FileFormat
   }
 
   /**
-   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry, deserializing each entry like a
+   * Streams an archive entry by entry, deserializing each entry like a
    * standalone Avro file via a forward-only [[DataFileStream]] (so the archive is never unpacked to
    * disk and memory stays bounded). The whole archive is a single split (see `isSplitable`). A
    * fresh datum reader and deserializer are built per entry, since each entry carries its own
@@ -193,9 +190,7 @@ private[sql] class AvroFileFormat extends FileFormat
       requiredSchema: StructType,
       filters: Seq[Filter]): Iterator[InternalRow] = {
     val userProvidedSchema = parsedOptions.schema
-    // Filters depend only on (filters, requiredSchema), which are constant across entries, so build
-    // them once. The datum reader, writer schema, and rebase mode are per-entry (each entry carries
-    // its own header schema).
+    // Filters do not depend on the entry, so build them once.
     val avroFilters = if (SQLConf.get.avroFilterPushDown) {
       new OrderedFilters(filters, requiredSchema)
     } else {
@@ -222,8 +217,7 @@ private[sql] class AvroFileFormat extends FileFormat
         parsedOptions.stableIdPrefixForUnionType,
         parsedOptions.recursiveFieldMaxDepth,
         dataSchema = Some(dataSchema))
-      // The record is deserialized eagerly in `hasNext` because `AvroDeserializer#deserialize` may
-      // filter rows (returning None); the stream is closed once its records are exhausted.
+      // Deserialize in `hasNext`, since `AvroDeserializer#deserialize` may filter the row out.
       new Iterator[InternalRow] with Closeable {
         private var nextRow: Option[InternalRow] = None
 

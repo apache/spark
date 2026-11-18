@@ -74,7 +74,7 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
     schema: StructType): Iterator[InternalRow]
 
   /**
-   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the JSON parser without
+   * Streams an archive entry by entry through the JSON parser without
    * unpacking it to disk. The whole archive is a single split (see `JsonFileFormat.isSplitable`);
    * each entry's bytes are parsed exactly like a standalone JSON file via [[readStream]], so this
    * is mode-agnostic (line-delimited and multi-line both flow through `readStream`). Each entry is
@@ -295,9 +295,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
     SupportsArchiveFormat.checkNoDecompressionCodecForArchives(
       inputPaths, parsedOptions.decompressionCodec)
     val baseRdd = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
-    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
-    // compiles it once when the archive branch is taken.
+    // Capture the glob string: the compiled GlobPattern is not serializable.
     val archivePathFilterGlob = parsedOptions.archivePathFilter
     val encoding = parsedOptions.encoding
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
@@ -306,8 +304,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
     // An archive entry's stream is only valid until the shared cursor advances, so each document
     // must be consumed before the next is pulled; `JsonInferSchema.infer` does.
     val docs: RDD[InputStream] = baseRdd.mapPartitions { streams =>
-      // Compile at most once per partition: lazy so a partition of only loose files never
-      // compiles, while a partition with archives reuses one matcher across all of them.
+      // Lazy, so the glob is compiled at most once per partition and only if it has an archive.
       lazy val archivePathFilter =
         archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
       streams.flatMap { stream =>
@@ -371,8 +368,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
         try delegate.hasNext
         catch {
           case NonFatal(e) =>
-            // A mid-advance throw reaches neither exhaustion nor close, so close the failed
-            // iterator here to release its archive stream promptly rather than at task completion.
+            // Close the failed iterator now to release its archive stream, rather than at task
+            // completion.
             delegate match {
               case c: Closeable => try c.close() catch { case NonFatal(_) => }
               case _ =>
@@ -437,8 +434,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       in: InputStream,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    // The entry is a single JSON document. Buffer its bytes so the corrupt-record column can echo
-    // the whole document on a parse failure, mirroring `readFile`'s `partitionedFileString`.
+    // Buffer the entry so the corrupt-record column can echo the whole document on a parse failure.
     val bytes = in.readAllBytes()
     lazy val documentLiteral: UTF8String = UTF8String.fromBytes(bytes)
     val streamParser = parser.options.encoding

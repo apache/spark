@@ -109,7 +109,7 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
       options: CSVOptions): Iterator[Array[String]]
 
   /**
-   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the CSV parser without
+   * Streams an archive entry by entry through the CSV parser without
    * unpacking it to disk. The whole archive is a single split (see `CSVFileFormat.isSplitable`); a
    * fresh header checker and parser are built per entry so each entry is parsed exactly like a
    * standalone CSV file -- its header, if any, validated and dropped independently. The
@@ -157,7 +157,7 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
   }
 
   /**
-   * Infers a CSV schema when at least one input is a tar archive. Every archive entry is streamed
+   * Infers a CSV schema when at least one input is an archive. Every archive entry is streamed
    * (never unpacked to disk) and every loose file is read, each tokenized the same way this mode's
    * scan reads it (see [[tokenizeForInference]]), and all of them feed a single [[CSVInferSchema]]
    * pass keyed on the first input's header. The column count is fixed by the first header and
@@ -174,13 +174,10 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
     SupportsArchiveFormat.checkNoDecompressionCodecForArchives(
       inputPaths, parsedOptions.decompressionCodec)
     val baseRdd = CSVDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
-    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
-    // compiles it once when the archive branch is taken.
+    // Capture the glob string: the compiled GlobPattern is not serializable.
     val archivePathFilterGlob = parsedOptions.archivePathFilter
     def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.mapPartitions { streams =>
-      // Compile at most once per partition: lazy so a partition of only loose files never
-      // compiles, while a partition with archives reuses one matcher across all of them.
+      // Lazy, so the glob is compiled at most once per partition and only if it has an archive.
       lazy val archivePathFilter =
         archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
       streams.flatMap { stream =>
@@ -322,8 +319,6 @@ object TextInputCSVDataSource extends CSVDataSource {
       requiredSchema: StructType,
       ignoredPathSegmentRegex: Pattern,
       archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
-    // Stream each tar entry through the line-based parser, treating the entry exactly like a
-    // standalone CSV file (a fresh parser/header checker is built per entry).
     streamArchiveEntries(
         conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex, archivePathFilter) {
       (parser, headerChecker, in) =>
@@ -353,9 +348,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       in: InputStream,
       dropHeader: Boolean,
       options: CSVOptions): Iterator[Array[String]] = {
-    // Match the line-based scan (`readArchive` -> `entryLines` -> `parseIterator`): split into
-    // lines, drop comments/blanks, drop this input's header line, then parse each line on its own,
-    // so a quoted field with an embedded newline splits across rows exactly as the read does.
+    // Parse line by line like the scan, so a quoted field with an embedded newline splits across
+    // rows exactly as the read does.
     val lines = CSVUtils.filterCommentAndEmpty(entryLines(in, options), options)
     val rows = if (dropHeader && lines.hasNext) { lines.next(); lines } else lines
     val parser = new CsvParser(options.asParserSettings)
@@ -453,8 +447,6 @@ object MultiLineCSVDataSource extends CSVDataSource {
       requiredSchema: StructType,
       ignoredPathSegmentRegex: Pattern,
       archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
-    // Stream each tar entry whole through the multi-line parser (a fresh parser/header checker is
-    // built per entry).
     streamArchiveEntries(
         conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex, archivePathFilter) {
       (parser, headerChecker, in) =>
@@ -465,7 +457,6 @@ object MultiLineCSVDataSource extends CSVDataSource {
       in: InputStream,
       dropHeader: Boolean,
       options: CSVOptions): Iterator[Array[String]] =
-    // The whole input is one continuous stream, exactly as the multi-line scan reads it.
     UnivocityParser.tokenizeStream(
       in, dropHeader, new CsvParser(options.asParserSettings), options.charset)
 

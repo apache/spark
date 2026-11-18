@@ -50,17 +50,16 @@ trait ZipArchiveTestUtils {
   }
 
   /**
-   * Writes bytes that are not a readable zip archive to `dest`. The leading bytes are not a local
-   * file header signature, so `ZipArchiveInputStream` fails when the first entry is read (rather
-   * than silently reporting an empty archive).
+   * Writes bytes that are not a readable zip archive to `dest`. They carry no central directory,
+   * so `ZipFile` fails when the archive is opened (rather than silently reporting an empty
+   * archive).
    */
   protected def writeCorruptArchive(dest: File): Unit =
     Files.write(dest.toPath, "this is not a valid zip archive, just some random bytes"
       .getBytes(StandardCharsets.UTF_8))
 
-  // Zip can't throw while *advancing*: a cut header reads as clean EOF, and a cut body only throws
-  // when the entry's bytes are read -- which a lazy reader (JSON) defers downstream. Tar is used
-  // for the mid-advance regression test instead.
+  // Zip reads its central directory when the archive is opened, so this helper cannot construct a
+  // failure that occurs only while advancing to another entry.
   protected def supportsMidAdvanceFailure: Boolean = false
 
   protected def writeArchiveFailingAfterFirstEntry(

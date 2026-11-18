@@ -45,11 +45,10 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def supportsDecompressionCodec: Boolean = true
 
-  // CSV infers its schema from row content (supportsSchemaInference defaults true); inference is
-  // triggered by the `inferSchema` option. CSV is positional/header-keyed and cannot represent
-  // nested types, so it opts out of the schema-merge and complex-type tests.
   override protected def inferenceOptions: Map[String, String] = Map("inferSchema" -> "true")
 
+  // CSV is positional and cannot represent nested types, so it opts out of the complex-type and
+  // schema-merge tests.
   override protected def supportsComplexTypes: Boolean = false
 
   override protected def supportsSchemaMerge: Boolean = false
@@ -92,10 +91,8 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("CSV: inference uses the same record model as the scan (quoted embedded newline)") {
-    // In default (non-multiLine) mode the scan reads line by line, so a quoted field containing a
-    // newline is split across rows; inference must tokenize the archived entry the same way, so it
-    // infers the same schema as that entry read as a loose file (rather than parsing the entry as
-    // one continuous stream and disagreeing with the read).
+    // The default scan reads line by line, so a quoted field containing a newline splits across
+    // rows; inference must tokenize the entry the same way.
     val entry = csvEntry("a,b", "\"x\ny\",2")
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> entry))
@@ -114,8 +111,7 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
 
   test("CSV: archive inference under multiLine matches the scan (quoted embedded newline)") {
     // Under multiLine the scan reads each entry as one stream, so a quoted embedded newline is one
-    // record; inference dispatches to the same stream model and agrees with that entry read as a
-    // loose multiLine file. Pins the multiLine branch of the per-mode tokenization dispatch.
+    // record; inference must agree.
     val entry = csvEntry("a,b", "\"x\ny\",2")
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> entry))

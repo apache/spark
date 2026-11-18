@@ -44,8 +44,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       path: Path): Boolean = {
     val parsedOptions = getCsvOptions(sparkSession, options)
-    // A tar archive is decompressed/unpacked as a sequential stream, so it must be read as a
-    // single split rather than carved into byte ranges.
+    // An archive is read as one sequential stream (entry by entry), so it is never split.
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       SupportsArchiveFormat.checkNoDecompressionCodec(path, parsedOptions.decompressionCodec)
       return false
@@ -139,8 +138,6 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       def getHeaderChecker(isStartOfFile: Boolean, source: String): CSVHeaderChecker =
         new CSVHeaderChecker(schema, parsedOptions, source, isStartOfFile)
 
-      // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
-      // archive reads are enabled; otherwise the file is parsed directly.
       if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         CSVDataSource(parsedOptions).readArchive(
           conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex,
