@@ -552,7 +552,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
     case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
     // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
-    case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
+    // And(b, c) evaluates b also on the rows where a is true. Thus, b can't be throwable.
+    case (a Or b) And c if !c.nullable && !b.throwable && a.semanticEquals(Not(c)) => And(b, c)
     // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
     case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
 
@@ -561,7 +562,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
     case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
     // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
-    case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
+    // Or(b, c) evaluates b also on the rows where a is false. Thus, b can't be throwable.
+    case (a And b) Or c if !c.nullable && !b.throwable && a.semanticEquals(Not(c)) => Or(b, c)
     // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
     case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
 
@@ -571,15 +573,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       //    i.e. lhs = (a || b), rhs = (a || c)
       // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-      // 4. If common is non-empty, apply the formula to get the optimized predicate:
-      //    common || (ldiff && rdiff)
-      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      // 4. If common is non-empty and not throwable, apply the formula to get the optimized
+      //    predicate: common || (ldiff && rdiff)
+      //    The formula evaluates common first, also on the rows where the operands before it in
+      //    left skip it. Thus, common can't be throwable.
+      // 5. Else, split left and right to get the conjunctive predicates.
       //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
       //    optimized predicate: (a && b && c)
       val lhs = splitDisjunctivePredicates(left)
       val rhs = splitDisjunctivePredicates(right)
       val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-      if (common.nonEmpty) {
+      if (common.nonEmpty && !common.exists(_.throwable)) {
         val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
         val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
         if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -609,15 +613,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       //    i.e.  lhs = (a && b), rhs = (a && c)
       // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-      // 4. If common is non-empty, apply the formula to get the optimized predicate:
-      //    common && (ldiff || rdiff)
-      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      // 4. If common is non-empty and not throwable, apply the formula to get the optimized
+      //    predicate: common && (ldiff || rdiff)
+      //    The formula evaluates common first, also on the rows where the operands before it in
+      //    left skip it. Thus, common can't be throwable.
+      // 5. Else, split left and right to get the conjunctive predicates.
       // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
       // optimized predicate: (a || b || c)
       val lhs = splitConjunctivePredicates(left)
       val rhs = splitConjunctivePredicates(right)
       val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-      if (common.nonEmpty) {
+      if (common.nonEmpty && !common.exists(_.throwable)) {
         val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
         val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
         if (ldiff.isEmpty || rdiff.isEmpty) {

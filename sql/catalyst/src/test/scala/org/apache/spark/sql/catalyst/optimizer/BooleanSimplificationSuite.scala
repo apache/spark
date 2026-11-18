@@ -176,6 +176,17 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       $"a" > 1 || $"b" > 3)
   }
 
+  test("SPARK-61938: do not move a throwable common factor ahead of the other operands") {
+    val r = IsNull(RaiseError($"d"))
+    // `r || (a < 5 && c < 50)` and `r && (a > 5 || c > 50)` would evaluate `r` also on the rows
+    // where the operand written before it already decides the predicate.
+    Seq(
+      ($"a" < 5 || r) && ($"c" < 50 || r),
+      ($"a" > 5 && r) || ($"c" > 50 && r)).foreach { input =>
+      checkCondition(input, input)
+    }
+  }
+
   test("e && (!e || f) - not nullable") {
     checkConditionInNotNullableRelation($"e" && (!$"e" || $"f" ), $"e" && $"f")
 
@@ -196,6 +207,15 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
         ($"e" && $"f") || !$"e",
         ($"f" && $"e") || !$"e").foreach { expr =>
       checkCondition(expr, expr)
+    }
+  }
+
+  test("SPARK-61938: e && (!e || f) - not nullable, throwable f") {
+    val r = IsNull(RaiseError($"d"))
+    // `r && e` and `r || e` would evaluate `r` also on the rows where `!e` already decides the
+    // operand that contains `r`.
+    Seq((!$"e" || r) && $"e", (!$"e" && r) || $"e").foreach { input =>
+      checkConditionInNotNullableRelation(input, input)
     }
   }
 

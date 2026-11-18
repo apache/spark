@@ -2021,6 +2021,19 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61938: BooleanSimplification does not move raise_error ahead of its guard") {
+    val df = spark.range(3).toDF()
+    val r = "raise_error('boom') IS NULL"
+    val all = Seq(Row(0L), Row(1L), Row(2L))
+    checkAnswer(df.where(s"(id < 5 OR $r) AND id >= 5"), Seq.empty)
+    checkAnswer(df.where(s"(id >= 5 AND $r) OR id < 5"), all)
+    // Subexpression elimination evaluates a duplicated raise_error ahead of its guards by itself.
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      checkAnswer(df.where(s"(id < 5 OR $r) AND (id > -5 OR $r)"), all)
+      checkAnswer(df.where(s"(id > 5 AND $r) OR (id < -5 AND $r)"), Seq.empty)
+    }
+  }
+
   test("SPARK-25816 ResolveReferences works with nested extractors") {
     val df = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("key", "map")
     val swappedDf = df.select($"key".as("map"), $"map".as("key"))
