@@ -466,6 +466,9 @@ case class CheckInvariant(
   override def children: Seq[Expression] = child +: columnExtractors.map(_._2)
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = false
+  // A violating row fails the write, so the optimizer must not evaluate this on rows that are
+  // not written, e.g. by pushing it below a join.
+  override lazy val throwable: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BooleanType) {

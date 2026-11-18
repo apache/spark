@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Coalesce, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CheckInvariant, Coalesce, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -191,5 +191,17 @@ class RewriteSubquerySuite extends PlanTest {
       val (_, result) = resultOnZeroRows(Coalesce(Seq(max($"v"), Literal(0))))
       assert(result.isInstanceOf[Literal] && result.asInstanceOf[Literal].value == null, result)
     }
+  }
+
+  test("SPARK-61927: keep a throwable predicate above the join of a predicate subquery") {
+    val relation = LocalRelation($"a".int, $"b".int)
+    val relInSubquery = LocalRelation($"x".int)
+    // A CHECK constraint fails on a violating row, so it must not see the rows that the subquery
+    // removes.
+    val check = CheckInvariant($"b" > 0, Seq("b" -> $"b"), "positive_b", "b > 0")
+
+    val query = relation.where($"a".in(ListQuery(relInSubquery.select($"x"))) && check)
+    val correctAnswer = relation.join(relInSubquery, LeftSemi, Some($"a" === $"x")).where(check)
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 }

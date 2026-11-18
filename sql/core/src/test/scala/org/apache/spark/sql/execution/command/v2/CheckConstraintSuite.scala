@@ -2046,6 +2046,44 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-61927: Check constraint is not evaluated on rows a join or a subquery removes") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", nonPartitionCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $source VALUES (-1, 10), (1, 20)")
+
+        sql(s"INSERT INTO $target SELECT s.id, s.value FROM $source s " +
+          "JOIN VALUES (20) AS v(value) ON s.value = v.value")
+        sql(s"INSERT INTO $target SELECT id, value FROM $source " +
+          "WHERE value IN (SELECT * FROM VALUES (20))")
+        checkAnswer(spark.table(target), Seq(Row(1, 20), Row(1, 20)))
+      }
+    }
+  }
+
+  test("SPARK-61927: Check constraint is not evaluated on source rows a merge does not insert") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (5, 10)")
+        sql(s"INSERT INTO $source VALUES (-1, 10), (1, 20)")
+
+        sql(
+          s"""
+             |MERGE INTO $target t
+             |USING $source s
+             |ON t.value = s.value
+             |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+             |""".stripMargin)
+        checkAnswer(spark.table(target), Seq(Row(5, 10), Row(1, 20)))
+      }
+    }
+  }
+
   test("Check constraint with constant valid expression should be optimized out") {
     Seq(
       "1 > 0",

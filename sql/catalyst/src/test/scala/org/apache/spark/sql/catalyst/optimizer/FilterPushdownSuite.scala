@@ -2614,6 +2614,18 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(queryWithoutRaiseError), correctAnswer)
   }
 
+  test("SPARK-61927: do not push down a CHECK constraint through joins") {
+    val x = testStringRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+
+    // A CHECK constraint fails on a violating row, so it must not see the rows a join removes.
+    val check = CheckInvariant($"x.a" > 0, Seq("a" -> $"x.a"), "positive_a", "a > 0")
+    Seq(Inner, LeftAnti).foreach { joinType =>
+      val query = x.join(y, joinType, Some($"x.a" === $"y.d")).where(check).analyze
+      comparePlans(Optimize.execute(query), query)
+    }
+  }
+
   test("push down deterministic predicate through BinBy") {
     // Relation: ts_start, ts_end, value (DISTRIBUTE), label (pass-through).
     val tsStart = AttributeReference("ts_start", TimestampType, nullable = false)()

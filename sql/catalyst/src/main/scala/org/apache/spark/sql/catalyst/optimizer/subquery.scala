@@ -149,15 +149,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       val (withSubquery, withoutSubquery) =
         splitConjunctivePredicates(condition)
           .partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
+      // A throwable conjunct stays above the joins that the subqueries are rewritten to, so that
+      // it is not evaluated on the rows they remove.
+      val (stayUp, pushDown) = withoutSubquery.partition(_.throwable)
 
       // Construct the pruned filter condition.
-      val newFilter: LogicalPlan = withoutSubquery match {
+      val newFilter: LogicalPlan = pushDown match {
         case Nil => child
         case conditions => Filter(conditions.reduce(And), child)
       }
 
       // Filter the plan by applying left semi and left anti joins.
-      withSubquery.foldLeft(newFilter) {
+      val rewritten = withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, _, _, conditions, subHint)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, sub, joinCond),
@@ -207,6 +210,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
       }
+      stayUp.reduceOption(And).map(Filter(_, rewritten)).getOrElse(rewritten)
 
     // This case takes care of predicate subqueries in join conditions that are not pushed down
     // to the children nodes by [[PushDownPredicates]].
