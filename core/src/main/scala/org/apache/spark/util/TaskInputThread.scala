@@ -93,9 +93,7 @@ private[spark] object TaskInputThread extends Logging {
       // thread adds. If the task already completed, the listener runs as a completion listener,
       // right away or behind the ones that another thread is running, and the thread is not
       // started.
-      context.addTaskPreCompletionListener(new TaskCompletionListener {
-        override def onTaskCompletion(context: TaskContext): Unit = stopper.stopAndAwait()
-      })
+      context.addTaskPreCompletionListener(stopper)
       stopper.start()
     }
   }
@@ -139,7 +137,7 @@ private[spark] object TaskInputThread extends Logging {
       gracePeriodMs: Long,
       warnIntervalMs: Long,
       awaitDone: Long => Boolean,
-      stop: Boolean => Unit) {
+      stop: Boolean => Unit) extends TaskCompletionListener {
     private val taskName = s"task ${context.partitionId()}.${context.attemptNumber()} in stage " +
       s"${context.stageId()} (TID ${context.taskAttemptId()})"
 
@@ -163,7 +161,7 @@ private[spark] object TaskInputThread extends Logging {
      * the wait, and is not left for the completion listeners that run next, whose cleanup it
      * would fail.
      */
-    def stopAndAwait(): Unit = {
+    override def onTaskCompletion(taskContext: TaskContext): Unit = {
       val wasStarted = synchronized {
         stopped = true
         started
@@ -239,7 +237,7 @@ private[spark] object TaskInputThread extends Logging {
       }
     }
 
-    // An interrupt of the calling thread does not end the wait, see stopAndAwait.
+    // An interrupt of the calling thread does not end the wait, see onTaskCompletion.
     private def isDone(nanos: Long): Boolean = {
       try {
         awaitDone(nanos)
