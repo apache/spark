@@ -36,6 +36,8 @@ case class SQLFunctionExpression(
     inputPositions: Seq[Int] = Nil,
     defaultInputs: Map[Int, Expression] = Map.empty) extends Expression with Unevaluable {
   override def children: Seq[Expression] = inputs
+  override lazy val deterministic: Boolean =
+    inputs.forall(_.deterministic) && defaultInputs.valuesIterator.forall(_.deterministic)
   override def dataType: DataType = returnType.get
   override def nullable: Boolean = true
   override def prettyName: String = name

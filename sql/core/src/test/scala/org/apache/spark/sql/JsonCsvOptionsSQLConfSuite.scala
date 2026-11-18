@@ -298,29 +298,157 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("numeric named defaults avoid a nested analyzer pipeline") {
-    withSQLConf(captureKey -> "true") {
-      withUserDefinedFunction("named_args_fn" -> false) {
-        sql("CREATE FUNCTION named_args_fn(a BIGINT, b BIGINT DEFAULT 1) " +
-          "RETURNS BIGINT RETURN a + b")
-        val plan = spark.sessionState.sqlParser.parsePlan("SELECT " +
-          Seq.fill(8)("named_args_fn(a => CAST(0 AS BIGINT))").mkString(", "))
-        val tracker = new QueryPlanningTracker
-        val resolved = QueryPlanningTracker.withTracker(tracker) {
-          spark.sessionState.analyzer.ResolveFunctions(plan)
+  for ((kind, dataType, default) <- Seq(
+      ("numeric", "BIGINT", "1"),
+      ("true boolean", "BOOLEAN", "true"),
+      ("false boolean", "BOOLEAN", "false"),
+      ("date", "DATE", "DATE '2025-01-02'"),
+      ("binary", "BINARY", "X'CAFE'"),
+      ("timestamp", "TIMESTAMP", "TIMESTAMP '2025-01-02 03:04:05'"),
+      ("timestamp_ntz", "TIMESTAMP_NTZ", "TIMESTAMP_NTZ '2025-01-02 03:04:05'"))) {
+    test(s"$kind named defaults avoid a nested analyzer pipeline") {
+      withSQLConf(captureKey -> "true") {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql(s"CREATE FUNCTION named_args_fn(a BIGINT, b $dataType DEFAULT $default) " +
+            s"RETURNS $dataType RETURN b")
+          val plan = spark.sessionState.sqlParser.parsePlan("SELECT " +
+            Seq.fill(8)("named_args_fn(a => CAST(0 AS BIGINT))").mkString(", "))
+          val tracker = new QueryPlanningTracker
+          val resolved = QueryPlanningTracker.withTracker(tracker) {
+            spark.sessionState.analyzer.ResolveFunctions(plan)
+          }
+          val functions = resolved.expressions.flatMap(_.collect {
+            case f: SQLFunctionExpression => f
+          })
+          assert(functions.size == 8)
+          assert(functions.forall(f =>
+            f.defaultInputs.nonEmpty && f.defaultInputs.values.forall(_.resolved)))
+          assert(tracker.rules.isEmpty)
         }
-        val functions = resolved.expressions.flatMap(_.collect {
-          case f: SQLFunctionExpression => f
-        })
-        assert(functions.size == 8)
-        assert(functions.forall(f =>
-          f.defaultInputs.nonEmpty && f.defaultInputs.values.forall(_.resolved)))
-        assert(tracker.rules.isEmpty)
       }
     }
   }
 
   for (capture <- Seq(true, false)) {
+    test(s"named default cycle validation follows table dependency paths: $capture") {
+      withSQLConf(captureKey -> "true", SQLConf.PATH_ENABLED.key -> "true") {
+        withDatabase("cycle_path_a", "cycle_path_b") {
+          sql("CREATE DATABASE cycle_path_a")
+          sql("CREATE DATABASE cycle_path_b")
+          withUserDefinedFunction("cycle_path_a.named_args_fn" -> false,
+              "cycle_path_a.default_dep" -> false, "cycle_path_b.default_dep" -> false,
+              "cycle_path_a.dep_tvf" -> false, "cycle_path_b.dep_tvf" -> false) {
+            sql("CREATE FUNCTION cycle_path_a.dep_tvf() RETURNS TABLE(v INT) RETURN SELECT 11")
+            sql("CREATE FUNCTION cycle_path_b.dep_tvf() RETURNS TABLE(v INT) RETURN SELECT 22")
+            sql("CREATE FUNCTION cycle_path_b.default_dep() RETURNS INT RETURN 22")
+            try {
+              sql("USE cycle_path_a")
+              sql("SET PATH = spark_catalog.cycle_path_a, system.builtin")
+              sql("CREATE FUNCTION cycle_path_a.default_dep() RETURNS INT " +
+                "RETURN (SELECT v FROM dep_tvf())")
+              sql("CREATE FUNCTION cycle_path_a.named_args_fn(" +
+                "x INT DEFAULT default_dep(), y INT DEFAULT 2) RETURNS INT RETURN x + y")
+              sql("USE cycle_path_b")
+              sql("SET PATH = spark_catalog.cycle_path_b, system.builtin")
+              withSQLConf(captureKey -> capture.toString) {
+                val replacement = "CREATE OR REPLACE FUNCTION cycle_path_a.dep_tvf() " +
+                  "RETURNS TABLE(v INT) RETURN SELECT cycle_path_a.named_args_fn(y => 3) AS v"
+                if (capture) {
+                  val error = intercept[AnalysisException] { sql(replacement) }
+                  assert(error.getCondition.contains("CYCLIC_FUNCTION_REFERENCE"))
+                } else {
+                  sql(replacement)
+                  checkAnswer(sql("SELECT * FROM cycle_path_a.dep_tvf()"), Row(25))
+                }
+              }
+            } finally {
+              sql("USE default")
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
+        }
+      }
+    }
+
+    test(s"named random defaults retain table argument evaluation boundaries: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("named_args_fn" -> false, "repeat_arg" -> false) {
+          sql("CREATE FUNCTION named_args_fn(a INT, b DOUBLE DEFAULT rand(0)) " +
+            "RETURNS DOUBLE RETURN b")
+          sql("CREATE FUNCTION repeat_arg(x DOUBLE) RETURNS TABLE(v DOUBLE) " +
+            "RETURN SELECT x AS v FROM range(10)")
+          val expected = Seq.fill(10)(sql("SELECT rand(0)").head())
+          checkAnswer(sql("SELECT * FROM repeat_arg(named_args_fn(a => 1, b => rand(0)))"),
+            expected)
+          checkAnswer(sql("SELECT * FROM repeat_arg(named_args_fn(a => 1))"), expected)
+        }
+      }
+    }
+
+    for (reverse <- Seq(true, false)) {
+      test(s"positional defaults complete grouping comparisons: $capture, $reverse") {
+        withSQLConf(captureKey -> capture.toString) {
+          withUserDefinedFunction("named_args_fn" -> false) {
+            sql("CREATE FUNCTION named_args_fn(a BIGINT, b BIGINT DEFAULT 1) " +
+              "RETURNS BIGINT RETURN a + b")
+            val omitted = "named_args_fn(id)"
+            val explicit = "named_args_fn(id, CAST(1 AS BIGINT))"
+            val (selected, grouped) = if (reverse) (omitted, explicit) else (explicit, omitted)
+            val query = s"SELECT $selected, count(*) FROM range(3) GROUP BY $grouped"
+            if (capture) {
+              checkAnswer(sql(query), (0L to 2L).map(id => Row(id + 1L, 1L)))
+            } else {
+              val error = intercept[AnalysisException] { sql(query) }
+              assert(error.getCondition == "MISSING_AGGREGATION")
+            }
+          }
+        }
+      }
+    }
+
+    for (replaceSaved <- Seq(true, false); supplied <- Seq(true, false)) {
+      test("named default cycle validation follows the effective path: " +
+          s"$capture, $replaceSaved, $supplied") {
+        withSQLConf(captureKey -> "true", SQLConf.PATH_ENABLED.key -> "true") {
+          withDatabase("cycle_path_a", "cycle_path_b") {
+            sql("CREATE DATABASE cycle_path_a")
+            sql("CREATE DATABASE cycle_path_b")
+            withUserDefinedFunction("cycle_path_a.named_args_fn" -> false,
+                "cycle_path_a.default_dep" -> false, "cycle_path_b.default_dep" -> false) {
+              sql("CREATE FUNCTION cycle_path_a.default_dep() RETURNS INT RETURN 11")
+              sql("CREATE FUNCTION cycle_path_b.default_dep() RETURNS INT RETURN 22")
+              try {
+                sql("USE cycle_path_a")
+                sql("SET PATH = spark_catalog.cycle_path_a, system.builtin")
+                sql("CREATE FUNCTION cycle_path_a.named_args_fn(" +
+                  "x INT DEFAULT default_dep(), y INT DEFAULT 2) RETURNS INT RETURN x + y")
+                sql("USE cycle_path_b")
+                sql("SET PATH = spark_catalog.cycle_path_b, system.builtin")
+                withSQLConf(captureKey -> capture.toString) {
+                  val target = if (replaceSaved) "cycle_path_a" else "cycle_path_b"
+                  val args = if (supplied) "x => default_dep(), y => 3" else "y => 3"
+                  val replacement = s"CREATE OR REPLACE FUNCTION $target.default_dep() " +
+                    s"RETURNS INT RETURN cycle_path_a.named_args_fn($args)"
+                  val cyclic = if (supplied) !replaceSaved else capture == replaceSaved
+                  if (cyclic) {
+                    val error = intercept[AnalysisException] { sql(replacement) }
+                    assert(error.getCondition.contains("CYCLIC_FUNCTION_REFERENCE"))
+                  } else {
+                    sql(replacement)
+                    val expected = if (capture && !supplied) 14 else 25
+                    checkAnswer(sql(s"SELECT $target.default_dep()"), Row(expected))
+                  }
+                }
+              } finally {
+                sql("USE default")
+                sql("SET PATH = DEFAULT_PATH")
+              }
+            }
+          }
+        }
+      }
+    }
+
     test(s"named random defaults preserve independent grouping keys: $capture") {
       withSQLConf(captureKey -> capture.toString) {
         withUserDefinedFunction("named_args_fn" -> false) {

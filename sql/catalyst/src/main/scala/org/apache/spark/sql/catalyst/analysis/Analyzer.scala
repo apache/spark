@@ -2873,11 +2873,13 @@ class Analyzer(
           }.toMap
         }
       }
-      // Numeric literal casts need no analyzer transformations or saved-context bindings.
+      // Numeric casts and non-string atomic identity casts need no analyzer transformations.
       // Other resolved expressions can still require rewrites, so retain their analysis below.
       if (parsed.valuesIterator.forall {
-          case c @ Cast(l: Literal, _: NumericType, _, _) =>
-            l.dataType.isInstanceOf[NumericType] && c.resolved
+          case c @ Cast(l: Literal, target, _, _) if c.resolved =>
+            (l.dataType.isInstanceOf[NumericType] && target.isInstanceOf[NumericType]) ||
+              (l.dataType == target && target.isInstanceOf[AtomicType] &&
+                !target.isInstanceOf[StringType])
           case _ => false
         }) {
         return parsed
