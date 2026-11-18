@@ -4399,6 +4399,20 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_STATE_V4_INDEX_VERSION =
+    buildConf("spark.sql.streaming.join.stateFormatV4.indexVersion")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("How state format version 4 of stream-stream joins orders the state of an input that " +
+        "it evicts by a range condition. 0: by the event time of the input, as in 4.3 and " +
+        "earlier. 1: by the column that the condition bounds. A streaming query keeps the " +
+        "version recorded in its checkpoint, and one restarted from a checkpoint without it uses " +
+        "0, which fails for a join whose condition bounds another column.")
+      .version("4.4.0")
+      .intConf
+      .checkValue(v => v == 0 || v == 1, "Valid versions are 0 and 1")
+      .createWithDefault(1)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
