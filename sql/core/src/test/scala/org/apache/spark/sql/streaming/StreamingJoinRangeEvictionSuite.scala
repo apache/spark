@@ -655,6 +655,38 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
+  test("V4 restart from an older checkpoint fails for an input without its own watermark") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val leftInput = MemoryStream[(Int, Long)]
+        val rightInput = MemoryStream[(Int, Long)]
+        val left = leftInput.toDF().toDF("leftKey", "time")
+          .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        val right = rightInput.toDF().toDF("rightKey", "time")
+          .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+          .withWatermark("rightTime", "10 seconds")
+        val joined = left.join(right, expr("leftKey = rightKey AND " +
+          "leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime + INTERVAL 5 SECONDS"),
+          "left_outer").select($"leftKey", $"rightKey")
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(leftInput, (1, 5L)),
+          CheckNewAnswer(),
+          StopStream)
+        removeIndexVersion(checkpoint)
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(rightInput, (2, 30L)),
+          ExpectFailure[AnalysisException] { e =>
+            checkError(
+              e.asInstanceOf[AnalysisException],
+              condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+              parameters = Map("side" -> "left", "column" -> "`leftTime`"))
+          })
+      }
+    }
+  }
+
   // The checkpoint has no join output watermark check, so the join keeps the earlier eviction.
   test("V4 restart from an older checkpoint keeps evicting by the event time when the " +
       "condition bounds another column") {

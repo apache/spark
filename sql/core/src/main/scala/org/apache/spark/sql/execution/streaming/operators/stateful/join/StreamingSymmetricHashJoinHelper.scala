@@ -290,7 +290,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             eventTimeWatermarkForEviction.get,
             prevStateKeyWatermark)
         }
-      } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
+      } else if (isWatermarkDefinedOnInput || !useFirstEventTimeColumn) {
+        // case 2 in the StreamingSymmetricHashJoinExec docs. The opposite watermark bounds the
+        // future matches, so this input needs no watermark of its own, except in the legacy mode.
         val eventTime = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         def wholeInput(watermark: Option[Long]): Option[Long] =
           StreamingJoinHelper.getStateValueWatermark(
