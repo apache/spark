@@ -25,7 +25,7 @@ import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.PythonUDF.{chainsInWorker, correctEvalType, isScalarPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -1422,11 +1422,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
-        // An in-process UDF never chains with worker UDFs, so it has no pipeline to preserve.
-        //
         // A conditional branch is not treated like a lambda, on purpose: the column stands, which
         // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
-        expression.mapChildren(applyExpr(_, parentIsUdf = chainsInWorker(expression),
+        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }
@@ -1724,7 +1722,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // Extend the set of types with the new types found in the current project node
       case p: Project =>
         pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
-          case udf: PythonUDF if chainsInWorker(udf) =>
+          case udf: PythonUDF if isScalarPythonUDF(udf) =>
             correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
         }).toSet
 
