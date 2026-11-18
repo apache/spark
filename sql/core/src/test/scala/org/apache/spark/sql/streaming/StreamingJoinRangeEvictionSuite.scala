@@ -252,6 +252,38 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
+  test("V4 restart from an older checkpoint fails when the opposite watermark picks another key") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val leftInput = MemoryStream[(Int, Int)]
+        val rightInput = MemoryStream[(Int, Int)]
+        val left = leftInput.toDF().toDF("a", "b")
+          .select(timestamp_seconds($"a").as("la"), timestamp_seconds($"b").as("lb"))
+          .withWatermark("la", "10 seconds")
+        val right = rightInput.toDF().toDF("a", "b")
+          .select(timestamp_seconds($"a").as("ra"), timestamp_seconds($"b").as("rb"))
+          .withWatermark("rb", "10 seconds")
+        val joined = left.join(right, expr("la = ra AND lb = rb"), "full_outer")
+          .select($"la".cast("int"), $"lb".cast("int"), $"ra".cast("int"), $"rb".cast("int"))
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          MultiAddData(leftInput, (5, 50))(rightInput, (80, 50)),
+          CheckNewAnswer(),
+          StopStream)
+        removeIndexVersion(checkpoint)
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(rightInput, (5, 50)),
+          ExpectFailure[AnalysisException] { e =>
+            checkError(
+              e.asInstanceOf[AnalysisException],
+              condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+              parameters = Map("side" -> "left", "column" -> "\"lb\""))
+          })
+      }
+    }
+  }
+
   test("V4 restart from an older checkpoint fails when the condition bounds another column") {
     withJoinConf(4) {
       withTempDir { checkpoint =>

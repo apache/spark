@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
+import org.apache.spark.sql.errors.QueryCompilationErrors.{toSQLExpr, toSQLId}
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SchemaValidationUtils, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorStateInfo, StatefulOperatorsUtils, StatefulOpStateStoreCheckpointInfo, StateStoreWriter, WatermarkSupport}
@@ -364,22 +364,27 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Older versions order the V4 state of an input by its event time, so their checkpoints
-    // cannot evict that state by another column.
+    // Older versions order the V4 state of an input by its event time, or by the equality key
+    // that findJoinKeyOrdinalForWatermark picks, so their checkpoints cannot evict that state by
+    // another column or key.
     if (stateFormatVersion == 4 &&
         conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION) == 0) {
-      Seq((LeftSide, stateWatermarkPredicates.left, left.output),
-          (RightSide, stateWatermarkPredicates.right, right.output)).foreach {
-        case (side, predicate, attributes) =>
+      val sharedKeyOrdinal = findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
+      Seq((LeftSide, stateWatermarkPredicates.left, left.output, leftKeys),
+          (RightSide, stateWatermarkPredicates.right, right.output, rightKeys)).foreach {
+        case (side, predicate, attributes, keys) =>
           val eventTime = WatermarkSupport.findEventTimeColumnIndex(
             attributes, allowMultipleEventTimeColumns = false)
-          stateValueWatermarkColumnOrdinal(predicate, attributes)
-            .filterNot(eventTime.contains).foreach { column =>
-              throw new AnalysisException(
-                errorClass = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
-                messageParameters = Map(
-                  "side" -> side.toString, "column" -> toSQLId(attributes(column).name)))
-            }
+          val column = stateValueWatermarkColumnOrdinal(predicate, attributes)
+            .filterNot(eventTime.contains).map(i => toSQLId(attributes(i).name))
+          val key = findStateKeyOrdinalForWatermark(
+            side, leftKeys, rightKeys, !allowMultipleStatefulOperators)
+            .filterNot(sharedKeyOrdinal.contains).map(i => toSQLExpr(keys(i)))
+          column.orElse(key).foreach { c =>
+            throw new AnalysisException(
+              errorClass = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+              messageParameters = Map("side" -> side.toString, "column" -> c))
+          }
       }
     }
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
@@ -423,19 +428,21 @@ case class StreamingSymmetricHashJoinExec(
     // Create left and right side hash joiners and store in the joiner manager.
     // Both sides should use the same store generator if we are re-using the same store instance.
     val joinStateManagerStoreGenerator = new JoinStateManagerStoreGenerator()
-    val joinKeyOrdinalForWatermark =
-      StreamingSymmetricHashJoinHelper.findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
+    def joinKeyOrdinalForWatermark(side: JoinSide): Option[Int] =
+      findStateKeyOrdinalForWatermark(side, leftKeys, rightKeys, !allowMultipleStatefulOperators)
     val joinerManager = OneSideHashJoinerManager(
       new OneSideHashJoiner(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
         checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark),
+        skippedNullValueCount, joinStateManagerStoreGenerator,
+        joinKeyOrdinalForWatermark(LeftSide)),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
         checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
-        skippedNullValueCount, joinStateManagerStoreGenerator, joinKeyOrdinalForWatermark))
+        skippedNullValueCount, joinStateManagerStoreGenerator,
+        joinKeyOrdinalForWatermark(RightSide)))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -746,11 +753,16 @@ case class StreamingSymmetricHashJoinExec(
 
     // The join condition bounds the column that the value predicate tests, so a row with a NULL
     // in it can never match, and the predicate never evicts it. The legacy mode tests the event
-    // time even when the condition bounds another column.
+    // time even when the condition bounds another column. The same holds for an equality key
+    // that the opposite watermark selects; the key that findJoinKeyOrdinalForWatermark selects
+    // keeps the previous behavior.
     private[this] val isEvictionColumnNull: UnsafeRow => Boolean = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _))
           if allowMultipleStatefulOperators =>
         Predicate.create(IsNull(column), inputAttributes).eval _
+      case Some(_: JoinStateKeyWatermarkPredicate) if joinKeyOrdinalForWatermark !=
+          findJoinKeyOrdinalForWatermark(leftKeys, rightKeys) =>
+        Predicate.create(IsNull(joinKeys(joinKeyOrdinalForWatermark.get)), inputAttributes).eval _
       case _ => _ => false
     }
 

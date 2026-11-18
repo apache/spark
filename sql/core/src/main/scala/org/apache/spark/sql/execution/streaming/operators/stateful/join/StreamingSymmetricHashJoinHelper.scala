@@ -224,13 +224,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     WatermarkSupport.findEventTimeColumn(rightAttributes,
       allowMultipleEventTimeColumns = useFirstEventTimeColumn)
 
-    val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
-      leftKeys, rightKeys)
-
     def getOneSideStateWatermarkPredicate(
+        joinSide: JoinSide,
         oneSideInputAttributes: Seq[Attribute],
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
+      val joinKeyOrdinalForWatermark = findStateKeyOrdinalForWatermark(
+        joinSide, leftKeys, rightKeys, useFirstEventTimeColumn)
       val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
@@ -297,9 +297,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
 
     val leftStateWatermarkPredicate =
-      getOneSideStateWatermarkPredicate(leftAttributes, leftKeys, rightAttributes)
+      getOneSideStateWatermarkPredicate(LeftSide, leftAttributes, leftKeys, rightAttributes)
     val rightStateWatermarkPredicate =
-      getOneSideStateWatermarkPredicate(rightAttributes, rightKeys, leftAttributes)
+      getOneSideStateWatermarkPredicate(RightSide, rightAttributes, rightKeys, leftAttributes)
     JoinStateWatermarkPredicates(leftStateWatermarkPredicate, rightStateWatermarkPredicate)
   }
 
@@ -327,12 +327,32 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     // left side keys effectively causes the timestamp on the right side to have a watermark.
     // We will use the ordinal of the left timestamp in the left keys to find the corresponding
     // right timestamp in the right keys.
-    leftKeys.zipWithIndex.collectFirst {
+    watermarkedKeyOrdinal(leftKeys).orElse(watermarkedKeyOrdinal(rightKeys))
+  }
+
+  /**
+   * The ordinal of the equality key that evicts the state of one side: the first watermarked key
+   * of the opposite input, whose future rows have that key above the watermark. When the
+   * opposite input has no watermarked key, and in the legacy mode with a single global
+   * watermark, this is [[findJoinKeyOrdinalForWatermark]].
+   */
+  def findStateKeyOrdinalForWatermark(
+      joinSide: JoinSide,
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      useFirstEventTimeColumn: Boolean): Option[Int] = {
+    val otherSideKeys = if (joinSide == LeftSide) rightKeys else leftKeys
+    val sharedOrdinal = findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
+    if (useFirstEventTimeColumn) {
+      sharedOrdinal
+    } else {
+      watermarkedKeyOrdinal(otherSideKeys).orElse(sharedOrdinal)
+    }
+  }
+
+  private def watermarkedKeyOrdinal(keys: Seq[Expression]): Option[Int] = {
+    keys.zipWithIndex.collectFirst {
       case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
-    } orElse {
-      rightKeys.zipWithIndex.collectFirst {
-        case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
-      }
     }
   }
 

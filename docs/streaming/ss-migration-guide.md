@@ -35,6 +35,14 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
   behavior.
 
+- Since Spark 4.4, a stream-stream join whose inputs have watermarks on different equality keys,
+  for example `la = ra AND lb = rb` with watermarks on `la` and `rb`, evicts the state of each
+  input by the key that the opposite input's watermark bounds. Earlier versions evicted both by
+  the same key and could lose matches. Such a join with state format version 4 cannot restart
+  from a checkpoint of an earlier version; start it with a new checkpoint. With
+  `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
+  behavior.
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent
