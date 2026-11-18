@@ -36,6 +36,17 @@ class IsIgnoredFileTests(unittest.TestCase):
     def test_sparktestsupport_source_is_not_ignored(self):
         self.assertFalse(modules.is_ignored_file("dev/sparktestsupport/modules.py"))
 
+    def test_agent_docs_are_ignored(self):
+        for path in [
+            ".agents/pr-workflow.md",
+            "sql/core/.agents/x.md",
+            ".ignore",
+            "python/.ignore",
+            "dev/agent_docs_lint.py",
+        ]:
+            self.assertTrue(modules.is_ignored_file(path), path)
+        self.assertFalse(modules.is_ignored_file("x.agents/y.md"))
+
 
 class ShellScriptTestGoalTests(unittest.TestCase):
     def test_default_stage(self):
@@ -189,3 +200,30 @@ class ModuleDefinitionsTests(unittest.TestCase):
                 )
                 self.assertNotIn(modules.root, modules_to_test)
                 self.assertNotIn(modules.streaming_kinesis_asl, modules_to_test)
+
+    def test_rust_sdk_changes_select_rust_sdk_module(self):
+        for filename in (
+            "sql/native/rust/src/lib.rs",
+            "examples/src/main/rust/native-data-source/src/lib.rs",
+            "sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertIn(modules.rust_sdk, changed_modules)
+                self.assertNotIn(modules.root, changed_modules)
+
+    def test_cargo_only_changes_select_only_rust_sdk_module(self):
+        for filename in (
+            "sql/native/rust/src/lib.rs",
+            "examples/src/main/rust/native-data-source/src/lib.rs",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertEqual({modules.rust_sdk}, changed_modules)
+
+    def test_non_rust_example_changes_select_examples_module(self):
+        changed_modules = determine_modules_for_files(["examples/src/main/scala/Example.scala"])
+        self.assertIn(modules.examples, changed_modules)
+
+    def test_sql_changes_do_not_select_rust_sdk_tests(self):
+        self.assertNotIn(modules.rust_sdk, determine_modules_to_test([modules.sql]))

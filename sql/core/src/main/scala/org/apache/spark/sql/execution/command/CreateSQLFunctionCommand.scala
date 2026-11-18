@@ -82,8 +82,7 @@ case class CreateSQLFunctionCommand(
     // type cannot hold a FILE in a map key.
     val routineName = QueryCompilationErrors.toSQLId(name.nameParts)
     def checkFileTypeInSignature(paramTypes: Seq[DataType], returnType: Option[DataType]): Unit = {
-      TypeUtils.checkNoQualifierInRoutineSignature(
-        paramTypes ++ returnType, routineType = "function", routineName = routineName)
+      TypeUtils.checkNoQualifierInRoutineSignature(paramTypes ++ returnType, routineName)
       returnType.foreach(TypeUtils.checkNoFileTypeMapKeyInReturnType(_, routineName))
     }
     checkFileTypeInSignature(inputParam.toSeq, returnType.map(_.fold(identity, identity)))

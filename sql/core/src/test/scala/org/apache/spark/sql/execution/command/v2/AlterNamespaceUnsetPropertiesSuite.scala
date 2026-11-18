@@ -18,11 +18,13 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `ALTER NAMESPACE ... UNSET PROPERTIES` command to check V2
  * table catalogs.
  */
+@DataSourceV2Test
 class AlterNamespaceUnsetPropertiesSuite extends command.AlterNamespaceUnsetPropertiesSuiteBase
   with CommandSuiteBase {
 
