@@ -2934,6 +2934,19 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(0)
 
+  private[spark] val LEGACY_RANGE_PARTITIONER_RDD_ID_SEED =
+    ConfigBuilder("spark.rdd.rangePartitioner.legacySeedWithRddId")
+      .internal()
+      .doc("When true, RangePartitioner seeds the samples that pick its range bounds with the " +
+        "RDD id, so the bounds of the same data can change on every execution. When false, the " +
+        "sketch uses partition indexes and the re-sampling seed does not depend on the RDD id; " +
+        "bounds repeat when the input data, partition membership, and row order within each " +
+        "partition are unchanged.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to true to enable push-based shuffle on the client side and this works in " +

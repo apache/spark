@@ -150,6 +150,57 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     }
   }
 
+  test("SPARK-61561: RangePartitioner bounds of skewed data do not depend on the RDD id") {
+    // Partition 0 is re-sampled as imbalanced; partitions 1-7 fit their reservoir whole.
+    val data = sc.makeRDD(0 until 8, 8).flatMap { i =>
+      if (i == 0) Iterator.range(0, 70000) else Iterator.range(70000 + 100 * i, 70020 + 100 * i)
+    }.cache()
+    def partitioner(): RangePartitioner[Int, Int] = new RangePartitioner(4, data.map(x => (x, x)))
+    val fixed = partitioner()
+    // Same data, a fresh RDD each time: the fixed seeds give identical bounds.
+    assert(fixed.numPartitions === 4 && fixed === partitioner())
+    val key = LEGACY_RANGE_PARTITIONER_RDD_ID_SEED.key
+    val prior = sc.conf.getOption(key)
+    sc.conf.set(LEGACY_RANGE_PARTITIONER_RDD_ID_SEED, true)
+    try {
+      // The legacy RDD-id seed moves the bounds of the same data between executions.
+      assert(partitioner() !== partitioner())
+    } finally {
+      prior.fold(sc.conf.remove(key))(sc.conf.set(key, _))
+    }
+  }
+
+  test("SPARK-61561: RangePartitioners with different orderings are not equal") {
+    // Both partitioners sample the same rows, so they can pick the same bound; they still route
+    // keys differently and must not let a join skip its shuffle.
+    val n = 1001
+    val rdd = sc.parallelize(0 until n, 11).map(x => (x, x)).cache()
+    val asc = new RangePartitioner(2, rdd)
+    val desc = new RangePartitioner(2, rdd)(Ordering[Int].reverse, implicitly)
+    // hashCode covers only the bounds and the direction, so equal hashes mean the same bounds.
+    assert(asc.hashCode === desc.hashCode)
+    assert(asc !== desc)
+    assert(desc !== asc)
+    assert(rdd.partitionBy(asc).join(rdd.partitionBy(desc)).count() === n)
+  }
+
+  test("SPARK-61561: one-partition RangePartitioners reuse existing partitioning") {
+    val rdd = sc.parallelize(0 until 10000, 4).map(x => (x, x))
+    def ordering: Ordering[Int] = new Ordering[Int] {
+      override def compare(x: Int, y: Int): Int = java.lang.Integer.compare(x, y)
+    }
+    val first = new RangePartitioner(1, rdd)(ordering, implicitly)
+    val second = new RangePartitioner(1, rdd)(ordering, implicitly)
+
+    assert(first.getPartition(0) === 0)
+    assert(second.getPartition(9999) === 0)
+    assert(first === second)
+    assert(first.hashCode === second.hashCode)
+
+    val partitioned = rdd.partitionBy(first)
+    assert(partitioned.partitionBy(second) eq partitioned)
+  }
+
   test("RangePartitioner should return a single partition for empty RDDs") {
     val empty1 = sc.emptyRDD[(Int, Double)]
     val partitioner1 = new RangePartitioner(0, empty1)
