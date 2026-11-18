@@ -402,7 +402,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     case timestampValue: Instant if SQLConf.get.legacyJdbcSessionZoneTimestampLiteral =>
       compileInstantInSessionZone(timestampValue)
     case timestampValue: Instant =>
-      // JVM-zone wall clock, the zone JDBC drivers use for zoneless values (as java8API off).
+      // JVM-zone wall clock, the zone JDBC drivers use for zoneless values (as with java8API off).
       compileInstant(timestampValue, ZoneId.systemDefault())
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
