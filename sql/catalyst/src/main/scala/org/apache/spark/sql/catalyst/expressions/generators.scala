@@ -76,6 +76,16 @@ trait Generator extends Expression {
   def terminate(): IterableOnce[InternalRow] = Nil
 
   /**
+   * Whether [[terminate]] may produce rows, i.e. rows emitted after the last input row with no
+   * input row to pair them with. Only generators that override [[terminate]] to return rows (a
+   * Hive UDTF forwarding rows from `close()` is the only built-in case) should set this. It lets a
+   * rule that would otherwise pair every generated row with an input row (for example by widening
+   * [[org.apache.spark.sql.execution.GenerateExec]]'s `requiredChildOutput`) leave such a generator
+   * alone, so its terminate rows are not routed onto a branch that reads a missing input row.
+   */
+  def mayProduceRowsOnTerminate: Boolean = false
+
+  /**
    * Check if this generator supports code generation.
    */
   def supportCodegen: Boolean = !isInstanceOf[CodegenFallback]

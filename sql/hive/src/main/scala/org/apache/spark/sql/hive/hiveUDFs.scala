@@ -302,6 +302,9 @@ private[hive] case class HiveGenericUDTF(
     collector.collectRows()
   }
 
+  // A Hive UDTF can forward rows from `close()` here, with no input row to pair them with.
+  override def mayProduceRowsOnTerminate: Boolean = true
+
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
