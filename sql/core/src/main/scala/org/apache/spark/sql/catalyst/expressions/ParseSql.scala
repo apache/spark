@@ -28,10 +28,13 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.{ParseSqlAnalyzeContext, ParseSqlMode, ParseSqlResult}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PARSE_SQL, TreePattern}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
+import org.apache.spark.sql.types.{
+  AbstractDataType, ArrayType, DataType, StringType, StructField, StructType
+}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -51,7 +54,7 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 // scalastyle:off nonascii
 @ExpressionDescription(
-  usage = """_FUNC_(sqlStmt[, mode]) - Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
+  usage = """_FUNC_(sqlStmt[, mode[, current_catalog[, current_schema[, variables[, relations[, parameter_markers]]]]]]) - Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
     returns a JSON array describing them so callers can inspect SQL text (lineage, statement
     kind, select-list types) without running the statements. Each object has 1-based
     character `start` and character `length` (Unicode code points; a single-code-point
@@ -85,6 +88,21 @@ import org.apache.spark.unsafe.types.UTF8String
       * mode - Optional `PARSE` or `ANALYZE` (case-insensitive). Defaults to `PARSE`.
         Must be a constant string. NULL returns NULL. Any other value fails the outer
         query with INVALID_PARAMETER_VALUE.PARSE_SQL_MODE.
+      * current_catalog - Optional catalog for `ANALYZE` of this call only. Must be a
+        constant string. NULL or omitted keeps the invoker's catalog. An unknown catalog
+        fails the outer query.
+      * current_schema - Optional schema for `ANALYZE` of this call only. Must be a constant
+        string. NULL or omitted keeps the invoker's schema (or the catalog default when
+        `current_catalog` is given). A schema that does not exist fails the outer query.
+      * variables - Optional constant array of `named_struct('name', ..., 'type', ...)`
+        entries. Each name is a session variable that `ANALYZE` treats as declared with
+        the DDL type; the variable is not created.
+      * relations - Optional constant array of `named_struct('name', ..., 'schema', ...)`
+        entries. Each name is a relation that `ANALYZE` treats as existing with the DDL
+        schema; nothing is created.
+      * parameter_markers - Optional constant array of `named_struct('name', ..., 'type', ...)`
+        entries. The name is `?` for a positional marker or the marker name for a named
+        marker. A marker without a type leaves the statement unresolved.
   """,
   examples = """
     Examples:
@@ -128,11 +146,28 @@ case class ParseSql(
     sqlStmt: Expression,
     mode: Expression,
     currentCatalog: Expression,
-    currentSchema: Expression)
+    currentSchema: Expression,
+    variables: Expression,
+    relations: Expression,
+    parameterMarkers: Expression)
   extends Expression
   with ImplicitCastInputTypes
   with CodegenFallback
   with QueryErrorsBase {
+
+  def this(
+      sqlStmt: Expression,
+      mode: Expression,
+      currentCatalog: Expression,
+      currentSchema: Expression) =
+    this(
+      sqlStmt,
+      mode,
+      currentCatalog,
+      currentSchema,
+      ParseSql.nullVariables,
+      ParseSql.nullRelations,
+      ParseSql.nullParameterMarkers)
 
   def this(sqlStmt: Expression, mode: Expression) =
     this(sqlStmt, mode, Literal.create(null, StringType), Literal.create(null, StringType))
@@ -141,7 +176,8 @@ case class ParseSql(
 
   override def prettyName: String = "parse_sql"
 
-  override def children: Seq[Expression] = Seq(sqlStmt, mode, currentCatalog, currentSchema)
+  override def children: Seq[Expression] =
+    Seq(sqlStmt, mode, currentCatalog, currentSchema, variables, relations, parameterMarkers)
 
   // Omit trailing NULL context arguments, so the generated column name for a call that
   // gives no context is unchanged. The defaults are NULL literals, possibly implicitly cast,
@@ -167,7 +203,8 @@ case class ParseSql(
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(4)(StringTypeWithCollation(supportsTrimCollation = true))
+    Seq.fill(4)(StringTypeWithCollation(supportsTrimCollation = true)) ++
+      Seq(ParseSql.variablesType, ParseSql.relationsType, ParseSql.parameterMarkersType)
 
   // ANALYZE reads the session catalog, so results are not context-independent.
   override def contextIndependentFoldable: Boolean = false
@@ -259,7 +296,13 @@ case class ParseSql(
         val context = if (parsedMode == ParseSqlMode.Analyze) {
           ParseSqlAnalyzeContext(
             catalog = utf8Option(currentCatalog.eval(input)),
-            schema = utf8Option(currentSchema.eval(input)))
+            schema = utf8Option(currentSchema.eval(input)),
+            variables = ParseSql.decodeNameSpecArray(
+              variables.eval(input), "variables", "type"),
+            relations = ParseSql.decodeNameSpecArray(
+              relations.eval(input), "relations", "schema"),
+            parameterMarkers = ParseSql.decodeNameSpecArray(
+              parameterMarkers.eval(input), "parameter_markers", "type"))
         } else {
           ParseSqlAnalyzeContext.empty
         }
@@ -276,26 +319,91 @@ case class ParseSql(
       sqlStmt = newChildren(0),
       mode = newChildren(1),
       currentCatalog = newChildren(2),
-      currentSchema = newChildren(3))
+      currentSchema = newChildren(3),
+      variables = newChildren(4),
+      relations = newChildren(5),
+      parameterMarkers = newChildren(6))
 }
 
 object ParseSql extends ExpressionBuilder {
+  val variableEntryType: StructType = StructType(Seq(
+    StructField("name", StringType, nullable = false),
+    StructField("type", StringType, nullable = false)))
+
+  val relationEntryType: StructType = StructType(Seq(
+    StructField("name", StringType, nullable = false),
+    StructField("schema", StringType, nullable = false)))
+
+  val variablesType: DataType = ArrayType(variableEntryType, containsNull = false)
+
+  val relationsType: DataType = ArrayType(relationEntryType, containsNull = false)
+
+  val parameterMarkersType: DataType = variablesType
+
+  def nullVariables: Expression = Literal.create(null, variablesType)
+
+  def nullRelations: Expression = Literal.create(null, relationsType)
+
+  def nullParameterMarkers: Expression = Literal.create(null, parameterMarkersType)
+
   def apply(sqlStmt: Expression): ParseSql = new ParseSql(sqlStmt)
 
   def apply(sqlStmt: Expression, mode: Expression): ParseSql = new ParseSql(sqlStmt, mode)
 
+  /** Decode ARRAY<STRUCT<name, spec>> pairs. NULL means omit. */
+  private[expressions] def decodeNameSpecArray(
+      value: Any,
+      parameter: String,
+      specField: String): Seq[(String, String)] = value match {
+    case null => Nil
+    case arr: ArrayData =>
+      val n = arr.numElements()
+      (0 until n).map { i =>
+        if (arr.isNullAt(i)) {
+          throw QueryExecutionErrors.invalidParseSqlContext(parameter, "NULL")
+        }
+        val row = arr.getStruct(i, 2)
+        def field(ord: Int, fieldName: String): String = {
+          if (row.isNullAt(ord)) {
+            throw QueryExecutionErrors.invalidParseSqlContext(
+              parameter, s"NULL $fieldName")
+          }
+          val text = row.getUTF8String(ord).toString
+          if (text.trim.isEmpty) {
+            throw QueryExecutionErrors.invalidParseSqlContext(parameter, text)
+          }
+          text
+        }
+        (field(0, "name"), field(1, specField))
+      }
+    case other =>
+      throw QueryExecutionErrors.invalidParseSqlContext(parameter, String.valueOf(other))
+  }
+
   /** Argument names in order, as they appear in error messages. */
-  val parameterNames: Seq[String] = Seq("sqlStmt", "mode", "current_catalog", "current_schema")
+  val parameterNames: Seq[String] = Seq(
+    "sqlStmt", "mode", "current_catalog", "current_schema",
+    "variables", "relations", "parameter_markers")
 
   override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
     InputParameter("sqlStmt"),
     InputParameter("mode", Some(Literal("PARSE"))),
     InputParameter("current_catalog", Some(Literal.create(null, StringType))),
-    InputParameter("current_schema", Some(Literal.create(null, StringType))))))
+    InputParameter("current_schema", Some(Literal.create(null, StringType))),
+    InputParameter("variables", Some(nullVariables)),
+    InputParameter("relations", Some(nullRelations)),
+    InputParameter("parameter_markers", Some(nullParameterMarkers)))))
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    assert(expressions.size == 4)
-    ParseSql(expressions(0), expressions(1), expressions(2), expressions(3))
+    assert(expressions.size == 7)
+    ParseSql(
+      expressions(0),
+      expressions(1),
+      expressions(2),
+      expressions(3),
+      expressions(4),
+      expressions(5),
+      expressions(6))
   }
 
   /** Register the builtin with a session function registry and the global builtin set. */

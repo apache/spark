@@ -25,7 +25,10 @@ import scala.util.Try
 import org.json4s._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
-import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{
+  ErrorMessageFormat, SparkRuntimeException, SparkThrowable, SparkThrowableHelper
+}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, SessionCatalog}
@@ -60,6 +63,7 @@ import org.apache.spark.sql.execution.datasources.{
 }
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{SparkUDFExpressionBuilder, SQLConf, StaticSQLConf}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.metricview.logical.ResolvedMetricView
 
 /**
@@ -83,8 +87,12 @@ object ParseSqlMode {
  */
 case class ParseSqlAnalyzeContext(
     catalog: Option[String] = None,
-    schema: Option[String] = None) {
-  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty
+    schema: Option[String] = None,
+    variables: Seq[(String, String)] = Nil,
+    relations: Seq[(String, String)] = Nil,
+    parameterMarkers: Seq[(String, String)] = Nil) {
+  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty && variables.isEmpty &&
+    relations.isEmpty && parameterMarkers.isEmpty
 }
 
 object ParseSqlAnalyzeContext {
@@ -173,7 +181,27 @@ object ParseSqlResult {
     }
     val session = ClassicSparkSession.getActiveSession
       .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
-    val analyzerOpt = if (context.isEmpty) None else Some(contextAnalyzer(session, context))
+    val analyzerOpt =
+      if (context.catalog.isEmpty && context.schema.isEmpty) {
+        None
+      } else {
+        Some(contextAnalyzer(session, context))
+      }
+    // Overlay names are canonicalized by the catalog manager the batch analyzes with.
+    val analysisMgr = analyzerOpt.map(_.catalogManager)
+      .getOrElse(session.sessionState.catalogManager)
+    // A bad overlay spec is reported on every statement, like an analysis error.
+    val overlays = try {
+      val variables = context.variables.map(parseKnownVariable)
+      val relations = context.relations.map { spec =>
+        val (name, schema) = parseKnownRelation(spec)
+        SuppliedRelationRegistry.canonicalize(analysisMgr, name) -> schema
+      }
+      val markers = context.parameterMarkers.map(parseKnownParameterMarker)
+      scala.Right((variables, relations, markers))
+    } catch {
+      case e: SparkRuntimeException => scala.Left(e)
+    }
     // The batch is analyzed on its own: a SQL script that calls parse_sql does
     // not lend it its locals, and CALL is not run.
     SqlScriptingContextManager.create(null).runWith {
@@ -181,8 +209,17 @@ object ParseSqlResult {
         JArray(parsed.zip(spans).map {
           case (ParseFailed(errorObj), _) => errorObj
           case (Parsed(plan), span) =>
-            val (analyzed, error) = analyze(session, analyzerOpt, plan)
-            successJson(plan, analyzed, error, Some(session), span)
+            overlays match {
+              case scala.Left(e) => successJson(plan, None, Some(e), Some(session), span)
+              case scala.Right((variables, relations, markers)) =>
+                // Caller-supplied overlays eclipse the real objects for this statement only.
+                val (analyzed, error) = SuppliedVariableRegistry.create(variables).runWith {
+                  SuppliedRelationRegistry.create(relations).runWith {
+                    analyze(session, analyzerOpt, plan, markers)
+                  }
+                }
+                successJson(plan, analyzed, error, Some(session), span)
+            }
         }.toList)
       }
     }
@@ -343,11 +380,111 @@ object ParseSqlResult {
   private def analyze(
       session: ClassicSparkSession,
       analyzerOpt: Option[Analyzer],
-      plan: LogicalPlan): (Option[LogicalPlan], Option[SparkThrowable with Throwable]) = {
+      plan: LogicalPlan,
+      markers: Seq[(String, DataType)])
+      : (Option[LogicalPlan], Option[SparkThrowable with Throwable]) = {
     try {
-      (Some(analyzePlan(session, analyzerOpt, plan)), None)
+      // Refuse a script before any binding wraps it, as [[analyzePlan]] does after.
+      if (QueryExecution.isUnresolvedPlanSqlScript(plan)) {
+        throw QueryExecutionErrors.parseSqlAnalyzeUnsupportedScript()
+      }
+      val toAnalyze = bindSuppliedParameterMarkers(plan, markers)
+      (Some(analyzePlan(session, analyzerOpt, toAnalyze)), None)
     } catch {
       case e: SparkThrowable with Throwable if !isInternalError(e) => (None, Some(e))
+    }
+  }
+
+  private def parseKnownVariable(spec: (String, String)): (Seq[String], DataType) = {
+    val (name, typeDdl) = spec
+    val parts = parseKnownName(name, "variables")
+    val dataType = try {
+      DataType.fromDDL(typeDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("variables", typeDdl)
+    }
+    (parts, dataType)
+  }
+
+  private def parseKnownRelation(spec: (String, String)): (Seq[String], StructType) = {
+    val (name, schemaDdl) = spec
+    val parts = parseKnownName(name, "relations")
+    val dataType = try {
+      DataType.fromDDL(schemaDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("relations", schemaDdl)
+    }
+    dataType match {
+      case schema: StructType if schema.nonEmpty =>
+        (parts, CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
+      case _ =>
+        throw QueryExecutionErrors.invalidParseSqlContext("relations", schemaDdl)
+    }
+  }
+
+  private def parseKnownName(name: String, parameter: String): Seq[String] = {
+    val parts = try {
+      parser.get().parseMultipartIdentifier(name)
+    } catch {
+      case _: ParseException =>
+        throw QueryExecutionErrors.invalidParseSqlContext(parameter, name)
+    }
+    if (parts.isEmpty) {
+      throw QueryExecutionErrors.invalidParseSqlContext(parameter, name)
+    }
+    parts
+  }
+
+  private def parseKnownParameterMarker(spec: (String, String)): (String, DataType) = {
+    val (name, typeDdl) = spec
+    val dataType = try {
+      DataType.fromDDL(typeDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("parameter_markers", typeDdl)
+    }
+    val trimmed = name.trim
+    if (trimmed == "?") {
+      ("?", dataType)
+    } else {
+      val parts = parseKnownName(trimmed, "parameter_markers")
+      if (parts.length != 1) {
+        throw QueryExecutionErrors.invalidParseSqlContext("parameter_markers", name)
+      }
+      (parts.head, dataType)
+    }
+  }
+
+  /**
+   * Bind caller-supplied marker types with the [[BindParameters]] rule that
+   * `sql(..., args)` uses, so the plan is typed the way a real query with those
+   * arguments would be. Markers the plan does not use leave it unchanged.
+   */
+  private def bindSuppliedParameterMarkers(
+      plan: LogicalPlan,
+      markers: Seq[(String, DataType)]): LogicalPlan = {
+    val used = if (markers.isEmpty) None else collectPlanReferences(plan).parameterMarkers
+    if (used.isEmpty) {
+      plan
+    } else {
+      val namedArgs = markers.collect {
+        case (name, dataType) if name != "?" => name -> Literal.create(null, dataType)
+      }
+      val posArgs = markers.collect {
+        case ("?", dataType) => Literal.create(null, dataType)
+      }
+      val usesNamed = used.exists(m => (m \ "named") != JNothing)
+      val usesPos = used.exists(m => (m \ "unnamed_count") != JNothing)
+      val wrapped = if (usesNamed && namedArgs.nonEmpty) {
+        NameParameterizedQuery(plan, namedArgs.toMap)
+      } else if (usesPos && posArgs.nonEmpty) {
+        PosParameterizedQuery(plan, posArgs)
+      } else {
+        plan
+      }
+      BindParameters(wrapped)
     }
   }
 
@@ -779,6 +916,9 @@ object ParseSqlResult {
           add(tempViewParts(r.identifier))
         case r: ResolvedIdentifier if role == TableRefRole.Target =>
           add(catalogIdentParts(r.catalog.name(), r.identifier))
+        case l: LocalRelation =>
+          // A caller-supplied relation (relations overlay) is named by its canonical identity.
+          l.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG).foreach(add)
         case _ =>
       }
     }
