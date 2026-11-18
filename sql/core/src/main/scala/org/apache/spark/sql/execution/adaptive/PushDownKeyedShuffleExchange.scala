@@ -86,7 +86,7 @@ case class PushDownKeyedShuffleExchange(
   /**
    * `keyedExchange`'s child with the hash shuffle below it retargeted to the layout
    * `keyedExchange` reports, or `None` when the walk cannot reach a hash shuffle that can take
-   * the layout, or the plan reuses both shuffles. The result reports the layout.
+   * the layout, or the plan reuses either shuffle. The result reports the layout.
    */
   private def pushDown(
       keyedExchange: ShuffleExchangeExec,
@@ -131,10 +131,12 @@ case class PushDownKeyedShuffleExchange(
             !sharedExchanges.contains(keyedExchange.canonicalized) &&
             !sharedExchanges.contains(hashExchange.canonicalized) =>
         // `EnsureRequirements` builds the layout with `KeyedShuffleSpec.createPartitioning`, which
-        // leaves it unmarked, so this shuffle routes undeclared rows by hash as the layout claims.
+        // marks it `HASH_ROUTING`, and this shuffle routes undeclared rows by hash, as marked.
         val retargeted = hashExchange.copy(outputPartitioning = layout)
         // A custom strategy can plan a user repartition right above this shuffle, and its
-        // elision records the user layout here; keep it so the check below can refuse.
+        // elision records the user layout here; keep it so the check below can refuse. Only
+        // union shuffle push-down makes `EnsureRequirements` record it, so with that off an
+        // elided user layout on the walk is replaced by the keyed one.
         retargeted.copyTagsFrom(hashExchange)
         Option.when(PartitioningOrigin.validateNode(retargeted))(retargeted)
 
@@ -152,7 +154,7 @@ case class PushDownKeyedShuffleExchange(
         rebind(layout, aggregate).flatMap(childLayout =>
           retargetChild(aggregate, childLayout, layout =>
             aggregate.requiredChildDistributionExpressions.exists(servesClustering(layout, _))))
-      case window: WindowExecBase =>
+      case window: WindowExecBase if window.expressions.forall(_.deterministic) =>
         retargetChild(window, layout,
           childLayout => servesClustering(childLayout, window.partitionSpec))
       case wgl: WindowGroupLimitExec if wgl.mode == FinalWindowGroupLimit =>

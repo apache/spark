@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, Eliminate
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftOuter,
   LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, CoalescedNullAwareHashPartitioning, HashPartitioning, KeyedPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryT
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin, ValidateRequirements}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, PartitioningOrigin, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, HashedRelationBroadcastMode, IntervalIndexKind, PointIndexKind, RangeRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -61,7 +61,7 @@ import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{SparkFatalException, ThreadUtils, Utils}
@@ -5735,6 +5735,63 @@ class AdaptiveQueryExecSuite
         s"expected the union stamp after keyed shuffle push-down at $keyedPushDown, got $stamps")
       assert(stamps.last == rules.length - 1,
         s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
+    }
+  }
+
+  test("SPARK-61860: a recorded user layout on the hash shuffle refuses the retarget") {
+    val a = AttributeReference("a", IntegerType)()
+    def plan(recordOrigin: Boolean): SparkPlan = {
+      val scan = new LocalTableScanExec(Seq(a), Seq(InternalRow(1)), None, false)
+      val hash = ShuffleExchangeExec(HashPartitioning(Seq(a), 2), scan, ENSURE_REQUIREMENTS)
+      if (recordOrigin) {
+        PartitioningOrigin.record(hash, HashPartitioning(Seq(a), 2), REPARTITION_BY_COL)
+      }
+      val project = ProjectExec(Seq(a), hash)
+      ShuffleExchangeExec(
+        KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))), project,
+        ENSURE_REQUIREMENTS)
+    }
+    val rule = PushDownKeyedShuffleExchange(EnsureRequirements(), queryContainsSubqueries = false)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true") {
+      // The retargeted shuffle keeps the record, and the keyed layout no longer reports it.
+      val recorded = plan(recordOrigin = true)
+      assert(rule.apply(recorded) eq recorded, recorded)
+      val plain = plan(recordOrigin = false)
+      assert(rule.apply(plain) ne plain, plain)
+    }
+  }
+
+  test("SPARK-61860: a recorded user layout on a broadcast join refuses the retarget") {
+    val a = AttributeReference("a", LongType)()
+    val b = AttributeReference("b", LongType)()
+    def plan(recordOrigin: Boolean): SparkPlan = {
+      val streamed = ShuffleExchangeExec(
+        HashPartitioning(Seq(a), 2),
+        new LocalTableScanExec(Seq(a), Seq(InternalRow(1L)), None, false),
+        ENSURE_REQUIREMENTS)
+      val buildScan = new LocalTableScanExec(Seq(b), Seq(InternalRow(1L)), None, false)
+      val join = BroadcastHashJoinExec(Seq(a), Seq(b), Inner, BuildRight, None, streamed, buildScan)
+      // The join binds its build side's keys, so the exchange has to carry the join's own mode.
+      val mode = join.requiredChildDistribution(1).asInstanceOf[BroadcastDistribution].mode
+      val joined = join.withNewChildren(Seq(streamed, BroadcastExchangeExec(mode, buildScan)))
+      if (recordOrigin) {
+        PartitioningOrigin.record(joined, HashPartitioning(Seq(a), 2), REPARTITION_BY_COL)
+      }
+      ShuffleExchangeExec(
+        KeyedPartitioning(Seq(a), Seq(InternalRow(1L), InternalRow(2L))), joined,
+        ENSURE_REQUIREMENTS)
+    }
+    val rule = PushDownKeyedShuffleExchange(EnsureRequirements(), queryContainsSubqueries = false)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true") {
+      // The rebuilt join keeps its record, and the keyed layout no longer reports it.
+      val recorded = plan(recordOrigin = true)
+      assert(rule.apply(recorded) eq recorded, recorded)
+      val plain = plan(recordOrigin = false)
+      assert(rule.apply(plain) ne plain, plain)
     }
   }
 

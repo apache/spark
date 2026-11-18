@@ -9248,13 +9248,15 @@ object SQLConf {
         "keys, such as an aggregate or a window, replaces the hash shuffle that feeds that " +
         "operator during AQE query stage preparation, so one shuffle serves both. The operator " +
         "then runs on the keyed shuffle at its partition count. A hash shuffle that the plan " +
-        "reuses elsewhere is kept. Requires " +
+        "reuses elsewhere is kept. Removing the stage above the operator, which reports the " +
+        "operator's output size, can cost AQE the join's adaptive broadcast conversion or " +
+        "empty-output pruning. Requires " +
         s"${V2_BUCKETING_SHUFFLE_ENABLED.key} to be enabled and " +
         s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} to be disabled.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PUSH_DOWN_KEYED_SHUFFLE_ALLOW_WITH_SUBQUERIES_ENABLED =
     buildConf("spark.sql.adaptive.pushDownKeyedShuffle.allowWithSubqueries.enabled")
