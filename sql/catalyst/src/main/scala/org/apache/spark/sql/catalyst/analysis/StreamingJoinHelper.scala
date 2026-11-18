@@ -118,6 +118,27 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
+   * Get the column that evicts the state of an input with its own watermark, with its state value
+   * watermark. That is the event time if the condition bounds it, and otherwise the first other
+   * TIMESTAMP column in input order that the condition bounds. Each column is solved on its own,
+   * so the cutoff applies to the column that the condition bounds.
+   */
+  def getStateValueWatermarkColumn(
+      inputAttributes: Seq[Attribute],
+      attributesWithEventWatermark: AttributeSet,
+      joinCondition: Option[Expression],
+      eventWatermark: Option[Long]): Option[(Attribute, Long)] = {
+    val eventTime = inputAttributes.find(_.metadata.contains(delayKey))
+    val candidates = eventTime.toSeq ++ inputAttributes.filter { a =>
+      a.dataType == TimestampType && !eventTime.exists(_.semanticEquals(a))
+    }
+    candidates.iterator.flatMap { a =>
+      getStateValueWatermark(AttributeSet(a), attributesWithEventWatermark, joinCondition,
+        eventWatermark).map(a -> _)
+    }.nextOption()
+  }
+
+  /**
    * Extract the state value watermark (milliseconds) from the condition
    * `LessThan(leftExpr, rightExpr)` where . For example: if we want to find the constraint for
    * leftTime using the watermark on the rightTime. Example:
@@ -197,6 +218,13 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
     }.reduceLeft(Add(_, _))
+
+    // Callers can pass only the constrained column and the opposite event time, so a term on any
+    // other column passes the occurrence check above. Its value is unknown here.
+    if (exprWithWatermarkSubstituted.references.nonEmpty) {
+      logDebug(s"Failed to extract state constraint: unresolved $exprWithWatermarkSubstituted")
+      return None
+    }
 
     // Calculate the constraint value
     logInfo(log"Final expression to evaluate " +

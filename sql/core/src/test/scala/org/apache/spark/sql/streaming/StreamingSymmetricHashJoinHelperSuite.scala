@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper
@@ -38,6 +38,21 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
 
   val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq(), None)
   val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq(), None)
+
+  test("value predicate tests the column that the condition bounds, except in the legacy mode") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 0L).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = watermark)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+    val condition = rightTime >= leftTime && rightTime <= expiry
+    // The legacy mode with a single global watermark applies the bound to the event time.
+    Seq(false -> expiry, true -> leftTime).foreach { case (legacyMode, column) =>
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(leftTime, expiry), Seq(rightTime), Nil, Nil, Some(condition), Some(100000L), None,
+        useFirstEventTimeColumn = legacyMode)
+      assert(predicates.left.get.expr.references === AttributeSet(column))
+    }
+  }
 
   test("empty") {
     val split = JoinConditionSplitPredicates(None, left, right)
