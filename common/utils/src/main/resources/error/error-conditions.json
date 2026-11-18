@@ -1,4 +1,10 @@
 {
+  "ADBC_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The ADBC driver returned columns that don't match the schema of the scan. Expected: <expected>. Actual: <actual>."
+    ],
+    "sqlState" : "KD000"
+  },
   "ADD_DEFAULT_UNSUPPORTED" : {
     "message" : [
       "Failed to execute <statementType> command because DEFAULT values are not supported when adding new columns to previously existing target data source with table provider: \"<dataSource>\"."
@@ -3988,6 +3994,84 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
+  },
+  "INVALID_ADBC_OPTIONS" : {
+    "message" : [
+      "Invalid options for the ADBC data source:"
+    ],
+    "subClass" : {
+      "BOTH_TABLE_AND_QUERY" : {
+        "message" : [
+          "Options <tableOption> and <queryOption> cannot both be specified."
+        ]
+      },
+      "DRIVER_CLASS_NOT_FOUND" : {
+        "message" : [
+          "Cannot find the ADBC driver factory class <driver>. Make sure the driver is on the classpath, e.g. by adding it with --packages."
+        ]
+      },
+      "EMPTY_OPTION" : {
+        "message" : [
+          "Option <option> cannot be empty."
+        ]
+      },
+      "INCOMPLETE_PARTITION_OPTIONS" : {
+        "message" : [
+          "Options <options> must be specified together."
+        ]
+      },
+      "INVALID_DRIVER_CLASS" : {
+        "message" : [
+          "Class <driver> cannot be used as an ADBC driver: it must implement <factoryClass> and have a public no-argument constructor."
+        ]
+      },
+      "INVALID_OPTION_VALUE" : {
+        "message" : [
+          "Option <option> must be one of <validValues>, but was <value>."
+        ]
+      },
+      "INVALID_PARTITION_BOUNDS" : {
+        "message" : [
+          "Option <lowerBoundOption> (<lowerBound>) cannot be greater than option <upperBoundOption> (<upperBound>)."
+        ]
+      },
+      "INVALID_PARTITION_COLUMN" : {
+        "message" : [
+          "The partition column <column> must be a column of integer type of the relation."
+        ]
+      },
+      "MISSING_OPTION" : {
+        "message" : [
+          "Option <option> is required."
+        ]
+      },
+      "MISSING_TABLE_OR_QUERY" : {
+        "message" : [
+          "One of the options <tableOption> or <queryOption> is required."
+        ]
+      },
+      "NOT_AN_INTEGER" : {
+        "message" : [
+          "Option <option> must be an integer, but was <value>."
+        ]
+      },
+      "NOT_A_POSITIVE_INTEGER" : {
+        "message" : [
+          "Option <option> must be a positive integer, but was <value>."
+        ]
+      },
+      "SCHEMA_WITH_QUERY" : {
+        "message" : [
+          "Option <schemaOption> can only be used with option <tableOption>, not with option <queryOption>."
+        ]
+      },
+      "WRITE_WITH_QUERY" : {
+        "message" : [
+          "Cannot write with option <queryOption>. Use option <tableOption> to name the table to write to."
+        ]
+      }
+    },
+    "sqlState" : "42616"
   },
   "INVALID_AGGREGATE_FILTER" : {
     "message" : [

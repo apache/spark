@@ -237,6 +237,7 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>19.0.0</arrow.version>
+    <arrow.adbc.version>0.25.0</arrow.adbc.version>
     <!-- For in-process Python UDFs; also read by the PySpark CI image and named by the guide -->
     <jep.version>4.3.2</jep.version>
     <ammonite.version>3.0.9</ammonite.version>
@@ -2620,6 +2621,34 @@
             <artifactId>netty-common</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow.adbc</groupId>
+        <artifactId>adbc-core</artifactId>
+        <version>${arrow.adbc.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.checkerframework</groupId>
+            <artifactId>checker-qual</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow.adbc</groupId>
+        <artifactId>adbc-driver-manager</artifactId>
+        <version>${arrow.adbc.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.checkerframework</groupId>
+            <artifactId>checker-qual</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow.adbc</groupId>
+        <artifactId>adbc-driver-jdbc</artifactId>
+        <version>${arrow.adbc.version}</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
