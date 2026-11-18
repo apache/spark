@@ -1041,12 +1041,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case c: Call if c.resolved =>
             if (!c.bound) {
-              val invalidExprSqls = c.args.map {
+              val readingChild = c.args.map {
                 case NamedArgumentExpression(_, value) => value
                 case arg => arg
-              }.filter(_.references.nonEmpty).map(toSQLExpr)
+              }.filter(_.references.nonEmpty)
               // A rule such as `TimeWindowing` put an operator under the CALL for these arguments.
-              if (invalidExprSqls.nonEmpty) {
+              if (readingChild.nonEmpty) {
+                val invalidExprSqls = (readingChild ++
+                  PlanHelper.specialExpressionsInUnsupportedOperator(c)).map(toSQLExpr).distinct
                 c.failAnalysis(
                   errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
                   messageParameters = Map(

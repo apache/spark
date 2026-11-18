@@ -761,6 +761,18 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
         parameters = Map("operator" -> "Call", "invalidExprSqls" -> invalidExprSqls),
         context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
     }
+
+    val window = "window(TIMESTAMP '2026-01-01 00:00:00', '1 hour')"
+    Seq(
+      s"CALL cat.ns.sum($window, IF(true OR max(1) > 0, 1, 2))" -> "\"window\", \"max(1)\"",
+      s"CALL cat.ns.sum(max($window.start), 1)" -> "\"max(window.start)\""
+    ).foreach { case (call, invalidExprSqls) =>
+      checkError(
+        exception = intercept[AnalysisException](sql(call)),
+        condition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+        parameters = Map("operator" -> "Call", "invalidExprSqls" -> invalidExprSqls),
+        context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+    }
   }
 
   test("SPARK-61506: a resolved CALL that is not bound fails analysis") {
