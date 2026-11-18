@@ -108,10 +108,14 @@ private[sql] object KllAggregatePreparation {
       val forwarded = required.filter(a => candidates.contains(a.exprId))
       val needed = current.references.filter(a => candidates.contains(a.exprId)) ++ forwarded
       current match {
+        case distinct: Distinct =>
+          // DISTINCT consumes its complete equality tuple, including keys hidden by a parent.
+          val keys = distinct.child.outputSet.filter(a => candidates.contains(a.exprId))
+          distinct.copy(child = visit(distinct.child, needed ++ keys))
         case _: Project | _: Aggregate | _: Filter | _: Sort | _: SubqueryAlias | _: Join |
             _: Repartition | _: RepartitionByExpression | _: RebalancePartitions |
             _: GlobalLimit | _: LocalLimit | _: Offset | _: Window | _: Deduplicate |
-            _: Distinct | _: CTERelationDef =>
+            _: CTERelationDef =>
           current.mapChildrenWithReferenceEquality(child => visit(child, needed))
         case _ =>
           // CTE definitions and positional set-operation branches need not share their

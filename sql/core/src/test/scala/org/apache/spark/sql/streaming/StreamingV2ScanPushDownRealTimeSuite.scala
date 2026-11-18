@@ -48,6 +48,44 @@ class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)
 
+  for (recorded <- Seq(None, Some(true))) {
+    test(s"KLL startup pruning ignores discarded real-time offsets: recorded=$recorded") {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false",
+          SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "false") {
+        withTempDir { checkpoint =>
+          org.apache.spark.sql.execution.streaming.runtime.StreamMetadata.write(
+            org.apache.spark.sql.execution.streaming.runtime.StreamMetadata(
+              java.util.UUID.randomUUID().toString),
+            new org.apache.hadoop.fs.Path(checkpoint.getAbsolutePath, "metadata"),
+            spark.sessionState.newHadoopConf())
+          val key = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+          val metadata = org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata(
+            0L, 0L, recorded.map(value => Map(key -> value.toString)).getOrElse(Map.empty))
+          val log = new org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqLog(
+            spark, new java.io.File(checkpoint, "offsets").getAbsolutePath)
+          assert(log.add(0L, org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq(
+            Seq(Some(org.apache.spark.sql.execution.streaming.runtime.LongOffset(0L))),
+            Some(metadata))))
+          val input = new PruningLowLatencyStream(spark)
+          val scalar = "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3))"
+          val query = readTable(new PruningRealTimeTable(input))
+            .selectExpr(s"CASE WHEN $scalar <=> $scalar THEN 1L ELSE id END AS n")
+          testStream(query, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpoint.getAbsolutePath),
+            AddData(input, (1L, "a", 10), (2L, "b", 20)),
+            CheckAnswer(1L, 1L),
+            AssertOnQuery { q =>
+              val columns = q.logicalPlan.collect {
+                case r: StreamingDataSourceV2ScanRelation => r.scan.readSchema().fieldNames.toSeq
+              }
+              assert(columns == Seq(Seq("_1")), q.logicalPlan)
+              true
+            })
+        }
+      }
+    }
+  }
+
   test("read only the columns that a real-time query needs") {
     val input = new PruningLowLatencyStream(spark)
     val df = readTable(new PruningRealTimeTable(input)).where("extra > 10").select("data")

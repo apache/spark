@@ -68,14 +68,17 @@ private[sql] object ExternalLookupJoinStartupCheck extends Logging {
       session: SparkSession,
       plan: LogicalPlan,
       offsetLogMetadata: Option[OffsetSeqMetadataBase],
-      startTimeMs: Long): Unit = {
+      startTimeMs: Long,
+      legacyKllSharing: Option[Boolean] = None): Unit = {
     if (!session.sessionState.conf.getConf(SQLConf.JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED) ||
         ExternalLookupJoinEligibility.lookupSidePlans(plan).isEmpty) {
       return
     }
     session.withActive {
       try {
-        SQLConf.withExistingConf(startupConf(session, offsetLogMetadata)) {
+        val conf = startupConf(session, offsetLogMetadata)
+        legacyKllSharing.foreach(conf.setConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING, _))
+        SQLConf.withExistingConf(conf) {
           // As in a micro-batch, the current time and date are the batch timestamp, of the last
           // batch in the offset log, if any, which stays unknown until the optimization ends.
           // Without startup values, date and timestamp conversions fold, as in the first

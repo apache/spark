@@ -3315,9 +3315,10 @@ class Analyzer(
         val (correctedOutputs, corrected) = resolve(Some(false))
         val (legacyOutputs, legacy) = resolve(Some(true))
         val outputs = (batchOutputs ++ correctedOutputs ++ legacyOutputs).distinctBy(_.exprId)
-        (outputs, batch.zip(corrected).zip(legacy).map { case ((batch, corrected), legacy) =>
-          KllAggregateResolution(batch, corrected, legacy)
-        })
+        (outputs, batch.iterator.zip(corrected.iterator).zip(legacy.iterator).map {
+          case ((batch, corrected), legacy) =>
+            KllAggregateResolution(batch, corrected, legacy)
+        }.toVector)
       }
     }
 
@@ -4681,7 +4682,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
     val kllOutputs = if (!plan.containsAllPatterns(KLL_AGGREGATE, OUTER_REFERENCE)) {
       Map.empty[ExprId, Attribute]
     } else {
-      SubExprUtils.getOuterReferences(plan).zip(outerAttrs).collect {
+      SubExprUtils.getOuterReferences(plan).iterator.zip(outerAttrs.iterator).collect {
         case (aggregate: AggregateExpression, attribute: Attribute)
             if aggregate.containsPattern(KLL_AGGREGATE) => aggregate.resultId -> attribute
       }.toMap

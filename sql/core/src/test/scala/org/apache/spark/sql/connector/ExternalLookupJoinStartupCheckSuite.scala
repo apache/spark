@@ -140,10 +140,8 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
           val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
               |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin
           val key = "s.id = lk.id"
-          // Legacy equality folds to true, exposing the filter-supplied lookup key. A corrected
-          // checkpoint retains independent scalars, so its control has a direct key as well.
-          val condition = if (legacy) s"IF($scalar <=> $scalar, $key, false)"
-            else s"$key AND ($scalar <=> $scalar)"
+          // Only legacy equality exposes the lookup key inside this conditional.
+          val condition = s"IF($scalar <=> $scalar, $key, false)"
           def analyzed(rollback: Boolean, directKey: Boolean = false): DataFrame = withSQLConf(
               SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> rollback.toString) {
             val predicate = if (directKey) s"$key AND ($scalar <=> $scalar)" else condition
@@ -185,7 +183,25 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
           }
           // Reanalyze in the opposite mode and change the session setting. The saved checkpoint
           // owns startup and micro-batch decisions in both cases, including a missing old key.
-          run(analyzed(!legacy), 3, !legacy)
+          if (!legacy) {
+            val before = SimpleExternalLookupDataSource.readerCount.get()
+            withSQLConf(sharing -> "true") {
+              val running = analyzed(rollback = true).writeStream
+                .option("checkpointLocation", checkpoint.getAbsolutePath)
+                .foreachBatch { (_: DataFrame, _: Long) => () }.start()
+              try {
+                val error = intercept[StreamingQueryException] {
+                  running.awaitTermination(timeoutMs)
+                }
+                assert(error.getCause.asInstanceOf[AnalysisException].getCondition ==
+                  "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
+                assert(SimpleExternalLookupDataSource.readerCount.get() == before)
+              } finally {
+                running.stop()
+              }
+            }
+          }
+          run(analyzed(!legacy, directKey = !legacy), 3, !legacy)
           assert(rows.asScala.toSeq.map(_.getString(0)).sorted == Seq("engineering", "research"))
           assert(SimpleExternalLookupDataSource.readerCount.get() > 0)
         }

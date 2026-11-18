@@ -523,7 +523,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("KLL UDF checkpoint bindings preserve distinct inputs and randomness") {
     for (legacySharing <- Seq(false, true)) {
       withTempDir { checkpoint =>
-        val input = MemoryStream[Int]
+        val input = MemoryStream[Int](spark, numPartitions = 1)
         def scalar(size: Int): String =
           s"(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range($size))"
         val identity = udf((n: java.lang.Long) => n).asNondeterministic()
@@ -538,6 +538,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           result
         }
         val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+        var expectedPairs = Set.empty[(Double, Double)]
         val bindings = AssertOnQuery { q =>
           val keys = q.lastExecution.executedPlan.collectFirst {
             case save: StateStoreSaveExec => save.keyExpressions.size
@@ -548,10 +549,34 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           }))
           assert(randoms.size == 2, q.lastExecution.normalized.toString)
           assert(randoms.map(_.seedExpression).distinct.size == 2)
+          import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExprId, Expression}
+          val optimized = q.lastExecution.optimizedPlan
+          val definitions = optimized.flatMap(_.expressions.flatMap(_.collect {
+            case a: Alias => a.exprId -> a.child
+          })).toMap
+          def seeds(value: Expression, seen: Set[ExprId] = Set.empty): Set[Long] = value match {
+            case random: Rand => Set(random.seedExpression.eval().asInstanceOf[Long])
+            case a: Attribute if !seen.contains(a.exprId) =>
+              definitions.get(a.exprId).map(seeds(_, seen + a.exprId)).getOrElse(Set.empty)
+            case other => other.children.flatMap(seeds(_, seen)).toSet
+          }
+          val output = optimized.collectFirst {
+            case a: Aggregate if a.output.exists(_.name == "other_random") => a
+          }.get
+          val shared = seeds(output.aggregateExpressions.find(_.name == "r").get)
+          val distinct = seeds(output.aggregateExpressions.find(_.name == "other_random").get)
+          assert(shared.size == 1 && distinct.size == 1 && shared != distinct, optimized)
+          val sharedGenerator = new org.apache.spark.util.random.XORShiftRandom(shared.head)
+          val distinctGenerator = new org.apache.spark.util.random.XORShiftRandom(distinct.head)
+          val added = if (q.lastExecution.currentBatchId == 0L) 2 else 1
+          expectedPairs ++= (1 to added).map { _ =>
+            (sharedGenerator.nextDouble(), distinctGenerator.nextDouble())
+          }
           true
         }
         def checkRows(total: Long): CheckAnswerRowsByFunc = CheckLastBatch { rows: Seq[Row] =>
           assert(rows.map(_.getLong(6)).sum == total)
+          assert(rows.map(row => (row.getDouble(3), row.getDouble(5))).toSet == expectedPairs)
           rows.foreach { row =>
             assert(row.getLong(0) == 3L && row.getLong(1) == 3L && row.getLong(2) == 5L)
             assert(row.getDouble(3) == row.getDouble(4), row.toString)
@@ -560,11 +585,11 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         testStream(query(legacy = legacySharing), Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(sharing -> legacySharing.toString)),
-          AddData(input, 1, 2), checkRows(2L), bindings, StopStream)
+          AddData(input, 1, 2), ProcessAllAvailable(), bindings, checkRows(2L), StopStream)
         testStream(query(legacy = false), Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(sharing -> (!legacySharing).toString)),
-          AddData(input, 3), checkRows(3L), bindings, StopStream)
+          AddData(input, 3), ProcessAllAvailable(), bindings, checkRows(3L), StopStream)
       }
     }
   }
@@ -751,7 +776,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val rollback = "spark.sql.legacy.kllAggregateDeterministic.enabled"
     val sharing = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
     for (legacy <- Seq(false, true); dataType <- Seq("bigint", "float", "double");
-        merge <- Seq(false, true)) {
+        merge <- Seq(false, true); analysisLegacy <- Seq(false, true)) {
       withTempDir { checkpoint =>
         val input = MemoryStream[(Long, Array[Byte])]
         def record(value: Long): (Long, Array[Byte]) = {
@@ -779,7 +804,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         val scalarArgument = if (merge) "s" else s"CAST(id AS $dataType)"
         val scalar = s"(SELECT kll_sketch_get_n_$dataType($function($scalarArgument)) " +
           s"FROM $source)"
-        val result = withSQLConf(rollback -> "true") {
+        val result = withSQLConf(rollback -> analysisLegacy.toString) {
           input.toDF().agg(
             expr(s"$function($argument, 8)").as("a"),
             expr(s"$function($argument, 8)").as("b"),
@@ -787,7 +812,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
             .selectExpr(s"kll_sketch_get_n_$dataType(a)", s"kll_sketch_get_n_$dataType(b)",
               "x", "y", "n")
         }
-        assert(result.queryExecution.analyzed.deterministic)
+        assert(result.queryExecution.analyzed.deterministic == analysisLegacy)
         def checkBuffers: AssertOnQuery = AssertOnQuery { query =>
           val aggregates = query.lastExecution.executedPlan.collect {
             case a: BaseAggregateExec if a.aggregateExpressions.exists(
@@ -866,8 +891,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         testStream(query(historicalLayout = true), Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(key -> "true")),
-          AddData(input, record(1L, 101L), record(2L, 102L)),
-          CheckLastBatch(if (nestedScalar) Row(0, 3L, 2L, 101L) else Row(0, 101L, 2L)),
+          AddData(input, record(11L, 101L), record(12L, 102L)),
+          CheckLastBatch(if (nestedScalar) Row(0, 3L, 12L, 101L) else Row(0, 101L, 12L)),
           StopStream)
 
         val logPath = new File(checkpoint, "offsets").getAbsolutePath
@@ -885,7 +910,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(key -> "false")),
           AddData(input, record(3L, 103L)),
-          CheckLastBatch(if (nestedScalar) Row(0, 3L, 3L, 101L) else Row(0, 101L, 3L)),
+          CheckLastBatch(if (nestedScalar) Row(0, 3L, 12L, 101L) else Row(0, 101L, 12L)),
           StopStream)
       }
     }

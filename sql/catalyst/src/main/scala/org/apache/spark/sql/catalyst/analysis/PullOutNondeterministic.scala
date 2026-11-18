@@ -36,9 +36,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp applyLocally
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case p if !p.resolved => p // Skip unresolved nodes.
     case p: Project => p
     case f: Filter => f
+    case p if !p.resolved => p // Skip unresolved nodes.
 
     // Let ordinary aggregate validation report the original invalid grouping expression.
     case a: Aggregate if a.groupingExpressions.exists(e => !e.deterministic && e.exists {
@@ -390,6 +390,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
 /** Keeps Count's input checks intact until NULL handling for primitive UDFs has run. */
 private[analysis] case class KllCountAggregateInput(override val children: Seq[Expression])
   extends RuntimeReplaceable {
+  // Primitive UDF null guards arrive after extraction. Their original inputs remain part of
+  // evaluator identity even when the provisional replacement is a nonnullable constant.
+  override lazy val canonicalized: Expression = copy(children = children.map(_.canonicalized))
   // Be conservative before HandleNullInputsForUDF: it can make an argument nullable later.
   override def nullable: Boolean = true
   override def dataType: DataType = LongType

@@ -68,6 +68,43 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     assert(large <= small * 6, s"width32=$small width128=$large attribute hashes")
   }
 
+  test("relocation skips repeated alias expansion in a binding-free join input") {
+    val visits = new AtomicInteger
+    val value = $"value".double
+    val ordinary = (1 to 12).foldLeft[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](
+      LocalRelation(value)) { (child, i) =>
+      val previous = child.output.head
+      Project(Seq(Alias(Add(Counted(previous, visits), previous), s"x$i")()), child)
+    }
+    val key = $"key".long
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+        .toAggregateExpression()).as("n")))
+    val binding = Alias(scalar, "binding")().asNondeterministicSubqueryBinding
+    val component = Join(LocalRelation(key), LocalRelation(), Inner, None, JoinHint.NONE)
+    val left = Project(Seq(key, binding), component)
+    val condition = EqualTo(Add(Cast(key, DoubleType), Cast(binding.toAttribute, DoubleType)),
+      ordinary.output.head)
+    val plan = Join(left, ordinary, Inner, Some(condition), JoinHint.NONE)
+    plan.foreach { p =>
+      p.treePatternBits
+      p.expressions.foreach(_.foreach { e => e.references; e.treePatternBits; e.deterministic })
+    }
+    visits.set(0)
+    val result = org.apache.spark.sql.catalyst.optimizer.PushDownKllSubqueryBindings(plan)
+      .asInstanceOf[Join]
+    assert(result.right eq ordinary)
+    assert(result.condition.get eq condition)
+    assert(result.left.exists {
+      case p: Project => p.projectList.exists {
+        case a: Alias => a.exprId == binding.exprId && (p.child eq component.left)
+        case _ => false
+      }
+      case _ => false
+    }, result)
+    assert(visits.get == 0, s"binding-free alias expansion visits=${visits.get}")
+  }
+
   test("global membership aggregates reject before legacy KLL proof reconstruction") {
     val copies = new AtomicInteger
     val value = (1 to 64).foldLeft[Expression](KllSketchAggBigint(Literal(1L),

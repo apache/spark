@@ -41,7 +41,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
@@ -208,6 +208,26 @@ class MicroBatchExecution(
   private lazy val initialLatestOffsetSeq: Option[(Long, OffsetSeqBase)] =
     offsetLog.getLatest()
 
+  private lazy val initialLatestCommittedBatch = commitLog.getLatest()
+
+  // Startup optimizations must use the KLL mode that execution will restore after real-time
+  // recovery. Keep the raw offset snapshot for the other startup settings and reader boundary.
+  private lazy val startupLegacyKllSharing: Boolean = {
+    val committed = initialLatestCommittedBatch.map(_._1).getOrElse(-1L)
+    val surviving = if (trigger.isInstanceOf[RealTimeTrigger] &&
+        initialLatestOffsetSeq.exists(_._1 > committed)) {
+      val batchId = offsetLog.getOrderedBatchFiles().iterator
+        .map(_.getPath.getName.toLong).find(_ <= committed)
+      assert(batchId.nonEmpty || committed == -1L)
+      batchId.map(id => id -> offsetLog.get(id).get)
+    } else initialLatestOffsetSeq
+    surviving.flatMap(_._2.metadataOpt).map { metadata =>
+      OffsetSeqMetadata.readValueOpt(metadata, SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
+        .map(_.toBoolean).getOrElse(true)
+    }.getOrElse(sparkSessionForStream.sessionState.conf
+      .getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING))
+  }
+
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
       "logicalPlan must be initialized in QueryExecutionThread " +
@@ -265,11 +285,13 @@ class MicroBatchExecution(
     // Before any source is created, so that a lookup join that cannot be planned stops the query
     // with no source to stop.
     ExternalLookupJoinStartupCheck(sparkSessionForStream, planWithDedupKeys,
-      initialLatestOffsetSeq.flatMap(_._2.metadataOpt), triggerClock.getTimeMillis())
+      initialLatestOffsetSeq.flatMap(_._2.metadataOpt), triggerClock.getTimeMillis(),
+      legacyKllSharing = Some(startupLegacyKllSharing))
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     lazy val columnsAndFiltersOfSources = StreamingV2ScanPushDown.columnsAndFiltersOfSources(
-      sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
+      sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt),
+      legacyKllSharing = Some(startupLegacyKllSharing))
     val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
@@ -554,7 +576,7 @@ class MicroBatchExecution(
   private def initializeExecution(
       sparkSessionForStream: SparkSession): MicroBatchExecutionContext = {
     var latestStartedBatch = initialLatestOffsetSeq
-    val latestCommittedBatch = commitLog.getLatest()
+    val latestCommittedBatch = initialLatestCommittedBatch
 
     val lastCommittedBatchId = latestCommittedBatch match {
       case Some((batchId, _)) => batchId
@@ -1162,6 +1184,9 @@ class MicroBatchExecution(
       s"shouldConstructNextBatch = $shouldConstructNextBatch")
 
     if (shouldConstructNextBatch) {
+      // Finalize the reader requirement from this batch's actual normalized sources before
+      // either the synchronous or asynchronous offset writer captures the metadata.
+      prepareBatch(execCtx, sparkSessionForStream)
       // Commit the next batch offset range to the offset log
       execCtx.updateStatusMessage("Writing offsets to log")
       execCtx.reportTimeTaken("walCommit") {
@@ -1208,10 +1233,10 @@ class MicroBatchExecution(
    * Processes any data available between `endOffsets` and `startOffset`.
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
-  private def runBatch(
+  private def prepareBatch(
       execCtx: MicroBatchExecutionContext,
-      sparkSessionToRunBatch: SparkSession): Unit = {
-    logDebug(s"Running batch ${execCtx.batchId}")
+      sparkSessionToRunBatch: SparkSession): PreparedMicroBatchPlan = {
+    logDebug(s"Preparing batch ${execCtx.batchId}")
 
     // Request unprocessed data from all sources.
     val mutableNewData = mutable.Map.empty ++ execCtx.reportTimeTaken("getBatch") {
@@ -1336,7 +1361,6 @@ class MicroBatchExecution(
           LocalRelation(r.output, isStreaming = true)
         }
     }
-    execCtx.newData = mutableNewData.toMap
     // Rewire the plan to use the new attributes that were returned by the source.
     val newAttributePlan = MicroBatchExecution.withBatchTimestamp(
       newBatchesPlan, execCtx.offsetSeqMetadata.batchTimestampMs)
@@ -1356,10 +1380,43 @@ class MicroBatchExecution(
 
     loggingThreadContext.put(LogKeys.BATCH_ID.name, execCtx.batchId.toString)
 
+    val prepared = execCtx.reportTimeTaken("queryPlanning") {
+      // This phase is logical: state schemas, source commits and sink execution still follow WAL.
+      val execution = new QueryExecution(sparkSessionToRunBatch, triggerLogicalPlan)
+      val original = execution.analyzed
+      val legacy = sparkSessionToRunBatch.sessionState.conf
+        .getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
+      val normalized = KllCheckpointPreparation(execution.normalized, original, legacy)
+      val needsKllReader = OffsetSeqLog.requiresKllReader(execCtx.offsetSeqMetadata) ||
+        (!legacy && (analyzedPlan.containsPattern(KLL_AGGREGATE) ||
+          original.containsPattern(KLL_AGGREGATE) || normalized.containsPattern(KLL_AGGREGATE)))
+      if (needsKllReader) {
+        // A replay cannot strengthen an already published offset file. Fail before physical
+        // state effects rather than silently running corrected KLL behind an old reader header.
+        if (execCtx.isCurrentBatchConstructed && offsetLog.get(execCtx.batchId).exists(
+            entry => !entry.metadataOpt.exists(OffsetSeqLog.requiresKllReader))) {
+          throw new IllegalStateException(
+            s"Offset log for batch ${execCtx.batchId} lacks the corrected KLL reader requirement")
+        }
+        execCtx.offsetSeqMetadata = OffsetSeqLog.withKllReaderBoundary(execCtx.offsetSeqMetadata)
+      }
+      PreparedMicroBatchPlan(original, normalized, mutableNewData.toMap)
+    }
+    execCtx.preparedLogicalPlan = Some(prepared)
+    prepared
+  }
+
+  private def runBatch(
+      execCtx: MicroBatchExecutionContext,
+      sparkSessionToRunBatch: SparkSession): Unit = {
+    logDebug(s"Running batch ${execCtx.batchId}")
+    val prepared = execCtx.preparedLogicalPlan.getOrElse(
+      prepareBatch(execCtx, sparkSessionToRunBatch))
+    execCtx.newData = prepared.newData
     execCtx.reportTimeTaken("queryPlanning") {
       execCtx.executionPlan = new IncrementalExecution(
         sparkSessionToRunBatch,
-        triggerLogicalPlan,
+        prepared.logical,
         outputMode,
         checkpointFile("state"),
         id,
@@ -1373,7 +1430,8 @@ class MicroBatchExecution(
         stateSchemaMetadatas,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
         isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger],
-        pushedFilterRewrites = pushedFilterRewrites)
+        pushedFilterRewrites = pushedFilterRewrites,
+        preparedNormalizedPlan = Some(prepared.normalized))
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins

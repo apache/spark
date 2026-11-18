@@ -42,14 +42,7 @@ private[sql] object KllCheckpointPreparation {
     var needsExtraction = false
     var kllChanged = false
     val unchosen = MutableSet.empty[ExprId]
-    val selected = if (!preOptimized.containsAnyPattern(
-        KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE)) {
-      preOptimized
-    } else preOptimized.transformAllExpressionsWithSubqueries {
-      case resolution: KllAggregateResolution =>
-        val chosen = if (legacySharing) resolution.legacy else resolution.corrected
-        unchosen ++= KllAggregatePreparation.unchosenOutputs(resolution, chosen)
-        chosen
+    val reclassify: PartialFunction[Expression, Expression] = {
       case k: KllSketchAggBigint if k.legacyDeterministic != legacySharing =>
         kllChanged = true
         needsExtraction = !legacySharing
@@ -75,6 +68,32 @@ private[sql] object KllCheckpointPreparation {
         needsExtraction = !legacySharing
         k.copy(legacyDeterministic = legacySharing)
     }
+    def selectExpression(expression: Expression): Expression = {
+      if (!expression.containsAnyPattern(KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE)) {
+        return expression
+      }
+      expression match {
+        case resolution: KllAggregateResolution =>
+          val chosen = if (legacySharing) resolution.legacy else resolution.corrected
+          unchosen ++= KllAggregatePreparation.unchosenOutputs(resolution, chosen)
+          selectExpression(chosen)
+        case other =>
+          reclassify.applyOrElse(other, identity[Expression]) match {
+            case query: SubqueryExpression =>
+              val children = query.mapChildrenWithReferenceEquality(selectExpression)
+                .asInstanceOf[SubqueryExpression]
+              val nested = selectPlan(query.plan)
+              if (nested eq query.plan) children else children.withNewPlan(nested)
+            case updated => updated.mapChildrenWithReferenceEquality(selectExpression)
+          }
+      }
+    }
+    def selectPlan(input: LogicalPlan): LogicalPlan = {
+      if (!input.containsAnyPattern(KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE)) return input
+      input.mapChildrenWithReferenceEquality(selectPlan)
+        .mapExpressionsWithReferenceEquality(selectExpression)
+    }
+    val selected = selectPlan(preOptimized)
     // Alternative resolution outputs are compiler-owned state demands. Retire those that
     // the selected consumer no longer uses even when optional ColumnPruning is disabled.
     val adjusted = if (unchosen.isEmpty) selected else {
@@ -160,7 +179,8 @@ private[sql] object KllCheckpointPreparation {
         (visit(input), bindings)
       }
       NondeterministicExpressionCollection.restoreBindingProvenance(originalBindings, adjusted)
-        .transformUpWithSubqueries {
+        .transformUpWithSubqueriesAndPruning(_.containsAnyPattern(
+          NONDETERMINISTIC_SUBQUERY_BINDING, KLL_CHECKPOINT_ALTERNATIVE)) {
         case join: Join =>
           val (left, leftBindings) = restoreInput(join.left, independentOnly = true)
           val (right, rightBindings) = restoreInput(join.right, independentOnly = true)
@@ -200,7 +220,9 @@ private[sql] object KllCheckpointPreparation {
     } else if (needsExtraction) {
       // Analysis in rollback mode did not stage newly nondeterministic subqueries. Apply the
       // same extraction before optimizing, including within scalar subquery plans.
-      adjusted.transformUpWithSubqueries(PullOutNondeterministic.applyLocally)
+      adjusted.transformUpWithSubqueriesAndPruning(_.containsAnyPattern(
+        KLL_AGGREGATE, KLL_CHECKPOINT_ALTERNATIVE, NONDETERMINISTIC_SUBQUERY_BINDING))(
+        PullOutNondeterministic.applyLocally)
     } else {
       adjusted
     }

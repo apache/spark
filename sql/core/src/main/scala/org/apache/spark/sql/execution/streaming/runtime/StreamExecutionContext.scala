@@ -110,6 +110,12 @@ class ContinuousExecutionContext(
     epochId,
     sparkSession)
 
+/** Source ranges and normalized expression identities prepared once for a single batch. */
+private[streaming] case class PreparedMicroBatchPlan(
+    logical: LogicalPlan,
+    normalized: LogicalPlan,
+    newData: Map[SparkDataStream, LogicalPlan])
+
 /**
  * Holds the all the mutable state and processing metrics for a single micro-batch
  * when using micro batch execution mode.
@@ -146,6 +152,9 @@ class MicroBatchExecutionContext(
    * (i.e. written to the offsetLog) and is ready for execution.
    */
   var isCurrentBatchConstructed = false
+
+  // Source ranges and normalized expression identities belong to this batch only.
+  private[streaming] var preparedLogicalPlan: Option[PreparedMicroBatchPlan] = None
 
   // copying some of the state from the previous batch
   previousContext.foreach { ctx =>

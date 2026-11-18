@@ -91,8 +91,9 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
           val prepared = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
             analyzed, analyzed, legacySharing = !legacy)
           assert(modes(prepared).forall(_ == !legacy))
-          query -> expected
-        }
+          Seq(query -> expected,
+            org.apache.spark.sql.classic.Dataset.ofRows(spark, prepared) -> expected)
+        }.flatten
       }
       queries.foreach { case (query, expected) => checkAnswer(query, expected) }
     }
@@ -493,6 +494,61 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("KLL Count binding retains distinct primitive UDF null dependencies") {
+    val add = udf((n: Long, s: Long) => n + s).asNonNullable()
+    val input = Seq((Some(1L), Some(1L)), (None, Some(2L))).toDF("a", "b")
+    for (legacy <- Seq(false, true);
+        codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+        val query = sql(s"SELECT $scalar AS n")
+        val value = org.apache.spark.sql.classic.ClassicConversions.column(
+          org.apache.spark.sql.classic.ColumnConversions.expression(query.scalar()))
+        val result = input.agg(
+          org.apache.spark.sql.functions.count(add($"a", value)),
+          org.apache.spark.sql.functions.count(add($"b", value)),
+          org.apache.spark.sql.functions.count(add($"a", value)))
+        result.queryExecution.analyzed
+        checkAnswer(result, Row(1L, 2L, 1L))
+      }
+    }
+  }
+
+  test("KLL DISTINCT retains every exposed key during alternative retirement") {
+    val queries = for (singlePass <- Seq(false, true); legacy <- Seq(false, true)) yield {
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val keys = Seq("(1L), (2L)" -> Seq(Row(1), Row(1)), "(1L), (1L)" -> Seq(Row(1)))
+          .flatMap { case (values, expected) =>
+            val query = sql(s"""SELECT c FROM (
+                |SELECT DISTINCT 1 AS c, kll_sketch_agg_bigint(id, 8) AS sketch
+                |FROM VALUES $values AS t(id) GROUP BY id
+                |HAVING kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id, 8)) > 0) q""".stripMargin)
+            val analyzed = query.queryExecution.analyzed
+            Seq(query -> expected) ++ Seq(false, true).map { checkpointLegacy =>
+              val prepared = org.apache.spark.sql.execution.streaming.runtime
+                .KllCheckpointPreparation(analyzed, analyzed, checkpointLegacy)
+              org.apache.spark.sql.classic.Dataset.ofRows(spark, prepared) -> expected
+            }
+          }
+        val control = sql("""SELECT c FROM (
+            |SELECT DISTINCT 1 AS c FROM VALUES (1L), (2L) AS t(id) GROUP BY id
+            |HAVING kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id, 8)) > 0) q""".stripMargin)
+        control.queryExecution.analyzed
+        keys :+ (control -> Seq(Row(1)))
+      }
+    }
+    queries.flatten.foreach { case (query, expected) => checkAnswer(query, expected) }
   }
 
   Seq("first", "any_value", "max_by", "min_by").foreach { function =>
@@ -1484,6 +1540,15 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
     data.collect()
     assert(observation.get == Map("n" -> 5L))
     assert(data.queryExecution.observedMetrics("kll_scalar_metric") == Row(5L))
+  }
+
+  test("KLL observed metrics reject an ordinary volatile scalar sibling") {
+    val error = intercept[AnalysisException] {
+      spark.range(2).observe("volatile_scalar_metric",
+        expr("count(*) + (SELECT rand(7))").as("n")).queryExecution.analyzed
+    }
+    assert(error.getCondition ==
+      "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC")
   }
 
   test("a shared KLL scalar preserves both SQL function equi join operands") {

@@ -260,9 +260,10 @@ private[sql] object StreamingV2ScanPushDown
   def columnsAndFiltersOfSources(
       session: SparkSession,
       plan: LogicalPlan,
-      offsetLogMetadata: Option[OffsetSeqMetadataBase]): Map[StreamingRelationV2, Reads] = {
+      offsetLogMetadata: Option[OffsetSeqMetadataBase],
+      legacyKllSharing: Option[Boolean] = None): Map[StreamingRelationV2, Reads] = {
     try {
-      readsOfSources(session, plan, offsetLogMetadata)
+      readsOfSources(session, plan, offsetLogMetadata, legacyKllSharing)
     } catch {
       case NonFatal(e)
           if !session.sessionState.conf.getConf(SQLConf.STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR) =>
@@ -277,8 +278,10 @@ private[sql] object StreamingV2ScanPushDown
   private def readsOfSources(
       session: SparkSession,
       plan: LogicalPlan,
-      offsetLogMetadata: Option[OffsetSeqMetadataBase]): Map[StreamingRelationV2, Reads] = {
+      offsetLogMetadata: Option[OffsetSeqMetadataBase],
+      legacyKllSharing: Option[Boolean]): Map[StreamingRelationV2, Reads] = {
     val conf = startupConf(session, plan, offsetLogMetadata).getOrElse(return Map.empty)
+    legacyKllSharing.foreach(conf.setConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING, _))
     session.withActive {
       SQLConf.withExistingConf(conf) {
         // The plan of a micro-batch is normalized before it is optimized, see `QueryExecution`.

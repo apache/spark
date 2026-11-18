@@ -117,6 +117,20 @@ class KllAggregateInputEvaluationSuite extends PlanTest {
     assert(evaluateCount(aggregate, InternalRow(1L, 1L)) == 1L)
   }
 
+  test("Count binding canonicalization retains original primitive UDF dependencies") {
+    val shared = scalar
+    val function = (n: Long, s: Long) => n + s
+    val encoder = Some(ExpressionEncoder[Long]().resolveAndBind())
+    def argument(attribute: Attribute): Expression = ScalaUDF(function, LongType,
+      Seq(attribute, shared), inputEncoders = Seq(encoder, encoder), nullable = false)
+    val first = KllCountAggregateInput(Seq(argument(a)))
+    val second = KllCountAggregateInput(Seq(argument(b)))
+    assert(first.canonicalized != second.canonicalized)
+    assert(first.canonicalized == KllCountAggregateInput(Seq(argument(a))).canonicalized)
+    val keys = new NondeterministicExpressionCollection.ExpressionKeys
+    assert(keys(first) != keys(second))
+  }
+
   test("interval TRY keeps the throwing division within its catcher") {
     val key = TryEval(DivideDTInterval(day, Subtract(Add(scalar, b), Literal(1L))))
     val aggregate = prepare(Aggregate(Seq(key),

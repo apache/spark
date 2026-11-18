@@ -95,6 +95,36 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
     }
   }
 
+  test("KLL checkpoint reclassification skips unrelated expression branches in a mixed plan") {
+    for (analysisLegacy <- Seq(false, true)) {
+      val visits = new AtomicInteger
+      val value = AttributeReference("value", LongType)()
+      val ordinary = (1 to 64).foldLeft[Expression](value) { (child, _) =>
+        NormalizationCounted(child, visits)
+      }
+      val sketch = KllSketchAggBigint(Literal(1L), legacyDeterministic = analysisLegacy)
+      val nested = Aggregate(Nil, Seq(Alias(sketch.toAggregateExpression(), "s")()),
+        LocalRelation())
+      val plan = Project(Seq(Alias(ordinary, "ordinary")(),
+        Alias(ScalarSubquery(nested), "scalar")()), LocalRelation(value))
+      plan.foreach { p =>
+        p.treePatternBits
+        p.expressions.foreach(_.foreach { e => e.treePatternBits; e.deterministic; e.resolved })
+      }
+      visits.set(0)
+      val prepared = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        plan, plan, legacySharing = false)
+      val reclassificationVisits = visits.get
+      assert(prepared.asInstanceOf[Project].projectList.head eq plan.projectList.head)
+      val modes = prepared.collectWithSubqueries { case p => p.expressions.flatMap(_.collect {
+        case k: KllSketchAggBigint => k.legacyDeterministic
+      }) }.flatten
+      assert(modes == Seq(false))
+      assert(reclassificationVisits == 0,
+        s"unrelated reclassification visits=$reclassificationVisits")
+    }
+  }
+
   test("checkpoint retirement shares outer-reference scans for repeated nested plans") {
     def work(candidateReference: Boolean): Int = {
       val visits = new AtomicInteger

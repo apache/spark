@@ -38,51 +38,55 @@ object PushDownKllSubqueryBindings extends Rule[LogicalPlan] with PredicateHelpe
           case getter: KllSketchGetNBase => PullOutNondeterministic.safeKllCount(getter)
           case _ => false
         })
-      def lower(input: LogicalPlan, consumers: Seq[Expression]): LogicalPlan = input match {
-        case filter: Filter => filter.copy(child = lower(filter.child,
-          consumers :+ filter.condition))
-        case alias: SubqueryAlias => alias.copy(child = lower(alias.child, consumers))
-        case projection: Project =>
-          val bindings = projection.projectList.collect { case a: Alias if eligible(a) => a }
-          val bindingIds = bindings.map(_.exprId).toSet
-          val aliases = AttributeMap(getAliasMap(projection).toSeq.filterNot {
-            case (attribute, _) => bindingIds.contains(attribute.exprId)
-          })
-          val expanded = consumers.map(replaceAlias(_, aliases))
-          val contributions = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
-          def collect(expression: Expression, references: AttributeSet): Unit = expression match {
-            case attribute: Attribute if bindingIds.contains(attribute.exprId) =>
-              contributions.getOrElseUpdate(attribute.exprId, mutable.ArrayBuffer.empty) +=
-                references.filter(a => !bindingIds.contains(a.exprId))
-            case comparison: BinaryComparison => comparison.children.foreach { operand =>
-              val local = AttributeSet(
-                operand.references.filterNot(a => bindingIds.contains(a.exprId)))
-              collect(operand, if (local.nonEmpty) local else references)
+      def lower(input: LogicalPlan, consumers: Vector[Expression]): LogicalPlan = {
+        if (!input.containsPattern(NONDETERMINISTIC_SUBQUERY_BINDING)) return input
+        input match {
+          case filter: Filter => filter.copy(child = lower(filter.child,
+            consumers :+ filter.condition))
+          case alias: SubqueryAlias => alias.copy(child = lower(alias.child, consumers))
+          case projection: Project =>
+            val bindings = projection.projectList.collect { case a: Alias if eligible(a) => a }
+            val bindingIds = bindings.map(_.exprId).toSet
+            val aliases = AttributeMap(getAliasMap(projection).toSeq.filterNot {
+              case (attribute, _) => bindingIds.contains(attribute.exprId)
+            })
+            val expanded = consumers.map(replaceAlias(_, aliases))
+            val contributions = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
+            def collect(expression: Expression, references: AttributeSet): Unit = expression match {
+              case attribute: Attribute if bindingIds.contains(attribute.exprId) =>
+                contributions.getOrElseUpdate(attribute.exprId, mutable.ArrayBuffer.empty) +=
+                  references.filter(a => !bindingIds.contains(a.exprId))
+              case comparison: BinaryComparison => comparison.children.foreach { operand =>
+                val local = operand.references.filter(a => !bindingIds.contains(a.exprId))
+                collect(operand, if (local.nonEmpty) local else references)
+              }
+              case other => other.children.foreach(collect(_, references))
             }
-            case other => other.children.foreach(collect(_, references))
-          }
-          expanded.foreach { expression =>
-            splitConjunctivePredicates(expression).foreach(e => collect(e, e.references))
-          }
-          val uses = contributions.iterator.map { case (id, sets) =>
-            id -> AttributeSet.fromAttributeSets(sets)
-          }.toMap
-          val placement = new KllSubqueryBindingPlacement
-          val movable = bindings.filter { binding =>
-            uses.contains(binding.exprId) &&
-              !(placement.destination(projection.child, uses(binding.exprId)) eq projection.child)
-          }
-          if (movable.isEmpty) projection.copy(child = lower(projection.child, expanded)) else {
-            val moved = movable.map(_.exprId).toSet
-            val outputs = projection.projectList.map {
-              case alias: Alias if moved.contains(alias.exprId) => alias.toAttribute
-              case other => other
+            def collectConjuncts(expression: Expression): Unit = expression match {
+              case And(left, right) => collectConjuncts(left); collectConjuncts(right)
+              case other => collect(other, other.references)
             }
-            Project(outputs, placement.project(projection.child, movable, uses.toMap))
-          }
-        case other => other
+            expanded.foreach(collectConjuncts)
+            val uses = contributions.iterator.map { case (id, sets) =>
+              id -> AttributeSet.fromAttributeSets(sets)
+            }.toMap
+            val placement = new KllSubqueryBindingPlacement
+            val movable = bindings.filter { binding =>
+              uses.contains(binding.exprId) &&
+                !(placement.destination(projection.child, uses(binding.exprId)) eq projection.child)
+            }
+            if (movable.isEmpty) projection.copy(child = lower(projection.child, expanded)) else {
+              val moved = movable.map(_.exprId).toSet
+              val outputs = projection.projectList.map {
+                case alias: Alias if moved.contains(alias.exprId) => alias.toAttribute
+                case other => other
+              }
+              Project(outputs, placement.project(projection.child, movable, uses.toMap))
+            }
+          case other => other
+        }
       }
-      join.copy(left = lower(join.left, join.condition.toSeq),
-        right = lower(join.right, join.condition.toSeq))
+      join.copy(left = lower(join.left, join.condition.toVector),
+        right = lower(join.right, join.condition.toVector))
   }
 }

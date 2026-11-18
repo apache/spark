@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, SerializedOffset, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
@@ -42,6 +43,85 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
 
   after {
     sqlContext.streams.active.foreach(_.stop())
+  }
+
+  for (firstKllBatch <- Seq(0L, 1L); asynchronous <- Seq(false, true)) {
+    test(s"normalized KLL gets its reader boundary before offset logging: " +
+        s"batch=$firstKllBatch async=$asynchronous") {
+      val session = new SparkSession(spark.sparkContext)
+      val calls = new java.util.concurrent.ConcurrentHashMap[Long,
+        java.util.concurrent.atomic.AtomicInteger]()
+      val normalizer = new org.apache.spark.sql.catalyst.rules.Rule[
+          org.apache.spark.sql.catalyst.plans.logical.LogicalPlan] {
+        override def apply(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
+            : org.apache.spark.sql.catalyst.plans.logical.LogicalPlan = {
+          val actual = plan.exists {
+            case r: StreamingDataSourceV2ScanRelation =>
+              r.startOffset.nonEmpty
+            case _ => false
+          }
+          val batch = plan.collectFirst {
+            case w: org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
+                if actual && w.batchId.nonEmpty => w.batchId.get
+          }
+          batch.foreach { id =>
+            calls.computeIfAbsent(id, _ => new java.util.concurrent.atomic.AtomicInteger)
+              .incrementAndGet()
+          }
+          if (!batch.exists(_ >= firstKllBatch)) plan else {
+            plan.transformAllExpressionsWithSubqueries {
+              case a: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+                  if a.aggregateFunction.isInstanceOf[
+                    org.apache.spark.sql.catalyst.expressions.aggregate.Count] =>
+                org.apache.spark.sql.catalyst.expressions.KllSketchGetNBigint(a.copy(
+                  aggregateFunction = org.apache.spark.sql.catalyst.expressions.aggregate
+                    .KllSketchAggBigint(org.apache.spark.sql.catalyst.expressions.Literal(1L),
+                      legacyDeterministic = false)))
+            }
+          }
+        }
+      }
+      session.extensions.injectPlanNormalizationRule(_ => normalizer)
+      session.conf.set(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key, "false")
+      session.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Int](session)
+        val query = input.toDF().selectExpr("""value + (SELECT count(*)
+            |FROM VALUES (1), (2), (3) AS t(id)) AS n""".stripMargin)
+        assert(!query.queryExecution.analyzed.containsPattern(
+          org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE))
+        val observed = new java.util.concurrent.ConcurrentLinkedQueue[Long]()
+        val running = query.writeStream.option("checkpointLocation", checkpoint.getAbsolutePath)
+          .option("asyncProgressTrackingEnabled", asynchronous)
+          .option("asyncProgressTrackingCheckpointIntervalMs", 0)
+          .option("_asyncProgressTrackingOverrideSinkSupportCheck", true)
+          .foreachBatch { (batch: org.apache.spark.sql.DataFrame, id: Long) =>
+            val log = new OffsetSeqLog(session,
+              new File(checkpoint, "offsets").getAbsolutePath)
+            eventually { assert(log.get(id).nonEmpty) }
+            val entry = log.get(id).get
+            assert(entry.metadataOpt.exists(OffsetSeqLog.requiresKllReader) ==
+              (id >= firstKllBatch))
+            val lines = java.nio.file.Files.readAllLines(
+              new File(checkpoint, s"offsets/$id").toPath)
+            assert(lines.get(0) == (if (id >= firstKllBatch) "v3" else "v1"))
+            batch.collect().foreach(row => observed.add(row.getLong(0)))
+            ()
+          }.start()
+        try {
+          input.addData(1)
+          running.processAllAvailable()
+          input.addData(2)
+          running.processAllAvailable()
+          import scala.jdk.CollectionConverters._
+          assert(observed.asScala.toSeq == Seq(4L, 5L))
+          assert(calls.size() == 2)
+          assert(calls.get(0L).get() == 1 && calls.get(1L).get() == 1)
+        } finally {
+          running.stop()
+        }
+      }
+    }
   }
 
   def getListOfFiles(dir: String): List[File] = {
