@@ -25,7 +25,7 @@ import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.PythonUDF.{chainsInWorker, correctEvalType, isScalarPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -1484,11 +1484,9 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
-        // An in-process UDF never chains with worker UDFs, so it has no pipeline to preserve.
-        //
         // A conditional branch is not treated like a lambda, on purpose: the column stands, which
         // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
-        expression.mapChildren(applyExpr(_, parentIsUdf = chainsInWorker(expression),
+        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }
@@ -1786,7 +1784,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // Extend the set of types with the new types found in the current project node
       case p: Project =>
         pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
-          case udf: PythonUDF if chainsInWorker(udf) =>
+          case udf: PythonUDF if isScalarPythonUDF(udf) =>
             correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
         }).toSet
 
@@ -3354,27 +3352,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
-   * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
-   * others, by pushing them below the join or moving them into its condition, and the ones that
-   * may not. A non-deterministic or throwable conjunct may not, and nor may a conjunct written
-   * after it that can fail: one that [[ExprUtils.canEvaluateUnconditionally]] rejects or that
-   * reads a column of either side that can fail (see `failableOutput`). It would be evaluated on
-   * rows that the conjunct before it may have dropped. The conjuncts that may not move are
-   * returned in their written order.
-   */
-  private def splitMovable(
-      condition: Seq[Expression],
-      left: LogicalPlan,
-      right: LogicalPlan): (Seq[Expression], Seq[Expression]) = {
-    val (leading, following) = condition.span(cond => cond.deterministic && !cond.throwable)
-    lazy val failable = failableOutput(left) ++ failableOutput(right)
-    val (cannotFail, stayUp) = following.partition { cond =>
-      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
-    }
-    (leading ++ cannotFail, stayUp)
-  }
-
-  /**
    * Splits join condition expressions or filter predicates (on a given join's output) into three
    * categories based on the attributes required to evaluate them. Note that we explicitly exclude
    * non-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
@@ -3384,7 +3361,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, stayUp) = splitMovable(condition, left, right)
+    val (pushDownCandidates, stayUp) = splitMovable(condition, Seq(left, right))
     val (leftEvaluateCondition, rightEvaluateCondition, commonCondition) =
       splitBySide(pushDownCandidates, left, right)
 
@@ -3423,7 +3400,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def splitLookupJoin(condition: Seq[Expression], join: ExternalLookupJoin) = {
-    val movable = splitMovable(condition, join.left, join.right)._1.filterNot { cond =>
+    val movable = splitMovable(condition, Seq(join.left, join.right))._1.filterNot { cond =>
       cond.references.exists(join.right.outputSet.contains) && (
         if (cond.references.subsetOf(join.right.outputSet)) {
           !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
@@ -3461,7 +3438,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
       val (movable, stayUp) =
-        splitMovable(splitConjunctivePredicates(filterCondition), left, right)
+        splitMovable(splitConjunctivePredicates(filterCondition), Seq(left, right))
       val (leftFilterConditions, rightFilterConditions, commonMovable) =
         splitBySide(movable, left, right)
       val commonFilterCondition = commonMovable ++ stayUp

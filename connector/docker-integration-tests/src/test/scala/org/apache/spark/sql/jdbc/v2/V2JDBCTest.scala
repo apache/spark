@@ -30,9 +30,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.DockerTest
 
-@DockerTest
 private[v2] trait V2JDBCTest
   extends DataSourcePushdownTestUtils
   with DockerIntegrationFunSuite
