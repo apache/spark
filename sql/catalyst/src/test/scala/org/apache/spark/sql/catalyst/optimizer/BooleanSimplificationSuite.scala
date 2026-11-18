@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 
 class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
@@ -176,14 +177,29 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       $"a" > 1 || $"b" > 3)
   }
 
-  test("SPARK-61938: do not move a throwable common factor ahead of the other operands") {
-    val r = IsNull(RaiseError($"d"))
-    // `r || (a < 5 && c < 50)` and `r && (a > 5 || c > 50)` would evaluate `r` also on the rows
-    // where the operand written before it already decides the predicate.
-    Seq(
-      ($"a" < 5 || r) && ($"c" < 50 || r),
-      ($"a" > 5 && r) || ($"c" > 50 && r)).foreach { input =>
-      checkCondition(input, input)
+  test("SPARK-61938: do not move a common factor that can fail ahead of the other operands") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val r = IsNull(RaiseError($"d"))
+      // A division can fail in ANSI mode, although it is not throwable.
+      val f = $"a" / $"b" > 1.0
+      // `r || (a < 5 && c < 50)` and `r && (a > 5 || c > 50)` would evaluate `r` also on the rows
+      // where the operand written before it already decides the predicate.
+      Seq(
+        ($"a" < 5 || r) && ($"c" < 50 || r),
+        ($"a" > 5 && r) || ($"c" > 50 && r),
+        ($"a" < 5 || f) && ($"c" < 50 || f)).foreach { input =>
+        checkCondition(input, input)
+      }
+      // A common factor that only the extracted ones come before on one side is extracted.
+      checkCondition((r || $"a" < 5) && ($"c" < 50 || r), r || ($"a" < 5 && $"c" < 50))
+      checkCondition(($"a" < 5 || r) && (r || $"c" < 50), r || ($"a" < 5 && $"c" < 50))
+      checkCondition(
+        ($"b" > 1 && r && $"a" > 5) || ($"b" > 1 && r && $"c" > 50),
+        $"b" > 1 && r && ($"a" > 5 || $"c" > 50))
+      // A common factor that can't fail is extracted alone.
+      checkCondition(
+        ($"a" > 5 && $"b" > 1 && r) || ($"c" > 50 && $"b" > 1 && r),
+        $"b" > 1 && (($"a" > 5 && r) || ($"c" > 50 && r)))
     }
   }
 
@@ -210,12 +226,18 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-61938: e && (!e || f) - not nullable, throwable f") {
-    val r = IsNull(RaiseError($"d"))
-    // `r && e` and `r || e` would evaluate `r` also on the rows where `!e` already decides the
-    // operand that contains `r`.
-    Seq((!$"e" || r) && $"e", (!$"e" && r) || $"e").foreach { input =>
-      checkConditionInNotNullableRelation(input, input)
+  test("SPARK-61938: e && (!e || f) - not nullable, f can fail") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // A division can fail in ANSI mode, although it is not throwable. `f || e` and `f && e`
+      // would evaluate it also on the rows where `!e` already decides the operand that contains
+      // it, so `e` is evaluated first.
+      val f = $"a" / $"b" > 1.0
+      checkConditionInNotNullableRelation((!$"e" && f) || $"e", $"e" || f)
+      // `comparePlans` sorts the conjuncts of a filter, so the condition is compared as it is.
+      val actual = Optimize.execute(testNotNullableRelationWithData.where((!$"e" || f) && $"e")
+        .analyze)
+      val expected = testNotNullableRelationWithData.where($"e" && f).analyze
+      assert(actual.asInstanceOf[Filter].condition == expected.asInstanceOf[Filter].condition)
     }
   }
 
@@ -357,14 +379,16 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
 
     val exprs = Seq(
       // actual expressions of the transformations: original -> transformed
+      // `ExprUtils.canEvaluateUnconditionally` does not accept a BoundReference, so the guard
+      // stays ahead of `col2NotNULL` where it was written ahead of it.
       (col1NotNULL && (!col1NotNULL || col2NotNULL)) -> (col1NotNULL && col2NotNULL),
       (col1NotNULL && (col2NotNULL || !col1NotNULL)) -> (col1NotNULL && col2NotNULL),
-      ((!col1NotNULL || col2NotNULL) && col1NotNULL) -> (col2NotNULL && col1NotNULL),
+      ((!col1NotNULL || col2NotNULL) && col1NotNULL) -> (col1NotNULL && col2NotNULL),
       ((col2NotNULL || !col1NotNULL) && col1NotNULL) -> (col2NotNULL && col1NotNULL),
 
       (col1NotNULL || (!col1NotNULL && col2NotNULL)) -> (col1NotNULL || col2NotNULL),
       (col1NotNULL || (col2NotNULL && !col1NotNULL)) -> (col1NotNULL || col2NotNULL),
-      ((!col1NotNULL && col2NotNULL) || col1NotNULL) -> (col2NotNULL || col1NotNULL),
+      ((!col1NotNULL && col2NotNULL) || col1NotNULL) -> (col1NotNULL || col2NotNULL),
       ((col2NotNULL && !col1NotNULL) || col1NotNULL) -> (col2NotNULL || col1NotNULL)
     )
 
