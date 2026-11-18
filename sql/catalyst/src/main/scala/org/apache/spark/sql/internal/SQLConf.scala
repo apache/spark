@@ -3257,12 +3257,12 @@ object SQLConf {
     buildConf("spark.sql.legacy.persistentCatalogFirst")
       .internal()
       .version("4.2.0")
-      .doc("When true (legacy), partially qualified function names like 'builtin.func' or " +
-        "'session.func' resolve to the persistent catalog first. When false (default), the " +
+      .doc("When true (default), partially qualified function names like 'builtin.func' or " +
+        "'session.func' resolve to the current catalog first. When false (legacy), the " +
         "system catalog is prioritized (system.builtin.func or system.session.func).")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PATH_ENABLED =
     buildConf("spark.sql.path.enabled")
@@ -4818,6 +4818,18 @@ object SQLConf {
         "the predicate of a condition that reads the current time, date, catalog, user and the " +
         "like, if Spark can build one, with their values at the time of the ALTER TABLE, as " +
         "before, so that a write that can read the predicate back compares with those values.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT =
+    buildConf("spark.sql.legacy.useCurrentConfigsForCheckConstraint")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a CHECK constraint under the " +
+        "SQL configs of the current active SparkSession, instead of the default values of the " +
+        "configs that change how the text reads, and a DDL does not reject a condition that " +
+        "reads differently under those default values.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

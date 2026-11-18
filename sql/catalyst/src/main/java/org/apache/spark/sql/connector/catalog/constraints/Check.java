@@ -68,6 +68,15 @@ public class Check extends BaseConstraint {
    * This is the canonical representation of the condition and is always present (never
    * {@code null}). The optional {@link #predicate()} provides a structured form, except in the
    * cases that method lists.
+   * <p>
+   * When a write cannot use {@link #predicate()}, Spark reads the condition from this text. It
+   * parses and analyzes the text with ANSI mode on and the default values of the SQL configs that
+   * change how a text reads, such as {@code spark.sql.parser.escapedStringLiterals}, regardless of
+   * the session of the write. Only the session time zone, case sensitivity, timestamp type and
+   * decimal precision loss, the configs that a view also takes from the session that reads it, the
+   * functions found through {@code SET PATH}, and the configs that an expression reads during
+   * evaluation, such as {@code spark.sql.legacy.timeParserPolicy}, follow that session. A
+   * connector that builds a constraint itself should write the condition accordingly.
    */
   public String predicateSql() {
     return predicateSql;

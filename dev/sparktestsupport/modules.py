@@ -39,6 +39,7 @@ all_modules = []
 #   standard library.
 ignored_file_patterns = (
     # Contributor docs.
+    ".agents/*.md",
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
@@ -56,6 +57,7 @@ ignored_file_patterns = (
     ".asf.yaml",
     ".gitattributes",
     ".gitignore",
+    ".ignore",
     # Build and test workflow wrappers or schedulers.
     "/.github/workflows/benchmark.yml",
     "/.github/workflows/branch*_scheduler.yml",
@@ -92,6 +94,7 @@ ignored_file_patterns = (
     ".pre-commit-config.yaml",
     "/dev/.rat-excludes",
     "/dev/.scalafmt.conf",
+    "/dev/agent_docs_lint.py",
     "/dev/check_pyspark_custom_errors.py",
     "/dev/check-license",
     "/dev/check-protos.py",
