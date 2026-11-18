@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.ValidateSubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, IntegerLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, Offset, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
@@ -25,19 +27,36 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
  * Pushes Project operator through Limit operator.
  */
 object PushProjectionThroughLimitAndOffset extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(treeBits =>
-    treeBits.containsPattern(PROJECT) && treeBits.containsAnyPattern(OFFSET, LIMIT)) {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val terminal = plan match {
+      case p @ Project(fields, global @ GlobalLimit(IntegerLiteral(n),
+          local @ LocalLimit(IntegerLiteral(m), child)))
+          if n > 0 && n == m && !child.containsAnyPattern(LIMIT, OFFSET) &&
+            fields.exists(!_.deterministic) && fields.forall {
+              case _: Attribute => true
+              case Alias(scalar: ScalarSubquery, _) =>
+                ValidateSubqueryExpression.isIndependentKllSubquery(scalar)
+              case _ => false
+            } =>
+        // A cached independent scalar has one result for every retained row. Moving this
+        // terminal projection restores CollectLimit's initial-partition collection path.
+        global.copy(child = local.copy(child = p.copy(child = child)))
+      case other => other
+    }
+    terminal.transformWithPruning(treeBits =>
+      treeBits.containsPattern(PROJECT) && treeBits.containsAnyPattern(OFFSET, LIMIT)) {
 
-    case p @ Project(projectList, limit @ LocalLimit(_, child))
+      case p @ Project(projectList, limit @ LocalLimit(_, child))
+          if projectList.forall(_.deterministic) =>
+        limit.copy(child = p.copy(projectList, child))
+
+      case p @ Project(projectList, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
+          if projectList.forall(_.deterministic) =>
+        g.copy(child = limit.copy(child = p.copy(projectList, child)))
+
+      case p @ Project(projectList, offset @ Offset(_, child))
         if projectList.forall(_.deterministic) =>
-      limit.copy(child = p.copy(projectList, child))
-
-    case p @ Project(projectList, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
-        if projectList.forall(_.deterministic) =>
-      g.copy(child = limit.copy(child = p.copy(projectList, child)))
-
-    case p @ Project(projectList, offset @ Offset(_, child))
-      if projectList.forall(_.deterministic) =>
-      offset.copy(child = p.copy(projectList, child))
+        offset.copy(child = p.copy(projectList, child))
+    }
   }
 }

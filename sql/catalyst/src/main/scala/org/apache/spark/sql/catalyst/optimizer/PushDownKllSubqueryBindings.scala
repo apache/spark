@@ -49,14 +49,14 @@ object PushDownKllSubqueryBindings extends Rule[LogicalPlan] with PredicateHelpe
           } || reachesBinding(project.child)
         case _ => false
       }).booleanValue()
-      def lower(input: LogicalPlan, consumers: Vector[Expression]): LogicalPlan = {
+      def lower(input: LogicalPlan, consumers: => Vector[Expression]): LogicalPlan = {
         if (!input.containsPattern(NONDETERMINISTIC_SUBQUERY_BINDING) ||
             !reachesBinding(input)) {
           return input
         }
         input match {
           case filter: Filter => filter.copy(child = lower(filter.child,
-            consumers :+ filter.condition))
+            consumers :+ trimAliases(filter.condition)))
           case alias: SubqueryAlias => alias.copy(child = lower(alias.child, consumers))
           case projection: Project =>
             val bindings = projection.projectList.collect { case a: Alias if eligible(a) => a }
@@ -64,7 +64,7 @@ object PushDownKllSubqueryBindings extends Rule[LogicalPlan] with PredicateHelpe
             val aliases = AttributeMap(getAliasMap(projection).toSeq.filterNot {
               case (attribute, _) => bindingIds.contains(attribute.exprId)
             })
-            val expanded = if (aliases.isEmpty) consumers.map(trimAliases)
+            val expanded = if (aliases.isEmpty) consumers
               else consumers.map(replaceAlias(_, aliases))
             if (bindings.isEmpty) {
               return projection.copy(child = lower(projection.child, expanded))
@@ -121,7 +121,7 @@ object PushDownKllSubqueryBindings extends Rule[LogicalPlan] with PredicateHelpe
           case other => other
         }
       }
-      join.copy(left = lower(join.left, join.condition.toVector),
-        right = lower(join.right, join.condition.toVector))
+      lazy val consumers = join.condition.toVector.map(trimAliases)
+      join.copy(left = lower(join.left, consumers), right = lower(join.right, consumers))
   }
 }

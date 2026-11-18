@@ -2865,12 +2865,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         f
       } else {
         lazy val aliases = AttributeMap(getAliasMap(project).filter(_._2.deterministic))
+        val eligibleAliases = scala.collection.mutable.HashMap.empty[ExprId, Boolean]
         val classified = splitConjunctivePredicates(condition).map { predicate =>
           val direct = predicate.references.subsetOf(grandChild.outputSet)
           val independent = predicate.deterministic && (direct ||
             predicate.references.forall { attribute =>
               grandChild.outputSet.contains(attribute) || aliases.get(attribute).exists {
-                alias => alias.child.references.subsetOf(grandChild.outputSet)
+                alias => eligibleAliases.getOrElseUpdate(alias.exprId,
+                  alias.child.references.subsetOf(grandChild.outputSet))
               }
             })
           val throwable = predicate.throwable || (independent && !direct &&

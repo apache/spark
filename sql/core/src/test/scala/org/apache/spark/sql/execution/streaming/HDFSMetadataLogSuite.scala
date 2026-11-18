@@ -34,6 +34,28 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
+  test("bounded sparse batch selection preserves the raw ordered listing semantics") {
+    withTempDir { temp =>
+      val dir = new File(temp, "offsets")
+      val log = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      Seq(0L, 5L, 10L).foreach(id => assert(log.add(id, s"batch$id")))
+      assert(log.getLatestBatchIdAtOrBefore(-1L).isEmpty)
+      assert(log.getLatestBatchIdAtOrBefore(5L).contains(5L))
+      assert(log.getLatestBatchIdAtOrBefore(9L).contains(5L))
+      assert(new File(dir, "5").delete())
+      assert(log.getLatestBatchIdAtOrBefore(9L).contains(0L))
+      // This helper follows the raw filtered listing, without synthesizing cached IDs or
+      // adding the regular-file restriction used by other metadata-log listing methods.
+      assert(new File(dir, "7").mkdir())
+      for (bound <- Seq(-1L, 0L, 6L, 7L, 9L, 10L, 100L)) {
+        val ordered = log.getOrderedBatchFiles().iterator.map(_.getPath.getName.toLong)
+          .find(_ <= bound)
+        assert(log.getLatestBatchIdAtOrBefore(bound) == ordered)
+      }
+      assert(log.getOrderedBatchFiles().map(_.getPath.getName.toLong).toSeq == Seq(10L, 7L, 0L))
+    }
+  }
+
   test("SPARK-46339: Directory with number name should not be treated as metadata log") {
     withTempDir { temp =>
       val dir = new File(temp, "dir")

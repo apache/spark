@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{Column, QueryTest}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
@@ -38,6 +38,126 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
   import testImplicits._
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
+
+  test("fixed legacy aggregate bindings share unchanged restoration prefixes") {
+    def work(width: Int): Int = {
+      val visits = new AtomicInteger
+      val value = AttributeReference("value", LongType)()
+      val common = (1 to 64).foldLeft[Expression](value) { (child, _) =>
+        NormalizationCounted(child, visits)
+      }
+      val nested = Aggregate(Nil, Seq(Alias(KllSketchGetNBigint(
+        KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+          .toAggregateExpression()), "n")()), LocalRelation())
+      val binding = Alias(ScalarSubquery(nested), "binding")()
+        .asNondeterministicSubqueryBinding
+      val roots = (1 to width).map(i => Add(common, Literal(i.toLong)))
+      val plan = Aggregate(roots :+ binding.toAttribute,
+        roots.zipWithIndex.map { case (e, i) => Alias(e, s"a$i")() },
+        Project(Seq(value, binding), LocalRelation(value)))
+      plan.foreach { p => p.treePatternBits
+        p.expressions.foreach(_.foreach { e => e.treePatternBits; e.deterministic })
+      }
+      visits.set(0)
+      val prepared = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        plan, plan, legacySharing = true)
+      val count = visits.get
+      assert(prepared.output.map(_.exprId) == plan.output.map(_.exprId))
+      count
+    }
+    val small = work(8)
+    val large = work(64)
+    assert(large <= small * 2, s"shared restoration prefix: eight=$small sixtyFour=$large")
+  }
+
+  test("legacy guarded grouping restores historical UDF demand and primitive NULL suppression") {
+    // Execution starts from a selected Catalyst plan. Bind fixture encoders before codegen.
+    def bindUdfInputs(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+      case udf: ScalaUDF => udf.copy(
+        inputEncoders = udf.inputEncoders.map(_.map(_.resolveAndBind())))
+    }
+    for (singlePass <- Seq(false, true); analysisLegacy <- Seq(false, true);
+        legacy <- Seq(false, true)) {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val calls = spark.sparkContext.longAccumulator
+        val nonempty = org.apache.spark.sql.functions.udf((bytes: Array[Byte]) => {
+          calls.add(1L)
+          bytes.nonEmpty
+        }).asNondeterministic()
+        def key: Column = org.apache.spark.sql.functions.when($"id" > 0L,
+          nonempty(expr("""(SELECT kll_sketch_agg_bigint(id)
+            |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin)))
+          .otherwise(false)
+        val original = spark.range(-2, 2).groupBy(key.as("a"), key.as("b")).count()
+          .queryExecution.analyzed
+        val prepared = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+          original, original, legacySharing = legacy)
+        val rows = org.apache.spark.sql.classic.Dataset.ofRows(spark, bindUdfInputs(prepared))
+          .collect().toSet
+        assert(rows == Set(org.apache.spark.sql.Row(false, false, 3L),
+          org.apache.spark.sql.Row(true, true, 1L)))
+        // Corrected preparation keeps existing intrinsic bindings from rollback analysis.
+        // Corrected analysis keeps its lazy guards unless legacy checkpoint recovery owns them.
+        assert(calls.value == (if (legacy || analysisLegacy) 4L else 2L),
+          s"singlePass=$singlePass analysisLegacy=$analysisLegacy " +
+            s"legacy=$legacy calls=${calls.value}")
+
+        // The single-pass analyzer does not insert primitive UDF NULL guards yet. Exercise
+        // restoration of those guards through the analyzer that produces them.
+        if (!singlePass) {
+          val primitive = org.apache.spark.sql.functions.udf((n: Long) => {
+            require(n > 0L, "primitive UDF must not receive the suppressed NULL as zero")
+            true
+          }).asNondeterministic()
+          def nullableKey: Column = {
+            val input = expr("""(SELECT CAST(NULL AS BIGINT) + kll_sketch_get_n_bigint(
+                |kll_sketch_agg_bigint(id)) FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin)
+            org.apache.spark.sql.functions.when(primitive(input), 1).otherwise(0)
+          }
+          val nullable = spark.range(2).groupBy(nullableKey.as("a"), nullableKey.as("b"))
+            .count().queryExecution.analyzed
+          val restoredNull =
+            org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+              nullable, nullable, legacySharing = legacy)
+          val nullRows = try {
+            org.apache.spark.sql.classic.Dataset.ofRows(spark, bindUdfInputs(restoredNull))
+              .collect().toSeq
+          } catch {
+            case error: Exception => fail(s"singlePass=$singlePass " +
+              s"analysisLegacy=$analysisLegacy legacy=$legacy\n$nullable\n$restoredNull", error)
+          }
+          assert(nullRows == Seq(org.apache.spark.sql.Row(0, 0, 2L)))
+        }
+      }
+    }
+  }
+
+  test("legacy guarded grouping restores the historical seeded draw sequence") {
+    for (singlePass <- Seq(false, true)) {
+      def analyzed(legacy: Boolean): LogicalPlan = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        def key = org.apache.spark.sql.functions.when($"id" > 0L,
+          org.apache.spark.sql.functions.rand(7L) + expr("""(SELECT kll_sketch_get_n_bigint(
+            |kll_sketch_agg_bigint(k)) FROM VALUES (0L), (1L), (2L) AS t(k))""".stripMargin))
+          .otherwise(-1D)
+        spark.range(-2, 2, 1, 1).groupBy(key.as("a"), key.as("b")).count()
+          .queryExecution.analyzed
+      }
+      val historical = analyzed(legacy = true)
+      val corrected = analyzed(legacy = false)
+      val restored = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        corrected, corrected, legacySharing = true)
+      val expected = org.apache.spark.sql.classic.Dataset.ofRows(spark, historical).collect().toSet
+      val actual = org.apache.spark.sql.classic.Dataset.ofRows(spark, restored).collect().toSet
+      assert(actual == expected)
+    }
+  }
 
   test("ordinary legacy compiler bindings skip KLL checkpoint restoration") {
     val visits = new AtomicInteger

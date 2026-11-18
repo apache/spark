@@ -4515,8 +4515,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
     val query = """SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) AS n
         |FROM VALUES (0), (1), (2) AS i(id)""".stripMargin
     Seq(s"SELECT n + rand() FROM ($query)",
-      s"SELECT n + rand() FROM ($query) WHERE n = o.id",
-      s"SELECT n FROM ($query) WHERE n = o.id").foreach { lateral =>
+      s"SELECT n + rand() FROM ($query) WHERE n = o.id").foreach { lateral =>
       val error = intercept[AnalysisException] {
         sql(s"SELECT * FROM VALUES (0), (1) AS o(id), LATERAL ($lateral) l")
       }
@@ -4525,6 +4524,8 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
     checkAnswer(sql(s"""SELECT * FROM VALUES (3), (9) AS o(id),
         |LATERAL ($query) l""".stripMargin), Seq(Row(3, 3L), Row(9, 3L)))
+    checkAnswer(sql(s"""SELECT * FROM VALUES (3), (9) AS o(id),
+        |LATERAL (SELECT n FROM ($query) WHERE n = o.id) l""".stripMargin), Row(3, 3L))
   }
 
   test("kll scalar extraction retains direct randomness restrictions") {

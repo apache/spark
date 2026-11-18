@@ -46,6 +46,76 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     sqlContext.streams.active.foreach(_.stop())
   }
 
+  for (analysisLegacy <- Seq(false, true)) {
+    test(s"late optimized KLL state requires a protected reader: legacy=$analysisLegacy") {
+      val session = new SparkSession(spark.sparkContext)
+      val physicalPreparations = new java.util.concurrent.atomic.AtomicInteger
+      session.extensions.injectPreCBORule { _ =>
+        new org.apache.spark.sql.catalyst.rules.Rule[
+            org.apache.spark.sql.catalyst.plans.logical.LogicalPlan] {
+          override def apply(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
+              : org.apache.spark.sql.catalyst.plans.logical.LogicalPlan = {
+            import org.apache.spark.sql.catalyst.expressions._
+            import org.apache.spark.sql.catalyst.expressions.aggregate._
+            plan.transformAllExpressions {
+              case aggregate: AggregateExpression if (aggregate.aggregateFunction match {
+                  case Count(Seq(input)) => input.dataType == LongType
+                  case _ => false
+                }) =>
+                val input = aggregate.aggregateFunction.children.head
+                KllSketchGetNBigint(aggregate.copy(aggregateFunction =
+                  KllSketchAggBigint(input, legacyDeterministic = analysisLegacy)))
+            }
+          }
+        }
+      }
+      session.extensions.injectColumnar { _ =>
+        new org.apache.spark.sql.execution.ColumnarRule {
+          override def preColumnarTransitions: org.apache.spark.sql.catalyst.rules.Rule[
+              org.apache.spark.sql.execution.SparkPlan] =
+            new org.apache.spark.sql.catalyst.rules.Rule[
+              org.apache.spark.sql.execution.SparkPlan] {
+              override def apply(plan: org.apache.spark.sql.execution.SparkPlan)
+                  : org.apache.spark.sql.execution.SparkPlan = {
+                physicalPreparations.incrementAndGet()
+                plan
+              }
+            }
+        }
+      }
+      session.conf.set(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key, analysisLegacy.toString)
+      session.conf.set(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key, "false")
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Option[Long]](session)
+        val effects = new java.util.concurrent.atomic.AtomicInteger
+        val query = input.toDF().groupBy().agg(count("value").as("n"))
+        input.addData(Some(1L), Some(2L))
+        var publishedHeader = Seq.empty[Byte]
+        for (_ <- 1 to 2) {
+          val stream = query.writeStream.outputMode("complete")
+            .option("checkpointLocation", checkpoint.getAbsolutePath)
+            .foreachBatch { (_: org.apache.spark.sql.Dataset[Row], _: Long) =>
+              effects.incrementAndGet()
+              ()
+            }.start()
+          try {
+            val error = intercept[StreamingQueryException] { stream.processAllAvailable() }
+            assert(error.getMessage.contains("lacks the corrected KLL reader requirement"))
+            assert(effects.get() == 0)
+            assert(physicalPreparations.get() == 0)
+            assert(!new File(checkpoint, "state").exists())
+            val header = java.nio.file.Files.readAllBytes(
+              new File(checkpoint, "offsets/0").toPath).toSeq
+            if (publishedHeader.nonEmpty) assert(header == publishedHeader)
+            publishedHeader = header
+          } finally {
+            stream.stop()
+          }
+        }
+      }
+    }
+  }
+
   for (asynchronous <- Seq(false, true); marked <- Seq(false, true);
       stateful <- Seq(false, true) if !asynchronous || !stateful) {
     test(s"normalized KLL replay validates the published header before effects: " +

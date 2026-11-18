@@ -111,8 +111,11 @@ private[sql] object KllCheckpointPreparation {
       // separate existence attributes during rewriting, while equal scalar SUMs historically share.
       def restoreInput(
           input: LogicalPlan,
-          independentOnly: Boolean): (LogicalPlan, MutableMap[ExprId, Expression]) = {
+          independentOnly: Boolean,
+          groupingBindings: Set[ExprId] = Set.empty)
+          : (LogicalPlan, MutableMap[ExprId, Expression]) = {
         val bindings = MutableMap.empty[ExprId, Expression]
+        val groupingDependencies = MutableSet.from(groupingBindings)
         if (!input.containsAnyPattern(
             NONDETERMINISTIC_SUBQUERY_BINDING, KLL_CHECKPOINT_ALTERNATIVE)) {
           return (input, bindings)
@@ -133,6 +136,11 @@ private[sql] object KllCheckpointPreparation {
         }
         def visit(plan: LogicalPlan): LogicalPlan = plan match {
           case project: Project =>
+            project.projectList.foreach {
+              case alias: Alias if groupingDependencies.contains(alias.exprId) =>
+                groupingDependencies ++= alias.child.references.map(_.exprId)
+              case _ =>
+            }
             val child = visit(project.child)
             val udfBindings = MutableMap.empty[Expression, Attribute]
             val retained = project.projectList.flatMap {
@@ -161,6 +169,45 @@ private[sql] object KllCheckpointPreparation {
                         udfBindings(key) = alias.toAttribute
                         Some(alias)
                     }
+                  case alias: Alias if alias.isNondeterministicSubqueryBinding &&
+                      groupingDependencies.contains(alias.exprId) &&
+                      !alias.child.exists(e =>
+                        e.isInstanceOf[SubqueryExpression] && !e.deterministic) =>
+                    // Historical grouping extraction hoisted intrinsic producers even from
+                    // branch-local guards. Reconstruct that topology only for compiler-owned
+                    // legacy grouping bindings; corrected mode keeps its guarded demand.
+                    val producers = scala.collection.mutable.ArrayBuffer.empty[NamedExpression]
+                    val intrinsic = scala.collection.mutable.ArrayBuffer.empty[Expression]
+                    def collect(expression: Expression): Unit = {
+                      if (!expression.deterministic && isUdfBinding(expression)) {
+                        intrinsic += expression
+                        expression match {
+                          // This guard was added after historical extraction. Hoist the guard
+                          // with its primitive UDF so NULL still suppresses that invocation.
+                          case If(_, _, udf: ScalaUDF) => udf.children.foreach(collect)
+                          case other => other.children.foreach(collect)
+                        }
+                      } else {
+                        if (expression.isInstanceOf[Nondeterministic]) intrinsic += expression
+                        expression.children.foreach(collect)
+                      }
+                    }
+                    collect(alias.child)
+                    intrinsic.distinct.foreach { expression =>
+                      udfBindings.getOrElseUpdate(expression.canonicalized, {
+                        val alias = Alias(expression, "_nondeterministic")()
+                        val producer = if (expression.containsPattern(PLAN_EXPRESSION)) {
+                          alias.asNondeterministicSubqueryBinding
+                        } else alias
+                        producers += producer
+                        producer.toAttribute
+                      })
+                    }
+                    bindings(alias.exprId) = alias.child.transformDown {
+                      case e if !e.deterministic && udfBindings.contains(e.canonicalized) =>
+                        udfBindings(e.canonicalized)
+                    }
+                    producers.toSeq
                   case other => Some(other)
                 }
             }
@@ -200,13 +247,17 @@ private[sql] object KllCheckpointPreparation {
             }, restored)
           }
         case aggregate: Aggregate =>
-          val (child, bindings) = restoreInput(aggregate.child, independentOnly = false)
+          val groupingBindings = aggregate.groupingExpressions.flatMap(_.references)
+            .map(_.exprId).toSet
+          val (child, bindings) = restoreInput(aggregate.child, independentOnly = false,
+            groupingBindings = groupingBindings)
           if (bindings.isEmpty && !aggregate.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) {
             aggregate
           } else {
+            val unchanged = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
             def restore(expression: Expression): Expression =
               NondeterministicExpressionCollection.restoreBindingReferences(
-                expression, bindings, stripFilterGuards = true)
+                expression, bindings, stripFilterGuards = true, unchanged = unchanged)
             val restored = aggregate.copy(
               groupingExpressions = aggregate.groupingExpressions.map(restore),
               aggregateExpressions = aggregate.aggregateExpressions.map {

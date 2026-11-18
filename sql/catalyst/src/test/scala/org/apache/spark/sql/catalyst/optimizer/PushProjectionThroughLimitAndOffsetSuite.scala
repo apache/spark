@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
@@ -32,6 +33,33 @@ class PushProjectionThroughLimitAndOffsetSuite extends PlanTest {
       PushProjectionThroughLimitAndOffset,
       EliminateLimits,
       LimitPushDown) :: Nil
+  }
+
+  test("terminal KLL scalar projection movement retains identity and evaluation boundaries") {
+    val attribute = $"a".long
+    val source = LocalRelation(attribute)
+    val scalar = ScalarSubquery(Aggregate(Nil, Seq(Alias(KllSketchGetNBigint(
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+        .toAggregateExpression()), "n")()), OneRowRelation()))
+    def limited(count: Int, child: LogicalPlan = source): LogicalPlan =
+      GlobalLimit(Literal(count), LocalLimit(Literal(count), child))
+    val fields = Seq(attribute, Alias(scalar, "n")())
+    val positive = Project(fields, limited(1))
+    val moved = PushProjectionThroughLimitAndOffset(positive)
+    assert(moved.isInstanceOf[GlobalLimit])
+    val retained = moved.collect { case p: Project =>
+      p.projectList.flatMap(_.collect { case q: ScalarSubquery => q })
+    }.flatten
+    assert(retained.size == 1 && (retained.head eq scalar))
+    val blocked = Seq(
+      Project(fields, limited(0)),
+      Project(fields, Offset(Literal(1), limited(2))),
+      Project(fields, limited(1, limited(2))),
+      Project(Seq(attribute, Alias(scalar.copy(outerAttrs = Seq(attribute)), "n")()), limited(1)),
+      Project(Seq(attribute, Alias(Add(scalar, Literal(1L)), "n")()), limited(1)),
+      Project(fields :+ Alias(Rand(0), "r")(), limited(1)),
+      Filter(Literal.TrueLiteral, positive))
+    blocked.foreach(plan => comparePlans(PushProjectionThroughLimitAndOffset(plan), plan))
   }
 
   test("SPARK-40501: push projection through limit") {

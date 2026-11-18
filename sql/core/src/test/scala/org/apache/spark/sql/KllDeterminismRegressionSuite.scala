@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -32,6 +34,119 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
+
+  test("correlated LATERAL exact KLL counts retain duplicate outer keys") {
+    for (legacy <- Seq(false, true); family <- Seq("bigint", "float", "double");
+        named <- Seq(false, true); merge <- Seq(false, true)) {
+      withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        val dataType = if (family == "bigint") "BIGINT" else family.toUpperCase(Locale.ROOT)
+        val parameter = if (named) ", 8" else ""
+        val membership = if (named) "i.k = o.k AND i.k < (SELECT 3)" else "i.k = o.k"
+        val producer = s"""SELECT kll_sketch_agg_$family(
+            |CAST(i.k AS $dataType)$parameter) AS sketch
+            |FROM VALUES (0), (1), (NULL) i(k) WHERE $membership""".stripMargin
+        val count = if (merge) {
+          s"SELECT kll_sketch_get_n_$family(kll_merge_agg_$family(sketch)) AS n " +
+            s"FROM ($producer) s"
+        } else if (named) {
+          s"SELECT kll_sketch_get_n_$family(sketch) AS n FROM ($producer) s"
+        } else {
+          s"""SELECT kll_sketch_get_n_$family(
+              |kll_sketch_agg_$family(CAST(i.k AS $dataType))) AS n
+              |FROM VALUES (0), (1), (NULL) i(k) WHERE i.k = o.k""".stripMargin
+        }
+        val query = sql(s"SELECT o.k, c.n FROM VALUES (0), (0), (1), (2) o(k), " +
+          s"LATERAL ($count) c")
+        checkAnswer(query, Seq(Row(0, 1L), Row(0, 1L), Row(1, 1L), Row(2, 0L)))
+      }
+    }
+  }
+
+  test("single-pass LATERAL support is unchanged for ordinary and exact KLL counts") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      for (legacy <- Seq(false, true); count <- Seq("count(i.k)",
+          "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(i.k))")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+          val error = intercept[AnalysisException] {
+            sql(s"SELECT * FROM VALUES (0), (0) o(k), LATERAL " +
+              s"(SELECT $count FROM VALUES (0L) i(k) WHERE i.k = o.k)").queryExecution.analyzed
+          }
+          assert(error.getCondition == "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE")
+        }
+      }
+    }
+  }
+
+  test("DataFrame LATERAL exact counts retain null and empty input behavior") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+        SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false") {
+      val outer = Seq(0, 0, 1, 2).toDF("k").as("o")
+      val inner = Seq((0, Option(1L)), (1, Option.empty[Long])).toDF("k", "v").as("i")
+      val counted = inner.where($"i.k" === $"o.k".outer()).select(
+        expr("kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v))").as("n"))
+      checkAnswer(outer.lateralJoin(counted).select($"o.k", $"n"),
+        Seq(Row(0, 1L), Row(0, 1L), Row(1, 0L), Row(2, 0L)))
+    }
+  }
+
+  test("correlated LATERAL count proof rejects observable sketch randomness") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+        SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false") {
+      val producer = """SELECT kll_sketch_agg_bigint(i.k) AS sketch
+          |FROM VALUES (0L), (1L) i(k) WHERE i.k = o.k""".stripMargin
+      val consumers = Seq(
+        s"SELECT sketch FROM ($producer) s",
+        s"SELECT kll_sketch_get_quantile_bigint(sketch, 0.5D) FROM ($producer) s",
+        s"SELECT kll_sketch_get_n_bigint(sketch), length(sketch) FROM ($producer) s",
+        s"SELECT kll_sketch_get_n_bigint(sketch) FROM ($producer) s WHERE length(sketch) > 0",
+        s"SELECT kll_sketch_get_n_bigint(sketch) FROM ($producer) s ORDER BY sketch",
+        s"SELECT kll_sketch_get_n_bigint(sketch) FROM (SELECT DISTINCT sketch FROM ($producer))",
+        s"SELECT kll_sketch_get_n_bigint(kll_merge_agg_bigint(DISTINCT sketch)) " +
+          s"FROM ($producer) s",
+        "SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(CAST(rand() AS BIGINT))) " +
+          "FROM VALUES (0L), (1L) i(k) WHERE i.k = o.k")
+      consumers.foreach { consumer =>
+        val error = intercept[AnalysisException] {
+          sql(s"SELECT * FROM VALUES (0L), (0L) o(k), LATERAL ($consumer) c")
+            .queryExecution.analyzed
+        }
+        assert(error.getCondition ==
+          "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES" ||
+          error.getCondition == "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+          s"$consumer: ${error.getCondition}")
+      }
+    }
+  }
+
+  test("terminal LIMIT retains short-circuit collection with an independent KLL scalar") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false") {
+      val query = sql(s"SELECT id, $scalar AS n FROM (SELECT * FROM range(0, 1000, 1, 128) " +
+        "LIMIT 1)")
+      assert(query.queryExecution.executedPlan.isInstanceOf[
+        org.apache.spark.sql.execution.CollectLimitExec], query.queryExecution.executedPlan)
+      val tasks = new java.util.concurrent.atomic.AtomicInteger
+      val listener = new org.apache.spark.scheduler.SparkListener {
+        override def onTaskEnd(event: org.apache.spark.scheduler.SparkListenerTaskEnd): Unit = {
+          tasks.incrementAndGet()
+        }
+      }
+      spark.sparkContext.addSparkListener(listener)
+      try {
+        val rows = query.collect().toSeq
+        assert(rows.size == 1 && rows.head.getLong(0) >= 0L && rows.head.getLong(0) < 1000L)
+        assert(rows.head.getLong(1) == 3L)
+        spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+        assert(tasks.get > 0 && tasks.get < 128, s"terminal collect tasks=${tasks.get}")
+      } finally {
+        spark.sparkContext.removeSparkListener(listener)
+      }
+    }
+  }
 
   test("correlated KLL grouping scalars validate CTEs before extraction") {
     for (singlePass <- Seq(false, true); singleJoin <- Seq(false, true)) {
@@ -1365,13 +1480,7 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
         def query: DataFrame = sql(s"""SELECT o.id, q.n FROM VALUES (0), (0), (1), (9) AS o(id),
             |LATERAL (SELECT kll_sketch_get_n_$valueType($aggregate) AS n
             |FROM $from) q""".stripMargin)
-        if (legacy) {
-          checkAnswer(query, Seq(Row(0, 1L), Row(0, 1L), Row(1, 1L), Row(9, 0L)))
-        } else {
-          val error = intercept[AnalysisException](query.queryExecution.analyzed)
-          assert(error.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-            "NON_DETERMINISTIC_LATERAL_SUBQUERIES")
-        }
+        checkAnswer(query, Seq(Row(0, 1L), Row(0, 1L), Row(1, 1L), Row(9, 0L)))
       }
     }
     val outer = spark.range(1).as("o")

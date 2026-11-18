@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, KllMergeAggBase, KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -240,7 +240,7 @@ object ValidateSubqueryExpression
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
         if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1) &&
-            !isIndependentKllSubquery(expr)) {
+            !isIndependentKllSubquery(expr) && !isCountOnlyKllSubquery(expr)) {
           cleanQueryInScalarSubquery(join.right.plan)._1 match {
             // Python UDTFs are by default non-deterministic. They are constructed as a
             // OneRowRelation subquery and can be rewritten by the optimizer without
@@ -366,6 +366,74 @@ object ValidateSubqueryExpression
   // Inspect copies only; direct row randomness and crossing lateral references retain the guard.
   private[sql] def isIndependentKllSubquery(query: SubqueryExpression): Boolean = {
     !query.deterministic && !query.isCorrelated && deterministicWithoutKllRandomness(query.plan)
+  }
+
+  /** Proof only: randomized bytes may flow through matching merges to an exact count observer. */
+  private def isCountOnlyKllSubquery(query: SubqueryExpression): Boolean = {
+    if (!query.plan.containsPattern(KLL_AGGREGATE)) return false
+    val legacy = new LegacyKllDeterminism
+    // Zero denotes a deterministic ordinary value; positive values denote sketch families.
+    // A missing result means that randomized bytes or residual volatility were observed.
+    def family(expression: Expression): Int = expression match {
+      case _: KllSketchAggBigint | _: KllMergeAggBigint | _: KllSketchGetNBigint => 1
+      case _: KllSketchAggFloat | _: KllMergeAggFloat | _: KllSketchGetNFloat => 2
+      case _: KllSketchAggDouble | _: KllMergeAggDouble | _: KllSketchGetNDouble => 3
+      case _ => 0
+    }
+    def value(expression: Expression, sketches: Map[ExprId, Int]): Option[Int] = {
+      expression match {
+        case attribute: Attribute => Some(sketches.getOrElse(attribute.exprId, 0))
+        case alias: Alias => value(alias.child, sketches)
+        case getter: KllSketchGetNBase =>
+          value(getter.child, sketches).filter(n => n == 0 || n == family(getter)).map(_ => 0)
+        case aggregate: AggregateExpression if family(aggregate.aggregateFunction) != 0 =>
+          val function = aggregate.aggregateFunction
+          val kind = family(function)
+          val inputs = function.children.map(value(_, sketches))
+          val merge = function.isInstanceOf[KllMergeAggBase[_]]
+          val valid = inputs.forall(_.exists { n =>
+            n == 0 || (merge && !aggregate.isDistinct && n == kind)
+          }) && aggregate.filter.forall(value(_, sketches).contains(0))
+          if (valid) Some(kind) else None
+        case subquery: SubqueryExpression if subquery.deterministic => Some(0)
+        case _: SubqueryExpression => None
+        case other if other.children.forall(value(_, sketches).contains(0)) &&
+            legacy.expression(other).deterministic => Some(0)
+        case _ => None
+      }
+    }
+    def outputs(
+        fields: Seq[NamedExpression],
+        sketches: Map[ExprId, Int]): Option[Map[ExprId, Int]] = {
+      val values = fields.map(e => e.exprId -> value(e, sketches))
+      if (values.exists(_._2.isEmpty)) None else {
+        Some(values.collect { case (id, Some(kind)) if kind != 0 => id -> kind }.toMap)
+      }
+    }
+    def plan(input: LogicalPlan): Option[Map[ExprId, Int]] = input match {
+      case project: Project => plan(project.child).flatMap(outputs(project.projectList, _))
+      case aggregate: Aggregate => plan(aggregate.child).flatMap { sketches =>
+        if (aggregate.groupingExpressions.forall(value(_, sketches).contains(0))) {
+          outputs(aggregate.aggregateExpressions, sketches)
+        } else None
+      }
+      case filter: Filter => plan(filter.child).filter { sketches =>
+        value(filter.condition, sketches).contains(0)
+      }
+      case alias: SubqueryAlias => plan(alias.child)
+      case other =>
+        // Equality/cardinality/order consumers need their usual deterministic inputs. In
+        // particular DISTINCT cannot deduplicate randomized intermediate sketch bytes.
+        val children = other.children.map(plan)
+        if (children.forall(_.contains(Map.empty[ExprId, Int])) &&
+            other.expressions.forall(value(_, Map.empty).contains(0)) &&
+            legacy.plan(other).deterministic) {
+          Some(Map.empty)
+        } else None
+    }
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      plan(query.plan).contains(Map.empty[ExprId, Int])
+    }
   }
 
   private[sql] final class KllSubqueryIndependence {

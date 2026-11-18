@@ -41,6 +41,10 @@ license: |
   subqueries as the same grouping value can now fail analysis; compute the value once and reuse
   its alias instead. Correlated lateral queries with KLL aggregates are rejected when the outer
   input can contain multiple rows, because decorrelation can share independent invocations.
+  Count-only compositions using matching `kll_sketch_get_n_*` and merge functions remain
+  supported when membership is deterministic and randomized sketch bytes have no other
+  observable use. Raw sketch, quantile, and sketch-dependent equality or ordering consumers
+  retain the restriction.
   Filters on values computed by these aggregates can execute later and increase work.
   To restore the previous aggregate determinism analysis and batch optimizer behavior, set
   `spark.sql.legacy.kllAggregateDeterministic.enabled` to `true` before the query is analyzed.

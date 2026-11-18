@@ -286,6 +286,12 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
       .reverse
   }
 
+  /** Select from the same raw listing as getOrderedBatchFiles without sorting its full history. */
+  private[sql] def getLatestBatchIdAtOrBefore(batchId: Long): Option[Long] = {
+    fileManager.list(metadataPath, batchFilesFilter).iterator
+      .map(file => pathToBatchId(file.getPath)).filter(_ <= batchId).maxOption
+  }
+
   private var lastPurgedBatchId: Long = -1L
 
   /**

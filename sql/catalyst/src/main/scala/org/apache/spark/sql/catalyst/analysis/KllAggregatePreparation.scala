@@ -85,7 +85,7 @@ private[sql] object KllAggregatePreparation {
         val updated = expression match {
           case query: SubqueryExpression =>
             val nested = nestedPlans.computeIfAbsent(query.plan,
-              child => visit(child, child.outputSet))
+              child => visit(child, child.outputSet.filter(a => candidates.contains(a.exprId))))
             val updated = if (nested eq query.plan) query else query.withNewPlan(nested)
             query match {
               case _: ScalarSubquery | _: Exists | _: ListQuery | _: LateralSubquery
@@ -109,8 +109,8 @@ private[sql] object KllAggregatePreparation {
       val current = trimmed.mapExpressionsWithReferenceEquality(retireSubqueries)
       // Only candidate identities can affect deletion. Avoid recursive output/inputSet reads
       // for ordinary forwarded columns, especially through long chains of filters.
-      val forwarded = required.filter(a => candidates.contains(a.exprId))
-      val needed = current.references.filter(a => candidates.contains(a.exprId)) ++ forwarded
+      val local = current.references.filter(a => candidates.contains(a.exprId))
+      val needed = if (local.isEmpty) required else local ++ required
       current match {
         case distinct: Distinct =>
           // DISTINCT consumes its complete equality tuple, including keys hidden by a parent.
@@ -131,6 +131,6 @@ private[sql] object KllAggregatePreparation {
           }
       }
     }
-    visit(plan, plan.outputSet)
+    visit(plan, plan.outputSet.filter(a => candidates.contains(a.exprId)))
   }
 }

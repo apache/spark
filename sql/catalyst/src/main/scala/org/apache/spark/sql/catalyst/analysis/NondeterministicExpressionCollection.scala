@@ -41,10 +41,13 @@ object NondeterministicExpressionCollection {
   private[sql] def restoreBindingProvenance(
       bindings: Set[ExprId],
       prepared: LogicalPlan): LogicalPlan = {
-    if (bindings.isEmpty) prepared else prepared.transformAllExpressionsWithSubqueries {
-      case alias: Alias if bindings.contains(alias.exprId) &&
-          !alias.isNondeterministicSubqueryBinding =>
-        alias.asNondeterministicSubqueryBinding
+    if (bindings.isEmpty) prepared else prepared.transformUpWithSubqueriesAndPruning(
+      _.containsPattern(ALIAS)) {
+      case plan => plan.transformExpressionsWithPruning(_.containsPattern(ALIAS)) {
+        case alias: Alias if bindings.contains(alias.exprId) &&
+            !alias.isNondeterministicSubqueryBinding =>
+          alias.asNondeterministicSubqueryBinding
+      }
     }
   }
 
@@ -52,11 +55,12 @@ object NondeterministicExpressionCollection {
   private[sql] def restoreBindingReferences(
       expression: Expression,
       bindings: scala.collection.Map[ExprId, Expression],
-      stripFilterGuards: Boolean = false): Expression = {
+      stripFilterGuards: Boolean = false,
+      unchanged: IdentityHashMap[Expression, java.lang.Boolean] =
+        new IdentityHashMap[Expression, java.lang.Boolean]): Expression = {
     if (bindings.isEmpty && !stripFilterGuards) return expression
-    // The caller's binding map is fixed for this invocation but can grow between calls. Only
-    // unchanged results are reusable: changed occurrences retain their own evaluation identities.
-    val unchanged = new IdentityHashMap[Expression, java.lang.Boolean]
+    // Share this cache only while the binding map is fixed. Project callers that grow bindings
+    // use the default fresh cache. Changed occurrences retain independent evaluation identities.
     def restore(value: Expression): Expression = {
       if (unchanged.containsKey(value)) return value
       val result = value match {

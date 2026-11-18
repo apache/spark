@@ -155,7 +155,8 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       val base = Project(Seq(key, binding), LocalRelation(key))
       val chain = (1 to depth).foldLeft[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](
         base) { (child, _) => Project(child.output, child) }
-      val condition = Counted(EqualTo(Add(key, binding.toAttribute), member), visits)
+      val condition = (1 to 32).foldLeft[Expression](
+        EqualTo(Add(key, binding.toAttribute), member)) { (child, _) => Counted(child, visits) }
       val plan = Join(chain, LocalRelation(member), Inner, Some(condition), JoinHint.NONE)
       plan.foreach { p =>
         p.treePatternBits
@@ -174,6 +175,53 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       assert(visits <= baseline + depth,
         s"depth=$depth forwarded consumer visits=$visits baseline=$baseline")
     }
+  }
+
+  test("candidate-only retirement demand is forwarded without rebuilding wide sets") {
+    def work(depth: Int): Int = {
+      val hashes = new AtomicInteger
+      val fields = (1 to 64).map(i => UnionHashCounted(s"a$i", hashes))
+      val chain = (1 to depth).foldLeft[
+          org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](LocalRelation(fields)) {
+        (child, _) => org.apache.spark.sql.catalyst.plans.logical.Filter(Literal.TrueLiteral, child)
+      }
+      val plan = Project(fields, chain)
+      plan.foreach { p => p.treePatternBits; p.references; p.outputSet }
+      hashes.set(0)
+      val result = KllAggregatePreparation.retireUnchosenOutputs(
+        plan, fields.map(_.exprId).toSet)
+      val count = hashes.get
+      assert(result.output == fields)
+      count
+    }
+    val baseline = work(0)
+    assert(work(32) <= baseline * 3, s"repeated candidate demand: baseline=$baseline")
+  }
+
+  test("computed alias eligibility is proved once for repeated conjuncts") {
+    def work(predicates: Int): Int = {
+      val hashes = new AtomicInteger
+      val fields = (1 to 64).map(i => UnionHashCounted(s"a$i", hashes))
+      val missing = UnionHashCounted("missing", hashes)
+      val computed = Alias(CreateArray(fields :+ missing), "computed")()
+      val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+        KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+          .toAggregateExpression()).as("n")))
+      val projection = Project(fields ++ Seq(computed, scalar.as("n")), LocalRelation(fields))
+      val condition = (1 to predicates).map { i =>
+        EqualTo(GetArrayItem(computed.toAttribute, Literal(0)), Literal(i.toDouble)): Expression
+      }.reduceLeft(And)
+      val plan = org.apache.spark.sql.catalyst.plans.logical.Filter(condition, projection)
+      plan.foreach { p => p.outputSet; p.treePatternBits
+        p.expressions.foreach(_.foreach { e => e.references; e.deterministic; e.throwable })
+      }
+      hashes.set(0)
+      assert(org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin(plan) eq plan)
+      hashes.get
+    }
+    val small = work(8)
+    val large = work(64)
+    assert(large <= small * 2, s"alias eligibility: eight=$small sixtyFour=$large")
   }
 
   private case class OutputReadCounted(

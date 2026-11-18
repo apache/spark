@@ -520,6 +520,57 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
+  testWithAllStateVersions("KLL legacy checkpoints restore guarded UDF grouping keys") {
+    for (guard <- Seq("if", "case", "coalesce", "and", "or", "try", "arithmetic")) {
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Int]
+        val nonempty = udf((bytes: Array[Byte]) => bytes.nonEmpty).asNondeterministic()
+        def query(legacy: Boolean): DataFrame = withSQLConf(
+            SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+          def key: org.apache.spark.sql.Column = {
+            val value = nonempty(expr("""(SELECT kll_sketch_agg_bigint(id)
+                |FROM range(3))""".stripMargin))
+            guard match {
+              case "if" => call_function("if", value, lit(1), lit(0))
+              case "case" => when(value, lit(1)).when(lit(true), lit(0))
+              case "coalesce" => coalesce(value, lit(false))
+              case "and" => value && lit(true)
+              case "or" => value || lit(false)
+              case "try" => try_add(value.cast("int"), lit(1))
+              case "arithmetic" => value.cast("int") + lit(1)
+            }
+          }
+          val result = input.toDF().groupBy(key.as("a"), key.as("b")).count()
+          result.queryExecution.assertAnalyzed()
+          result
+        }
+        val historical = query(legacy = true)
+        val current = query(legacy = false)
+        val expected = guard match {
+          case "coalesce" | "and" | "or" => true
+          case "try" | "arithmetic" => 2
+          case _ => 1
+        }
+        val oneKey = AssertOnQuery { q =>
+          q.lastExecution.executedPlan.collectFirst {
+            case save: StateStoreSaveExec => save.keyExpressions.size
+          }.contains(1)
+        }
+        val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+        testStream(historical, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> "true")),
+          AddData(input, 1, 2), CheckLastBatch(Row(expected, expected, 2L)),
+          oneKey, StopStream)
+        testStream(current, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> "false")),
+          AddData(input, 3), CheckLastBatch(Row(expected, expected, 3L)),
+          oneKey, StopStream)
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL checkpoint keys restore both nullable primitive UDF inputs") {
     withTempDir { checkpoint =>
       val input = MemoryStream[Int]

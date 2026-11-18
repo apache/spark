@@ -216,10 +216,13 @@ class MicroBatchExecution(
     val committed = initialLatestCommittedBatch.map(_._1).getOrElse(-1L)
     val surviving = if (trigger.isInstanceOf[RealTimeTrigger] &&
         initialLatestOffsetSeq.exists(_._1 > committed)) {
-      val batchId = offsetLog.getOrderedBatchFiles().iterator
-        .map(_.getPath.getName.toLong).find(_ <= committed)
-      assert(batchId.nonEmpty || committed == -1L)
-      batchId.map(id => id -> offsetLog.get(id).get)
+      if (committed == -1L) None else {
+        val entry = offsetLog.get(committed).map(committed -> _).orElse {
+          offsetLog.getLatestBatchIdAtOrBefore(committed).map(id => id -> offsetLog.get(id).get)
+        }
+        assert(entry.nonEmpty)
+        entry
+      }
     } else initialLatestOffsetSeq
     surviving.flatMap(_._2.metadataOpt).map { metadata =>
       OffsetSeqMetadata.readValueOpt(metadata, SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
@@ -1443,6 +1446,15 @@ class MicroBatchExecution(
     execCtx.reportTimeTaken("queryPlanning") {
       // Reuse the same analysis, normalized identities and transaction owner as preparation.
       execCtx.executionPlan = prepared.execution
+      // Optimizer extensions can introduce KLL after the pre-WAL logical discovery. The
+      // checkpoint's sharing mode owns compatibility even if a new node captured batch rollback.
+      if (!sparkSessionToRunBatch.sessionState.conf
+          .getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING) &&
+          execCtx.executionPlan.optimizedPlan.containsPattern(KLL_AGGREGATE) &&
+          !OffsetSeqLog.requiresKllReader(execCtx.offsetSeqMetadata)) {
+        throw new IllegalStateException(
+          s"Offset log for batch ${execCtx.batchId} lacks the corrected KLL reader requirement")
+      }
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins
