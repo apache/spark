@@ -60,7 +60,10 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem](
       "org.apache.spark.sql.TableValuedFunction.variant_explode"),
     ProblemFilters.exclude[ReversedMissingMethodProblem](
-      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer"),
+    // [SPARK-60775][SQL][PYTHON] Add SparkSession.getOrCreateDataFrame
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.SparkSession.getOrCreateDataFrame")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
