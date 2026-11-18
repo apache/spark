@@ -127,6 +127,11 @@ class JoinOptimizationSuite extends PlanTest {
     }
   }
 
+  // The conjuncts of the top filter in their written order, which `comparePlans` does not check.
+  private def topFilterConjuncts(plan: LogicalPlan): Seq[Expression] =
+    normalizeExprIds(plan).collectFirst { case Filter(condition, _) => condition }
+      .map(splitConjunctivePredicates(_).map(_.canonicalized)).getOrElse(Nil)
+
   test("SPARK-61930: reorder inner joins without moving a throwable condition into a join") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
@@ -145,7 +150,9 @@ class JoinOptimizationSuite extends PlanTest {
       .where(throwables)
       .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
 
-    comparePlans(Optimize.execute(query.analyze), answer.analyze)
+    val optimized = Optimize.execute(query.analyze)
+    comparePlans(optimized, answer.analyze)
+    assert(topFilterConjuncts(optimized) === topFilterConjuncts(answer.analyze))
   }
 
   test("SPARK-61930: reorder inner joins without moving a condition that can fail ahead of a " +
@@ -166,6 +173,25 @@ class JoinOptimizationSuite extends PlanTest {
       .join(z, condition = Some($"d" === $"e" && $"b" > $"f"))
       .where(Rand(0) > 0.1 && divide($"b", $"f") > 1 && $"q" > 0)
 
-    comparePlans(ReorderJoin(query.analyze), answer.analyze)
+    val reordered = ReorderJoin(query.analyze)
+    comparePlans(reordered, answer.analyze)
+    assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
+  }
+
+  test("SPARK-61930: createOrderedJoin does not choose the next plan by a condition kept above " +
+    "the joins") {
+    // The kept condition is the only one between x and y, so x is joined first with z, by the
+    // condition between them, and then with y.
+    val (x, y, z) = (testRelation, testRelation1, LocalRelation($"e".int, $"f".int))
+    val Seq(a, b, _) = x.output
+    val Seq(d) = y.output
+    val Seq(e, f) = z.output
+    val kept = If(a === d, Literal(true), IsNull(RaiseError(Literal("boom"))))
+    val joined = ReorderJoin.createOrderedJoin(
+      Seq((x, Inner), (y, Inner), (z, Inner)), Seq(kept, d === e, b === f), keptAbove = Seq(kept))
+    val answer = Filter(kept,
+      Join(Join(x, z, Inner, Some(b === f), JoinHint.NONE), y, Inner, Some(d === e), JoinHint.NONE))
+
+    comparePlans(joined, answer)
   }
 }

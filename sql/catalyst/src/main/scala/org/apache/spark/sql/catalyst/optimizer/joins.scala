@@ -102,6 +102,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
         conditions
+          .filterNot(keptAbove.contains)
           .filterNot(l => l.references.nonEmpty && canEvaluate(l, left))
           .filterNot(r => r.references.nonEmpty && canEvaluate(r, plan))
           .exists(_.references.subsetOf(refs))
