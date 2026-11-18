@@ -18,13 +18,15 @@ package org.apache.spark.sql.connect.utils
 
 import java.util.UUID
 
-import com.google.rpc.Code
+import com.google.rpc.{Code, ErrorInfo}
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ErrorUtilsSuite extends SharedSparkSession {
@@ -56,10 +58,16 @@ class ErrorUtilsSuite extends SharedSparkSession {
     }
   }
 
-  test("handleError falls back when linkage errors prevent session-state initialization") {
+  test("handleError preserves linkage error details when session-state initialization fails") {
     val linkageError = new NoSuchMethodError("incompatible session extension")
     val session = new SparkSession(spark.sparkContext)
-    session.extensions.injectParser((_, _) => throw linkageError)
+    session.sqlConf.setConf(Connect.CONNECT_ENRICH_ERROR_ENABLED, true)
+    session.sqlConf.setConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED, true)
+    var parserBuilds = 0
+    session.extensions.injectParser { (_, _) =>
+      parserBuilds += 1
+      throw linkageError
+    }
     val holder = SessionHolder("user1", UUID.randomUUID().toString, session)
     SparkConnectService.sessionManager.putSessionForTesting(holder)
     var callbackCalled = false
@@ -78,11 +86,14 @@ class ErrorUtilsSuite extends SharedSparkSession {
           holder.sessionId,
           callback = Some(() => callbackCalled = true))(linkageError)
       }
-      assert(error.getStatus.getCode == Status.Code.UNKNOWN)
+      assert(error.getStatus.getCode == Status.Code.INTERNAL)
       assert(error.getStatus.getDescription == linkageError.getMessage)
-      assert(error.getCause eq linkageError)
-      assert(StatusProto.fromThrowable(error).getDetailsCount == 0)
-      assert(holder.errorIdToError.size() == 0)
+      val info = StatusProto.fromThrowable(error).getDetails(0).unpack(classOf[ErrorInfo])
+      assert(info.getReason == linkageError.getClass.getName)
+      val errorId = info.getMetadataOrThrow("errorId")
+      assert(holder.errorIdToError.getIfPresent(errorId) eq linkageError)
+      assert(info.getMetadataOrThrow("stackTrace").contains(linkageError.getMessage))
+      assert(parserBuilds == 1)
       assert(callbackCalled)
     } finally {
       SparkConnectService.sessionManager.closeSession(holder.key)

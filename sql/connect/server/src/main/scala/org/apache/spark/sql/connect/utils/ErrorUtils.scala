@@ -85,7 +85,10 @@ private[connect] object ErrorUtils extends Logging {
     while (buffer.size < MAX_ERROR_CHAIN_LENGTH && currentError != null) {
       val builder = FetchErrorDetailsResponse.Error
         .newBuilder()
-        .setMessage(Option(currentError.getMessage).getOrElse(currentError.getClass.getName))
+        .setMessage(
+          Option(currentError.getMessage)
+            .filter(_.nonEmpty)
+            .getOrElse(currentError.getClass.getName))
         .addAllErrorTypeHierarchy(
           ErrorUtils.allClasses(currentError.getClass).map(_.getName).asJava)
 
@@ -247,8 +250,8 @@ private[connect] object ErrorUtils extends Logging {
       case _ =>
     }
 
-    val enrichErrorEnabled = sessionHolderOpt.exists(
-      _.session.sessionState.conf.getConf(Connect.CONNECT_ENRICH_ERROR_ENABLED))
+    val enrichErrorEnabled =
+      sessionHolderOpt.exists(_.session.sqlConf.getConf(Connect.CONNECT_ENRICH_ERROR_ENABLED))
     if (enrichErrorEnabled) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString
@@ -260,8 +263,8 @@ private[connect] object ErrorUtils extends Logging {
     }
 
     lazy val stackTrace = Option(Utils.stackTraceToString(st))
-    val stackTraceEnabled = sessionHolderOpt.exists(
-      _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
+    val stackTraceEnabled =
+      sessionHolderOpt.exists(_.session.sqlConf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =
       if (stackTraceEnabled && stackTrace.nonEmpty) {
         val maxSize = Math.min(
@@ -364,7 +367,7 @@ private[connect] object ErrorUtils extends Logging {
         try {
           StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
         } catch {
-          // Reading the session configuration can retry failed session-state initialization.
+          // Preserve the original error if constructing structured details also fails.
           case NonFatal(_) | _: LinkageError => fallbackStatus(e)
         }
 
