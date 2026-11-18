@@ -499,7 +499,9 @@ query and in the SQL tab of the Spark UI, when the scan uses the domains of all 
 the filter constrains. The default uses none, so a connector can ignore the method. Spark pushes
 the domains to every builder, also to one that keeps the default: for a query whose filters give
 a domain, it creates the source and the builder of the scan while it optimizes the query, as it
-does for a LIMIT that it pushes, rather than when it plans the partitions.
+does for a LIMIT that it pushes, rather than when it plans the partitions. For a connector
+whose `new` or `new_scan` is expensive, and that uses no domain, set
+`spark.sql.dataSource.native.filterPushdown.enabled` to false so that Spark pushes no domain.
 
 | `Domain` field | ABI field | Meaning |
 | --- | --- | --- |

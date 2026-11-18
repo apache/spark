@@ -805,7 +805,7 @@ pub unsafe fn domains(
                 }
                 let array = unsafe { ArrowArray::from_raw(domain.ranges) };
                 let schema = unsafe { ArrowSchema::from_raw(domain.ranges_schema) };
-                let data = check(unsafe { from_ffi(array, &schema)? })
+                let data = align_and_validate(unsafe { from_ffi(array, &schema)? })
                     .map_err(|e| format!("the ranges of a domain are not valid Arrow data: {e}"))?;
                 let ranges = make_array(data);
                 let ranges = ranges
@@ -848,15 +848,15 @@ pub unsafe fn export_schema(schema: &SchemaRef, output: *mut ArrowSchema) -> Res
     Ok(())
 }
 
-/// Checks Arrow data that Spark passed, as imported from C data, which Arrow neither aligns nor
-/// validates, while the safe accessors of the connector rely on both. Arrow requires each buffer
-/// of fixed-width values to be aligned to its type, such as the 16 bytes of an `i128` for a
+/// Aligns and validates Arrow data that Spark passed, as imported from C data, which Arrow does
+/// not do on import, while the safe accessors of the connector rely on both. Arrow requires each
+/// buffer of fixed-width values to be aligned to its type, such as the 16 bytes of an `i128` for a
 /// decimal on x86_64 and aarch64, which the Arrow Java allocator of Spark does not promise, so
 /// this copies the buffers that are not aligned, and only those. It then validates the layout
 /// and values of the data: a Spark string may hold bytes that are not UTF-8, such as those of a
 /// cast from binary, which a Rust `&str` must not. It leaves nullability to Spark, for the reason
 /// that `validate` gives.
-pub fn check(mut data: ArrayData) -> Result<ArrayData> {
+pub fn align_and_validate(mut data: ArrayData) -> Result<ArrayData> {
     data.align_buffers();
     validate(&data)?;
     Ok(data)

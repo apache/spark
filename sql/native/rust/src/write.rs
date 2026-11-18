@@ -250,13 +250,14 @@ pub unsafe fn write_batch(handle: *mut c_void, array: *mut ArrowArray) -> Result
     state.writer().write(RecordBatch::from(array))
 }
 
-/// Imports a batch to write, which [`abi::check`] aligns and validates.
+/// Imports a batch to write, aligned and validated with [`abi::align_and_validate`].
 ///
 /// # Safety
 /// As for write_batch: the array must be Arrow C data of `data_type`.
 unsafe fn import(array: ArrowArray, data_type: &DataType) -> Result<StructArray> {
     let data = unsafe { ffi::from_ffi_and_data_type(array, data_type.clone())? };
-    let data = abi::check(data).map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
+    let data = abi::align_and_validate(data)
+        .map_err(|e| format!("write input is not valid Arrow data: {e}"))?;
     Ok(StructArray::from(data))
 }
 

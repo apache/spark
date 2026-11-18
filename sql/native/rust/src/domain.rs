@@ -23,7 +23,7 @@ use arrow_array::types::{
     Date32Type, Decimal128Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type,
     Int8Type, TimestampMicrosecondType,
 };
-use arrow_array::{Array, ArrayRef, BooleanArray, StructArray};
+use arrow_array::{new_empty_array, Array, ArrayRef, BooleanArray, StructArray};
 use arrow_schema::{DataType, Fields, TimeUnit};
 use serde::{Deserialize, Serialize};
 
@@ -190,69 +190,51 @@ mod decimal_string {
     }
 }
 
-/// Whether the SDK has a [`Value`] for the values of a column of `data_type`.
+/// Whether the SDK has a [`Value`] for the values of a column of `data_type`: the types that
+/// [`values`] converts.
 fn has_value(data_type: &DataType) -> bool {
-    ranges_from_values(data_type, None).is_some()
+    values(&new_empty_array(data_type)).is_some()
 }
 
 /// The ranges of a domain of a column of `data_type`, a type that has a [`Value`], from the
 /// struct array that Spark passes, with the fields `low` and `high`, of the type of the column,
 /// and `low_inclusive` and `high_inclusive`.
 fn value_ranges(ranges: &StructArray, data_type: &DataType) -> Result<Vec<ValueRange>> {
-    let wrong_type = |name: &str, actual: &DataType| {
-        format!(
-            "the field {name} of the ranges of a domain has the type {actual}, not the type \
-             {data_type} of its column"
-        )
-    };
-    let supported = has_value(data_type);
-    let bounds = |name: &str| -> Result<&ArrayRef> {
+    let bounds = |name: &str| -> Result<Vec<Option<Value>>> {
         let array = field(ranges, name)?;
-        if supported && array.data_type() == data_type {
-            Ok(array)
+        let converted = if array.data_type() == data_type {
+            values(array)
         } else {
-            Err(wrong_type(name, array.data_type()).into())
-        }
-    };
-    let columns = RangeColumns {
-        low: bounds("low")?,
-        high: bounds("high")?,
-        low_inclusive: flags(ranges, "low_inclusive")?,
-        high_inclusive: flags(ranges, "high_inclusive")?,
-    };
-    ranges_from_values(data_type, Some(&columns))
-        .ok_or_else(|| wrong_type("low", columns.low.data_type()).into())
-}
-
-/// Validated columns of the ranges, whose typed bounds are collected directly into the result.
-struct RangeColumns<'a> {
-    low: &'a ArrayRef,
-    high: &'a ArrayRef,
-    low_inclusive: &'a BooleanArray,
-    high_inclusive: &'a BooleanArray,
-}
-
-impl RangeColumns<'_> {
-    fn collect<T>(
-        &self,
-        lows: impl IntoIterator<Item = Option<T>>,
-        highs: impl IntoIterator<Item = Option<T>>,
-        value: impl Fn(T) -> Value,
-    ) -> Vec<ValueRange> {
-        let bound = |endpoint: Option<T>, inclusive: bool| match endpoint.map(&value) {
-            None => Bound::Unbounded,
-            Some(value) if inclusive => Bound::Included(value),
-            Some(value) => Bound::Excluded(value),
+            None
         };
-        lows.into_iter()
-            .zip(highs)
-            .enumerate()
-            .map(|(row, (low, high))| ValueRange {
-                low: bound(low, self.low_inclusive.value(row)),
-                high: bound(high, self.high_inclusive.value(row)),
-            })
-            .collect()
-    }
+        converted.ok_or_else(|| {
+            format!(
+                "the field {name} of the ranges of a domain has the type {}, not the type \
+                 {data_type} of its column",
+                array.data_type()
+            )
+            .into()
+        })
+    };
+    let lows = bounds("low")?;
+    let highs = bounds("high")?;
+    let low_inclusive = flags(ranges, "low_inclusive")?;
+    let high_inclusive = flags(ranges, "high_inclusive")?;
+    let bound = |value: Option<Value>, inclusive: bool| match value {
+        None => Bound::Unbounded,
+        Some(value) if inclusive => Bound::Included(value),
+        Some(value) => Bound::Excluded(value),
+    };
+    let ranges = lows
+        .into_iter()
+        .zip(highs)
+        .enumerate()
+        .map(|(row, (low, high))| ValueRange {
+            low: bound(low, low_inclusive.value(row)),
+            high: bound(high, high_inclusive.value(row)),
+        })
+        .collect();
+    Ok(ranges)
 }
 
 fn field<'a>(ranges: &'a StructArray, name: &str) -> Result<&'a ArrayRef> {
@@ -267,49 +249,50 @@ fn flags<'a>(ranges: &'a StructArray, name: &str) -> Result<&'a BooleanArray> {
         .ok_or_else(|| format!("the field {name} of the ranges of a domain is not boolean").into())
 }
 
-/// Converts the ranges of a supported type, or probes support without allocating arrays when
-/// `columns` is `None`. The same dispatch determines support and downcasts both bound arrays,
-/// once per domain, before iterating their values.
-fn ranges_from_values(
-    data_type: &DataType,
-    columns: Option<&RangeColumns<'_>>,
-) -> Option<Vec<ValueRange>> {
-    macro_rules! convert {
-        ($cast:ident $(::<$primitive:ty>)?, $value:expr) => {
-            Some(columns.map_or_else(Vec::new, |columns| {
-                columns.collect(
-                    columns.low.$cast $(::<$primitive>)? (),
-                    columns.high.$cast $(::<$primitive>)? (),
-                    $value,
-                )
-            }))
-        };
+/// The values of an array of one of the types of version 1 of the ABI, with `None` for its
+/// nulls, or `None` for another type.
+fn values(array: &ArrayRef) -> Option<Vec<Option<Value>>> {
+    fn convert<T>(
+        values: impl IntoIterator<Item = Option<T>>,
+        value: impl Fn(T) -> Value,
+    ) -> Option<Vec<Option<Value>>> {
+        Some(values.into_iter().map(|v| v.map(&value)).collect())
     }
-    match data_type {
-        DataType::Boolean => convert!(as_boolean, Value::Boolean),
-        DataType::Int8 => convert!(as_primitive::<Int8Type>, |v| Value::Integer(v.into())),
-        DataType::Int16 => convert!(as_primitive::<Int16Type>, |v| Value::Integer(v.into())),
-        DataType::Int32 => convert!(as_primitive::<Int32Type>, |v| Value::Integer(v.into())),
-        DataType::Int64 => convert!(as_primitive::<Int64Type>, Value::Integer),
-        DataType::Float32 => convert!(as_primitive::<Float32Type>, |v| Value::Float(v.into())),
-        DataType::Float64 => convert!(as_primitive::<Float64Type>, Value::Float),
+    match array.data_type() {
+        DataType::Boolean => convert(array.as_boolean(), Value::Boolean),
+        DataType::Int8 => convert(array.as_primitive::<Int8Type>(), |v| {
+            Value::Integer(v.into())
+        }),
+        DataType::Int16 => convert(array.as_primitive::<Int16Type>(), |v| {
+            Value::Integer(v.into())
+        }),
+        DataType::Int32 => convert(array.as_primitive::<Int32Type>(), |v| {
+            Value::Integer(v.into())
+        }),
+        DataType::Int64 => convert(array.as_primitive::<Int64Type>(), Value::Integer),
+        DataType::Float32 => convert(array.as_primitive::<Float32Type>(), |v| {
+            Value::Float(v.into())
+        }),
+        DataType::Float64 => convert(array.as_primitive::<Float64Type>(), Value::Float),
         &DataType::Decimal128(precision, scale) => {
-            convert!(as_primitive::<Decimal128Type>, |unscaled| Value::Decimal {
-                unscaled,
-                precision,
-                scale,
+            convert(array.as_primitive::<Decimal128Type>(), |unscaled| {
+                Value::Decimal {
+                    unscaled,
+                    precision,
+                    scale,
+                }
             })
         }
-        DataType::Utf8 => convert!(as_string::<i32>, |v: &str| Value::String(v.to_owned())),
-        DataType::Binary => convert!(as_binary::<i32>, |v: &[u8]| Value::Binary(v.to_vec())),
-        DataType::Date32 => convert!(as_primitive::<Date32Type>, Value::Date),
-        DataType::Timestamp(TimeUnit::Microsecond, zone) => match zone {
-            Some(_) => convert!(as_primitive::<TimestampMicrosecondType>, Value::Timestamp),
-            None => convert!(
-                as_primitive::<TimestampMicrosecondType>,
-                Value::TimestampNtz
-            ),
-        },
+        DataType::Utf8 => convert(array.as_string::<i32>(), |v| Value::String(v.to_owned())),
+        DataType::Binary => convert(array.as_binary::<i32>(), |v| Value::Binary(v.to_vec())),
+        DataType::Date32 => convert(array.as_primitive::<Date32Type>(), Value::Date),
+        DataType::Timestamp(TimeUnit::Microsecond, zone) => {
+            let values = array.as_primitive::<TimestampMicrosecondType>();
+            match zone {
+                Some(_) => convert(values, Value::Timestamp),
+                None => convert(values, Value::TimestampNtz),
+            }
+        }
         _ => None,
     }
 }
@@ -431,7 +414,7 @@ mod tests {
                 Some(vec![ValueRange::single(value.clone())]),
                 "{data_type}"
             );
-            // Paired iterators must preserve nulls, order, and inclusivity for every type.
+            // The conversion must preserve nulls, order, and inclusivity for every type.
             let data = array.to_data();
             let mut bounds = MutableArrayData::new(vec![&data], true, 4);
             bounds.extend_nulls(1);
