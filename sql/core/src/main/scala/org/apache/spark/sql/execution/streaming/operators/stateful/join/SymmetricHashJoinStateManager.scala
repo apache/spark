@@ -269,9 +269,9 @@ class SymmetricHashJoinStateManagerV4(
     stateValueWatermarkColumnOrdinal.orElse(eventTimeColIdxOpt)
   }
 
-  // When there is no event time column in the value and no watermark ordinal in the key,
-  // the secondary index (TsWithKey) will never be used for eviction. Skip writing to it
-  // to avoid unnecessary RocksDB merge overhead.
+  // When there is no ordering column in the value (the column that the value predicate tests, or
+  // the event time) and no watermark ordinal in the key, the secondary index (TsWithKey) will
+  // never be used for eviction. Skip writing to it to avoid unnecessary RocksDB merge overhead.
   // TODO(SPARK-56536): This could be further optimized by also considering whether the state
   //   watermark predicate is defined. Even when an event time column exists, the secondary index
   //   is unused if eviction is not possible (e.g., only one side defines a watermark in a time
@@ -294,7 +294,7 @@ class SymmetricHashJoinStateManagerV4(
         }
 
       case _ =>
-        // When event time column is not available, we will use random bucketing strategy to decide
+        // When no ordering column is available, we will use random bucketing strategy to decide
         // where the new value will be stored. There is a trade-off between the bucket size and the
         // number of values in each bucket; we can tune the bucket size with the configuration if
         // we figure out the magic number to not work well.
