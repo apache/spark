@@ -76,12 +76,22 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   private final MemoryMode memoryMode;
 
+  // Whether a missing column's existence default may hold a NULL nested in a struct or array, or a
+  // decimal that overflows a long. False restores the old failure.
+  private final boolean fillNullsAndWideDecimalDefaults;
+
   // The wrapped ORC column vectors.
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
 
   public OrcColumnarBatchReader(int capacity, MemoryMode memoryMode) {
+    this(capacity, memoryMode, /* fillNullsAndWideDecimalDefaults= */ true);
+  }
+
+  public OrcColumnarBatchReader(
+      int capacity, MemoryMode memoryMode, boolean fillNullsAndWideDecimalDefaults) {
     this.capacity = capacity;
     this.memoryMode = memoryMode;
+    this.fillNullsAndWideDecimalDefaults = fillNullsAndWideDecimalDefaults;
   }
 
 
@@ -219,7 +229,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           Object defaultValue = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)[i];
           if (defaultValue == null) {
             missingCol.putNulls(0, capacity);
-          } else if (missingCol.appendObjects(capacity, defaultValue).isEmpty()) {
+          } else if (missingCol.appendObjects(capacity, defaultValue,
+              fillNullsAndWideDecimalDefaults).isEmpty()) {
             throw new IllegalArgumentException("Cannot assign default column value to result " +
               "column batch in vectorized Orc reader because the data type is not supported: " +
               defaultValue);

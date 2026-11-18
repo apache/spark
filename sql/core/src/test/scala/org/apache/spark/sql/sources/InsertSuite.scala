@@ -2069,8 +2069,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   // Creates a table in `format` with two old rows, then adds columns whose existence defaults
   // have a NULL field, a NULL array element, a NULL nested struct or a decimal whose unscaled
   // value overflows a long, at the top level or in a struct and array (d, e, f, w); compact and
-  // wide decimals that fit in a long (i, l, c); and maps, also nested in a struct, with a NULL or
-  // an overflowing decimal value (m, md, sm), which keep the old error.
+  // wide decimals that fit in a long (i, l, c); and defaults that contain a map, which keep the
+  // old error: maps with a NULL or an overflowing decimal value, also nested in a struct (m, md,
+  // sm), and a struct with an ordinary map next to a NULL or an overflowing decimal (sn, sw).
   private def withNullFieldAndWideDecimalDefaults(format: String)(f: => Unit): Unit = {
     val wide = "99999999999999999999999999999999999999"
     withSQLConf(
@@ -2102,7 +2103,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             "m map<string, int> default map('a', cast(null as int), 'b', 2), " +
             s"md map<string, decimal(38, 0)> default map('a', $wide), " +
             "sm struct<m: map<string, decimal(38, 0)>> " +
-            s"default named_struct('m', map('a', $wide)))")
+            s"default named_struct('m', map('a', $wide)), " +
+            "sn struct<n: int, m: map<string, int>> " +
+            "default named_struct('n', cast(null as int), 'm', map('a', 1, 'b', 2)), " +
+            "sw struct<v: decimal(38, 0), m: map<string, int>> " +
+            s"default named_struct('v', $wide, 'm', map('a', 1, 'b', 2)))")
         }
         f
       }
@@ -2110,7 +2115,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   private val fixedColumns = Seq("s", "a", "n", "d", "e", "f", "w")
-  private val mapColumns = Seq("m", "md", "sm")
+  private val mapColumns = Seq("m", "md", "sm", "sn", "sw")
   private val controlColumns = Seq("i", "l", "c")
   private val controlValues =
     Seq(BigDecimal("1.25"), BigDecimal("999999999999999999"), BigDecimal("123.5"))
@@ -2137,7 +2142,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           val columns = (fixedColumns ++ controlColumns).mkString(", ")
           checkAnswer(sql(s"select id, $columns from t"),
             Seq(Row(1 +: expected: _*), Row(2 +: expected: _*)))
-          // Maps keep the old error: their branch does not give each row its own entries yet.
+          // Defaults that contain a map keep the old error: the map branch does not give each row
+          // its own entries yet, so filling their NULL or wide-decimal siblings would drop entries.
           mapColumns.foreach(column => assertOldReadError(column, s"$format.$column"))
         }
       }

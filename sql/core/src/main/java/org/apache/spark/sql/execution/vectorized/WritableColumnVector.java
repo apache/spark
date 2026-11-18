@@ -822,14 +822,10 @@ public abstract class WritableColumnVector extends ColumnVector {
         || type instanceof AnyTimestampNanoType;
   }
 
-  // Whether `value` holds a NULL or a decimal of precision > 18 outside any map: the values that
-  // appendObjects fills only when the legacy failure behavior is disabled.
-  private static boolean hasNullOrWideDecimal(Object value) {
-    if (value == null) {
+  // Whether `value` contains a map at any depth.
+  private static boolean containsMap(Object value) {
+    if (value instanceof ArrayBasedMapData) {
       return true;
-    }
-    if (value instanceof Decimal decimal) {
-      return decimal.precision() > Decimal.MAX_LONG_DIGITS();
     }
     Object[] elements = null;
     if (value instanceof GenericArrayData arrayData) {
@@ -839,7 +835,7 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
     if (elements != null) {
       for (Object element : elements) {
-        if (hasNullOrWideDecimal(element)) {
+        if (containsMap(element)) {
           return true;
         }
       }
@@ -849,22 +845,35 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Appends multiple copies of a Java Object to the vector using the corresponding append* method
-   * above.
+   * above. Same as `appendObjects(length, value, true)`.
    * @param length: The number of instances to append
    * @param value value to append to the vector
    * @return the number of values appended if the value maps to one of the append* methods above,
    * or Optional.empty() otherwise.
    */
   public Optional<Integer> appendObjects(int length, Object value) {
-    boolean fillNullsAndWideDecimals = hasNullOrWideDecimal(value) &&
-      !(Boolean) SQLConf.get().getConf(
-        SQLConf.LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT());
-    return appendObjects(length, value, fillNullsAndWideDecimals);
+    return appendObjects(length, value, true);
   }
 
-  // Fills NULLs and decimals that overflow a long only when `fillNullsAndWideDecimals`. Map entries
-  // keep the old behavior: the map branch does not give each row its own entries yet.
-  private Optional<Integer> appendObjects(
+  /**
+   * Appends multiple copies of a Java Object to the vector using the corresponding append* method
+   * above.
+   * @param length: The number of instances to append
+   * @param value value to append to the vector
+   * @param fillNullsAndWideDecimals whether to append a NULL nested in a struct or array, and a
+   *   decimal whose unscaled value overflows a long. When false, the former returns
+   *   Optional.empty() and the latter throws ArithmeticException, as before Spark 5.0. A value
+   *   that contains a map keeps that behavior either way, because the map branch does not give
+   *   each row its own entries yet (SPARK-60940).
+   * @return the number of values appended if the value maps to one of the append* methods above,
+   * or Optional.empty() otherwise.
+   */
+  public Optional<Integer> appendObjects(
+      int length, Object value, boolean fillNullsAndWideDecimals) {
+    return appendObjectsImpl(length, value, fillNullsAndWideDecimals && !containsMap(value));
+  }
+
+  private Optional<Integer> appendObjectsImpl(
       int length, Object value, boolean fillNullsAndWideDecimals) {
     if (value == null) {
       // A NULL field or element nested in a struct or array default value.
@@ -933,7 +942,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (int i = 0; i < length; ++i) {
         appendArray(arrayData.numElements());
         for (Object element : arrayData.array()) {
-          if (arrayData().appendObjects(1, element, fillNullsAndWideDecimals).isEmpty()) {
+          if (arrayData().appendObjectsImpl(1, element, fillNullsAndWideDecimals).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -947,7 +956,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         appendStruct(false);
         for (int j = 0; j < row.values().length; ++j) {
           Object element = row.values()[j];
-          if (childColumns[j].appendObjects(1, element, fillNullsAndWideDecimals).isEmpty()) {
+          if (childColumns[j].appendObjectsImpl(1, element, fillNullsAndWideDecimals).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -960,12 +969,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         for (Object key : data.keyArray().array()) {
-          if (childColumns[0].appendObjects(1, key, false).isEmpty()) {
+          if (childColumns[0].appendObjectsImpl(1, key, false).isEmpty()) {
             return Optional.empty();
           }
         }
         for (Object val: data.valueArray().array()) {
-          if (childColumns[1].appendObjects(1, val, false).isEmpty()) {
+          if (childColumns[1].appendObjectsImpl(1, val, false).isEmpty()) {
             return Optional.empty();
           }
         }

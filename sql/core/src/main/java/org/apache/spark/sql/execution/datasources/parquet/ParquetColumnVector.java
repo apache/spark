@@ -67,7 +67,8 @@ final class ParquetColumnVector {
       int capacity,
       Set<ParquetColumn> missingColumns,
       boolean isTopLevel,
-      Object defaultValue) {
+      Object defaultValue,
+      boolean fillNullsAndWideDecimalDefaults) {
     this.column = column;
     this.vector = vector;
     this.children = new ArrayList<>();
@@ -89,7 +90,8 @@ final class ParquetColumnVector {
       // the appendObjects method. This delegates to some specific append* method depending on the
       // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
       // appendFloats method.
-      if (vector.appendObjects(capacity, defaultValue).isEmpty()) {
+      if (vector.appendObjects(capacity, defaultValue, fillNullsAndWideDecimalDefaults)
+          .isEmpty()) {
         throw new IllegalArgumentException("Cannot assign default column value to result " +
           "column batch in vectorized Parquet reader because the data type is not supported: " +
           defaultValue);
@@ -103,7 +105,8 @@ final class ParquetColumnVector {
       WritableColumnVector fileContent = vector.reserveNewColumn(
         capacity, fileContentCol.sparkType());
       ParquetColumnVector contentVector = new ParquetColumnVector(fileContentCol, fileContent,
-        capacity, missingColumns, /* isTopLevel= */ false, /* defaultValue= */ null);
+        capacity, missingColumns, /* isTopLevel= */ false, /* defaultValue= */ null,
+        fillNullsAndWideDecimalDefaults);
       children.add(contentVector);
       variantSchema = SparkShreddingUtils.buildVariantSchema(fileContentCol.sparkType());
       fieldsToExtract = SparkShreddingUtils.getFieldsToExtract(column.sparkType(), variantSchema);
@@ -132,7 +135,8 @@ final class ParquetColumnVector {
           ? vector.getChild(i)
           : vector.reserveNewColumn(capacity, childColumn.sparkType());
         ParquetColumnVector childCv = new ParquetColumnVector(childColumn, childVector, capacity,
-          missingColumns, /* isTopLevel= */ false, /* defaultValue= */ null);
+          missingColumns, /* isTopLevel= */ false, /* defaultValue= */ null,
+          fillNullsAndWideDecimalDefaults);
         children.add(childCv);
 
         // Only use levels from non-missing child, this can happen if only some but not all

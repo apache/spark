@@ -6838,9 +6838,10 @@ object SQLConf {
     buildConf("spark.sql.legacy.vectorizedReader.failOnNullFieldOrWideDecimalDefault")
       .internal()
       .doc("When true, the vectorized Parquet and ORC readers fail on a missing " +
-        "column whose existence default holds, outside any map, a NULL inside a struct or array " +
-        "or a decimal whose unscaled value overflows a long, as before Spark 5.0. When false " +
-        "(the default), they return the default value.")
+        "column whose existence default contains no map and holds a NULL inside a struct or " +
+        "array or a decimal whose unscaled value overflows a long, as before Spark 5.0. When " +
+        "false (the default), they return the default value. Defaults that contain a map fail " +
+        "either way.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
