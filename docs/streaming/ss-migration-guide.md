@@ -25,6 +25,30 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
+- Since Spark 4.4, micro-batch queries classify the randomized
+  `kll_sketch_agg_bigint/float/double` and `kll_merge_agg_bigint/float/double` aggregates as
+  nondeterministic during logical optimization by default. The setting
+  `spark.sql.streaming.aggregation.legacyKllSharing.enabled` controls historical logical sharing
+  and aggregate buffer count and order. New micro-batch checkpoints record its configured value,
+  which defaults to `false`. Checkpoints created before this setting existed restore `true`;
+  newer checkpoints restore their recorded value even when the session setting changes.
+  Changing this mode requires a new checkpoint. It does not force separate physical evaluations
+  or mandatory CTE materialization: the physical reuse policies described in the
+  [SQL migration guide](../sql-migration-guide.html) still apply. Sketch serialization is unchanged.
+  The analysis and batch rollback setting `spark.sql.legacy.kllAggregateDeterministic.enabled`
+  does not override the micro-batch checkpoint's mode. This checkpoint policy is specific to
+  micro-batch execution; continuous execution does not record or restore this setting.
+  Corrected-mode checkpoints for queries containing KLL aggregates use a version 3 offset-log
+  wrapper. Older binaries reject this version before reading the state: they ignore the sharing
+  setting and could otherwise assign valid binary state fields to different KLL outputs.
+  Legacy-mode checkpoints and new checkpoints for queries without KLL aggregates keep their
+  existing log format. An existing corrected checkpoint retains its reader requirement even if
+  the current query no longer contains a KLL aggregate.
+  If rollback to an older binary is needed,
+  select legacy sharing (`true`) before creating the checkpoint, subject to the usual
+  cross-version compatibility requirements, or plan a replay with a fresh checkpoint.
+  Changing the session setting after checkpoint creation does not remove this reader boundary.
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent

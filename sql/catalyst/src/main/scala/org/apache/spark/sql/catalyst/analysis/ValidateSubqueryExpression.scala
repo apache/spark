@@ -22,11 +22,11 @@ import scala.collection.mutable
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, KllMergeAggBigint, KllMergeAggDouble, KllMergeAggFloat, KllSketchAggBigint, KllSketchAggDouble, KllSketchAggFloat}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, KLL_AGGREGATE, PLAN_EXPRESSION}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -145,7 +145,11 @@ object ValidateSubqueryExpression
 
     // Check whether the given expressions contains the subquery expression.
     def containsExpr(expressions: Seq[Expression]): Boolean = {
-      expressions.exists(_.exists(_.semanticEquals(expr)))
+      expressions.exists(_.exists {
+        // A shared nondeterministic scalar is not semantically equal even to itself.
+        case scalar: ScalarSubquery if scalar.exprId == expr.exprId => true
+        case other => other.semanticEquals(expr)
+      })
     }
 
     /**
@@ -235,7 +239,8 @@ object ValidateSubqueryExpression
         val join = plan.asInstanceOf[LateralJoin]
         // A lateral join with a multi-row outer query and a non-deterministic lateral subquery
         // cannot be decorrelated. Otherwise it may produce incorrect results.
-        if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1)) {
+        if (!expr.deterministic && !join.left.maxRows.exists(_ <= 1) &&
+            !isIndependentKllSubquery(expr)) {
           cleanQueryInScalarSubquery(join.right.plan)._1 match {
             // Python UDTFs are by default non-deterministic. They are constructed as a
             // OneRowRelation subquery and can be rewritten by the optimizer without
@@ -326,6 +331,114 @@ object ValidateSubqueryExpression
       }
       visit(plan, inSubquery = false)
       references.toMap
+    }
+  }
+
+  private[analysis] def allowsNondeterministicJoinSubqueries(operator: LogicalPlan): Boolean =
+    operator match {
+      case join: Join => join.expressions.forall(
+        ExprUtils.isDeterministicAfterPredicateSubqueryRewrite)
+      case join: AsOfJoin =>
+        val checked = new java.util.IdentityHashMap[Expression, Expression]
+        val independent = new KllSubqueryIndependence
+        def rewritten(expression: Expression): Expression = {
+          if (expression.deterministic) return expression
+          val cached = checked.get(expression)
+          if (cached != null) return cached
+          val children = expression.mapChildrenWithReferenceEquality(rewritten)
+          val result = children match {
+            case scalar: ScalarSubquery if independent(scalar) =>
+              Literal.default(scalar.dataType)
+            case exists: Exists if independent(exists) => Literal.TrueLiteral
+            case in: InSubquery if independent(in.query) &&
+                in.values.forall(_.deterministic) => Literal.TrueLiteral
+            case other => other
+          }
+          checked.put(expression, result)
+          result
+        }
+        join.copy(condition = None).expressions.forall(_.deterministic) &&
+          join.condition.forall(expression => rewritten(expression).deterministic)
+      case _ => false
+    }
+
+  // An independent KLL relation was accepted before its implicit randomness was exposed.
+  // Inspect copies only; direct row randomness and crossing lateral references retain the guard.
+  private[sql] def isIndependentKllSubquery(query: SubqueryExpression): Boolean = {
+    !query.deterministic && !query.isCorrelated && deterministicWithoutKllRandomness(query.plan)
+  }
+
+  private[sql] final class KllSubqueryIndependence {
+    private val plans = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
+    private lazy val legacy = new LegacyKllDeterminism
+
+    def apply(query: SubqueryExpression): Boolean = {
+      !query.deterministic && !query.isCorrelated && plans.computeIfAbsent(query.plan,
+        plan => AnalysisHelper.allowInvokingTransformsInAnalyzer {
+          legacy.plan(plan).deterministic
+        }).booleanValue()
+    }
+  }
+
+  private val legacyKll: PartialFunction[Expression, Expression] = {
+    case k: KllSketchAggBigint => k.copy(legacyDeterministic = true)
+    case k: KllSketchAggFloat => k.copy(legacyDeterministic = true)
+    case k: KllSketchAggDouble => k.copy(legacyDeterministic = true)
+    case k: KllMergeAggBigint => k.copy(legacyDeterministic = true)
+    case k: KllMergeAggFloat => k.copy(legacyDeterministic = true)
+    case k: KllMergeAggDouble => k.copy(legacyDeterministic = true)
+  }
+
+  private[analysis] final class LegacyKllDeterminism {
+    private val expressions = new java.util.IdentityHashMap[Expression, Expression]
+    private val plans = new java.util.IdentityHashMap[LogicalPlan, LogicalPlan]
+
+    def expression(value: Expression): Expression = {
+      if (value.deterministic) return value
+      val cached = expressions.get(value)
+      if (cached != null) return cached
+      val result = value match {
+        case query: SubqueryExpression => query.withNewPlan(plan(query.plan))
+        case other =>
+          val children = other.mapChildrenWithReferenceEquality(expression)
+          legacyKll.applyOrElse(children, identity[Expression])
+      }
+      expressions.put(value, result)
+      result
+    }
+
+    def plan(value: LogicalPlan): LogicalPlan = {
+      if (value.deterministic) return value
+      val cached = plans.get(value)
+      if (cached != null) return cached
+      // This copy is only a determinism proof. Opaque startup placeholders keep their real
+      // plans hidden from optimization, but must expose the source of KLL nondeterminism here.
+      val result = value match {
+        case opaque: OpaqueLogicalPlan => plan(opaque.hiddenPlan)
+        case other => other.mapChildrenWithReferenceEquality(plan)
+          .mapExpressionsWithReferenceEquality(expression)
+      }
+      plans.put(value, result)
+      result
+    }
+  }
+
+  private[sql] def deterministicWithoutKllRandomness(expression: Expression): Boolean = {
+    deterministicWithoutKllRandomness(Seq(expression))
+  }
+
+  private[sql] def deterministicWithoutKllRandomness(expressions: Seq[Expression]): Boolean = {
+    lazy val legacy = new LegacyKllDeterminism
+    expressions.forall(expression => expression.deterministic ||
+      (expression.containsAnyPattern(KLL_AGGREGATE, PLAN_EXPRESSION) &&
+        AnalysisHelper.allowInvokingTransformsInAnalyzer {
+          legacy.expression(expression).deterministic
+        }))
+  }
+
+  private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      new LegacyKllDeterminism().plan(plan).deterministic
     }
   }
 

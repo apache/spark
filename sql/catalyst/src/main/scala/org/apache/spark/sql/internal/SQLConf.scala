@@ -4207,6 +4207,31 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_KLL_AGGREGATE_DETERMINISTIC =
+    buildConf("spark.sql.legacy.kllAggregateDeterministic.enabled")
+      .doc("When true, restore the historical deterministic classification of KLL sketch and " +
+        "merge aggregates during analysis and batch optimization. This can duplicate randomized " +
+        "CTE evaluations or share independent aggregates. Micro-batch optimization instead uses " +
+        "the sharing mode recorded in its checkpoint.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_AGGREGATION_LEGACY_KLL_SHARING =
+    buildConf("spark.sql.streaming.aggregation.legacyKllSharing.enabled")
+      .internal()
+      .doc("Preserve the historical KLL optimizer behavior and ordered aggregation buffers " +
+        "in existing micro-batch checkpoints. " +
+        "New micro-batch checkpoints default to nondeterministic logical optimization; " +
+        "physical subquery and exchange reuse policies are unchanged. Micro-batch checkpoints " +
+        "restore this setting; changing it requires a new checkpoint. Continuous execution " +
+        "does not record or restore this setting.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_EXCEPT_ON_STREAMING_DATAFRAME =
     buildConf("spark.sql.streaming.allowExceptOnStreamingDataFrame")
       .internal()

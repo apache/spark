@@ -242,6 +242,12 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
 }
 
+/** A placeholder whose hidden plan supplies determinism without participating in optimization. */
+private[sql] trait OpaqueLogicalPlan extends LogicalPlan {
+  def hiddenPlan: LogicalPlan
+  override def deterministic: Boolean = hiddenPlan.deterministic
+}
+
 /**
  * A single observation of a fully materialized leaf's current cache generation.
  */

@@ -148,7 +148,8 @@ object ResolveZip extends Rule[LogicalPlan] {
       exprId = a.exprId,
       qualifier = a.qualifier,
       explicitMetadata = a.explicitMetadata,
-      nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
+      nonInheritableMetadataKeys = a.nonInheritableMetadataKeys,
+      nondeterministicSubqueryOrigin = a.nondeterministicSubqueryOrigin)
   }
 
   private def remapNamedExpr(

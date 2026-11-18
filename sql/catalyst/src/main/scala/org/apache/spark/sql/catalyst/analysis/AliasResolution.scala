@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ExtractValue,
   Generator,
   GeneratorOuter,
+  KllAggregateResolution,
   Literal,
   NamedExpression,
   OuterReference
@@ -51,6 +52,8 @@ object AliasResolution {
   def resolve(u: UnresolvedAlias): Expression = {
     val UnresolvedAlias(child, optGenAliasFunc) = u
     child match {
+      case resolution: KllAggregateResolution if resolution.batch.isInstanceOf[OuterReference] =>
+        resolve(u.copy(child = resolution.batch)).withNewChildren(Seq(resolution))
       case outerReference: OuterReference =>
         val aliasName = outerReference
           .getTagValue(OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE)

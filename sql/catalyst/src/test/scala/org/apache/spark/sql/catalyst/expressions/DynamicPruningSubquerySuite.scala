@@ -38,6 +38,33 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
     onlyInBroadcast = false
   )()
 
+  test("stable build keys retain dynamic pruning with a live KLL output") {
+    val key = AttributeReference("key", IntegerType)()
+    val sketch = Alias(org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint(
+      Cast(key, org.apache.spark.sql.types.LongType)).toAggregateExpression(), "s")()
+    val build = org.apache.spark.sql.catalyst.plans.logical.Aggregate(
+      Seq(key), Seq(key, sketch), LocalRelation(key))
+    val pruning = DynamicPruningSubquery(key, build, Seq(key), Seq(0), false)()
+    assert(pruning.deterministic)
+    val dependent = pruning.copy(pruningKey = Literal(1L),
+      buildKeys = Seq(KllSketchGetNBigint(sketch.toAttribute)))(None)
+    assert(dependent.resolved)
+    assert(!dependent.deterministic)
+    val filtered = pruning.withNewPlan(org.apache.spark.sql.catalyst.plans.logical.Filter(
+      GreaterThan(KllSketchGetNBigint(sketch.toAttribute), Literal(0L)), build))
+    assert(!filtered.deterministic)
+    val multiple = pruning.copy(buildKeys = Seq(KllSketchGetNBigint(sketch.toAttribute), key),
+      broadcastKeyIndices = Seq(1))(None)
+    assert(multiple.resolved)
+    assert(multiple.deterministic)
+    assert(!multiple.copy(broadcastKeyIndices = Seq(0))(None).deterministic)
+    for (indices <- Seq(Seq.empty[Int], Seq(0, 1), Seq(-1), Seq(2))) {
+      val unresolved = multiple.copy(broadcastKeyIndices = indices)(None)
+      assert(!unresolved.resolved)
+      assert(!unresolved.deterministic)
+    }
+  }
+
   test("pruningKey data type matches single buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
       .copy(buildKeys = Seq(Literal(2023)))(None)

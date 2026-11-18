@@ -52,7 +52,7 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
 
   private def normalizeExpression(e: Expression): Expression = e.transform {
     case a: expressions.Alias =>
-      a.copy()(exprId = ExprId(0), a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+      a.withExprId(ExprId(0))
     case a: expressions.AttributeReference =>
       a.withExprId(ExprId(0))
     case d: analysis.UnresolvedDeserializer =>

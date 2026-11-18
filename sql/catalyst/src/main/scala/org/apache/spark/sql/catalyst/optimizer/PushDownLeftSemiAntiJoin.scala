@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.ValidateSubqueryExpression
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -39,16 +40,26 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     _.containsPattern(LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
     // LeftSemi/LeftAnti over Project
     case j @ Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-        if pList.forall(_.deterministic) &&
-        !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
+        if !pList.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
         canPushThroughCondition(Seq(gChild), joinCond, rightOp) =>
-      if (joinCond.isEmpty) {
+      val independent = new ValidateSubqueryExpression.KllSubqueryIndependence
+      val conditionReferences = joinCond.map(_.references).getOrElse(AttributeSet.empty)
+      def selectedScalar(expression: NamedExpression): Boolean = expression match {
+        case alias @ Alias(scalar: ScalarSubquery, _) =>
+          !conditionReferences.contains(alias.toAttribute) && independent(scalar)
+        case _ => false
+      }
+      if (!pList.forall(e => e.deterministic || selectedScalar(e))) {
+        j
+      } else if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
       } else {
         val aliasMap = getAliasMap(p)
         // Do not push complex join condition
-        if (aliasMap.forall(_._2.child.children.isEmpty)) {
+        if (aliasMap.forall { case (_, alias) =>
+            alias.child.children.isEmpty || selectedScalar(alias)
+          }) {
           val newJoinCond = if (aliasMap.nonEmpty) {
             Option(replaceAlias(joinCond.get, aliasMap))
           } else {
@@ -62,14 +73,32 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
 
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
-        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
+        if (agg.aggregateExpressions.forall(_.deterministic) ||
+            ValidateSubqueryExpression.deterministicWithoutKllRandomness(
+              agg.aggregateExpressions)) &&
+          agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
           canPushThroughCondition(agg.children, joinCond, rightOp) &&
           canPlanAsBroadcastHashJoin(join, conf) =>
       val aliasMap = getAliasMap(agg)
+      val deterministic = agg.aggregateExpressions.forall(_.deterministic)
+      lazy val normalizedKeys = ExpressionSet(agg.groupingExpressions.filter(e =>
+        NormalizeFloatingNumbers.needNormalize(e.dataType)))
+      def equalityOperandSafe(expression: Expression): Boolean =
+        normalizedKeys.contains(expression) || !expression.exists(normalizedKeys.contains)
+      def normalizationSafe(expression: Expression): Boolean = {
+        if (normalizedKeys.isEmpty) true else expression match {
+          // SQL equality observes the same NaN and signed-zero equivalence as grouping.
+          // Derived representations such as CAST(key AS STRING) still retain the barrier.
+          case EqualTo(left, right) => equalityOperandSafe(left) && equalityOperandSafe(right)
+          case EqualNullSafe(left, right) => equalityOperandSafe(left) && equalityOperandSafe(right)
+          case other => !other.exists(normalizedKeys.contains)
+        }
+      }
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&
+          (deterministic || normalizationSafe(replaced)) &&
           replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
       }
       val makeJoinCondition = (predicates: Seq[Expression]) => {

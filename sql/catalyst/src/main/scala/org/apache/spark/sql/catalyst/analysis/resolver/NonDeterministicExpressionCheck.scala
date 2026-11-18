@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, ValidateSubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -28,7 +28,8 @@ object NonDeterministicExpressionCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreachUp { operator =>
       if (nonDeterministic(operator.expressions) &&
-        !operatorAllowsNonDeterministicExpressions(operator)) {
+        !operatorAllowsNonDeterministicExpressions(operator) &&
+        !ValidateSubqueryExpression.allowsNondeterministicJoinSubqueries(operator)) {
         operator.failAnalysis(
           errorClass = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
           messageParameters = Map(

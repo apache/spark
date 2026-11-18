@@ -35,6 +35,10 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  */
 object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
 
+  // TODO: Retention of a randomized KLL CTE does not enforce one execution when optional
+  // exchange reuse is disabled. Required materialization needs an explicit definition identity
+  // through ordinary and adaptive planning; aggregate determinism metadata alone cannot provide it.
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case _: Subquery => plan
     case _ =>

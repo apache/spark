@@ -107,8 +107,8 @@ class SubqueryScope(
    * Adds an aliased aggregate expression from currently resolved subquery scope to the outer
    * operator's context in order for it to be pushed down to the outer [[Aggregate]].
    */
-  def addExtractedAggregateExpression(alias: Alias): Unit = {
-    outerOperatorResolutionContext.addSubqueryAggregateExpression(alias)
+  def addExtractedAggregateExpression(alias: Alias, sharing: Option[Boolean] = None): Unit = {
+    outerOperatorResolutionContext.addSubqueryAggregateExpression(alias, sharing)
   }
 
   /**
@@ -116,8 +116,10 @@ class SubqueryScope(
    * semantically equivalent aggregate expression that was already extracted from another subquery,
    * if such exists.
    */
-  def getExtractedAggregateExpression(expression: Expression): Option[Alias] = {
-    outerOperatorResolutionContext.getSubqueryAggregateExpression(expression)
+  def getExtractedAggregateExpression(
+      expression: Expression,
+      sharing: Option[Boolean] = None): Option[Alias] = {
+    outerOperatorResolutionContext.getSubqueryAggregateExpression(expression, sharing)
   }
 
   /**

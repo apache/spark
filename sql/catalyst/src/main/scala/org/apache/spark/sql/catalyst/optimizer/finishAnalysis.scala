@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, KllAggregatePreparation, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -50,9 +50,11 @@ import org.apache.spark.unsafe.types.UTF8String
  *   we use this to replace Every and Any with Min and Max respectively.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE)) {
-    case p => p.mapExpressions(replace)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val selected = KllAggregatePreparation.selectBatch(plan)
+    selected.transformWithPruning(_.containsAnyPattern(RUNTIME_REPLACEABLE)) {
+      case p => p.mapExpressions(replace)
+    }
   }
 
   private[sql] def replace(e: Expression): Expression = e match {

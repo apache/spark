@@ -47,6 +47,87 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   val testRelation1 = LocalRelation($"d".int)
   val testRelation2 = LocalRelation($"e".int)
 
+  for (joinType <- Seq(LeftSemi, LeftAnti)) {
+    test(s"floating equality below live KLL outputs retains $joinType pushdown") {
+      val key = $"key".double
+      val member = $"member".double
+      val sketch = Alias(org.apache.spark.sql.catalyst.expressions.aggregate
+        .KllSketchAggDouble(key).toAggregateExpression(), "s")()
+      val input = LocalRelation(key)
+      val aggregate = Aggregate(Seq(key), Seq(key, sketch), input)
+      for (comparison <- Seq(EqualTo(key, member), EqualNullSafe(key, member))) {
+        val join = Join(aggregate, LocalRelation(member), joinType,
+          Some(comparison), JoinHint.NONE)
+        comparePlans(PushDownLeftSemiAntiJoin(join),
+          aggregate.copy(child = join.copy(left = input)))
+      }
+    }
+
+    test(s"live KLL outputs retain stable grouping-key $joinType pushdown") {
+      val a = $"key".long
+      val b = $"member".long
+      val input = LocalRelation(a)
+      val right = LocalRelation(b)
+      val sketch = Alias(org.apache.spark.sql.catalyst.expressions.aggregate
+        .KllSketchAggBigint(a).toAggregateExpression(), "s")()
+      val aggregate = Aggregate(Seq(a), Seq(a, sketch), input)
+      val join = Join(aggregate, right, joinType, Some(EqualTo(a, b)), JoinHint.NONE)
+      comparePlans(PushDownLeftSemiAntiJoin(join),
+        aggregate.copy(child = join.copy(left = input)))
+    }
+
+    test(s"unrelated floating KLL grouping keys retain $joinType pushdown") {
+      val a = $"tenant".long
+      val b = $"member".long
+      val floating = $"bucket".double
+      val input = LocalRelation(a, floating)
+      val sketch = Alias(org.apache.spark.sql.catalyst.expressions.aggregate
+        .KllSketchAggBigint(a).toAggregateExpression(), "s")()
+      val aggregate = Aggregate(Seq(a, floating), Seq(a, floating, sketch), input)
+      val join = Join(aggregate, LocalRelation(b), joinType, Some(EqualTo(a, b)), JoinHint.NONE)
+      comparePlans(PushDownLeftSemiAntiJoin(join),
+        aggregate.copy(child = join.copy(left = input)))
+
+      // A string cast can distinguish raw -0.0 from the normalized grouping output.
+      val unsafe = EqualTo(Cast(floating, org.apache.spark.sql.types.StringType), Literal("-0.0"))
+      val condition = And(EqualTo(a, b), unsafe)
+      val guarded = join.copy(condition = Some(condition))
+      val expected = if (joinType == LeftSemi) {
+        Filter(unsafe, aggregate.copy(child = join.copy(left = input)))
+      } else guarded
+      comparePlans(PushDownLeftSemiAntiJoin(guarded), expected)
+      val derived = Alias(Cast(floating, org.apache.spark.sql.types.StringType), "bucket_text")()
+      val aliased = aggregate.copy(aggregateExpressions = Seq(a, derived, sketch))
+      val aliasGuarded = join.copy(left = aliased,
+        condition = Some(And(EqualTo(a, b), EqualTo(derived.toAttribute, Literal("-0.0")))))
+      val aliasExpected = if (joinType == LeftSemi) {
+        Filter(EqualTo(derived.toAttribute, Literal("-0.0")),
+          aliased.copy(child = join.copy(left = input)))
+      } else aliasGuarded
+      comparePlans(PushDownLeftSemiAntiJoin(aliasGuarded), aliasExpected)
+    }
+  }
+
+  for (joinType <- Seq(LeftSemi, LeftAnti)) {
+    test(s"selected independent KLL scalar stays above key-only $joinType") {
+      val key = $"key".long
+      val member = $"member".long
+      val input = LocalRelation(key)
+      val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+        org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint(
+          Literal(1L), legacyDeterministic = false).toAggregateExpression().as("s")))
+      val sketch = Alias(scalar, "sketch")()
+      val projection = Project(Seq(key, sketch), input)
+      val join = Join(projection, LocalRelation(member), joinType,
+        Some(EqualTo(key, member)), JoinHint.NONE)
+      comparePlans(PushDownLeftSemiAntiJoin(join),
+        projection.copy(child = join.copy(left = input)))
+      val consumed = join.copy(condition = Some(EqualTo(
+        KllSketchGetNBigint(sketch.toAttribute), member)))
+      comparePlans(PushDownLeftSemiAntiJoin(consumed), consumed)
+    }
+  }
+
   test("Project: LeftSemi join pushdown") {
     val originalQuery = testRelation
       .select(star())

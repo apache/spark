@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.KllSketchAggBigint
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -62,6 +63,51 @@ class FilterPushdownSuite extends PlanTest {
   val testStringRelation = LocalRelation(attrA, attrB, attrE)
 
   val testArrayStringRelation = LocalRelation($"a".int, $"s_arr".array(StringType))
+
+  test("cached independent KLL WHERE scalars retain single-side join pushdown") {
+    val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(aggregate).as("n")))
+    val join = Join(testRelation, testRelation1, Inner, None, JoinHint.NONE)
+    val condition = Cast(attrA, LongType) > scalar
+    comparePlans(PushPredicateThroughJoin(Filter(condition, join)),
+      join.copy(left = Filter(condition, testRelation)))
+    val random = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+    val unsupported = Filter(Cast(attrA, DoubleType) > random, join)
+    comparePlans(PushPredicateThroughJoin(unsupported), unsupported)
+  }
+
+  test("push only independent filters through independent aggregate scalar bindings") {
+    val aggregate = KllSketchAggBigint(Literal(1L)).toAggregateExpression()
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(
+      KllSketchGetNBigint(aggregate).as("n")))
+    val randomScalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+    val prunableAggregate = ScalarSubquery(scalar.plan.select(Rand(0).as("n")))
+    for (expression <- Seq[Expression](scalar, randomScalar, prunableAggregate, Rand(0));
+        generated <- Seq(false, true)) {
+      val alias = Alias(expression, "s")()
+      val binding = if (generated) alias.asNondeterministicSubqueryBinding else alias
+      val project = Project(testRelation.output :+ binding, testRelation)
+      val condition = attrA > Literal(1)
+      val plan = Filter(condition, project)
+      val actual = PushPredicateThroughNonJoin(plan)
+      val expected = if (expression eq scalar) {
+        project.copy(child = Filter(condition, testRelation))
+      } else plan
+      comparePlans(actual, expected)
+      val consuming = Filter(binding.toAttribute > Cast(Literal(1), expression.dataType), project)
+      comparePlans(PushPredicateThroughNonJoin(consuming), consuming)
+      if (expression eq scalar) {
+        val dependsOnBinding = binding.toAttribute > Literal(1L)
+        comparePlans(PushPredicateThroughNonJoin(Filter(condition && dependsOnBinding, project)),
+          Filter(dependsOnBinding, project.copy(child = Filter(condition, testRelation))))
+        val throwing = attrA > Literal(5) || IsNull(RaiseError(Literal("boom")))
+        assert(throwing.throwable)
+        val guarded = Filter(binding.toAttribute < Literal(0L) && throwing, project)
+        comparePlans(PushPredicateThroughNonJoin(guarded), guarded)
+      }
+    }
+  }
 
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)

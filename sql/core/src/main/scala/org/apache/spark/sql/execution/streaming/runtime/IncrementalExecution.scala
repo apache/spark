@@ -133,6 +133,14 @@ class IncrementalExecution(
    */
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
 
+  // Reconcile checkpoint semantics before cache substitution can hide static KLL producers.
+  // Both cache matching and extracted scalar identities must use the checkpoint's mode.
+  override lazy val normalized: LogicalPlan = {
+    val preOptimized = super.normalized
+    KllCheckpointPreparation(preOptimized, logicalPlan,
+      sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING))
+  }
+
   /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
@@ -140,10 +148,8 @@ class IncrementalExecution(
    */
   override
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
-    // Performing streaming specific pre-optimization.
     val preOptimized = withCachedData.transform {
-      // We eliminate the "marker" node for writer on DSv1 as it's only used as representation
-      // of sink information.
+      // Eliminate the DSv1 writer marker before streaming optimization.
       case w: WriteToMicroBatchDataSourceV1 => w.child
     }
     val optimized = sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,

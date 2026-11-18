@@ -28,9 +28,10 @@ import scala.util.{Failure, Success, Try}
 import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow, StructFilters}
+import org.apache.spark.sql.catalyst.analysis.ValidateSubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, ArrayContains, AttributeReference, AttributeSet, BoundReference, Cast, Divide, EqualTo, EvalMode, Expression, GetArrayItem, GetStructField, GreaterThan, IsNotNull, LeafExpression, LessThan, Literal, Or, Pow, Predicate => CatalystPredicate, Rand, RLike, ScalarSubquery, ScalaUDF, TypeOf}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, InferFiltersFromConstraints, InferFiltersFromGenerate, PruneFilters}
@@ -878,6 +879,63 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("KLL startup scalar placeholders preserve corrected micro-batch column dependencies") {
+    withSourceTable() {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false") {
+        // Counts agree regardless of the serialized sketches, while their metadata must keep
+        // the comparison from folding away the dependency on id when the query starts.
+        val scalar = "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3))"
+        val query = spark.readStream.table(tbl)
+          .selectExpr(s"CASE WHEN $scalar <=> $scalar THEN 1L ELSE id END AS n")
+        assert(requiredColumns(query).values.map(_.map(_.name).toSet).toSeq === Seq(Set("id")))
+        testStream(query)(
+          StartStream(),
+          ProcessAllAvailable(),
+          CheckLastBatch(1L, 1L),
+          assertReadSchema("id"),
+          insert("(3, 'c', 30)"),
+          ProcessAllAvailable(),
+          CheckLastBatch(1L),
+          StopStream,
+          StartStream(),
+          insert("(4, 'd', 40)"),
+          ProcessAllAvailable(),
+          CheckLastBatch(1L),
+          assertReadSchema("id"),
+          StopStream)
+      }
+    }
+  }
+
+  Seq(false, true).foreach { legacySharing =>
+    test(s"KLL startup reconciles analysis and checkpoint modes: legacy=$legacySharing") {
+      withSourceTable() {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> (!legacySharing).toString,
+            SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> legacySharing.toString) {
+          val scalar = "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3))"
+          val query = spark.readStream.table(tbl)
+            .selectExpr(s"CASE WHEN $scalar <=> $scalar THEN 1L ELSE id END AS n")
+          val expected = if (legacySharing) Seq(Set.empty[String]) else Seq(Set("id"))
+          assert(requiredColumns(query).values.map(_.map(_.name).toSet).toSeq === expected)
+          val columns = if (legacySharing) Seq.empty[String] else Seq("id")
+          testStream(query)(
+            StartStream(),
+            ProcessAllAvailable(),
+            CheckLastBatch(1L, 1L),
+            assertReadSchema(columns: _*),
+            StopStream,
+            StartStream(additionalConfs = Map(
+              SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> (!legacySharing).toString)),
+            insert("(3, 'c', 30)"),
+            ProcessAllAvailable(),
+            CheckLastBatch(1L),
+            assertReadSchema(columns: _*),
+            StopStream)
+        }
+      }
+    }
+  }
+
   test("read the columns of a condition on a subquery, whatever its plan is") {
     withSourceTable() {
       withTempView("s") {
@@ -1374,6 +1432,28 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  Seq(false, true).foreach { legacy =>
+    test(s"KLL startup static scalar placeholders preserve determinism: legacy=$legacy") {
+      withSourceTable() {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+          val df = spark.readStream.table(tbl).selectExpr(
+            "(SELECT kll_sketch_agg_bigint(id) FROM range(3)) AS kll",
+            "(SELECT max(id) FROM range(3)) AS maximum",
+            "(SELECT rand(0)) AS random",
+            "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) + rand(0) " +
+              "FROM range(3)) AS mixed")
+          val analyzed = df.queryExecution.analyzed
+          Seq(analyzed, StreamingV2ScanPushDown.forStartup(analyzed)).foreach { plan =>
+            val scalars = plan.expressions.flatMap(_.collect { case s: ScalarSubquery => s })
+            assert(scalars.map(_.deterministic) === Seq(legacy, true, false, false))
+            assert(scalars.map(ValidateSubqueryExpression.isIndependentKllSubquery) ===
+              Seq(!legacy, false, false, false))
+          }
+        }
+      }
+    }
+  }
+
   test("plan the placeholders in the expressions of other placeholders too") {
     withSourceTable() {
       // The cast of the string is a placeholder whose expression has the placeholder of the
@@ -1457,6 +1537,32 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
               "config" -> s"\"${SQLConf.STREAMING_V2_FILTER_PUSHDOWN_ENABLED.key}\""))
         })
     }
+  }
+
+  test("throwable KLL-independent predicates agree at startup and in micro-batches") {
+    val input = new FilteringMemoryStream(spark)
+    val table = new FilterStreamTable(input, catalyst = true)
+    val df = Dataset.ofRows(spark, StreamingRelationV2(None, table.name(), table,
+      CaseInsensitiveStringMap.empty(), DataTypeUtils.toAttributes(table.schema()), None, None,
+      None)).toDF("id", "payload")
+      .selectExpr("id", "payload", """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(x))
+          |FROM VALUES (0L), (1L) AS t(x)) AS n""".stripMargin)
+      .where("CASE WHEN id < 0 THEN raise_error('negative input') ELSE id >= 0 END")
+      .select("payload", "n")
+    testStream(df)(
+      StartStream(),
+      AddData(input, (0L, "a"), (1L, "b")),
+      CheckAnswer(Row("a", 2L), Row("b", 2L)),
+      AddData(input, (-1L, "negative")),
+      ExpectFailure[SparkRuntimeException] { error =>
+        var cause: Throwable = error
+        while (cause.getCause != null) cause = cause.getCause
+        assert(cause.isInstanceOf[SparkRuntimeException], cause)
+        val raised = cause.asInstanceOf[SparkRuntimeException]
+        assert(raised.getCondition == "USER_RAISED_EXCEPTION")
+        assert(raised.getMessageParameters.get("errorMessage") == "negative input")
+      })
+    assert(table.pushed.nonEmpty)
   }
 
   Seq(false, true).foreach { catalyst =>

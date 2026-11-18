@@ -23,6 +23,25 @@ import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, Str
 
 class NamedExpressionSuite extends SparkFunSuite {
 
+  test("Alias retains the six-argument JVM factory and constructor used by plugins") {
+    val parameters = Array[Class[_]](classOf[Expression], classOf[String], classOf[ExprId],
+      classOf[Seq[_]], classOf[Option[_]], classOf[Seq[_]])
+    val id = NamedExpression.newExprId
+    val metadata = new MetadataBuilder().putString("owner", "plugin").build()
+    val arguments = Array[AnyRef](Literal(1), "plugin_alias", id, Seq("plugin"),
+      Some(metadata), Seq("private_key"))
+    val factory = Alias.getClass.getMethod("apply", parameters: _*)
+    val constructed = Seq(
+      factory.invoke(Alias, arguments: _*).asInstanceOf[Alias],
+      classOf[Alias].getConstructor(parameters: _*).newInstance(arguments: _*))
+    constructed.foreach { alias =>
+      assert(alias.child == Literal(1) && alias.name == "plugin_alias")
+      assert(alias.exprId == id && alias.qualifier == Seq("plugin"))
+      assert(alias.metadata == metadata && alias.nonInheritableMetadataKeys == Seq("private_key"))
+      assert(!alias.isNondeterministicSubqueryBinding)
+    }
+  }
+
   test("SPARK-34636: sql method should quote qualified names properly") {
     val attr1 = UnresolvedAttribute("a"::Nil)
     assert(attr1.sql === "a")

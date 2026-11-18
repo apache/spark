@@ -365,6 +365,8 @@ abstract class KllSketchMergeBase
     extends BinaryExpression
         with CodegenFallback
         with ImplicitCastInputTypes {
+  // TODO: Audit scalar merge determinism and foldability separately from the six KLL aggregates.
+  // Scalar merges also compact randomly; their evaluation and constant-folding lifecycle differs.
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
   override def nullIntolerant: Boolean = true

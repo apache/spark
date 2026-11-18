@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, HintInfo, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -60,6 +61,16 @@ case class DynamicPruningSubquery(
   override def child: Expression = pruningKey
 
   override def plan: LogicalPlan = buildQuery
+
+  override lazy val deterministic: Boolean = children.forall(_.deterministic) &&
+    (buildQuery.deterministic || (buildQuery.containsPattern(KLL_AGGREGATE) &&
+        broadcastKeyIndices.size == 1 && broadcastKeyIndices.forall(i =>
+          i >= 0 && i < buildKeys.size) && {
+      // Membership depends on the selected keys. A live sketch payload used by the join
+      // must not make this key-only dependency inherit its compaction randomness.
+      val keys = broadcastKeyIndices.map(i => Alias(buildKeys(i), "_pruning_key")())
+      ColumnPruning(Project(keys, buildQuery)).deterministic
+    }))
 
   override def nullable: Boolean = false
 

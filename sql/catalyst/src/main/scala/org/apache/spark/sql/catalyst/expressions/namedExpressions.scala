@@ -150,10 +150,24 @@ case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty,
     val explicitMetadata: Option[Metadata] = None,
-    val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
+    val nonInheritableMetadataKeys: Seq[String] = Seq.empty,
+    private[sql] val nondeterministicSubqueryOrigin: Option[ExprId] = None)
   extends UnaryExpression with NamedExpression {
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ALIAS)
+  // Preserve the JVM constructor used by already compiled expression plugins.
+  def this(
+      child: Expression,
+      name: String,
+      exprId: ExprId,
+      qualifier: Seq[String],
+      explicitMetadata: Option[Metadata],
+      nonInheritableMetadataKeys: Seq[String]) = {
+    this(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys, None)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] =
+    if (isNondeterministicSubqueryBinding) Seq(ALIAS, NONDETERMINISTIC_SUBQUERY_BINDING)
+    else Seq(ALIAS)
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =
@@ -184,20 +198,43 @@ case class Alias(child: Expression, name: String)(
       exprId = exprId,
       qualifier = qualifier,
       explicitMetadata = explicitMetadata,
-      nonInheritableMetadataKeys = nonInheritableMetadataKeys)
+      nonInheritableMetadataKeys = nonInheritableMetadataKeys,
+      nondeterministicSubqueryOrigin = nondeterministicSubqueryOrigin)
   }
 
-  def newInstance(): NamedExpression =
+  def newInstance(): NamedExpression = {
+    val newId = NamedExpression.newExprId
     Alias(child, name)(
+      exprId = newId,
       qualifier = qualifier,
       explicitMetadata = explicitMetadata,
-      nonInheritableMetadataKeys = nonInheritableMetadataKeys)
+      nonInheritableMetadataKeys = nonInheritableMetadataKeys,
+      nondeterministicSubqueryOrigin =
+        if (isNondeterministicSubqueryBinding) Some(newId) else None)
+  }
+
+  // Compiler ownership is part of a binding's structural identity, never column metadata.
+  private[sql] def isNondeterministicSubqueryBinding: Boolean =
+    nondeterministicSubqueryOrigin.contains(exprId)
+
+  private[sql] def asNondeterministicSubqueryBinding: Alias =
+    copy(child = child)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys,
+      Some(exprId))
+
+  override lazy val canonicalized: Expression = {
+    val normalized = withCanonicalizedChildren.asInstanceOf[Alias]
+    if (normalized.nondeterministicSubqueryOrigin.isEmpty) normalized else {
+      normalized.copy(child = normalized.child)(exprId, qualifier, explicitMetadata,
+        nonInheritableMetadataKeys, None)
+    }
+  }
 
   def withExprId(newExprId: ExprId): Alias = {
     if (exprId == newExprId) {
       this
     } else {
-      Alias(child, name)(newExprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+      Alias(child, name)(newExprId, qualifier, explicitMetadata, nonInheritableMetadataKeys,
+        if (isNondeterministicSubqueryBinding) Some(newExprId) else None)
     }
   }
 
@@ -233,11 +270,13 @@ case class Alias(child: Expression, name: String)(
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
-    exprId :: qualifier :: explicitMetadata :: nonInheritableMetadataKeys :: Nil
+    exprId :: qualifier :: explicitMetadata :: nonInheritableMetadataKeys ::
+      nondeterministicSubqueryOrigin :: Nil
   }
 
   override def hashCode(): Int = {
-    val state = Seq(name, exprId, child, qualifier, explicitMetadata)
+    val state = Seq(name, exprId, child, qualifier, explicitMetadata,
+      nondeterministicSubqueryOrigin)
     state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
@@ -245,7 +284,8 @@ case class Alias(child: Expression, name: String)(
     case a: Alias =>
       name == a.name && exprId == a.exprId && child == a.child && qualifier == a.qualifier &&
         explicitMetadata == a.explicitMetadata &&
-        nonInheritableMetadataKeys == a.nonInheritableMetadataKeys
+        nonInheritableMetadataKeys == a.nonInheritableMetadataKeys &&
+        nondeterministicSubqueryOrigin == a.nondeterministicSubqueryOrigin
     case _ => false
   }
 
@@ -261,7 +301,22 @@ case class Alias(child: Expression, name: String)(
   }
 
   override protected def withNewChildInternal(newChild: Expression): Alias =
-    copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
+    copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys,
+      nondeterministicSubqueryOrigin)
+}
+
+object Alias {
+  // A flat parameter list retains the old JVM descriptor without overloading the curried
+  // source constructor's first parameter list, which would make Alias(child, name) ambiguous.
+  def apply(
+      child: Expression,
+      name: String,
+      exprId: ExprId,
+      qualifier: Seq[String],
+      explicitMetadata: Option[Metadata],
+      nonInheritableMetadataKeys: Seq[String]): Alias = {
+    new Alias(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys, None)
+  }
 }
 
 // Singleton tree pattern BitSet for all AttributeReference instances.

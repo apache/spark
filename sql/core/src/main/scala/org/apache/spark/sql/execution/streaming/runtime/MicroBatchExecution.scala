@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
-import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, KLL_AGGREGATE}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -658,6 +658,19 @@ class MicroBatchExecution(
     setLatestExecutionContext(execCtx)
 
     populateStartOffsets(execCtx, sparkSessionForStream)
+
+    // Older executables ignore the sharing mode and can accept identical BinaryType schemas
+    // with different aggregate buffer identities. Install the reader requirement for subsequent
+    // offset writes and retain it on restart. Normal micro-batches log offsets before execution;
+    // real-time execution persists offsets after processing and committing state.
+    val needsKllReader = initialLatestOffsetSeq.flatMap(_._2.metadataOpt)
+      .exists(OffsetSeqLog.requiresKllReader) ||
+      (!sparkSessionForStream.sessionState.conf
+        .getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING) &&
+        analyzedPlan.containsPattern(KLL_AGGREGATE))
+    if (needsKllReader) {
+      execCtx.offsetSeqMetadata = OffsetSeqLog.withKllReaderBoundary(execCtx.offsetSeqMetadata)
+    }
 
     // SPARK-53941: This code path is executed for the first batch, regardless of whether it's a
     // fresh new run or restart.

@@ -192,11 +192,42 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     }
   }
 
+  private[sql] def isDeterministicAfterSubqueryExtraction(
+      expression: Expression): Boolean = new SubqueryExtractionDeterminism().apply(expression)
+
+  private[sql] final class SubqueryExtractionDeterminism(extractScalars: Boolean = true) {
+    // Function resolution and the single-pass analyzer validate before the post hoc extraction.
+    // Rewrite each expression once. A recursive transform at each IN operand would walk
+    // rejected descendants again even if their Boolean result had already been memoized.
+    val checked = new java.util.IdentityHashMap[Expression, Expression]
+    def rewritten(expr: Expression): Expression = {
+      val cached = checked.get(expr)
+      if (cached != null) return cached
+      val result = if (expr.deterministic) expr else expr match {
+        case scalar: ScalarSubquery if extractScalars =>
+          Literal.create(null, scalar.dataType)
+        case _: Exists => Literal.TrueLiteral
+        case in: InSubquery =>
+          val values = in.values.map(rewritten)
+          if (values.forall(_.deterministic)) Literal.TrueLiteral else in.copy(values = values)
+        case other => other.mapChildrenWithReferenceEquality(rewritten)
+      }
+      checked.put(expr, result)
+      result
+    }
+    def apply(expression: Expression): Boolean = rewritten(expression).deterministic
+  }
+
+  private[sql] def isDeterministicAfterPredicateSubqueryRewrite(expression: Expression): Boolean = {
+    new SubqueryExtractionDeterminism(extractScalars = false).apply(expression)
+  }
+
   def assertValidAggregation(
       a: Aggregate,
       semanticEquality: (Expression, Expression) => Boolean =
         (groupingExpression, checkedExpression) =>
-          groupingExpression.semanticEquals(checkedExpression)): Unit = {
+          groupingExpression.semanticEquals(checkedExpression),
+      aggregateArgumentIsDeterministic: Expression => Boolean = _.deterministic): Unit = {
     def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case expr: AggregateExpression =>
         val aggFunction = expr.aggregateFunction
@@ -209,7 +240,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
             case other => // OK
           }
 
-          if (!child.deterministic) {
+          if (!aggregateArgumentIsDeterministic(child)) {
             child.failAnalysis(
               errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
               messageParameters = Map("sqlExpr" -> toSQLExpr(expr)))

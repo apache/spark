@@ -146,8 +146,8 @@ case class OffsetMap(
  * - VERSION_1 (sequence-based offset log): Uses [[OffsetSeq]] with [[OffsetSeqMetadata]]
  * - VERSION_2 (map-based offset log): Uses [[OffsetMap]] with [[OffsetSeqMetadataV2]]
  *
- * The metadata version must match the offset log version for proper serialization and
- * deserialization.
+ * The metadata version identifies the enclosed payload. Logs requiring corrected KLL checkpoint
+ * semantics wrap either payload in a version 3 reader boundary; its metadata version stays 1 or 2.
  */
 trait OffsetSeqMetadataBase extends Serializable {
   def batchWatermarkMs: Long
@@ -207,6 +207,7 @@ object OffsetSeqMetadata extends Logging {
     ENABLE_STREAMING_SOURCE_EVOLUTION,
     STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT,
     DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER,
+    STREAMING_AGGREGATION_LEGACY_KLL_SHARING,
     ALLOW_EXCEPT_ON_STREAMING_DATAFRAME,
     REGEX_PATTERN_COST_ESTIMATE_VERSION,
     AVOID_DOUBLE_FILTER_EVAL,
@@ -283,6 +284,7 @@ object OffsetSeqMetadata extends Logging {
     ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false",
     STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT.key -> "false",
     DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key -> "false",
+    STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> "true",
     ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true",
     REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0",
     AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF.key -> "false"

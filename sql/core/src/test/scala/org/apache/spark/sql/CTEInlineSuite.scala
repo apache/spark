@@ -1122,6 +1122,37 @@ abstract class CTEInlineSuiteBase
     }
   }
 
+  test("KLL aggregates in reused correlated CTEs") {
+    for {
+      family <- Seq("sketch", "merge")
+      dataType <- Seq("bigint", "float", "double")
+      kParam <- Seq("", ", 8")
+    } {
+      val (function, value, source) = if (family == "sketch") {
+        (s"kll_sketch_agg_$dataType", s"CAST(i.id AS $dataType)", "range(2)")
+      } else {
+        (s"kll_merge_agg_$dataType", "i.sketch",
+          s"""(SELECT id, kll_sketch_agg_$dataType(CAST(id AS $dataType)) AS sketch
+             | FROM range(2) GROUP BY id)""".stripMargin)
+      }
+      val subquery =
+        s"""WITH sketches AS (
+           |  SELECT i.id, $function($value$kParam) AS sketch
+           |  FROM $source i WHERE i.id = o.id GROUP BY i.id
+           |)
+           |SELECT id FROM sketches WHERE kll_sketch_get_n_$dataType(sketch) = 1
+           |UNION ALL
+           |SELECT id FROM sketches WHERE kll_sketch_get_n_$dataType(sketch) = 1
+           |""".stripMargin
+      for (predicate <- Seq(s"EXISTS ($subquery)", s"o.id IN ($subquery)")) {
+        withClue(s"function=$function, kParam=$kParam, predicate=$predicate: ") {
+          checkAnswer(sql(s"SELECT o.id FROM range(3) o WHERE $predicate"),
+            Seq(Row(0L), Row(1L)))
+        }
+      }
+    }
+  }
+
   test("MATERIALIZED CTE cannot reference the outer query") {
     withTempView("t") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
