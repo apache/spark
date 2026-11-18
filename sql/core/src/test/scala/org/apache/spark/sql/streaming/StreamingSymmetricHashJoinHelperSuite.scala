@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeS
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinConditionSplitPredicates, JoinSide, JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate, LeftSide, RightSide}
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
@@ -53,6 +53,27 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
         Seq(leftTime, expiry), Seq(rightTime), Nil, Nil, Some(condition), Some(100000L), None,
         useFirstEventTimeColumn = legacyMode)
       assert(predicates.left.get.expr.references === AttributeSet(column))
+    }
+  }
+
+  test("equality key that evicts each side is the opposite watermarked key") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 0L).build()
+    val la = AttributeReference("la", TimestampType, metadata = watermark)()
+    val lb = AttributeReference("lb", TimestampType)()
+    val ra = AttributeReference("ra", TimestampType)()
+    val rb = AttributeReference("rb", TimestampType, metadata = watermark)()
+    def ordinal(side: JoinSide, leftKeys: Seq[Expression], rightKeys: Seq[Expression],
+        legacyMode: Boolean = false): Option[Int] =
+      StreamingSymmetricHashJoinHelper.findStateKeyOrdinalForWatermark(
+        side, leftKeys, rightKeys, useFirstEventTimeColumn = legacyMode)
+    assert(ordinal(LeftSide, Seq(la, lb), Seq(ra, rb)) === Some(1))
+    assert(ordinal(RightSide, Seq(la, lb), Seq(ra, rb)) === Some(0))
+    // Without an opposite watermarked key, and in the legacy mode, both sides use the first
+    // watermarked key of the left input, or else of the right input.
+    assert(ordinal(LeftSide, Seq(la, lb), Seq(ra, ra)) === Some(0))
+    assert(ordinal(RightSide, Seq(lb, lb), Seq(ra, rb)) === Some(1))
+    Seq(LeftSide, RightSide).foreach { side =>
+      assert(ordinal(side, Seq(la, lb), Seq(ra, rb), legacyMode = true) === Some(0))
     }
   }
 
