@@ -1446,7 +1446,7 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
           Seq(analyzed, StreamingV2ScanPushDown.forStartup(analyzed)).foreach { plan =>
             val scalars = plan.expressions.flatMap(_.collect { case s: ScalarSubquery => s })
             assert(scalars.map(_.deterministic) === Seq(legacy, true, false, false))
-            assert(scalars.map(ValidateSubqueryExpression.isIndependentKllScalar) ===
+            assert(scalars.map(ValidateSubqueryExpression.isIndependentKllSubquery) ===
               Seq(!legacy, false, false, false))
           }
         }

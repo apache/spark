@@ -39,6 +39,31 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
 
   private val legacySharingKey = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
 
+  test("checkpoint retirement shares full-output nested-plan demands") {
+    def work(retire: Boolean): Int = {
+      val visits = new AtomicInteger
+      val shared = (1 to 32).foldLeft[LogicalPlan](LocalRelation()) { (child, i) =>
+        Project(Seq(Alias(NormalizationCounted(Literal(1L), visits), s"n$i")()), child)
+      }
+      val corrected = Alias(Literal(1L), "corrected")()
+      val legacy = Alias(Literal(2L), "legacy")()
+      val alternatives = KllAggregateResolution(corrected.toAttribute,
+        corrected.toAttribute, if (retire) legacy.toAttribute else corrected.toAttribute)
+      val scalars = (1 to 32).map(i => Alias(ScalarSubquery(shared), s"s$i")())
+      val plan = Project(Alias(alternatives, "selected")() +: scalars,
+        Project(Seq(corrected, legacy), LocalRelation()))
+      plan.treePatternBits
+      visits.set(0)
+      val selected = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+        plan, plan, legacySharing = false)
+      assert(selected.output.size == 33)
+      visits.get
+    }
+    val baseline = work(retire = false)
+    val retirement = work(retire = true) - baseline
+    assert(retirement <= 32 * 16, s"additional shared-plan retirement visits=$retirement")
+  }
+
   test("empty checkpoint retirement demand skips cold forwarding outputs") {
     val visits = new AtomicInteger
     val depth = 64

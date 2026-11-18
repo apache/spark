@@ -240,6 +240,8 @@ class KllStreamingJoinSuite extends StreamTest {
               StartStream(checkpointLocation = checkpoint.getAbsolutePath,
                 additionalConfs = Map(sharing -> (!legacy).toString)),
               AddData(right, r), CheckLastBatch(expected(l, r)),
+              // Probe both the saved and newly appended right rows, including their payloads.
+              AddData(left, l), CheckLastBatch(expected(l, r), expected(l, r)),
               AddData(left, l + 1), CheckLastBatch(),
               AddData(right, r + 1), CheckLastBatch(expected(l + 1, r + 1)),
               checkPayload, StopStream)

@@ -417,16 +417,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     var newPlan = plan
     val introducedAttrs = ArrayBuffer.empty[Attribute]
     var guardOutput = Option.empty[Vector[Attribute]]
+    final class TryDomain(var succeeded: Expression)
+    var tryDomain = Option.empty[TryDomain]
     val memberships = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
     def hasKllMembership(expression: Expression): Boolean = memberships.computeIfAbsent(expression,
       current => current match {
-        case in: InSubquery => (!in.query.isCorrelated &&
-          in.query.plan.containsPattern(KLL_AGGREGATE)) || in.values.exists(hasKllMembership)
+        case in: InSubquery => in.query.plan.containsPattern(KLL_AGGREGATE) ||
+          in.values.exists(hasKllMembership)
         case other => other.children.exists(hasKllMembership)
       }).booleanValue()
     def guardedMemberships(expression: Expression, domain: Expression): Expression = {
       if (!hasKllMembership(expression)) return expression
-      def bind(value: Expression): Attribute = {
+      def rawBind(value: Expression): Attribute = {
         val alias = Alias(value, "_subquery_guard")()
         val attribute = alias.toAttribute
         val output = guardOutput.getOrElse(newPlan.output.toVector)
@@ -435,7 +437,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         introducedAttrs += attribute
         attribute
       }
-      def condition(value: Expression): Attribute = {
+      def bind(value: Expression): Expression = tryDomain match {
+        case Some(context) =>
+          // A non-null struct distinguishes a successful NULL value from a caught exception.
+          // Later bindings and the final TRY value must stop after the first failed input.
+          val result = CreateStruct(Seq(value))
+          val attempted = rawBind(TryEval(If(context.succeeded, result,
+            Literal.create(null, result.dataType))))
+          context.succeeded = rawBind(And(context.succeeded, IsNotNull(attempted)))
+          GetStructField(attempted, 0)
+        case None => rawBind(value)
+      }
+      def condition(value: Expression): Expression = {
         val rewritten = guardedMemberships(value, domain)
         bind(if (domain == Literal.TrueLiteral) rewritten else {
           If(domain, rewritten, Literal.create(null, value.dataType))
@@ -443,6 +456,14 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
       def when(value: Expression): Expression = And(domain, value)
       expression match {
+        case TryEval(child) =>
+          val enclosing = tryDomain
+          val context = new TryDomain(enclosing.map(c => And(domain, c.succeeded))
+            .getOrElse(domain))
+          tryDomain = Some(context)
+          val rewritten = guardedMemberships(child, domain)
+          tryDomain = enclosing
+          If(context.succeeded, TryEval(rewritten), Literal.create(null, child.dataType))
         case If(predicate, positive, negative) =>
           val predicateRef = condition(predicate)
           val isTrue = EqualNullSafe(predicateRef, Literal.TrueLiteral)
@@ -478,11 +499,30 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             when(Not(EqualNullSafe(leftRef, Literal.TrueLiteral)))))
         case in: InSubquery =>
           val values = in.values.map(guardedMemberships(_, domain))
-          val guardedValues = if (domain != Literal.TrueLiteral && !in.query.isCorrelated &&
+          val guardedValues = if (domain != Literal.TrueLiteral &&
               in.query.plan.containsPattern(KLL_AGGREGATE)) {
             values.map(value => If(domain, value, Literal.create(null, value.dataType)))
           } else values
-          in.copy(values = guardedValues)
+          in.copy(values = if (tryDomain.nonEmpty) guardedValues.map(bind) else guardedValues)
+        case other if other.nullIntolerant && other.children.sizeCompare(1) > 0 =>
+          val children = other.children.toArray
+          // Division evaluates its divisor first; the usual null-safe evaluator goes left first.
+          val order = other match {
+            case _: DivModLike => Seq(1, 0)
+            case _ => children.indices
+          }
+          var remaining = domain
+          val lastMembership = order.lastIndexWhere(i => hasKllMembership(children(i)))
+          order.zipWithIndex.foreach { case (index, position) =>
+            val child = children(index)
+            val rewritten = guardedMemberships(child, remaining)
+            if (position < lastMembership) {
+              val reference = bind(If(remaining, rewritten, Literal.create(null, child.dataType)))
+              children(index) = reference
+              remaining = rawBind(And(remaining, IsNotNull(reference)))
+            } else children(index) = rewritten
+          }
+          other.withNewChildren(children.toIndexedSeq)
         case other => other.mapChildrenWithReferenceEquality(guardedMemberships(_, domain))
       }
     }

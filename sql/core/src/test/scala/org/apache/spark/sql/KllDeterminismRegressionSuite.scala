@@ -33,6 +33,58 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  for (host <- Seq("arithmetic", "division", "array", "try", "try-operand",
+      "nested-try", "ordered", "correlated")) {
+    test(s"KLL membership retains its enclosing evaluation domain: $host") {
+      for (legacy <- Seq(false, true); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
+        withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+            SQLConf.ANSI_ENABLED.key -> "true", SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {
+          val member = s"id IN (SELECT $scalar)"
+          val conditional = s"IF(1L / b > 0, CAST($member AS BIGINT), 0L)"
+          val danger = "CAST(raise_error(CAST(id AS STRING)) AS BIGINT)"
+          val value = host match {
+            case "arithmetic" => s"a + $conditional"
+            case "division" => s"$conditional / a"
+            case "array" => s"array_contains(IF(id = 0, CAST(NULL AS ARRAY<BIGINT>), " +
+              s"array(1L)), $conditional)"
+            case "try" => s"try_divide(INTERVAL '1' DAY, $conditional)"
+            case "try-operand" => s"try_divide(INTERVAL '1' DAY, " +
+              s"CAST($danger IN (SELECT $scalar) AS BIGINT))"
+            case "nested-try" => s"coalesce(try_divide(INTERVAL '1' DAY, $conditional), " +
+              "INTERVAL '2' DAY)"
+            case "ordered" => s"a + CAST($danger IN (SELECT $scalar) AS BIGINT)"
+            case "correlated" => s"IF(id < 0, $danger IN (SELECT " +
+              "kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v)) " +
+              "FROM VALUES (0L), (1L) t(v) WHERE v = q.id), true)"
+          }
+          val source = "(SELECT id, IF(id = 0, CAST(NULL AS BIGINT), 1L) AS a, " +
+            "id AS b FROM range(2)) q"
+          val result = sql(s"SELECT $value FROM $source WHERE id = 0")
+          val expected = host match {
+            case "correlated" => true
+            case "nested-try" => java.time.Duration.ofDays(2)
+            case _ => null
+          }
+          checkAnswer(result, Row(expected))
+          if (Seq("arithmetic", "array", "division").contains(host)) {
+            val active: Any = host match {
+              case "arithmetic" => 1L
+              case "division" => 0D
+              case "array" => false
+            }
+            checkAnswer(sql(s"SELECT $value FROM $source WHERE id = 1"), Row(active))
+          }
+          if (host == "ordered") {
+            val error = intercept[Exception] {
+              sql(s"SELECT $value FROM $source WHERE id = 1").collect()
+            }
+            if (host == "ordered") assert(error.toString.contains("USER_RAISED_EXCEPTION"))
+          }
+        }
+      }
+    }
+  }
+
   test("KLL membership guards retain their aggregate host") {
     for (singlePass <- Seq(false, true); codegen <- Seq("NO_CODEGEN", "CODEGEN_ONLY")) {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegen) {

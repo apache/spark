@@ -3002,8 +3002,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // stays up is not pushed, though (see `splitPushable`). This includes a predicate over a
     // throwable alias of the aggregate.
     case filter @ Filter(condition, aggregate: Aggregate)
-      if aggregate.groupingExpressions.nonEmpty && aggregate.aggregateExpressions.forall(
-          ValidateSubqueryExpression.deterministicWithoutKllRandomness) =>
+      if aggregate.groupingExpressions.nonEmpty &&
+          ValidateSubqueryExpression.deterministicWithoutKllRandomness(
+            aggregate.aggregateExpressions) =>
       val (pushDown, stayUp) = pushBelowAggregate(splitConjunctivePredicates(condition), aggregate)
 
       if (pushDown.nonEmpty) {

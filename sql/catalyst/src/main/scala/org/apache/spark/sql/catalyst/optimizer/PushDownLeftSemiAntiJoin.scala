@@ -64,8 +64,8 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
         if (agg.aggregateExpressions.forall(_.deterministic) ||
-            agg.aggregateExpressions.forall(
-              ValidateSubqueryExpression.deterministicWithoutKllRandomness)) &&
+            ValidateSubqueryExpression.deterministicWithoutKllRandomness(
+              agg.aggregateExpressions)) &&
           agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
           canPushThroughCondition(agg.children, joinCond, rightOp) &&

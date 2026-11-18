@@ -364,10 +364,6 @@ object ValidateSubqueryExpression
 
   // An independent KLL relation was accepted before its implicit randomness was exposed.
   // Inspect copies only; direct row randomness and crossing lateral references retain the guard.
-  private[sql] def isIndependentKllScalar(scalar: ScalarSubquery): Boolean = {
-    isIndependentKllSubquery(scalar)
-  }
-
   private[sql] def isIndependentKllSubquery(query: SubqueryExpression): Boolean = {
     !query.deterministic && !query.isCorrelated && deterministicWithoutKllRandomness(query.plan)
   }
@@ -428,11 +424,16 @@ object ValidateSubqueryExpression
   }
 
   private[sql] def deterministicWithoutKllRandomness(expression: Expression): Boolean = {
-    expression.deterministic ||
+    deterministicWithoutKllRandomness(Seq(expression))
+  }
+
+  private[sql] def deterministicWithoutKllRandomness(expressions: Seq[Expression]): Boolean = {
+    lazy val legacy = new LegacyKllDeterminism
+    expressions.forall(expression => expression.deterministic ||
       (expression.containsAnyPattern(KLL_AGGREGATE, PLAN_EXPRESSION) &&
         AnalysisHelper.allowInvokingTransformsInAnalyzer {
-          new LegacyKllDeterminism().expression(expression).deterministic
-        })
+          legacy.expression(expression).deterministic
+        }))
   }
 
   private def deterministicWithoutKllRandomness(plan: LogicalPlan): Boolean = {

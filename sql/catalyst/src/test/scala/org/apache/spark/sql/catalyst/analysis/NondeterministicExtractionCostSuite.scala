@@ -230,6 +230,35 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     assert(copies.get <= 64, s"shared prefix copies=${copies.get}")
   }
 
+  test("aggregate output determinism proofs share nested scalar plans") {
+    for (semi <- Seq(false, true)) {
+      val copies = new AtomicInteger
+      val shared = (1 to 64).foldLeft[Expression](KllSketchAggBigint(Literal(1L),
+        legacyDeterministic = false).toAggregateExpression()) { (child, _) =>
+        ProofCopyCounted(child, copies)
+      }
+      val nested = OneRowRelation().groupBy()(shared.as("s"))
+      val key = $"key".long
+      val member = $"member".long
+      val aggregate = Aggregate(Seq(key), Seq(key) ++ (1 to 32).map { i =>
+        ScalarSubquery(nested).as(s"s$i")
+      }, LocalRelation(key))
+      val plan = if (semi) Join(aggregate, LocalRelation(member),
+        org.apache.spark.sql.catalyst.plans.LeftSemi, Some(EqualTo(key, member)), JoinHint.NONE)
+      else org.apache.spark.sql.catalyst.plans.logical.Filter(
+        GreaterThan(key, Literal(0L)), aggregate)
+      plan.treePatternBits
+      plan.stats
+      aggregate.aggregateExpressions.foreach(_.deterministic)
+      copies.set(0)
+      val result = if (semi) {
+        org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin(plan)
+      } else org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin(plan)
+      assert(result.isInstanceOf[Aggregate])
+      assert(copies.get <= 64 * 2, s"semi=$semi shared proof copies=${copies.get}")
+    }
+  }
+
   test("KLL aggregate resolution consumes List alternatives sequentially") {
     val visits = new AtomicInteger
     val values = (1 to 128).map(_ => KllSketchAggBigint(Literal(1L),
@@ -684,7 +713,7 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       assert(comparisons.get <= depth * 8,
         s"nested=$nested depth=$depth comparisons=${comparisons.get}")
       comparisons.set(0)
-      assert(ValidateSubqueryExpression.isIndependentKllScalar(ScalarSubquery(query)))
+      assert(ValidateSubqueryExpression.isIndependentKllSubquery(ScalarSubquery(query)))
       assert(comparisons.get <= depth * 8,
         s"plan probe depth=$depth comparisons=${comparisons.get}")
     }

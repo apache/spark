@@ -42,8 +42,9 @@ license: |
   its alias instead. Correlated lateral queries with KLL aggregates are rejected when the outer
   input can contain multiple rows, because decorrelation can share independent invocations.
   Conditional `IN` and `NOT IN` expressions containing these aggregates also preserve their
-  `IF`, `CASE`, and `COALESCE` evaluation guards, including nested membership values. Previously,
-  an inactive operand could still be evaluated and raise an error. This guard correction applies
+  `IF`, `CASE`, `COALESCE`, ordered NULL, and `TRY` evaluation guards, including nested and
+  correlated membership values. Previously, an inactive operand could still be evaluated and
+  raise an error, or an error could escape `TRY`. This guard correction applies
   in both determinism modes.
   To restore the previous aggregate determinism analysis and batch optimizer behavior, set
   `spark.sql.legacy.kllAggregateDeterministic.enabled` to `true` before the query is analyzed.

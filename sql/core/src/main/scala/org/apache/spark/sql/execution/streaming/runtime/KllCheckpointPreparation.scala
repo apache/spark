@@ -198,6 +198,7 @@ private[sql] object KllCheckpointPreparation {
   }
 
   private def retireUnchosenOutputs(plan: LogicalPlan, candidates: Set[ExprId]): LogicalPlan = {
+    val nestedPlans = new java.util.IdentityHashMap[LogicalPlan, LogicalPlan]
     def visit(input: LogicalPlan, required: AttributeSet): LogicalPlan = {
       def keep(expression: NamedExpression): Boolean =
         !candidates.contains(expression.exprId) || required.contains(expression.toAttribute)
@@ -210,7 +211,8 @@ private[sql] object KllCheckpointPreparation {
       val current = trimmed.mapExpressionsWithReferenceEquality { expression =>
         expression.transformDownWithReferenceEquality {
           case query: SubqueryExpression =>
-            val nested = visit(query.plan, query.plan.outputSet)
+            val nested = nestedPlans.computeIfAbsent(query.plan,
+              child => visit(child, child.outputSet))
             val updated = query.withNewPlan(nested)
             query match {
               case _: ScalarSubquery | _: Exists | _: ListQuery | _: LateralSubquery
