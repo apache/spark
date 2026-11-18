@@ -3541,6 +3541,26 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61927: keep the written order of a throwable condition and a predicate subquery") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t1", "t2") {
+        sql("CREATE TABLE t1 (a INT, b INT) USING parquet")
+        sql("INSERT INTO t1 VALUES (1, 0), (4, 2)")
+        sql("CREATE TABLE t2 (c INT) USING parquet")
+        sql("INSERT INTO t2 VALUES (2)")
+        // The guard removes the row (1, 0) before a condition written after it divides by b.
+        val guard =
+          "CASE WHEN b = 0 THEN false WHEN b < 0 THEN raise_error('negative b') ELSE true END"
+        checkAnswer(
+          sql(s"SELECT * FROM t1 WHERE $guard AND a / b IN (SELECT c FROM t2)"),
+          Row(4, 2))
+        checkAnswer(
+          sql(s"SELECT * FROM t1 WHERE b IN (SELECT c FROM t2) AND $guard AND a / b > 1"),
+          Row(4, 2))
+      }
+    }
+  }
+
   test("SPARK-60501: count bug of correlated scalar subqueries over an emptied local relation") {
     withTempView("t1", "t2") {
       sql("CREATE TEMP VIEW t1(a1, a2) AS VALUES (1, 1), (2, 2)")

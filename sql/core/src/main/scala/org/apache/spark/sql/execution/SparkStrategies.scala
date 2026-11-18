@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -926,17 +925,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case e @ ArrowEvalPython(
-          udfs, requiredChildOutput, resultAttrs, child,
-          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
-        InProcessPythonUDFBuilder.checkConfiguration(conf)
-        // The in-process evaluator passes through the whole child, so drop what is not required.
-        val exec = InProcessArrowEvalPythonExec(udfs, resultAttrs, planLater(child))
-        if (requiredChildOutput == child.output) {
-          exec :: Nil
-        } else {
-          ProjectExec(e.output, exec) :: Nil
-        }
       case ArrowEvalPython(udfs, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child), evalType)(
           conf.arrowPySparkUDFColumnarInputEnabled) :: Nil
