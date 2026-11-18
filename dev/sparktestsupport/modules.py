@@ -691,7 +691,7 @@ mllib = Module(
 
 graph = Module(
     name="graph",
-    dependencies=[sql],
+    dependencies=[sql, graphx],
     source_file_regexes=[
         "graph/",
     ],

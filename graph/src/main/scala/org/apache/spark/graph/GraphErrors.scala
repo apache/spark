@@ -31,7 +31,7 @@ private[graph] object GraphErrors {
 
   def cannotInvokeInTransformationsError(): SparkException = {
     new SparkException(
-      errorClass = "GRAPH_CANNOT_INVOKE_IN_TRANSFORMATIONS",
+      errorClass = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
       messageParameters = Map.empty,
       cause = null)
   }
@@ -42,29 +42,26 @@ private[graph] object GraphErrors {
       messageParameters = Map("dataFrameKind" -> dataFrameKind))
   }
 
-  def missingRequiredColumnError(
-      dataFrameKind: String,
-      columnName: String,
-      columns: Seq[String]): AnalysisException = {
-    new AnalysisException(
-      errorClass = "GRAPH_MISSING_REQUIRED_COLUMN",
-      messageParameters = Map(
-        "dataFrameKind" -> dataFrameKind,
-        "columnName" -> quoteIdentifier(columnName),
-        "availableColumns" -> columns.map(quoteIdentifier).mkString(", ")))
+  def unresolvedColumnError(columnName: String, columns: Seq[String]): AnalysisException = {
+    if (columns.isEmpty) {
+      new AnalysisException(
+        errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+        messageParameters = Map("objectName" -> quoteIdentifier(columnName)))
+    } else {
+      new AnalysisException(
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        messageParameters = Map(
+          "objectName" -> quoteIdentifier(columnName),
+          "proposal" -> columns.map(quoteIdentifier).mkString(", ")))
+    }
   }
 
-  def ambiguousRequiredColumnError(
-      dataFrameKind: String,
-      columnName: String,
-      matchingColumns: Seq[String]): AnalysisException = {
+  def ambiguousColumnError(columnName: String, numMatches: Int): AnalysisException = {
     new AnalysisException(
-      errorClass = "GRAPH_AMBIGUOUS_REQUIRED_COLUMN",
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
       messageParameters = Map(
-        "dataFrameKind" -> dataFrameKind,
-        "count" -> matchingColumns.length.toString,
-        "columnName" -> quoteIdentifier(columnName),
-        "matchingColumns" -> matchingColumns.map(quoteIdentifier).mkString(", ")))
+        "name" -> quoteIdentifier(columnName),
+        "n" -> numMatches.toString))
   }
 
   def unsupportedIdTypeError(
@@ -113,16 +110,10 @@ private[graph] object GraphErrors {
         "expectedType" -> toSQLType(expectedType)))
   }
 
-  def propertiesColumnConflictError(
-      dataFrameKind: String,
-      targetKind: String,
-      conflictingColumns: Seq[String]): AnalysisException = {
+  def columnAlreadyExistsError(columnName: String): AnalysisException = {
     new AnalysisException(
-      errorClass = "GRAPH_PROPERTIES_COLUMN_CONFLICT",
-      messageParameters = Map(
-        "dataFrameKind" -> dataFrameKind,
-        "targetKind" -> targetKind,
-        "conflictingColumns" -> conflictingColumns.map(quoteIdentifier).mkString(", ")))
+      errorClass = "COLUMN_ALREADY_EXISTS",
+      messageParameters = Map("columnName" -> quoteIdentifier(columnName)))
   }
 
   private def toSQLType(dataType: DataType): String = "\"" + dataType.sql + "\""

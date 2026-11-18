@@ -3332,18 +3332,6 @@
     ],
     "sqlState" : "KD000"
   },
-  "GRAPH_AMBIGUOUS_REQUIRED_COLUMN" : {
-    "message" : [
-      "The <dataFrameKind> DataFrame contains <count> columns that match the required column <columnName>: <matchingColumns>. Rename or drop the duplicate columns."
-    ],
-    "sqlState" : "42702"
-  },
-  "GRAPH_CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
-    "message" : [
-      "GraphFrame methods can only be invoked by the driver, not inside of Dataset transformations or other closures executed on executors."
-    ],
-    "sqlState" : "0A000"
-  },
   "GRAPH_ID_TYPE_MISMATCH" : {
     "message" : [
       "The vertex ID column <idColumn> and the edge columns <srcColumn> and <dstColumn> must have the same data type, but their types are <idType>, <srcType> and <dstType>."
@@ -3378,23 +3366,11 @@
     },
     "sqlState" : "23000"
   },
-  "GRAPH_MISSING_REQUIRED_COLUMN" : {
-    "message" : [
-      "The <dataFrameKind> DataFrame does not contain the required column <columnName>. Available columns: <availableColumns>."
-    ],
-    "sqlState" : "42703"
-  },
   "GRAPH_NULL_DATAFRAME" : {
     "message" : [
       "The <dataFrameKind> DataFrame must not be null."
     ],
     "sqlState" : "22004"
-  },
-  "GRAPH_PROPERTIES_COLUMN_CONFLICT" : {
-    "message" : [
-      "The <dataFrameKind> DataFrame contains columns that already exist in the <targetKind> DataFrame: <conflictingColumns>. Rename or drop them before joining."
-    ],
-    "sqlState" : "42711"
   },
   "GRAPH_PROPERTIES_KEY_TYPE_MISMATCH" : {
     "message" : [

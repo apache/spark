@@ -78,7 +78,7 @@ import org.apache.spark.storage.StorageLevel
  * @groupname transformations Graph transformations
  * @groupname utils Graph utilities
  *
- * @since 5.0.0
+ * @since 4.5.0
  */
 @Experimental
 class GraphFrame private (
@@ -97,7 +97,7 @@ class GraphFrame private (
    *   the vertices `DataFrame`
    *
    * @group structure
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def vertices: DataFrame = {
     if (_vertices == null) {
@@ -114,7 +114,7 @@ class GraphFrame private (
    *   the edges `DataFrame`
    *
    * @group structure
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def edges: DataFrame = {
     if (_edges == null) {
@@ -131,7 +131,7 @@ class GraphFrame private (
    *   the vertex column names, in order
    *
    * @group structure
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def vertexColumns: Array[String] = vertices.columns
 
@@ -142,7 +142,7 @@ class GraphFrame private (
    *   the edge column names, in order
    *
    * @group structure
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def edgeColumns: Array[String] = edges.columns
 
@@ -160,7 +160,7 @@ class GraphFrame private (
    *   a new (lazy) `GraphFrame`
    *
    * @group subgraph
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def filterVertices(condition: Column): GraphFrame = {
     val vv = vertices.filter(condition)
@@ -184,7 +184,7 @@ class GraphFrame private (
    *   a new (lazy) `GraphFrame`
    *
    * @group subgraph
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def filterVertices(conditionExpr: String): GraphFrame = filterVertices(expr(conditionExpr))
 
@@ -198,7 +198,7 @@ class GraphFrame private (
    *   a new (lazy) `GraphFrame`
    *
    * @group subgraph
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def filterEdges(condition: Column): GraphFrame = GraphFrame(vertices, edges.filter(condition))
 
@@ -213,7 +213,7 @@ class GraphFrame private (
    *   a new (lazy) `GraphFrame`
    *
    * @group subgraph
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def filterEdges(conditionExpr: String): GraphFrame = filterEdges(expr(conditionExpr))
 
@@ -228,7 +228,7 @@ class GraphFrame private (
    *   a new (lazy) `GraphFrame` with the same edges
    *
    * @group subgraph
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def dropIsolatedVertices(): GraphFrame = {
     val edgeVertexIds = edges.select(explode(array(col(SRC), col(DST))).as(ID))
@@ -247,7 +247,7 @@ class GraphFrame private (
    *   a new (lazy) `GraphFrame`
    *
    * @group transformations
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def asUndirected(): GraphFrame = {
     val attributes = edges.columns
@@ -282,11 +282,11 @@ class GraphFrame private (
    *   if `properties` is null
    *
    * @group transformations
-   * @since 5.0.0
+   * @since 4.5.0
    */
   @throws[AnalysisException]
   def joinVertices(properties: DataFrame): GraphFrame = {
-    checkProperties(properties, Seq(ID), vertices, VERTEX_PROPERTIES, VERTICES)
+    checkProperties(properties, Seq(ID), vertices, VERTEX_PROPERTIES)
     GraphFrame(vertices.join(properties, Seq(ID), "left"), edges)
   }
 
@@ -310,11 +310,11 @@ class GraphFrame private (
    *   if `properties` is null
    *
    * @group transformations
-   * @since 5.0.0
+   * @since 4.5.0
    */
   @throws[AnalysisException]
   def joinEdges(properties: DataFrame): GraphFrame = {
-    checkProperties(properties, Seq(SRC, DST), edges, EDGE_PROPERTIES, EDGES)
+    checkProperties(properties, Seq(SRC, DST), edges, EDGE_PROPERTIES)
     GraphFrame(vertices, edges.join(properties, Seq(SRC, DST), "left"))
   }
 
@@ -326,7 +326,7 @@ class GraphFrame private (
    *   a string in the form "GraphFrame(v:[id: bigint, ...], e:[src: bigint, dst: bigint, ...])"
    *
    * @group utils
-   * @since 5.0.0
+   * @since 4.5.0
    */
   override def toString: String = {
     val vCols = (ID +: vertices.columns.filter(_ != ID).toSeq)
@@ -350,7 +350,7 @@ class GraphFrame private (
    *   if the graph is invalid
    *
    * @group utils
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def validate(): Unit =
     validate(checkVertices = true, intermediateStorageLevel = StorageLevel.MEMORY_AND_DISK)
@@ -378,7 +378,7 @@ class GraphFrame private (
    *   if the graph is invalid
    *
    * @group utils
-   * @since 5.0.0
+   * @since 4.5.0
    */
   def validate(checkVertices: Boolean, intermediateStorageLevel: StorageLevel): Unit = {
     if (!vertices.where(col(ID).isNull).isEmpty) {
@@ -424,7 +424,7 @@ class GraphFrame private (
  * :: Experimental :: Companion object with the column name constants and the `apply` factory
  * method.
  *
- * @since 5.0.0
+ * @since 4.5.0
  */
 @Experimental
 object GraphFrame extends Serializable {
@@ -432,21 +432,21 @@ object GraphFrame extends Serializable {
   /**
    * The name of the vertex ID column: "id".
    *
-   * @since 5.0.0
+   * @since 4.5.0
    */
   val ID: String = "id"
 
   /**
    * The name of the edge source column: "src".
    *
-   * @since 5.0.0
+   * @since 4.5.0
    */
   val SRC: String = "src"
 
   /**
    * The name of the edge destination column: "dst".
    *
-   * @since 5.0.0
+   * @since 4.5.0
    */
   val DST: String = "dst"
 
@@ -454,14 +454,14 @@ object GraphFrame extends Serializable {
    * The name of the column that holds the edge data in results that combine vertices and edges:
    * "edge".
    *
-   * @since 5.0.0
+   * @since 4.5.0
    */
   val EDGE: String = "edge"
 
   /**
    * The name of the optional edge weight column: "weight".
    *
-   * @since 5.0.0
+   * @since 4.5.0
    */
   val WEIGHT: String = "weight"
 
@@ -491,7 +491,7 @@ object GraphFrame extends Serializable {
    * @throws org.apache.spark.SparkIllegalArgumentException
    *   if `vertices` or `edges` is null
    *
-   * @since 5.0.0
+   * @since 4.5.0
    */
   @throws[AnalysisException]
   def apply(vertices: DataFrame, edges: DataFrame): GraphFrame = {
@@ -503,8 +503,8 @@ object GraphFrame extends Serializable {
     }
 
     val resolver = columnResolver(vertices)
-    checkRequiredColumn(ID, vertices.columns.toSeq, resolver, VERTICES)
-    Seq(SRC, DST).foreach(checkRequiredColumn(_, edges.columns.toSeq, resolver, EDGES))
+    checkRequiredColumn(ID, vertices.columns.toSeq, resolver)
+    Seq(SRC, DST).foreach(checkRequiredColumn(_, edges.columns.toSeq, resolver))
 
     val idType = vertices.schema(ID).dataType
     val srcType = edges.schema(SRC).dataType
@@ -527,17 +527,13 @@ object GraphFrame extends Serializable {
     }
   }
 
-  private def checkRequiredColumn(
-      name: String,
-      columns: Seq[String],
-      resolver: Resolver,
-      dataFrameKind: String): Unit = {
+  private def checkRequiredColumn(name: String, columns: Seq[String], resolver: Resolver): Unit = {
     if (!columns.contains(name)) {
-      throw GraphErrors.missingRequiredColumnError(dataFrameKind, name, columns)
+      throw GraphErrors.unresolvedColumnError(name, columns)
     }
-    val matchingColumns = columns.filter(resolver(_, name))
-    if (matchingColumns.length > 1) {
-      throw GraphErrors.ambiguousRequiredColumnError(dataFrameKind, name, matchingColumns)
+    val numMatches = columns.count(resolver(_, name))
+    if (numMatches > 1) {
+      throw GraphErrors.ambiguousColumnError(name, numMatches)
     }
   }
 
@@ -551,14 +547,13 @@ object GraphFrame extends Serializable {
       properties: DataFrame,
       keys: Seq[String],
       target: DataFrame,
-      dataFrameKind: String,
-      targetKind: String): Unit = {
+      dataFrameKind: String): Unit = {
     if (properties == null) {
       throw GraphErrors.nullDataFrameError(dataFrameKind)
     }
     val resolver = columnResolver(target)
     val columns = properties.columns.toSeq
-    keys.foreach(checkRequiredColumn(_, columns, resolver, dataFrameKind))
+    keys.foreach(checkRequiredColumn(_, columns, resolver))
     keys.foreach { key =>
       val actualType = properties.schema(key).dataType
       val expectedType = target.schema(key).dataType
@@ -570,14 +565,11 @@ object GraphFrame extends Serializable {
           expectedType)
       }
     }
-    val conflictingColumns = columns
+    val existingColumn = columns
       .filterNot(c => keys.exists(resolver(c, _)))
-      .filter(c => target.columns.exists(resolver(c, _)))
-    if (conflictingColumns.nonEmpty) {
-      throw GraphErrors.propertiesColumnConflictError(
-        dataFrameKind,
-        targetKind,
-        conflictingColumns)
+      .find(c => target.columns.exists(resolver(c, _)))
+    existingColumn.foreach { c =>
+      throw GraphErrors.columnAlreadyExistsError(c)
     }
   }
 }

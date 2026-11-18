@@ -79,32 +79,28 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
       exception = intercept[AnalysisException] {
         GraphFrame(vertexData.withColumnRenamed(ID, "uid"), edgeData)
       },
-      condition = "GRAPH_MISSING_REQUIRED_COLUMN",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map(
-        "dataFrameKind" -> "vertices",
-        "columnName" -> "`id`",
-        "availableColumns" -> "`uid`, `name`, `gender`"))
+      parameters = Map("objectName" -> "`id`", "proposal" -> "`uid`, `name`, `gender`"))
     checkError(
       exception = intercept[AnalysisException] {
         GraphFrame(vertexData, edgeData.withColumnRenamed(SRC, "srcId"))
       },
-      condition = "GRAPH_MISSING_REQUIRED_COLUMN",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map(
-        "dataFrameKind" -> "edges",
-        "columnName" -> "`src`",
-        "availableColumns" -> "`srcId`, `dst`, `relationship`"))
+      parameters = Map("objectName" -> "`src`", "proposal" -> "`srcId`, `dst`, `relationship`"))
     checkError(
       exception = intercept[AnalysisException] {
         GraphFrame(vertexData, edgeData.withColumnRenamed(DST, "dstId"))
       },
-      condition = "GRAPH_MISSING_REQUIRED_COLUMN",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map(
-        "dataFrameKind" -> "edges",
-        "columnName" -> "`dst`",
-        "availableColumns" -> "`src`, `dstId`, `relationship`"))
+      parameters = Map("objectName" -> "`dst`", "proposal" -> "`src`, `dstId`, `relationship`"))
+    checkError(
+      exception = intercept[AnalysisException](GraphFrame(spark.emptyDataFrame, edgeData)),
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> "`id`"))
   }
 
   test("construction fails on null DataFrames") {
@@ -130,35 +126,23 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
       exception = intercept[AnalysisException] {
         GraphFrame(vertexData.select(col(ID), col(ID), col("name")), edgeData)
       },
-      condition = "GRAPH_AMBIGUOUS_REQUIRED_COLUMN",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       sqlState = "42702",
-      parameters = Map(
-        "dataFrameKind" -> "vertices",
-        "count" -> "2",
-        "columnName" -> "`id`",
-        "matchingColumns" -> "`id`, `id`"))
+      parameters = Map("name" -> "`id`", "n" -> "2"))
     checkError(
       exception = intercept[AnalysisException] {
         GraphFrame(vertexData, edgeData.select(col(SRC), col(DST), col(SRC)))
       },
-      condition = "GRAPH_AMBIGUOUS_REQUIRED_COLUMN",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       sqlState = "42702",
-      parameters = Map(
-        "dataFrameKind" -> "edges",
-        "count" -> "2",
-        "columnName" -> "`src`",
-        "matchingColumns" -> "`src`, `src`"))
+      parameters = Map("name" -> "`src`", "n" -> "2"))
     checkError(
       exception = intercept[AnalysisException] {
         GraphFrame(vertexData, edgeData.select(col(SRC), col(DST), col(DST)))
       },
-      condition = "GRAPH_AMBIGUOUS_REQUIRED_COLUMN",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       sqlState = "42702",
-      parameters = Map(
-        "dataFrameKind" -> "edges",
-        "count" -> "2",
-        "columnName" -> "`dst`",
-        "matchingColumns" -> "`dst`, `dst`"))
+      parameters = Map("name" -> "`dst`", "n" -> "2"))
   }
 
   test("required columns differing only in case follow spark.sql.caseSensitive") {
@@ -167,22 +151,14 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       checkError(
         exception = intercept[AnalysisException](GraphFrame(vertices, edgeData)),
-        condition = "GRAPH_AMBIGUOUS_REQUIRED_COLUMN",
+        condition = "AMBIGUOUS_COLUMN_OR_FIELD",
         sqlState = "42702",
-        parameters = Map(
-          "dataFrameKind" -> "vertices",
-          "count" -> "2",
-          "columnName" -> "`id`",
-          "matchingColumns" -> "`id`, `ID`"))
+        parameters = Map("name" -> "`id`", "n" -> "2"))
       checkError(
         exception = intercept[AnalysisException](GraphFrame(vertexData, edges)),
-        condition = "GRAPH_AMBIGUOUS_REQUIRED_COLUMN",
+        condition = "AMBIGUOUS_COLUMN_OR_FIELD",
         sqlState = "42702",
-        parameters = Map(
-          "dataFrameKind" -> "edges",
-          "count" -> "2",
-          "columnName" -> "`dst`",
-          "matchingColumns" -> "`dst`, `DST`"))
+        parameters = Map("name" -> "`dst`", "n" -> "2"))
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val g = GraphFrame(vertices, edges)
@@ -542,33 +518,23 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
       exception = intercept[AnalysisException] {
         graph.joinVertices(vertexData.select(col(ID).as("vid"), col("name").as("label")))
       },
-      condition = "GRAPH_MISSING_REQUIRED_COLUMN",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map(
-        "dataFrameKind" -> "vertex properties",
-        "columnName" -> "`id`",
-        "availableColumns" -> "`vid`, `label`"))
+      parameters = Map("objectName" -> "`id`", "proposal" -> "`vid`, `label`"))
     checkError(
       exception = intercept[AnalysisException] {
         graph.joinEdges(edgeData.select(col(SRC), col("relationship").as("label")))
       },
-      condition = "GRAPH_MISSING_REQUIRED_COLUMN",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = "42703",
-      parameters = Map(
-        "dataFrameKind" -> "edge properties",
-        "columnName" -> "`dst`",
-        "availableColumns" -> "`src`, `label`"))
+      parameters = Map("objectName" -> "`dst`", "proposal" -> "`src`, `label`"))
     checkError(
       exception = intercept[AnalysisException] {
         graph.joinVertices(vertexData.select(col(ID), col(ID), col("name").as("label")))
       },
-      condition = "GRAPH_AMBIGUOUS_REQUIRED_COLUMN",
+      condition = "AMBIGUOUS_COLUMN_OR_FIELD",
       sqlState = "42702",
-      parameters = Map(
-        "dataFrameKind" -> "vertex properties",
-        "count" -> "2",
-        "columnName" -> "`id`",
-        "matchingColumns" -> "`id`, `id`"))
+      parameters = Map("name" -> "`id`", "n" -> "2"))
     checkError(
       exception = intercept[AnalysisException] {
         graph.joinVertices(
@@ -597,24 +563,18 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
       exception = intercept[AnalysisException] {
         graph.joinVertices(vertexData.select(col(ID), col("name"), col("gender").as("label")))
       },
-      condition = "GRAPH_PROPERTIES_COLUMN_CONFLICT",
+      condition = "COLUMN_ALREADY_EXISTS",
       sqlState = "42711",
-      parameters = Map(
-        "dataFrameKind" -> "vertex properties",
-        "targetKind" -> "vertices",
-        "conflictingColumns" -> "`name`"))
+      parameters = Map("columnName" -> "`name`"))
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
           graph.joinEdges(
             edgeData.select(col(SRC), col(DST), col("relationship").as("RELATIONSHIP")))
         },
-        condition = "GRAPH_PROPERTIES_COLUMN_CONFLICT",
+        condition = "COLUMN_ALREADY_EXISTS",
         sqlState = "42711",
-        parameters = Map(
-          "dataFrameKind" -> "edge properties",
-          "targetKind" -> "edges",
-          "conflictingColumns" -> "`RELATIONSHIP`"))
+        parameters = Map("columnName" -> "`RELATIONSHIP`"))
     }
   }
 
@@ -638,12 +598,12 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
     val g = Utils.deserialize[GraphFrame](Utils.serialize(graph))
     checkError(
       exception = intercept[SparkException](g.vertices),
-      condition = "GRAPH_CANNOT_INVOKE_IN_TRANSFORMATIONS",
+      condition = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
       sqlState = "0A000",
       parameters = Map.empty)
     checkError(
       exception = intercept[SparkException](g.edges),
-      condition = "GRAPH_CANNOT_INVOKE_IN_TRANSFORMATIONS",
+      condition = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
       sqlState = "0A000",
       parameters = Map.empty)
   }
