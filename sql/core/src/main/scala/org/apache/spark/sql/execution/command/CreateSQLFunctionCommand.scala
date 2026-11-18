@@ -491,7 +491,7 @@ case class CreateSQLFunctionCommand(
         if (f.function.name == name) {
           throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
         }
-        val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
+        val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs, f.inputPositions)
         checkPlan(plan, newPath)
       }
     }

@@ -24,12 +24,15 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * Represent a SQL function expression resolved from the catalog SQL function builder.
+ *
+ * @param inputPositions parameter positions for sparse named inputs; empty for a positional prefix
  */
 case class SQLFunctionExpression(
     name: String,
     function: SQLFunction,
     inputs: Seq[Expression],
-    returnType: Option[DataType]) extends Expression with Unevaluable {
+    returnType: Option[DataType],
+    inputPositions: Seq[Int] = Nil) extends Expression with Unevaluable {
   override def children: Seq[Expression] = inputs
   override def dataType: DataType = returnType.get
   override def nullable: Boolean = true

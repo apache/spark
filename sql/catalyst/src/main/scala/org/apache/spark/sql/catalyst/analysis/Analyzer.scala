@@ -2868,7 +2868,8 @@ class Analyzer(
     private def resolve(f: SQLFunctionExpression): LogicalPlan = {
       // Validate the SQL function input.
       checkFunctionInput(f)
-      val plan = v1SessionCatalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
+      val plan = v1SessionCatalog.makeSQLFunctionPlan(
+        f.name, f.function, f.inputs, f.inputPositions)
       val resolved = SQLFunctionContext.withSQLFunction {
         // Resolve the SQL function plan using its context.
         val newConf = Analyzer.buildSQLFunctionConf(

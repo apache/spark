@@ -192,6 +192,67 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  for (capture <- Seq(true, false)) {
+    test(s"named scalar arguments normalize before aggregate extraction: $capture") {
+      withSQLConf(captureKey -> capture.toString) {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql("CREATE FUNCTION named_args_fn(a BIGINT) RETURNS BIGINT RETURN a")
+          checkAnswer(sql("SELECT named_args_fn(a => sum(id)) FROM range(3)"), Row(3L))
+        }
+      }
+    }
+
+    for (reordered <- Seq(true, false)) {
+      test(s"named scalar arguments normalize grouping keys: $capture, $reordered") {
+        withSQLConf(captureKey -> capture.toString) {
+          withUserDefinedFunction("named_args_fn" -> false) {
+            val second = if (reordered) ", b BIGINT" else ""
+            val body = if (reordered) "a + b" else "a + 1"
+            sql(s"CREATE FUNCTION named_args_fn(a BIGINT$second) RETURNS BIGINT RETURN $body")
+            val positional = if (reordered) "id, 1" else "id"
+            val named = if (reordered) "b => 1, a => id" else "a => id"
+            checkAnswer(sql(s"SELECT named_args_fn($positional), count(*) FROM range(3) " +
+              s"GROUP BY named_args_fn($named)"), Seq(Row(1L, 1L), Row(2L, 1L), Row(3L, 1L)))
+          }
+        }
+      }
+    }
+
+    test(s"named scalar calls preserve nontrailing omitted defaults: $capture") {
+      val key = SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key
+      withSQLConf(captureKey -> "true", key -> "false") {
+        withUserDefinedFunction("named_args_fn" -> false) {
+          sql("CREATE FUNCTION named_args_fn(" +
+            "a STRING DEFAULT to_json(named_struct('n', CAST(NULL AS INT))), " +
+            "b BIGINT DEFAULT 1) RETURNS STRING RETURN concat(a, CAST(b AS STRING))")
+          withSQLConf(captureKey -> capture.toString, key -> "true") {
+            val json = if (capture) """{"n":null}""" else "{}"
+            checkAnswer(sql("SELECT named_args_fn(b => sum(id)) FROM range(3)"), Row(json + "3"))
+            checkAnswer(sql("SELECT named_args_fn(b => id), count(*) FROM range(3) " +
+              "GROUP BY named_args_fn(b => id)"),
+              (0 to 2).map(id => Row(json + id, 1L)))
+          }
+        }
+      }
+    }
+
+    test(s"named scalar default parsing honors capture rollback: $capture") {
+      withSQLConf(captureKey -> "true", SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withDefaultFunction("scalar", "TIMESTAMP_LTZ '2024-01-02 00:00:00'",
+            "TIMESTAMP_LTZ") { query =>
+          withSQLConf(captureKey -> capture.toString,
+              SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+            val saved = Timestamp.from(Instant.parse("2024-01-02T00:00:00Z"))
+            val caller = Timestamp.from(Instant.parse("2024-01-02T08:00:00Z"))
+            checkAnswer(query("1"), Row(saved))
+            checkAnswer(query("a => 1"), Row(if (capture) saved else caller))
+            checkAnswer(query("s => TIMESTAMP_LTZ '2024-01-02 00:00:00', a => 1"), Row(caller))
+          }
+        }
+      }
+    }
+  }
+
   test("named function defaults retain the caller's parameter-name matching") {
     val key = SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key
     val default = "to_json(named_struct('n', CAST(NULL AS INT)))"
