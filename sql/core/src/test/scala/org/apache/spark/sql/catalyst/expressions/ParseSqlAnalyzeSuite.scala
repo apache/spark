@@ -320,6 +320,50 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE overlays match session and catalog names under case-sensitive analysis") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTable("parse_sql_cs_t") {
+        sql("CREATE TABLE parse_sql_cs_t (a INT) USING parquet")
+        withTempView("parse_sql_cs_v") {
+          sql("CREATE TEMP VIEW parse_sql_cs_v AS SELECT 1 AS a")
+          val sessionJson = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT a FROM SYSTEM.SESSION.parse_sql_cs_v',
+              |  'ANALYZE',
+              |  relations => array(named_struct(
+              |    'name', 'system.session.parse_sql_cs_v',
+              |    'schema', 'a STRING')))
+              |""".stripMargin).head().getString(0)
+          val sessionHit = parse(sessionJson) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(sessionHit \ "analyze_success" === JBool(true))
+          assert(sessionHit \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("a"))), "type" -> jsonString))))
+
+          val catalogJson = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT a FROM spark_catalog.default.parse_sql_cs_t',
+              |  'ANALYZE',
+              |  relations => array(named_struct(
+              |    'name', 'SPARK_CATALOG.default.parse_sql_cs_t',
+              |    'schema', 'a STRING')))
+              |""".stripMargin).head().getString(0)
+          val catalogHit = parse(catalogJson) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(catalogHit \ "analyze_success" === JBool(true))
+          assert(catalogHit \ "select_list" === JArray(List(
+            JObject("name" -> JArray(List(JString("a"))), "type" -> jsonString))))
+        }
+      }
+    }
+  }
+
   test("ANALYZE reports range as system.builtin and de-duplicates count") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       withTable("parse_sql_dedup_t") {
