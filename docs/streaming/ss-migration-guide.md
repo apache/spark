@@ -86,6 +86,15 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
+- Since Spark 4.4, a stream-stream join also evicts the state of an input without its own
+  watermark when the other input's watermark and a range condition bound one of its TIMESTAMP
+  columns, for example `leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime +
+  INTERVAL 5 SECONDS` with a watermark only on `rightTime`. Earlier versions kept such state
+  forever and never emitted the unmatched rows of an outer join. Such a join with state format
+  version 4 cannot restart from a checkpoint of an earlier version; start it with a new
+  checkpoint. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
+  the earlier behavior.
+
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
   unsupported-operation checks. Existing queries can still restart from their persistent

@@ -56,6 +56,19 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     }
   }
 
+  test("an input without its own watermark is evicted by value, except in the legacy mode") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 0L).build()
+    val leftTime = AttributeReference("leftTime", TimestampType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+    val condition = leftTime > rightTime
+    Seq(false -> Some(AttributeSet(leftTime)), true -> None).foreach { case (legacyMode, column) =>
+      val predicates = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(leftTime), Seq(rightTime), Nil, Nil, Some(condition), Some(100000L), None,
+        useFirstEventTimeColumn = legacyMode)
+      assert(predicates.left.map(_.expr.references) === column)
+    }
+  }
+
   test("previous value watermark of an input evicted by its event time covers the whole input") {
     val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 0L).build()
     val leftTime = AttributeReference("leftTime", TimestampType, metadata = watermark)()
