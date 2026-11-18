@@ -261,15 +261,26 @@ private[sql] object StreamingV2ScanPushDown
       session: SparkSession,
       plan: LogicalPlan,
       offsetLogMetadata: Option[OffsetSeqMetadataBase],
-      legacyKllSharing: Option[Boolean] = None): Map[StreamingRelationV2, Reads] = {
-    try {
-      readsOfSources(session, plan, offsetLogMetadata, legacyKllSharing)
+      legacyKllSharing: => Option[Boolean] = None): Map[StreamingRelationV2, Reads] = {
+    def failed(error: Throwable): Map[StreamingRelationV2, Reads] = {
+      if (session.sessionState.conf.getConf(SQLConf.STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR)) {
+        throw error
+      }
+      logWarning(log"Could not optimize the streaming query to push down what it reads " +
+        log"to the scans of its sources, which read all their columns with no filter.", error)
+      Map.empty
+    }
+    val conf = try {
+      startupConf(session, plan, offsetLogMetadata).getOrElse(return Map.empty)
     } catch {
-      case NonFatal(e)
-          if !session.sessionState.conf.getConf(SQLConf.STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR) =>
-        logWarning(log"Could not optimize the streaming query to push down what it reads " +
-          log"to the scans of its sources, which read all their columns with no filter.", e)
-        Map.empty
+      case NonFatal(error) => return failed(error)
+    }
+    // Only eligible sources demand the checkpoint policy. Recovery errors must propagate.
+    legacyKllSharing.foreach(conf.setConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING, _))
+    try {
+      readsOfSources(session, plan, conf)
+    } catch {
+      case NonFatal(error) => failed(error)
     }
   }
 
@@ -278,10 +289,7 @@ private[sql] object StreamingV2ScanPushDown
   private def readsOfSources(
       session: SparkSession,
       plan: LogicalPlan,
-      offsetLogMetadata: Option[OffsetSeqMetadataBase],
-      legacyKllSharing: Option[Boolean]): Map[StreamingRelationV2, Reads] = {
-    val conf = startupConf(session, plan, offsetLogMetadata).getOrElse(return Map.empty)
-    legacyKllSharing.foreach(conf.setConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING, _))
+      conf: SQLConf): Map[StreamingRelationV2, Reads] = {
     session.withActive {
       SQLConf.withExistingConf(conf) {
         // The plan of a micro-batch is normalized before it is optimized, see `QueryExecution`.

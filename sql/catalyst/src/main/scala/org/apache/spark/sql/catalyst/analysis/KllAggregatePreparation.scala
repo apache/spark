@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{KLL_CHECKPOINT_ALTERNATIVE, OUTER_REFERENCE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{KLL_CHECKPOINT_ALTERNATIVE, OUTER_REFERENCE, PLAN_EXPRESSION}
 
 /** Retires compiler-owned producers after a batch or checkpoint resolution choice is selected. */
 private[sql] object KllAggregatePreparation {
@@ -80,8 +80,9 @@ private[sql] object KllAggregatePreparation {
           }
         case other => other
       }
-      val current = trimmed.mapExpressionsWithReferenceEquality { expression =>
-        expression.transformDownWithReferenceEquality {
+      def retireSubqueries(expression: Expression): Expression = {
+        if (!expression.containsPattern(PLAN_EXPRESSION)) return expression
+        val updated = expression match {
           case query: SubqueryExpression =>
             val nested = nestedPlans.computeIfAbsent(query.plan,
               child => visit(child, child.outputSet))
@@ -101,8 +102,11 @@ private[sql] object KllAggregatePreparation {
                 }
               case _ => updated
             }
+          case other => other
         }
+        updated.mapChildrenWithReferenceEquality(retireSubqueries)
       }
+      val current = trimmed.mapExpressionsWithReferenceEquality(retireSubqueries)
       // Only candidate identities can affect deletion. Avoid recursive output/inputSet reads
       // for ordinary forwarded columns, especially through long chains of filters.
       val forwarded = required.filter(a => candidates.contains(a.exprId))

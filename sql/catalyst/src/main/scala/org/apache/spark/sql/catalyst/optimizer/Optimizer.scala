@@ -2847,10 +2847,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           }).booleanValue()
         // Scalar, EXISTS and IN bindings can inherit randomness from independent retained
         // KLL aggregates. Row randomness and correlated queries keep their ordinary barrier.
-        val queries = alias.child.collect {
-          case query: SubqueryExpression if !query.deterministic => query
-        }
-        queries.nonEmpty && queries.forall { query =>
+        ExprUtils.forallNondeterministicSubqueries(alias.child) { query =>
           independent(query) && retainedAggregate(query.plan)
         }
       case _ => false
@@ -3470,10 +3467,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     lazy val extracted = new ExprUtils.SubqueryExtractionDeterminism
     def cachedScalarPredicate(expression: Expression): Boolean = {
       expression.containsPattern(SCALAR_SUBQUERY) && extracted(expression) && {
-        val queries = expression.collect {
-          case query: SubqueryExpression if !query.deterministic => query
-        }
-        queries.nonEmpty && queries.forall {
+        ExprUtils.forallNondeterministicSubqueries(expression) {
           case scalar: ScalarSubquery => independent(scalar)
           case _ => false
         }

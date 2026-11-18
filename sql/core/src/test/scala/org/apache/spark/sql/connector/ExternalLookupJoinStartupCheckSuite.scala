@@ -63,6 +63,32 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
 
   private implicit def sqlContextOfStreams: SQLContext = spark.sqlContext
 
+  test("lookup startup demands checkpoint recovery only after eligibility") {
+    val calls = new AtomicInteger
+    val failure = new IllegalStateException("checkpoint recovery failed")
+    def policy: Option[Boolean] = {
+      calls.incrementAndGet()
+      throw failure
+    }
+    val stream = MemoryStream[Long].toDF().toDF("id")
+    ExternalLookupJoinStartupCheck(spark, stream.queryExecution.analyzed, None, 0L,
+      legacyKllSharing = policy)
+    assert(calls.get() == 0)
+    val eligible = stream.join(lookupOnly.hint("external_lookup"), Seq("id"))
+      .queryExecution.analyzed
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED.key -> "false") {
+      ExternalLookupJoinStartupCheck(spark, eligible, None, 0L, legacyKllSharing = policy)
+    }
+    assert(calls.get() == 0)
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED.key -> "true") {
+      val error = intercept[IllegalStateException] {
+        ExternalLookupJoinStartupCheck(spark, eligible, None, 0L, legacyKllSharing = policy)
+      }
+      assert(error eq failure)
+    }
+    assert(calls.get() == 1)
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     SimpleExternalLookupDataSource.resetCounters()

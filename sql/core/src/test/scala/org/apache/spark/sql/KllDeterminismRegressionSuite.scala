@@ -33,6 +33,34 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
   private val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
       |FROM VALUES (0), (1), (2) AS t(id))""".stripMargin
 
+  test("correlated KLL grouping scalars validate CTEs before extraction") {
+    for (singlePass <- Seq(false, true); singleJoin <- Seq(false, true)) {
+      val queries = withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> singleJoin.toString,
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false") {
+        val values = (0 until 10).map(i => s"(${i}L)").mkString(", ")
+        val inner = s"""SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(i.id)) AS n
+            |FROM VALUES $values i(id) WHERE i.id = o.id GROUP BY i.id""".stripMargin
+        Seq(s"($inner)", s"(WITH c AS ($inner) SELECT n FROM c)").map { subquery =>
+          val query = sql(s"""SELECT $subquery AS n, count(*)
+              |FROM VALUES (0L), (1L), (2L) o(id)
+              |GROUP BY 1""".stripMargin)
+          query.queryExecution.assertAnalyzed()
+          query
+        }
+      }
+      queries.foreach { query =>
+        val rows = query.queryExecution.executedPlan.executeCollect().map { row =>
+          Row(row.getLong(0), row.getLong(1))
+        }.toSeq
+        assert(rows == Seq(Row(1L, 3L)))
+      }
+    }
+  }
+
   test("aggregate admission rejects residual correlated scalar volatility") {
     val outcomes = for (singlePass <- Seq(false, true); legacy <- Seq(false, true);
         filter <- Seq(false, true)) yield {
@@ -113,9 +141,15 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
           val query = sql(s"""SELECT min(t.id) AS ordinary_key, count(*) AS ordinary_count
               |FROM VALUES $source AS t(id)
               |HAVING EXISTS (SELECT 1 WHERE $all $comparison $half)""".stripMargin)
-          query.queryExecution.analyzed
-          query -> comparison
-        }
+          val analyzed = query.queryExecution.analyzed
+          val checkpointQueries = Seq(false, true).map { checkpointLegacy =>
+            val selected =
+              org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+                analyzed, analyzed, legacySharing = checkpointLegacy)
+            org.apache.spark.sql.classic.Dataset.ofRows(spark, selected)
+          }
+          (query +: checkpointQueries).map(_ -> comparison)
+        }.flatten
       }
       queries.foreach { case (query, comparison) =>
         checkAnswer(query, if (comparison == ">") Seq(Row(0L, 10L)) else Nil)
@@ -397,6 +431,17 @@ class KllDeterminismRegressionSuite extends QueryTest with SharedSparkSession {
             Seq(Row(0D, 2L), Row(Double.NaN, 2L)))
           checkAnswer(sql(s"SELECT /*+ BROADCAST(r) */ a.k, a.n FROM $source " +
             "LEFT ANTI JOIN kll_float_members r ON a.k <=> r.k"), Row(2D, 1L))
+          val derived = """(SELECT k, CAST(k AS STRING) AS text,
+              |kll_sketch_get_n_double(kll_sketch_agg_double(v)) AS n
+              |FROM kll_float_groups GROUP BY k) a""".stripMargin
+          for (operand <- Seq("CAST(a.k AS STRING)", "a.text");
+              membership <- Seq("SEMI", "ANTI")) {
+            checkAnswer(sql(s"SELECT /*+ BROADCAST(r) */ a.k, a.n FROM $derived " +
+              s"LEFT $membership JOIN VALUES ('-0.0') r(k) ON $operand <=> r.k"),
+              if (membership == "SEMI") Nil else {
+                Seq(Row(0D, 2L), Row(Double.NaN, 2L), Row(2D, 1L))
+              })
+          }
         }
       }
     }

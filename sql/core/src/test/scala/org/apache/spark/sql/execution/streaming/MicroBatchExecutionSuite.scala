@@ -46,12 +46,34 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  for (asynchronous <- Seq(false, true); marked <- Seq(false, true)) {
+  for (asynchronous <- Seq(false, true); marked <- Seq(false, true);
+      stateful <- Seq(false, true) if !asynchronous || !stateful) {
     test(s"normalized KLL replay validates the published header before effects: " +
-        s"async=$asynchronous marked=$marked") {
+        s"async=$asynchronous marked=$marked stateful=$stateful") {
       val session = new SparkSession(spark.sparkContext)
       val enabled = new java.util.concurrent.atomic.AtomicBoolean(false)
       val preparations = new java.util.concurrent.atomic.AtomicInteger
+      val statePreparations = new java.util.concurrent.atomic.AtomicInteger
+      session.extensions.injectColumnar { _ =>
+        new org.apache.spark.sql.execution.ColumnarRule {
+          override def preColumnarTransitions: org.apache.spark.sql.catalyst.rules.Rule[
+              org.apache.spark.sql.execution.SparkPlan] =
+            new org.apache.spark.sql.catalyst.rules.Rule[
+              org.apache.spark.sql.execution.SparkPlan] {
+            override def apply(plan: org.apache.spark.sql.execution.SparkPlan)
+                : org.apache.spark.sql.execution.SparkPlan = {
+              if (enabled.get() && plan.exists {
+                  case save: org.apache.spark.sql.execution.streaming.operators.stateful
+                      .StateStoreSaveExec => save.stateInfo.nonEmpty
+                  case _ => false
+                }) {
+                statePreparations.incrementAndGet()
+              }
+              plan
+            }
+          }
+        }
+      }
       session.extensions.injectPlanNormalizationRule { _ =>
         new org.apache.spark.sql.catalyst.rules.Rule[
             org.apache.spark.sql.catalyst.plans.logical.LogicalPlan] {
@@ -80,9 +102,11 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
       session.conf.set(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key, "false")
       withTempDir { checkpoint =>
         val input = MemoryStream[Int](session)
-        val query = input.toDF().selectExpr("""value + (SELECT count(*)
+        val projected = input.toDF().selectExpr("""value + (SELECT count(*)
             |FROM VALUES (1), (2), (3) AS t(id)) AS n""".stripMargin)
+        val query = if (stateful) projected.groupBy().sum("n") else projected
         def writer: DataStreamWriter[Row] = query.writeStream
+          .outputMode(if (stateful) "complete" else "append")
           .option("checkpointLocation", checkpoint.getAbsolutePath)
           .option("asyncProgressTrackingEnabled", asynchronous)
           .option("asyncProgressTrackingCheckpointIntervalMs", 0)
@@ -126,11 +150,13 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
             assert(effects.get() == 1)
             import scala.jdk.CollectionConverters._
             assert(rows.asScala.toSeq == Seq(4L))
+            if (stateful) assert(statePreparations.get() > 0)
           } else {
             val error = intercept[StreamingQueryException] { replay.processAllAvailable() }
             assert(error.getMessage.contains("lacks the corrected KLL reader requirement"))
             assert(effects.get() == 0)
-            assert(!new File(checkpoint, "state").exists())
+            assert(statePreparations.get() == 0)
+            if (!stateful) assert(!new File(checkpoint, "state").exists())
             assert(!new File(checkpoint, "commits/0").exists())
           }
           assert(preparations.get() == 1)

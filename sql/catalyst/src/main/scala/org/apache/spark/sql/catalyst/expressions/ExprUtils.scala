@@ -192,6 +192,22 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     }
   }
 
+  /** Requires a nonempty set of subqueries and stops discovery at the first rejected occurrence. */
+  private[sql] def forallNondeterministicSubqueries(expression: Expression)(
+      predicate: SubqueryExpression => Boolean): Boolean = {
+    var found = false
+    def check(input: Expression): Boolean = {
+      val accepted = input match {
+        case query: SubqueryExpression if !query.deterministic =>
+          found = true
+          predicate(query)
+        case _ => true
+      }
+      accepted && input.children.forall(check)
+    }
+    check(expression) && found
+  }
+
   private[sql] def isDeterministicAfterSubqueryExtraction(
       expression: Expression): Boolean = new SubqueryExtractionDeterminism().apply(expression)
 

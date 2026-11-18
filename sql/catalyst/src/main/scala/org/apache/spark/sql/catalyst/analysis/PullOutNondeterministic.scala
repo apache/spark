@@ -35,6 +35,19 @@ import org.apache.spark.sql.types.{DataType, LongType}
 object PullOutNondeterministic extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp applyLocally
 
+  private def hasNestedPreparedAggregate(expression: Expression): Boolean = {
+    if (!expression.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) false else {
+      expression match {
+        case aggregate: AggregateExpression =>
+          aggregate.aggregateFunction.children.exists(_.exists {
+            case _: AggregateExpression => true
+            case _ => false
+          })
+        case other => other.children.exists(hasNestedPreparedAggregate)
+      }
+    }
+  }
+
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case p: Project => p
     case f: Filter => f
@@ -48,15 +61,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
 
     // Preserve nested aggregate diagnostics before a prepared Count input could hide them
     // inside a child Project. CheckAnalysis must see the original invalid aggregate host.
-    case a: Aggregate if a.containsAnyPattern(SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY) &&
-        a.aggregateExpressions.exists(_.exists {
-          case expression: AggregateExpression =>
-            expression.aggregateFunction.children.exists(_.exists {
-              case _: AggregateExpression => true
-              case _ => false
-            })
-          case _ => false
-        }) => a
+    case a: Aggregate if a.aggregateExpressions.exists(hasNestedPreparedAggregate) => a
 
     case a: Aggregate =>
       val guarded = guardAggregateInputs(a)
@@ -127,7 +132,9 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
       val keys = new NondeterministicExpressionCollection.ExpressionKeys
       val nondeterToAttr = new java.util.LinkedHashMap[
         NondeterministicExpressionCollection.ExpressionKey, NamedExpression]
+      val visited = new java.util.IdentityHashMap[Expression, java.lang.Boolean]
       def collect(expression: Expression): Unit = {
+        if (visited.put(expression, true) != null) return
         val candidate = expression match {
           // Store the consumed count, rather than copying a binary sketch into every input row
           // and state record. Keep the scalar identity inside the getter for physical reuse.
@@ -377,7 +384,7 @@ object PullOutNondeterministic extends Rule[LogicalPlan] {
         expression match {
           // Extraction must retain the restrictions of the subquery's original host.
           case subquery: SubqueryExpression if !subquery.deterministic =>
-            ValidateSubqueryExpression(plan, subquery)
+            ValidateSubqueryExpression(plan, subquery, lookThroughCteReferences = true)
           case _ =>
         }
         expression.children.foreach(validate)

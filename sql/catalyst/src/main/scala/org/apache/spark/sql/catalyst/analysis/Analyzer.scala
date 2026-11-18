@@ -3289,11 +3289,16 @@ class Analyzer(
         exprs: Seq[Expression],
         agg: Aggregate): (Seq[NamedExpression], Seq[Expression]) = {
       val legacyKeys = new ValidateSubqueryExpression.LegacyKllDeterminism
-      def resolve(sharing: Option[Boolean]): (Seq[NamedExpression], Seq[Expression]) = {
+      lazy val ordinaryLookups =
+        new java.util.IdentityHashMap[Expression, Option[NamedExpression]]
+      def resolve(
+          sharing: Option[Boolean],
+          reuseLookups: Boolean = false): (Seq[NamedExpression], Seq[Expression]) = {
         val extra = new LinkedHashMap[Expression, NamedExpression]
+        val lookups = if (reuseLookups) Some(ordinaryLookups) else None
         val transformed = exprs.map { expression =>
           if (!expression.resolved) expression else {
-            buildAggExprList(expression, agg, extra, sharing, legacyKeys)
+            buildAggExprList(expression, agg, extra, sharing, legacyKeys, lookups)
           }
         }
         (extra.values().asScala.toSeq, transformed)
@@ -3311,9 +3316,9 @@ class Analyzer(
       } else {
         // Preserve the full host's matching boundary and compiler output order. In particular,
         // a getter may match a SELECT output even when its nested aggregate has another height.
-        val (batchOutputs, batch) = resolve(None)
-        val (correctedOutputs, corrected) = resolve(Some(false))
-        val (legacyOutputs, legacy) = resolve(Some(true))
+        val (batchOutputs, batch) = resolve(None, reuseLookups = true)
+        val (correctedOutputs, corrected) = resolve(Some(false), reuseLookups = true)
+        val (legacyOutputs, legacy) = resolve(Some(true), reuseLookups = true)
         val outputs = (batchOutputs ++ correctedOutputs ++ legacyOutputs).distinctBy(_.exprId)
         (outputs, batch.iterator.zip(corrected.iterator).zip(legacy.iterator).map {
           case ((batch, corrected), legacy) =>
@@ -3327,7 +3332,9 @@ class Analyzer(
         agg: Aggregate,
         aggExprMap: LinkedHashMap[Expression, NamedExpression],
         sharing: Option[Boolean],
-        legacyKeys: ValidateSubqueryExpression.LegacyKllDeterminism): Expression = {
+        legacyKeys: ValidateSubqueryExpression.LegacyKllDeterminism,
+        ordinaryLookups: Option[java.util.IdentityHashMap[
+          Expression, Option[NamedExpression]]]): Expression = {
       // Avoid adding an extra aggregate expression if it's already present in
       // `agg.aggregateExpressions`. Trim inner aliases from aggregate expressions because of
       // expressions like `spark_grouping_id` that can have inner aliases.
@@ -3336,7 +3343,7 @@ class Analyzer(
           legacyKeys.expression(left).semanticEquals(legacyKeys.expression(right))
         } else left.semanticEquals(right)
       }
-      val replacement: Option[NamedExpression] =
+      def findReplacement(): Option[NamedExpression] =
         if ((!sharing.contains(true) && !expr.deterministic) ||
             (sharing.contains(false) && expr.containsPattern(KLL_AGGREGATE))) {
           None
@@ -3347,6 +3354,10 @@ class Analyzer(
             case (current, _) => current
           }
         }
+      val replacement = if (!sharing.contains(true) && expr.deterministic &&
+          !expr.containsPattern(KLL_AGGREGATE) && ordinaryLookups.nonEmpty) {
+        ordinaryLookups.get.computeIfAbsent(expr, _ => findReplacement())
+      } else findReplacement()
       if (replacement.isDefined) {
         replacement.get.toAttribute
       } else {
@@ -3388,7 +3399,8 @@ class Analyzer(
                 case a: Attribute => TempResolvedColumn(a, Seq(a.name))
               }
               val newChild =
-                buildAggExprList(childWithTempCol, agg, aggExprMap, sharing, legacyKeys)
+                buildAggExprList(childWithTempCol, agg, aggExprMap, sharing, legacyKeys,
+                  ordinaryLookups)
               if (newChild.containsPattern(TEMP_RESOLVED_COLUMN)) {
                 withOrigin(t.origin)(t.copy(hasTried = true))
               } else {
@@ -3397,7 +3409,7 @@ class Analyzer(
             }
           case other =>
             other.mapChildrenWithReferenceEquality(
-              buildAggExprList(_, agg, aggExprMap, sharing, legacyKeys))
+              buildAggExprList(_, agg, aggExprMap, sharing, legacyKeys, ordinaryLookups))
         }
       }
     }
@@ -4687,6 +4699,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             if aggregate.containsPattern(KLL_AGGREGATE) => aggregate.resultId -> attribute
       }.toMap
     }
+    lazy val legacyKeys = new ValidateSubqueryExpression.LegacyKllDeterminism
     plan resolveExpressions {
       case e if e.containsPattern(OUTER_REFERENCE) =>
         val reference = stripOuterReference(e)
@@ -4708,10 +4721,32 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             case _ => value.semanticEquals(reference)
           }
         })
-        outerAlias match {
-          case Some(a: Alias) => OuterReference(a.toAttribute)
-          case Some(a: Attribute) => OuterReference(a)
-          case _ => e
+        def outer(expression: Expression): Expression = expression match {
+          case a: Alias => OuterReference(a.toAttribute)
+          case a: Attribute => OuterReference(a)
+        }
+        if (!reference.isInstanceOf[AggregateExpression] &&
+            reference.containsPattern(KLL_AGGREGATE) && reference.exists {
+              case aggregate: AggregateExpression => kllOutputs.contains(aggregate.resultId)
+              case _ => false
+            }) {
+          // A whole getter can match a SELECT alias in captured legacy analysis. Retain that
+          // historical choice while binding corrected dependencies before such a match erases
+          // their independently exported aggregate result identities.
+          val legacyAlias = refExprs.find(alias =>
+            legacyKeys.expression(stripAlias(alias))
+              .semanticEquals(legacyKeys.expression(reference)))
+          if (outerAlias.isEmpty && legacyAlias.isEmpty) e else {
+            val corrected = e.transformDownWithReferenceEquality {
+              case aggregate: AggregateExpression if kllOutputs.contains(aggregate.resultId) =>
+                OuterReference(kllOutputs(aggregate.resultId))
+            }
+            val batch = outerAlias.map(outer).getOrElse(corrected)
+            val legacy = legacyAlias.map(outer).getOrElse(corrected)
+            KllAggregateResolution(batch, corrected, legacy)
+          }
+        } else {
+          outerAlias.map(outer).getOrElse(e)
         }
     }
   }
@@ -4725,7 +4760,13 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             // Collect the aliases from output of aggregate.
             val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
             // Update the subquery plan to record the OuterReference to point to outer query plan.
-            s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases, s.getOuterAttrs))
+            val updated = updateOuterReferenceInSubquery(s.plan, outerAliases, s.getOuterAttrs)
+            val result = s.withNewPlan(updated)
+            if (updated.containsPattern(KLL_CHECKPOINT_ALTERNATIVE)) {
+              // Whole-getter choices may introduce a SELECT dependency that was absent from
+              // the original aggregate-only exports. Keep all choices available to decorrelation.
+              result.withNewOuterAttrs(SubExprUtils.getOuterReferences(updated).distinct)
+            } else result
       }
     }
   }

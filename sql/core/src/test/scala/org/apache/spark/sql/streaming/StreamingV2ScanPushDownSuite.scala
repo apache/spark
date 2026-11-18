@@ -61,6 +61,30 @@ class StreamingV2ScanPushDownSuite extends StreamTest with BeforeAndAfter {
 
   private val tbl = "testcat.t"
 
+  test("scan startup demands checkpoint recovery only after eligibility") {
+    val calls = new AtomicInteger
+    val failure = new IllegalStateException("checkpoint recovery failed")
+    def policy: Option[Boolean] = {
+      calls.incrementAndGet()
+      throw failure
+    }
+    val ordinary = MemoryStream[Long](spark).toDF().queryExecution.analyzed
+    assert(StreamingV2ScanPushDown.columnsAndFiltersOfSources(spark, ordinary, None,
+      legacyKllSharing = policy).isEmpty)
+    assert(calls.get() == 0)
+    withSourceTable() {
+      val eligible = spark.readStream.table(tbl).queryExecution.analyzed
+      withSQLConf(SQLConf.STREAMING_V2_SCAN_PUSHDOWN_FAIL_ON_ERROR.key -> "false") {
+        val error = intercept[IllegalStateException] {
+          StreamingV2ScanPushDown.columnsAndFiltersOfSources(spark, eligible, None,
+            legacyKllSharing = policy)
+        }
+        assert(error eq failure)
+      }
+      assert(calls.get() == 1)
+    }
+  }
+
   // The pushdowns to the scans of streaming queries are disabled by default.
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)

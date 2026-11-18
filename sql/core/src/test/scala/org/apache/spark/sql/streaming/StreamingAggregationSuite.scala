@@ -520,6 +520,42 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
+  testWithAllStateVersions("KLL checkpoint keys restore both nullable primitive UDF inputs") {
+    withTempDir { checkpoint =>
+      val input = MemoryStream[Int]
+      def scalar(size: Int): String =
+        s"(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range($size))"
+      val add = udf((left: Long, right: Long) => left + right).asNondeterministic()
+      def query(legacy: Boolean): DataFrame = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString) {
+        def key: org.apache.spark.sql.Column = add(
+          when($"value" === 1, lit(null).cast("bigint")).otherwise(expr(scalar(3))),
+          when($"value" === 2, lit(null).cast("bigint")).otherwise(expr(scalar(5))))
+        val result = input.toDF().groupBy(key.as("a"), key.as("b")).count()
+        result.queryExecution.assertAnalyzed()
+        result
+      }
+      val historical = query(legacy = true)
+      val current = query(legacy = false)
+      val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+      val oneKey = AssertOnQuery { q =>
+        q.lastExecution.executedPlan.collectFirst {
+          case save: StateStoreSaveExec => save.keyExpressions.size
+        }.contains(1)
+      }
+      testStream(historical, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "true")),
+        AddData(input, 1, 2, 3), CheckLastBatch(Row(null, null, 2L), Row(8L, 8L, 1L)),
+        oneKey, StopStream)
+      testStream(current, Complete)(
+        StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+          additionalConfs = Map(sharing -> "false")),
+        AddData(input, 1, 2, 3), CheckLastBatch(Row(null, null, 4L), Row(8L, 8L, 2L)),
+        oneKey, StopStream)
+    }
+  }
+
   testWithAllStateVersions("KLL UDF checkpoint bindings preserve distinct inputs and randomness") {
     for (legacySharing <- Seq(false, true)) {
       withTempDir { checkpoint =>
@@ -909,8 +945,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         testStream(query(historicalLayout = false), Complete)(
           StartStream(checkpointLocation = checkpoint.getAbsolutePath,
             additionalConfs = Map(key -> "false")),
-          AddData(input, record(3L, 103L)),
-          CheckLastBatch(if (nestedScalar) Row(0, 3L, 12L, 101L) else Row(0, 101L, 12L)),
+          AddData(input, record(13L, 103L)),
+          CheckLastBatch(if (nestedScalar) Row(0, 3L, 13L, 101L) else Row(0, 101L, 13L)),
           StopStream)
       }
     }

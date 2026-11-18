@@ -887,7 +887,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             def checkMetric(
                 s: Expression,
                 e: Expression,
-                validWrapper: Boolean,
+                validWrapper: () => Boolean,
                 seenAggregate: Boolean = false): Unit = {
               e match {
                 case _: WindowExpression =>
@@ -915,7 +915,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 case a: Alias =>
                   checkMetric(s, a.child, validWrapper, seenAggregate)
                 case a if !e.deterministic && !seenAggregate &&
-                    !validWrapper =>
+                    !validWrapper() =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
                     Map("expr" -> toSQLExpr(s)))
@@ -923,7 +923,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                   e.children.foreach(checkMetric(s, _, validWrapper, seenAggregate))
               }
             }
-            metrics.foreach(m => checkMetric(m, m, deterministicOutsideAggregates(m)))
+            metrics.foreach { m =>
+              lazy val validWrapper = deterministicOutsideAggregates(m)
+              checkMetric(m, m, () => validWrapper)
+            }
 
           // see Analyzer.ResolveUnpivot
           // given ids must be AttributeReference when no values given

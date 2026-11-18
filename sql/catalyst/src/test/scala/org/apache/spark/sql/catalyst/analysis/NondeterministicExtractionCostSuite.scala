@@ -30,6 +30,96 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, J
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
+  test("Boolean subquery proofs stop discovery and retain preorder") {
+    val visits = new AtomicInteger
+    def query: ScalarSubquery = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+    val first = query
+    val second = query
+    val expression = And(EqualTo(first, Literal(0D)),
+      Counted(EqualTo(second, Literal(0D)), visits))
+    expression.deterministic
+    visits.set(0)
+    val checked = scala.collection.mutable.ArrayBuffer.empty[ExprId]
+    assert(!ExprUtils.forallNondeterministicSubqueries(expression) { scalar =>
+      checked += scalar.exprId
+      false
+    })
+    assert(checked.toSeq == Seq(first.exprId))
+    assert(visits.get == 0, s"rejected suffix discovery visits=${visits.get}")
+    checked.clear()
+    assert(ExprUtils.forallNondeterministicSubqueries(expression) { scalar =>
+      checked += scalar.exprId
+      true
+    })
+    assert(checked.toSeq == Seq(first.exprId, second.exprId))
+    assert(!ExprUtils.forallNondeterministicSubqueries(Literal(true))(_ => true))
+    checked.clear()
+    assert(!ExprUtils.forallNondeterministicSubqueries(expression) { scalar =>
+      checked += scalar.exprId
+      scalar.exprId != second.exprId
+    })
+    assert(checked.toSeq == Seq(first.exprId, second.exprId))
+  }
+
+  test("ordinary host output scans are reused across batch and corrected choices") {
+    val scans = new AtomicInteger
+    val fields = Seq(Literal(0L).as("unused"))
+    val outputs = new scala.collection.immutable.AbstractSeq[NamedExpression] {
+      override def length: Int = fields.length
+      override def apply(index: Int): NamedExpression = fields(index)
+      override def iterator: Iterator[NamedExpression] = fields.iterator
+      override def foldLeft[B](initial: B)(op: (B, NamedExpression) => B): B = {
+        scans.incrementAndGet()
+        fields.foldLeft(initial)(op)
+      }
+    }
+    val ordinary = (1 to 64).map(i => Literal(i.toLong): Expression)
+    val kll = KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+      .toAggregateExpression()
+    val aggregate = Aggregate(Nil, outputs, OneRowRelation())
+    val (_, resolved) = SimpleAnalyzer.ResolveAggregateFunctions
+      .resolveExprsWithAggregate(ordinary :+ kll, aggregate)
+    assert(resolved.size == 65)
+    assert(scans.get <= 129, s"ordinary host output scans=${scans.get}")
+  }
+
+  private case class DiscoveryCounted(
+      child: Expression,
+      visits: AtomicInteger,
+      beforeRewrite: AtomicInteger) extends Expression with Unevaluable {
+    override def children: Seq[Expression] = {
+      visits.incrementAndGet()
+      Seq(child)
+    }
+    override def nullable: Boolean = false
+    override def dataType: DataType = child.dataType
+    override lazy val deterministic: Boolean = child.deterministic
+    override lazy val canonicalized: Expression = this
+    override protected def withNewChildrenInternal(children: IndexedSeq[Expression]): Expression = {
+      beforeRewrite.compareAndSet(-1, visits.get)
+      copy(child = children.head)
+    }
+  }
+
+  test("join binding discovery visits shared wrappers once before contextual rewriting") {
+    val visits = new AtomicInteger
+    val beforeRewrite = new AtomicInteger(-1)
+    val scalar = ScalarSubquery(OneRowRelation().select(Rand(0).as("n")))
+    val depth = 10
+    val condition = (1 to depth).foldLeft[Expression](EqualTo(scalar, Literal(0D))) {
+      (child, _) => DiscoveryCounted(Or(child, child), visits, beforeRewrite)
+    }
+    val plan = Join(OneRowRelation(), OneRowRelation(), Inner, Some(condition), JoinHint.NONE)
+    plan.resolved
+    plan.treePatternBits
+    condition.foreach { e => e.references; e.deterministic; e.canonicalized }
+    visits.set(0)
+    beforeRewrite.set(-1)
+    PullOutNondeterministic.applyLocally(plan)
+    assert(beforeRewrite.get >= 0 && beforeRewrite.get <= depth * 12,
+      s"discovery visits before the first contextual rewrite=${beforeRewrite.get}")
+  }
+
   test("ordinary volatile scalar Projects reject before inspecting wide conditions") {
     for (width <- Seq(32, 128)) {
       val visits = new AtomicInteger
@@ -80,8 +170,8 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
     val baseline = work(0)
     for (depth <- Seq(12, 24)) {
       val visits = work(depth)
-      // Forwarding Projects still expand aliases twice, but have no contribution scan.
-      assert(visits <= baseline + depth * 2,
+      // An empty alias map needs trimming only, with no substitution walk.
+      assert(visits <= baseline + depth,
         s"depth=$depth forwarded consumer visits=$visits baseline=$baseline")
     }
   }
@@ -93,6 +183,116 @@ class NondeterministicExtractionCostSuite extends AnalysisTest {
       reads.incrementAndGet()
       fields
     }
+  }
+
+  test("relocation skips alias expansion above an unreachable descendant binding") {
+    val visits = new AtomicInteger
+    val key = $"key".double
+    val target = $"target".double
+    val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+      KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+        .toAggregateExpression()).as("n")))
+    val binding = Alias(scalar, "binding")().asNondeterministicSubqueryBinding
+    val inner = Join(Project(Seq(key, binding), LocalRelation(key)), LocalRelation(),
+      Inner, None, JoinHint.NONE)
+    val chain = (1 to 10).foldLeft[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](
+      inner) { (child, i) =>
+      val previous = child.output.head
+      Project(Seq(Alias(Add(Counted(previous, visits), previous), s"x$i")()), child)
+    }
+    val plan = Join(chain, LocalRelation(target), Inner,
+      Some(EqualTo(chain.output.head, target)), JoinHint.NONE)
+    plan.foreach { p =>
+      p.treePatternBits
+      p.expressions.foreach(_.foreach { e => e.references; e.deterministic; e.canonicalized })
+    }
+    visits.set(0)
+    val result = org.apache.spark.sql.catalyst.optimizer.PushDownKllSubqueryBindings(plan)
+    val work = visits.get
+    comparePlans(result, plan)
+    assert(work == 0, s"unreachable consumer expansion visits=$work")
+  }
+
+  test("relocation shares a wide reference context across repeated binding uses") {
+    def work(width: Int): Int = {
+      val hashes = new AtomicInteger
+      val fields = (1 to width).map(i => UnionHashCounted(s"a$i", hashes))
+      val target = $"target".double
+      val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+        KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+          .toAggregateExpression()).as("n")))
+      val binding = Alias(scalar, "binding")().asNondeterministicSubqueryBinding
+      val component = Join(LocalRelation(fields.take(width / 2)),
+        LocalRelation(fields.drop(width / 2)), Inner, None, JoinHint.NONE)
+      val operand = (fields ++ Seq.fill(width)(binding.toAttribute))
+        .reduceLeft[Expression](Add(_, _))
+      val condition = EqualTo(operand, target)
+      val plan = Join(Project(component.output :+ binding, component), LocalRelation(target),
+        Inner, Some(condition), JoinHint.NONE)
+      plan.treePatternBits
+      plan.foreach(_.outputSet)
+      condition.foreach { e => e.references; e.deterministic; e.canonicalized }
+      hashes.set(0)
+      val result = org.apache.spark.sql.catalyst.optimizer.PushDownKllSubqueryBindings(plan)
+      assert(result.output.map(_.exprId) == plan.output.map(_.exprId))
+      hashes.get
+    }
+    val small = work(16)
+    val large = work(64)
+    assert(large <= small * 6, s"width16=$small width64=$large hashes")
+  }
+
+  test("child-only subqueries do not trigger unrelated nested aggregate diagnostics") {
+    val visits = new AtomicInteger
+    val ordinary = (1 to 64).foldLeft[Expression](Literal(1D)) { (child, _) =>
+      Counted(child, visits)
+    }
+    val child = OneRowRelation().select(
+      ScalarSubquery(OneRowRelation().select(Literal(1).as("x"))).as("s"))
+    val plan = child.groupBy()(org.apache.spark.sql.catalyst.expressions.aggregate.Max(ordinary)
+      .toAggregateExpression().as("m"))
+    plan.resolved
+    plan.treePatternBits
+    plan.expressions.foreach(_.deterministic)
+    visits.set(0)
+    assert(PullOutNondeterministic.applyLocally(plan) eq plan)
+    assert(visits.get == 0, s"unrelated diagnostic visits=${visits.get}")
+  }
+
+  test("KLL retirement skips query-free ordinary expression searches") {
+    val visits = new AtomicInteger
+    val ordinary = (1 to 64).foldLeft[Expression](Literal(1D)) { (child, _) =>
+      Counted(child, visits)
+    }
+    val live = org.apache.spark.sql.catalyst.expressions.aggregate.Max(ordinary)
+      .toAggregateExpression().as("live")
+    val unused = Literal(2L).as("unused")
+    val plan = Project(Seq(live.toAttribute),
+      Aggregate(Nil, Seq(live, unused), OneRowRelation()))
+    plan.foreach { p =>
+      p.treePatternBits
+      p.expressions.foreach(_.foreach { e => e.references; e.deterministic })
+    }
+    visits.set(0)
+    val result = KllAggregatePreparation.retireUnchosenOutputs(plan, Set(unused.exprId))
+    val work = visits.get
+    assert(result.collect { case a: Aggregate => a.aggregateExpressions.size }.head == 1)
+    assert(work == 0, s"query-free retirement searches=$work")
+  }
+
+  test("ordinary deterministic metrics do not build discarded wrapper proofs") {
+    val copies = new AtomicInteger
+    val value = $"value".long
+    val metric = (1 to 32).foldLeft[Expression](Sum(value).toAggregateExpression()) {
+      (child, _) => ProofCopyCounted(child, copies)
+    }
+    val plan = CollectMetrics("ordinary", Seq(metric.as("n")), LocalRelation(value), 0L)
+    plan.resolved
+    plan.treePatternBits
+    metric.deterministic
+    copies.set(0)
+    getAnalyzer.checkAnalysis(plan)
+    assert(copies.get == 0, s"unused metric proof copies=${copies.get}")
   }
 
   test("relocation collects growing binding reference contributions once") {

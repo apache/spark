@@ -55,6 +55,7 @@ class KllSubqueryBindingPlacementSuite extends PlanTest {
       }.flatten
       assert(aliases.size == 1)
       assert(aliases.head.child eq value.child)
+      assert(aliases.head.isNondeterministicSubqueryBinding)
       assert(actual.exists {
         case Project(fields, child: LocalRelation) =>
           fields.exists(_.exprId == value.exprId) && child.output == Seq(b)
@@ -62,6 +63,32 @@ class KllSubqueryBindingPlacementSuite extends PlanTest {
       })
       actual.foreach(p => assert(p.missingInput.isEmpty, p))
       comparePlans(PushDownKllSubqueryBindings(actual), actual)
+    }
+
+    test(s"relocated ownership permits another move after pruning: numeric=$numeric") {
+      val value = binding(numeric)
+      val inner = component
+      val barrier = Project(inner.output :+ Rand(0).as("unused"), inner)
+      val scoped = SubqueryAlias("boundary", barrier)
+      val projected = Project(scoped.output :+ value, scoped)
+      val condition = EqualTo(Add(b, count(value, numeric)), c)
+      val original = Project(Seq(a, c, value.toAttribute),
+        Join(projected, LocalRelation(c), Inner, Some(condition), JoinHint.NONE))
+      def owners(plan: LogicalPlan): Seq[Alias] = plan.collect { case p: Project =>
+        p.projectList.collect { case alias: Alias if alias.exprId == value.exprId => alias }
+      }.flatten
+      val first = PushDownKllSubqueryBindings(original)
+      assert(owners(first).size == 1 && owners(first).head.isNondeterministicSubqueryBinding)
+      val pruned = ColumnPruning(first)
+      val second = PushDownKllSubqueryBindings(pruned)
+      assert(second.exists {
+        case Project(fields, child: LocalRelation) =>
+          fields.exists(_.exprId == value.exprId) && child.output == Seq(b)
+        case _ => false
+      }, second)
+      assert(owners(second).size == 1 && owners(second).head.isNondeterministicSubqueryBinding)
+      second.foreach(p => assert(p.missingInput.isEmpty, p))
+      comparePlans(PushDownKllSubqueryBindings(second), second)
     }
 
     test(s"random, throwing, outer and hinted relocation boundaries: numeric=$numeric") {

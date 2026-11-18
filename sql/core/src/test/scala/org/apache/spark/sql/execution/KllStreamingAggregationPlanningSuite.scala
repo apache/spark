@@ -153,6 +153,51 @@ class KllStreamingAggregationPlanningSuite extends QueryTest with SharedSparkSes
     assert(extra <= 512, s"additional shared outer-reference visits=$extra")
   }
 
+  test("checkpoint choices retain getter-wrapped outer KLL producer identities") {
+    for (singlePass <- Seq(false, true); analysisLegacy <- Seq(false, true);
+        getter <- Seq(false, true); reassociated <- Seq(false, true)) {
+      def call(argument: String): String = {
+        val sketch = s"kll_sketch_agg_bigint($argument, 8)"
+        if (getter) s"kll_sketch_get_quantile_bigint($sketch, 0.5D)" else sketch
+      }
+      val selectedCall = call(if (reassociated) "t.a + (t.b + (t.c + t.d))" else "t.a")
+      val havingCall = call(if (reassociated) "(t.a + t.b) + (t.c + t.d)" else "t.a")
+      val original = withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> analysisLegacy.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        sql(s"""SELECT count(*) AS n, $selectedCall AS s
+            |FROM VALUES (1L, 2L, 3L, 4L), (2L, 3L, 4L, 5L) t(a, b, c, d)
+            |HAVING EXISTS (SELECT 1 WHERE $havingCall != s)""".stripMargin)
+          .queryExecution.analyzed
+      }
+      for (legacy <- Seq(false, true)) {
+        val selected = org.apache.spark.sql.execution.streaming.runtime.KllCheckpointPreparation(
+          original, original, legacySharing = legacy)
+        val ids = selected.flatMap(_.expressions).flatMap(_.collect {
+          case query: Exists => query.plan.flatMap(_.expressions).flatMap(_.collect {
+            case OuterReference(a: Attribute) => a.exprId
+          })
+        }).flatten.distinct
+        val aggregate = selected.collect { case a: Aggregate => a }.head
+        val functions = org.apache.spark.sql.catalyst.planning.PhysicalAggregation
+          .unapply(aggregate).get._2
+        assert(!functions.head.containsPattern(
+          org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE))
+        val sketches = functions.filter(_.containsPattern(
+          org.apache.spark.sql.catalyst.trees.TreePattern.KLL_AGGREGATE))
+        // The single-pass analyzer historically exports the nested aggregate before the
+        // getter can match a SELECT alias; unequal aggregate heights then retain two buffers.
+        val legacyBuffers = if (singlePass && getter && reassociated) 2 else 1
+        assert(sketches.size == (if (legacy) legacyBuffers else 2),
+          s"singlePass=$singlePass analysisLegacy=$analysisLegacy " +
+            s"getter=$getter reassociated=$reassociated\n$selected")
+        if (!legacy) assert(ids.size == 2, selected)
+      }
+    }
+  }
+
   test("corrected checkpoints retain an exported HAVING call distinct from SELECT") {
     withTempView("kll_outer_identity") {
       val original = withSQLConf(

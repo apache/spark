@@ -129,23 +129,28 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       comparePlans(PushDownLeftSemiAntiJoin(join),
         aggregate.copy(child = join.copy(left = input)))
 
-      // A string cast can distinguish raw -0.0 from the normalized grouping output.
-      val unsafe = EqualTo(Cast(floating, org.apache.spark.sql.types.StringType), Literal("-0.0"))
-      val condition = And(EqualTo(a, b), unsafe)
-      val guarded = join.copy(condition = Some(condition))
-      val expected = if (joinType == LeftSemi) {
-        Filter(unsafe, aggregate.copy(child = join.copy(left = input)))
-      } else guarded
-      comparePlans(PushDownLeftSemiAntiJoin(guarded), expected)
-      val derived = Alias(Cast(floating, org.apache.spark.sql.types.StringType), "bucket_text")()
-      val aliased = aggregate.copy(aggregateExpressions = Seq(a, derived, sketch))
-      val aliasGuarded = join.copy(left = aliased,
-        condition = Some(And(EqualTo(a, b), EqualTo(derived.toAttribute, Literal("-0.0")))))
-      val aliasExpected = if (joinType == LeftSemi) {
-        Filter(EqualTo(derived.toAttribute, Literal("-0.0")),
-          aliased.copy(child = join.copy(left = input)))
-      } else aliasGuarded
-      comparePlans(PushDownLeftSemiAntiJoin(aliasGuarded), aliasExpected)
+      for (nullSafe <- Seq(false, true)) {
+        def equality(left: Expression, right: Expression): Expression =
+          if (nullSafe) EqualNullSafe(left, right) else EqualTo(left, right)
+        // A string cast can distinguish raw -0.0 from the normalized grouping output.
+        val unsafe = equality(
+          Cast(floating, org.apache.spark.sql.types.StringType), Literal("-0.0"))
+        val condition = And(EqualTo(a, b), unsafe)
+        val guarded = join.copy(condition = Some(condition))
+        val expected = if (joinType == LeftSemi) {
+          Filter(unsafe, aggregate.copy(child = join.copy(left = input)))
+        } else guarded
+        comparePlans(PushDownLeftSemiAntiJoin(guarded), expected)
+        val derived = Alias(Cast(floating, org.apache.spark.sql.types.StringType), "bucket_text")()
+        val aliased = aggregate.copy(aggregateExpressions = Seq(a, derived, sketch))
+        val aliasGuarded = join.copy(left = aliased,
+          condition = Some(And(EqualTo(a, b), equality(derived.toAttribute, Literal("-0.0")))))
+        val aliasExpected = if (joinType == LeftSemi) {
+          Filter(equality(derived.toAttribute, Literal("-0.0")),
+            aliased.copy(child = join.copy(left = input)))
+        } else aliasGuarded
+        comparePlans(PushDownLeftSemiAntiJoin(aliasGuarded), aliasExpected)
+      }
     }
   }
 
