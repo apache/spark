@@ -336,15 +336,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           .executeUpdate()
       }
       // SQL Server's own cast rounds MONEY, which would match 1.6 and sum to 2 + 3 + (-2) = 3.
-      for (col <- Seq("m", "sm"); target <- Seq("INT", "BIGINT")) {
-        val filtered = sql(s"SELECT label FROM $table WHERE CAST($col AS $target) = 2")
-        checkFilterPushed(filtered)
-        assert(filtered.collect().map(_.getString(0)) === Array("b"))
-
-        val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $table")
-        checkAggregateRemoved(aggregated)
-        assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
-      }
+      checkIntegralCastsTruncate(table, Seq("m", "sm"))
     }
   }
 }

@@ -707,15 +707,6 @@ private[v2] trait V2JDBCTest
   // `(a = 10000) IS NULL`. MsSqlServer has no boolean type, so it cannot and Spark evaluates it.
   protected def supportsIsNullOverPredicate: Boolean = true
 
-  // Whether this database rounds a fractional to integral cast rather than truncating like Spark.
-  protected def roundsIntegralCast: Boolean = false
-
-  // Whether a cast of `col` to `target` is pushed down. MySQL can only cast to 64-bit SIGNED.
-  protected def pushesIntegralCast(col: String, target: String): Boolean = true
-
-  // Whether this database accepts the SQL that Spark 4.3 pushed for a cast to `target`.
-  protected def acceptsLegacyIntegralCast(target: String): Boolean = true
-
   test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
     val tbl = s"$catalogName.composite_is_null"
     withTable(tbl) {
@@ -1373,6 +1364,30 @@ private[v2] trait V2JDBCTest
     }
   }
 
+  // Whether this database rounds a fractional to integral cast rather than truncating like Spark.
+  protected def roundsIntegralCast: Boolean = false
+
+  // Whether a cast of `col` to `target` is pushed down. MySQL can only cast to 64-bit SIGNED.
+  protected def pushesIntegralCast(col: String, target: String): Boolean = true
+
+  // Whether this database accepts the SQL that Spark 4.3 pushed for a cast to `target`.
+  protected def acceptsLegacyIntegralCast(target: String): Boolean = true
+
+  // `table` holds 1.6, 2.6 and -1.6 in each of `cols`, labeled a, b and c. A pushed filter cast
+  // truncates like Spark, so only 2.6 becomes 2. So does an aggregate: 1 + 2 + (-1) = 2.
+  protected def checkIntegralCastsTruncate(table: String, cols: Seq[String]): Unit = {
+    for (col <- cols; target <- Seq("INT", "BIGINT")) {
+      val pushed = pushesIntegralCast(col, target)
+      val filtered = sql(s"SELECT label FROM $table WHERE CAST($col AS $target) = 2")
+      checkFilterPushed(filtered, pushed)
+      assert(filtered.collect().map(_.getString(0)) === Array("b"))
+
+      val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $table")
+      checkAggregateRemoved(aggregated, pushed)
+      assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
+    }
+  }
+
   test("SPARK-58372: fractional to integral cast pushed down truncates toward zero like Spark") {
     val tbl = s"$catalogName.integral_cast"
     withTable(tbl) {
@@ -1389,18 +1404,7 @@ private[v2] trait V2JDBCTest
         assert(projected.collect().map(_.getInt(0)) === Array(-1, 1, 2))
       }
 
-      // A pushed filter cast truncates like Spark, so only 2.6 truncates to 2. So does an
-      // aggregate: 1 + 2 + (-1) = 2.
-      for (col <- Seq("double_col", "decimal_col"); target <- Seq("INT", "BIGINT")) {
-        val pushed = pushesIntegralCast(col, target)
-        val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS $target) = 2")
-        checkFilterPushed(filtered, pushed)
-        assert(filtered.collect().map(_.getString(0)) === Array("b"))
-
-        val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $tbl")
-        checkAggregateRemoved(aggregated, pushed)
-        assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
-      }
+      checkIntegralCastsTruncate(tbl, Seq("double_col", "decimal_col"))
 
       // Legacy behavior: the conf restores the previous pushed SQL. A rounding database then
       // rounds, so a filter matches 1.6 and a sum is 2 + 3 + (-2) = 3.

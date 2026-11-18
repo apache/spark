@@ -125,6 +125,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      lazy val fractionalToIntegral = !JdbcUtils.legacyIntegralCastPushdown &&
+        isFractionalToIntegral(exprDataType, dataType)
       dataType match {
         case DoubleType =>
           // The common JDBC mapping is DOUBLE PRECISION, which is not a portable CAST target for
@@ -132,17 +134,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           throw new UnsupportedOperationException("Cannot cast to double type")
         // MySQL's only integral CAST target is 64-bit SIGNED, and MariaDB clamps values out of its
         // range, so of the fractional casts only BIGINT from a DECIMAL that always fits is pushed.
-        case LongType if !JdbcUtils.legacyIntegralCastPushdown && (exprDataType match {
-          case d: DecimalType => d.precision - d.scale <= 18
+        case LongType if fractionalToIntegral && (exprDataType match {
+          case d: DecimalType => d.precision - d.scale <= Decimal.MAX_LONG_DIGITS
           case _ => false
         }) =>
-          val value =
-            if (dropsFraction(exprDataType, dataType)) truncateFractionalValue(expr) else expr
-          s"CAST($value AS SIGNED)"
-        case _: IntegralType if !JdbcUtils.legacyIntegralCastPushdown &&
-            isFractionalToIntegral(exprDataType, dataType) =>
-          throw new UnsupportedOperationException(
-            s"Cannot cast $exprDataType to $dataType without changing the result")
+          s"CAST(${truncateFraction(expr, exprDataType)} AS SIGNED)"
+        case _: IntegralType if fractionalToIntegral => cannotPushCast(exprDataType, dataType)
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
     }

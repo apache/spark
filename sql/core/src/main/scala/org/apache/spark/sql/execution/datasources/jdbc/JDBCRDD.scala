@@ -245,16 +245,15 @@ class JDBCRDD(
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
-    val part = partition.getOrElse(JDBCPartition(whereClause = null, idx = 1))
-    val builderWithPredicates =
-      JdbcUtils.withLegacyIntegralCastPushdown(options.legacyIntegralCastPushdown) {
-        dialect.getJdbcSQLQueryBuilder(options).withPredicates(predicates, part)
-      }
-    var builder = builderWithPredicates
-      .withColumns(columns)
-      .withSortOrders(sortOrders)
-      .withLimit(limit)
-      .withOffset(offset)
+    var builder = JdbcUtils.withLegacyIntegralCastPushdown(options.legacyIntegralCastPushdown) {
+      dialect
+        .getJdbcSQLQueryBuilder(options)
+        .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
+        .withColumns(columns)
+        .withSortOrders(sortOrders)
+        .withLimit(limit)
+        .withOffset(offset)
+    }
 
     groupByColumns.foreach { groupByKeys =>
       builder = builder.withGroupByColumns(groupByKeys)
