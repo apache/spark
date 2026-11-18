@@ -262,6 +262,11 @@ class MicroBatchExecution(
           keys, child, spec, orderDeterministically, dedupResolver))
     }
 
+    // Before any source is created, so that a lookup join that cannot be planned stops the query
+    // with no source to stop.
+    ExternalLookupJoinStartupCheck(sparkSessionForStream, planWithDedupKeys,
+      initialLatestOffsetSeq.flatMap(_._2.metadataOpt), triggerClock.getTimeMillis())
+
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     lazy val columnsAndFiltersOfSources = StreamingV2ScanPushDown.columnsAndFiltersOfSources(
       sparkSessionForStream, planWithDedupKeys, initialLatestOffsetSeq.flatMap(_._2.metadataOpt))
@@ -1320,31 +1325,8 @@ class MicroBatchExecution(
     }
     execCtx.newData = mutableNewData.toMap
     // Rewire the plan to use the new attributes that were returned by the source.
-    val newAttributePlan = newBatchesPlan.transformAllExpressionsWithPruning(
-      _.containsPattern(CURRENT_LIKE)) {
-      case ct: CurrentTimestamp =>
-        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
-        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
-        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          ct.dataType, Some("Dummy TimeZoneId"))
-      case ct: CurrentTimestampNanos =>
-        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
-        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
-        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
-        // nanos-within-micro.
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          ct.dataType, Some("Dummy TimeZoneId"))
-      case lt: LocalTimestamp =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          lt.dataType, lt.timeZoneId)
-      case lt: LocalTimestampNanos =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          lt.dataType, lt.timeZoneId)
-      case cd: CurrentDate =>
-        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
-          cd.dataType, cd.timeZoneId)
-    }
+    val newAttributePlan = MicroBatchExecution.withBatchTimestamp(
+      newBatchesPlan, execCtx.offsetSeqMetadata.batchTimestampMs)
 
     val triggerLogicalPlan = sink match {
       case _: Sink =>
@@ -1751,6 +1733,32 @@ class MicroBatchExecution(
 
 object MicroBatchExecution {
   val BATCH_ID_KEY = "streaming.sql.batchId"
+
+  /**
+   * `plan` with the current time and date as the batch timestamp, as each micro-batch reads them.
+   * A `CurrentBatchTimestamp` stays non-deterministic until the optimization of the micro-batch
+   * ends, when it becomes a literal.
+   */
+  private[sql] def withBatchTimestamp(plan: LogicalPlan, batchTimestampMs: Long): LogicalPlan =
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
+      case ct: CurrentTimestamp =>
+        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
+        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
+        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
+        CurrentBatchTimestamp(batchTimestampMs, ct.dataType, Some("Dummy TimeZoneId"))
+      case ct: CurrentTimestampNanos =>
+        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
+        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
+        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
+        // nanos-within-micro.
+        CurrentBatchTimestamp(batchTimestampMs, ct.dataType, Some("Dummy TimeZoneId"))
+      case lt: LocalTimestamp =>
+        CurrentBatchTimestamp(batchTimestampMs, lt.dataType, lt.timeZoneId)
+      case lt: LocalTimestampNanos =>
+        CurrentBatchTimestamp(batchTimestampMs, lt.dataType, lt.timeZoneId)
+      case cd: CurrentDate =>
+        CurrentBatchTimestamp(batchTimestampMs, cd.dataType, cd.timeZoneId)
+    }
 
   /**
    * Default sink name used when sink evolution is disabled or no explicit name is provided.

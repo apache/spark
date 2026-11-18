@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.control.NonFatal
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
 
 import org.apache.spark.SparkException
@@ -101,9 +103,9 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
-    val initEvaluator = path.foldable match {
-      case true if path.eval() != null =>
-        val cachedPath = path.eval().asInstanceOf[UTF8String]
+    val foldablePath = ExprUtils.tryEvalFoldable(path)
+    val initEvaluator = foldablePath match {
+      case Some(cachedPath) if cachedPath != null =>
         val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
         s"new $evaluatorClass($refCachedPath)"
       case _ => s"new $evaluatorClass()"
@@ -122,7 +124,7 @@ case class GetJsonObject(json: Expression, path: Expression)
          |  $evaluator.setJson(${jsonEval.value});
          |}
          |""".stripMargin
-    val setPath = if (!path.foldable) {
+    val setPath = if (foldablePath.isEmpty) {
       s"""
          |if (${pathEval.isNull}) {
          |  $evaluator.setPath(null);
@@ -1715,22 +1717,19 @@ case class JsonArray(
     // `RETURNING STRING`, which `DataTypeAstBuilder` maps to the companion. (A non-default
     // collation is not `==` to the companion anyway, since StringType.equals compares constraint.)
     val returningSQL = if (returning.eq(StringType)) "" else s" RETURNING ${returning.sql}"
+    // The non-default `NULL ON NULL` always renders. Canonical `sql` (`forceBuiltinOwnership`) also
+    // appends the default `ABSENT ON NULL` so the reparse stays on the direct grammar path instead
+    // of routing to a shadowing routine; the pretty form omits it to keep column names clean.
+    // Mirrors `JsonObjectExpr`.
     val nullSQL = nullBehavior match {
       case JsonConstructorNullBehavior.Null => " NULL ON NULL"
-      case JsonConstructorNullBehavior.Absent => ""
+      case JsonConstructorNullBehavior.Absent =>
+        if (forceBuiltinOwnership) " ABSENT ON NULL" else ""
     }
-    // Add `RETURNING STRING` so a clause-free render still means the built-in when reparsed (a
-    // clause-free call, even a nested one, could bind a shadow). A rendered FORMAT JSON, null, or
-    // RETURNING clause already does that.
-    val rendersFormatJson = rendered.exists {
-      case (v, isJson) => isJson && !directlyImplicit(v)
-    }
-    val ownershipClause =
-      if (forceBuiltinOwnership && !rendersFormatJson && nullSQL.isEmpty &&
-          returningSQL.isEmpty) {
-        " RETURNING STRING"
-      } else ""
-    s"JSON_ARRAY($valuesSQL$nullSQL$returningSQL$ownershipClause)"
+    // A zero-element array drops the leading space of its clauses (`JSON_ARRAY(ABSENT ON NULL)`).
+    val clausesSQL = s"$nullSQL$returningSQL"
+    val inner = if (values.isEmpty) clausesSQL.stripPrefix(" ") else s"$valuesSQL$clausesSQL"
+    s"JSON_ARRAY($inner)"
   }
 
   override protected def withNewChildrenInternal(
@@ -2023,9 +2022,15 @@ abstract class JsonPathExpressionBuilder extends ExpressionBuilder {
     val pathExpr = expressions(1)
     pathExpr.dataType match {
       case _: StringType if pathExpr.foldable =>
-        // TODO(SPARK-59244): wrap eval() so a foldable-but-throwing path re-throws as a clean
-        // invalid-argument analysis error naming `path`.
-        val pathValue = pathExpr.eval()
+        // A foldable path can still fail to evaluate (e.g. `element_at(array('$.a'), 0)`); report
+        // it as an invalid `path` argument, keeping the runtime error as the cause.
+        val pathValue =
+          try pathExpr.eval()
+          catch {
+            case NonFatal(e) =>
+              throw QueryCompilationErrors.cannotEvaluateParameterError(
+                funcName, "path", pathExpr, e)
+          }
         if (pathValue == null) {
           throw QueryCompilationErrors.unexpectedNullError("path", pathExpr)
         }

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTERNAL_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
@@ -82,9 +82,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
-    // creation-side subquery cannot be extracted into a Python evaluation operator.
-    if (aggregate.containsPattern(PYTHON_UDF)) {
+    // Runtime filters are introduced after subquery optimization, so Python and external UDFs in
+    // a new creation-side subquery cannot be extracted into their evaluation operators.
+    if (aggregate.containsAnyPattern(PYTHON_UDF, EXTERNAL_UDF)) {
       return filterApplicationSidePlan
     }
     // The subquery evaluates the creation side again, apart from the join. A non-deterministic
@@ -257,18 +257,24 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   private def isSimpleExpression(e: Expression): Boolean = {
     !e.containsAnyPattern(PYTHON_UDF, SCALA_UDF, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY,
-      REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
+      REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, EXTERNAL_UDF)
   }
 
-  private def isProbablyShuffleJoin(left: LogicalPlan,
-      right: LogicalPlan, hint: JoinHint): Boolean = {
-    !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
-      !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
+  // A broadcast hash join can build only a side that its join type allows, and a hint can rule it
+  // out. A join without equi-join keys is not a hash join, so its join type does not matter here.
+  private def isProbablyShuffleJoin(join: Join): Boolean = join match {
+    case ExtractEquiJoinKeys(_, _, _, _, _, _, _, _) =>
+      // A hinted broadcast outranks a merge hint, which outranks a size-based broadcast.
+      getBroadcastBuildSide(join, hintOnly = true, conf).isEmpty &&
+        (hintToSortMergeJoin(join.hint) || !canPlanAsBroadcastHashJoin(join, conf))
+    case Join(left, right, _, _, hint) =>
+      !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
+        !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
     plan.exists {
-      case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
+      case join: Join => isProbablyShuffleJoin(join)
       case _: Aggregate => true
       case _: Window => true
       case _ => false
@@ -302,6 +308,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   /**
    * Extracts the beneficial filter creation plan with check show below:
+   * - Both keys are binary stable. The Bloom filter hashes the bytes of the key, so it could drop
+   *   a row whose key is equal under a non-binary collation but has different bytes
    * - The filterApplicationSideKey can be pushed down through joins, aggregates and windows
    *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate, or its exact materialized row count
@@ -313,11 +321,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSide: LogicalPlan,
       filterApplicationSideKey: Expression,
       filterCreationSideKey: Expression): Option[FilterCreationSide] = {
-    if (findExpressionAndTrackLineageDown(
+    if (UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
+      UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType) &&
+      findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
-      val allowMaterializedCache = UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
-        UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType)
       def distinctCount(key: Expression, plan: LogicalPlan): Option[BigInt] = key match {
         case attribute: Attribute =>
           plan.stats.attributeStats.get(attribute).flatMap(_.distinctCount)
@@ -351,34 +359,26 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           currentDistinctCount
         }
       }
-      if (allowMaterializedCache) {
-        var sawMaterializedLeaf = false
-        val selectiveCreationSide = extractSelectiveFilterOverScan(
-          filterCreationSide,
-          filterCreationSideKey,
-          allowMaterializedCache = false,
-          applicationDistinctCount = None,
-          onMaterializedLeaf = { sawMaterializedLeaf = true })
-        selectiveCreationSide
-          .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
-          .orElse {
-            if (sawMaterializedLeaf) {
-              extractSelectiveFilterOverScan(
-                filterCreationSide,
-                filterCreationSideKey,
-                allowMaterializedCache = true,
-                applicationDistinctCount = applicationDistinctCount)
-            } else {
-              selectiveCreationSide
-            }
+      var sawMaterializedLeaf = false
+      val selectiveCreationSide = extractSelectiveFilterOverScan(
+        filterCreationSide,
+        filterCreationSideKey,
+        allowMaterializedCache = false,
+        applicationDistinctCount = None,
+        onMaterializedLeaf = { sawMaterializedLeaf = true })
+      selectiveCreationSide
+        .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
+        .orElse {
+          if (sawMaterializedLeaf) {
+            extractSelectiveFilterOverScan(
+              filterCreationSide,
+              filterCreationSideKey,
+              allowMaterializedCache = true,
+              applicationDistinctCount = applicationDistinctCount)
+          } else {
+            selectiveCreationSide
           }
-      } else {
-        extractSelectiveFilterOverScan(
-          filterCreationSide,
-          filterCreationSideKey,
-          allowMaterializedCache = false,
-          applicationDistinctCount = None)
-      }
+        }
     } else {
       None
     }
@@ -534,7 +534,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       }
     }
     plan transformUp {
-      case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
+      case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
         var newLeft = left
         var newRight = right
         leftKeys.lazyZip(rightKeys).foreach((l, r) => {
@@ -570,7 +570,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the left key yet
-            val hasShuffle = isProbablyShuffleJoin(left, right, hint)
+            val hasShuffle = isProbablyShuffleJoin(join)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
               !hasBloomFilter(newLeft, l)) {
               creationSide(left, l, right, r).foreach(c => newLeft = injectFilter(l, newLeft, c))

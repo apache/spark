@@ -23,11 +23,13 @@ import org.apache.spark.sql.connector.catalog.{Column, Identifier, Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * The class contains tests for the `ALTER TABLE .. RENAME COLUMN` command
  * to check V2 table catalogs.
  */
+@DataSourceV2Test
 class AlterTableRenameColumnSuite
   extends command.AlterTableRenameColumnSuiteBase with CommandSuiteBase {
 

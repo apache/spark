@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
+import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID, TASK_ATTEMPT_ID, TASK_STATE}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.util.PostStatusUpdateListener
 
@@ -102,9 +102,10 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
                         blockPusher.initiateBlockPush(
                           dataFile, writer.getPartitionLengths(), dep, mapIndex)
                       } else {
-                        logInfo(s"Task ${context.taskAttemptId()} was " +
-                          s"${if (context.isInterrupted()) "killed" else "failed"}, " +
-                          s"skipping shuffle block push for shuffle ${dep.shuffleId}")
+                        val taskState = if (context.isInterrupted()) "killed" else "failed"
+                        logInfo(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} was " +
+                          log"${MDC(TASK_STATE, taskState)}, skipping shuffle block push for " +
+                          log"shuffle ${MDC(SHUFFLE_ID, dep.shuffleId)}")
                       }
                     }
                   })

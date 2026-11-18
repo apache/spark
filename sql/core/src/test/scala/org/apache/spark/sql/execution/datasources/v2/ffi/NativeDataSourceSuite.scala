@@ -64,6 +64,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -72,6 +73,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * compiled with the C++ compiler of the machine by [[NativeDataSourceTestUtils]]. The tests that
  * load a library are skipped when there is no C++ compiler, or before Java 22.
  */
+@DataSourceV2Test
 class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   import NativeDataSourceTestUtils._
 

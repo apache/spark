@@ -34,6 +34,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
@@ -2925,6 +2926,36 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def nextDayOverflowError(days: Int, dayOfWeek: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the next $dayOfWeek after " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def lastDayOverflowError(days: Int): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"find the last day of the month of " +
+          s"${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def truncDateOverflowError(days: Int, unit: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"truncate ${toSQLValue(DateTimeUtils.daysToLocalDate(days), DateType)} " +
+          s"to $unit")),
+      context = Array.empty,
+      summary = "")
+  }
+
   def calendarIntervalArrowNanosOverflowError(
       interval: CalendarInterval): SparkArithmeticException = {
     new SparkArithmeticException(
@@ -3401,6 +3432,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "invalidValue" -> pos.toString))
   }
 
+  def variantConstructorSizeLimitError(sizeLimit: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "VARIANT_CONSTRUCTOR_SIZE_LIMIT",
+      messageParameters = Map("sizeLimit" -> s"${ByteUnit.BYTE.toMiB(sizeLimit)} MiB"))
+  }
+
   def variantSizeLimitError(sizeLimit: Int, functionName: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "VARIANT_SIZE_LIMIT",
@@ -3841,5 +3878,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
       messageParameters = Map("functionName" -> toSQLId("parse_sql")))
+  }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new SparkRuntimeException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLFreeFormId(table)) ++ messageParameters)
   }
 }

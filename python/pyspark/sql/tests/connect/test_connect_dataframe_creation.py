@@ -38,6 +38,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 if should_test_connect:
     import numpy as np
     import pandas as pd
+    import pyarrow as pa
 
     from pyspark.errors.exceptions.connect import ParseException
     from pyspark.sql import functions as SF
@@ -240,6 +241,35 @@ class SparkConnectDataFrameCreationTests(ReusedMixedTestCase, PandasOnSparkTestU
 
                 self.assertEqual(sdf.schema, cdf.schema)
                 self.assert_eq(sdf.toPandas(), cdf.toPandas())
+
+    def test_ignored_options(self):
+        data = [(1, "a"), (2, "b")]
+        with self.assertWarnsRegex(UserWarning, "'samplingRatio' is ignored"):
+            cdf = self.connect.createDataFrame(data, ["x", "y"], samplingRatio=0.5)
+        self.assertEqual(cdf.collect(), [Row(x=1, y="a"), Row(x=2, y="b")])
+
+        with self.assertWarnsRegex(UserWarning, "'verifySchema' is ignored"):
+            cdf = self.connect.createDataFrame(data, ["x", "y"], verifySchema=False)
+        self.assertEqual(cdf.collect(), [Row(x=1, y="a"), Row(x=2, y="b")])
+
+    def test_with_mismatched_column_names(self):
+        # Fewer names than columns: the remaining columns get default names.
+        pdf = pd.DataFrame({"a": [1, 2], "b": ["u", "v"], "c": [3.0, 4.0]})
+        for data in [pdf, pa.Table.from_pandas(pdf)]:
+            with self.subTest(data=type(data).__name__):
+                cdf = self.connect.createDataFrame(data, ["x"])
+                self.assertEqual(cdf.columns, ["x", "_2", "_3"])
+                self.assertEqual(cdf.collect(), [Row(1, "u", 3.0), Row(2, "v", 4.0)])
+
+        # A 1-dim ndarray has exactly one column.
+        with self.assertRaises(PySparkValueError) as pe:
+            self.connect.createDataFrame(np.array([1, 2, 3]), ["a", "b"])
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="AXIS_LENGTH_MISMATCH",
+            messageParameters={"expected_length": "2", "actual_length": "1"},
+        )
 
     def test_with_none_and_nan(self):
         # SPARK-41855: make createDataFrame support None and NaN
