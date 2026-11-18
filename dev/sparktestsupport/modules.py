@@ -736,9 +736,7 @@ pyspark_base = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core, pyspark_base],
-    source_file_regexes=[
-        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"
-    ],
+    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
         "pyspark.conf",
