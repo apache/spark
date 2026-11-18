@@ -63,6 +63,22 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  private def withDefaultFunction(
+      kind: String,
+      default: String,
+      dataType: String)(f: (String => DataFrame) => Unit): Unit = {
+    withUserDefinedFunction("captured_default_fn" -> false) {
+      val returns = if (kind == "scalar") dataType else s"TABLE(value $dataType)"
+      val body = if (kind == "scalar") "s" else "SELECT s AS value"
+      sql(s"CREATE FUNCTION captured_default_fn(a INT, s $dataType DEFAULT $default) " +
+        s"RETURNS $returns RETURN $body")
+      f { arguments =>
+        val call = s"captured_default_fn($arguments)"
+        sql(if (kind == "scalar") s"SELECT $call" else s"SELECT value FROM $call")
+      }
+    }
+  }
+
   for {
     kind <- Seq("view", "function")
     format <- Seq("json", "csv")
@@ -168,6 +184,109 @@ class JsonCsvOptionsSQLConfSuite extends QueryTest with SharedSparkSession {
             Seq(None, Some(true), Some(false)).foreach { readerValue =>
               withFallbackConf(readerValue) {
                 checkAnswer(sql(query), expected)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("named function defaults retain the caller's parameter-name matching") {
+    val key = SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key
+    val default = "to_json(named_struct('n', CAST(NULL AS INT)))"
+    for (savedCaseSensitive <- Seq(true, false)) {
+      withSQLConf(captureKey -> "true", key -> "false",
+          SQLConf.CASE_SENSITIVE.key -> savedCaseSensitive.toString) {
+        withDefaultFunction("scalar", default, "STRING") { query =>
+          withSQLConf(key -> "true",
+              SQLConf.CASE_SENSITIVE.key -> (!savedCaseSensitive).toString) {
+            checkAnswer(query("a => 1"), Row("""{"n":null}"""))
+            if (savedCaseSensitive) {
+              checkAnswer(query("A => 1"), Row("""{"n":null}"""))
+            } else {
+              val error = intercept[AnalysisException] { query("A => 1") }
+              assert(error.getCondition == "UNRECOGNIZED_PARAMETER_NAME")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for (kind <- Seq("scalar", "table"); format <- Seq("json", "csv");
+      creator <- Seq(true, false)) {
+    test(s"$kind function defaults capture to_$format settings for named calls: $creator") {
+      val (key, option) = if (format == "json") {
+        (SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key, "IgNoReNuLlFiElDs")
+      } else {
+        (SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV.key,
+          "TrEaTnUlLaSeMpTyStRiNg")
+      }
+      val input = "named_struct('id', 1, 'n', CAST(NULL AS INT))"
+      val default = s"""named_struct(
+                      |'configured', to_$format($input),
+                      |'enabled', to_$format($input, map('$option', 'true')),
+                      |'disabled', to_$format($input, map('$option', 'false')))""".stripMargin
+      val dataType = "STRUCT<configured: STRING, enabled: STRING, disabled: STRING>"
+      def rendered(enabled: Boolean): String = if (format == "json") {
+        if (enabled) """{"id":1}""" else """{"id":1,"n":null}"""
+      } else {
+        if (enabled) "1,\"\"" else "1,"
+      }
+      def value(enabled: Boolean): Row =
+        Row(rendered(enabled), rendered(true), rendered(false))
+      withSQLConf(captureKey -> "true", key -> creator.toString) {
+        withDefaultFunction(kind, default, dataType) { query =>
+          for (capture <- Seq(true, false); reader <- Seq(true, false)) {
+            withSQLConf(captureKey -> capture.toString, key -> reader.toString) {
+              val expected = value(if (capture) creator else reader)
+              checkAnswer(query("1"), Row(expected))
+              checkAnswer(query("a => 1"), Row(expected))
+              // Supplied arguments belong to the caller, even when reordered by name.
+              checkAnswer(query(s"s => $default, a => 1"), Row(value(reader)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for (kind <- Seq("scalar", "table"); creator <- Seq(None, Some(true), Some(false))) {
+    test(s"$kind function defaults capture JSON fallback for named calls: $creator") {
+      val input = """'{"d":"1","ts":"2024-01-02"}'"""
+      val parsedType = "STRUCT<d: DATE, ts: TIMESTAMP>"
+      def parsed(explicit: Option[Boolean]): String = {
+        val option = explicit.map(value => s", 'EnAbLeDaTeTiMePaRsInGfAlLbAcK', '$value'")
+          .getOrElse("")
+        s"from_json($input, '$parsedType', " +
+          s"map('timestampFormat', 'yyyy/MM/dd HH:mm:ss'$option))"
+      }
+      val default = s"named_struct('configured', ${parsed(None)}, " +
+        s"'enabled', ${parsed(Some(true))}, 'disabled', ${parsed(Some(false))})"
+      val dataType =
+        s"STRUCT<configured: $parsedType, enabled: $parsedType, disabled: $parsedType>"
+      def result(fallback: Option[Boolean]): Row = {
+        val date = if (fallback.contains(false)) null else Date.valueOf("1970-01-02")
+        val timestamp = if (fallback.contains(true)) {
+          Timestamp.from(Instant.parse("2024-01-02T00:00:00Z"))
+        } else null
+        Row(date, timestamp)
+      }
+      def value(fallback: Option[Boolean]): Row =
+        Row(result(fallback), result(Some(true)), result(Some(false)))
+      withSQLConf(captureKey -> "true", SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withFallbackConf(creator) {
+          withDefaultFunction(kind, default, dataType) { query =>
+            for (capture <- Seq(true, false); reader <- Seq(None, Some(true), Some(false))) {
+              withSQLConf(captureKey -> capture.toString) {
+                withFallbackConf(reader) {
+                  val expected = value(if (capture) creator else reader)
+                  checkAnswer(query("1"), Row(expected))
+                  checkAnswer(query("a => 1"), Row(expected))
+                  checkAnswer(query(s"s => $default, a => 1"), Row(value(reader)))
+                }
               }
             }
           }

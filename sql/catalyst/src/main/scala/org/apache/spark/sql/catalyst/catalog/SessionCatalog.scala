@@ -1845,10 +1845,10 @@ class SessionCatalog(
           messageParameters = Map(
             "funcName" -> function.name.unquotedString))
       }
-      val args = rearrangeArguments(function.inputParam, input, function.name.toString)
       val returnType = function.getScalarFuncReturnType
+      // Fill omitted defaults only when the function's saved configuration is installed.
       SQLFunctionExpression(
-        function.name.unquotedString, function, args, Some(returnType))
+        function.name.unquotedString, function, input, Some(returnType))
     }
   }
 
@@ -1898,6 +1898,7 @@ class SessionCatalog(
       "Function '" + function.name + "' is a table function. " +
       "Use makeSQLTableFunctionPlan() instead of makeSQLFunctionPlan().")
     val funcName = function.name.funcName
+    val argumentResolver = SQLConf.get.resolver
 
     // Use captured SQL configs when parsing a SQL function.
     val conf = Analyzer.buildSQLFunctionConf(
@@ -1906,6 +1907,8 @@ class SessionCatalog(
       alwaysSetAnsiValue = true)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
+      val orderedInput = rearrangeArguments(
+        inputParam, input, function.name.toString, argumentResolver)
       val returnType = function.getScalarFuncReturnType
       val (expression, query) = function.getExpressionAndQuery(parser, isTableFunc = false)
       assert(expression.isDefined || query.isDefined,
@@ -1915,13 +1918,13 @@ class SessionCatalog(
 
       // Check function arguments
       val paramSize = inputParam.map(_.size).getOrElse(0)
-      if (input.size > paramSize) {
+      if (orderedInput.size > paramSize) {
         throw QueryCompilationErrors.wrongNumArgsError(
-          name, paramSize.toString, input.size)
+          name, paramSize.toString, orderedInput.size)
       }
 
       // Check if any input contains a lambda variable
-      val hasLambdaVar = input.exists { expr =>
+      val hasLambdaVar = orderedInput.exists { expr =>
         expr.find {
           case _: NamedLambdaVariable => true
           case _: UnresolvedNamedLambdaVariable => true
@@ -1940,7 +1943,7 @@ class SessionCatalog(
         // function name as a qualifier. E.G.:
         // `create function foo(a int) returns int return foo.a`
         val qualifier = Seq(funcName)
-        val paddedInput = padArgumentsWithDefaults(input, param, name, parser)
+        val paddedInput = padArgumentsWithDefaults(orderedInput, param, name, parser)
 
         val funcInputMetadata = new MetadataBuilder()
           .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)
@@ -2307,7 +2310,8 @@ class SessionCatalog(
   private def rearrangeArguments(
       inputParams: Option[StructType],
       expressions: Seq[Expression],
-      functionName: String) : Seq[Expression] = {
+      functionName: String,
+      resolver: Resolver = SQLConf.get.resolver): Seq[Expression] = {
     val firstNamedArgumentExpressionIdx =
       expressions.indexWhere(_.isInstanceOf[NamedArgumentExpression])
     if (firstNamedArgumentExpressionIdx == -1) {
@@ -2330,7 +2334,7 @@ class SessionCatalog(
       }
 
     NamedParametersSupport.defaultRearrange(
-      FunctionSignature(paramNames), expressions, functionName, SQLConf.get.resolver)
+      FunctionSignature(paramNames), expressions, functionName, resolver)
   }
 
   /**
