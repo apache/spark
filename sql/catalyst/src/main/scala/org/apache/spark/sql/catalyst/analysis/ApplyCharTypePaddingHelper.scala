@@ -25,13 +25,14 @@ import org.apache.spark.sql.catalyst.expressions.{
   In,
   Literal,
   NamedExpression,
+  Or,
   OuterReference
 }
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
-import org.apache.spark.sql.types.{CharType, Metadata, StringType}
+import org.apache.spark.sql.types.{CharType, DataType, Metadata, StringType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -98,6 +99,23 @@ object ApplyCharTypePaddingHelper {
           }
           .getOrElse(b)
 
+      // `value IN (e1, e2, ...)` returns what `value = e1 OR value = e2 OR ...` returns, and each
+      // of these comparisons pads its sides on its own. The two `In` cases below pad the value
+      // and all the elements to a common length, which is only right if all the elements are
+      // padded the same way. If the list mixes elements that are padded in different ways, e.g. a
+      // CHAR column and a STRING column that is not padded at all, split the IN into one IN per
+      // group of elements that are padded the same way, so that each element is compared with
+      // the value padded for it.
+      case i @ InWithMixedPadding(groups) =>
+        val newIns = groups.map { group =>
+          singleNodePaddingForStringComparison(i.copy(list = group), padCharCol)
+        }
+        // Keep the IN as it is if no element is padded.
+        val padded = newIns.zip(groups).exists { case (newIn, group) =>
+          !newIn.fastEquals(i.copy(list = group))
+        }
+        if (padded) newIns.reduceLeft[Expression](Or(_, _)) else i
+
       case i @ In(e @ AttrOrOuterRef(attr), list)
           if i.resolved && attr.dataType.isInstanceOf[StringType] && list.forall(_.foldable) =>
         CharVarcharUtils
@@ -160,6 +178,55 @@ object ApplyCharTypePaddingHelper {
 
       case other => other
     }
+
+  // How an element of `value IN (list)` is padded in its comparison with the value.
+  private sealed trait InElementPadding
+  private case object NotPadded extends InElementPadding
+  // A string literal compared with a CHAR value, padded like in an IN list of literals.
+  private case object PaddedLiteral extends InElementPadding
+  // A column whose type has CHAR, padded together with the columns of the same type, regardless
+  // of the CHAR and VARCHAR lengths.
+  private case class PaddedColumn(typeWithoutLengths: DataType) extends InElementPadding
+
+  private def inElementPadding(value: Attribute, element: Expression): InElementPadding = {
+    val valueRawType = CharVarcharUtils.getRawType(value.metadata)
+    element match {
+      case e if e.foldable =>
+        if (valueRawType.exists(_.isInstanceOf[CharType])) PaddedLiteral else NotPadded
+      case a: Attribute =>
+        CharVarcharUtils.getRawType(a.metadata)
+          .filter(_.existsRecursively(_.isInstanceOf[CharType]))
+          .map { rawType =>
+            PaddedColumn(rawType.transformRecursively {
+              case _: CharType => CharType(0)
+              case _: VarcharType => VarcharType(0)
+            })
+          }
+          .getOrElse(NotPadded)
+      case _ => NotPadded
+    }
+  }
+
+  /**
+   * Matches `value IN (list)` whose elements are padded in different ways in their comparisons
+   * with the value, and returns the groups of elements that are padded the same way.
+   */
+  private object InWithMixedPadding {
+    def unapply(in: In): Option[Seq[Seq[Expression]]] = in.value match {
+      case AttrOrOuterRef(attr)
+          if in.resolved && CharVarcharUtils.getRawType(attr.metadata).isDefined =>
+        val paddings = in.list.map(inElementPadding(attr, _))
+        val distinctPaddings = paddings.distinct
+        if (distinctPaddings.length > 1) {
+          Some(distinctPaddings.map { padding =>
+            in.list.zip(paddings).collect { case (element, p) if p == padding => element }
+          })
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
 
   private def padAttrLitCmp(
       expr: Expression,

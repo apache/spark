@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -65,7 +65,17 @@ class PlanRewriter(
         case subqueryExpression: SubqueryExpression =>
           val rewrittenSubqueryPlan = doRewriteWithSubqueries(subqueryExpression.plan)
 
-          subqueryExpression.withNewPlan(rewrittenSubqueryPlan)
+          if (rewrittenSubqueryPlan.fastEquals(subqueryExpression.plan)) {
+            subqueryExpression
+          } else {
+            // A post-resolution rule can change the outer references of the subquery plan, e.g.
+            // `ApplyCharTypePadding` can reference an outer attribute more than once when it pads
+            // it. The fixed-point Analyzer collects the outer references after running these
+            // rules on the subquery plan, so collect them again from the rewritten plan.
+            subqueryExpression
+              .withNewPlan(rewrittenSubqueryPlan)
+              .withNewOuterAttrs(SubExprUtils.getOuterReferences(rewrittenSubqueryPlan))
+          }
       }
 
     rewrite(planWithRewrittenSubqueries)

@@ -619,6 +619,100 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("char type comparison: IN list mixing CHAR columns with other elements") {
+    // `c IN (e1, e2)` must return what `c = e1 OR c = e2` returns, where each equality pads its
+    // own sides: c is padded against a CHAR column of another length and a string literal, but
+    // not against a STRING or VARCHAR column.
+    val lists = Seq(
+      Seq("c5", "s"), Seq("s", "c5"), Seq("c5", "v"), Seq("c5", "'x'"), Seq("s", "'a'"),
+      Seq("c5", "s", "v", "'x'", "null"), Seq("c5b", "s"), Seq("c5b", "v"), Seq("c5b", "s", "'b'"),
+      Seq("s", "v"))
+
+    def checkInAsOr(table: String, value: String): Unit = {
+      val df = spark.table(table)
+      val ins = lists.flatMap { list =>
+        val elems = list.mkString(", ")
+        Seq(s"$value IN ($elems)", s"$value NOT IN ($elems)")
+      }
+      val ors = lists.flatMap { list =>
+        val or = list.map(e => s"$value = $e").mkString(" OR ")
+        Seq(s"$or", s"NOT ($or)")
+      }
+      checkAnswer(df.selectExpr(ins: _*), df.selectExpr(ors: _*))
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(2), c5 CHAR(5), c5b CHAR(5), s STRING, v VARCHAR(5)) " +
+        s"USING $format")
+      sql("INSERT INTO t VALUES ('a', 'a', 'b', 'a', 'a')")
+      testConditions(spark.table("t"), Seq(
+        ("c = c5", true),
+        ("c = s", false),
+        ("c = v", false),
+        ("c IN (c5, s)", true),
+        ("c IN (s, c5)", true),
+        ("c NOT IN (c5, s)", false),
+        ("c IN (c5, v)", true),
+        ("c IN (c5, 'x')", true),
+        ("c IN (s, 'a')", true),
+        ("c IN (c5, s, v, 'x', null)", true),
+        // s and v hold 'a' without the padding of c, so they must not be padded to match it.
+        ("c IN (c5b, s)", false),
+        ("c IN (c5b, v)", false),
+        ("c IN (c5b, s, 'b')", false),
+        ("c IN (s, v)", false)))
+      checkInAsOr("t", "c")
+    }
+
+    // Without read-side padding the CHAR columns are padded in the predicate instead.
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2), c5 CHAR(5), c5b CHAR(5), s STRING, v VARCHAR(5)) " +
+          s"USING $format")
+        sql("INSERT INTO t VALUES ('a', 'a', 'b', 'a', 'a')")
+        testConditions(spark.table("t"), Seq(
+          ("c IN (c5, s)", true),
+          ("c IN (c5, v)", true),
+          ("c IN (c5, 'x')", true),
+          ("c IN (s, 'a')", true)))
+        checkInAsOr("t", "c")
+      }
+    }
+
+    // The value is an OuterReference in a correlated subquery.
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(c CHAR(2)) USING $format")
+      sql(s"CREATE TABLE t2(c5 CHAR(5), c5b CHAR(5), s STRING) USING $format")
+      sql("INSERT INTO t1 VALUES ('a')")
+      sql("INSERT INTO t2 VALUES ('a', 'b', 'a')")
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (t2.c5, t2.s))"),
+        Row("a "))
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (t2.c5b, t2.s))"),
+        Nil)
+    }
+
+    // CHAR fields nested in structs.
+    withTable("t") {
+      sql(s"CREATE TABLE t(c STRUCT<f: CHAR(2)>, c5 STRUCT<f: CHAR(5)>, s STRUCT<f: STRING>) " +
+        s"USING $format")
+      sql("INSERT INTO t VALUES (struct('a'), struct('a'), struct('a'))")
+      testConditions(spark.table("t"), Seq(
+        ("c = c5", true),
+        ("c = s", false),
+        ("c IN (c5, s)", true),
+        ("c IN (s, c5)", true),
+        ("c IN (s)", false)))
+      // Padding a struct that is an outer reference references it more than once.
+      Seq("t.c = t2.c5", "t.c IN (t2.c5, t2.s)").foreach { cond =>
+        checkAnswer(
+          sql(s"SELECT 1 FROM t WHERE EXISTS (SELECT 1 FROM t AS t2 WHERE $cond)"),
+          Row(1))
+      }
+    }
+  }
+
   test("char type comparison: partition pruning") {
     withTable("t") {
       sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 VARCHAR(5)) USING $format PARTITIONED BY (c1, c2)")
