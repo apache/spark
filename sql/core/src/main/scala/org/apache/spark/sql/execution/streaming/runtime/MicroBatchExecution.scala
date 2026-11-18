@@ -41,7 +41,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
@@ -760,7 +760,7 @@ class MicroBatchExecution(
   private def executeOneBatch(
       execCtx: MicroBatchExecutionContext,
       sparkSessionForStream: SparkSession,
-      noDataBatchesEnabled: Boolean): Boolean = {
+      noDataBatchesEnabled: Boolean): Boolean = try {
     assert(execCtx != null)
 
     if (isActive) {
@@ -840,6 +840,15 @@ class MicroBatchExecution(
     }
     execCtx.updateStatusMessage("Waiting for next trigger")
     isActive
+  } catch {
+    case error: Throwable =>
+      // Preparation can open a transaction before offsets are logged. Keep its owner available
+      // for failures and interruption anywhere between preparation and physical execution.
+      Utils.tryWithSafeFinally {
+        throw error
+      } {
+        execCtx.preparedBatch.foreach(_.execution.abortTransaction())
+      }
   }
 
   /**
@@ -1235,7 +1244,7 @@ class MicroBatchExecution(
    */
   private def prepareBatch(
       execCtx: MicroBatchExecutionContext,
-      sparkSessionToRunBatch: SparkSession): PreparedMicroBatchPlan = {
+      sparkSessionToRunBatch: SparkSession): PreparedMicroBatch = {
     logDebug(s"Preparing batch ${execCtx.batchId}")
 
     // Request unprocessed data from all sources.
@@ -1381,42 +1390,11 @@ class MicroBatchExecution(
     loggingThreadContext.put(LogKeys.BATCH_ID.name, execCtx.batchId.toString)
 
     val prepared = execCtx.reportTimeTaken("queryPlanning") {
-      // This phase is logical: state schemas, source commits and sink execution still follow WAL.
-      val execution = new QueryExecution(sparkSessionToRunBatch, triggerLogicalPlan)
-      val original = execution.analyzed
-      val legacy = sparkSessionToRunBatch.sessionState.conf
-        .getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
-      val normalized = KllCheckpointPreparation(execution.normalized, original, legacy)
-      val needsKllReader = OffsetSeqLog.requiresKllReader(execCtx.offsetSeqMetadata) ||
-        (!legacy && (analyzedPlan.containsPattern(KLL_AGGREGATE) ||
-          original.containsPattern(KLL_AGGREGATE) || normalized.containsPattern(KLL_AGGREGATE)))
-      if (needsKllReader) {
-        // A replay cannot strengthen an already published offset file. Fail before physical
-        // state effects rather than silently running corrected KLL behind an old reader header.
-        if (execCtx.isCurrentBatchConstructed && offsetLog.get(execCtx.batchId).exists(
-            entry => !entry.metadataOpt.exists(OffsetSeqLog.requiresKllReader))) {
-          throw new IllegalStateException(
-            s"Offset log for batch ${execCtx.batchId} lacks the corrected KLL reader requirement")
-        }
-        execCtx.offsetSeqMetadata = OffsetSeqLog.withKllReaderBoundary(execCtx.offsetSeqMetadata)
-      }
-      PreparedMicroBatchPlan(original, normalized, mutableNewData.toMap)
-    }
-    execCtx.preparedLogicalPlan = Some(prepared)
-    prepared
-  }
-
-  private def runBatch(
-      execCtx: MicroBatchExecutionContext,
-      sparkSessionToRunBatch: SparkSession): Unit = {
-    logDebug(s"Running batch ${execCtx.batchId}")
-    val prepared = execCtx.preparedLogicalPlan.getOrElse(
-      prepareBatch(execCtx, sparkSessionToRunBatch))
-    execCtx.newData = prepared.newData
-    execCtx.reportTimeTaken("queryPlanning") {
-      execCtx.executionPlan = new IncrementalExecution(
+      // Only force logical preparation here. Normal micro-batches log offsets before physical
+      // planning and execution; Real-Time Mode logs them after sink execution and state commit.
+      val execution = new IncrementalExecution(
         sparkSessionToRunBatch,
-        prepared.logical,
+        triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
         id,
@@ -1430,8 +1408,41 @@ class MicroBatchExecution(
         stateSchemaMetadatas,
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type],
         isRealTimeMode = trigger.isInstanceOf[RealTimeTrigger],
-        pushedFilterRewrites = pushedFilterRewrites,
-        preparedNormalizedPlan = Some(prepared.normalized))
+        pushedFilterRewrites = pushedFilterRewrites)
+      val prepared = PreparedMicroBatch(execution, mutableNewData.toMap)
+      execCtx.preparedBatch = Some(prepared)
+      val original = execution.analyzed
+      val normalized = execution.normalized
+      val legacy = sparkSessionToRunBatch.sessionState.conf
+        .getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING)
+      val needsKllReader = OffsetSeqLog.requiresKllReader(execCtx.offsetSeqMetadata) ||
+        (!legacy && (analyzedPlan.containsPattern(KLL_AGGREGATE) ||
+          original.containsPattern(KLL_AGGREGATE) || normalized.containsPattern(KLL_AGGREGATE)))
+      if (needsKllReader) {
+        // A replay cannot strengthen an already published offset file. Fail before physical
+        // state effects rather than silently running corrected KLL behind an old reader header.
+        if (execCtx.isCurrentBatchConstructed && offsetLog.get(execCtx.batchId).exists(
+            entry => !entry.metadataOpt.exists(OffsetSeqLog.requiresKllReader))) {
+          throw new IllegalStateException(
+            s"Offset log for batch ${execCtx.batchId} lacks the corrected KLL reader requirement")
+        }
+        execCtx.offsetSeqMetadata = OffsetSeqLog.withKllReaderBoundary(execCtx.offsetSeqMetadata)
+      }
+      prepared
+    }
+    prepared
+  }
+
+  private def runBatch(
+      execCtx: MicroBatchExecutionContext,
+      sparkSessionToRunBatch: SparkSession): Unit = {
+    logDebug(s"Running batch ${execCtx.batchId}")
+    val prepared = execCtx.preparedBatch.getOrElse(
+      prepareBatch(execCtx, sparkSessionToRunBatch))
+    execCtx.newData = prepared.newData
+    execCtx.reportTimeTaken("queryPlanning") {
+      // Reuse the same analysis, normalized identities and transaction owner as preparation.
+      execCtx.executionPlan = prepared.execution
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
     // Set up StateStore commit tracking before execution begins

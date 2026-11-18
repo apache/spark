@@ -19,9 +19,13 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{Aborted, CatalogV2Util, Committed, Identifier, InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SharedTablesInMemoryRowLevelOperationTableCatalog, TableInfo}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager, FailureInjectionFileSystem}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.DataSourceV2Test
@@ -53,6 +57,52 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
     val session = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
     session.sessionState.catalogManager.catalog("cat")
       .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
+  }
+
+  for (stopBeforeWal <- Seq(false, true); legacy <- Seq(false, true)) {
+    test(s"prepared transaction is closed before execution: stop=$stopBeforeWal legacy=$legacy") {
+      withSQLConf(
+          SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> legacy.toString,
+          SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+            classOf[FailureInjectionCheckpointFileManager].getName) {
+        createSimpleTable("value INT")
+        withTempDir { checkpoint =>
+          val path = checkpoint.getCanonicalPath
+          val injection = FailureInjectionFileSystem.registerTempPath(path)
+          if (stopBeforeWal) injection.delayCreateAtomicRegex = Seq(".*/offsets/0")
+          else injection.failureCreateAtomicRegex = Seq(".*/offsets/0")
+          val input = MemoryStream[Int]
+          val query = input.toDF().writeStream.option("checkpointLocation", path)
+            .toTable(tableNameAsString)
+          try {
+            input.addData(1, 2, 3)
+            if (stopBeforeWal) {
+              eventually(timeout(30.seconds)) {
+                assert(FailureInjectionFileSystem.createAtomicDelaySemaphore.hasQueuedThreads)
+                assert(streamCatalog(query).transaction != null)
+              }
+              query.stop()
+              assert(query.exception.isEmpty)
+            } else {
+              val error = intercept[Exception] { query.processAllAvailable() }
+              assert(error.getMessage.contains("Fake File System Create Atomic Failure"))
+              query.stop()
+            }
+            val txn = streamCatalog(query).lastTransaction
+            assert(txn != null)
+            assert(txn.currentState === Aborted)
+            assert(txn.isClosed)
+            assert(table.version() === "0")
+            assert(catalog.observedTransactions.isEmpty)
+            checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq.empty)
+          } finally {
+            query.stop()
+            FailureInjectionFileSystem.removePathFromTempToInjectionState(path)
+          }
+        }
+      }
+    }
   }
 
   test("streaming write commits a transaction") {
@@ -92,43 +142,50 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
     }
   }
 
-  test("each micro-batch is an independent transaction") {
-    createSimpleTable("value INT")
+  for (legacy <- Seq(false, true)) {
+    test(s"each micro-batch is an independent transaction: legacy=$legacy") {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> legacy.toString,
+          SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> legacy.toString) {
+        createSimpleTable("value INT")
 
-    withTempDir { checkpointDir =>
-      val inputData = MemoryStream[Int]
+        withTempDir { checkpointDir =>
+          val inputData = MemoryStream[Int]
 
-      val query = inputData.toDF()
-        .writeStream
-        .option("checkpointLocation", checkpointDir.getAbsolutePath)
-        .toTable(tableNameAsString)
+          val query = inputData.toDF()
+            .writeStream
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .toTable(tableNameAsString)
 
-      assert(table.version() === "0")
+          assert(table.version() === "0")
 
-      inputData.addData(1, 2, 3)
-      query.processAllAvailable()
+          inputData.addData(1, 2, 3)
+          query.processAllAvailable()
 
-      inputData.addData(4, 5, 6)
-      query.processAllAvailable()
+          inputData.addData(4, 5, 6)
+          query.processAllAvailable()
 
-      query.stop()
+          query.stop()
 
-      val sc = streamCatalog(query)
-      assert(sc.observedTransactions.size === 2)
-      assert(sc.observedTransactions.forall(_.currentState === Committed))
-      // Pure streaming append: write target is not read in any micro-batch.
-      assert(sc.observedTransactions.forall { t =>
-        indexByName(t.catalog.txnTables.values.toSeq)(tableNameAsString).scanEvents.isEmpty
-      })
-      // Each committed micro-batch increments the delegate version exactly once.
-      assert(table.version() === "2")
+          val sc = streamCatalog(query)
+          assert(sc.observedTransactions.size === 2)
+          assert(sc.observedTransactions.forall(_.currentState === Committed))
+          assert(sc.observedTransactions.forall(_.isClosed))
+          assert(sc.observedTransactions.head ne sc.observedTransactions.last)
+          // Pure streaming append: write target is not read in any micro-batch.
+          assert(sc.observedTransactions.forall { t =>
+            indexByName(t.catalog.txnTables.values.toSeq)(tableNameAsString).scanEvents.isEmpty
+          })
+          // Each committed micro-batch increments the delegate version exactly once.
+          assert(table.version() === "2")
 
-      // Transaction must be scoped to the streaming session; main session catalog is untouched.
-      assert(catalog.observedTransactions.isEmpty)
+          // Transaction must be scoped to the streaming session; main session catalog is untouched.
+          assert(catalog.observedTransactions.isEmpty)
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(Row(1), Row(2), Row(3), Row(4), Row(5), Row(6)))
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1), Row(2), Row(3), Row(4), Row(5), Row(6)))
+        }
+      }
     }
   }
 

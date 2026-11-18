@@ -697,6 +697,9 @@ class QueryExecution(
     case None => block
   }
 
+  /** Releases a prepared streaming write's transaction if execution cannot proceed. */
+  private[sql] def abortTransaction(): Unit = transactionOpt.foreach(TransactionUtils.abort)
+
 
   /** Attaches a transaction to the given SparkPlan to the transactional execution nodes. */
   private def attachTransaction(plan: SparkPlan): SparkPlan = transactionOpt match {

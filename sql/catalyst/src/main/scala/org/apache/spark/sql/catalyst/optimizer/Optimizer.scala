@@ -2806,6 +2806,25 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     private val independent = new ValidateSubqueryExpression.KllSubqueryIndependence
     private val deterministic = new ExprUtils.SubqueryExtractionDeterminism
     private val retained = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
+    private val candidates = new java.util.IdentityHashMap[LogicalPlan, java.lang.Boolean]
+
+    // Check ordinary and hidden startup plans for KLL without forcing the full independence
+    // proof for a retained-only filter.
+    private def candidate(plan: LogicalPlan): Boolean = candidates.computeIfAbsent(plan, current =>
+      current.containsPattern(KLL_AGGREGATE) || current.exists {
+        case opaque: OpaqueLogicalPlan => candidate(opaque.hiddenPlan)
+        case node => node.expressions.exists(expression =>
+          expression.containsPattern(PLAN_EXPRESSION) && expression.exists {
+            case query: SubqueryExpression => candidate(query.plan)
+            case _ => false
+          })
+      }).booleanValue()
+
+    def mayContainKll(expression: NamedExpression): Boolean =
+      expression.containsPattern(KLL_AGGREGATE) || expression.exists {
+        case query: SubqueryExpression => candidate(query.plan)
+        case _ => false
+      }
 
     def apply(expression: NamedExpression): Boolean = expression match {
       case alias: Alias if alias.child.containsAnyPattern(
@@ -2842,47 +2861,51 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case f @ Filter(condition, project @ Project(fields, grandChild))
         if fields.exists(!_.deterministic) &&
           fields.forall(e => e.deterministic || e.containsAnyPattern(
-            SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) &&
-          canPushThroughCondition(grandChild, condition) =>
-      lazy val aliases = AttributeMap(getAliasMap(project).filter(_._2.deterministic))
-      val classified = splitConjunctivePredicates(condition).map { predicate =>
-        val direct = predicate.references.subsetOf(grandChild.outputSet)
-        val independent = predicate.deterministic && (direct ||
-          predicate.references.forall { attribute =>
-            grandChild.outputSet.contains(attribute) || aliases.get(attribute).exists {
-              alias => alias.child.references.subsetOf(grandChild.outputSet)
-            }
-          })
-        val throwable = predicate.throwable || (independent && !direct &&
-          predicate.references.exists { attribute =>
-            aliases.get(attribute).exists(_.child.throwable)
-          })
-        (predicate, throwable, independent, direct)
-      }
-      // Include referenced alias throwability without copying predicates just to classify them.
-      val (pushable, retained) = splitPushable(classified)(
-        canPush = _._3, throwable = _._2)
-      val push = pushable.map(_._1)
-      val stay = retained.map(_._1)
+            SCALAR_SUBQUERY, EXISTS_SUBQUERY, IN_SUBQUERY)) =>
       lazy val bindings = new AggregateScalarBindings
-      if (push.isEmpty || !fields.forall(e => e.deterministic || bindings(e))) f
-      else {
-        // Let the ordinary deterministic Project path own alias substitution and expensive
-        // expression splitting. Avoid translating each predicate once here and once again below.
-        val filtered = if (pushable.forall(_._4)) {
-          project.copy(child = Filter(push.reduceLeft(And), grandChild))
-        } else {
-          val deterministicAliases = fields.collect { case alias: Alias if alias.deterministic =>
-            alias
-          }
-          val lower = Project(grandChild.output ++ deterministicAliases, grandChild)
-          val outputs = fields.map {
-            case alias: Alias if alias.deterministic => alias.toAttribute
-            case other => other
-          }
-          Project(outputs, Filter(push.reduceLeft(And), lower))
+      if (!fields.forall(e => e.deterministic || bindings.mayContainKll(e)) ||
+          !canPushThroughCondition(grandChild, condition)) {
+        f
+      } else {
+        lazy val aliases = AttributeMap(getAliasMap(project).filter(_._2.deterministic))
+        val classified = splitConjunctivePredicates(condition).map { predicate =>
+          val direct = predicate.references.subsetOf(grandChild.outputSet)
+          val independent = predicate.deterministic && (direct ||
+            predicate.references.forall { attribute =>
+              grandChild.outputSet.contains(attribute) || aliases.get(attribute).exists {
+                alias => alias.child.references.subsetOf(grandChild.outputSet)
+              }
+            })
+          val throwable = predicate.throwable || (independent && !direct &&
+            predicate.references.exists { attribute =>
+              aliases.get(attribute).exists(_.child.throwable)
+            })
+          (predicate, throwable, independent, direct)
         }
-        stay.reduceLeftOption(And).map(Filter(_, filtered)).getOrElse(filtered)
+        // Include referenced alias throwability without copying predicates just to classify them.
+        val (pushable, retained) = splitPushable(classified)(
+          canPush = _._3, throwable = _._2)
+        val push = pushable.map(_._1)
+        val stay = retained.map(_._1)
+        if (push.isEmpty || !fields.forall(e => e.deterministic || bindings(e))) f
+        else {
+          // Let the ordinary deterministic Project path own alias substitution and expensive
+          // expression splitting. Avoid translating each predicate once here and once again below.
+          val filtered = if (pushable.forall(_._4)) {
+            project.copy(child = Filter(push.reduceLeft(And), grandChild))
+          } else {
+            val deterministicAliases = fields.collect { case alias: Alias if alias.deterministic =>
+              alias
+            }
+            val lower = Project(grandChild.output ++ deterministicAliases, grandChild)
+            val outputs = fields.map {
+              case alias: Alias if alias.deterministic => alias.toAttribute
+              case other => other
+            }
+            Project(outputs, Filter(push.reduceLeft(And), lower))
+          }
+          stay.reduceLeftOption(And).map(Filter(_, filtered)).getOrElse(filtered)
+        }
       }
 
     // Projections are a special case because the filter _may_ contain references to fields added in

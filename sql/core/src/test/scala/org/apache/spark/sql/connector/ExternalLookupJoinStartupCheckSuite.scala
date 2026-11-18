@@ -209,6 +209,54 @@ class ExternalLookupJoinStartupCheckSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  for (legacy <- Seq(false, true)) {
+    test(s"fresh KLL lookup startup reconciles opposite analysis mode: legacy=$legacy") {
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> (!legacy).toString,
+          SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> legacy.toString) {
+        withTempDir { checkpoint =>
+          withTempView("fresh_kll_stream", "fresh_kll_lookup") {
+            val input = MemoryStream[Int]
+            input.toDF().toDF("id").createOrReplaceTempView("fresh_kll_stream")
+            lookupOnly.createOrReplaceTempView("fresh_kll_lookup")
+            val scalar = """(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id))
+                |FROM VALUES (0L), (1L), (2L) AS t(id))""".stripMargin
+            val query = sql(s"""SELECT lk.department FROM fresh_kll_stream s
+                |JOIN fresh_kll_lookup lk ON true WHERE IF($scalar <=> $scalar, s.id = lk.id, false)
+                |""".stripMargin)
+            query.queryExecution.analyzed
+            val rows = new ConcurrentLinkedQueue[Row]()
+            val running = query.writeStream
+              .option("checkpointLocation", checkpoint.getAbsolutePath)
+              .foreachBatch { (batch: DataFrame, _: Long) =>
+                rows.addAll(batch.collect().toSeq.asJava)
+                ()
+              }.start()
+            try {
+              if (legacy) {
+                awaitInitialization(running)
+                input.addData(1, 3)
+                running.processAllAvailable()
+                assert(rows.asScala.toSeq.map(_.getString(0)).sorted ==
+                  Seq("engineering", "research"))
+                assert(SimpleExternalLookupDataSource.readerCount.get() > 0)
+              } else {
+                val error = intercept[StreamingQueryException] {
+                  running.awaitTermination(timeoutMs)
+                }
+                assert(error.getCause.asInstanceOf[AnalysisException].getCondition ==
+                  "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
+                assert(SimpleExternalLookupDataSource.readerCount.get() == 0)
+                assert(!new java.io.File(checkpoint, "offsets/0").exists())
+              }
+            } finally {
+              running.stop()
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("an ordinary stream-static join fails at its first micro-batch, not at start") {
     val input = MemoryStream[Int]
     val stream = input.toDF().toDF("id")

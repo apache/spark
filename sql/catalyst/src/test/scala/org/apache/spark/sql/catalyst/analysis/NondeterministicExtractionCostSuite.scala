@@ -30,6 +30,62 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, J
 import org.apache.spark.sql.types.{DataType, DoubleType}
 
 class NondeterministicExtractionCostSuite extends AnalysisTest {
+  test("ordinary volatile scalar Projects reject before inspecting wide conditions") {
+    for (width <- Seq(32, 128)) {
+      val visits = new AtomicInteger
+      val value = $"value".long
+      val inner = $"inner".double
+      val scalar = ScalarSubquery(Aggregate(Nil,
+        Seq(Alias(Add(org.apache.spark.sql.catalyst.expressions.aggregate.Max(inner)
+          .toAggregateExpression(), Rand(0)), "r")()), LocalRelation(inner)))
+      val project = Project(Seq(value, scalar.as("r")), LocalRelation(value))
+      val condition = (1 to width).map { i =>
+        Counted(EqualTo(Add(value, Literal(i.toLong)), Literal(0L)), visits)
+      }.reduceLeft[Expression](And)
+      val filter = org.apache.spark.sql.catalyst.plans.logical.Filter(condition, project)
+      filter.treePatternBits
+      filter.foreach(_.expressions.foreach(_.foreach { e =>
+        e.references; e.deterministic; e.throwable
+      }))
+      visits.set(0)
+      assert(org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin(filter) eq filter)
+      assert(visits.get == 0, s"width=$width unrelated condition visits=${visits.get}")
+    }
+  }
+
+  test("binding-free Projects skip contribution scans above descendant bindings") {
+    def work(depth: Int): Int = {
+      val visits = new AtomicInteger
+      val key = $"key".long
+      val member = $"member".long
+      val scalar = ScalarSubquery(OneRowRelation().groupBy()(KllSketchGetNBigint(
+        KllSketchAggBigint(Literal(1L), legacyDeterministic = false)
+          .toAggregateExpression()).as("n")))
+      val binding = Alias(scalar, "binding")().asNondeterministicSubqueryBinding
+      val base = Project(Seq(key, binding), LocalRelation(key))
+      val chain = (1 to depth).foldLeft[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan](
+        base) { (child, _) => Project(child.output, child) }
+      val condition = Counted(EqualTo(Add(key, binding.toAttribute), member), visits)
+      val plan = Join(chain, LocalRelation(member), Inner, Some(condition), JoinHint.NONE)
+      plan.foreach { p =>
+        p.treePatternBits
+        p.expressions.foreach(_.foreach { e => e.references; e.deterministic; e.canonicalized })
+      }
+      visits.set(0)
+      val result = org.apache.spark.sql.catalyst.optimizer.PushDownKllSubqueryBindings(plan)
+      val count = visits.get()
+      comparePlans(result, plan)
+      count
+    }
+    val baseline = work(0)
+    for (depth <- Seq(12, 24)) {
+      val visits = work(depth)
+      // Forwarding Projects still expand aliases twice, but have no contribution scan.
+      assert(visits <= baseline + depth * 2,
+        s"depth=$depth forwarded consumer visits=$visits baseline=$baseline")
+    }
+  }
+
   private case class OutputReadCounted(
       fields: Seq[Attribute], reads: AtomicInteger)
       extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {

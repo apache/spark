@@ -48,6 +48,92 @@ class StreamingV2ScanPushDownRealTimeSuite extends StreamRealTimeModeSuiteBase {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.STREAMING_V2_COLUMN_PRUNING_ENABLED, true)
 
+  for (recorded <- Seq(None, Some(true), Some(false)); lookup <- Seq(false, true)) {
+    test(s"KLL startup uses the surviving real-time checkpoint: " +
+        s"recorded=$recorded lookup=$lookup") {
+      val legacy = recorded.getOrElse(true)
+      withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> (!legacy).toString,
+          SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key -> (!legacy).toString) {
+        withTempDir { checkpoint =>
+          org.apache.spark.sql.execution.streaming.runtime.StreamMetadata.write(
+            org.apache.spark.sql.execution.streaming.runtime.StreamMetadata(
+              java.util.UUID.randomUUID().toString),
+            new org.apache.hadoop.fs.Path(checkpoint.getAbsolutePath, "metadata"),
+            spark.sessionState.newHadoopConf())
+          val input = new PruningLowLatencyStream(spark)
+          val key = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+          val log = new org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqLog(
+            spark, new java.io.File(checkpoint, "offsets").getAbsolutePath)
+          def entry(mode: Option[Boolean])
+              : org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq = {
+            val metadata = org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata(
+              0L, 0L, mode.map(value => Map(key -> value.toString)).getOrElse(Map.empty))
+            org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq(
+              Seq(Some(org.apache.spark.sql.execution.streaming.runtime.SerializedOffset(
+                input.initialOffset().json()))), Some(metadata))
+          }
+          assert(log.add(0L, entry(recorded)))
+          assert(log.add(1L, entry(Some(!legacy))))
+          val commits = new org.apache.spark.sql.execution.streaming.checkpointing.CommitLog(
+            spark, new java.io.File(checkpoint, "commits").getAbsolutePath)
+          assert(commits.add(0L,
+            org.apache.spark.sql.execution.streaming.checkpointing.CommitMetadataV2()))
+          val scalar = "(SELECT kll_sketch_get_n_bigint(kll_sketch_agg_bigint(id)) FROM range(3))"
+          if (lookup) {
+            val connector = org.apache.spark.sql.connector.SimpleExternalLookupDataSource
+            connector.resetCounters()
+            withTempView("rt_kll_stream", "rt_kll_lookup") {
+              readTable(new PruningRealTimeTable(input)).selectExpr("CAST(id AS INT) AS id")
+                .createOrReplaceTempView("rt_kll_stream")
+              spark.read.format(classOf[
+                org.apache.spark.sql.connector.SimpleExternalLookupDataSource].getName).load()
+                .createOrReplaceTempView("rt_kll_lookup")
+              val query = sql(s"""SELECT lk.department FROM rt_kll_stream s
+                  |JOIN rt_kll_lookup lk ON true WHERE IF($scalar <=> $scalar, s.id = lk.id, false)
+                  |""".stripMargin)
+              query.queryExecution.analyzed
+              if (legacy) {
+                testStream(query, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+                  StartStream(checkpointLocation = checkpoint.getAbsolutePath),
+                  AddData(input, (1L, "a", 10), (3L, "b", 20)),
+                  CheckAnswer("engineering", "research"),
+                  AssertOnQuery { _ =>
+                    assert(input.columns.nonEmpty)
+                    assert(connector.readerCount.get() > 0)
+                    true
+                  })
+              } else {
+                testStream(query, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+                  StartStream(checkpointLocation = checkpoint.getAbsolutePath),
+                  ExpectFailure[org.apache.spark.sql.AnalysisException] { error =>
+                    val cause = error.asInstanceOf[org.apache.spark.sql.AnalysisException]
+                    assert(cause.getCondition ==
+                      "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE")
+                    assert(input.columns.isEmpty)
+                    assert(connector.readerCount.get() == 0)
+                  })
+              }
+            }
+          } else {
+            val query = readTable(new PruningRealTimeTable(input))
+              .selectExpr(s"CASE WHEN $scalar <=> $scalar THEN 1L ELSE id END AS n")
+            testStream(query, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+              StartStream(checkpointLocation = checkpoint.getAbsolutePath),
+              AddData(input, (1L, "a", 10), (2L, "b", 20)),
+              CheckAnswer(1L, 1L),
+              AssertOnQuery { q =>
+                val columns = q.logicalPlan.collect {
+                  case r: StreamingDataSourceV2ScanRelation => r.scan.readSchema().fieldNames.toSeq
+                }
+                assert(columns == Seq(if (legacy) Seq.empty else Seq("_1")), q.logicalPlan)
+                true
+              })
+          }
+        }
+      }
+    }
+  }
+
   for (recorded <- Seq(None, Some(true))) {
     test(s"KLL startup pruning ignores discarded real-time offsets: recorded=$recorded") {
       withSQLConf(SQLConf.LEGACY_KLL_AGGREGATE_DETERMINISTIC.key -> "false",

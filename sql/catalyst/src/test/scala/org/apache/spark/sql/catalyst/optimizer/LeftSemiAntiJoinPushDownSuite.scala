@@ -112,6 +112,9 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
       val join = Join(aggregate, right, joinType, Some(EqualTo(a, b)), JoinHint.NONE)
       comparePlans(PushDownLeftSemiAntiJoin(join),
         aggregate.copy(child = join.copy(left = input)))
+      val mixed = join.copy(left = aggregate.copy(
+        aggregateExpressions = aggregate.aggregateExpressions :+ Rand(0).as("random")))
+      comparePlans(PushDownLeftSemiAntiJoin(mixed), mixed)
     }
 
     test(s"unrelated floating KLL grouping keys retain $joinType pushdown") {

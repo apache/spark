@@ -88,8 +88,7 @@ class IncrementalExecution(
     val isTerminatingTrigger: Boolean = false,
     val isRealTimeMode: Boolean = false,
     pushedFilterRewrites: StreamingV2ScanPushDown.PushedFilterRewrites =
-      new StreamingV2ScanPushDown.PushedFilterRewrites,
-    preparedNormalizedPlan: Option[LogicalPlan] = None)
+      new StreamingV2ScanPushDown.PushedFilterRewrites)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode,
     shuffleCleanupModeOpt =
       Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
@@ -136,9 +135,9 @@ class IncrementalExecution(
 
   // Reconcile checkpoint semantics before cache substitution can hide static KLL producers.
   // Both cache matching and extracted scalar identities must use the checkpoint's mode.
-  override lazy val normalized: LogicalPlan = preparedNormalizedPlan.getOrElse {
+  override lazy val normalized: LogicalPlan = {
     val preOptimized = super.normalized
-    KllCheckpointPreparation(preOptimized, logicalPlan,
+    KllCheckpointPreparation(preOptimized, analyzed,
       sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING))
   }
 

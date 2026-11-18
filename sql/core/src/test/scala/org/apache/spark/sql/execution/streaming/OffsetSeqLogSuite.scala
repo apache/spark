@@ -38,6 +38,31 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
+  test("v3 rejects sequence and map payloads without the corrected KLL reader marker") {
+    for (mapOffsets <- Seq(false, true); marker <- Seq(None, Some(false))) {
+      withTempDir { dir =>
+        val conf = marker.map(value =>
+          Map("spark.sql.streaming.kllCorrectedState" -> value.toString))
+          .getOrElse(Map.empty[String, String])
+        val offsets: OffsetSeqBase = if (mapOffsets) {
+          OffsetMap(Map("source" -> Some(LongOffset(7))), OffsetSeqMetadataV2(conf = conf))
+        } else {
+          OffsetSeq(Seq(Some(LongOffset(7))), Some(OffsetSeqMetadata(conf = conf)))
+        }
+        val log = new OffsetSeqLog(spark, dir.getAbsolutePath)
+        assert(log.add(0, offsets))
+        assert(new OffsetSeqLog(spark, dir.getAbsolutePath).get(0).get.metadataOpt ==
+          offsets.metadataOpt)
+        val payload = java.nio.file.Files.readString(new File(dir, "0").toPath)
+        java.nio.file.Files.writeString(new File(dir, "1").toPath, s"v3\n$payload")
+        val error = intercept[IllegalStateException] {
+          new OffsetSeqLog(spark, dir.getAbsolutePath).get(1)
+        }
+        assert(error.getMessage.contains("Version 3 offset log requires KLL reader metadata"))
+      }
+    }
+  }
+
   test("KLL reader boundaries preserve sequence and map offset payloads") {
     for (mapOffsets <- Seq(false, true); boundary <- Seq(false, true)) {
       withTempDir { dir =>

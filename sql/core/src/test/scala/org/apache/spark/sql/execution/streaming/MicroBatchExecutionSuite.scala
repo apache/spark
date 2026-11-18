@@ -24,6 +24,7 @@ import org.scalatest.matchers.should._
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
@@ -33,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, Offset
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, SerializedOffset, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{DataStreamWriter, OutputMode, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.Utils
 
@@ -43,6 +44,102 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
 
   after {
     sqlContext.streams.active.foreach(_.stop())
+  }
+
+  for (asynchronous <- Seq(false, true); marked <- Seq(false, true)) {
+    test(s"normalized KLL replay validates the published header before effects: " +
+        s"async=$asynchronous marked=$marked") {
+      val session = new SparkSession(spark.sparkContext)
+      val enabled = new java.util.concurrent.atomic.AtomicBoolean(false)
+      val preparations = new java.util.concurrent.atomic.AtomicInteger
+      session.extensions.injectPlanNormalizationRule { _ =>
+        new org.apache.spark.sql.catalyst.rules.Rule[
+            org.apache.spark.sql.catalyst.plans.logical.LogicalPlan] {
+          override def apply(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
+              : org.apache.spark.sql.catalyst.plans.logical.LogicalPlan = {
+            if (!enabled.get() || !plan.exists {
+                case r: StreamingDataSourceV2ScanRelation => r.startOffset.nonEmpty
+                case _ => false
+              }) {
+              plan
+            } else {
+              preparations.incrementAndGet()
+              plan.transformAllExpressionsWithSubqueries {
+                case a: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+                    if a.aggregateFunction.isInstanceOf[
+                      org.apache.spark.sql.catalyst.expressions.aggregate.Count] =>
+                  org.apache.spark.sql.catalyst.expressions.KllSketchGetNBigint(a.copy(
+                    aggregateFunction = org.apache.spark.sql.catalyst.expressions.aggregate
+                      .KllSketchAggBigint(org.apache.spark.sql.catalyst.expressions.Literal(1L),
+                        legacyDeterministic = false)))
+              }
+            }
+          }
+        }
+      }
+      session.conf.set(SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key, "false")
+      withTempDir { checkpoint =>
+        val input = MemoryStream[Int](session)
+        val query = input.toDF().selectExpr("""value + (SELECT count(*)
+            |FROM VALUES (1), (2), (3) AS t(id)) AS n""".stripMargin)
+        def writer: DataStreamWriter[Row] = query.writeStream
+          .option("checkpointLocation", checkpoint.getAbsolutePath)
+          .option("asyncProgressTrackingEnabled", asynchronous)
+          .option("asyncProgressTrackingCheckpointIntervalMs", 0)
+          .option("_asyncProgressTrackingOverrideSinkSupportCheck", true)
+        val initial = writer.foreachBatch { (_: org.apache.spark.sql.DataFrame, _: Long) =>
+          throw new IllegalStateException("leave this batch unfinished")
+        }.start()
+        try {
+          input.addData(1)
+          val error = intercept[StreamingQueryException] { initial.processAllAvailable() }
+          assert(error.getMessage.contains("leave this batch unfinished"))
+        } finally {
+          initial.stop()
+        }
+        val logPath = new File(checkpoint, "offsets").getAbsolutePath
+        val log = new OffsetSeqLog(session, logPath)
+        eventually { assert(log.get(0L).nonEmpty) }
+        assert(!new File(checkpoint, "commits/0").exists())
+        if (marked) {
+          val entry = log.get(0L).get.asInstanceOf[OffsetSeq]
+          val path = new org.apache.hadoop.fs.Path(logPath, "0")
+          assert(path.getFileSystem(session.sessionState.newHadoopConf()).delete(path, false))
+          assert(log.add(0L, entry.copy(metadataOpt = entry.metadataOpt.map { metadata =>
+            metadata.copy(conf = metadata.conf +
+              ("spark.sql.streaming.kllCorrectedState" -> "true"))
+          })))
+        }
+        val path = new File(checkpoint, "offsets/0").toPath
+        val before = java.nio.file.Files.readAllBytes(path).toSeq
+        val effects = new java.util.concurrent.atomic.AtomicInteger
+        val rows = new java.util.concurrent.ConcurrentLinkedQueue[Long]()
+        enabled.set(true)
+        val replay = writer.foreachBatch { (batch: org.apache.spark.sql.DataFrame, _: Long) =>
+          effects.incrementAndGet()
+          batch.collect().foreach(row => rows.add(row.getLong(0)))
+          ()
+        }.start()
+        try {
+          if (marked) {
+            replay.processAllAvailable()
+            assert(effects.get() == 1)
+            import scala.jdk.CollectionConverters._
+            assert(rows.asScala.toSeq == Seq(4L))
+          } else {
+            val error = intercept[StreamingQueryException] { replay.processAllAvailable() }
+            assert(error.getMessage.contains("lacks the corrected KLL reader requirement"))
+            assert(effects.get() == 0)
+            assert(!new File(checkpoint, "state").exists())
+            assert(!new File(checkpoint, "commits/0").exists())
+          }
+          assert(preparations.get() == 1)
+          assert(java.nio.file.Files.readAllBytes(path).toSeq == before)
+        } finally {
+          replay.stop()
+        }
+      }
+    }
   }
 
   for (firstKllBatch <- Seq(0L, 1L); asynchronous <- Seq(false, true)) {

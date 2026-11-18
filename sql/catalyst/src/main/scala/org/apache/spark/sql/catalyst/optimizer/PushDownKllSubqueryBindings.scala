@@ -51,6 +51,9 @@ object PushDownKllSubqueryBindings extends Rule[LogicalPlan] with PredicateHelpe
               case (attribute, _) => bindingIds.contains(attribute.exprId)
             })
             val expanded = consumers.map(replaceAlias(_, aliases))
+            if (bindings.isEmpty) {
+              return projection.copy(child = lower(projection.child, expanded))
+            }
             val contributions = mutable.HashMap.empty[ExprId, mutable.ArrayBuffer[AttributeSet]]
             def collect(expression: Expression, references: AttributeSet): Unit = expression match {
               case attribute: Attribute if bindingIds.contains(attribute.exprId) =>
