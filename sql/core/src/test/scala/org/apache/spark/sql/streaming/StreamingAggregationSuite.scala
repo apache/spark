@@ -64,6 +64,51 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 
   import testImplicits._
 
+  testWithAllStateVersions("KLL corrected checkpoints reject historical offset readers") {
+    for (legacy <- Seq(false, true); kll <- Seq(true, false)) {
+      withTempDir { checkpoint =>
+        val input = MemoryStream[(Int, Long, Long)]
+        val data = input.toDF().toDF("key", "x", "y")
+        val aggregates = if (kll) {
+          data.groupBy("key").agg(expr("kll_sketch_agg_bigint(x, 8)").as("a"),
+            expr("kll_sketch_agg_bigint(y, 8)").as("b"))
+        } else {
+          data.groupBy("key").agg(max("x").as("a"), min("y").as("b"))
+        }
+        val reordered = aggregates.select("key", "b", "a")
+        val query = if (kll) reordered.selectExpr("key",
+          "kll_sketch_get_quantile_bigint(b, 0.0D)",
+          "kll_sketch_get_quantile_bigint(a, 1.0D)") else reordered
+        val sharing = SQLConf.STREAMING_AGGREGATION_LEGACY_KLL_SHARING.key
+        testStream(query, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> legacy.toString)),
+          AddData(input, (0, 1L, 101L), (0, 2L, 102L)),
+          CheckLastBatch(Row(0, 101L, 2L)), StopStream)
+
+        val logPath = new File(checkpoint, "offsets")
+        val log = new OffsetSeqLog(spark, logPath.getAbsolutePath)
+        val (batchId, _) = log.getLatest().get
+        val header = java.nio.file.Files.readAllLines(
+          new File(logPath, batchId.toString).toPath,
+          java.nio.charset.StandardCharsets.UTF_8).get(0)
+        // Historical readers support offset versions through v2. They must reject this
+        // corrected state before assigning [x, y] buffers to the historical [y, x] order.
+        if (kll && !legacy) {
+          intercept[IllegalStateException] { log.validateVersion(header, 2) }
+        } else {
+          assert(log.validateVersion(header, 2) <= 2)
+        }
+
+        testStream(query, Complete)(
+          StartStream(checkpointLocation = checkpoint.getAbsolutePath,
+            additionalConfs = Map(sharing -> (!legacy).toString)),
+          AddData(input, (0, 3L, 103L)),
+          CheckLastBatch(Row(0, 101L, 3L)), StopStream)
+      }
+    }
+  }
+
   testWithAllStateVersions("KLL legacy HAVING restarts without optional column pruning") {
     for (analysisLegacy <- Seq(false, true)) {
       withTempDir { checkpoint =>

@@ -38,6 +38,38 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
+  test("KLL reader boundaries preserve sequence and map offset payloads") {
+    for (mapOffsets <- Seq(false, true); boundary <- Seq(false, true)) {
+      withTempDir { dir =>
+        val conf = if (boundary) Map("spark.sql.streaming.kllCorrectedState" -> "true")
+          else Map.empty[String, String]
+        val offsets: OffsetSeqBase = if (mapOffsets) {
+          OffsetMap(Map("source" -> Some(LongOffset(7))), OffsetSeqMetadataV2(conf = conf))
+        } else {
+          OffsetSeq(Seq(Some(LongOffset(7)), None), Some(OffsetSeqMetadata(conf = conf)))
+        }
+        val log = new OffsetSeqLog(spark, dir.getAbsolutePath)
+        assert(log.add(0, offsets))
+        val lines = java.nio.file.Files.readAllLines(new File(dir, "0").toPath,
+          java.nio.charset.StandardCharsets.UTF_8)
+        assert(lines.get(0) == s"v${if (boundary) 3 else offsets.version}")
+        if (boundary) {
+          intercept[IllegalStateException] { log.validateVersion(lines.get(0), 2) }
+          assert(lines.get(1) == s"v${offsets.version}")
+        }
+        val restored = new OffsetSeqLog(spark, dir.getAbsolutePath).get(0).get
+        assert(restored.metadataOpt == offsets.metadataOpt)
+        assert(restored.version == offsets.version)
+        if (mapOffsets) {
+          assert(restored.asInstanceOf[OffsetMap].offsetsMap.view.mapValues(_.map(_.json)).toMap ==
+            Map("source" -> Some("7")))
+        } else {
+          assert(restored.offsets.map(_.map(_.json)) == Seq(Some("7"), None))
+        }
+      }
+    }
+  }
+
   test("KLL aggregate sharing is pinned to the streaming checkpoint") {
     val key = "spark.sql.streaming.aggregation.legacyKllSharing.enabled"
     val old = OffsetSeqMetadata()

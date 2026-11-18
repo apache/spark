@@ -146,8 +146,8 @@ case class OffsetMap(
  * - VERSION_1 (sequence-based offset log): Uses [[OffsetSeq]] with [[OffsetSeqMetadata]]
  * - VERSION_2 (map-based offset log): Uses [[OffsetMap]] with [[OffsetSeqMetadataV2]]
  *
- * The metadata version must match the offset log version for proper serialization and
- * deserialization.
+ * The metadata version identifies the enclosed payload. Logs requiring corrected KLL checkpoint
+ * semantics wrap either payload in a version 3 reader boundary; its metadata version stays 1 or 2.
  */
 trait OffsetSeqMetadataBase extends Serializable {
   def batchWatermarkMs: Long

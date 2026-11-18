@@ -50,6 +50,10 @@ import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
  *   0:{0}     // sourceId:offset
  *   1:{3}     // sourceId:offset
  *   ...
+ *
+ * Version 3 wraps either payload in a reader compatibility boundary for corrected KLL state:
+ *   v3        // readers without corrected KLL checkpoint semantics must reject this log
+ *   v1 or v2  // the enclosed offset payload format, followed by its metadata and offsets
  */
 class OffsetSeqLog(
     sparkSession: SparkSession,
@@ -65,7 +69,11 @@ class OffsetSeqLog(
     }
 
     val versionStr = lines.next()
-    val versionInt = validateVersion(versionStr, OffsetSeqLog.MAX_VERSION)
+    val logVersion = validateVersion(versionStr, OffsetSeqLog.MAX_VERSION)
+    val versionInt = if (logVersion == OffsetSeqLog.VERSION_3) {
+      if (!lines.hasNext) throw new IllegalStateException("Incomplete v3 offset log")
+      validateVersion(lines.next(), OffsetSeqLog.VERSION_2)
+    } else logVersion
 
     // read metadata
     val metadata = lines.next().trim match {
@@ -73,7 +81,7 @@ class OffsetSeqLog(
       case md => Some(md)
     }
     import org.apache.spark.util.ArrayImplicits._
-    if (versionInt == OffsetSeqLog.VERSION_2) {
+    val offsets = if (versionInt == OffsetSeqLog.VERSION_2) {
       // deserialize the remaining lines into the offset map
       val remainingLines = lines.toArray
       // New OffsetMap format: sourceId:offset
@@ -99,10 +107,18 @@ class OffsetSeqLog(
       OffsetSeq.fill(metadata,
         lines.map(OffsetSeqLog.parseOffset).toArray.toImmutableArraySeq: _*)
     }
+    if (logVersion == OffsetSeqLog.VERSION_3 &&
+        !offsets.metadataOpt.exists(OffsetSeqLog.requiresKllReader)) {
+      throw new IllegalStateException("Version 3 offset log requires KLL reader metadata")
+    }
+    offsets
   }
 
   override protected def serialize(offsetSeq: OffsetSeqBase, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
+    if (offsetSeq.metadataOpt.exists(OffsetSeqLog.requiresKllReader)) {
+      out.write(s"v${OffsetSeqLog.VERSION_3}\n".getBytes(UTF_8))
+    }
     out.write(("v" + offsetSeq.metadataOpt.map(_.version).getOrElse(OffsetSeqLog.VERSION_1))
       .getBytes(UTF_8))
 
@@ -146,9 +162,24 @@ class OffsetSeqLog(
 object OffsetSeqLog {
   private[streaming] val VERSION_1 = 1
   private[streaming] val VERSION_2 = 2
+  private[streaming] val VERSION_3 = 3
   private[streaming] val VERSION = VERSION_1  // Default version for backward compatibility
-  private[streaming] val MAX_VERSION = VERSION_2
+  private[streaming] val MAX_VERSION = VERSION_3
   private[spark] val SERIALIZED_VOID_OFFSET = "-"
+
+  // A persisted reader requirement, not a session configuration. Preserve it on every rewrite.
+  private val KLL_CORRECTED_STATE = "spark.sql.streaming.kllCorrectedState"
+
+  private[sql] def requiresKllReader(metadata: OffsetSeqMetadataBase): Boolean =
+    metadata.conf.get(KLL_CORRECTED_STATE).contains("true")
+
+  private[sql] def withKllReaderBoundary(
+      metadata: OffsetSeqMetadataBase): OffsetSeqMetadataBase = metadata match {
+    case sequence: OffsetSeqMetadata =>
+      sequence.copy(conf = sequence.conf.updated(KLL_CORRECTED_STATE, "true"))
+    case map: OffsetSeqMetadataV2 =>
+      map.copy(conf = map.conf.updated(KLL_CORRECTED_STATE, "true"))
+  }
 
   private[checkpointing] def parseOffset(value: String): OffsetV2 = value match {
     case SERIALIZED_VOID_OFFSET => null
