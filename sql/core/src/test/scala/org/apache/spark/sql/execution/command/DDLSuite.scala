@@ -2659,6 +2659,26 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       )
     }
   }
+
+  test("COMMENT ON TABLE keeps the default collation and ALTER TABLE DEFAULT COLLATION " +
+    "keeps the comment") {
+    // No SQL statement removes a default collation: UNSET TBLPROPERTIES rejects the reserved
+    // `collation` key. V2SessionCatalogSuite covers removing it through a table change.
+    // (statement, expected comment, expected collation)
+    Seq(
+      ("COMMENT ON TABLE t IS 'new comment'", Some("new comment"), Some("UTF8_LCASE")),
+      ("ALTER TABLE t DEFAULT COLLATION UNICODE", Some("table comment"), Some("UNICODE"))
+    ).foreach { case (statement, expectedComment, expectedCollation) =>
+      withTable("t") {
+        sql("CREATE TABLE t (a STRING) USING parquet COMMENT 'table comment' " +
+          "DEFAULT COLLATION UTF8_LCASE")
+        sql(statement)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.comment == expectedComment, statement)
+        assert(table.collation == expectedCollation, statement)
+      }
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
