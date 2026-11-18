@@ -23,7 +23,6 @@ import java.util.regex.{Matcher, Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.commons.text.StringEscapeUtils
@@ -105,33 +104,42 @@ abstract class StringRegexExpression extends BinaryExpression
 
   /**
    * Whether matching against `right` cannot fail: it is a literal pattern that is null, which
-   * makes the result null, or that has at most 100 characters (UTF-16 code units), passes
-   * `isStackSafePattern` and compiles. The projection split of `PushPredicateThroughNonJoin`
-   * reads it (SPARK-60731). This is not `isTotal`, which the other rules read too and which
-   * promises more than not failing.
+   * makes the result null, or that has at most `MAX_CANNOT_FAIL_PATTERN_LENGTH` characters (UTF-16
+   * code units), passes `isStackSafePattern` and compiles. Unlike `_expensivePattern`, it does not
+   * evaluate a foldable pattern that is not a literal yet, such as one `ConstantFolding` has not
+   * folded. The projection split of `PushPredicateThroughNonJoin` reads it (SPARK-60731). This is
+   * not `isTotal`, which the other rules read too and which promises more than not failing.
    */
   private[catalyst] final lazy val cannotFailPattern: Boolean = right match {
     case Literal(null, _) => true
     case Literal(pattern: UTF8String, _) =>
       val str = pattern.toString
-      str.length <= StringRegexExpression.MaxCannotFailPatternLength &&
-        isStackSafePattern(str) && Try(compile(str)).isSuccess
+      str.length <= StringRegexExpression.MAX_CANNOT_FAIL_PATTERN_LENGTH &&
+        isStackSafePattern(str) && {
+          try {
+            compile(str)
+            true
+          } catch {
+            case NonFatal(_) => false
+          }
+        }
     case _ => false
   }
 
   /**
-   * Whether matching against the constant pattern `str`, of at most 100 characters, cannot
-   * overflow the stack. Java's regex engine recurses once per node of the pattern, once per
-   * repetition of a quantified group, and, for a `{}` quantifier or for `\R` or `\X`, each time
-   * the length of a match changes, such as for `.` over supplementary characters. So a long
-   * pattern, or such a quantifier over a long input, can overflow the stack.
+   * Whether matching against the constant pattern `str`, of at most
+   * `MAX_CANNOT_FAIL_PATTERN_LENGTH` characters, cannot overflow the stack. Java's regex engine
+   * recurses once per node of the pattern, once per repetition of a quantified group, and, for a
+   * `{}` quantifier or for `\R` or `\X`, each time the length of a match changes, such as for `.`
+   * over supplementary characters. So a long pattern, or such a quantifier over a long input, can
+   * overflow the stack.
    */
   protected def isStackSafePattern(str: String): Boolean = false
 }
 
 private[catalyst] object StringRegexExpression {
   /** The longest pattern, in UTF-16 code units, that `cannotFailPattern` accepts. */
-  val MaxCannotFailPatternLength = 100
+  val MAX_CANNOT_FAIL_PATTERN_LENGTH = 100
 
   /**
    * Whether matching `regex` is likely to be expensive. A failed match tries every combination of

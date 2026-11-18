@@ -293,23 +293,25 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * metadata that most expressions do not override. A throwing ScalaUDF with
    * non-throwing children, for example, reports non-throwable.
    */
-  def canEvaluateUnconditionally(e: Expression): Boolean = canEvaluateUnconditionally(e, _ => false)
+  def canEvaluateUnconditionally(e: Expression): Boolean =
+    canEvaluateUnconditionallyWith(e, _ => false)
 
   /**
-   * [[canEvaluateUnconditionally]], also accepting an operator that `cannotFail` accepts as not
-   * failing itself, whatever the values of its children of their current types; its children
-   * are checked as those of a total operator. This is for a caller that only needs `e` not to
-   * fail, not the equal results for equal children that [[isTotalOperator]] also promises, e.g.
-   * the projection split of `PushPredicateThroughNonJoin` with LIKE and RLIKE (SPARK-60731). The
-   * whole tree is still checked for being deterministic and having no subquery.
+   * `canEvaluateUnconditionally`, also accepting an operator that `operatorCannotFail` accepts,
+   * whose children are then checked as those of a total operator. An operator it accepts must
+   * not fail for any values of its children; it may look at their form for that, e.g. at a
+   * literal pattern. This is for a caller that only needs `e` not to fail, not the equal results
+   * for equal children that [[isTotalOperator]] also promises, e.g. the projection split of
+   * `PushPredicateThroughNonJoin` with LIKE and RLIKE (SPARK-60731). The whole tree is still
+   * checked for being deterministic and having no subquery.
    */
-  private[catalyst] def canEvaluateUnconditionally(
+  private[catalyst] def canEvaluateUnconditionallyWith(
       e: Expression,
-      cannotFail: Expression => Boolean): Boolean = {
+      operatorCannotFail: Expression => Boolean): Boolean = {
     def check(e: Expression): Boolean = e match {
       // The collation of a Collate evaluates to its name; it only sets the type.
       case _: AttributeReference | _: Literal | _: ResolvedCollation => true
-      case _ if isTotalOperator(e) || cannotFail(e) => e.children.forall(check)
+      case _ if isTotalOperator(e) || operatorCannotFail(e) => e.children.forall(check)
       case _ => false
     }
     e.deterministic && !e.containsPattern(PLAN_EXPRESSION) && check(e)

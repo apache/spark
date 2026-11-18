@@ -3178,7 +3178,6 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
-
   test("SPARK-60633: a throwable filter condition is not pushed through an operator ahead of " +
     "its order") {
     def df: DataFrame = spark.range(0, 10, 1, 1).toDF()

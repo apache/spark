@@ -837,19 +837,21 @@ class FilterPushdownSuite extends PlanTest {
           .select($"a", $"f", g as "g", $"j")
           .where(Not($"g" === $"j")))
       // Nor can a short LIKE, also with a parenthesis in the pattern, as the regex it translates
-      // to has no group.
-      val likeJ = $"e".like("(3%")
-      check(Optimize.execute(testStringRelation
-          .select($"a", f as "f", g as "g", likeJ as "j")
-          .where($"f" && Not($"g" === $"j") && $"j")
-          .analyze),
-        testStringRelation
-          .select($"a", $"b", $"e", f as "f")
-          .where($"f")
-          .select($"a", $"b", $"e", $"f", likeJ as "j")
-          .where($"j")
-          .select($"a", $"f", g as "g", $"j")
-          .where(Not($"g" === $"j")))
+      // to has no group, also of the longest length accepted, nor a regex with a null pattern.
+      Seq($"e".like("(3%"), $"e".like("_" * StringRegexExpression.MAX_CANNOT_FAIL_PATTERN_LENGTH),
+        $"e".rlike(Literal.create(null, StringType))).foreach { likeJ =>
+        check(Optimize.execute(testStringRelation
+            .select($"a", f as "f", g as "g", likeJ as "j")
+            .where($"f" && Not($"g" === $"j") && $"j")
+            .analyze),
+          testStringRelation
+            .select($"a", $"b", $"e", f as "f")
+            .where($"f")
+            .select($"a", $"b", $"e", $"f", likeJ as "j")
+            .where($"j")
+            .select($"a", $"f", g as "g", $"j")
+            .where(Not($"g" === $"j")))
+      }
       // Several such conditions share the layer's filter in their written order, also one that
       // reads an alias computed in an earlier layer, which (g != j) does not need; one
       // application of the rule places both, as later passes would otherwise push the one
@@ -865,7 +867,8 @@ class FilterPushdownSuite extends PlanTest {
       check(Optimize.execute(two), twoAnswer)
       check(PushPredicateThroughNonJoin(two), twoAnswer)
       // Also when that alias, computed in an earlier layer, can fail: only the aliases not
-      // computed yet are inlined. One application of the rule, as later passes place it there too.
+      // computed yet are inlined, as a later pass reads the computed ones as columns. One
+      // application of the rule, as later passes place the condition there too.
       val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       check(PushPredicateThroughNonJoin(testStringRelation
@@ -986,17 +989,18 @@ class FilterPushdownSuite extends PlanTest {
           .where(Not($"g" === $"j") && $"j" && ($"c" > 5 || Not($"j")))
           .analyze)
       // An alias the layer would compute that can fail: a regex whose pattern is not a literal,
-      // also a column,
-      // does not compile, or has a quantified group, `\R` or a `{}` quantifier, which can
-      // overflow the stack on a long input, a LIKE whose pattern is longer than 100 characters, a
-      // regex whose input can fail, a UDF, also under an operator that cannot fail, a throwable
-      // alias, and a subquery expression with a child, even one that declares `NoThrow`.
+      // also a column, does not compile, or has a quantified group, `\R` or a `{}` quantifier,
+      // which can overflow the stack on a long input, a LIKE whose pattern is longer than 100
+      // characters, a regex whose input can fail, a UDF, also under an operator that cannot fail,
+      // a throwable alias, and an expression with a child that declares `NoThrow` and carries the
+      // subquery pattern, as a subquery expression with a child would.
       val udfJ = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       val udfString = ScalaUDF((s: String) => s, StringType, Seq($"e"), Seq(None),
         udfDeterministic = true)
+      val tooLong = "_" * (StringRegexExpression.MAX_CANNOT_FAIL_PATTERN_LENGTH + 1)
       Seq(expensiveRLike("third"), $"e".rlike($"e"), $"e".rlike("["), $"e".rlike("(a|b)*c"),
-        $"e".rlike("\\R*c"), $"e".rlike(".{0,99999}c"), $"e".like("_" * 101),
+        $"e".rlike("\\R*c"), $"e".rlike(".{0,99999}c"), $"e".like(tooLong),
         udfString.rlike("^3"), udfJ, Not(udfJ),
         If(literalRLike("^3"), Literal(true), raiseError),
         NoThrowWithPlanExpressionPattern(literalRLike("^3"))).foreach { failingJ =>
