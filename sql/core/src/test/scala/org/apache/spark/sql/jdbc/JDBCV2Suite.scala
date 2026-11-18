@@ -338,6 +338,10 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy")))
   }
 
+  private def scanOf(df: DataFrame): DataSourceV2ScanRelation =
+    df.queryExecution.optimizedPlan.collectFirst { case r: DataSourceV2ScanRelation => r }
+      .getOrElse(fail(s"no scan in:\n${df.queryExecution.optimizedPlan}"))
+
   private def checkSchemaNames(df: DataFrame, names: Seq[String]): Unit = {
     val scan = df.queryExecution.optimizedPlan.collectFirst {
       case s: DataSourceV2ScanRelation => s
@@ -1016,18 +1020,11 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
   }
 
-  test("SPARK-61173: a scan with a pushed aggregate reads the same rows again, unless a top N " +
-    "follows it") {
-    def scanOf(df: DataFrame): DataSourceV2ScanRelation =
-      df.queryExecution.optimizedPlan.collectFirst { case r: DataSourceV2ScanRelation => r }
-        .getOrElse(fail(s"no scan in:\n${df.queryExecution.optimizedPlan}"))
+  test("SPARK-61173: a scan with a pushed aggregate reads the same rows again") {
     val agg = spark.read.table("h2.test.employee").groupBy("DEPT").sum("SALARY")
     checkAggregateRemoved(agg)
-    assert(scanOf(agg).repeatableRead && !scanOf(agg).onlyRowWisePushdowns)
-    val topN = agg.orderBy("DEPT").limit(1)
-    checkSortRemoved(topN)
-    checkLimitRemoved(topN)
-    assert(!scanOf(topN).repeatableRead)
+    val scan = scanOf(agg)
+    assert(scan.repeatableRead && !scan.onlyRowWisePushdowns)
   }
 
   test("scan with aggregate push-down, top N push-down and offset push-down") {
@@ -1050,6 +1047,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     val topN1 = df1.limit(1)
     checkSortRemoved(topN1)
     checkLimitRemoved(topN1)
+    // A pushed top N lets the source pick other rows on a second read.
+    assert(!scanOf(topN1).repeatableRead)
     checkPushedInfo(topN1,
       "PushedAggregates: [SUM(SALARY)]",
       "PushedGroupByExpressions: [DEPT]",

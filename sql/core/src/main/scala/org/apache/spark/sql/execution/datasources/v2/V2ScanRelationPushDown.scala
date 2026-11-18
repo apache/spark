@@ -905,26 +905,30 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *   - `pushedOffset`           -- pushed OFFSET
    *   - `pushedSample`           -- pushed table sample
    *   - `sortOrders`             -- pushed sort order (top-N / ordering)
-   *   - `joinedRelationsPushedDownOperators` -- table sample pushed into a side of a pushed join
+   *   - `joinedRelationsPushedDownOperators` -- the same operations pushed into a side of a join
    *
    * It decides the `onlyRowWisePushdowns` flag of the plain and the variant-extraction scans, see
    * [[DataSourceV2ScanRelation.onlyRowWisePushdowns]], and blocks merging, see
    * [[hasBlockingPushdown]]. A pushed aggregate or join never reaches those builds, and their scans
    * keep the flag's default. It also decides the `repeatableRead` flag of every scan this rule
    * builds, see [[DataSourceV2ScanRelation.repeatableRead]]. Limit, offset and top-N pushdowns run
-   * before the aggregate and the join builds, so they see one pushed after an aggregate or join. A
-   * sample pushed into a side of a pushed join is kept with that side's pushed operators.
+   * before the aggregate and the join builds, so they see one pushed after an aggregate or join. An
+   * operation pushed into a side of a pushed join is kept with that side's pushed operators, which
+   * this checks too, whichever pushdowns run before `pushDownJoin`.
    */
   private def hasRowSelectingPushdown(holder: ScanBuilderHolder): Boolean =
     holder.pushedLimit.isDefined ||
       holder.pushedOffset.isDefined ||
       holder.pushedSample.isDefined ||
       holder.sortOrders.nonEmpty ||
-      holder.joinedRelationsPushedDownOperators.exists(hasPushedSample)
+      holder.joinedRelationsPushedDownOperators.exists(hasRowSelectingOperators)
 
-  private def hasPushedSample(operators: PushedDownOperators): Boolean =
-    operators.sample.isDefined ||
-      operators.joinedRelationPushedDownOperators.exists(hasPushedSample)
+  private def hasRowSelectingOperators(operators: PushedDownOperators): Boolean =
+    operators.limit.isDefined ||
+      operators.offset.isDefined ||
+      operators.sample.isDefined ||
+      operators.sortValues.nonEmpty ||
+      operators.joinedRelationPushedDownOperators.exists(hasRowSelectingOperators)
 
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>

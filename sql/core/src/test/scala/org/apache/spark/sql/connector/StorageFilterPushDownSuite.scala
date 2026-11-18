@@ -480,13 +480,15 @@ class StorageFilterPushDownSuite
     }
   }
 
-  // The reader would filter ahead of the operation, which then picks other rows.
-  Seq[(String, DataFrame => DataFrame)](
+  // The pushdowns that pick which rows the scan returns.
+  private val rowSelectingPushdowns: Seq[(String, DataFrame => DataFrame)] = Seq(
     "limit" -> (_.limit(100)),
     "offset" -> (_.offset(10)),
     "topN" -> (_.orderBy("v").limit(100)),
-    "sample" -> (_.sample(0.5))
-  ).foreach { case (op, apply) =>
+    "sample" -> (_.sample(0.5)))
+
+  // The reader would filter ahead of the operation, which then picks other rows.
+  rowSelectingPushdowns.foreach { case (op, apply) =>
     test(s"nothing is offered to a scan that took a pushed $op") {
       withBloomJoin() {
         val probe = apply(v2Probe("columnar" -> "true", "push" -> op))
@@ -511,12 +513,7 @@ class StorageFilterPushDownSuite
     }
     val unrestricted = variantScan("", identity)
     assert(unrestricted.onlyRowWisePushdowns && unrestricted.repeatableRead)
-    Seq[(String, DataFrame => DataFrame)](
-      "limit" -> (_.limit(100)),
-      "offset" -> (_.offset(10)),
-      "topN" -> (_.orderBy("v").limit(100)),
-      "sample" -> (_.sample(0.5))
-    ).foreach { case (op, apply) =>
+    rowSelectingPushdowns.foreach { case (op, apply) =>
       val scan = variantScan(op, apply)
       assert(!scan.onlyRowWisePushdowns && !scan.repeatableRead, s"$op: $scan")
     }

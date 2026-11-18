@@ -36,12 +36,15 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
+  // `checkedAggregate` is the bloom filter aggregate of a side that the search already checked
+  // with `bloomFilterAggregate` and the caller's `takes`.
   private case class FilterCreationSide(
       key: Expression,
       plan: LogicalPlan,
       useMaterializedThreshold: Boolean,
       materializedRowCount: Option[BigInt] = None,
-      materializedSizeInBytes: Option[BigInt] = None)
+      materializedSizeInBytes: Option[BigInt] = None,
+      checkedAggregate: Option[LogicalPlan] = None)
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
@@ -58,11 +61,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSide: FilterCreationSide): LogicalPlan = {
-    bloomFilterAggregate(filterCreationSide).map { aggregate =>
-      val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
-      val filter = BloomFilterMightContain(bloomFilterSubquery,
-        new XxHash64(Seq(filterApplicationSideKey)))
-      Filter(filter, filterApplicationSidePlan)
+    filterCreationSide.checkedAggregate.orElse(bloomFilterAggregate(filterCreationSide)).map {
+      aggregate =>
+        val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
+        val filter = BloomFilterMightContain(bloomFilterSubquery,
+          new XxHash64(Seq(filterApplicationSideKey)))
+        Filter(filter, filterApplicationSidePlan)
     }.getOrElse(filterApplicationSidePlan)
   }
 
@@ -113,8 +117,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * expressions they reference must remain simple, so the runtime-filter subquery does not
    * introduce expensive computation. The extracted plan must produce a superset of the creation
    * side's join keys. A side found only through the filters that a DSv2 scan took in is returned
-   * only if `injectBloomFilter` and `takes` take it, so that a join above can still take its other
-   * side.
+   * only if `bloomFilterAggregate` and `takes` take it, so that a join above can still take its
+   * other side.
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
@@ -259,14 +263,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           if !scan.repeatableRead || !scan.pushedFilters.forall(isSimpleExpression) => None
       // A filter that a DSv2 scan took in fully leaves no `Filter` for it, as a built-in file scan
       // does with its partition filters, so a selective one counts as a selective `Filter` does.
+      // If the scan's `reflectsFullyPushedDownFilters` is false, `V2ScanRelationPushDown` can put
+      // a pushed filter back above it to adjust its statistics.
       // The size check of `bloomFilterAggregate` uses the scan's estimate, which for a V2 file
       // scan covers all its partitions.
       case leaf: LeafNode if hasHitSelectiveFilter || hasSelectivePushedFilters(leaf) =>
-        Some(FilterCreationSide(
-          targetKey,
-          currentPlan,
-          useMaterializedThreshold = false)).filter { side =>
-          hasHitSelectiveFilter || (bloomFilterAggregate(side).isDefined && takes(side))
+        val side = FilterCreationSide(targetKey, currentPlan, useMaterializedThreshold = false)
+        if (hasHitSelectiveFilter) {
+          Some(side)
+        } else {
+          bloomFilterAggregate(side).filter(_ => takes(side))
+            .map(aggregate => side.copy(checkedAggregate = Some(aggregate)))
         }
       case _ => None
     }
@@ -606,7 +613,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                 keyDpps.isEmpty || (keyCanTake && canEvaluateAgain(c))
               extractBeneficialFilterCreatePlan(
                 side, withoutDppFilters(other, keyDpps.contains), key, otherKey, takes)
-                .filter(takes)
+                .filter(c => c.checkedAggregate.isDefined || takes(c))
             }
             // Check if:
             // 1. The current join type supports prune the left side with runtime filter
