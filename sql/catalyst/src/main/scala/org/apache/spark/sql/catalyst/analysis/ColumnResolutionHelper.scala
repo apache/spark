@@ -197,14 +197,24 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         }
 
         case u: UnresolvedExtractValue =>
-          resolveExtractValue(u, isLastResort = false)
+          resolveExtractValue(u, isLastResort = false, isTopLevel = isTopLevel)
 
         // The missing optional field of a last-resort extraction is NULL in the first step that
         // resolves its child, see `LastResortExtractValue`. Until then, it stays wrapped.
         case LastResortExtractValue(u) =>
-          resolveExtractValue(u, isLastResort = true) match {
+          resolveExtractValue(u, isLastResort = true, isTopLevel = isTopLevel) match {
             case unresolved: UnresolvedExtractValue => LastResortExtractValue(unresolved)
             case other => other
+          }
+
+        // An unaliased SELECT item is named after its child, so an extraction that is the whole
+        // item is resolved as a top-level one, see `resolveExtractValue`.
+        case alias: UnresolvedAlias if isTopLevel =>
+          alias.mapChildren {
+            case extraction @ (_: UnresolvedExtractValue | _: LastResortExtractValue) =>
+              innerResolve(extraction, isTopLevel = true)
+            case child =>
+              innerResolve(child, isTopLevel = false)
           }
 
         // Default value expression can not reference real columns,
@@ -219,7 +229,16 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       resolved
     }
 
-    def resolveExtractValue(u: UnresolvedExtractValue, isLastResort: Boolean): Expression = {
+    /**
+     * Resolves the extraction `u`. Like the NULL of a missing optional name, the NULL of a missing
+     * optional field keeps the name of the extraction only at the top level (`isTopLevel`), so
+     * that `coalesce(items[0].price?, 0)` is named `coalesce(NULL, 0)`, as `coalesce(s.price?, 0)`
+     * is.
+     */
+    def resolveExtractValue(
+        u: UnresolvedExtractValue,
+        isLastResort: Boolean,
+        isTopLevel: Boolean): Expression = {
       val newChild = innerResolve(u.child, isTopLevel = false)
       val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
         innerResolve(u.extraction, isTopLevel = false)
@@ -237,10 +256,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         None
       }
       val resolved = if (missingOptionalFieldAliasName.isDefined) {
-        OptionalReferences.implicitAlias(
-          OptionalReferences.nullReference(),
-          missingOptionalFieldAliasName.get
-        )
+        val nullReference = OptionalReferences.nullReference()
+        if (isTopLevel) {
+          OptionalReferences.implicitAlias(nullReference, missingOptionalFieldAliasName.get)
+        } else {
+          nullReference
+        }
       } else if (newChild.resolved) {
         // applyOrNull propagates NULL when the base is NullType instead of throwing
         // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).

@@ -29,9 +29,10 @@ object OptionalReferenceValidation {
 
   /**
    * Throws an error for the optional reference `ctx`, i.e. the parse tree of a reference with a
-   * `?` after one of its name parts, if `ctx` is part of an UPDATE, DELETE, MERGE, or AUTO CDC
-   * statement, of the REPLACE condition of INSERT, of a partition specification, or of a DEFAULT,
-   * GENERATED ALWAYS AS, CHECK, or OPTIONS clause of a table or function definition.
+   * `?` after one of its name parts or of a named parameter marker followed by `?`, if `ctx` is
+   * part of an UPDATE, DELETE, MERGE, or AUTO CDC statement, of the REPLACE condition of INSERT,
+   * of a partition specification, or of a DEFAULT, GENERATED ALWAYS AS, CHECK, or OPTIONS clause
+   * of a table or function definition.
    *
    * The boundary is the kind of statement. UPDATE, DELETE, MERGE, and AUTO CDC exist to modify
    * existing rows, so they reject optional references everywhere, including in the source query of

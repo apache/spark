@@ -827,6 +827,90 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT default.id? FROM qualified_t
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`default`.`id`",
+    "proposal" : "`qualified_t`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "default.id?"
+  } ]
+}
+
+
+-- !query
+SELECT default.missing? FROM qualified_t
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`default`.`missing`",
+    "proposal" : "`qualified_t`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "default.missing?"
+  } ]
+}
+
+
+-- !query
+SELECT spark_catalog.default.id? FROM qualified_t
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`spark_catalog`.`default`.`id`",
+    "proposal" : "`spark_catalog`.`default`.`qualified_t`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "spark_catalog.default.id?"
+  } ]
+}
+
+
+-- !query
+SELECT spark_catalog.qualified_t?.id FROM qualified_t
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`spark_catalog`.`qualified_t`.`id`",
+    "proposal" : "`spark_catalog`.`default`.`qualified_t`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "spark_catalog.qualified_t?.id"
+  } ]
+}
+
+
+-- !query
 DROP TABLE qualified_t
 -- !query analysis
 DropTable false, false
@@ -1440,10 +1524,70 @@ Project [variablereference(system.session.known=7) AS known#x, null AS unknown#x
 
 
 -- !query
-SELECT session?, system.session?
+SELECT session?
 -- !query analysis
-Project [null AS session#x, null AS session#x]
+Project [null AS session#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT system.session?
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`system`.`session`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "system.session?"
+  } ]
+}
+
+
+-- !query
+SELECT system.known?
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`system`.`known`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "system.known?"
+  } ]
+}
+
+
+-- !query
+SELECT system.unknown?
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`system`.`unknown`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "system.unknown?"
+  } ]
+}
 
 
 -- !query
@@ -2479,6 +2623,19 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "items?"
   } ]
 }
+
+
+-- !query
+SELECT coalesce(items[0].price?, 0), map('k', named_struct('a', 1))['k'].b? IS NULL
+FROM orders
+-- !query analysis
+Project [coalesce(cast(null as int), 0) AS coalesce(NULL, 0)#x, isnull(null) AS (NULL IS NULL)#x]
++- SubqueryAlias orders
+   +- View (`orders`, [id#x, items#x])
+      +- Project [cast(id#x as int) AS id#x, cast(items#x as array<struct<sku:string,qty:int>>) AS items#x]
+         +- Project [id#x, items#x]
+            +- SubqueryAlias t
+               +- LocalRelation [id#x, items#x]
 
 
 -- !query

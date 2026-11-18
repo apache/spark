@@ -103,6 +103,12 @@ SELECT qualified_t.missing? AS a, default.qualified_t.missing? AS b,
   spark_catalog.default.qualified_t.missing? AS c
 FROM qualified_t;
 SELECT other.qualified_t.missing? FROM qualified_t;
+-- A namespace or catalog without the table, or a catalog and table without the namespace, is not
+-- a qualifier, so these names fail as they do without `?`, whether or not the column exists.
+SELECT default.id? FROM qualified_t;
+SELECT default.missing? FROM qualified_t;
+SELECT spark_catalog.default.id? FROM qualified_t;
+SELECT spark_catalog.qualified_t?.id FROM qualified_t;
 DROP TABLE qualified_t;
 
 -- Three-part names: `?` binds to the immediately preceding identifier only.
@@ -120,7 +126,9 @@ SELECT n.a?, a + 1 FROM VALUES (NULL) AS t(n);
 SELECT struct(id?, missing?) AS s FROM orgs;
 
 -- Errors other than not-found are still raised, and so is the not-found error of an ORDER BY
--- name that matches more than one column of the FROM clause, which is not a missing column.
+-- name that matches more than one column of the FROM clause, which is not a missing column. A
+-- missing reference in the SELECT list of an aggregate is a constant NULL that needs no grouping,
+-- so it raises no error, unlike the found `addr.zip?` below.
 SELECT x? FROM (SELECT 1 AS x) a JOIN (SELECT 2 AS x) b;
 SELECT addr.state? FROM people a JOIN people b ON a.id = b.id;
 SELECT id.missing? FROM people;
@@ -167,7 +175,11 @@ SELECT known? FROM people WHERE missing? IS NULL LIMIT 1;
 DECLARE OR REPLACE VARIABLE known_struct STRUCT<a: INT> DEFAULT named_struct('a', 1);
 SELECT known_struct.a?, known_struct.b?;
 SELECT session.known?, session.unknown?, system.session.unknown?;
-SELECT session?, system.session?;
+SELECT session?;
+-- `system` without `session` is not a qualifier, so these names fail as they do without `?`.
+SELECT system.session?;
+SELECT system.known?;
+SELECT system.unknown?;
 SELECT known_struct.b;
 -- The name of a missing field of a variable is not a lateral column alias either.
 SELECT known_struct.b?, b + 1;
@@ -407,6 +419,9 @@ SELECT missing?[0], missing?['key'] FROM people LIMIT 1;
 SELECT id, items[0].qty?, items[0].price? FROM orders ORDER BY items[0].qty? DESC;
 SELECT id FROM orders ORDER BY items[0].price?, id DESC;
 SELECT id FROM orders ORDER BY items?[0].price, id DESC;
+-- Within an expression, a missing field is named after NULL, like a missing column.
+SELECT coalesce(items[0].price?, 0), map('k', named_struct('a', 1))['k'].b? IS NULL
+FROM orders;
 -- A path extraction from a missing optional VARIANT column is NULL, like a field of a missing
 -- struct column. A written NULL is not a VARIANT.
 SELECT CAST(v?:a AS STRING) AS a, CAST(missing?:a AS STRING) AS b, missing?:a::INT AS i

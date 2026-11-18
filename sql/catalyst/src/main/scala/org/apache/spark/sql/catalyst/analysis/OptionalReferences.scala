@@ -362,17 +362,22 @@ object OptionalReferences {
    * FOR statement, are valid paths too, the latter except in the query of a view (`isViewQuery`),
    * when the view is read or defined: a view cannot see the variables of the script, so a
    * definition that resolves a label is rejected when the view is created rather than when it is
-   * read. A qualifier is not a reference by itself, so the last name part never matches a
-   * qualifier.
+   * read. A qualifier is not a reference by itself, so a name is on the path of a qualifier only
+   * if it has a name part after the whole qualifier. Otherwise `?` would turn a column or variable
+   * that exists into NULL, as in `default.id?` or `system.v?`, which fail without `?` because
+   * `default` and `system` alone are not qualifiers.
    * Returns None if the whole name matches a path, which means that the name was found but was not
    * usable, e.g. because it references a column that is not grouped.
    *
    * {{{
-   *   -- `t` has the columns `id` and `addr STRUCT<city STRING>`:
-   *   t.name    -- 1: `t` matches the qualifier of `id`, `name` matches nothing
-   *   ghost.id  -- 0
-   *   addr.zip  -- 1
-   *   t         -- 0: `t` is not a column
+   *   -- `t` is the table `spark_catalog.default.t` with the columns `id` and
+   *   -- `addr STRUCT<city STRING>`:
+   *   t.name          -- 1: `t` matches the qualifier of `id`, `name` matches nothing
+   *   default.t.name  -- 2
+   *   ghost.id        -- 0
+   *   default.id      -- 0: `default` is not a qualifier without `t`
+   *   addr.zip        -- 1
+   *   t               -- 0: `t` is not a column
    * }}}
    */
   def firstUnmatchedNamePartIndex(
@@ -500,19 +505,24 @@ object OptionalReferences {
 
   /**
    * Returns the number of leading name parts of `nameParts` that match the leading parts of
-   * `qualifier`. The last name part is not compared, because a reference needs at least one name
-   * part after its qualifier.
+   * `qualifier`, or 0 if `nameParts` has no name part after a whole qualifier. A reference needs
+   * at least one name part after its qualifier, so a shorter name, such as `default.id` for the
+   * qualifier `default.t`, is not on a reference path of this qualifier at all.
    */
   private def matchedQualifierPartCount(
       nameParts: Seq[String],
       qualifier: Seq[String],
       resolver: Resolver): Int = {
-    qualifier
-      .zip(nameParts.init)
-      .takeWhile {
-        case (qualifierPart, namePart) => resolver(qualifierPart, namePart)
-      }
-      .length
+    if (nameParts.length > qualifier.length) {
+      qualifier
+        .zip(nameParts)
+        .takeWhile {
+          case (qualifierPart, namePart) => resolver(qualifierPart, namePart)
+        }
+        .length
+    } else {
+      0
+    }
   }
 
   /**
