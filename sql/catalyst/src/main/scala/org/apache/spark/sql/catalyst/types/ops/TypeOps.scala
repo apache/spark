@@ -175,8 +175,10 @@ trait TypeOps extends TypeApiOps {
    * projection, comparison, etc.) can handle them through existing code paths via
    * self-recursion - no per-physical-type matching needed at call sites.
    *
-   * Primitive-backed types (e.g., TimeType backed by Long) return None because
-   * existing infrastructure default paths already handle primitives correctly.
+   * Every other type returns None, and the logical-type sites then see the type itself: a
+   * primitive-backed type such as TimeType goes through their existing primitive handling, and
+   * a type that is neither primitive- nor complex-backed, such as the nanosecond timestamp
+   * types, needs handling of its own there, as those types have.
    *
    * This is NOT a type alias - the framework type retains its identity in schemas,
    * expressions, proto serialization, and error messages. This is solely a dispatch
@@ -187,7 +189,7 @@ trait TypeOps extends TypeApiOps {
    * always a built-in DataType, never another framework type, as some sites look the
    * representation up only once.
    *
-   * @return Some(DataType) for complex-backed types, None for primitive-backed types
+   * @return Some(DataType) for struct-, array- and map-backed types, None for every other type
    */
   def rowRepresentationType: Option[DataType] = getPhysicalType match {
     case PhysicalStructType(fields) => Some(StructType(fields))

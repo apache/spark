@@ -37,15 +37,16 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.ops.TestStructBackedType
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarArray, ColumnarBatch, ColumnarBatchRow, ColumnarMap, ColumnVector}
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -2255,7 +2256,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
   test("SPARK-56076: generic get reads types that are not matched by name through their " +
       "physical type") {
     val interval = new CalendarInterval(1, 2, 3L)
+    val geometry = GeometryType(4326)
+    val geography = GeographyType(4326)
     val schema = new StructType().add("t", TimeType(6)).add("i", CalendarIntervalType)
+      .add("g", geometry).add("h", geography)
     Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
       val time = allocate(1, TimeType(6), mode)
       val cal = allocate(1, CalendarIntervalType, mode)
@@ -2265,6 +2269,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         cal.putInterval(0, interval)
         struct.getChild(0).putLong(0, 42L)
         struct.getChild(1).asInstanceOf[WritableColumnVector].putInterval(0, interval)
+        struct.getChild(2).putByteArray(0, Array[Byte](1, 2, 3))
+        struct.getChild(3).putByteArray(0, Array[Byte](4, 5))
 
         val batchRow = new ColumnarBatchRow(Array(time, cal))
         batchRow.rowId = 0
@@ -2274,6 +2280,11 @@ class ColumnarBatchSuite extends SparkFunSuite {
         val columnarRow = struct.getStruct(0)
         assert(columnarRow.get(0, TimeType(6)) === 42L)
         assert(columnarRow.get(1, CalendarIntervalType) === interval)
+        Seq(2 -> geometry, 3 -> geography).foreach { case (ordinal, dt) =>
+          assert(columnarRow.get(ordinal, dt).asInstanceOf[BinaryView].getBytes.toSeq ===
+            columnarRow.getBinaryView(ordinal).getBytes.toSeq)
+        }
+        assert(columnarRow.getBinaryView(2).getBytes.toSeq === Seq[Byte](1, 2, 3))
 
         // Types without a physical type, and NullType, keep the original error.
         val objectType = ObjectType(classOf[String])
@@ -2300,6 +2311,34 @@ class ColumnarBatchSuite extends SparkFunSuite {
         cal.close()
         struct.close()
       }
+    }
+  }
+
+  test("SPARK-56076: a column vector of a struct-backed framework type is read as a struct") {
+    val testType = TestStructBackedType()
+    val name = new OnHeapColumnVector(1, StringType)
+    val value = new OnHeapColumnVector(1, LongType)
+    try {
+      name.putByteArray(0, "a".getBytes(StandardCharsets.UTF_8))
+      value.putLong(0, 7L)
+      val vector = new ChildrenOnlyColumnVector(testType, Array(name, value))
+      def check(row: InternalRow): Unit = {
+        assert(row.numFields === 2)
+        assert(row.getUTF8String(0).toString === "a")
+        assert(row.getLong(1) === 7L)
+      }
+      // ColumnVector.getStruct builds a ColumnarRow over the framework-typed vector.
+      check(vector.getStruct(0))
+      // ColumnarBatchRow.get reads the column through its physical type.
+      val batchRow = new ColumnarBatchRow(Array(vector))
+      batchRow.rowId = 0
+      check(batchRow.get(0, testType).asInstanceOf[InternalRow])
+      // ColumnarRow.get reads it as the field of an enclosing struct.
+      val outer = new ChildrenOnlyColumnVector(new StructType().add("f", testType), Array(vector))
+      check(outer.getStruct(0).get(0, testType).asInstanceOf[InternalRow])
+    } finally {
+      name.close()
+      value.close()
     }
   }
 
@@ -2470,4 +2509,30 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
     }
   }
+}
+
+/**
+ * A column vector of a given type that only returns the given child vectors, for a type that a
+ * writable column vector cannot hold, such as a struct-backed framework type.
+ */
+private class ChildrenOnlyColumnVector(dataType: DataType, children: Array[ColumnVector])
+    extends ColumnVector(dataType) {
+  private def unsupported: Nothing = throw new UnsupportedOperationException()
+  override def close(): Unit = {}
+  override def hasNull: Boolean = false
+  override def numNulls: Int = 0
+  override def isNullAt(rowId: Int): Boolean = false
+  override def getBoolean(rowId: Int): Boolean = unsupported
+  override def getByte(rowId: Int): Byte = unsupported
+  override def getShort(rowId: Int): Short = unsupported
+  override def getInt(rowId: Int): Int = unsupported
+  override def getLong(rowId: Int): Long = unsupported
+  override def getFloat(rowId: Int): Float = unsupported
+  override def getDouble(rowId: Int): Double = unsupported
+  override def getArray(rowId: Int): ColumnarArray = unsupported
+  override def getMap(ordinal: Int): ColumnarMap = unsupported
+  override def getDecimal(rowId: Int, precision: Int, scale: Int): Decimal = unsupported
+  override def getUTF8String(rowId: Int): UTF8String = unsupported
+  override def getBinary(rowId: Int): Array[Byte] = unsupported
+  override def getChild(ordinal: Int): ColumnVector = children(ordinal)
 }

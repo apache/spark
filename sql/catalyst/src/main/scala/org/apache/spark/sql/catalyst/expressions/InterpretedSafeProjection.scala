@@ -63,10 +63,14 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
       .getOrElse(generateSafeValueConverterDefault(dt))
 
   // A nested value (an array element, a struct field, a map key or value) may be null, which the
-  // array, struct and map converters cannot convert.
+  // array, struct and map converters cannot convert. The identity converter already keeps null.
   private def generateNullSafeValueConverter(dt: DataType): Any => Any = {
     val converter = generateSafeValueConverter(dt)
-    v => if (v == null) null else converter(v)
+    if (converter eq InterpretedSafeProjection.identityConverter) {
+      converter
+    } else {
+      v => if (v == null) null else converter(v)
+    }
   }
 
   private def generateSafeValueConverterDefault(dt: DataType): Any => Any = dt match {
@@ -110,7 +114,7 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
     case udt: UserDefinedType[_] =>
       generateSafeValueConverter(udt.sqlType)
 
-    case _ => identity
+    case _ => InterpretedSafeProjection.identityConverter
   }
 
   override def initialize(partitionIndex: Int): Unit = {
@@ -136,6 +140,10 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
  * Helper functions for creating an [[InterpretedSafeProjection]].
  */
 object InterpretedSafeProjection {
+
+  // The converter of a value that needs no conversion. It is shared, so that a nested converter
+  // can tell that it needs no null check.
+  private val identityConverter: Any => Any = v => v
 
   /**
    * Returns an [[SafeProjection]] for given sequence of bound Expressions.
