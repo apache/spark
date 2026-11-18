@@ -668,7 +668,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       checkError(
         exception = intercept[AnalysisException](spark.udf.registerColumnar(file)),
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> "`file_udf`"))
+        parameters = Map("routineName" -> "`file_udf`"))
     }
   }
 }
