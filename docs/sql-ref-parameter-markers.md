@@ -58,7 +58,7 @@ Parameter markers can be provided by:
 - **Java** using its [org.apache.spark.sql.SparkSession.sql()](https://spark.apache.org/docs/latest/api/java/org/apache/spark/sql/SparkSession.html) API.
 - **SQL** using the [`EXECUTE IMMEDIATE` statement](sql-ref-syntax-aux-exec-imm.html).
 
-To type-check SQL that contains markers without executing it, `parse_sql` `ANALYZE` accepts a `parameter_markers` array of names (`?` or a simple identifier) and DDL types. Markers are bound as typed `NULL` values for analysis only.
+To type-check SQL that contains markers without executing it, `parse_sql` `ANALYZE` accepts a `parameter_markers` array of names (`?` or a simple identifier) and DDL types. Markers are bound as typed `NULL` values for analysis only. `parse_sql` requires `spark.sql.function.parseSql.enabled=true`.
 
 #### Named parameter markers
 

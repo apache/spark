@@ -412,7 +412,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
           case JArray(List(value: JObject)) => value
           case other => fail(s"expected one statement object, got: $other")
         }
-        assert(analyzed \ "analyze_success" === JBool(true))
+        assert(analyzed \ "analyze_success" === JBool(true), json)
         assert(spark.sql("SELECT current_path()").head().getString(0) === before)
       } finally {
         sql("SET PATH = DEFAULT_PATH")
@@ -479,6 +479,52 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       assert(analyzed \ "analyze_success" === JBool(true))
       assert(spark.conf.get(SQLConf.PATH_ENABLED.key) === pathEnabled)
       assert(spark.sql("SELECT current_path()").head().getString(0) === before)
+    }
+  }
+
+  test("ANALYZE DDL does not see caller-supplied relations and keeps later statements") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'ALTER TABLE parse_sql_ddl_missing RENAME COLUMN a TO b;
+          |   SELECT a FROM parse_sql_ddl_missing',
+          |  'ANALYZE',
+          |  relations => array(named_struct('name', 'parse_sql_ddl_missing', 'schema', 'a INT')))
+          |""".stripMargin).head().getString(0)
+      val statements = parse(json) match {
+        case JArray(values) => values.map(_.asInstanceOf[JObject])
+        case other => fail(s"expected a statement array, got: $other")
+      }
+      assert(statements.length === 2)
+      assert(statements(0) \ "parse_success" === JBool(true))
+      assert(statements(0) \ "analyze_success" === JBool(false))
+      assert(errorClass(statements(0)) === JString("TABLE_OR_VIEW_NOT_FOUND"))
+      assert(statements(1) \ "analyze_success" === JBool(true))
+    }
+  }
+
+  test("ANALYZE DDL on a real table is not replaced by a same-named supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_ddl_t") {
+        sql("CREATE TABLE parse_sql_ddl_t (a INT) USING parquet")
+        val json = spark.sql(
+          """SELECT parse_sql(
+            |  'ALTER TABLE parse_sql_ddl_t ADD COLUMN b INT',
+            |  'ANALYZE',
+            |  relations => array(named_struct('name', 'parse_sql_ddl_t', 'schema', 'a STRING')))
+            |""".stripMargin).head().getString(0)
+        val analyzed = parse(json) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(analyzed \ "analyze_success" === JBool(true), json)
+        // The catalog table is the target, not the supplied relation.
+        assert(analyzed \ "target_table_references" ===
+          JArray(List(JArray(List(
+            JString("spark_catalog"), JString("default"), JString("parse_sql_ddl_t"))))), json)
+        // ANALYZE does not run the statement.
+        assert(spark.table("parse_sql_ddl_t").columns.toSeq === Seq("a"))
+      }
     }
   }
 
@@ -1212,7 +1258,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
           case JArray(List(value: JObject)) => value
           case other => fail(s"expected one statement object, got: $other")
         }
-        assert(analyzed \ "analyze_success" === JBool(true))
+        assert(analyzed \ "analyze_success" === JBool(true), json)
         assert(analyzed \ "select_list" === JArray(List(
           JObject("name" -> JArray(List(JString("x"))), "type" -> jsonInt))))
         assert(spark.sql("SELECT parse_sql_existing_v").head().getInt(0) === 1)
@@ -1237,7 +1283,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
             case JArray(List(value: JObject)) => value
             case other => fail(s"expected one statement object, got: $other")
           }
-          assert(analyzed \ "analyze_success" === JBool(true))
+          assert(analyzed \ "analyze_success" === JBool(true), json)
           assert(analyzed \ "select_list" === JArray(List(
             JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))))
         }
@@ -1264,7 +1310,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
               case JArray(List(value: JObject)) => value
               case other => fail(s"expected one statement object, got: $other")
             }
-            assert(analyzed \ "analyze_success" === JBool(true))
+            assert(analyzed \ "analyze_success" === JBool(true), json)
             assert(analyzed \ "select_list" === JArray(List(
               JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))))
             assert(spark.sql("SELECT parse_sql_shadow_v").head().getInt(0) === 1)

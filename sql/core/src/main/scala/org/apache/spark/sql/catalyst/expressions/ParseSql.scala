@@ -102,7 +102,8 @@ import org.apache.spark.unsafe.types.UTF8String
         the DDL type; the variable is not created.
       * relations - Optional constant array of `named_struct('name', ..., 'schema', ...)`
         entries. Each name is a relation that `ANALYZE` treats as existing with the DDL
-        schema; nothing is created.
+        schema; nothing is created. Query sources and DML targets resolve to the entry.
+        DDL and other commands that name a table act on the catalog's own objects.
       * parameter_markers - Optional constant array of `named_struct('name', ..., 'type', ...)`
         entries. The name is `?` for a positional marker or the marker name for a named
         marker. A marker without a type leaves the statement unresolved.
