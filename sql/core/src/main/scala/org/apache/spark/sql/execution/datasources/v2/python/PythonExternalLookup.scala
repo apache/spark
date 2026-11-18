@@ -134,7 +134,9 @@ class PythonExternalLookupReaderFactory(
  *
  * The calls that use the worker or the Arrow memory hold `ioLock`, which a close from another
  * thread never waits for: when a call holds it, the close destroys the worker, which ends the
- * call, and the call releases the memory when it ends.
+ * call, and the call releases the memory when it ends. Arrow memory is read and freed only while
+ * `ioLock` is held: a cursor copies each row out of it in `next()`, so a close from any thread,
+ * at any time, never frees the memory of a row that Spark may still read.
  *
  * The reader registers one interrupt listener, which destroys the worker if the task has not
  * completed within `spark.python.task.killTimeout` after it was killed, also when the task thread
@@ -351,8 +353,14 @@ private object PythonExternalLookupReader {
 }
 
 /**
- * A cursor over the response to one request, read batch by batch. [[get]] returns a view of the
- * current Arrow row without the ordinal column, which Spark copies.
+ * A cursor over the response to one request, read batch by batch.
+ *
+ * [[next]] copies the ordinal and the values of the next row out of the Arrow batch, holding the
+ * reader's `ioLock`, and [[inputOrdinal]] and [[get]] return the copies. The
+ * `ExternalLookupReader` contract lets Spark call them, and read the row that [[get]] returned
+ * last, while or after another thread closes the cursor and the reader, which frees the Arrow
+ * memory; the copies stay readable then. The copy keeps every value as the Arrow row has it,
+ * nulls included, so Spark's checks of the results are unchanged.
  */
 private class PythonExternalLookupResultCursor(
     reader: PythonExternalLookupReader,
@@ -365,6 +373,9 @@ private class PythonExternalLookupResultCursor(
   private var values: ColumnarBatch = null
   private var rowIndex = -1
   private var numRows = 0
+  // The copies of the current row, which do not use Arrow memory.
+  private var currentOrdinal = -1
+  private var currentRow: InternalRow = null
   // Whether the response was read to its end, or will not be, because the worker is gone.
   private var finished = false
   @volatile private var closed = false
@@ -374,13 +385,17 @@ private class PythonExternalLookupResultCursor(
     reader.guarded(worker) {
       rowIndex += 1
       while (rowIndex >= numRows && !finished) loadNextBatch()
+      if (!finished) {
+        currentOrdinal = ordinals.get(rowIndex)
+        currentRow = values.getRow(rowIndex).copy()
+      }
       !finished
     }
   }
 
-  override def inputOrdinal(): Int = ordinals.get(rowIndex)
+  override def inputOrdinal(): Int = currentOrdinal
 
-  override def get(): InternalRow = values.getRow(rowIndex)
+  override def get(): InternalRow = currentRow
 
   /**
    * On the thread that drives the reader, reads the rest of the response, which it cancels.
