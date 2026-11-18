@@ -23,14 +23,16 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SchemaValidationUtils, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorStateInfo, StatefulOperatorsUtils, StatefulOpStateStoreCheckpointInfo, StateStoreWriter, WatermarkSupport}
@@ -362,6 +364,24 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    // Older versions order the V4 state of an input by its event time, so their checkpoints
+    // cannot evict that state by another column.
+    if (stateFormatVersion == 4 &&
+        conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION) == 0) {
+      Seq((LeftSide, stateWatermarkPredicates.left, left.output),
+          (RightSide, stateWatermarkPredicates.right, right.output)).foreach {
+        case (side, predicate, attributes) =>
+          val eventTime = WatermarkSupport.findEventTimeColumnIndex(
+            attributes, allowMultipleEventTimeColumns = false)
+          stateValueWatermarkColumnOrdinal(predicate, attributes)
+            .filterNot(eventTime.contains).foreach { column =>
+              throw new AnalysisException(
+                errorClass = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+                messageParameters = Map(
+                  "side" -> side.toString, "column" -> toSQLId(attributes(column).name)))
+            }
+      }
+    }
     val stateStoreCoord = session.sessionState.streamingQueryManager.stateStoreCoordinator
     metrics // initialize metrics
     left.execute().stateStoreAwareZipPartitions(
@@ -697,7 +717,9 @@ case class StreamingSymmetricHashJoinExec(
       stateFormatVersion = stateFormatVersion,
       skippedNullValueCount = skippedNullValueCount,
       joinStoreGenerator = joinStateManagerStoreGenerator,
-      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark)
+      joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark,
+      stateValueWatermarkColumnOrdinal =
+        stateValueWatermarkColumnOrdinal(stateWatermarkPredicate, inputAttributes))
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
@@ -721,6 +743,16 @@ case class StreamingSymmetricHashJoinExec(
     private[this] var numRemovedFromOtherSideDuringJoinCount = 0
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+
+    // The join condition bounds the column that the value predicate tests, so a row with a NULL
+    // in it can never match, and the predicate never evicts it. The legacy mode tests the event
+    // time even when the condition bounds another column.
+    private[this] val isEvictionColumnNull: UnsafeRow => Boolean = stateWatermarkPredicate match {
+      case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _))
+          if allowMultipleStatefulOperators =>
+        Predicate.create(IsNull(column), inputAttributes).eval _
+      case _ => _ => false
+    }
 
     // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
     // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
@@ -843,11 +875,11 @@ case class StreamingSymmetricHashJoinExec(
 
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
-        // If this row fails the pre join filter, that means it can never satisfy the full join
-        // condition no matter what other side row it's matched with. This allows us to avoid
-        // adding it to the state, and generate an outer join row immediately (or do nothing in
-        // the case of inner join).
-        if (preJoinFilter(thisRow)) {
+        // If this row fails the pre join filter, or its eviction column is NULL, that means it can
+        // never satisfy the full join condition no matter what other side row it's matched with.
+        // This allows us to avoid adding it to the state, and generate an outer join row
+        // immediately (or do nothing in the case of inner join).
+        if (preJoinFilter(thisRow) && !isEvictionColumnNull(thisRow)) {
           val key = keyGenerator(thisRow)
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for

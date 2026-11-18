@@ -262,27 +262,34 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             prevStateKeyWatermark)
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
-        val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
-          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-          attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-          condition,
-          eventTimeWatermarkForEviction)
-        // A row can pass late-input filtering but already be eligible for eviction in this batch.
-        // When the previous join-derived state cutoff is ahead of the late-input watermark, a new
-        // row can fall at or below that cutoff. V4 must scan from the beginning to find such rows.
-        val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { lateWatermark =>
-          StreamingJoinHelper.getStateValueWatermark(
-            attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-            attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-            condition,
-            eventTimeWatermarkForLateEvents).filter(_ <= lateWatermark)
-        }
-        val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
-        val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
-        expr.map { e =>
-          // watermarkExpression only provides the expression when eventTimeWatermarkForEviction
-          // is defined
-          JoinStateValueWatermarkPredicate(e, stateValueWatermark.get, prevStateValueWatermark)
+        val eventTime = oneSideInputAttributes.find(_.metadata.contains(delayKey))
+        // The legacy mode with a single global watermark keeps applying a cutoff on any column of
+        // this input to the event time.
+        def solve(watermark: Option[Long]): Option[(Attribute, Long)] =
+          if (useFirstEventTimeColumn) {
+            StreamingJoinHelper.getStateValueWatermark(
+              attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+              attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
+              condition,
+              watermark).map(eventTime.get -> _)
+          } else {
+            StreamingJoinHelper.getStateValueWatermarkColumn(oneSideInputAttributes,
+              AttributeSet(otherSideInputAttributes), condition, watermark)
+          }
+        solve(eventTimeWatermarkForEviction).flatMap { case (column, stateValueWatermark) =>
+          // A row can pass late-input filtering but already be eligible for eviction in this
+          // batch. When the previous join-derived state cutoff is ahead of the late-input
+          // watermark, a new row can fall at or below that cutoff. V4 must scan from the
+          // beginning to find such rows. Late-input filtering bounds only the event time, so a
+          // cutoff on another column always scans from the beginning.
+          val prevStateValueWatermark = eventTimeWatermarkForLateEvents.flatMap { lateWatermark =>
+            solve(Some(lateWatermark)).collect {
+              case (c, w) if eventTime.exists(_.semanticEquals(c)) && w <= lateWatermark => w
+            }
+          }
+          watermarkExpression(Some(column), Some(stateValueWatermark)).map { e =>
+            JoinStateValueWatermarkPredicate(e, stateValueWatermark, prevStateValueWatermark)
+          }
         }
       } else {
         None
@@ -294,6 +301,17 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     val rightStateWatermarkPredicate =
       getOneSideStateWatermarkPredicate(rightAttributes, rightKeys, leftAttributes)
     JoinStateWatermarkPredicates(leftStateWatermarkPredicate, rightStateWatermarkPredicate)
+  }
+
+  /**
+   * The ordinal of the input column that a value predicate tests. State format version 4 orders
+   * the state of the input by this column.
+   */
+  def stateValueWatermarkColumnOrdinal(
+      predicate: Option[JoinStateWatermarkPredicate],
+      inputAttributes: Seq[Attribute]): Option[Int] = predicate.collect {
+    case p: JoinStateValueWatermarkPredicate =>
+      inputAttributes.indexWhere(p.expr.references.contains)
   }
 
   private[join] def findJoinKeyOrdinalForWatermark(
