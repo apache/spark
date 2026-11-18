@@ -146,12 +146,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     _.containsAnyPattern(EXISTS_SUBQUERY, LIST_SUBQUERY)) {
     case Filter(condition, child)
       if SubqueryExpression.hasInOrCorrelatedExistsSubquery(condition) =>
-      val (withSubquery, withoutSubquery) =
-        splitConjunctivePredicates(condition)
-          .partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
-      // A throwable conjunct stays above the joins that the subqueries are rewritten to, so that
-      // it is not evaluated on the rows they remove.
-      val (stayUp, pushDown) = withoutSubquery.partition(_.throwable)
+      val conjuncts = splitConjunctivePredicates(condition)
+      // The deterministic, throwable conjuncts written last, e.g. the CHECK constraints of a write,
+      // stay above the joins that the subqueries are rewritten to, so that they are not evaluated
+      // on the rows these joins remove. The other conjuncts keep their written order below the
+      // joins, so that no conjunct is evaluated ahead of a throwable one written before it.
+      val (rest, stayUp) = conjuncts.splitAt(conjuncts.lastIndexWhere { c =>
+        !c.deterministic || !c.throwable || SubqueryExpression.hasInOrCorrelatedExistsSubquery(c)
+      } + 1)
+      val (withSubquery, pushDown) =
+        rest.partition(SubqueryExpression.hasInOrCorrelatedExistsSubquery)
 
       // Construct the pruned filter condition.
       val newFilter: LogicalPlan = pushDown match {

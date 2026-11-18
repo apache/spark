@@ -204,4 +204,22 @@ class RewriteSubquerySuite extends PlanTest {
     val correctAnswer = relation.join(relInSubquery, LeftSemi, Some($"a" === $"x")).where(check)
     comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
+
+  test("SPARK-61927: keep a throwable predicate below the join if it is not written last") {
+    val relation = LocalRelation($"a".int, $"b".int)
+    val relInSubquery = LocalRelation($"x".int)
+    val inSubquery = $"a".in(ListQuery(relInSubquery.select($"x")))
+    val check = CheckInvariant($"b" > 0, Seq("b" -> $"b"), "positive_b", "b > 0")
+
+    // The subquery or the condition written after a throwable predicate must not be evaluated on
+    // the rows that it removes, so it stays below the join in the written order.
+    Seq(
+      (check && inSubquery) -> check,
+      (inSubquery && check && $"a" > 1) -> (check && $"a" > 1)).foreach {
+      case (condition, belowJoin) =>
+        val correctAnswer =
+          relation.where(belowJoin).join(relInSubquery, LeftSemi, Some($"a" === $"x"))
+        comparePlans(Optimize.execute(relation.where(condition).analyze), correctAnswer.analyze)
+    }
+  }
 }
