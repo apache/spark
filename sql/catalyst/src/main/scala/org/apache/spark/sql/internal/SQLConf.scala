@@ -4506,6 +4506,20 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED =
+    buildConf("spark.sql.streaming.join.checkWatermarkDirection.enabled")
+      .internal()
+      .doc("When true, a stream-stream left outer, left semi, right outer or full outer join " +
+        "fails analysis unless the other input's watermark bounds the state of each input " +
+        "whose rows the join outputs once: through an equality on the other input's event-time " +
+        "column, optionally shifted forward by a constant, or through a range condition. " +
+        "Otherwise, late rows of the other input can match rows that were already output. " +
+        "When false, only the check of earlier versions applies.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
