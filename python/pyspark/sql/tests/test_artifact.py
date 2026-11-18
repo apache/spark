@@ -22,7 +22,10 @@ from pathlib import Path
 
 from pyspark.errors import PySparkRuntimeError, SparkRuntimeException
 from pyspark.sql.functions import assert_true, lit, udf
-from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
+from pyspark.sql.tests.connect.client.test_artifact import (
+    ArtifactTestsMixin,
+    GlobalPyFilesTestsMixin,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -180,6 +183,12 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_file(self.spark.newSession())
+
+
+class GlobalPyFilesTests(GlobalPyFilesTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def conf(cls):
+        return cls.with_global_py_files(super().conf())
 
 
 if __name__ == "__main__":

@@ -94,6 +94,19 @@ private[spark] object Python {
     .booleanConf
     .createWithDefault(false)
 
+  val PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED =
+    ConfigBuilder("spark.python.isolatedSession.globalPyFiles.enabled")
+      .internal()
+      .doc("When true, the Python workers of a session with artifact isolation, such as a " +
+        "Spark Connect session, can also import the Python files that the application was " +
+        "started with (--py-files or spark.submit.pyFiles), after the session's own files. " +
+        "Set to false to restore the previous behavior, where these workers can only import " +
+        "the session's own Python files, except on YARN, which puts the application's Python " +
+        "files on PYTHONPATH.")
+      .version("4.0.6")
+      .booleanConf
+      .createWithDefault(true)
+
   val PYTHON_UNIX_DOMAIN_SOCKET_ENABLED = ConfigBuilder("spark.python.unix.domain.socket.enabled")
     .doc("When set to true, the Python driver uses a Unix domain socket for operations like " +
       "creating or collecting a DataFrame from local data, using accumulators, and executing " +

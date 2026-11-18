@@ -33,7 +33,8 @@ import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.Python.PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE
+import org.apache.spark.internal.config.Python.{PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE, PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED}
+import org.apache.spark.internal.config.SUBMIT_PYTHON_FILES
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -147,7 +148,32 @@ private[spark] class PythonWorkerFactory(
   private val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
-    sys.env.getOrElse("PYTHONPATH", ""))
+    sys.env.getOrElse("PYTHONPATH", ""),
+    globalPythonFilesPath)
+
+  /**
+   * SPARK-62000: The Python path of the Python files that the application was started with, for
+   * the workers of a session with artifact isolation, like the global JARs that the class loader
+   * of such a session inherits (SPARK-51537). The workers add the session's own files in front
+   * of it. Only the files in the default files directory are used: spark-submit and
+   * `SparkContext` put them there, except on YARN, which puts them on PYTHONPATH instead.
+   */
+  private def globalPythonFilesPath: String = {
+    val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
+    if (jobArtifactUUID == "default" ||
+        !conf.get(PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED)) {
+      ""
+    } else {
+      val rootDir = new File(SparkFiles.getRootDirectory()).getAbsoluteFile
+      val files = conf.get(SUBMIT_PYTHON_FILES)
+        .map(path => new File(rootDir, new File(Utils.resolveURI(path).getPath).getName))
+        .filter(_.isFile)
+      val (modules, packages) = files.partition(_.getName.endsWith(".py"))
+      // A module is imported from its directory, and a package from its archive.
+      PythonUtils.mergePythonPaths(
+        packages.map(_.getPath) ++ modules.headOption.map(_ => rootDir.getPath): _*)
+    }
+  }
 
   def create(): (PythonWorker, Option[PythonWorkerHandle]) = {
     if (useDaemon) {

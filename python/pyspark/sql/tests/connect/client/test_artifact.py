@@ -19,6 +19,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import uuid
 import zipfile
 import zlib
 
@@ -177,6 +178,99 @@ class ArtifactTestsMixin:
                 f"sc://localhost:{DefaultChannelBuilder.default_port()}"
             ).create()
         )
+
+
+class GlobalPyFilesTestsMixin:
+    """
+    The Python files that the application was started with (spark.submit.pyFiles, as with
+    --py-files) stay importable in Python UDFs.
+    """
+
+    @classmethod
+    def with_global_py_files(cls, conf):
+        cls.global_py_files_dir = tempfile.mkdtemp(prefix="global_py_files")
+        paths = []
+        for name, value in [
+            ("global_py_files_module.py", "global module"),
+            ("global_py_files_clash.py", "global clash"),
+        ]:
+            path = os.path.join(cls.global_py_files_dir, name)
+            with open(path, "w") as f:
+                f.write(f"value = {value!r}")
+            paths.append(path)
+        # As spark-submit does with --py-files outside YARN.
+        return conf.set("spark.files", ",".join(paths)).set("spark.submit.pyFiles", ",".join(paths))
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            super().tearDownClass()
+        finally:
+            shutil.rmtree(cls.global_py_files_dir, ignore_errors=True)
+
+    @staticmethod
+    def global_py_files_udf():
+        @udf("string")
+        def func(x):
+            import global_py_files_clash
+            import global_py_files_module
+
+            return f"{global_py_files_module.value}, {global_py_files_clash.value}"
+
+        return func
+
+    def test_global_py_files_batch_udf(self):
+        func = self.global_py_files_udf()
+        rows = self.spark.range(1).select(func("id")).collect()
+        self.assertEqual([r[0] for r in rows], ["global module, global clash"])
+
+    def test_global_py_files_streaming_udf(self):
+        func = self.global_py_files_udf()
+        with tempfile.TemporaryDirectory(prefix="test_global_py_files_streaming_udf") as d:
+            with open(os.path.join(d, "input.json"), "w") as f:
+                f.write('{"id": 0}\n')
+            query_name = f"global_py_files_{uuid.uuid4().hex}"
+            q = (
+                self.spark.readStream.schema("id BIGINT")
+                .json(d)
+                .select(func("id"))
+                .writeStream.format("memory")
+                .queryName(query_name)
+                .trigger(availableNow=True)
+                .start()
+            )
+            try:
+                q.awaitTermination()
+            finally:
+                q.stop()
+            rows = self.spark.table(query_name).collect()
+            self.assertEqual([r[0] for r in rows], ["global module, global clash"])
+
+
+class GlobalPyFilesPrecedenceTestsMixin:
+    """With artifact isolation, the Python files of the session come first."""
+
+    def test_global_py_files_session_precedence(self):
+        session = SparkSession.builder.remote(
+            f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+        ).create()
+        with tempfile.TemporaryDirectory(prefix="test_global_py_files_precedence") as d:
+            path = os.path.join(d, "global_py_files_clash.py")
+            with open(path, "w") as f:
+                f.write("value = 'session clash'")
+            session.addArtifacts(path, pyfile=True)
+            func = self.global_py_files_udf()
+            rows = session.range(1).select(func("id")).collect()
+            self.assertEqual([r[0] for r in rows], ["global module, session clash"])
+
+
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
+class GlobalPyFilesTests(
+    GlobalPyFilesTestsMixin, GlobalPyFilesPrecedenceTestsMixin, ReusedConnectTestCase
+):
+    @classmethod
+    def conf(cls):
+        return cls.with_global_py_files(super().conf())
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")

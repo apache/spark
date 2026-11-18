@@ -16,7 +16,11 @@
 #
 import os
 
-from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
+from pyspark.sql.tests.connect.client.test_artifact import (
+    ArtifactTestsMixin,
+    GlobalPyFilesPrecedenceTestsMixin,
+    GlobalPyFilesTestsMixin,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
@@ -31,6 +35,20 @@ class LocalClusterArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
     def root(cls):
         # In local cluster, we can mimic the production usage.
         return "."
+
+    @classmethod
+    def master(cls):
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[2,2,512]")
+
+
+class LocalClusterGlobalPyFilesTests(
+    GlobalPyFilesTestsMixin, GlobalPyFilesPrecedenceTestsMixin, ReusedConnectTestCase
+):
+    @classmethod
+    def conf(cls):
+        return cls.with_global_py_files(
+            super().conf().set("spark.driver.memory", "512M").set("spark.executor.memory", "512M")
+        )
 
     @classmethod
     def master(cls):
