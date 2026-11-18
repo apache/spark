@@ -54,6 +54,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * The lookup source has the schema `id BIGINT, pid INT, partition INT, match INT`. For each
  * parameter row with a non-negative `id`, it returns `matches` rows, numbered by `match`, with
  * the process id of the Python worker and the partition of the task; a negative `id` is a miss.
+ * With the option `recordBatches`, it returns the same rows as `pyarrow.RecordBatch`es of
+ * `batchRows` rows, by default 10, with the ordinal first.
  * It appends its events, with the process id, to the file `events` in `markerDir`.
  */
 abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
@@ -93,6 +95,28 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
        |        return [i for i, c in enumerate(candidates) if c.attribute == ("id",)][:1]
        |
        |    def lookup(self, parameters):
+       |        pairs = self.pairs(parameters)
+       |        if self.options.get("recordBatches") != "true":
+       |            return pairs
+       |        return self.record_batches(pairs)
+       |
+       |    def record_batches(self, pairs):
+       |        import pyarrow as pa
+       |        from itertools import islice
+       |        types = [pa.int64(), pa.int32(), pa.int32(), pa.int32()]
+       |        try:
+       |            while True:
+       |                chunk = list(islice(pairs, int(self.options.get("batchRows", "10"))))
+       |                if not chunk:
+       |                    return
+       |                yield pa.RecordBatch.from_arrays(
+       |                    [pa.array([o for o, _ in chunk], pa.int64())] +
+       |                    [pa.array([r[i] for _, r in chunk], t) for i, t in enumerate(types)],
+       |                    names=["ordinal", "id", "pid", "partition", "match"])
+       |        finally:
+       |            pairs.close()
+       |
+       |    def pairs(self, parameters):
        |        matches = int(self.options.get("matches", "1"))
        |        behavior = self.options.get("behavior", "")
        |        pid = os.getpid()
@@ -601,22 +625,52 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
     }
   }
 
-  test("the Arrow memory of a reader returns to the baseline") {
-    withLookup("matches" -> "1000")(
-        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") { (factory, _) =>
-      val (before, during, after) = inTask() { _ =>
-        val before = ArrowUtils.rootAllocator.getAllocatedMemory
-        val reader = factory.createReader()
-        readAll(reader.lookupBatch(parameterRows(Seq(1L, 2L))))
-        val cursor = reader.lookupBatch(parameterRows(Seq(3L)))
-        cursor.next()
-        val during = ArrowUtils.rootAllocator.getAllocatedMemory
-        // The cursor is closed by the reader's close.
-        reader.close()
-        (before, during, ArrowUtils.rootAllocator.getAllocatedMemory)
+  test("the RecordBatch form returns the rows of its batches") {
+    def results(options: (String, String)*): Seq[(Int, Long, Int)] = {
+      var rows: Seq[(Int, Long, Int)] = Nil
+      withLookup(options :+ ("matches" -> "3"): _*)() { (factory, _) =>
+        rows = inTask() { _ =>
+          val reader = factory.createReader()
+          try {
+            readAll(reader.lookupBatch(parameterRows(Seq(7L, -1L, 9L)))).map { r =>
+              (r.ordinal, r.id, r.matchIndex)
+            }
+          } finally {
+            reader.close()
+          }
+        }
       }
-      assert(during > before)
-      assert(after === before)
+      rows
+    }
+    val expected = Seq(7L, 9L).zip(Seq(0, 2)).flatMap { case (key, ordinal) =>
+      (0 until 3).map(i => (ordinal, key, i))
+    }
+    assert(results() === expected)
+    // Batches of two rows, and of more rows than a request returns.
+    assert(results("recordBatches" -> "true", "batchRows" -> "2") === expected)
+    assert(results("recordBatches" -> "true", "batchRows" -> "100") === expected)
+  }
+
+  // The tuple form keeps the name of its test from before the RecordBatch form.
+  Seq(false, true).foreach { recordBatches =>
+    val form = if (recordBatches) ", in the RecordBatch form" else ""
+    test(s"the Arrow memory of a reader returns to the baseline$form") {
+      withLookup("matches" -> "1000", "recordBatches" -> recordBatches.toString)(
+          SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") { (factory, _) =>
+        val (before, during, after) = inTask() { _ =>
+          val before = ArrowUtils.rootAllocator.getAllocatedMemory
+          val reader = factory.createReader()
+          readAll(reader.lookupBatch(parameterRows(Seq(1L, 2L))))
+          val cursor = reader.lookupBatch(parameterRows(Seq(3L)))
+          cursor.next()
+          val during = ArrowUtils.rootAllocator.getAllocatedMemory
+          // The cursor is closed by the reader's close.
+          reader.close()
+          (before, during, ArrowUtils.rootAllocator.getAllocatedMemory)
+        }
+        assert(during > before)
+        assert(after === before)
+      }
     }
   }
 

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import datetime
 import json
 import os
 import socket
@@ -36,6 +37,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
@@ -136,6 +138,26 @@ class ListLookupReader(DataSourceLookupReader):
 
     def lookup(self, parameters):
         return [(0, (1, "one"))]
+
+
+class BatchLookupReader(DataSourceLookupReader):
+    """
+    Returns the results that `make_results(parameters)` builds, `pyarrow.RecordBatch`es or
+    other values, and records its calls in `events`.
+    """
+
+    def __init__(self, make_results) -> None:
+        self.make_results = make_results
+
+    def selectLookupPredicates(self, candidates):
+        return range(len(candidates))
+
+    def lookup(self, parameters):
+        events.append(f"lookup {parameters}")
+        try:
+            yield from self.make_results(parameters)
+        finally:
+            events.append("finally")
 
 
 READ_SCHEMA = StructType([StructField("id", LongType()), StructField("name", StringType())])
@@ -428,6 +450,153 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
                 client = self.client(PairLookupReader((0, row)), read_schema=read_schema)
                 client.lookup_error((1,), error_type=error_type)
 
+    @staticmethod
+    def echo_batches(parameters):
+        """The results of `EchoLookupReader`, as one `pyarrow.RecordBatch` with int64 ordinals."""
+        ordinals, ids, names = [], [], []
+        for ordinal, (key, *_) in enumerate(parameters):
+            if key is None:
+                continue
+            for name in [f"first {key}", f"second {key}"] if key % 2 == 0 else [f"named {key}"]:
+                ordinals.append(ordinal)
+                ids.append(key)
+                names.append(name)
+        yield pa.RecordBatch.from_arrays(
+            [pa.array(ordinals, pa.int64()), pa.array(ids, pa.int64()), pa.array(names)],
+            names=["ordinal", "id", "name"],
+        )
+
+    def test_record_batch_form_gives_the_rows_of_the_tuple_form(self):
+        parameters = [(2,), (None,), (3,), (7,)]
+        tuple_rows = self.rows(self.client(EchoLookupReader()).lookup(*parameters)[0])
+        client = self.client(BatchLookupReader(self.echo_batches))
+        batches, status = client.lookup(*parameters)
+        self.assertIn("lookup [(2,), (None,), (3,), (7,)]", events)
+        self.assertEqual(sorted(self.rows(batches), key=str), sorted(tuple_rows, key=str))
+        # The ordinals are cast to int32, and the batch keeps its size.
+        self.assertEqual([batch.num_rows for batch in batches], [4])
+        self.assertEqual(batches[0].schema.field("ordinal").type, pa.int32())
+        self.assertEqual(status, client.protocol.STATUS_COMPLETE)
+        self.assertEqual(client.close(), 0)
+
+    def test_record_batch_form_ordinals(self):
+        def batch(ordinals):
+            n = len(ordinals)
+            return pa.RecordBatch.from_arrays(
+                [ordinals, pa.array([1] * n, pa.int64()), pa.array(["a"] * n)],
+                names=["o", "id", "name"],
+            )
+
+        # Any integer type, clamped to the range of a Java int as in the tuple form.
+        for ordinals, expected in [
+            (pa.array([0, 1], pa.int8()), [0, 1]),
+            (pa.array([2**40], pa.uint64()), [2**31 - 1]),
+            (pa.array([-(2**40)], pa.int64()), [-(2**31)]),
+        ]:
+            with self.subTest(ordinals=ordinals):
+                client = self.client(BatchLookupReader(lambda p, o=ordinals: iter([batch(o)])))
+                batches, _ = client.lookup((1,), (2,))
+                self.assertEqual([row["ordinal"] for row in self.rows(batches)], expected)
+
+        # The ordinals that the tuple form rejects: a null, a bool or a float.
+        for ordinals, rejected_type in [
+            (pa.array([0, None], pa.int64()), "NoneType"),
+            (pa.array([True]), "bool"),
+            (pa.array([0.0]), "double"),
+        ]:
+            with self.subTest(ordinals=ordinals):
+                events.clear()
+                client = self.client(BatchLookupReader(lambda p, o=ordinals: iter([batch(o)])))
+                error = client.lookup_error((1,))
+                self.assertEqual(error.getCondition(), "DATA_SOURCE_INVALID_RETURN_TYPE")
+                self.assertEqual(error.getMessageParameters()["type"], rejected_type)
+                self.assertEqual(events[-1], "finally")
+
+    def test_record_batch_form_checks_every_batch_as_read_does(self):
+        def ok():
+            return pa.RecordBatch.from_arrays(
+                [pa.array([0]), pa.array([1]), pa.array(["a"])], names=["o", "id", "name"]
+            )
+
+        def bad(**columns):
+            arrays = {"o": pa.array([0]), "id": pa.array([1]), "name": pa.array(["a"])}
+            arrays.update(columns)
+            return pa.RecordBatch.from_arrays(list(arrays.values()), names=list(arrays))
+
+        cases = [
+            # The errors of `DataSourceReader.read` for a batch that does not match.
+            (bad(name=pa.array([1])), "DATA_SOURCE_RETURN_SCHEMA_MISMATCH"),
+            (bad(name=pa.array(["a"], pa.large_string())), "DATA_SOURCE_RETURN_SCHEMA_MISMATCH"),
+            (bad(extra=pa.array([1])), "DATA_SOURCE_RETURN_SCHEMA_MISMATCH"),
+            (
+                pa.RecordBatch.from_arrays(
+                    [pa.array([0]), pa.array([1]), pa.array(["a"])], names=["o", "id", "label"]
+                ),
+                "DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+            ),
+            # A value of the other form after the first batch.
+            ((0, (1, "a")), "DATA_SOURCE_INVALID_RETURN_TYPE"),
+        ]
+        for second, condition in cases:
+            with self.subTest(second=second):
+                events.clear()
+                client = self.client(BatchLookupReader(lambda p, s=second: iter([ok(), s])))
+                error = client.lookup_error((1,))
+                self.assertEqual(error.getCondition(), condition)
+                self.assertEqual(events[-1], "finally")
+
+        # A batch after a first pair is a value of the other form too.
+        client = self.client(BatchLookupReader(lambda p: iter([(0, (1, "a")), ok()])))
+        self.assertEqual(
+            client.lookup_error((1,)).getCondition(), "DATA_SOURCE_INVALID_RETURN_TYPE"
+        )
+
+    def test_record_batch_form_passes_empty_batches(self):
+        empty = pa.RecordBatch.from_arrays(
+            [pa.array([], pa.int64()), pa.array([], pa.int64()), pa.array([], pa.string())],
+            names=["o", "id", "name"],
+        )
+        client = self.client(BatchLookupReader(lambda p: iter([empty, empty])))
+        batches, status = client.lookup((1,))
+        self.assertEqual([batch.num_rows for batch in batches], [0, 0])
+        self.assertEqual(status, client.protocol.STATUS_COMPLETE)
+        # No result at all is an empty response in either form.
+        client = self.client(BatchLookupReader(lambda p: iter([])))
+        batches, status = client.lookup((1,))
+        self.assertEqual(batches, [])
+
+    def test_record_batch_form_timestamps(self):
+        import datetime
+
+        read_schema = StructType(
+            [StructField("id", LongType()), StructField("ts", TimestampType())]
+        )
+        instant = datetime.datetime(2026, 3, 29, 1, 30, tzinfo=datetime.timezone.utc)
+
+        def tuples(parameters):
+            for ordinal, (key,) in enumerate(parameters):
+                yield ordinal, (key, instant)
+
+        def batches(parameters):
+            n = len(parameters)
+            yield pa.RecordBatch.from_arrays(
+                [
+                    pa.array(range(n), pa.int64()),
+                    pa.array([key for (key,) in parameters], pa.int64()),
+                    # The Arrow type of a TIMESTAMP column in `DataSourceReader.read`.
+                    pa.array([instant] * n, pa.timestamp("us", tz="UTC")),
+                ],
+                names=["o", "id", "ts"],
+            )
+
+        results = []
+        for make_results in (tuples, batches):
+            client = self.client(BatchLookupReader(make_results), read_schema=read_schema)
+            response, _ = client.lookup((1,), (2,))
+            results.append(self.rows(response))
+        self.assertEqual(results[0], results[1])
+        self.assertEqual(results[1][0]["ts"], instant)
+
     def test_lookup_must_return_an_iterator(self):
         client = self.client(ListLookupReader())
         error = client.lookup_error((1,))
@@ -521,22 +690,45 @@ class BasePythonDataSourceLookupTestsMixin:
     the rows `(id, "name{id}")` for `id` in [1, 9], keyed by `id`.
     """
 
-    def register_lookup_source(self, lookup_value=None):
+    def register_lookup_source(self, lookup_value=None, record_batches=False):
         """
         Registers the lookup source `lookup_test`. `lookup_value(reader, key)` computes the value
-        of the column `extra` on the executor; it returns `None` by default.
+        of the column `extra` on the executor; it returns `None` by default. The column `ts` is
+        the timestamp of the key's day in 2026. With `record_batches`, `lookup` returns the
+        same rows as `pyarrow.RecordBatch`es, with the ordinal first.
         """
+        import datetime
+
         from pyspark.sql.datasource import DataSource, EqualTo
+
+        def timestamp(key):
+            return datetime.datetime(2026, 1, key, 12, tzinfo=datetime.timezone.utc)
 
         class TupleReader(DataSourceLookupReader):
             def selectLookupPredicates(self, candidates):
                 return [i for i, c in enumerate(candidates) if isinstance(c, EqualTo)][:1]
 
             def lookup(self, parameters):
-                for ordinal, (key,) in enumerate(parameters):
-                    if 1 <= key <= 9:
-                        extra = lookup_value(self, key) if lookup_value else None
-                        yield ordinal, (key, f"name{key}", extra)
+                hits = [(o, key) for o, (key,) in enumerate(parameters) if 1 <= key <= 9]
+                extras = [lookup_value(self, key) if lookup_value else None for _, key in hits]
+                if not record_batches:
+                    for (ordinal, key), extra in zip(hits, extras):
+                        yield ordinal, (key, f"name{key}", extra, timestamp(key))
+                    return
+                import pyarrow as pa
+
+                # One batch per hit, to return several batches.
+                for (ordinal, key), extra in zip(hits, extras):
+                    yield pa.RecordBatch.from_arrays(
+                        [
+                            pa.array([ordinal], pa.int64()),
+                            pa.array([key], pa.int64()),
+                            pa.array([f"name{key}"]),
+                            pa.array([extra], pa.string()),
+                            pa.array([timestamp(key)], pa.timestamp("us", tz="UTC")),
+                        ],
+                        names=["ordinal", "id", "name", "extra", "ts"],
+                    )
 
         class LookupTestSource(DataSource):
             @classmethod
@@ -544,7 +736,7 @@ class BasePythonDataSourceLookupTestsMixin:
                 return "lookup_test"
 
             def schema(self):
-                return "id BIGINT, name STRING, extra STRING"
+                return "id BIGINT, name STRING, extra STRING, ts TIMESTAMP"
 
             def lookupReader(self, schema):
                 return TupleReader()
@@ -583,6 +775,23 @@ class BasePythonDataSourceLookupTestsMixin:
             )
             rows = self.run_lookup_join([2, 12], how="left_anti")
             self.assertEqual([r.sid for r in rows], [12])
+
+    def test_lookup_join_gives_the_same_rows_in_both_forms(self):
+        with self.sql_conf({"spark.sql.python.externalLookup.enabled": "true"}):
+            results = {}
+            for record_batches in (False, True):
+                self.register_lookup_source(record_batches=record_batches)
+                results[record_batches] = [
+                    self.run_lookup_join([1, 3, 12, 3, 5]),
+                    self.run_lookup_join([2, 12, 4], how="left_outer"),
+                    self.run_lookup_join([2, 12, 4], how="left_semi"),
+                ]
+            self.assertEqual(results[True], results[False])
+            inner = results[True][0]
+            self.assertEqual([r.sid for r in inner], [1, 3, 3, 5])
+            # PySpark returns a TIMESTAMP as a naive datetime in the local time zone.
+            noon = datetime.datetime(2026, 1, 1, 12, tzinfo=datetime.timezone.utc)
+            self.assertEqual(inner[0].ts, noon.astimezone().replace(tzinfo=None))
 
     def test_lookup_sees_its_task_files_and_accumulators(self):
         accumulator = self.spark.sparkContext.accumulator(0)

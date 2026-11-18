@@ -48,7 +48,8 @@ import org.apache.spark.sql.types.StructType
  * events, to the file `events` in `markerDir`: `serve` at the first request of each reader, and,
  * with the option `markParameters`, each parameter row. With the option `behavior` set to
  * `sparkFile`, the `name` of each returned row is the text of the file `file`, which it finds
- * through `SparkFiles`.
+ * through `SparkFiles`. With the option `recordBatches`, it returns the same rows as
+ * `pyarrow.RecordBatch`es of `batchRows` rows, by default 10, with the ordinal first.
  */
 class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuiteBase {
   private val runCount = new AtomicInteger(0)
@@ -151,7 +152,26 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
        |            self.mark(f"finally {yielded}")
        |
        |    def lookup(self, parameters):
-       |        return self.matches(parameters)
+       |        pairs = self.matches(parameters)
+       |        if self.options.get("recordBatches") != "true":
+       |            return pairs
+       |        return self.record_batches(pairs)
+       |
+       |    def record_batches(self, pairs):
+       |        import pyarrow as pa
+       |        from itertools import islice
+       |        types = [pa.int64(), pa.int32(), pa.string()]
+       |        try:
+       |            while True:
+       |                chunk = list(islice(pairs, int(self.options.get("batchRows", "10"))))
+       |                if not chunk:
+       |                    return
+       |                yield pa.RecordBatch.from_arrays(
+       |                    [pa.array([o for o, _ in chunk], pa.int64())] +
+       |                    [pa.array([r[i] for _, r in chunk], t) for i, t in enumerate(types)],
+       |                    names=["ordinal"] + COLUMNS)
+       |        finally:
+       |            pairs.close()
        |
        |    def close(self):
        |        self.mark("close")
@@ -704,6 +724,51 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
         parameters = Map(
           "action" -> "plan", "type" -> "lookup", "msg" -> "(?s).*ZeroDivisionError.*"),
         matchPVals = true)
+    }
+  }
+
+  test("the RecordBatch form gives the join results of the tuple form") {
+    // For each form, the rows of each join: the four join types, a null-safe key, and a selected
+    // range on a stream column.
+    def joins(recordBatches: Boolean): Seq[Seq[Row]] = {
+      var results = Seq.empty[Seq[Row]]
+      withLookupSource()("recordBatches" -> recordBatches.toString, "nullKey" -> "true") {
+        (lookup, _) =>
+          results = Seq("inner", "left_outer", "left_semi", "left_anti").map { joinType =>
+            val stream = idStream(ids: _*)
+            runStream(stream.join(lookup, stream("sid") === lookup("id"), joinType)).rows
+          }
+          val stream = idStream(Some(1L), None, Some(2L))
+          results :+= runStream(stream.join(lookup, stream("sid") <=> lookup("id"))).rows
+      }
+      withLookupSource()(
+          "recordBatches" -> recordBatches.toString, "select" -> "range(len(candidates))") {
+        (lookup, _) =>
+          val schema = new StructType().add("sid", "bigint").add("minTier", "int")
+          val stream = streamOf(schema, Seq(Row(2L, 1), Row(5L, 0), Row(4L, 2)), numPartitions = 1)
+          results :+= runStream(stream.join(lookup,
+            stream("sid") === lookup("id") && lookup("tier") >= stream("minTier"))).rows
+      }
+      results.map(_.sortBy(_.toString))
+    }
+    val tupleRows = joins(recordBatches = false)
+    assert(joins(recordBatches = true) === tupleRows)
+    assert(tupleRows.head.map(_.getAs[String]("name")).sorted === ids.flatten.flatMap { sid =>
+      storedRows().filter(_._1.longValue() == sid).map(_._3)
+    }.sorted)
+  }
+
+  test("a semi join reads no further than its answer, in the RecordBatch form") {
+    // Each key matches 5000 rows, in batches of 10, and the first match decides a stream row.
+    withLookupSource()("recordBatches" -> "true", "repeat" -> "5000") { (lookup, markerDir) =>
+      val stream = idStream(Some(1L))
+      checkStream(stream.join(lookup, stream("sid") === lookup("id"), "left_semi"),
+        Seq(Row(1L)))
+      val yielded = events(markerDir).collect {
+        case event if event.startsWith("finally ") => event.stripPrefix("finally ").toInt
+      }
+      assert(yielded.length === 1 && yielded.head < 5000, yielded)
+      assert(events(markerDir).last === "close")
     }
   }
 }

@@ -126,6 +126,41 @@ class RowsToArrowConverter:
                     pylist[col].append(column_converters[col](result[col]))
         return pa.RecordBatch.from_arrays(pylist, schema=self.pa_schema)
 
+    def check_batch(self, batch: pa.RecordBatch) -> None:
+        """
+        Checks a `pyarrow.RecordBatch` that the data source returns: its number of columns, their
+        names, and its schema, which must equal the Arrow schema of `return_type`.
+        """
+        num_columns = batch.num_columns
+        if num_columns != self.num_cols:
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                messageParameters={
+                    "expected": str(self.num_cols),
+                    "actual": str(num_columns),
+                },
+            )
+        for name in self.column_names:
+            if name not in batch.schema.names:
+                raise PySparkRuntimeError(
+                    errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                    messageParameters={
+                        "expected": str(self.column_names),
+                        "actual": str(batch.schema.names),
+                    },
+                )
+        # Validate that the Arrow schema types match the expected output schema.
+        # This prevents cryptic errors from Arrow's VectorLoader when the batch
+        # buffer layout doesn't match what the JVM expects (e.g., SPARK-55583).
+        if not self.pa_schema.equals(batch.schema):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                messageParameters={
+                    "expected": str(self.pa_schema),
+                    "actual": str(batch.schema),
+                },
+            )
+
 
 def records_to_arrow_batches(
     output_iter: Union[Iterator[Tuple], Iterator[pa.RecordBatch]],
@@ -141,10 +176,6 @@ def records_to_arrow_batches(
     """
 
     converter = RowsToArrowConverter(return_type, data_source.name)
-    pa_schema = converter.pa_schema
-    column_names = converter.column_names
-    # Convert the results from the `reader.read` method to an iterator of arrow batches.
-    num_cols = converter.num_cols
 
     try:
         first_element = next(output_iter)
@@ -153,36 +184,7 @@ def records_to_arrow_batches(
 
     # If the first element is of type pa.RecordBatch yield all elements and return
     if isinstance(first_element, pa.RecordBatch):
-        # Validate the schema, check the RecordBatch column count
-        num_columns = first_element.num_columns
-        if num_columns != num_cols:
-            raise PySparkRuntimeError(
-                errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
-                messageParameters={
-                    "expected": str(num_cols),
-                    "actual": str(num_columns),
-                },
-            )
-        for name in column_names:
-            if name not in first_element.schema.names:
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
-                    messageParameters={
-                        "expected": str(column_names),
-                        "actual": str(first_element.schema.names),
-                    },
-                )
-        # Validate that the Arrow schema types match the expected output schema.
-        # This prevents cryptic errors from Arrow's VectorLoader when the batch
-        # buffer layout doesn't match what the JVM expects (e.g., SPARK-55583).
-        if not pa_schema.equals(first_element.schema):
-            raise PySparkRuntimeError(
-                errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
-                messageParameters={
-                    "expected": str(pa_schema),
-                    "actual": str(first_element.schema),
-                },
-            )
+        converter.check_batch(first_element)
 
         yield first_element
         for element in output_iter:

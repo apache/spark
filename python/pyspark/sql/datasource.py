@@ -1416,7 +1416,9 @@ class DataSourceLookupReader(ABC):
         return 1000
 
     @abstractmethod
-    def lookup(self, parameters: List[Tuple]) -> Iterator[Tuple[int, Tuple]]:
+    def lookup(
+        self, parameters: List[Tuple]
+    ) -> Union[Iterator[Tuple[int, Tuple]], Iterator["RecordBatch"]]:
         """
         Looks up the stored rows that match each of the given parameter rows.
 
@@ -1455,7 +1457,7 @@ class DataSourceLookupReader(ABC):
 
         Returns
         -------
-        iterator of (int, tuple or :class:`Row`) pairs
+        iterator of (int, tuple or :class:`Row`) pairs, or of PyArrow's `RecordBatch`
             One `(ordinal, row)` pair per result row, in any order. `ordinal` is the position of
             the matched parameter row in `parameters`: an `int` in ``[0, len(parameters))``,
             not a `bool` or `None`. `row` is a tuple in the order of the read schema, or a
@@ -1464,13 +1466,20 @@ class DataSourceLookupReader(ABC):
             matches several parameter rows is returned once per ordinal, and equal stored rows
             are each returned.
 
+            It can also return an iterator of PyArrow's `RecordBatch`, as
+            :meth:`DataSourceReader.read` can: the first column of each batch is the ordinal of
+            each row, of any integer type and with no nulls, and the other columns are those of
+            the read schema, with their names and the Arrow types that a batch of
+            :meth:`DataSourceReader.read` has. The first value that the iterator yields decides
+            the form for the whole call.
+
         Notes
         -----
         Every returned row must carry the stored values of the columns that the selected
         predicates read. A value may be NULL only where both the table and the read schema
-        allow one. The Python worker rounds a DECIMAL to the scale of its column, half to even,
-        and it must then fit the column's precision. The results may omit a row
-        that fails a pushed filter. Do not keep `parameters` after the generator ends.
+        allow one. In the `(ordinal, row)` form, the Python worker rounds a DECIMAL to the scale
+        of its column, half to even, and it must then fit the column's precision. The results may
+        omit a row that fails a pushed filter. Do not keep `parameters` after the generator ends.
 
         Spark fails the task with a :class:`PythonException` (`PYTHON_EXCEPTION`) for an
         exception that this method raises, and for these errors, which the Python worker
@@ -1480,25 +1489,47 @@ class DataSourceLookupReader(ABC):
         that does not fit the read schema. It fails the task with
         `DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_INPUT_ORDINAL` for an ordinal out of range,
         and with `NULL_IN_NOT_NULL_FIELD` for a `None` in a top-level column that is not
-        nullable. The Python worker raises an exception, which fails the task with
-        `PYTHON_EXCEPTION`, for a DECIMAL with more digits than its precision allows, and for a
-        `None` in a nested field, an array element or a map value that is not nullable.
+        nullable. In the `(ordinal, row)` form, the Python worker raises an exception, which
+        fails the task with `PYTHON_EXCEPTION`, for a DECIMAL with more digits than its
+        precision allows, and for a `None` in a nested field, an array element or a map value
+        that is not nullable. In the `RecordBatch` form, the Python worker reports
+        `DATA_SOURCE_INVALID_RETURN_TYPE` for an item that is not a `RecordBatch`, or an ordinal
+        column that is not of an integer type or holds a null, and checks the other columns as
+        it checks a batch of :meth:`DataSourceReader.read`, such as with
+        `DATA_SOURCE_RETURN_SCHEMA_MISMATCH` for a wrong number of columns.
 
         Spark may stop reading the result early, for example when a semi join has decided every
         stream row. It then closes the generator, so `try`/`finally` and `with` blocks run. The
         stop takes effect at the end of a batch: Python reads the pairs in batches of
         `spark.sql.execution.arrow.maxRecordsPerBatch`, so the generator may run up to one batch
-        further. If the generator does not stop within `spark.python.task.killTimeout`, Spark
-        ends the Python worker: neither the generator's `finally` blocks nor :meth:`close` run
-        on that copy of the reader, and a later request of the task runs on a new copy of the
-        planned reader.
+        further, and in the `RecordBatch` form, it may run until it yields its next batch. If
+        the generator does not stop within `spark.python.task.killTimeout`, Spark ends the
+        Python worker: neither the generator's `finally` blocks nor :meth:`close` run on that
+        copy of the reader, and a later request of the task runs on a new copy of the planned
+        reader.
 
         Examples
         --------
+        Yields `(ordinal, row)` pairs:
+
         >>> def lookup(self, parameters):
         ...     for ordinal, (user_id,) in enumerate(parameters):
         ...         for row in self.backend.get(user_id):
         ...             yield ordinal, row
+
+        Yields PyArrow RecordBatches, with the ordinal as the first column:
+
+        >>> def lookup(self, parameters):
+        ...     import pyarrow as pa
+        ...     ordinals, user_ids, names = [], [], []
+        ...     for ordinal, (user_id,) in enumerate(parameters):
+        ...         for row in self.backend.get(user_id):
+        ...             ordinals.append(ordinal)
+        ...             user_ids.append(row[0])
+        ...             names.append(row[1])
+        ...     yield pa.RecordBatch.from_pydict(
+        ...         {"ordinal": ordinals, "user_id": user_ids, "name": names}
+        ...     )
         """
         ...
 
