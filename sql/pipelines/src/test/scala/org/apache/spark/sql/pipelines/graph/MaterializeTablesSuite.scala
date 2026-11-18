@@ -1788,8 +1788,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
-  test("SPARK-57670: a dropped reserved key other than comment declared as a table property " +
-    "stays on the table") {
+  test("SPARK-57670: a hand-edited record that lists a reserved key does not remove it") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)
       materializeStreamingTable(
