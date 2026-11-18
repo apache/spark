@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
@@ -24,7 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, MonotonicallyIncreasingID, NamedExpression, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, DatetimeSub, Expression, GetStructField, Literal, MonotonicallyIncreasingID, NamedExpression, TimestampAdd, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -626,6 +627,36 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
             Seq("without a watermark on the", "that bounds the state of the"))
         }
+      }
+    }
+
+    // The right key in other forms, with watermarks on both inputs.
+    val lt = leftTime.withMetadata(watermarkMetadata)
+    val rt = rightTime.withMetadata(watermarkMetadata)
+    val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
+    val rw = AttributeReference("rw", windowType)().withMetadata(watermarkMetadata)
+    def backward(interval: Expression): Expression =
+      Cast(DatetimeSub(rt, interval, TimestampAddInterval(rt, UnaryMinus(interval))), TimestampType)
+    Seq(
+      ("TIMESTAMPADD forward", TimestampAdd("SECOND", Literal(10), rt), true),
+      ("TIMESTAMPADD backward", TimestampAdd("SECOND", Literal(-10), rt), false),
+      ("month interval forward", TimestampAddYMInterval(rt, Literal(Period.ofMonths(1))), true),
+      ("window end", GetStructField(rw, 1, Some("end")), true),
+      ("window start", GetStructField(rw, 0, Some("start")), false),
+      ("resolved interval addition",
+        Cast(TimestampAddInterval(rt, Literal(Duration.ofSeconds(10))), TimestampType), true),
+      ("resolved interval subtraction", backward(Literal(Duration.ofSeconds(10))), false),
+      ("1 microsecond backward", backward(Literal(Duration.ofNanos(1000))), false)
+    ).foreach { case (name, rightKey, supported) =>
+      val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(
+        new TestStreamingRelation(rightKey.references.toSeq), joinType = LeftOuter,
+        condition = Some(lt === rightKey))
+      val testName = s"LeftOuter join on event time with key $name"
+      if (supported) {
+        assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+          Seq("without a watermark on the right input"))
       }
     }
   }

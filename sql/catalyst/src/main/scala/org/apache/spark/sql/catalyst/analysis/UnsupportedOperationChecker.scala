@@ -741,9 +741,9 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * The rows of an input that the join outputs once, unmatched rows of an outer join or the
-   * matched rows of a left semi join, are final only if later rows of the other input cannot
-   * match them. So the other input's watermark must bound this input's state, through the
+   * When the join evicts an unmatched row of an input, an outer join outputs it with NULLs and a
+   * left semi join drops it. Both are final only if later rows of the other input cannot match
+   * the row. So the other input's watermark must bound this input's state, through the
    * equality key that eviction uses or through a range condition.
    */
   private def checkStreamStreamJoinWatermarkDirection(join: Join): Unit = {
@@ -762,7 +762,7 @@ object UnsupportedOperationChecker extends Logging {
       val boundedByKey = keyOrdinal.exists { ordinal =>
         StreamingJoinHelper.isKeyBoundedByWatermark(otherKeys(ordinal), other.outputSet)
       }
-      val boundedByRange = StreamingJoinHelper.getStateValueWatermark(
+      lazy val boundedByRange = StreamingJoinHelper.getStateValueWatermark(
         state.outputSet, other.outputSet, join.condition, Some(1000000)).isDefined
       if (!boundedByKey && !boundedByRange) {
         val confKey = SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key
@@ -770,8 +770,8 @@ object UnsupportedOperationChecker extends Logging {
           s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
             s"is not supported without a watermark on the $otherSide input that bounds the " +
             s"state of the $stateSide input, through an equality on the $otherSide input's " +
-            "event-time column or a range condition. Otherwise, late rows of the " +
-            s"$otherSide input can match $stateSide rows that were already output. To " +
+            "event-time column or a range condition. Otherwise, a later row of the " +
+            s"$otherSide input can match a $stateSide row that the join already evicted. To " +
             s"skip this check, set $confKey to false.")(join)
       }
     }
