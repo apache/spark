@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.duration._
@@ -586,6 +587,53 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
     q.awaitTermination()
+  }
+
+  test("SPARK-61959: Stream reader reads the files of the session") {
+    assume(shouldTestPandasUDFs)
+    val fileName = "stream_reader_session_file.txt"
+    val sourceName = "SessionFileDataSource"
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+         |
+         |class FileStreamReader(DataSourceStreamReader):
+         |    def initialOffset(self):
+         |        return {"offset": 0}
+         |    def latestOffset(self):
+         |        return {"offset": 1}
+         |    def partitions(self, start: dict, end: dict):
+         |        return [InputPartition(i) for i in range(start["offset"], end["offset"])]
+         |    def commit(self, end: dict):
+         |        pass
+         |    def read(self, partition):
+         |        from pyspark import SparkFiles
+         |        with open(SparkFiles.get("$fileName")) as f:
+         |            yield (f.read(),)
+         |
+         |class $sourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "value STRING"
+         |    def streamReader(self, schema):
+         |        return FileStreamReader()
+         |""".stripMargin
+    // A new session, so that its file is not visible to the other tests.
+    val session = spark.newSession()
+    withTempDir { dir =>
+      val file = new File(dir, fileName)
+      Files.writeString(file.toPath, "session file")
+      session.artifactManager.addArtifact(Paths.get(s"files/$fileName"), file.toPath, None)
+      session.dataSource.registerPython(
+        sourceName, createUserDefinedPythonDataSource(sourceName, dataSourceScript))
+      val q = session.readStream.format(sourceName).load()
+        .writeStream.format("memory").queryName("stream_reader_session_file").start()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+      checkAnswer(session.table("stream_reader_session_file"), Row("session file"))
+    }
   }
 
   test("Filter the stream of a data source without a batch reader") {

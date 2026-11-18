@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{JobArtifactSet, SparkEnv}
 import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
@@ -83,8 +83,9 @@ abstract class PythonMicroBatchStreamBase(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
+    val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
     new PythonStreamingPartitionReaderFactory(
-      ds.source, readInfo.func, outputSchema, None, None)
+      ds.source, readInfo.func, outputSchema, jobArtifactUUID, None)
   }
 
   override def commit(end: Offset): Unit = {

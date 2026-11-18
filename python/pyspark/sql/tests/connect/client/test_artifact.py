@@ -19,6 +19,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import uuid
 import zipfile
 import zlib
 
@@ -177,6 +178,107 @@ class ArtifactTestsMixin:
                 f"sc://localhost:{DefaultChannelBuilder.default_port()}"
             ).create()
         )
+
+    def streaming_input(self, spark_session, d):
+        with open(os.path.join(d, "input.json"), "w") as f:
+            f.write('{"id": 0}\n')
+        return spark_session.readStream.schema("id BIGINT").json(d)
+
+    def collect_streaming_query(self, df):
+        query_name = f"artifact_streaming_{uuid.uuid4().hex}"
+        q = df.writeStream.format("memory").queryName(query_name).trigger(availableNow=True).start()
+        try:
+            q.awaitTermination()
+        finally:
+            q.stop()
+        return [tuple(r) for r in df.sparkSession.table(query_name).collect()]
+
+    def check_add_file_streaming(self, spark_session, use_arrow):
+        with tempfile.TemporaryDirectory(prefix="check_add_file_streaming") as d:
+            # Each file has its own name because Spark Classic shares files between sessions.
+            file_name = f"my_streaming_file_{use_arrow}.txt"
+            with open(os.path.join(d, file_name), "w") as f:
+                f.write("Hello streaming!!")
+            spark_session.addArtifacts(os.path.join(d, file_name), file=True)
+
+            @udf("string", useArrow=use_arrow)
+            def func(x):
+                from pyspark import SparkFiles
+
+                with open(SparkFiles.get(file_name), "r") as my_file:
+                    return my_file.read().strip()
+
+            input_dir = os.path.join(d, "input")
+            os.mkdir(input_dir)
+            df = self.streaming_input(spark_session, input_dir).select(func("id"))
+            self.assertEqual(self.collect_streaming_query(df), [("Hello streaming!!",)])
+
+    def test_add_file_streaming(self):
+        # A streaming query plans its micro-batches in its own thread, which must still see the
+        # files of the session.
+        self.check_add_file_streaming(self.spark, use_arrow=False)
+        self.check_add_file_streaming(self.spark, use_arrow=True)
+
+    def test_add_pyfile_streaming(self):
+        with tempfile.TemporaryDirectory(prefix="test_add_pyfile_streaming") as d:
+            pyfile_path = os.path.join(d, "my_streaming_pyfile.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 10")
+
+            @udf("int")
+            def func(x):
+                import my_streaming_pyfile
+
+                return my_streaming_pyfile.my_func()
+
+            self.spark.addArtifacts(pyfile_path, pyfile=True)
+            input_dir = os.path.join(d, "input")
+            os.mkdir(input_dir)
+            df = self.streaming_input(self.spark, input_dir).select(func("id"))
+            self.assertEqual(self.collect_streaming_query(df), [(10,)])
+
+    def test_add_file_python_streaming_data_source(self):
+        from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+
+        file_name = "my_streaming_source_file.txt"
+
+        class FileStreamReader(DataSourceStreamReader):
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def latestOffset(self):
+                return {"offset": 1}
+
+            def partitions(self, start, end):
+                return [InputPartition(i) for i in range(start["offset"], end["offset"])]
+
+            def commit(self, end):
+                pass
+
+            def read(self, partition):
+                from pyspark import SparkFiles
+
+                with open(SparkFiles.get(file_name), "r") as my_file:
+                    yield (my_file.read().strip(),)
+
+        class FileDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "artifact_file_stream"
+
+            def schema(self):
+                return "value STRING"
+
+            def streamReader(self, schema):
+                return FileStreamReader()
+
+        with tempfile.TemporaryDirectory(prefix="test_add_file_python_streaming_ds") as d:
+            with open(os.path.join(d, file_name), "w") as f:
+                f.write("Hello source!!")
+            self.spark.addArtifacts(os.path.join(d, file_name), file=True)
+            self.spark.dataSource.register(FileDataSource)
+            df = self.spark.readStream.format("artifact_file_stream").load()
+            self.assertEqual(self.collect_streaming_query(df), [("Hello source!!",)])
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
