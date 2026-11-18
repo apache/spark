@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
  * @param outputEncoder ExpressionEncoder for the return type of function. It's only defined when
  *                      this is a typed Scala UDF.
  * @param udfName  The user-specified name of this UDF.
- * @param nullable  True if the UDF can return null value.
+ * @param udfNullable  True if the UDF can return null value.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
  *                          each time it is invoked with a particular input.
  */
@@ -52,11 +52,18 @@ case class ScalaUDF(
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
     outputEncoder: Option[ExpressionEncoder[_]] = None,
     udfName: Option[String] = None,
-    nullable: Boolean = true,
+    udfNullable: Boolean = true,
     udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+
+  // The analyzer makes the UDF return null for a null input of a primitive parameter (see
+  // `HandleNullInputsForUDF`) only after resolution, so the nullability covers that case for the
+  // rules that run before, e.g. the ones adding NOT NULL checks to table writes.
+  override def nullable: Boolean = udfNullable || inputPrimitives.zip(children).exists {
+    case (isPrimitive, child) => isPrimitive && child.nullable
+  }
 
   // `ScalaUDF` uses `ExpressionEncoder` to convert the function result to Catalyst internal format.
   // `ExpressionEncoder` is stateful as it reuses the `UnsafeRow` instance, thus `ScalaUDF` is
@@ -1158,7 +1165,7 @@ case class ScalaUDF(
 
     val funcInvocation = if (isPrimitive(dataType)
         // If the output is nullable, the returned value must be unwrapped from the Option
-        && !nullable) {
+        && !udfNullable) {
       s"$resultTerm = ($boxedType)$getFuncResult"
     } else {
       s"$resultTerm = ($boxedType)$resultConverter.apply($getFuncResult)"
