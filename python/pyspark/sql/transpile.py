@@ -35,8 +35,9 @@ numeric, string, bool, binary, or map/array for dict/list annotations --
 and keeps the option matrix small; prefer doing so. A ``Sequence``
 annotation is tried as both array and string, since a ``str`` is one too.
 ``Optional[X]`` pins what ``X`` does. To bound plan growth, functions with
-more than three untyped parameters only emit the all-numeric and all-string
-variants.
+more than three unpinned (untyped or ``Sequence``) parameters only emit the
+all-integer, all-float and all-string fills of those parameters; typed
+parameters stay pinned.
 
 A ``list`` annotation that names its element type (``list[int]``,
 ``List[str]``, ``list[list[bytes]]``) yields an element-aware category such as
@@ -277,6 +278,15 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
             # `_category`'s numeric catch-all, so a bool body passed the
             # return-type check for a numeric return type.
             return _is_definitely_basic_type(body) and _is_definitely_basic_type(orelse)
+        case ast.Compare(left=left, comparators=comparators):
+            # A comparison of basic operands is a bool, and `and` / `or` yield one
+            # of their operands. Without these, a comparison of comparisons
+            # (`(a is None) != (b is None)`) was not seen as boolean and fell to
+            # `_category`'s numeric catch-all, so a bool body passed the
+            # return-type check for a numeric return type.
+            return all(_is_definitely_basic_type(v) for v in [left] + comparators)
+        case ast.BoolOp(values=values):
+            return all(_is_definitely_basic_type(v) for v in values)
         case _:
             return False
 
@@ -1335,6 +1345,10 @@ def _annotation_name(annotation: Optional[ast.AST]) -> Optional[str]:
     Peels a subscript (``dict[str, str]`` -> ``dict``) and a ``typing.``
     qualifier (``typing.Dict`` -> ``Dict``, but not ``torch.float``), and reads
     a quoted annotation like its unquoted spelling."""
+    # TODO: `Union[X, None]` and `Union[None, X]` (bare, `typing.`-qualified or
+    # quoted) resolve to `Union` here, so a container wrapped that way, such as
+    # `tags: Union[List[str], None]`, stays untyped and keeps running in Python.
+    # Only `Optional[X]` and `X | None` are unwrapped, by `_strip_optional`.
     annotation = _parse_annotation(annotation)
     if isinstance(annotation, ast.Subscript):
         annotation = _parse_annotation(annotation.value)  # dict[str, str] -> dict

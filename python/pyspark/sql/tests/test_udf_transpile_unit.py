@@ -3152,6 +3152,95 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [False, True, True],
         )
 
+    def test_udf_transpile_comparison_of_comparisons_is_boolean(self):
+        # A comparison whose operands are comparisons or `and` / `or` is a bool.
+        # Classified numeric, it passed the return-type check for LongType and
+        # lowered to cast(bool as bigint) = 0/1 where the interpreted UDF returns
+        # NULL, and as an if test or arithmetic operand it failed ANSI analysis
+        # instead of falling back. Covered on map, array and scalar columns.
+        def map_nulls_differ(a: dict, b: dict):
+            return (a is None) != (b is None)
+
+        def array_nulls_differ(a: list, b: list):
+            return (a is None) != (b is None)
+
+        def scalar_nulls_differ(a: int, b: int):
+            return (a is None) != (b is None)
+
+        def map_is_none_is_none(a: dict):
+            return (a is None) is None
+
+        def map_nulls_differ_times_two(a: dict, b: dict):
+            return ((a is None) != (b is None)) * 2
+
+        def signs_match(a: list, b: int, c: int):
+            return (b > 0) == (c > 0)
+
+        def both_positive_matches(a: list, b: int, c: int):
+            return (b > 0 and c > 0) == (b < 10)
+
+        map_schema = "a map<string,int>, b map<string,int>"
+        map_rows = [({"x": 1}, {"y": 2}), (None, {"y": 2}), (None, None)]
+        array_schema = "a array<string>, b array<string>"
+        array_rows = [(["x"], ["y"]), (["x"], None), (None, None)]
+        scalar_schema = "a long, b long"
+        scalar_rows = [(1, 2), (None, 2), (None, None)]
+        mixed_schema = "a array<int>, b long, c long"
+        mixed_rows = [([1], 1, 2), ([1], 1, -2), (None, 20, 30)]
+        # The interpreted LongType converter nulls a bool; `bool * int` is an int.
+        bool_typed = "a bool-typed lowering"
+        nulls = [None, None, None]
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, needle, expected in (
+                (map_nulls_differ, map_schema, map_rows, bool_typed, nulls),
+                (array_nulls_differ, array_schema, array_rows, bool_typed, nulls),
+                (scalar_nulls_differ, scalar_schema, scalar_rows, bool_typed, nulls),
+                (map_is_none_is_none, "a map<string,int>", [({"x": 1},)], bool_typed, [None]),
+                (map_nulls_differ_times_two, map_schema, map_rows, "Mult", [0, 2, 0]),
+                (signs_match, mixed_schema, mixed_rows, bool_typed, nulls),
+                (both_positive_matches, mixed_schema, mixed_rows, bool_typed, nulls),
+            ):
+                with self.subTest(func=func.__name__, schema=schema):
+                    u, reasons = self._fallback_reason(func, LongType())
+                    self.assertIn(needle, reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+
+        for func, schema, rows, expected in (
+            (map_nulls_differ, map_schema, map_rows, [False, True, False]),
+            (array_nulls_differ, array_schema, array_rows, [False, True, False]),
+            (scalar_nulls_differ, scalar_schema, scalar_rows, [False, True, False]),
+            (signs_match, mixed_schema, mixed_rows, [True, False, True]),
+            (both_positive_matches, mixed_schema, mixed_rows, [True, False, False]),
+        ):
+            with self.subTest(func=func.__name__, schema=schema, return_type="boolean"):
+                self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+
+    def test_udf_transpile_comparison_of_comparisons_as_if_test(self):
+        # An if test comparing two null checks is a bool, so it lowers to
+        # `when(coalesce(test, false), ...)` instead of being read as a number
+        # whose truthiness is `test != 0`, which fails ANSI analysis on a bool.
+        def map_same(a: dict, b: dict):
+            if (a is None) == (b is None):
+                return "same"
+            return "diff"
+
+        def array_same(a: list, b: list):
+            return "same" if (a is None) == (b is None) else "diff"
+
+        def scalar_same(a: int, b: int):
+            if (a is None) == (b is None):
+                return "same"
+            return "diff"
+
+        for func, schema, rows in (
+            (map_same, "a map<string,int>, b map<string,int>", [({"x": 1}, None), (None, None)]),
+            (array_same, "a array<int>, b array<int>", [([1], None), ([1], [2])]),
+            (scalar_same, "a long, b long", [(1, None), (None, None)]),
+        ):
+            with self.subTest(func=func.__name__):
+                self.assertEqual(self._vals(func, StringType(), schema, rows), ["diff", "same"])
+
     def test_quoted_container_annotation_suppresses_syntax_warnings(self):
         import ast
         import warnings
