@@ -408,8 +408,8 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
     last -- Spark's ``NULL AND false`` is ``false`` where Python's ``None and
     False`` is ``None`` -- so those gate on the stricter
     ``_is_never_null_boolean``. For ``not`` and the last ``and`` / ``or``
-    operand, anything else (bare Name, arithmetic, calls, ...) falls back to
-    interpreted Python; an if/ternary test takes ``_truthiness_col`` instead.
+    operand, anything else (bare Name, arithmetic, other calls, ...) falls back
+    to interpreted Python; an if/ternary test takes ``_truthiness_col`` instead.
     """
     match node:
         case ast.Constant(value=v):
@@ -426,6 +426,9 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
         case ast.IfExp(body=body, orelse=orelse):
             # Ternary is boolean only if both branches are.
             return _is_definitely_boolean(body) and _is_definitely_boolean(orelse)
+        case ast.Call(func=ast.Attribute(attr=method)) if method in _STRING_METHODS:
+            # `s.startswith(p)` / `s.endswith(p)` produce bool (SPARK-59816).
+            return _STRING_METHODS[method][2] == "bool"
         case _:
             return False
 
@@ -466,6 +469,10 @@ def _is_never_null_boolean(node: ast.AST) -> bool:
             return all(_is_never_null_boolean(v) for v in values)
         case ast.IfExp(body=body, orelse=orelse):
             return _is_never_null_boolean(body) and _is_never_null_boolean(orelse)
+        case ast.Call(func=ast.Attribute(attr=method)) if method in _STRING_METHODS:
+            # ``s.startswith(p)`` / ``s.endswith(p)`` (SPARK-59816) raise on a NULL
+            # operand under either null strictness, so they are never NULL.
+            return _STRING_METHODS[method][2] == "bool"
         case _:
             return False
 
@@ -583,6 +590,15 @@ def _null_narrowed(params: List[str], test_node: ast.AST) -> Tuple[frozenset, fr
                 body_nonnull |= bn
             return body_nonnull, frozenset()
     return frozenset(), frozenset()
+
+
+# ``str`` method -> (Catalyst function, argument count, result category).
+_STRING_METHODS: dict[str, Tuple[Callable[..., Column], int, str]] = {
+    "upper": (upper, 0, "string"),
+    "lower": (lower, 0, "string"),
+    "startswith": (startswith, 1, "bool"),
+    "endswith": (endswith, 1, "bool"),
+}
 
 
 class CatalystTranspiler(AbstractTranspiler):
