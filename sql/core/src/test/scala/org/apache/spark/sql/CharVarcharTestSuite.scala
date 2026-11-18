@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
 import org.apache.spark.sql.catalyst.expressions.{
-  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal,
+  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, In, InSet, Literal,
   ScalarSubquery, StringRPad, StringToMap, Upper
 }
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
@@ -662,6 +662,11 @@ trait CharVarcharTestSuite extends QueryTest {
         ("c IN (c5b, s, 'b')", false),
         ("c IN (s, v)", false)))
       checkInAsOr("t", "c")
+
+      // A list of only columns and literals keeps all its literals in one IN.
+      val ins = spark.table("t").selectExpr("c IN (c5, 'x', s, 'y')").queryExecution.analyzed
+        .flatMap(_.expressions.flatMap(_.collect { case i: In => i }))
+      assert(ins.length == 3 && ins.exists(i => i.list.length == 2 && i.list.forall(_.foldable)))
     }
 
     // Without read-side padding the CHAR columns are padded in the predicate instead.
@@ -676,6 +681,23 @@ trait CharVarcharTestSuite extends QueryTest {
           ("c IN (c5, 'x')", true),
           ("c IN (s, 'a')", true)))
         checkInAsOr("t", "c")
+      }
+    }
+
+    // s and v hold the value that c reads, so they match c only if c is not padded for them.
+    Seq("true", "false").foreach { readSidePadding =>
+      withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> readSidePadding) {
+        withTable("t") {
+          sql(s"CREATE TABLE t(c CHAR(2), c5 CHAR(5), c5b CHAR(5), s STRING, v VARCHAR(5)) " +
+            s"USING $format")
+          sql("INSERT INTO t VALUES ('a', 'a', 'b', 'a ', 'a ')")
+          testConditions(spark.table("t"), Seq(
+            ("c = s", true),
+            ("c = v", true),
+            ("c IN (c5b, s)", true),
+            ("c IN (c5b, v)", true)))
+          checkInAsOr("t", "c")
+        }
       }
     }
 
@@ -709,6 +731,21 @@ trait CharVarcharTestSuite extends QueryTest {
         checkAnswer(
           sql(s"SELECT 1 FROM t WHERE EXISTS (SELECT 1 FROM t AS t2 WHERE $cond)"),
           Row(1))
+      }
+    }
+  }
+
+  test("char type comparison: IN list keeps the order of elements that can fail") {
+    // Like the OR of the equalities, the IN must not evaluate an element that can fail if an
+    // element written ahead of it matches.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2), c2 CHAR(2), c5 CHAR(5), s STRING, arr ARRAY<STRING>) " +
+          s"USING $format")
+        sql("INSERT INTO t VALUES ('a', 'a', 'b', 'x', array('y'))")
+        val cond = "c IN (s, c2, element_at(arr, 10), c5)"
+        testConditions(spark.table("t"), Seq((cond, true)))
+        checkAnswer(spark.table("t").where(cond).select("c"), Row("a "))
       }
     }
   }

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   BinaryComparison,
   Expression,
+  ExprUtils,
   In,
   Literal,
   NamedExpression,
@@ -103,14 +104,16 @@ object ApplyCharTypePaddingHelper {
       // of these comparisons pads its sides on its own. The two `In` cases below pad the value
       // and all the elements to a common length, which is only right if all the elements are
       // padded the same way. If the list mixes elements that are padded in different ways, e.g. a
-      // CHAR column and a STRING column that is not padded at all, split the IN into one IN per
-      // group of elements that are padded the same way, so that each element is compared with
-      // the value padded for it.
+      // CHAR column and a STRING column that is not padded at all, split the IN into an OR of
+      // INs whose elements are each padded the same way, so that the value is padded for the
+      // elements of each IN on its own. `InWithMixedPadding` describes how the list is split, and
+      // which elements are not padded yet.
       case i @ InWithMixedPadding(groups) =>
         val newIns = groups.map { group =>
           singleNodePaddingForStringComparison(i.copy(list = group), padCharCol)
         }
-        // Keep the IN as it is if no element is padded.
+        // Keep the IN as it is if none of the split INs pads anything, neither the value nor an
+        // element.
         val padded = newIns.zip(groups).exists { case (newIn, group) =>
           !newIn.fastEquals(i.copy(list = group))
         }
@@ -188,11 +191,9 @@ object ApplyCharTypePaddingHelper {
   // of the CHAR and VARCHAR lengths.
   private case class PaddedColumn(typeWithoutLengths: DataType) extends InElementPadding
 
-  private def inElementPadding(value: Attribute, element: Expression): InElementPadding = {
-    val valueRawType = CharVarcharUtils.getRawType(value.metadata)
+  private def inElementPadding(valueIsChar: Boolean, element: Expression): InElementPadding =
     element match {
-      case e if e.foldable =>
-        if (valueRawType.exists(_.isInstanceOf[CharType])) PaddedLiteral else NotPadded
+      case e if e.foldable => if (valueIsChar) PaddedLiteral else NotPadded
       case a: Attribute =>
         CharVarcharUtils.getRawType(a.metadata)
           .filter(_.existsRecursively(_.isInstanceOf[CharType]))
@@ -203,26 +204,47 @@ object ApplyCharTypePaddingHelper {
             })
           }
           .getOrElse(NotPadded)
+      // TODO: Pad outer references used as list elements the way their equalities with the value
+      // pad them. They are compared unpadded for now. IN subqueries, and a literal value with a
+      // list of CHAR columns, are not padded either.
       case _ => NotPadded
     }
-  }
 
   /**
    * Matches `value IN (list)` whose elements are padded in different ways in their comparisons
-   * with the value, and returns the groups of elements that are padded the same way.
+   * with the value, and returns the lists of the INs to split it into, such that the elements of
+   * each list are padded the same way.
+   *
+   * The INs are combined with OR, which evaluates them in order, and each IN evaluates its
+   * elements in order until one matches. If every element can be evaluated on any row, the
+   * elements are grouped by how they are padded, so that e.g. all the string literals stay in one
+   * IN. Otherwise grouping could evaluate an element that can fail, or is non-deterministic,
+   * before an element written ahead of it that matches, so the list is split into its runs of
+   * consecutive elements that are padded the same way, in the order written.
    */
   private object InWithMixedPadding {
     def unapply(in: In): Option[Seq[Seq[Expression]]] = in.value match {
-      case AttrOrOuterRef(attr)
-          if in.resolved && CharVarcharUtils.getRawType(attr.metadata).isDefined =>
-        val paddings = in.list.map(inElementPadding(attr, _))
-        val distinctPaddings = paddings.distinct
-        if (distinctPaddings.length > 1) {
-          Some(distinctPaddings.map { padding =>
-            in.list.zip(paddings).collect { case (element, p) if p == padding => element }
-          })
-        } else {
-          None
+      case AttrOrOuterRef(attr) if in.resolved =>
+        // Parse the raw type of the value once, not once per element.
+        CharVarcharUtils.getRawType(attr.metadata).flatMap { valueRawType =>
+          val valueIsChar = valueRawType.isInstanceOf[CharType]
+          val paddings = in.list.map(inElementPadding(valueIsChar, _))
+          val distinctPaddings = paddings.distinct
+          if (distinctPaddings.length <= 1) {
+            None
+          } else if (in.list.forall(ExprUtils.canEvaluateUnconditionally)) {
+            Some(distinctPaddings.map { padding =>
+              in.list.zip(paddings).collect { case (element, p) if p == padding => element }
+            })
+          } else {
+            val runs = in.list.zip(paddings)
+              .foldRight(List.empty[(InElementPadding, List[Expression])]) {
+                case ((element, padding), (p, run) :: rest) if p == padding =>
+                  (p, element :: run) :: rest
+                case ((element, padding), rest) => (padding, element :: Nil) :: rest
+              }
+            Some(runs.map(_._2))
+          }
         }
       case _ => None
     }
