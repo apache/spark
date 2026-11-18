@@ -340,6 +340,13 @@ abstract class StreamExecution(
               shufflePartitionValue)
         }
 
+        // The legacy mode orders the V4 state of stream-stream joins as index version 0 does. A
+        // restart takes the version from the checkpoint instead.
+        if (!sparkSessionForStream.sessionState.conf.getConf(
+            SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
+          sparkSessionForStream.conf.set(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION.key, "0")
+        }
+
         getLatestExecutionContext().updateStatusMessage("Initializing sources")
         // force initialization of the logical plan so that the sources can be created
         logicalPlan
