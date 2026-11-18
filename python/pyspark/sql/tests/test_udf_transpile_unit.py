@@ -2069,8 +2069,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         exec("def f(a, /):\n    return a", ns)
         with self._with_variety(self._eager_variety()):
             with self.sql_conf(_TRANSPILE_ON):
-                pudf = UserDefinedFunction(ns["f"], LongType())
+                # The source-less function must lower from bytecode; otherwise the
+                # keyword-call check below passes on the plain Python UDF alone.
+                pudf = self._transpiled_udf(ns["f"], LongType())
                 df = self.spark.createDataFrame([(2,)], "a long")
+                positional = df.select(pudf("a"))
+                self.assertEqual(0, self._eval_python_count(positional))
+                self.assertEqual([2], [r[0] for r in positional.collect()])
                 with self.assertRaisesRegex(Exception, "positional-only arguments"):
                     df.select(pudf(a=df.a)).collect()
 
@@ -2105,6 +2110,34 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with self._with_variety(BadCategoryTranspiler):
                 u, reasons = self._fallback_reason(ident, LongType())
                 self.assertIn("unknown input categories", reasons)
+
+    def test_udf_transpile_variety_with_source_only_signature(self):
+        # An override written for the original six-parameter hook is still called,
+        # with just the arguments it declares, and is skipped when there is no source.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class SourceOnlyTranspiler(AbstractTranspiler):
+            variety = "source_only_55213"
+
+            def _transpile_from_ast(
+                self, src, ast_info, function_ast, params, returnType, param_categories=None
+            ):
+                return col("_udf_param_0").cast(returnType)
+
+        def ident(a: int):
+            return a
+
+        ns: dict = {}
+        exec("def repl_ident(a):\n    return a", ns)
+        with self._with_variety(SourceOnlyTranspiler):
+            u = self._transpiled_udf(ident, LongType())
+            self.assertEqual([["integer"]], u._transpiled_input_categories)
+            projected = self.spark.createDataFrame([(7,)], "a long").select(u("a"))
+            self.assertEqual(0, self._eval_python_count(projected))
+            self.assertEqual([7], [r[0] for r in projected.collect()])
+            _, reasons = self._fallback_reason(ns["repl_ident"], LongType())
+            self.assertIn("takes no bytecode", reasons)
 
     def _lowering_variety(self, category, lower=lambda c: c):
         """A variety lowering to ``lower(_udf_param_0)`` and reporting ``category``."""
@@ -3216,6 +3249,32 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [14],
             "both parameters come from the call site",
         )
+
+    def test_udf_transpile_never_reads_code_off_a_call_descriptor(self):
+        # A custom descriptor as ``__call__`` cannot be lowered, and finding that out
+        # must not run user code: its ``__code__`` property is never read while the UDF
+        # is built.
+        reads: list = []
+
+        class Descriptor:
+            @property
+            def __code__(self):
+                reads.append("__code__")
+                return (lambda x: x).__code__
+
+            def __get__(self, obj, objtype=None):
+                return lambda x: x + 1
+
+        class Holder:
+            __call__ = Descriptor()
+
+        self.assertEqual(6, Holder()(5))
+        with self.sql_conf(_TRANSPILE_ON):
+            u, _ = self._fallback_reason(Holder())
+            self.assertEqual(
+                6, self.spark.createDataFrame([(5,)], "a long").select(u("a")).first()[0]
+            )
+        self.assertEqual([], reads)
 
     def test_udf_transpile_known_value_divergences(self):
         # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
