@@ -18,7 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{Rand, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.adaptive._
@@ -1101,6 +1102,40 @@ abstract class CTEInlineSuiteBase
           case r: RepartitionOperation => r
         }.nonEmpty,
         "MATERIALIZED CTE in subquery should not be inlined.")
+    }
+  }
+
+  test("SPARK-61957: predicate referencing a nested MATERIALIZED CTE stays in its scope") {
+    withTempView("t2", "small") {
+      spark.range(100).selectExpr("id", "id % 10 as k").createOrReplaceTempView("t2")
+      spark.range(5).createOrReplaceTempView("small")
+
+      // Each scalar subquery keeps `c` in its own nested WithCTE, which the outer `u`
+      // cannot see. The predicate on the reference to `u` mentions `c` only inside that
+      // nested scope, so PushdownPredicatesAndPruneColumnsForCTEDef must keep it at the
+      // reference; pushing it into `u`'s definition plants a reference to `c` outside
+      // `c`'s scope, which used to crash the rule's next pass with a key-not-found error.
+      val df = sql(
+        s"""with
+           |u0 as materialized (select id from t2),
+           |u as materialized (select id, k from t2 where k < 6)
+           |select (with c as materialized (select id from small)
+           |        select count(*) from u where id > (select min(id) from c)) x,
+           |       (with c as materialized (select id from small)
+           |        select max(id) from u where id > (select min(id) from c)) y
+           |from u0 limit 1
+         """.stripMargin)
+      checkAnswer(df, Row(59, 95) :: Nil)
+
+      // No definition may absorb a predicate that references another scope's CTE.
+      val defsWithSubquery = df.queryExecution.optimizedPlan.collectWithSubqueries {
+        case d: CTERelationDef
+          if d.child.collect {
+            case p if p.expressions.exists(_.exists(_.isInstanceOf[ScalarSubquery])) => p
+          }.nonEmpty => d
+      }
+      assert(defsWithSubquery.isEmpty,
+        s"a CTE definition absorbed a predicate with a subquery: $defsWithSubquery")
     }
   }
 
