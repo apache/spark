@@ -42,6 +42,11 @@ Before the first code edit or running test in a session, ensure a clean working 
   read `.agents/build-and-test.md`. For setup and local troubleshooting: `docs/building-spark.md`.
 - Before writing a new Scala or Python test suite: read `.agents/test-base-classes.md` and pick
   the lowest base class that provides what the test actually needs.
+- When writing or changing a test, pin the configs its assertions depend on (`withSQLConf`, or
+  `self.sql_conf` in Python): suites also run in the scheduled Non-ANSI job
+  (`SPARK_ANSI_SQL_MODE=false`), where `spark.sql.ansi.enabled` defaults to `false`.
+- Never remove a failing test or mock the code under test unless asked; document why any mock is
+  needed.
 - SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read the class
   documentation before running or updating these tests. DO NOT edit the generated golden files
   (`.sql.out`) directly. Always regenerate them when needed, and carefully review the diff to make
@@ -53,8 +58,8 @@ Before the first code edit or running test in a session, ensure a clean working 
 
 - Keep source lines within 100 characters; the linters enforce this for Scala, Java, and Python.
   Avoid non-ASCII characters in code and comments (string literals may contain them when the
-  content requires it). Before committing Scala, Java or Python changes: run the spot-checks in
-  `.agents/code-conventions.md`.
+  content requires it). Before committing Scala, Java or Python changes: read
+  `.agents/code-conventions.md` and run its spot-checks.
 - When adding a member to an existing class or object, put it with the code it belongs with,
   following the file's existing sectioning. Do not reorganize existing members unless the change
   requires it.

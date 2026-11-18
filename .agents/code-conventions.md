@@ -12,3 +12,7 @@ Keep source lines within 100 characters — the linters enforce this for Scala, 
           {print FILENAME":"FNR": "length" chars"}'
 
 This is only a hint: it approximates the linters' exemptions (imports, URLs) rather than matching them exactly, so it can over- or under-report. The linters remain the source of truth.
+
+Every new source file starts with the Apache License header; copy it from a neighboring file of the same type. The license check in CI (`dev/check-license`) fails without it.
+
+Keep public Scala and Java APIs binary compatible; the MiMa check in CI (`dev/mima`) reports changes that are not. When MiMa flags a change that is intended, add an exclusion with a `// [SPARK-xxxxx]` comment to the `vNNexcludes` section of `project/MimaExcludes.scala` for the version the change first ships in (see `.agents/versioning.md`).
