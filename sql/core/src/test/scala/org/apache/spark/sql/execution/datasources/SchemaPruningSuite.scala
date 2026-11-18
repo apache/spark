@@ -822,28 +822,51 @@ abstract class SchemaPruningSuite
         Row(null, null) :: Nil)
   }
 
-  testSchemaPruning("SPARK-62042: non-deterministic nested field accesses get a value per " +
-      "output row") {
+  testSchemaPruning("SPARK-62042: non-deterministic nested field accesses give the same " +
+      "results with and without nested column aliasing") {
     withDataSourceTable(elementRows, "elements") {
       withDataSourceTable(joinKeys, "join_keys") {
-        // Each query below builds about 1000 rows from the one row of `elements`, and picks a
-        // random element of `s.arr` for each of them.
-        val access = "s.arr[CAST(rand(0) * 1000 AS INT)].x"
-        val joined = sql(s"SELECT $access AS v FROM elements JOIN join_keys ON id = rid")
-        val exploded =
-          sql(s"SELECT $access AS v, n FROM elements LATERAL VIEW explode(seq) t AS n")
-        val sampled = spark.table("elements")
-          .sample(withReplacement = true, fraction = 1000.0, seed = 0L)
-          .selectExpr(s"$access AS v")
+        // Each row reads monotonically_increasing_id() twice in one select list: as `m`, and as
+        // `v` through an access of `s.arr`, whose element i has x = i. Both are evaluated once
+        // per row of the select list's input, so v = m in every row, whatever the partitioning.
+        val id = "CAST(monotonically_increasing_id() % 1000 AS INT)"
+        val v = s"s.arr[$id].x AS v"
+        val m = s"$id AS m"
+        // Each query builds about 1000 rows from the one row of `elements`. The explode query
+        // reads `n`, without which nested column aliasing does not apply to the explode.
+        val queries: Seq[(String, () => DataFrame)] = Seq(
+          "join" -> (() => sql(s"SELECT count(*), count_if(v != m) FROM " +
+            s"(SELECT $v, $m FROM elements JOIN join_keys ON id = rid)")),
+          "explode" -> (() => sql(s"SELECT count(*), count_if(v != m), sum(n) FROM " +
+            s"(SELECT $v, $m, n FROM elements LATERAL VIEW explode(seq) t AS n)")),
+          "sample" -> (() => spark.table("elements")
+            .sample(withReplacement = true, fraction = 1000.0, seed = 0L)
+            .selectExpr(v, m)
+            .selectExpr("count(*)", "count_if(v != m)")))
 
-        val numDistinctValues = Seq("join" -> joined, "explode" -> exploded, "sample" -> sampled)
-          .map { case (name, df) => name -> df.collect().map(_.get(0)).distinct.length }
-        assert(numDistinctValues.forall(_._2 > 1),
-          s"every row built from the one input row got the same value: $numDistinctValues")
+        def withNestedColumnAliasing[T](enabled: Boolean)(f: => T): T = withSQLConf(
+            SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> enabled.toString,
+            SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> enabled.toString)(f)
+
+        val results = queries.map { case (name, query) =>
+          (name,
+            withNestedColumnAliasing(enabled = false)(query().collect().toSeq),
+            withNestedColumnAliasing(enabled = true)(query().collect().toSeq))
+        }
+        results.foreach { case (name, without, _) =>
+          assert(without.head.getLong(1) == 0, s"$name without nested column aliasing: $without")
+        }
+        assert(results.forall { case (_, without, withAliasing) => without == withAliasing },
+          "results without and with nested column aliasing: " + results.map {
+            case (name, without, withAliasing) => s"$name: $without vs $withAliasing"
+          }.mkString("; "))
+
         // `s.e` is still pruned: only the element access itself stays above the join.
-        checkScan(joined,
-          "struct<id:int,s:struct<arr:array<struct<x:int,y:int>>>>",
-          "struct<rid:int>")
+        withNestedColumnAliasing(enabled = true) {
+          checkScan(sql(s"SELECT $v, $m FROM elements JOIN join_keys ON id = rid"),
+            "struct<id:int,s:struct<arr:array<struct<x:int,y:int>>>>",
+            "struct<rid:int>")
+        }
       }
     }
   }
