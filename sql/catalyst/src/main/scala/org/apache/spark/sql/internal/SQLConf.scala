@@ -373,6 +373,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PREFER_GENERATOR_ALIAS_OVER_OUTER_REFERENCE_AND_VARIABLE =
+    buildConf("spark.sql.analyzer.preferGeneratorAliasOverOuterReferenceAndVariable")
+      .internal()
+      .version("4.4.0")
+      .doc(
+        "When true, a column in a SELECT list that references the output alias of a preceding " +
+        "generator in the same SELECT list, such as `tag` in " +
+        "`SELECT explode(tags) AS tag, upper(tag)`, is resolved to the generator output, even if " +
+        "an outer query column or a SQL variable has the same name. When false, it is resolved " +
+        "to the outer query column or the SQL variable.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
     buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
       .internal()

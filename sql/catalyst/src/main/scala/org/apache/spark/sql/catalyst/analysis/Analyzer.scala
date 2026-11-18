@@ -1782,7 +1782,7 @@ class Analyzer(
         val resolvedBasic = p.projectList.map(resolveExpressionByPlanChildren(_, p))
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
-        val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
+        val resolvedFinal = resolveSelectListColsLastResort(resolvedWithLCA)
         p.copy(projectList =
           resolvedFinal.map(e => aliasIfOuterReference(e.asInstanceOf[NamedExpression])))
 

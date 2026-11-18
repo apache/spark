@@ -245,8 +245,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  // Resolves `UnresolvedAttribute` to `OuterReference`.
-  protected def resolveOuterRef(e: Expression): Expression = {
+  // Resolves `UnresolvedAttribute` to `OuterReference`, except for the ones `skip` returns true.
+  protected def resolveOuterRef(
+      e: Expression,
+      skip: UnresolvedAttribute => Boolean = _ => false): Expression = {
     val outerPlan = AnalysisContext.get.outerPlan
     if (outerPlan.isEmpty) return e
 
@@ -274,7 +276,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     e.transformWithPruning(
       _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
-      case u: UnresolvedAttribute =>
+      case u: UnresolvedAttribute if !skip(u) =>
         resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
       // Aggregate but failed.
@@ -283,8 +285,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
-  // Resolves `UnresolvedAttribute` to its value.
-  protected def resolveVariables(e: Expression): Expression = {
+  // Resolves `UnresolvedAttribute` to its value, except for the ones `skip` returns true.
+  protected def resolveVariables(
+      e: Expression,
+      skip: UnresolvedAttribute => Boolean = _ => false): Expression = {
     val variableResolution =
       new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
@@ -299,7 +303,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
       if (e.resolved || !e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) return e
       val resolved = e match {
-        case u @ UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(nameParts) if !skip(u) =>
           val result = withPosition(u) {
             resolve(nameParts).getOrElse(u) match {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
@@ -507,6 +511,48 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
    */
   protected def resolveColsLastResort(e: Expression): Expression = {
     resolveVariables(resolveOuterRef(e))
+  }
+
+  /**
+   * Applies [[resolveColsLastResort]] to a SELECT list (the project list of a `Project` or the
+   * aggregate expressions of an `Aggregate`), but keeps the columns that reference the output
+   * alias of a preceding generator in the same SELECT list unresolved, such as `tag` in
+   * `SELECT explode(tags) AS tag, upper(tag)`. The rule `ExtractGenerator` will pull the generator
+   * out into a `Generate` node below the SELECT list, and then these columns can be resolved to
+   * the generator output.
+   *
+   * This follows the lateral column alias rule: the output alias of a generator has higher
+   * priority than outer references and SQL variables only for the SELECT items after the
+   * generator. A reference that comes before the generator keeps its current resolution. Note
+   * that a generator whose function call is not resolved yet is protected by the lateral column
+   * alias resolution, which turns the references to an unresolved alias into
+   * [[LateralColumnAliasReference]] and prevents resolving them as outer references.
+   */
+  protected def resolveSelectListColsLastResort(selectList: Seq[Expression]): Seq[Expression] = {
+    if (!conf.getConf(SQLConf.PREFER_GENERATOR_ALIAS_OVER_OUTER_REFERENCE_AND_VARIABLE)) {
+      return selectList.map(resolveColsLastResort)
+    }
+    // The output names of the generators before the current SELECT item.
+    val precedingGeneratorOutputNames = mutable.ArrayBuffer.empty[String]
+    selectList.map { e =>
+      val result = if (precedingGeneratorOutputNames.isEmpty) {
+        resolveColsLastResort(e)
+      } else {
+        val names = precedingGeneratorOutputNames.toSeq
+        // Like lateral column alias, only the first name part is used to look up the generator
+        // output, as the generator output does not have qualifiers.
+        val isGeneratorOutputRef = (u: UnresolvedAttribute) =>
+          names.exists(name => conf.resolver(name, u.nameParts.head))
+        resolveVariables(resolveOuterRef(e, isGeneratorOutputRef), isGeneratorOutputRef)
+      }
+      e match {
+        case Alias(_: Generator, name) => precedingGeneratorOutputNames += name
+        // `MultiAlias` is only allowed for generators, even if its child is not resolved yet.
+        case MultiAlias(_, names) => precedingGeneratorOutputNames ++= names
+        case _ =>
+      }
+      result
+    }
   }
 
   /**
