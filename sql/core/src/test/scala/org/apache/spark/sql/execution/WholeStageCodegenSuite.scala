@@ -2329,8 +2329,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
       if (x <= 5) throw new IllegalStateException(s"rc($x)"); java.lang.Long.valueOf(x) }
     // Not read by the filter at all, so the parent's `consume` loads it.
     val u = udf((x: Long) => { if (x <= 5) throw new IllegalStateException(s"u($x)"); x })
-    // NULL for the rows `r` throws on, so the inferred IsNotNull(n), generated among the checks
-    // of `n + r > 0`, the first condition that reads `r`, drops them: `r` must be loaded after it.
+    // NULL for the rows `r` throws on, so `n IS NOT NULL`, generated among the checks of
+    // `n + r > 0`, the first condition that reads `r`, drops them: `r` must be loaded after it.
     val n = udf { (x: Long) => if (x <= 5) null else java.lang.Long.valueOf(x) }
 
     def firstFilterOverProject(df: DataFrame): FilterExec = {
@@ -2347,8 +2347,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
     def normalize(code: String): String =
       code.replaceAll("#\\d+", "#").replaceAll("/\\* \\d+ \\*/", "").replaceAll("\\s+", " ")
 
-    // A condition, and whether the shape relies on the inferred IsNotNull(n).
-    case class Shape(predicate: String, inferredNotNullN: Boolean = false)
+    // A condition, and whether the shape relies on the check IsNotNull(n) in the filter.
+    case class Shape(predicate: String, notNullN: Boolean = false)
     val shapes = Seq(
       // `r` (non-nullable, no IsNotNull) first read by `r > 0`, after the dropping `f + 1 > 6`.
       Shape("f >= 0 AND f + 1 > 6 AND f + 1 < 100 AND r > 0"),
@@ -2358,9 +2358,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
       Shape("f + 1 > 6 AND r + 1 > 0 AND r + 1 < 100 AND f + 1 < 100"),
       // `rc` read only by a leftover IsNotNull; `rb`, `u` and `n` are not read by the filter.
       Shape("f + 1 > 6 AND f + 1 < 100 AND r > 0 AND rc IS NOT NULL"),
-      // `r` first read by `n + r > 0`, after the inferred IsNotNull(n) generated among the checks
-      // of `n + r > 0`.
-      Shape("n + r > 0 AND f + 1 > 0 AND f + 1 < 100", inferredNotNullN = true))
+      // `r` first read by `n + r > 0`, after `n IS NOT NULL` generated among the checks of
+      // `n + r > 0`. The check is written out, as no IsNotNull is inferred over `n`, a UDF alias
+      // that can fail (SPARK-61823).
+      Shape("n IS NOT NULL AND n + r > 0 AND f + 1 > 0 AND f + 1 < 100", notNullN = true))
 
     // `methodSplitThreshold` 1 exercises the path that splits each common subexpression into its
     // own function, whose parameters are the input columns' variables; Int.MaxValue keeps the
@@ -2376,17 +2377,17 @@ class WholeStageCodegenSuite extends SharedSparkSession
         val df = spark.range(10).select(
           f($"id").as("f"), r($"id").as("r"), rb($"id").as("rb"),
           rc($"id").as("rc"), u($"id").as("u"), n($"id").as("n"))
-        shapes.foreach { case Shape(predicate, inferredNotNullN) =>
+        shapes.foreach { case Shape(predicate, notNullN) =>
           // Names the shape and the threshold in a failure, also when the query raises.
           withClue(s"methodSplitThreshold $threshold, $predicate: ") {
             try {
               val filtered = df.where(predicate)
               val fe = firstFilterOverProject(filtered)
-              if (inferredNotNullN) {
+              if (notNullN) {
                 assert(fe.condition.exists {
                   case IsNotNull(a: Attribute) => a.name == "n"
                   case _ => false
-                }, s"IsNotNull(n) should be inferred: ${fe.condition}")
+                }, s"IsNotNull(n) should be in the filter over the projection: ${fe.condition}")
               }
               checkAnswer(filtered,
                 (6L to 9L).map(i => Row(i, i, i, i, i, i)))
