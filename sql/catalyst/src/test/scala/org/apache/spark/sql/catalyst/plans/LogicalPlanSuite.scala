@@ -173,6 +173,11 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("SPARK-61891: a left single join outputs at most as many rows as its left side") {
     val join = Join(Range(0, 10, 1, 1), Range(0, 100, 1, 1), LeftSingle, None, JoinHint.NONE)
     assert(join.maxRows === Some(10))
+
+    // The bound of the left side holds without a bound of the right side.
+    val unbounded = Join(Range(0, 10, 1, 1), UnresolvedRelation(Seq("t")), LeftSingle, None,
+      JoinHint.NONE)
+    assert(unbounded.maxRows === Some(10))
   }
 
   test("SPARK-46285: foreachWithSubqueries") {
