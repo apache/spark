@@ -2092,6 +2092,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     returnType,
                     param_categories=None,
                     held_code=None,
+                    code_owner=None,
+                    udf_callable=None,
+                    *,
                     bad=bad,
                 ):
                     return (col("_udf_param_0").cast(returnType), [bad])
