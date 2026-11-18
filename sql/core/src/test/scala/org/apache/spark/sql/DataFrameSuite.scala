@@ -3032,6 +3032,19 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-61886: a filter condition over a column that can fail is not evaluated " +
+    "ahead of a non-deterministic one") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The first conjunct of the outer filter is false on every row, so the `AND` short-circuit
+      // keeps `q`, a division by zero on id 3, from being evaluated.
+      val df = spark.range(0, 10, 1, 1).toDF()
+        .select($"id", (lit(10L) / ($"id" - 3)).as("q"))
+        .where($"id" >= 0)
+        .where(rand(10) * 10 > 100 && $"q" > 0)
+      checkAnswer(df, Nil)
+    }
+  }
+
   test("SPARK-60985: an inferred filter does not raise an error the query does not raise") {
     withTempPath { dir =>
       // On (0, 6), neither `x = y` nor `10 / y` fails, whichever is evaluated first. On

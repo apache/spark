@@ -185,6 +185,30 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-61886: a condition over a column that can fail is not combined ahead of a " +
+    "non-deterministic one") {
+    // `i` can fail as the cast does, and `j` as it reads `i`, also through the sample, the
+    // projection and the filter above them. A condition over either stays above, also when it
+    // reads a column that can not fail as well, while one over the non-deterministic `r`, which
+    // is computed on every row, or over `w`, an alias that can not fail, is combined.
+    val projected = testStringRelation
+      .select($"a", Cast($"e", IntegerType, evalMode = EvalMode.ANSI).as("i"),
+        Cast($"a", LongType).as("w"), Rand(1).as("r"))
+      .sample(0.0, 0.5, withReplacement = false, 1L)
+      .select($"a", $"i", IsNull($"i").as("j"), $"w", $"r")
+    val originalQuery = projected
+      .where($"a" > 0)
+      .where($"a" > 1)
+      .where(Rand(0) > 0.1 && $"i" > 0 && $"j" && $"i" > $"a" && $"w" > 0 && $"r" > 0.5)
+
+    val correctAnswer = projected
+      .where($"a" > 0 && $"a" > 1 && $"w" > 0 && $"r" > 0.5)
+      .where(Rand(0) > 0.1 && $"i" > 0 && $"j" && $"i" > $"a")
+      .analyze
+
+    comparePlans(CombineFilters(originalQuery.analyze), correctAnswer)
+  }
+
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
     val originalQuery =
       testRelation
