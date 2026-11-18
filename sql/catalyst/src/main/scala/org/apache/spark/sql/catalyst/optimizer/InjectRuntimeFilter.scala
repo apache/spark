@@ -435,8 +435,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   // plan it reads must give the same rows again (SPARK-60808). So it must read no CTE, whose
   // reference hides the determinism of its plan, a cache only if Spark can tell that scanning it
   // again gives the same rows, and a V2 scan only if every operation pushed into it works on each
-  // row by itself. A pushed limit or top-N, for example, lets the source pick other rows on a
-  // second read. It must not read a file metadata column either, such as
+  // row by itself. `extract` already drops a V2 scan that is not `repeatableRead`, so this keeps
+  // out one with a pushed aggregate or join, or the target read of a copy-on-write operation. It
+  // must not read a file metadata column either, such as
   // `_metadata.file_block_start`, which depends on how the scan splits its files. The subquery can
   // split them differently. Its filters, and the projections that the key and the filters need,
   // must pass `cannotFail`, which takes only expressions that are deterministic in the subquery

@@ -86,8 +86,9 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
           j.copy(condition = Some(optimizeMergeJoinCondition(cond, evaluatedFilters)))
 
         // replace DataSourceV2Relation with DataSourceV2ScanRelation for the row operation table
-        // there may be multiple read relations for UPDATEs that are rewritten as UNION
-        // The scan takes only filters and the read columns, so reading it again gives no other rows
+        // there may be multiple read relations for UPDATEs that are rewritten as UNION.
+        // The scan takes only filters and the read columns, so reading it again gives no other
+        // rows.
         case r: DataSourceV2Relation if r.table eq table =>
           DataSourceV2ScanRelation(r, scan, PushDownUtils.toOutputAttrs(scan.readSchema(), r),
             repeatableRead = true)

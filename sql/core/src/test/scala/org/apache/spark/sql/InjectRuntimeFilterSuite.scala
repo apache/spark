@@ -1673,10 +1673,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
   test("SPARK-61870: a DSv2 scan that reads the same rows again but is not row-wise is a " +
     "creation side") {
-    // As with a pushed aggregate or join, or the target read of a copy-on-write UPDATE. It counts
-    // under a selective `Filter`, but not for a key whose DPP filter is dropped. The source keeps
-    // `i > 3` in a `Filter` above its scan. The V2 fact takes the inferred `part > 3` in fully, so
-    // it gives no bloom filter on `d.i`.
+    // A pushed aggregate or join, or the target read of a copy-on-write UPDATE, gives such a scan.
+    // It counts under a selective `Filter`, but not for a key whose DPP filter is dropped, where
+    // `canEvaluateAgain` still asks for `onlyRowWisePushdowns`. The source keeps `i > 3` in a
+    // `Filter` above its scan. The V2 fact takes the inferred `part > 3` in fully, so it gives no
+    // bloom filter on `d.i`.
     withTempDir { dir =>
       val factPath = new File(dir, "fact").getCanonicalPath
       spark.range(100).selectExpr("id", "CAST(id % 10 AS INT) AS part")

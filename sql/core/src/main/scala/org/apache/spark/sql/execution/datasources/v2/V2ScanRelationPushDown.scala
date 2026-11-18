@@ -912,9 +912,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * [[hasBlockingPushdown]]. A pushed aggregate or join never reaches those builds, and their scans
    * keep the flag's default. It also decides the `repeatableRead` flag of every scan this rule
    * builds, see [[DataSourceV2ScanRelation.repeatableRead]]. Limit, offset and top-N pushdowns run
-   * before the aggregate and the join builds, so they see one pushed after an aggregate or join. An
-   * operation pushed into a side of a pushed join is kept with that side's pushed operators, which
-   * this checks too, whichever pushdowns run before `pushDownJoin`.
+   * before the aggregate and the join builds, so those builds see a limit, offset or top-N pushed
+   * above an aggregate or join. An operation pushed into a side of a pushed join is kept with that
+   * side's pushed operators, which this checks too, whichever pushdowns run before `pushDownJoin`.
    */
   private def hasRowSelectingPushdown(holder: ScanBuilderHolder): Boolean =
     holder.pushedLimit.isDefined ||
