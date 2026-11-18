@@ -42,9 +42,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   analysis unless the watermark of the other input bounds the state of each input whose rows the
   join outputs once, as the join support table of the programming guide requires. For example,
   a left outer join on `leftTime = rightTime` with a watermark only on `leftTime` is rejected:
-  a late right row could match a left row that was already output with NULLs. So is a key
-  shifted backward, such as `leftTime = rightTime - INTERVAL 10 SECONDS`. A full outer join
-  needs watermarks on both inputs. To restore the earlier check, set
+  a later right row could match a left row that was already output with NULLs. So is a key
+  shifted backward, such as `leftTime = rightTime - INTERVAL 10 SECONDS`, and a key in a form
+  other than the event-time column shifted forward by constants, such as a UDF of that column.
+  A full outer join needs watermarks on both inputs. To restore the earlier check, set
   `spark.sql.streaming.join.checkWatermarkDirection.enabled` to `false`.
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected

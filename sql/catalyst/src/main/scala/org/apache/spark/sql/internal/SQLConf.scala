@@ -4513,7 +4513,7 @@ object SQLConf {
         "fails analysis unless the other input's watermark bounds the state of each input " +
         "whose rows the join outputs once: through an equality on the other input's event-time " +
         "column, optionally shifted forward by a constant, or through a range condition. " +
-        "Otherwise, late rows of the other input can match rows that were already output. " +
+        "Otherwise, later rows of the other input can match rows that were already evicted. " +
         "When false, only the check of earlier versions applies.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
