@@ -114,7 +114,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
    * thread, as `PipedRDD` does. Otherwise, as under a LIMIT, the process blocks on writing its
    * output, and the thread on writing the rest of the input or on reading it, e.g. from a shuffle
    * fetch that the completed task no longer serves, so that neither ends. A process whose whole
-   * output the task read runs to its end, as it may still do work after it closes its output.
+   * output the task read runs to its end, as it may still do work after it closes its output,
+   * once the thread wrote all its input. The thread no longer reads the input rows once the task
+   * completes, so it destroys a process that it still writes to then, rather than give it the
+   * rows written so far as its whole input, and logs that as an error: unlike under a LIMIT, the
+   * work of the process is lost.
    *
    * The task also waits until the thread no longer reads the input rows, before its completion
    * listeners run, which free what the thread may still read, such as the batch that a columnar
@@ -324,7 +328,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
   def exception: Option[Throwable] = Option(_exception)
 
   // Whether the task read the output of the process to its end. The process is then not stopped
-  // when the task completes.
+  // when the task completes, unless this thread still writes its input (see `inputRows`).
   @volatile private[sql] var outputReadToEnd = false
 
   // Whether the process was destroyed as a task that did not fail completed before the process
@@ -373,13 +377,17 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
    * thread is then blocked in a write to a process that does not read its input.
    */
   private[execution] def stopOnTaskCompletion(force: Boolean): Unit = {
-    val taskFailed = taskContext.isFailed()
+    val destroy = !force && !outputReadToEnd && proc.isAlive
+    // Set before this thread can see `stoppedOnTaskCompletion` and fail, so that it does not log
+    // the expected failure as an error.
+    if (destroy) {
+      destroyedOnTaskCompletion = !taskContext.isFailed()
+    }
     stoppedOnTaskCompletion = true
     if (force) {
       // Also once the process is gone: the processes that it started may live on.
       procStopper.stop(force = true)
-    } else if (!outputReadToEnd && proc.isAlive) {
-      destroyedOnTaskCompletion = !taskFailed
+    } else if (destroy) {
       // `Process.destroy()` would close the input of the process, which waits for a write of
       // this thread blocked on a full pipe, and so would block the task on a process that
       // ignores the signal. Only signal the process instead, and close its output, which the

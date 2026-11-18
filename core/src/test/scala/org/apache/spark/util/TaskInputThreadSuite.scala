@@ -18,10 +18,14 @@
 package org.apache.spark.util
 
 import java.util.concurrent.{CopyOnWriteArrayList, CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.LogEvent
+import org.apache.logging.log4j.core.appender.AbstractAppender
+import org.apache.logging.log4j.core.config.Property
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
@@ -40,6 +44,22 @@ class TaskInputThreadSuite extends SparkFunSuite {
     }
 
     def awaitRunning(): Unit = assert(running.await(1, TimeUnit.MINUTES))
+  }
+
+  /**
+   * Fails every logging call whose message contains `trigger` with `failure`. Unlike
+   * `LogAppender`, it does not ignore its exceptions, so log4j passes them to the caller.
+   */
+  private class FailingAppender(trigger: String, failure: RuntimeException)
+    extends AbstractAppender("failingAppender", null, null, false, Property.EMPTY_ARRAY) {
+    val failures = new AtomicInteger()
+
+    override def append(event: LogEvent): Unit = {
+      if (event.getMessage.getFormattedMessage.contains(trigger)) {
+        failures.incrementAndGet()
+        throw failure
+      }
+    }
   }
 
   /** Waits for the latch, also when the thread is interrupted. */
@@ -211,6 +231,47 @@ class TaskInputThreadSuite extends SparkFunSuite {
     thread.awaitRunning()
     context.markTaskCompleted(None)
     assert(!thread.isAlive && interrupted.getCount == 0)
+  }
+
+  test("a failure to log during the wait for a thread does not end it") {
+    val context = TaskContext.empty()
+    val release = new CountDownLatch(1)
+    val thread = new TestThread(awaitUninterruptibly(release))
+    val aliveAtCompletion = new CopyOnWriteArrayList[Boolean]()
+    context.addTaskCompletionListener[Unit](_ => aliveAtCompletion.add(thread.isAlive))
+    val started = TaskInputThread.start(
+        context, thread, gracePeriodMs = 100, warnIntervalMs = 50)(_ => ())
+    assert(started)
+    thread.awaitRunning()
+    val logFailure = new IllegalStateException("cannot log")
+    val appender = new FailingAppender("still reads the input of task", logFailure)
+    val completionError = new AtomicReference[Throwable]()
+    val completing = new Thread(() => {
+      try {
+        context.markTaskCompleted(None)
+      } catch {
+        case t: Throwable => completionError.set(t)
+      }
+    })
+    val loggerName = TaskInputThread.getClass.getName.stripSuffix("$")
+    withLogAppender(appender, Seq(loggerName), Some(Level.WARN)) {
+      completing.start()
+      // The periodic warnings and the one before the stop by force fail.
+      eventually(timeout(1.minute), interval(10.milliseconds)) {
+        assert(!completing.isAlive || appender.failures.get >= 3)
+      }
+      assert(completing.isAlive, "the completion of the task returned instead of waiting")
+      release.countDown()
+      completing.join(TimeUnit.MINUTES.toMillis(1))
+    }
+    assert(!completing.isAlive && !thread.isAlive)
+    // The completion listeners ran once the thread exited, and the first failure is thrown then.
+    assert(aliveAtCompletion.asScala.toSeq === Seq(false))
+    val error = completionError.get
+    assert(error.isInstanceOf[TaskCompletionListenerException])
+    assert(error.getSuppressed.exists { e =>
+      Iterator.iterate(e)(_.getCause).takeWhile(_ != null).exists(_ eq logFailure)
+    })
   }
 
   test("start a thread without a task") {

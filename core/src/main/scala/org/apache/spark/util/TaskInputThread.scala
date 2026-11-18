@@ -146,6 +146,10 @@ private[spark] object TaskInputThread extends Logging {
     private var started = false
     private var stopped = false
 
+    // The first failure to stop, log or interrupt the thread while the listener waits for it,
+    // which is thrown once the wait ends. Only the thread that runs the listener uses it.
+    private var failure: Option[Throwable] = None
+
     def start(): Boolean = synchronized {
       if (!stopped && !context.isCompleted()) {
         thread.start()
@@ -159,7 +163,10 @@ private[spark] object TaskInputThread extends Logging {
      * interrupt status of the calling thread as it was: an interrupt that arrives during the
      * wait, such as the kill of the task, which the task context already records, does not end
      * the wait, and is not left for the completion listeners that run next, whose cleanup it
-     * would fail.
+     * would fail. Neither does a failure to stop, log or interrupt the thread, such as of an
+     * appender that does not ignore exceptions: the completion listeners that run next would
+     * free what the thread still reads. The first such failure is thrown once the wait ends,
+     * except a non-fatal failure of `stop`, which is only logged.
      */
     override def onTaskCompletion(taskContext: TaskContext): Unit = {
       val wasStarted = synchronized {
@@ -172,6 +179,7 @@ private[spark] object TaskInputThread extends Logging {
         if (wasStarted) {
           await()
         }
+        failure.foreach(e => throw e)
       } finally {
         Thread.interrupted()
         if (wasInterrupted) {
@@ -180,8 +188,18 @@ private[spark] object TaskInputThread extends Logging {
       }
     }
 
-    // A failure to stop the thread must not end the wait for it.
-    private def tryStop(force: Boolean): Unit = {
+    // Runs `f`, whose failure must not end the wait for the thread, and records it instead. An
+    // interrupt of the calling thread is not a failure, see onTaskCompletion.
+    private def bestEffort(f: => Unit): Unit = {
+      try {
+        f
+      } catch {
+        case _: InterruptedException => Thread.interrupted()
+        case t: Throwable => failure = failure.orElse(Some(t))
+      }
+    }
+
+    private def tryStop(force: Boolean): Unit = bestEffort {
       try {
         stop(force)
       } catch {
@@ -193,9 +211,11 @@ private[spark] object TaskInputThread extends Logging {
 
     // Not while the task is not interruptible, which the kill of a task respects too: a thread of
     // the task then creates a resource that an interrupt would leak.
-    private def interruptThread(): Unit = TaskContext.synchronized {
-      if (context.interruptible()) {
-        thread.interrupt()
+    private def interruptThread(): Unit = bestEffort {
+      TaskContext.synchronized {
+        if (context.interruptible()) {
+          thread.interrupt()
+        }
       }
     }
 
@@ -216,17 +236,19 @@ private[spark] object TaskInputThread extends Logging {
           val untilWarning = warnIntervalNs - (now - lastWarningNs)
           if (!forced && untilForce <= 0) {
             forced = true
-            logWarning(stillReading(startNs) + log" Stopping it by force.")
+            bestEffort(logWarning(stillReading(startNs) + log" Stopping it by force."))
             tryStop(force = true)
             interruptThread()
           } else if (untilWarning <= 0) {
-            if (warned) {
-              logWarning(stillReading(startNs))
-            } else {
-              val stack = new Exception(s"Stack trace of thread ${thread.getName}")
-              stack.setStackTrace(thread.getStackTrace)
-              logWarning(stillReading(startNs), stack)
-              warned = true
+            bestEffort {
+              if (warned) {
+                logWarning(stillReading(startNs))
+              } else {
+                val stack = new Exception(s"Stack trace of thread ${thread.getName}")
+                stack.setStackTrace(thread.getStackTrace)
+                logWarning(stillReading(startNs), stack)
+                warned = true
+              }
             }
             interruptThread()
             lastWarningNs = System.nanoTime()

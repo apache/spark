@@ -20,6 +20,7 @@ package org.apache.spark.api.r
 import java.io._
 import java.net.{InetAddress, ServerSocket}
 import java.util.Arrays
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.io.Source
 import scala.util.Try
@@ -71,14 +72,22 @@ private[spark] abstract class BaseRRunner[IN, OUT](
     dataStream = try {
       val inSocket = serverSocket.accept()
       BaseRRunner.authHelper.authClient(inSocket)
-      val writerThread =
-        newWriterThread(inSocket.getOutputStream(), inputIterator, partitionIndex)
+      // Stops between two elements once the task completes: the PrintStream that writes the
+      // STRING format does not fail when the socket is closed, so the thread would otherwise
+      // read the rest of the input.
+      val stopped = new AtomicBoolean(false)
+      val input = new Iterator[IN] {
+        override def hasNext: Boolean = !stopped.get() && inputIterator.hasNext
+        override def next(): IN = inputIterator.next()
+      }
+      val writerThread = newWriterThread(inSocket.getOutputStream(), input, partitionIndex)
       // The task waits for the writer thread to exit, before its completion listeners run: the
       // thread reads the input of the task, and these listeners free what it may still read,
       // such as the batch that a columnar reader returned last (see TaskInputThread). Closing
       // the socket fails a write of the thread that is blocked on an R worker that does not read
       // its input, which an interrupt does not.
       TaskInputThread.start(TaskContext.get(), writerThread) { _ =>
+        stopped.set(true)
         Utils.tryLogNonFatalError(inSocket.close())
       }
 
