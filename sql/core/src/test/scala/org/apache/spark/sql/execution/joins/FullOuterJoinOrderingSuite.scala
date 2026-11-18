@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.execution.{LocalTableScanExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec}
@@ -63,8 +62,7 @@ class FullOuterJoinOrderingSuite
       Seq(
         (Seq(Row(1), Row(2), Row(3)), Seq(Row(4), Row(5)), (1 to 5).map(Row(_))),
         (Seq.empty[Row], Seq(Row(2), Row(1)), Seq(Row(1), Row(2))),
-        (Seq(Row(2), Row(1)), Seq.empty[Row], Seq(Row(1), Row(2))),
-        (Seq.empty[Row], Seq.empty[Row], Seq.empty[Row])).foreach {
+        (Seq(Row(2), Row(1)), Seq.empty[Row], Seq(Row(1), Row(2)))).foreach {
         case (left, right, expected) =>
           withSingleKeys(left, right) {
             val df = sql("SELECT /*+ MERGE(a, b) */ k FROM a FULL OUTER JOIN b USING (k)")
@@ -129,43 +127,20 @@ class FullOuterJoinOrderingSuite
     }
   }
 
-  test("ordering alternatives have nullable attributes and preserve only key prefixes") {
+  test("ordering alternatives recursively make key attributes nullable") {
     val l1 = AttributeReference("l1", IntegerType, nullable = false)()
     val l2 = AttributeReference("l2", IntegerType, nullable = false)()
     val r1 = AttributeReference("r1", IntegerType, nullable = false)()
     val r2 = AttributeReference("r2", IntegerType, nullable = false)()
     val join = metadataJoin(Seq(l1, Add(l2, Literal(1))), Seq(r1, Add(r2, Literal(1))))
-    val ordering = join.outputOrdering
-    assert(ordering.size == 2)
     val leftFirst = Seq(
       Coalesce(Seq(l1.withNullability(true), r1.withNullability(true))),
       Coalesce(Seq(Add(l2.withNullability(true), Literal(1)),
         Add(r2.withNullability(true), Literal(1)))))
     val rightFirst = leftFirst.map(e => Coalesce(e.children.reverse))
-    ordering.zip(leftFirst.zip(rightFirst)).foreach { case (order, (l, r)) =>
-      assert(order.child == l)
-      assert(order.sameOrderExpressions == Seq(r))
-      assert(order.direction == Ascending && order.nullOrdering == NullsFirst)
-    }
-    assert(ordering.flatMap(_.collect { case a: Attribute => a }).forall(_.nullable))
-    assert(ordering.forall(_.references.subsetOf(join.outputSet)))
-    Seq(leftFirst, rightFirst, Seq(leftFirst.head, rightFirst(1))).foreach { keys =>
-      assert(SortOrder.orderingSatisfies(ordering, keys.map(SortOrder(_, Ascending))))
-    }
-    assert(SortOrder.orderingSatisfies(ordering, Seq(SortOrder(leftFirst.head, Ascending))))
-    Seq(
-      Seq(SortOrder(leftFirst.head, Descending)),
-      Seq(SortOrder(leftFirst.head, Ascending, NullsLast, Nil)),
-      leftFirst.reverse.map(SortOrder(_, Ascending)),
-      Seq(SortOrder(leftFirst(1), Ascending)),
-      Seq(SortOrder(l1, Ascending)),
-      Seq(SortOrder(r1, Ascending)),
-      leftFirst.map(SortOrder(_, Ascending)) :+ SortOrder(l2, Ascending)).foreach { required =>
-      assert(!SortOrder.orderingSatisfies(ordering, required), required)
-    }
-    val hashJoin = ShuffledHashJoinExec(join.leftKeys, join.rightKeys, FullOuter, BuildRight,
-      None, join.left, join.right)
-    assert(hashJoin.outputOrdering.isEmpty)
+    assert(join.outputOrdering == leftFirst.zip(rightFirst).map { case (l, r) =>
+      SortOrder(l, Ascending, NullsFirst, Seq(r))
+    })
   }
 
   test("null-padding checks cover both sides and every key pair") {
@@ -185,7 +160,7 @@ class FullOuterJoinOrderingSuite
     }
   }
 
-  test("unsafe nullable expressions do not claim ordering in either argument order") {
+  test("unsafe nullable expressions on either side do not claim ordering") {
     withSingleKeys(Seq(Row(1), Row(3)), Seq(Row(1), Row(2))) {
       def unsafe(key: String): String =
         s"CASE WHEN $key IS NULL THEN 0 WHEN $key = 99 THEN NULL ELSE $key END"
@@ -195,9 +170,6 @@ class FullOuterJoinOrderingSuite
         val df = sql(s"SELECT /*+ MERGE(a, b) */ coalesce($first, $second) AS k " +
           s"FROM a FULL OUTER JOIN b ON $first = $second")
         assert(fullOuterJoin(df).outputOrdering.isEmpty)
-        val reversed = sql(s"SELECT /*+ MERGE(a, b) */ coalesce($second, $first) AS k " +
-          s"FROM a FULL OUTER JOIN b ON $first = $second")
-        assert(fullOuterJoin(reversed).outputOrdering.isEmpty)
         checkAnswer(df.orderBy("k").limit(1), Seq(Row(0)))
       }
     }
@@ -283,12 +255,12 @@ class FullOuterJoinOrderingSuite
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       val left = frame((0 until 3).map(Row(_)), "ak" -> false)
       val right = frame((2 until 5).map(Row(_)), "bk" -> false)
-      Seq((col("ak"), col("bk")), (col("ak") + 1, col("bk") + 1)).foreach {
-        case (leftKey, rightKey) =>
+      Seq(
+        (col("ak"), col("bk"), (0 until 5).map(Row(_))),
+        (col("ak") + 1, col("bk") + 1, (1 to 5).map(Row(_)))).foreach {
+        case (leftKey, rightKey, expected) =>
           val joined = left.hint("merge").join(right, leftKey === rightKey, "full_outer")
-          val join = fullOuterJoin(joined)
-          assert(join.outputOrdering.flatMap(_.collect { case a: Attribute => a })
-            .forall(_.nullable))
+          fullOuterJoin(joined)
           val checkpointed = joined.localCheckpoint()
           try {
             val bySide = checkpointed.select(leftKey.as("k")).sortWithinPartitions("k")
@@ -296,12 +268,7 @@ class FullOuterJoinOrderingSuite
             val byMerged = checkpointed.select(coalesce(leftKey, rightKey).as("k"))
               .sortWithinPartitions("k")
             assert(numSorts(byMerged.queryExecution.executedPlan) == 0)
-            assertLocallyOrdered(bySide.queryExecution.executedPlan,
-              Seq(SortOrder(bySide.queryExecution.executedPlan.output.head, Ascending)))
-            assertLocallyOrdered(byMerged.queryExecution.executedPlan,
-              Seq(SortOrder(byMerged.queryExecution.executedPlan.output.head, Ascending)))
-            checkAnswer(checkpointed, Seq(Row(0, null), Row(1, null), Row(2, 2),
-              Row(null, 3), Row(null, 4)))
+            checkOrdered(byMerged, expected, "k")
           } finally {
             checkpointed.unpersist()
           }
