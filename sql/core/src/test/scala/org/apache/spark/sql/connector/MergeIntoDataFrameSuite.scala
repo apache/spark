@@ -542,6 +542,16 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         checkMergeFails(spark.sql(unionAll).union(other), unionAll)
         checkMergeFails(spark.sql(unionAll).unionAll(other), unionAll)
         checkMergeFails(spark.sql(unionAll).unionByName(other), unionAll)
+        // So does the union of a distinct union of Datasets: it flattens the analyzed Distinct of
+        // a SQL UNION, and the Deduplicate of `distinct` over the Union of a UNION ALL. The other
+        // operands have the VOID type of `archived` in the query, as the cast that widens a type
+        // would come between the unions.
+        val union = unionAll.replace("UNION ALL", "UNION")
+        val voidOther = spark.table("source").selectExpr("pk + 2 AS pk", "NULL AS archived")
+        val voidLast = spark.table("source").selectExpr("pk + 3 AS pk", "NULL AS archived")
+        checkMergeFails(spark.sql(union).union(voidOther).distinct().union(voidLast), union)
+        checkMergeFails(
+          spark.sql(unionAll).distinct().union(voidOther).distinct().union(voidLast), unionAll)
 
         // A join of Datasets with a condition, `joinWith`, and `joinAsOf` rebuild the analyzed
         // Join whose condition has the reference.
@@ -562,6 +572,65 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
               tolerance = null, allowExactMatches = true, direction = "backward")
             .selectExpr("l.pk", "true AS archived"),
           condition)
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))
+    }
+  }
+
+  test("merge into fails if type coercion replaced the NULL of an optional reference in an " +
+      "analyzed operation of the source") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |""".stripMargin)
+      Seq((1, 100, "software")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+      val target = tableNameAsString
+
+      def checkMergeFails(source: DataFrame, selectItem: String, reference: String): Unit = {
+        checkError(
+          exception = intercept[AnalysisException] {
+            source.as("s")
+              .mergeInto(target, $"s.pk" === col(target + ".pk"))
+              .whenMatched(expr("s.archived IS NULL"))
+              .delete()
+              .merge()
+          },
+          condition = "OPTIONAL_REFERENCE_NOT_SUPPORTED.IN_DML",
+          sqlState = "0A000",
+          parameters = Map("context" -> "MERGE"),
+          context = ExpectedContext(
+            fragment = reference,
+            start = selectItem.indexOf(reference),
+            stop = selectItem.indexOf(reference) + reference.length - 1))
+      }
+
+      withSQLConf(
+          SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        val other = spark.table("source").selectExpr("pk + 1 AS pk", "NULL AS archived")
+        // Type coercion replaces the NULL of the reference with a NULL of the type that the
+        // comparison or `size` takes, so only the mark records the reference.
+        Seq(
+          "status? = 'deleted' AS archived" -> "status?",
+          "size(tags?) AS archived" -> "tags?"
+        ).foreach { case (selectItem, reference) =>
+          Seq("false", "true").foreach { singlePass =>
+            withClue(s"$selectItem with the single-pass resolver $singlePass: ") {
+              val selected =
+                withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+                  spark.table("source").selectExpr("pk", selectItem)
+                }
+              checkMergeFails(selected, selectItem, reference)
+              checkMergeFails(selected.union(other), selectItem, reference)
+              checkMergeFails(
+                selected.as("l").join(selected.as("r"), expr("l.pk = r.pk"))
+                  .selectExpr("l.pk", "l.archived"),
+                selectItem,
+                reference)
+            }
+          }
+        }
       }
 
       checkAnswer(sql(s"SELECT * FROM $target"), Seq(Row(1, 100, "hr")))

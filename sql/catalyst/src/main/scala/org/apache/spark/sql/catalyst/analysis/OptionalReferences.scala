@@ -77,10 +77,11 @@ object OptionalReferences {
    *
    * The two tags that the parser sets, [[OPTIONAL_NAME_PART_INDICES]] and [[OPTIONAL_REFERENCE]],
    * describe the statement: they are facts about the reference as written, which stay true in every
-   * analysis of the plan. The generic transforms of a tree copy them to the nodes that replace a
-   * tagged node. A rule that rebuilds a reference in another way forwards them itself: the optional
-   * name parts of a multipart name with [[withOptionalNamePartsOf]], and the marker of a field
-   * extraction, a named parameter marker, or an IDENTIFIER clause with `copyTagsFrom`. This tag
+   * analysis of the plan. The generic transforms of a tree copy the tags of a node to the node that
+   * replaces it, but only if that node has no tags of its own, see `TreeNode.copyTagsFrom`. A rule
+   * that rebuilds a reference in another way forwards them itself: the optional name parts of a
+   * multipart name with [[withOptionalNamePartsOf]], and the marker of a field extraction, a named
+   * parameter marker, or an IDENTIFIER clause with `copyTagsFrom` into the new node. This tag
    * records a decision of one analysis, that a reference matched nothing, on the NULL and the alias
    * that this analysis creates, like [[RESOLVED_NULL_REFERENCE]] on the plan that it returns. Only
    * the analyzer sets them, and only on these nodes: the plan that the analyzer receives can be
@@ -100,10 +101,12 @@ object OptionalReferences {
    * or SQL function that the plan reads do not count: that body is analyzed in an analysis
    * context of its own.
    *
-   * A later analysis keeps the mark, because its rules copy the tags of a node to the node that
-   * replaces it. A rewrite outside of the analyzer that replaces an analyzed plan, such as the
-   * union flattening and the self-join rewrite of `Dataset`, must keep the mark of the plan that
-   * it replaces, see [[withResolvedNullReferenceOf]].
+   * The generic transforms of a later analysis copy the mark to the node that replaces a marked
+   * one only if that node has no tags of its own, see `TreeNode.copyTagsFrom`; a node with a
+   * Dataset id or a Spark Connect plan id has some. So code outside of the analyzer that replaces
+   * or rebuilds an analyzed node, e.g. with a case class copy, must keep the mark of the node that
+   * it replaces with [[withResolvedNullReferenceOf]], which also sets it on a node with other tags,
+   * as the union flattening and the join rewrites of `Dataset` do.
    */
   val RESOLVED_NULL_REFERENCE: TreeNodeTag[Origin] =
     TreeNodeTag[Origin]("optionalReferenceResolvedNull")
