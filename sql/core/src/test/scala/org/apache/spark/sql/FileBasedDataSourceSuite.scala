@@ -26,8 +26,9 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.parquet.io.ParquetDecodingException
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.FilePartition
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -1847,6 +1848,49 @@ class FileBasedDataSourceSuite extends SharedSparkSession
           }),
           condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
           parameters = expectedParameters)
+      }
+    }
+  }
+
+  test("SPARK-61585: ignoreCorruptFiles does not treat SparkUpgradeException as file corruption") {
+    val upgrade = DataSourceUtils.newRebaseExceptionInRead("Parquet")
+    val wrapped = new ParquetDecodingException("wrapped", upgrade)
+    // By default an upgrade error (and a Parquet decoding error wrapping one) is not file
+    // corruption, so ignoreCorruptFiles must not skip the rest of the file for it.
+    assert(!DataSourceUtils.shouldIgnoreCorruptFileException(upgrade))
+    assert(!DataSourceUtils.shouldIgnoreCorruptFileException(wrapped))
+    // A plain Parquet decoding error or other runtime error still counts as corruption.
+    assert(DataSourceUtils.shouldIgnoreCorruptFileException(new ParquetDecodingException("bad")))
+    assert(DataSourceUtils.shouldIgnoreCorruptFileException(new RuntimeException("x")))
+    // The legacy flag restores the old behavior of skipping the upgrade error.
+    withSQLConf(SQLConf.LEGACY_IGNORE_CORRUPT_FILES_SKIPS_UPGRADE_ERRORS.key -> "true") {
+      assert(DataSourceUtils.shouldIgnoreCorruptFileException(upgrade))
+      assert(DataSourceUtils.shouldIgnoreCorruptFileException(wrapped))
+    }
+  }
+
+  test("SPARK-61585: reading a file that raises an upgrade error under ignoreCorruptFiles") {
+    // Spark 2.4.5 wrote these pre-1582 dates without rebase metadata, so reading them in the
+    // EXCEPTION rebase mode raises a SparkUpgradeException: thrown directly by the vectorized
+    // reader, wrapped in a ParquetDecodingException by the parquet-mr one.
+    val path = testFile("test-data/before_1582_date_v2_4_5.snappy.parquet")
+    def hasUpgradeError(e: Throwable): Boolean = Iterator.iterate(e)(_.getCause)
+      .takeWhile(_ != null).exists(_.isInstanceOf[SparkUpgradeException])
+    for {
+      useV1SourceList <- Seq("parquet", "")
+      vectorized <- Seq("true", "false")
+    } {
+      withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList,
+          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized,
+          SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> "EXCEPTION",
+          SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        val e = intercept[Exception](spark.read.parquet(path).collect())
+        assert(hasUpgradeError(e), s"V1 list '$useV1SourceList', vectorized $vectorized: $e")
+        withSQLConf(SQLConf.LEGACY_IGNORE_CORRUPT_FILES_SKIPS_UPGRADE_ERRORS.key -> "true") {
+          // The legacy setting reaches the tasks and skips the rest of the file.
+          checkAnswer(spark.read.parquet(path), Nil)
+        }
       }
     }
   }

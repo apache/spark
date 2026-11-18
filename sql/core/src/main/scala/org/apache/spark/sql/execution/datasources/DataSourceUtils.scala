@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.io.ParquetDecodingException
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
@@ -270,9 +271,17 @@ object DataSourceUtils extends PredicateHelper {
   }
 
   def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
+    // An upgrade error (e.g. a datetime the new parser rejects) is not file corruption, so by
+    // default it is raised rather than skipped along with the rest of the file.
+    case _: SparkUpgradeException => ignoreUpgradeErrorAsCorruptFile()
+    case p: ParquetDecodingException if p.getCause.isInstanceOf[SparkUpgradeException] =>
+      ignoreUpgradeErrorAsCorruptFile()
     case _: RuntimeException | _: IOException | _: InternalError => true
     case _ => false
   }
+
+  private def ignoreUpgradeErrorAsCorruptFile(): Boolean =
+    SQLConf.get.getConf(SQLConf.LEGACY_IGNORE_CORRUPT_FILES_SKIPS_UPGRADE_ERRORS)
 
   def createDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
