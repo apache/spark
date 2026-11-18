@@ -291,6 +291,26 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   /**
+   * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
+   * others, by pushing them below a join or moving them into the condition of a join, and the
+   * ones that may not. A non-deterministic or throwable conjunct may not, and nor may a conjunct
+   * written after it that can fail: one that [[ExprUtils.canEvaluateUnconditionally]] rejects or
+   * that reads a column of `plans`, the inputs of the joins, that can fail (see
+   * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
+   * dropped. The conjuncts that may not move are returned in their written order.
+   */
+  protected def splitMovable(
+      conditions: Seq[Expression],
+      plans: Seq[LogicalPlan]): (Seq[Expression], Seq[Expression]) = {
+    val (leading, following) = conditions.span(cond => cond.deterministic && !cond.throwable)
+    lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
+    val (cannotFail, stayUp) = following.partition { cond =>
+      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
+    }
+    (leading ++ cannotFail, stayUp)
+  }
+
+  /**
    * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
    * constraints from `condition`. This is used for predicate pushdown.
    * When there is no such filter, `None` is returned.
