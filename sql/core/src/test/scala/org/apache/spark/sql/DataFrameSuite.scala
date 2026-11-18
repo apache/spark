@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, S
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2041,11 +2042,17 @@ class DataFrameSuite extends SharedSparkSession
         "CASE WHEN id = 3 THEN -1 ELSE 1 END AS v").createOrReplaceTempView("t1")
       spark.range(3).selectExpr("id AS k", "id AS b").createOrReplaceTempView("t2")
       val c = "CASE WHEN t1.v < 0 THEN raise_error('bad v') ELSE TRUE END"
+      val c2 = "CASE WHEN t1.v < 0 THEN raise_error('bad v2') ELSE TRUE END"
       Seq(
         s"(t1.k = t2.k AND $c AND t1.a = 1) OR (t1.k = t2.k AND $c AND t2.b = 2)",
-        s"t1.k = t2.k AND ((t1.a = 1 AND $c) OR (t2.b = 2 AND $c))").foreach { cond =>
-        checkAnswer(sql(s"SELECT t1.k, t2.k FROM t1 JOIN t2 ON $cond"),
-          Seq(Row(1L, 1L), Row(2L, 2L)))
+        s"t1.k = t2.k AND ((t1.a = 1 AND $c) OR (t2.b = 2 AND $c))",
+        s"t1.k = t2.k AND ((t1.a = 1 AND $c) OR (t2.b = 2 AND $c2))").foreach { cond =>
+        val joined = sql(s"SELECT t1.k, t2.k FROM t1 JOIN t2 ON $cond")
+        checkAnswer(joined, Seq(Row(1L, 1L), Row(2L, 2L)))
+        // `t1.k = t2.k` stays an equi-join key.
+        assert(collect(joined.queryExecution.executedPlan) {
+          case j: BroadcastNestedLoopJoinExec => j
+        }.isEmpty)
       }
     }
   }

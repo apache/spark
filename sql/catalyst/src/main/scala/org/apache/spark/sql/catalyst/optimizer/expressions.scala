@@ -575,8 +575,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case and @ (left And right) =>
       // 1. Split left and right to get the disjunctive predicates,
       //    i.e. lhs = (a || b), rhs = (a || c)
-      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). One that can
-      //    fail is left out where the formula evaluates it on more rows, see `commonFactors`.
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). A throwable
+      //    one is left out where the formula evaluates it on more rows, see `commonFactors`.
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
       // 4. If common is non-empty, apply the formula to get the optimized predicate:
       //    common || (ldiff && rdiff)
@@ -614,8 +614,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case or @ (left Or right) =>
       // 1. Split left and right to get the conjunctive predicates,
       //    i.e.  lhs = (a && b), rhs = (a && c)
-      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). One that can
-      //    fail is left out where the formula evaluates it on more rows, see `commonFactors`.
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). A throwable
+      //    one is left out where the formula evaluates it on more rows, see `commonFactors`.
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
       // 4. If common is non-empty, apply the formula to get the optimized predicate:
       //    common && (ldiff || rdiff)
@@ -654,17 +654,20 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Returns the operands of `lhs` that are also in `rhs` and are to be evaluated ahead of the other
-   * operands, in their order in `lhs`. One that can fail, as
-   * [[ExprUtils.canEvaluateUnconditionally]] decides, is returned only if, in `lhs` or in `rhs`,
-   * only the ones returned before it come before it. Otherwise, evaluating it ahead would also run
-   * it on rows where an operand before it decides the result of both `lhs` and `rhs`.
+   * operands, in their order in `lhs`. A throwable one is returned only if it is the same in `lhs`
+   * and `rhs`, and if, in `lhs` or in `rhs`, only the ones returned before it come before it.
+   * Otherwise, evaluating it ahead would also run it on rows where an operand before it decides the
+   * result of both `lhs` and `rhs`, or would run its own operands in an order that
+   * `semanticEquals` ignores. As in PushPredicateThroughJoin, one that can fail without being
+   * throwable, such as a division in ANSI mode, is returned anyway: it can be a join key, which a
+   * hash join evaluates on every row.
    */
   private def commonFactors(lhs: Seq[Expression], rhs: Seq[Expression]): Seq[Expression] = {
     lhs.filter(e => rhs.exists(e.semanticEquals)).foldLeft(Seq.empty[Expression]) { (common, e) =>
       def onlyCommonBefore(operands: Seq[Expression]): Boolean =
         operands.takeWhile(!_.semanticEquals(e)).forall(o => common.exists(o.semanticEquals))
-      if (ExprUtils.canEvaluateUnconditionally(e) ||
-          onlyCommonBefore(lhs) || onlyCommonBefore(rhs)) {
+      if (!e.throwable ||
+          (rhs.contains(e) && (onlyCommonBefore(lhs) || onlyCommonBefore(rhs)))) {
         common :+ e
       } else {
         common

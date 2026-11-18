@@ -177,29 +177,31 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       $"a" > 1 || $"b" > 3)
   }
 
-  test("SPARK-61938: do not move a common factor that can fail ahead of the other operands") {
+  test("SPARK-61938: do not move a throwable common factor ahead of the other operands") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val r = IsNull(RaiseError($"d"))
-      // A division can fail in ANSI mode, although it is not throwable.
-      val f = $"a" / $"b" > 1.0
       // `r || (a < 5 && c < 50)` and `r && (a > 5 || c > 50)` would evaluate `r` also on the rows
-      // where the operand written before it already decides the predicate.
+      // where the operand written before it already decides the predicate. `e || r` is written as
+      // `r || e` on the other side, where `r` is evaluated before `e`.
       Seq(
         ($"a" < 5 || r) && ($"c" < 50 || r),
         ($"a" > 5 && r) || ($"c" > 50 && r),
-        ($"a" < 5 || f) && ($"c" < 50 || f)).foreach { input =>
+        ($"a" > 5 && ($"e" || r)) || ((r || $"e") && $"c" > 50)).foreach { input =>
         checkCondition(input, input)
       }
-      // A common factor that only the extracted ones come before on one side is extracted.
+      // A throwable common factor that only the extracted ones come before on one side is
+      // extracted.
       checkCondition((r || $"a" < 5) && ($"c" < 50 || r), r || ($"a" < 5 && $"c" < 50))
       checkCondition(($"a" < 5 || r) && (r || $"c" < 50), r || ($"a" < 5 && $"c" < 50))
       checkCondition(
         ($"b" > 1 && r && $"a" > 5) || ($"b" > 1 && r && $"c" > 50),
         $"b" > 1 && r && ($"a" > 5 || $"c" > 50))
-      // A common factor that can't fail is extracted alone.
+      // A common factor that is not throwable is extracted alone, also a division, which can
+      // fail in ANSI mode.
+      val f = $"a" / $"b" > 1.0
       checkCondition(
-        ($"a" > 5 && $"b" > 1 && r) || ($"c" > 50 && $"b" > 1 && r),
-        $"b" > 1 && (($"a" > 5 && r) || ($"c" > 50 && r)))
+        ($"a" > 5 && f && r) || ($"c" > 50 && f && r),
+        f && (($"a" > 5 && r) || ($"c" > 50 && r)))
     }
   }
 
