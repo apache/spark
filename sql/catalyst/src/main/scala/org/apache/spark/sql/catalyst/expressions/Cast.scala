@@ -149,7 +149,8 @@ object Cast extends QueryErrorsBase {
     case (BooleanType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) =>
+      variant.VariantGet.checkDataType(to) && !variantCastTargetRejected(to)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
@@ -319,7 +320,8 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
     case (_: NumericType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) =>
+      variant.VariantGet.checkDataType(to) && !variantCastTargetRejected(to)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
@@ -714,6 +716,26 @@ object Cast extends QueryErrorsBase {
 
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 
+  // A cast from VARIANT returns NULL for a struct field whose key is missing, and for an array
+  // element or map value whose JSON value is null, unless that element or value is itself a
+  // VARIANT, which holds a variant null instead. So, as `resolvableNullability` does for a
+  // nullable source slot, reject a target with a non-nullable slot the cast can fill with NULL.
+  private def variantCastTargetRejected(to: DataType): Boolean =
+    hasNonNullableSlotCastCanFillWithNull(to) &&
+      !SQLConf.get.getConf(SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET)
+
+  private def hasNonNullableSlotCastCanFillWithNull(dt: DataType): Boolean = dt match {
+    case StructType(fields) =>
+      fields.exists(f => !f.nullable || hasNonNullableSlotCastCanFillWithNull(f.dataType))
+    case ArrayType(elementType, containsNull) =>
+      (!containsNull && elementType != VariantType) ||
+        hasNonNullableSlotCastCanFillWithNull(elementType)
+    case MapType(_, valueType, valueContainsNull) =>
+      (!valueContainsNull && valueType != VariantType) ||
+        hasNonNullableSlotCastCanFillWithNull(valueType)
+    case _ => false
+  }
+
   /**
    * We process literals such as 'Infinity', 'Inf', '-Infinity' and 'NaN' etc in case
    * insensitive manner to be compatible with other database systems such as PostgreSQL and DB2.
@@ -869,6 +891,14 @@ case class Cast(
   }
 
   private def typeCheckFailureInCast: DataTypeMismatch = evalMode match {
+    case _ if child.dataType == VariantType && variant.VariantGet.checkDataType(dataType) &&
+        Cast.variantCastTargetRejected(dataType) =>
+      DataTypeMismatch(
+        errorSubClass = "CAST_VARIANT_TO_NON_NULLABLE_TARGET",
+        messageParameters = Map(
+          "srcType" -> toSQLType(child.dataType),
+          "targetType" -> toSQLType(dataType),
+          "config" -> toSQLConf(SQLConf.LEGACY_VARIANT_CAST_ALLOW_NON_NULLABLE_TARGET.key)))
     case EvalMode.ANSI =>
       if (containsTag(Cast.BY_TABLE_INSERTION)) {
         Cast.typeCheckFailureMessage(child.dataType, dataType,
