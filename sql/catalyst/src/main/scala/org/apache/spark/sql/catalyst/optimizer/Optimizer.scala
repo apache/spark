@@ -3353,10 +3353,10 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
    * others, by pushing them below the join or moving them into its condition, and the ones that
    * may not. A non-deterministic or throwable conjunct may not, and nor may a conjunct written
-   * after it that can fail, as in [[CombineFilters]]: one that
-   * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of either side that
-   * can fail (see `failableOutput`). It would be evaluated on rows that the conjunct before it may
-   * have dropped. The conjuncts that may not move are returned in their written order.
+   * after it that can fail: one that [[ExprUtils.canEvaluateUnconditionally]] rejects or that
+   * reads a column of either side that can fail (see `failableOutput`). It would be evaluated on
+   * rows that the conjunct before it may have dropped. The conjuncts that may not move are
+   * returned in their written order.
    */
   private def splitMovable(
       condition: Seq[Expression],
@@ -3381,12 +3381,25 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (pushDownCandidates, stayUp) = splitMovable(condition, left, right)
+    val (leftEvaluateCondition, rightEvaluateCondition, commonCondition) =
+      splitBySide(pushDownCandidates, left, right)
+
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
+  }
+
+  /**
+   * Splits conjuncts that may move (see [[splitMovable]]) by the side of the join that can
+   * evaluate them, as [[split]] does.
+   *
+   * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
+   */
+  private def splitBySide(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftEvaluateCondition, rest) =
-      pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
+      condition.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
   }
 
   /**
@@ -3443,9 +3456,11 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
-      val conjuncts = splitConjunctivePredicates(filterCondition)
-      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
-        split(conjuncts, left, right)
+      val (movable, stayUp) =
+        splitMovable(splitConjunctivePredicates(filterCondition), left, right)
+      val (leftFilterConditions, rightFilterConditions, commonMovable) =
+        splitBySide(movable, left, right)
+      val commonFilterCondition = commonMovable ++ stayUp
       joinType match {
         case _: InnerLike =>
           // push down the single side `where` condition into respective sides
@@ -3455,10 +3470,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           // don't push throwable expressions into join condition, nor the other conjuncts that
           // may not move
-          val stayUp = splitMovable(conjuncts, left, right)._2
-          val (newJoinConditions, others) = commonFilterCondition.partition { cond =>
-            canEvaluateWithinJoin(cond) && !cond.throwable && !stayUp.contains(cond)
-          }
+          val (newJoinConditions, notInJoin) = commonMovable.partition(canEvaluateWithinJoin)
+          val others = notInJoin ++ stayUp
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
           val join = Join(newLeft, newRight, joinType, newJoinCond, hint)
