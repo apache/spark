@@ -1873,6 +1873,45 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("nanosecond timestamps cast from but not to VARIANT") {
+    val types = (7 to 9).flatMap { p =>
+      Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))
+    }
+    types.foreach { t =>
+      Seq(
+        t -> VariantType,
+        ArrayType(ArrayType(t)) -> VariantType,
+        ArrayType(t) -> ArrayType(VariantType),
+        MapType(StringType, t) -> MapType(StringType, VariantType),
+        new StructType().add("f", t) -> new StructType().add("f", VariantType)
+      ).foreach { case (from, to) =>
+        assert(!Cast.canCast(from, to))
+        assert(!Cast.canAnsiCast(from, to))
+        assert(!Cast.canTryCast(from, to))
+        verifyCastFailure(
+          cast(Literal.create(null, from), to),
+          DataTypeMismatch(
+            "CAST_WITHOUT_SUGGESTION",
+            Map("srcType" -> s""""${from.sql}"""", "targetType" -> s""""${to.sql}"""")))
+        // Reading back is allowed.
+        assert(Cast.canCast(to, from))
+        assert(Cast.canAnsiCast(to, from))
+        assert(Cast.canTryCast(to, from))
+      }
+    }
+    // The error names the SQL type.
+    verifyCastFailure(
+      cast(Literal.create(null, TimestampNTZNanosType(9)), VariantType),
+      DataTypeMismatch(
+        "CAST_WITHOUT_SUGGESTION",
+        Map("srcType" -> "\"TIMESTAMP_NTZ(9)\"", "targetType" -> "\"VARIANT\"")))
+    Seq(DateType, TimestampType, TimestampNTZType).foreach { t =>
+      assert(Cast.canCast(t, VariantType))
+      assert(Cast.canAnsiCast(t, VariantType))
+      assert(cast(Literal.create(null, ArrayType(t)), VariantType).checkInputDataTypes().isSuccess)
+    }
+  }
+
   test("SPARK-35112: Cast string to day-time interval") {
     checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType()), 0L)
     checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),

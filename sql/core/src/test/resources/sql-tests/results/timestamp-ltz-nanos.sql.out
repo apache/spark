@@ -2747,3 +2747,283 @@ SET spark.sql.ansi.enabled=true
 struct<key:string,value:string>
 -- !query output
 spark.sql.ansi.enabled	true
+
+
+-- !query
+SELECT CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789' AS VARIANT)\"",
+    "srcType" : "\"TIMESTAMP_LTZ(9)\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT try_cast(CAST('2020-01-01 00:00:00.1234567 UTC' AS timestamp_ltz(7)) AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"TRY_CAST(CAST(2020-01-01 00:00:00.1234567 UTC AS TIMESTAMP_LTZ(7)) AS VARIANT)\"",
+    "srcType" : "\"TIMESTAMP_LTZ(7)\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 87,
+    "fragment" : "try_cast(CAST('2020-01-01 00:00:00.1234567 UTC' AS timestamp_ltz(7)) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT CAST(array(CAST('2020-01-01 00:00:00.12345678 UTC' AS timestamp_ltz(8))) AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(array(CAST(2020-01-01 00:00:00.12345678 UTC AS TIMESTAMP_LTZ(8))) AS VARIANT)\"",
+    "srcType" : "\"ARRAY<TIMESTAMP_LTZ(8)>\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 91,
+    "fragment" : "CAST(array(CAST('2020-01-01 00:00:00.12345678 UTC' AS timestamp_ltz(8))) AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT to_variant_object(named_struct('t', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"to_variant_object(named_struct(t, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789'))\"",
+    "srcType" : "\"STRUCT<t: TIMESTAMP_LTZ(9) NOT NULL>\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 94,
+    "fragment" : "to_variant_object(named_struct('t', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC'))"
+  } ]
+}
+
+
+-- !query
+SELECT variant_from_arrays(array('a'), array(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"variant_from_arrays(array(a), array(TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789'))\"",
+    "srcType" : "\"TIMESTAMP_LTZ(9)\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 96,
+    "fragment" : "variant_from_arrays(array('a'), array(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC'))"
+  } ]
+}
+
+
+-- !query
+SELECT variant_from_entries(array(named_struct('k', 'a', 'v', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"variant_from_entries(array(named_struct(k, a, v, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789')))\"",
+    "srcType" : "\"TIMESTAMP_LTZ(9)\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 114,
+    "fragment" : "variant_from_entries(array(named_struct('k', 'a', 'v', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')))"
+  } ]
+}
+
+
+-- !query
+SELECT variant_set(parse_json('{"a":1}'), '$.b', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"variant_set(parse_json({\"a\":1}), $.b, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789', true)\"",
+    "srcType" : "\"TIMESTAMP_LTZ(9)\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 99,
+    "fragment" : "variant_set(parse_json('{\"a\":1}'), '$.b', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT)) AS t(v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789' AS VARIANT)\"",
+    "srcType" : "\"TIMESTAMP_LTZ(9)\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 88,
+    "fragment" : "CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(9)')
+-- !query schema
+struct<variant_get(parse_json({"t":"2020-01-01 00:00:00.123456789"}), $.t):timestamp_ltz(9)>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+SELECT try_variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(8)')
+-- !query schema
+struct<try_variant_get(parse_json({"t":"2020-01-01 00:00:00.123456789"}), $.t):timestamp_ltz(8)>
+-- !query output
+2020-01-01 00:00:00.12345678
+
+
+-- !query
+SELECT CAST(parse_json('"2020-01-01 00:00:00.123456789"') AS timestamp_ltz(7))
+-- !query schema
+struct<CAST(parse_json("2020-01-01 00:00:00.123456789") AS TIMESTAMP_LTZ(7)):timestamp_ltz(7)>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+SELECT CAST(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456 UTC' AS VARIANT) AS STRING)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP '2019-12-31 16:00:00.123456' AS VARIANT) AS STRING):string>
+-- !query output
+2019-12-31 16:00:00.123456
+
+
+-- !query
+SELECT variant_get(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456 UTC' AS VARIANT), '$', 'TIMESTAMP_LTZ(9)')
+-- !query schema
+struct<variant_get(CAST(TIMESTAMP '2019-12-31 16:00:00.123456' AS VARIANT), $):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.123456
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789' AS VARIANT)\"",
+    "srcType" : "\"TIMESTAMP_LTZ(9)\"",
+    "targetType" : "\"VARIANT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC' AS VARIANT)"
+  } ]
+}
+
+
+-- !query
+SELECT variant_get(parse_json('{"t":"2020-01-01 00:00:00.123456789"}'), '$.t', 'TIMESTAMP_LTZ(9)')
+-- !query schema
+struct<variant_get(parse_json({"t":"2020-01-01 00:00:00.123456789"}), $.t):timestamp_ltz(9)>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true

@@ -149,11 +149,11 @@ object Cast extends QueryErrorsBase {
     case (BooleanType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) => variant.VariantGet.canCastFromVariant(to)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
-    case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
+    case (_, VariantType) => variant.VariantGet.canCastToVariant(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
     case (_: TimeType, _: IntegralType) => true
@@ -319,11 +319,11 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
     case (_: NumericType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) => variant.VariantGet.canCastFromVariant(to)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
-    case (_, VariantType) => variant.VariantGet.checkDataType(from, allowStructsAndMaps = false)
+    case (_, VariantType) => variant.VariantGet.canCastToVariant(from, allowStructsAndMaps = false)
 
     case (_: TimeType, _: TimeType) => true
     case (_: TimeType, _: IntegralType) => true
