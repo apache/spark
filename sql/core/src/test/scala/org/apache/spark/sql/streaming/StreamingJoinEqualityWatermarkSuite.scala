@@ -91,6 +91,52 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
     }
   }
 
+  // The legacy mode evicts both inputs by la and ra, as earlier versions did.
+  for (version <- Seq(2, 4)) {
+    test(s"equality eviction in the legacy mode keeps the earlier behavior, V$version") {
+      withJoinConf(version) {
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          val (leftInput, rightInput, joined) = crossedKeyJoin()
+          testStream(joined)(
+            MultiAddData(leftInput, (5, 50))(rightInput, (80, 50)),
+            CheckNewAnswer(),
+            MultiAddData(leftInput, (60, 100))(rightInput, (70, 50)),
+            CheckNewAnswer(),
+            AddData(leftInput, (70, 100)),
+            CheckNewAnswer(Row(5, 50, null, null)),
+            AddData(rightInput, (5, 50)),
+            CheckNewAnswer(Row(null, null, 5, 50)),
+            MultiAddData(leftInput, (200, 200))(rightInput, (200, 200)),
+            CheckNewAnswer(Row(200, 200, 200, 200)))
+        }
+      }
+    }
+  }
+
+  // An earlier version, like the legacy mode, stored a row whose lb is NULL and evicted it by la.
+  for (version <- Seq(2, 3)) {
+    test(s"a stored row whose eviction key is NULL is evicted, V$version") {
+      withJoinConf(version) {
+        val (leftInput, rightInput, joined) = crossedKeyJoin()
+        withTempDir { checkpoint =>
+          withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+            testStream(joined)(
+              StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+              MultiAddData(leftInput, (5, -1))(rightInput, (80, 50)),
+              CheckNewAnswer(),
+              MultiAddData(leftInput, (60, 100))(rightInput, (70, 50)),
+              CheckNewAnswer(),
+              StopStream)
+          }
+          testStream(joined)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(leftInput, (70, 100)),
+            CheckNewAnswer(Row(5, null, null, null)))
+        }
+      }
+    }
+  }
+
   for (version <- Seq(2, 4)) {
     test(s"a row whose eviction key is NULL is emitted on arrival, V$version") {
       withJoinConf(version) {

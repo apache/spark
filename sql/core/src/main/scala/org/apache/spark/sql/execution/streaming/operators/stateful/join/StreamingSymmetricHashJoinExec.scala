@@ -27,7 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Or, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -367,7 +367,8 @@ case class StreamingSymmetricHashJoinExec(
     // Older versions and the legacy mode order the V4 state of an input by its event time, or by
     // the equality key that findJoinKeyOrdinalForWatermark picks (index version 0), so their
     // checkpoints cannot evict that state by another column or key. Index version 1 orders it by
-    // the column that the default mode picks, which the legacy mode cannot evict.
+    // the column or key that the default mode picks, which the legacy mode cannot evict or look
+    // rows up by.
     val indexVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION)
     if (stateFormatVersion == 4 && (indexVersion == 0 || !allowMultipleStatefulOperators)) {
       val sharedKeyOrdinal = findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
@@ -385,7 +386,7 @@ case class StreamingSymmetricHashJoinExec(
             }.flatten.map { case (c, _) => attributes.indexWhere(_.semanticEquals(c)) }
           }
           val key = findStateKeyOrdinalForWatermark(
-            side, leftKeys, rightKeys, !allowMultipleStatefulOperators)
+            side, leftKeys, rightKeys, !allowMultipleStatefulOperators && indexVersion == 0)
             .filterNot(sharedKeyOrdinal.contains).map(i => toSQLExpr(keys(i)))
           column.filterNot(eventTime.contains).map(i => toSQLId(attributes(i).name)).orElse(key)
             .foreach { c =>
@@ -739,6 +740,11 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
+      // A key that the opposite watermark selects can be NULL in a row that an earlier version
+      // or the legacy mode stored. Such a row can never match.
+      case Some(JoinStateKeyWatermarkPredicate(expr @ LessThanOrEqual(key, _), _, _))
+          if joinKeyOrdinalForWatermark != findJoinKeyOrdinalForWatermark(leftKeys, rightKeys) =>
+        Predicate.create(Or(expr, IsNull(key)), Seq.empty).eval _
       case Some(JoinStateKeyWatermarkPredicate(expr, _, _)) =>
         // inputSchema can be empty as expr should only have BoundReferences and does not require
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].

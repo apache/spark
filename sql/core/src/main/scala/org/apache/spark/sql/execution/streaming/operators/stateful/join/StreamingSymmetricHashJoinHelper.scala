@@ -345,6 +345,9 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * of the opposite input, whose future rows have that key above the watermark. When the
    * opposite input has no watermarked key, and in the legacy mode with a single global
    * watermark, this is [[findJoinKeyOrdinalForWatermark]].
+   *
+   * TODO(SPARK-62002): a watermarked key that the opposite input's key shifts or truncates, as in
+   * `lb = rb + INTERVAL 1 HOUR`, is not found here, so that side keeps the shared key.
    */
   def findStateKeyOrdinalForWatermark(
       joinSide: JoinSide,
