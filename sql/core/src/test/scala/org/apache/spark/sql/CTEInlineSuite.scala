@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelat
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
@@ -1318,6 +1319,39 @@ abstract class CTEInlineSuiteBase
               |  with v as materialized (select c1 from t2) select c1 from v
               |)""".stripMargin),
         Row(0, 1) :: Row(1, 2) :: Nil)
+    }
+  }
+
+  for (localRelationLimit <- Seq(0, 100)) {
+    test(s"SPARK-61943: recursive CTE preserves dates and timestamps, limit $localRelationLimit") {
+      DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+        withSQLConf(
+            SQLConf.DATETIME_JAVA8API_ENABLED.key -> "false",
+            SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+            SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION.key ->
+              localRelationLimit.toString) {
+          val df = sql(
+            """WITH RECURSIVE r(id, d, ts, lvl) AS (
+              |  SELECT /*+ REPARTITION(2) */ id, d, ts, 0
+              |  FROM VALUES (1, DATE '1582-10-10', TIMESTAMP_LTZ '1883-11-18 19:52:58Z'),
+              |              (2, CAST(NULL AS DATE), CAST(NULL AS TIMESTAMP_LTZ)) AS t(id, d, ts)
+              |  UNION ALL
+              |  SELECT /*+ REPARTITION(2) */ id,
+              |    COALESCE(date_add(d, 1), DATE '1582-10-11'),
+              |    COALESCE(ts + INTERVAL 1 SECOND, TIMESTAMP_LTZ '1883-11-18 19:52:59Z'),
+              |    lvl + 1
+              |  FROM r WHERE lvl < 2
+              |)
+              |SELECT id, lvl, CAST(d AS STRING), unix_micros(ts) FROM r""".stripMargin)
+          checkAnswer(df, Seq(
+            Row(1, 0, "1582-10-10", -2717640422000000L),
+            Row(1, 1, "1582-10-11", -2717640421000000L),
+            Row(1, 2, "1582-10-12", -2717640420000000L),
+            Row(2, 0, null, null),
+            Row(2, 1, "1582-10-11", -2717640421000000L),
+            Row(2, 2, "1582-10-12", -2717640420000000L)))
+        }
+      }
     }
   }
 
