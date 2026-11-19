@@ -291,13 +291,26 @@ private[client] object GrpcExceptionConverter {
         getErrorClassOrFallback(params),
         errorParamsToMessageParameters(params),
         getSqlStateOrFallback(params))),
-    errorConstructor(params =>
-      new ParseException(
-        None,
-        Origin(),
-        errorClass = getErrorClassOrFallback(params),
-        messageParameters = errorParamsToMessageParameters(params),
-        queryContext = params.queryContext)),
+    errorConstructor { params =>
+      val errorClass = getErrorClassOrFallback(params)
+      if (errorClass != null && !SparkThrowableHelper.isValidErrorClass(errorClass)) {
+        // The client's error definitions lack the server's condition, for example when the
+        // client and server versions differ, so keep the message the server rendered.
+        ParseException.withRenderedMessage(
+          params.message,
+          errorClass,
+          errorParamsToMessageParameters(params),
+          params.queryContext,
+          getSqlStateOrFallback(params))
+      } else {
+        new ParseException(
+          None,
+          Origin(),
+          errorClass = errorClass,
+          messageParameters = errorParamsToMessageParameters(params),
+          queryContext = params.queryContext)
+      }
+    },
     errorConstructor(params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3100")
       new AnalysisException(

@@ -32,9 +32,10 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{QueryContext, QueryContextType, SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
@@ -391,6 +392,72 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         assert(error.getCondition == legacyErrorClass)
         assert(error.getSqlState == "XXKCM")
     }
+  }
+
+  test("ParseException keeps the server message for a condition the client does not define") {
+    val sqlContext = new QueryContext {
+      override def contextType(): QueryContextType = QueryContextType.SQL
+      override def objectType(): String = ""
+      override def objectName(): String = ""
+      override def startIndex(): Int = 0
+      override def stopIndex(): Int = 5
+      override def fragment(): String = "SELECT"
+      override def callSite(): String = ""
+      override def summary(): String = "== SQL (line 1, position 1) ==\nSELECT\n^^^^^^\n"
+    }
+    Seq(
+      // A subcondition the client lacks, with a query context and the server's SQLSTATE.
+      (
+        "INVALID_SQL_SYNTAX.SUBCONDITION_NOT_DEFINED_BY_CLIENT",
+        Map("statement" -> "SELECT"),
+        Array(sqlContext),
+        Some("42000"),
+        "42000"),
+      // A main condition the client lacks, without a query context or SQLSTATE, as when only
+      // the truncated error status is available.
+      (
+        "CONDITION_NOT_DEFINED_BY_CLIENT",
+        Map.empty[String, String],
+        Array.empty[QueryContext],
+        None,
+        "XXKCM")).foreach {
+      case (errorClass, messageParameters, queryContext, serverSqlState, expectedSqlState) =>
+        withClue(errorClass) {
+          val serverMessage = s"\n[$errorClass] Server message. SQLSTATE: $expectedSqlState\n" +
+            queryContext.map(_.summary()).mkString
+          val error = GrpcExceptionConverter
+            .errorFactory(classOf[ParseException].getName)(
+              GrpcExceptionConverter.ErrorParams(
+                message = serverMessage,
+                cause = None,
+                errorClass = Some(errorClass),
+                messageParameters = messageParameters,
+                queryContext = queryContext,
+                sqlState = serverSqlState))
+            .asInstanceOf[ParseException]
+          assert(error.getMessage == serverMessage)
+          assert(error.getCondition == errorClass)
+          assert(error.getSqlState == expectedSqlState)
+          assert(error.getMessageParameters.asScala == messageParameters)
+          assert(error.getQueryContext.toSeq == queryContext.toSeq)
+        }
+    }
+  }
+
+  test("ParseException is rendered from the client definitions for a defined condition") {
+    val error = GrpcExceptionConverter
+      .errorFactory(classOf[ParseException].getName)(GrpcExceptionConverter.ErrorParams(
+        message = "Server message",
+        cause = None,
+        errorClass = Some("PARSE_SYNTAX_ERROR"),
+        messageParameters = Map("error" -> "'SELEC'", "hint" -> ""),
+        queryContext = Array.empty,
+        sqlState = None))
+      .asInstanceOf[ParseException]
+    assert(error.getMessage.contains("[PARSE_SYNTAX_ERROR] Syntax error at or near 'SELEC'."))
+    assert(!error.getMessage.contains("Server message"))
+    assert(error.getCondition == "PARSE_SYNTAX_ERROR")
+    assert(error.getSqlState == "42601")
   }
 
   private case class TestPackURI(

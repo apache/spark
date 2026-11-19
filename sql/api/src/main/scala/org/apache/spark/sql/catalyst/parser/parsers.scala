@@ -179,7 +179,9 @@ class ParseException private (
     val start: Origin,
     errorClass: Option[String] = None,
     messageParameters: Map[String, String] = Map.empty,
-    queryContext: Array[QueryContext] = ParseException.getQueryContext())
+    queryContext: Array[QueryContext] = ParseException.getQueryContext(),
+    sqlState: Option[String] = None,
+    isMessageRendered: Boolean = false)
     extends AnalysisException(
       message,
       start.line,
@@ -187,7 +189,8 @@ class ParseException private (
       None,
       errorClass,
       messageParameters,
-      queryContext) {
+      queryContext,
+      sqlState) {
 
   def this(errorClass: String, messageParameters: Map[String, String], ctx: ParserRuleContext) =
     this(
@@ -228,7 +231,9 @@ class ParseException private (
       messageParameters,
       queryContext)
 
-  override def getMessage: String = {
+  override def getMessage: String = if (isMessageRendered) message else composeMessage()
+
+  private def composeMessage(): String = {
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     if (queryContext.nonEmpty) {
@@ -278,6 +283,27 @@ object ParseException {
   def getQueryContext(): Array[QueryContext] = {
     Some(CurrentOrigin.get.context).collect { case b: SQLQueryContext if b.isValid => b }.toArray
   }
+
+  /**
+   * Creates a [[ParseException]] whose `getMessage` returns `renderedMessage` unchanged. The
+   * Spark Connect client uses it for a server error whose condition is missing from the client's
+   * own error definitions, which it therefore cannot render again.
+   */
+  private[sql] def withRenderedMessage(
+      renderedMessage: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      queryContext: Array[QueryContext],
+      sqlState: Option[String]): ParseException =
+    new ParseException(
+      command = None,
+      message = renderedMessage,
+      start = Origin(),
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      queryContext = queryContext,
+      sqlState = sqlState,
+      isMessageRendered = true)
 }
 
 /**
