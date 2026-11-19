@@ -53,7 +53,7 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     val xmlOptions = getXmlOptions(sparkSession, options)
     if (xmlOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       SupportsArchiveFormat.checkNoDecompressionCodec(path, xmlOptions.decompressionCodec)
-      // An archive is read as one sequential stream (entry by entry), so it is never split.
+      // An archive is read whole by one reader, entry by entry, so it is never split.
       return false
     }
     XmlDataSource(xmlOptions).isSplitable && super.isSplitable(sparkSession, options, path)

@@ -72,7 +72,7 @@ private[sql] class AvroFileFormat extends FileFormat
       path: Path): Boolean = {
     val parsedOptions = new AvroOptions(options, sparkSession.sessionState.newHadoopConf())
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
-      // An archive is read as one sequential stream (entry by entry), so it is never split.
+      // An archive is read whole by one reader, entry by entry, so it is never split.
       return false
     }
     true

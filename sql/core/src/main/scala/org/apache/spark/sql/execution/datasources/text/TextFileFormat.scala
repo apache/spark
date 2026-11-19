@@ -65,7 +65,7 @@ case class TextFileFormat()
     val textOptions = new TextOptions(options)
     if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       SupportsArchiveFormat.checkNoDecompressionCodec(path, textOptions.decompressionCodec)
-      // An archive is read as one sequential stream (entry by entry), so it is never split.
+      // An archive is read whole by one reader, entry by entry, so it is never split.
       return false
     }
     super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
@@ -133,6 +133,9 @@ case class TextFileFormat()
    * standalone text file (one row per line, or a single row holding the whole entry when
    * `wholeText` is set), without unpacking the archive to disk. The whole archive is a single
    * split (see `isSplitable`).
+   *
+   * Archive reads are wired into the V1 text source only, so the dispatch lives in `buildReader`
+   * rather than in a reader shared with the DSv2 text source.
    */
   private def readArchive(
       conf: Broadcast[SerializableConfiguration],

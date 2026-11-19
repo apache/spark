@@ -44,7 +44,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       path: Path): Boolean = {
     val parsedOptions = getCsvOptions(sparkSession, options)
-    // An archive is read as one sequential stream (entry by entry), so it is never split.
+    // An archive is read whole by one reader, entry by entry, so it is never split.
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       SupportsArchiveFormat.checkNoDecompressionCodec(path, parsedOptions.decompressionCodec)
       return false
