@@ -96,7 +96,8 @@ import org.apache.spark.unsafe.types.UTF8String
         fails the outer query.
       * current_schema - Optional schema for `ANALYZE` of this call only. Must be a constant
         string. NULL or omitted keeps the invoker's schema (or the catalog default when
-        `current_catalog` is given). A schema that does not exist fails the outer query.
+        `current_catalog` names another catalog). A schema that does not exist fails the
+        outer query.
       * current_path - Optional SQL path for `ANALYZE` of this call only, as in `SET PATH`.
         Must be a constant string. NULL or omitted keeps the invoker's path. A blank path
         uses the conf default path. The path feature is enabled for this call only.
@@ -106,9 +107,10 @@ import org.apache.spark.unsafe.types.UTF8String
         local such as a procedure parameter (`proc.p`). The variable is not created.
       * relations - Optional constant array of `named_struct('name', ..., 'schema', ...)`
         entries. Each name is a relation that `ANALYZE` treats as existing with the DDL
-        schema; nothing is created. Query sources and INSERT targets resolve to the entry.
-        DDL and other commands that name a table act on the catalog's own objects, and a
-        table read by a persistent view's body is not replaced.
+        schema; nothing is created. Query sources and the targets of INSERT, UPDATE,
+        DELETE, and MERGE resolve to the entry. DDL and other commands that name a table
+        act on the catalog's own objects, and a table read by a persistent view's body is
+        not replaced.
       * parameter_markers - Optional constant array of `named_struct('name', ..., 'type', ...)`
         entries. The name is `?` for a positional marker or the marker name for a named
         marker. A marker without a type leaves the statement unresolved.
@@ -196,7 +198,11 @@ case class ParseSql(
   // gives no context is unchanged. The defaults are NULL literals, possibly implicitly cast,
   // and the name is taken after pretty-printing, which shows a NULL literal as NULL.
   override def sql: String = {
-    val isDefault: Expression => Boolean = e => e.sql == "NULL" || (e.foldable && e.eval() == null)
+    def isDefault(e: Expression): Boolean = e match {
+      case Literal(null, _) => true
+      case c: Cast => isDefault(c.child)
+      case _ => e.sql == "NULL"
+    }
     val shown = children.take(2) ++ children.drop(2).reverse.dropWhile(isDefault).reverse
     s"$prettyName(${shown.map(_.sql).mkString(", ")})"
   }
@@ -267,16 +273,13 @@ case class ParseSql(
   }
 
   /**
-   * True if `e` is known on the driver before execution. A scalar subquery is not constant
-   * even when its children are, because it reads the data it selects from.
+   * True if `e` folds once the optimizer has replaced the current_* functions with literals,
+   * which happens before [[org.apache.spark.sql.catalyst.optimizer.EvaluateParseSql]] runs.
    */
-  private def constantArg(e: Expression): Boolean = e match {
-    case _: SubqueryExpression => false
-    case _ if e.foldable => true
-    case _: CurrentDatabase | _: CurrentCatalog | _: CurrentPath | _: CurrentUser => true
-    case _: LeafExpression => false
-    case other => other.deterministic && other.children.forall(constantArg)
-  }
+  private def constantArg(e: Expression): Boolean = e.transformUp {
+    case c @ (_: CurrentDatabase | _: CurrentCatalog | _: CurrentPath | _: CurrentUser) =>
+      Literal.create(null, c.dataType)
+  }.foldable
 
   /**
    * The normalized mode, or `None` when the mode is NULL. `mode` is foldable (checked in

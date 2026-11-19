@@ -272,6 +272,23 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE rejects an argument that does not fold, such as a UDF over literals") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      spark.udf.register("parse_sql_identity", (s: String) => s)
+      try {
+        val e = intercept[AnalysisException](
+          spark.sql("SELECT parse_sql(parse_sql_identity('SELECT 1'), 'ANALYZE')").collect())
+        assert(e.getCondition === "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
+        val folded = evalCall(
+          "SELECT parse_sql('SELECT 1 AS a', 'ANALYZE', NULL, " +
+            "concat(current_schema(), ''))")
+        assert(folded.head \ "analyze_success" === JBool(true), folded)
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("parse_sql_identity", ignoreIfNotExists = true)
+      }
+    }
+  }
+
   test("ANALYZE does not execute SQL scripts") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       withTable("parse_sql_script_t", "parse_sql_script_u") {
@@ -1683,6 +1700,39 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       assert(analyzed \ "analyze_success" === JBool(false))
       assert((analyzed \ "error" \ "errorClass").asInstanceOf[JString].s ===
         "INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT")
+    }
+  }
+
+  test("ANALYZE reports a variable name with more than three parts as JSON") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val result = evalCall(
+        "SELECT parse_sql('SELECT 1 AS a', 'ANALYZE', variables => array(named_struct(" +
+          "'name', 'a.system.session.v', 'type', 'INT')))")
+      assert(result.head \ "analyze_success" === JBool(false))
+      assert(result.head \ "error" \ "errorClass" ===
+        JString("INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT"))
+    }
+  }
+
+  test("ANALYZE resolves UPDATE, DELETE, and MERGE targets to a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val target = JArray(List(ref("spark_catalog", "default", "parse_sql_ovl")))
+      def analyze(stmt: String): JObject = evalCall(
+        s"SELECT parse_sql('$stmt', 'ANALYZE', relations => array(named_struct(" +
+          "'name', 'spark_catalog.default.parse_sql_ovl', 'schema', 'a INT, b STRING')))").head
+      Seq(
+        "UPDATE parse_sql_ovl SET a = 1 WHERE b = ''x''",
+        "DELETE FROM parse_sql_ovl WHERE a = 1",
+        "MERGE INTO parse_sql_ovl USING (SELECT 1 AS a) s ON parse_sql_ovl.a = s.a " +
+          "WHEN MATCHED THEN UPDATE SET b = ''y''").foreach { stmt =>
+        val result = analyze(stmt)
+        assert(result \ "analyze_success" === JBool(true), result)
+        assert(result \ "target_table_references" === target, result)
+      }
+      val missing = analyze("UPDATE parse_sql_ovl SET c = 1")
+      assert(missing \ "analyze_success" === JBool(false))
+      assert(missing \ "error" \ "errorClass" ===
+        JString("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
     }
   }
 

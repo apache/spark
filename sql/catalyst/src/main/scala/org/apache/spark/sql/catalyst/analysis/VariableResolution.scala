@@ -170,7 +170,7 @@ class VariableResolution(
       None
     } else {
       SuppliedVariableRegistry.lookup(nameParts, conf.resolver).map { dataType =>
-        // A session name has one part, so a local has a qualifier.
+        // A name that is not a session name is qualified, as in proc.p.
         val ident = Identifier.of(
           Array(namePartsCaseAdjusted.dropRight(1).last), namePartsCaseAdjusted.last)
         VariableReference(
