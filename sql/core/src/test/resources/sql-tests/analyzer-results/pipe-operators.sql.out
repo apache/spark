@@ -1015,6 +1015,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select x, x from t
+|> set x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "select x, x from t\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
 table t
 |> set x = 1 as z
 -- !query analysis

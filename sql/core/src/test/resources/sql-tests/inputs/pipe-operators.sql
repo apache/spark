@@ -368,6 +368,10 @@ values (0), (1) lhs(a)
 table t
 |> set z = 1;
 
+-- SET with a column name that matches two copies of the same column.
+select x, x from t
+|> set x = 1;
+
 -- SET with an alias.
 table t
 |> set x = 1 as z;

@@ -723,6 +723,22 @@ case class UnresolvedStarExceptOrReplace(
       case except: NamedExpression => except -> Seq.empty
     }
 
+    // Each replacement takes the place of the column that its except names. Two copies of the
+    // same column, as in `SELECT x, x`, resolve to one attribute, so a replacement for that name
+    // is ambiguous, as it would be for two different columns with the name.
+    val replacementsByColumn = replacements.map { replacementList =>
+      assert(exceptPairs.size == replacementList.size,
+        "The number of replacements must be the same as the number of excepts")
+      excepts.zip(exceptPairs).foreach { case (exceptParts, (column, _)) =>
+        val copies = expandedCols.map(_.toAttribute).filter(_.semanticEquals(column.toAttribute))
+        if (copies.size > 1) {
+          throw QueryCompilationErrors.ambiguousReferenceError(
+            UnresolvedAttribute(exceptParts).name, copies)
+        }
+      }
+      AttributeMap(exceptPairs.map(_._1.toAttribute).zip(replacementList))
+    }
+
     // Filter columns which correspond to ones listed in the except list and return a new list of
     // columns which exclude the columns in the except list. The 'filtering' manifests as either
     // dropping the column from the list of columns we return, or rewriting the projected column in
@@ -751,14 +767,6 @@ case class UnresolvedStarExceptOrReplace(
       // group the except pairs by the column they refer to. NOTE: no groupMap until scala 2.13
       val groupedExcepts: AttributeMap[Seq[Seq[String]]] =
         AttributeMap(excepts.groupBy(_._1.toAttribute).transform((_, v) => v.map(_._2)))
-      // If the 'replacements' list is populated to indicate we should replace excepted columns
-      // with new expressions, we must have the same number of replacements as excepts. Keep an
-      // index to track the current replacement.
-      replacements.foreach { r =>
-        assert(excepts.size == r.size,
-          "The number of replacements must be the same as the number of excepts")
-      }
-      var replacementIndex = 0
       // map input columns while searching for the except entry corresponding to the current column
       columns.map(col => col -> groupedExcepts.get(col.toAttribute)).collect {
         // pass through columns that don't match anything in groupedExcepts
@@ -792,9 +800,8 @@ case class UnresolvedStarExceptOrReplace(
             messageParameters = Map(
               "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
         // found a match and the 'replacements' list is populated - replace the column
-        case (_, Some(_)) if replacements.nonEmpty =>
-          replacementIndex += 1
-          replacements.get(replacementIndex - 1)
+        case (col, Some(_)) if replacementsByColumn.nonEmpty =>
+          replacementsByColumn.get(col.toAttribute)
       }
     }
 
