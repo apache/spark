@@ -16,6 +16,7 @@
 #
 
 import json
+import math
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pyspark.errors import PySparkValueError, StreamingQueryException
@@ -221,6 +222,11 @@ class StreamingQuery:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
+            if not math.isfinite(timeout):
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_FINITE",
+                    messageParameters={"arg_name": "timeout", "arg_value": str(timeout)},
                 )
             return self._jsq.awaitTermination(int(timeout * 1000))
         else:
@@ -599,6 +605,11 @@ class StreamingQueryManager:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_POSITIVE",
                     messageParameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
+            if not math.isfinite(timeout):
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_FINITE",
+                    messageParameters={"arg_name": "timeout", "arg_value": str(timeout)},
                 )
             return self._jsqm.awaitAnyTermination(int(timeout * 1000))
         else:

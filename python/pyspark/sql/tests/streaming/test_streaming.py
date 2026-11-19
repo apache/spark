@@ -339,6 +339,14 @@ class StreamingTestsMixin:
                 self.fail("Expected a value exception")
             except ValueError:
                 pass
+            for value in (float("nan"), float("inf")):
+                with self.assertRaises(PySparkValueError) as pe:
+                    q.awaitTermination(value)
+                self.check_error(
+                    pe.exception,
+                    errorClass="VALUE_NOT_FINITE",
+                    messageParameters={"arg_name": "timeout", "arg_value": str(value)},
+                )
             now = time.time()
             # test should take at least 2 seconds
             res = q.awaitTermination(2.6)
@@ -426,6 +434,14 @@ class StreamingTestsMixin:
                 self.fail("Expected a value exception")
             except ValueError:
                 pass
+            for value in (float("nan"), float("inf")):
+                with self.assertRaises(PySparkValueError) as pe:
+                    self.spark.streams.awaitAnyTermination(value)
+                self.check_error(
+                    pe.exception,
+                    errorClass="VALUE_NOT_FINITE",
+                    messageParameters={"arg_name": "timeout", "arg_value": str(value)},
+                )
             now = time.time()
             # test should take at least 2 seconds
             res = self.spark.streams.awaitAnyTermination(2.6)
