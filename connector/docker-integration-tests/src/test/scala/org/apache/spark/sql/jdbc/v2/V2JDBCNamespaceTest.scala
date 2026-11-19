@@ -32,9 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType}
-import org.apache.spark.tags.DockerTest
 
-@DockerTest
 private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession with DockerIntegrationFunSuite {
   val catalog = new JDBCTableCatalog()
 

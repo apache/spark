@@ -478,13 +478,14 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     }
   }
 
-  test("persistentCatalogFirst is unsupported") {
-    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
-      checkResolverGuard(
-        "SELECT 1",
-        unsupportedReason = Some("configuration: persistentCatalogFirst")
-      )
-    }
+  gridTest("persistentCatalogFirst does not make the plan unsupported")(Seq(true, false)) {
+    persistentCatalogFirst =>
+      withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> persistentCatalogFirst.toString) {
+        checkResolverGuard(
+          "SELECT 1",
+          unsupportedReason = None
+        )
+      }
   }
 
   gridTest("ASOF JOIN")(Seq(true, false)) { enabled =>

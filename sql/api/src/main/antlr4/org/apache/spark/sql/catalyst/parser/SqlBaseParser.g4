@@ -1286,6 +1286,8 @@ groupingSet
     | expression
     ;
 
+// TODO(SPARK-61976): The trailing alias still consumes a following join keyword, such as LEFT,
+// as an alias in the default keyword mode.
 pivotClause
     : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN (AS? errorCapturingIdentifier)?
     ;
@@ -1299,6 +1301,8 @@ pivotValue
     : expression (AS? errorCapturingIdentifier)?
     ;
 
+// TODO(SPARK-61976): The trailing alias still consumes a following join keyword, such as LEFT,
+// as an alias in the default keyword mode.
 unpivotClause
     : UNPIVOT nullOperator=unpivotNullClause? LEFT_PAREN
         operator=unpivotOperator
@@ -1358,7 +1362,7 @@ binByClause
         (BIN_START AS binStartAlias=errorCapturingIdentifier)?
         (BIN_END AS binEndAlias=errorCapturingIdentifier)?
         (BIN_DISTRIBUTE_RATIO AS binRatioAlias=errorCapturingIdentifier)?
-      RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
+      RIGHT_PAREN (AS? tblAlias=strictIdentifier)?
     ;
 
 gapFillClause

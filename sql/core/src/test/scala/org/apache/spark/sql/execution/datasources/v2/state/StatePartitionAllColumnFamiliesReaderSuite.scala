@@ -33,11 +33,13 @@ import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInp
 import org.apache.spark.sql.streaming.util.{StreamManualClock, TTLProcessorUtils}
 import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils}
 import org.apache.spark.sql.types.{DataType, NullType, StructField, StructType}
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Note: This extends StateDataSourceTestBase to access
  * helper methods like runDropDuplicatesQuery without inheriting all predefined tests.
  */
+@DataSourceV2Test
 class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase {
 
   import testImplicits._

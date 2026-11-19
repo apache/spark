@@ -27,8 +27,8 @@ import org.apache.spark.sql.types.StructType;
  * logic. Implementations can directly provide procedure parameters and execution logic without
  * implementing the {@link UnboundProcedure#bind(StructType) bind} method.
  * <p>
- * The default {@link #bind(StructType) bind} method simply returns {@code this}, as the procedure
- * is already considered bound.
+ * The default {@link #bind(StructType) bind} method simply returns {@code this}. Spark still calls
+ * it before invoking the procedure; see {@link UnboundProcedure#bind(StructType)}.
  *
  * @since 4.2.0
  */

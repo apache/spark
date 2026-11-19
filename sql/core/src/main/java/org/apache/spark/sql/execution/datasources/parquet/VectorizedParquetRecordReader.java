@@ -294,11 +294,15 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
     columnarBatch = new ColumnarBatch(vectors);
 
+    Object[] defaultValues = null;
+    if (sparkRequestedSchema != null) {
+      defaultValues = ResolveDefaultColumns.existenceDefaultValues(sparkRequestedSchema);
+    }
     columnVectors = new ParquetColumnVector[sparkSchema.fields().length];
     for (int i = 0; i < columnVectors.length; i++) {
       Object defaultValue = null;
-      if (sparkRequestedSchema != null) {
-        defaultValue = ResolveDefaultColumns.existenceDefaultValues(sparkRequestedSchema)[i];
+      if (defaultValues != null) {
+        defaultValue = defaultValues[i];
       }
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
         (WritableColumnVector) vectors[i], capacity, missingColumns, /* isTopLevel= */ true,

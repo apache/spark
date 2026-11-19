@@ -18,14 +18,17 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, RowLevelWrite, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 
 /** Builds check and generated-column invariants for a write to a resolved V2 table. */
 private[sql] class TableConstraintResolution(
@@ -41,11 +44,7 @@ private[sql] class TableConstraintResolution(
       if (r.table.constraints != null && r.table.constraints.nonEmpty) {
         // Check constraint is the only enforced constraint for DSV2 tables.
         r.table.constraints.collect {
-          case c: Check =>
-            val unresolvedExpr = buildCatalystExpression(c)
-            val columnExtractors = mutable.Map[String, Expression]()
-            buildColumnExtractors(unresolvedExpr, columnExtractors)
-            CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
+          case c: Check => buildCheckInvariant(c, v2Write.query)
         }.toSeq
       } else {
         Seq.empty
@@ -57,12 +56,44 @@ private[sql] class TableConstraintResolution(
       condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
   }
 
-  private def buildCatalystExpression(c: Check): Expression = {
-    Option(c.predicate())
-      .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(StoredExpressionFunctions.qualifyBuiltinFunctions(
-        catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql())))
+  private def buildCheckInvariant(c: Check, query: LogicalPlan): Expression = {
+    Option(c.predicate()).flatMap(V2ExpressionUtils.toCatalyst) match {
+      case Some(expr) => toCheckInvariant(c, expr)
+      case None if SQLConf.get.getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT) =>
+        toCheckInvariant(c, parseCondition(c))
+      case None => readCheckInvariant(c, query)
+    }
   }
+
+  private def toCheckInvariant(c: Check, unresolvedExpr: Expression): CheckInvariant = {
+    val columnExtractors = mutable.Map[String, Expression]()
+    buildColumnExtractors(unresolvedExpr, columnExtractors)
+    CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
+  }
+
+  /**
+   * Reads a CHECK condition from its text, independently of the settings of the writer. Only the
+   * condition is analyzed under the fixed settings, and the query of the write is not analyzed
+   * again. The result is resolved against the same attributes as the query, so it can go to the
+   * [[Filter]] above the query as it is.
+   */
+  private def readCheckInvariant(c: Check, query: LogicalPlan): Expression = {
+    try {
+      val analyzed = SQLConf.withExistingConf(StoredExpressionText.fixedConf(SQLConf.get)) {
+        analyze(Filter(toCheckInvariant(c, parseCondition(c)), LocalRelation(query.output)))
+      }
+      // Check under the session's representation settings, as `analyzeStrict` does.
+      SimpleAnalyzer.checkAnalysis(analyzed)
+      analyzed.asInstanceOf[Filter].condition
+    } catch {
+      case e: AnalysisException =>
+        throw QueryCompilationErrors.unresolvableCheckConstraintError(c.name, c.predicateSql, e)
+    }
+  }
+
+  private def parseCondition(c: Check): Expression =
+    StoredExpressionFunctions.qualifyBuiltinFunctions(
+      catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql))
 
   /**
    * For each generated column whose value was provided by the write, add a CheckInvariant that
