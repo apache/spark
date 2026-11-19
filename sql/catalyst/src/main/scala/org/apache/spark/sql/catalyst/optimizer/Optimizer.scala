@@ -2627,21 +2627,12 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
     _.containsPattern(FILTER), ruleId)(applyLocally)
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    // The query execution/optimization does not guarantee the expressions are evaluated in order.
-    // We only can combine them if and only if both are deterministic and the outer condition is not
-    // throwable (inner can be throwable as it was going to be evaluated first anyways).
-    // Combining a condition written after a non-deterministic or throwable one evaluates it ahead
-    // of that one, so it must also be unable to fail. `throwable` does not report e.g. a division
-    // by zero in ANSI mode, which the condition before it may have kept from being evaluated.
-    // Nor may it read a column that can fail (see `failableOutput`).
+    // Combines the conjuncts of the outer condition that may be evaluated ahead of the others
+    // (see `splitMovable`) into the inner filter, and keeps the rest in a filter above it. The
+    // inner condition must be deterministic.
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (leading, following) =
-        splitConjunctivePredicates(fc).span(p => p.deterministic && !p.throwable)
-      lazy val failable = failableOutput(grandChild)
-      val (cannotFail, rest) = following.partition { p =>
-        ExprUtils.canEvaluateUnconditionally(p) && !p.references.exists(failable.contains)
-      }
-      val mergedFilter = (ExpressionSet(leading ++ cannotFail) --
+      val (movable, rest) = splitMovable(splitConjunctivePredicates(fc), Seq(grandChild))
+      val mergedFilter = (ExpressionSet(movable) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
           Filter(And(nc, ac), grandChild)
@@ -3357,27 +3348,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
-   * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
-   * others, by pushing them below the join or moving them into its condition, and the ones that
-   * may not. A non-deterministic or throwable conjunct may not, and nor may a conjunct written
-   * after it that can fail: one that [[ExprUtils.canEvaluateUnconditionally]] rejects or that
-   * reads a column of either side that can fail (see `failableOutput`). It would be evaluated on
-   * rows that the conjunct before it may have dropped. The conjuncts that may not move are
-   * returned in their written order.
-   */
-  private def splitMovable(
-      condition: Seq[Expression],
-      left: LogicalPlan,
-      right: LogicalPlan): (Seq[Expression], Seq[Expression]) = {
-    val (leading, following) = condition.span(cond => cond.deterministic && !cond.throwable)
-    lazy val failable = failableOutput(left) ++ failableOutput(right)
-    val (cannotFail, stayUp) = following.partition { cond =>
-      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
-    }
-    (leading ++ cannotFail, stayUp)
-  }
-
-  /**
    * Splits join condition expressions or filter predicates (on a given join's output) into three
    * categories based on the attributes required to evaluate them. Note that we explicitly exclude
    * non-deterministic (i.e., stateful) condition expressions in canEvaluateInLeft or
@@ -3387,7 +3357,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, stayUp) = splitMovable(condition, left, right)
+    val (pushDownCandidates, stayUp) = splitMovable(condition, Seq(left, right))
     val (leftEvaluateCondition, rightEvaluateCondition, commonCondition) =
       splitBySide(pushDownCandidates, left, right)
 
@@ -3426,7 +3396,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def splitLookupJoin(condition: Seq[Expression], join: ExternalLookupJoin) = {
-    val movable = splitMovable(condition, join.left, join.right)._1.filterNot { cond =>
+    val movable = splitMovable(condition, Seq(join.left, join.right))._1.filterNot { cond =>
       cond.references.exists(join.right.outputSet.contains) && (
         if (cond.references.subsetOf(join.right.outputSet)) {
           !ExternalLookupJoinShapes.canEvaluateInLookupStage(cond)
@@ -3464,7 +3434,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
       val (movable, stayUp) =
-        splitMovable(splitConjunctivePredicates(filterCondition), left, right)
+        splitMovable(splitConjunctivePredicates(filterCondition), Seq(left, right))
       val (leftFilterConditions, rightFilterConditions, commonMovable) =
         splitBySide(movable, left, right)
       val commonFilterCondition = commonMovable ++ stayUp

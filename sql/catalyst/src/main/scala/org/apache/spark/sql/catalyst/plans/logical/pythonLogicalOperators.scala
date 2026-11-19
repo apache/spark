@@ -298,6 +298,12 @@ trait BaseEvalPython extends UnaryNode {
   /** Returns a copy that passes through `requiredChildOutput` of the child. */
   def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): BaseEvalPython
 
+  /**
+   * If defined, the UDFs are evaluated only for the child rows where this deterministic
+   * condition is true, and their results are null for the other rows (see `EvalOnlyWhen`).
+   */
+  def evalCondition: Option[Expression] = None
+
   override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
@@ -327,12 +333,15 @@ trait BaseEvalPythonUDTF extends UnaryNode {
  * @param requiredChildOutput the columns of the child that are passed through to the output
  * @param resultAttrs the attributes of the results of the UDFs
  * @param child the child plan
+ * @param evalCondition if set, a deterministic condition over the child; the UDFs are evaluated
+ *                      only for the child rows where it is true (see `EvalOnlyWhen`)
  */
 case class BatchEvalPython(
     udfs: Seq[PythonUDF],
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
-    child: LogicalPlan) extends BaseEvalPython {
+    child: LogicalPlan,
+    override val evalCondition: Option[Expression] = None) extends BaseEvalPython {
   override def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): BatchEvalPython =
     copy(requiredChildOutput = requiredChildOutput)
 
@@ -348,13 +357,16 @@ case class BatchEvalPython(
  * @param resultAttrs the attributes of the results of the UDFs
  * @param child the child plan
  * @param evalType the eval type of the UDFs
+ * @param evalCondition if set, a deterministic condition over the child; the UDFs are evaluated
+ *                      only for the child rows where it is true (see `EvalOnlyWhen`)
  */
 case class ArrowEvalPython(
     udfs: Seq[PythonUDF],
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: LogicalPlan,
-    evalType: Int) extends BaseEvalPython {
+    evalType: Int,
+    override val evalCondition: Option[Expression] = None) extends BaseEvalPython {
   override def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): ArrowEvalPython =
     copy(requiredChildOutput = requiredChildOutput)
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, MergeRows}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, LeafNode, LogicalPlan, MergeRows}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
@@ -54,6 +54,7 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
       }
       newPlan match {
         case m: MergeRows => widenOutputNullability(m)
+        case e: Expand => widenOutputNullability(e)
         case _ => newPlan
       }
   }
@@ -68,5 +69,19 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
       attr.withNullability(attr.nullable || outputs.exists(output => output(index).nullable))
     }
     if (newOutput == m.output) m else m.copy(output = newOutput)
+  }
+
+  // Expand derives the nullability of its new output attributes from its projections when it is
+  // built, for instance, for grouping sets or UNPIVOT. The projections may become nullable later
+  // when this rule updates the attributes they reference, e.g., a column of a Dataset that an
+  // outer join makes nullable, so widen the nullability of the output attributes accordingly,
+  // keeping their expression IDs.
+  private def widenOutputNullability(e: Expand): Expand = {
+    val projections = e.projections.map(_.toIndexedSeq)
+    val newOutput = e.output.zipWithIndex.map { case (attr, index) =>
+      attr.withNullability(
+        attr.nullable || projections.exists(projection => projection(index).nullable))
+    }
+    if (newOutput == e.output) e else e.copy(output = newOutput)
   }
 }
