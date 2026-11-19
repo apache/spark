@@ -850,8 +850,13 @@ object UnsupportedOperationChecker extends Logging {
     // Check if the nullable side has a watermark, and there's a range condition which
     // implies a state value watermark on the first side.
     val hasValidWatermarkRange = join.joinType match {
-      case LeftOuter | LeftSemi => StreamingJoinHelper.getStateValueWatermark(
+      case LeftOuter => StreamingJoinHelper.getStateValueWatermark(
         join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
+      // A left semi join emits a left row when it matches, so a range condition that gives no
+      // cutoff, such as a constant-only one, only keeps its state from being evicted. Earlier
+      // versions accepted such joins, and they return correct results.
+      case LeftSemi => StreamingJoinHelper.getStateValueWatermark(join.left.outputSet,
+        join.right.outputSet, join.condition, Some(1000000), risingCutoffsOnly = false).isDefined
       case RightOuter => StreamingJoinHelper.getStateValueWatermark(
         join.right.outputSet, join.left.outputSet, join.condition, Some(1000000)).isDefined
       case FullOuter =>

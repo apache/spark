@@ -75,6 +75,26 @@ class StreamingJoinRangeCutoffSuite extends StreamTest {
       }
     }
 
+    test(s"left semi join whose only range condition is constant-only, V$version") {
+      withJoinStateVersion(version) {
+        val (leftInput, rightInput, left, right) = inputs()
+        val joined = left
+          .join(right, expr("leftKey = rightKey AND CAST(lt AS LONG) > 10"), "left_semi")
+          .select($"leftKey", $"lt".cast("long"))
+
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 20L), (2, 20L)), AddData(rightInput, (1, 30L)))),
+          CheckNewAnswer(Row(1, 20L)),
+          StopStream,
+          StartStream(),
+          // The condition gives no cutoff, so the left row (2, 20) is still in state.
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 60L)), AddData(rightInput, (2, 60L), (1, 60L)))),
+          CheckNewAnswer(Row(2, 20L)))
+      }
+    }
+
     test(s"constant-only conjunct does not cap the state cutoff, V$version") {
       withJoinStateVersion(version) {
         val (leftInput, rightInput, left, right) = inputs()

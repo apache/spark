@@ -62,18 +62,23 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   a warning, and also turns the existing check of chained stateful operators into a warning.
   Queries restarted from checkpoints written before Spark 4.5 only log a warning.
 
-## Upgrading from Structured Streaming 4.3 to 4.4
-
-- Since Spark 4.4, a range condition of a stream-stream join bounds the state of one input only
+- Since Spark 4.5, a range condition of a stream-stream join bounds the state of one input only
   if it can be rearranged to `leftTime > rightTime + c` (or `>=`), where `rightTime` is the other
   input's watermarked column, so that the cutoff rises with that watermark. For example,
   `leftTime > rightTime - INTERVAL 5 SECONDS` bounds the state of the left input.
   `CAST(leftTime AS LONG) > 10` no longer gives a cutoff, so it no longer holds back the cutoff of
   other range conditions. `CAST(leftTime AS LONG) + CAST(rightTime AS LONG) > 100` no longer
-  evicts state that later rows of the other input can still match. As a result, outer and semi
-  joins without a watermark in the join keys, whose only range condition has one of these forms,
-  fail analysis, also when an existing query restarts. To run such a query, add a range condition
-  that bounds the state, or a watermark in the join keys, and start it from a new checkpoint.
+  evicts state that later rows of the other input can still match. As a result, outer joins
+  without a watermark in the join keys, whose only range condition has one of these forms, fail
+  analysis, also when an existing query restarts. To run such a query, add a range condition that
+  bounds the state, or a watermark in the join keys, and start it from a new checkpoint. A left
+  semi join of that kind still runs, as in earlier versions, but its state is not evicted. The
+  rule also applies with `spark.sql.streaming.statefulOperator.allowMultiple` set to false. There,
+  and for an input bounded only through a column cast to TIMESTAMP (SPARK-62044), a cutoff solved
+  for another column can now evict by the event time where a constant-only conjunct used to cap
+  it.
+
+## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial

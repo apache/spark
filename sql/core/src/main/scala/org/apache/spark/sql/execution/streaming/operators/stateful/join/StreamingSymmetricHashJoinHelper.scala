@@ -325,6 +325,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           // whole-input fallback, the state can come from an earlier version or the legacy mode,
           // which evicted only up to the cutoff solved over the whole input, so the scan starts
           // there, or from the beginning when that cutoff is ahead of the late-input watermark.
+          // Both assume that the previous batch evicted with the same rule for cutoffs.
+          // TODO: [SPARK-62038] An earlier version also took constant-only and negative-sign
+          //  conjuncts into the cutoff, so it can have evicted less than this bound in the first
+          //  batch after an upgrade. Scan from the start in the first batch of each run.
           val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
             eventTime.exists(_.semanticEquals(column))
           }.flatMap { lateWatermark =>
