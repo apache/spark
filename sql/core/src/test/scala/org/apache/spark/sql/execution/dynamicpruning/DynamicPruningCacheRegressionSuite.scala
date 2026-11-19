@@ -164,6 +164,10 @@ class DynamicPruningCacheRegressionSuite
       info +: info.children.flatMap(nodes)
     }
     val planInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
-    assert(nodes(planInfo).count(_.nodeName == "SubqueryBroadcast") >= 2)
+    val described = nodes(planInfo)
+    assert(described.exists(_.nodeName == "SubqueryBroadcast"))
+    val ids = described.flatMap(_.metadata.get("spark.sql.dpp.planInfo.id")).toSet
+    val refs = described.flatMap(_.metadata.get("spark.sql.dpp.planInfo.ref"))
+    assert(refs.nonEmpty && refs.forall(ids.contains))
   }
 }

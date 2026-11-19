@@ -750,10 +750,11 @@ case class AdaptiveSparkPlanExec(
       printNodeId: Boolean,
       printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
+    val output = SparkPlan.subqueryPlanString(append)
     super.generateTreeString(
       depth,
       lastChildren,
-      append,
+      output,
       verbose,
       prefix,
       addSuffix,
@@ -766,7 +767,7 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan.generateTreeString(
         depth + 1,
         lastChildren,
-        append,
+        output,
         verbose,
         prefix = "",
         addSuffix = false,
@@ -780,7 +781,7 @@ case class AdaptiveSparkPlanExec(
         if (isFinalPlan) "Final Plan" else "Current Plan",
         currentPhysicalPlan,
         depth,
-        append,
+        output,
         verbose,
         maxFields,
         printNodeId,
@@ -789,7 +790,7 @@ case class AdaptiveSparkPlanExec(
         "Initial Plan",
         initialPlan,
         depth,
-        append,
+        output,
         verbose,
         maxFields,
         printNodeId,

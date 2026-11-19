@@ -34,8 +34,6 @@ import org.apache.spark.sql.execution.{BaseSubqueryExec, ProjectedBroadcastValue
  * Lookups run before the planning or preparation they can reuse, including nested DPP.
  * Cached subquery producers remain traversable by later reuse rules; broadcast eligibility
  * stays with the calling rules.
- * Plan rendering and SQL event serialization can still expand shared plans along each reference
- * path, even after construction and final reuse finish.
  */
 private[execution] class DynamicPruningSubqueryCache(session: SparkSession) {
   import DynamicPruningSubqueryCache._
