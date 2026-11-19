@@ -3848,8 +3848,8 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-60501: a Python UDF over the result of a lower aggregate runs only for outer rows " +
-      "without matching rows") {
+  test("SPARK-60501: a Python UDF over the result of a lower aggregate runs on the value over no " +
+      "rows only for outer rows without matching rows") {
     import IntegratedUDFTestUtils._
     assume(shouldTestPythonUDFs)
     registerTestUDF(TestFailingPythonUDF(name = "inv"), spark)
@@ -3866,8 +3866,19 @@ class SubquerySuite extends SharedSparkSession
       // The outer row 7 has no matching rows, so inv(0) is computed for it and fails.
       val e = intercept[Exception](sql(s"SELECT o.a, $subquery FROM lo7 o").collect())
       assert(e.getMessage.contains("ZeroDivisionError"))
-      checkAnswer(sql("SELECT o.a, (SELECT COUNT(*) FROM (SELECT inv(MAX(ri.d)) AS x FROM ri " +
-        "WHERE ri.c = o.a)) FROM lo7 o"), Row(2, 1) :: Row(3, 1) :: Row(6, 1) :: Row(7, 1) :: Nil)
+      // The value over no rows of a UDF that does not fail there is the correct result for 7.
+      checkAnswer(sql("SELECT o.a, (SELECT SUM(x) FROM (SELECT inv(10 DIV " +
+        "COALESCE(MAX(ri.d), 1)) AS x FROM ri WHERE ri.c = o.a)) FROM lo7 o"),
+        Row(2, 33) :: Row(3, 20) :: Row(6, 10) :: Row(7, 10) :: Nil)
+      // Without SPARK-61482's conditional evaluation, the UDF would run on the value over no rows
+      // for every outer row, so the subquery keeps the count bug handling of before.
+      withSQLConf(
+          SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key -> "false") {
+        checkAnswer(sql(s"SELECT o.a, $subquery FROM lo o"),
+          Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Nil)
+        checkAnswer(sql(s"SELECT o.a, $subquery FROM lo7 o"),
+          Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Row(7, null) :: Nil)
+      }
     }
   }
 

@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
+import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED, DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
   WRAP_EXISTS_IN_AGGREGATE_FUNCTION}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -771,7 +771,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // of DecorrelateInnerQuery are known not to work, so as not to make such queries worse
         // than before: where the outer input may give other rows when computed again (see
         // repeatableInput and mayMoveIntoOuterInput), and for outer references that are not
-        // orderable, for which the domain joins fail.
+        // orderable, for which the domain joins fail. So does a subquery with a Python or external
+        // UDF when DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED is off, since
+        // the UDF would then run on the values over no rows for every outer row (SPARK-61482).
         // A filter above can also inline another subquery of `plan` through its alias, so those
         // are checked as well.
         lazy val domainJoinsWork = inputRepeatable &&
@@ -782,7 +784,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           outerAttrs.forall(e => RowOrdering.isOrderable(e.dataType))
         lazy val onlyDefaultResultSelectsDecorrelation =
           conf.getConf(SQLConf.LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR) ||
-            !domainJoinsWork
+            !domainJoinsWork ||
+            (!conf.getConf(DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED) &&
+              sub.exists(_.expressions.exists(EvalOnlyWhen.hasLiftedUDF)))
         // The lower Aggregates that selected decorrelation before SPARK-60501.
         def defaultResultCountBugAgg(a: Aggregate): Boolean =
           a.groupingExpressions.isEmpty && hasDefaultResult(a)
