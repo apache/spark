@@ -86,37 +86,35 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
    * stack(2, id, null)). So the PipeExpression is stripped as soon as the arguments are resolved,
    * keeping both wrappers in place; otherwise ExtractGenerator sees the PipeExpression above the
    * generator and rejects it as nested inside another expression.
+   *
+   * These are the shapes that ExtractGenerator's AliasedGenerator plans, without the Alias the
+   * parser puts above the PipeExpression; keep the two in sync.
    */
   private def isReadyGeneratorItem(e: Expression): Boolean = e match {
-    case MultiAlias(g: Generator, _) => isReadyGenerator(g)
-    case g: Generator => isReadyGenerator(g)
+    case MultiAlias(g: Generator, _) => isReadyGeneratorItem(g)
+    case GeneratorOuter(g) => g.childrenResolved
+    case g: Generator => g.childrenResolved
     case _ => false
-  }
-
-  private def isReadyGenerator(g: Generator): Boolean = g match {
-    case GeneratorOuter(inner) => inner.childrenResolved
-    case _ => g.childrenResolved
   }
 
   /**
    * Validates aggregate function constraints for a [[PipeExpression]] and returns its child
    * expression (stripping the [[PipeExpression]] wrapper).
    *
-   * This method is shared between the fixed-point analyzer rule and the single-pass resolver.
-   *
    * @param pipeExpression The [[PipeExpression]] containing metadata about the pipe clause.
-   * @param resolvedChild The child expression to validate and return. It is resolved, except for
-   *                      the generator items accepted by `isReadyGeneratorItem`, of which only
-   *                      the generator's arguments are known to be resolved.
+   * @param child The child expression to validate and return. It is either resolved, or a
+   *              generator item whose arguments are resolved but which is not resolved itself:
+   *              a [[Generator]], optionally wrapped in [[GeneratorOuter]] and then in a
+   *              MultiAlias. The aggregate checks run before such a generator's own type check.
    * @return The child expression after validation.
    */
   def validateAndStripPipeExpression(
       pipeExpression: PipeExpression,
-      resolvedChild: Expression): Expression = {
-    val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(resolvedChild)
+      child: Expression): Expression = {
+    val firstAggregateFunction: Option[AggregateFunction] = findFirstAggregate(child)
     if (pipeExpression.isAggregate && firstAggregateFunction.isEmpty) {
       throw QueryCompilationErrors
-          .pipeOperatorAggregateExpressionContainsNoAggregateFunction(resolvedChild)
+          .pipeOperatorAggregateExpressionContainsNoAggregateFunction(child)
     }
     if (!pipeExpression.isAggregate) {
       // For non-aggregate clauses, only allow aggregate functions in SELECT.
@@ -131,7 +129,7 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
         }
       }
     }
-    resolvedChild
+    child
   }
 
   /** Returns the first aggregate function in the given expression, or None if not found. */

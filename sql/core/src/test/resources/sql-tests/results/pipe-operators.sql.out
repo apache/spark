@@ -5309,6 +5309,62 @@ struct<id:int,col0:int>
 
 -- !query
 table outer_gen_test
+|> aggregate explode_outer(collect_list(if(id > 10, id, null))) as id group by author
+-- !query schema
+struct<author:string,id:int>
+-- !query output
+ann	NULL
+bob	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode(collect_list(if(id > 10, id, null))) as id group by author
+-- !query schema
+struct<author:string,id:int>
+-- !query output
+
+
+
+-- !query
+table outer_gen_test
+|> set id = stack(2, id, null)
+|> select id, author
+-- !query schema
+struct<id:int,author:string>
+-- !query output
+1	ann
+2	bob
+3	ann
+4	bob
+NULL	ann
+NULL	ann
+NULL	bob
+NULL	bob
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, p, v
+-- !query schema
+struct<id:int,t:string,p:int,v:int>
+-- !query output
+1	spark	0	1
+1	spark	1	2
+1	sql	0	1
+1	sql	1	2
+2	delta	0	1
+2	delta	1	2
+3	NULL	0	1
+3	NULL	1	2
+4	NULL	0	1
+4	NULL	1	2
+
+
+-- !query
+table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query schema
 struct<>
@@ -5318,7 +5374,22 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "expression" : "\"pipeexpression(upper(generatorouter(explode(tags))))\""
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select upper(explode_outer(tags)) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
   }
 }
 
@@ -5428,7 +5499,22 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "expression" : "\"pipeexpression(multialias(upper(generatorouter(explode(tags)))))\""
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select *, upper(explode_outer(tags)) as (a, b) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
   }
 }
 
@@ -5535,6 +5621,56 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 11,
     "stopIndex" : 24,
     "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(id)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(explode(id#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 51,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(count(*)) group by author
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"count(1)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(count(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 57,
+    "fragment" : "explode_outer(count(*))"
   } ]
 }
 

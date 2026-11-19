@@ -5773,6 +5773,63 @@ Project [id#x, col0#x]
 
 -- !query
 table outer_gen_test
+|> aggregate explode_outer(collect_list(if(id > 10, id, null))) as id group by author
+-- !query analysis
+Project [author#x, id#x]
++- Generate explode(_gen_input_0#x), true, [id#x]
+   +- Aggregate [author#x], [author#x, collect_list(if ((id#x > 10)) id#x else cast(null as int), 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode(collect_list(if(id > 10, id, null))) as id group by author
+-- !query analysis
+Project [author#x, id#x]
++- Generate explode(_gen_input_0#x), false, [id#x]
+   +- Aggregate [author#x], [author#x, collect_list(if ((id#x > 10)) id#x else cast(null as int), 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> set id = stack(2, id, null)
+|> select id, author
+-- !query analysis
+Project [id#x, author#x]
++- Project [id#x, author#x, tags#x]
+   +- Generate stack(2, id#x, null), false, [id#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, p, v
+-- !query analysis
+Project [id#x, t#x, p#x, v#x]
++- Project [id#x, author#x, tags#x, t#x, p#x, v#x]
+   +- Generate posexplode(array(1, 2)), true, [p#x, v#x]
+      +- Project [id#x, author#x, tags#x, t#x]
+         +- Generate explode(tags#x), true, [t#x]
+            +- SubqueryAlias outer_gen_test
+               +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                  +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -5780,7 +5837,20 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "expression" : "\"pipeexpression(upper(generatorouter(explode(tags))))\""
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select upper(explode_outer(tags)) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
   }
 }
 
@@ -5880,7 +5950,20 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "expression" : "\"pipeexpression(multialias(upper(generatorouter(explode(tags)))))\""
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select *, upper(explode_outer(tags)) as (a, b) from outer_gen_test
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
   }
 }
 
@@ -5979,6 +6062,52 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 11,
     "stopIndex" : 24,
     "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(id)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(explode(id#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 51,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(count(*)) group by author
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"count(1)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(count(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 57,
+    "fragment" : "explode_outer(count(*))"
   } ]
 }
 

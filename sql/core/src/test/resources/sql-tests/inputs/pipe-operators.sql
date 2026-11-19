@@ -2094,12 +2094,33 @@ table outer_gen_test
 |> extend stack(2, id, null)
 |> select id, col0;
 
+-- Outer generators over an empty aggregated array return one NULL row per group, while the
+-- non-outer generator returns no rows.
+table outer_gen_test
+|> aggregate explode_outer(collect_list(if(id > 10, id, null))) as id group by author;
+
+table outer_gen_test
+|> aggregate explode(collect_list(if(id > 10, id, null))) as id group by author;
+
+-- A generator that needs type coercion in the pipe SET list.
+table outer_gen_test
+|> set id = stack(2, id, null)
+|> select id, author;
+
+-- A generator item whose arguments resolve before the input plan below it does.
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, p, v;
+
 -- Outer generators: negative tests.
 --------------------------------------
 
 -- Outer generators nested inside other expressions are not allowed, as in a plain SELECT.
 table outer_gen_test
 |> select upper(explode_outer(tags));
+
+select upper(explode_outer(tags)) from outer_gen_test;
 
 -- The pipe AGGREGATE list requires an aggregate function.
 table outer_gen_test
@@ -2119,6 +2140,8 @@ table outer_gen_test
 table outer_gen_test
 |> extend upper(explode_outer(tags)) as (a, b);
 
+select *, upper(explode_outer(tags)) as (a, b) from outer_gen_test;
+
 -- A generator with a wrongly typed argument reports the same error as the plain SQL query.
 table outer_gen_test
 |> select id, explode_outer(id);
@@ -2129,6 +2152,13 @@ table outer_gen_test
 |> extend posexplode(id) as (pos, v);
 
 select *, posexplode(id) as (pos, v) from outer_gen_test;
+
+-- In the pipe AGGREGATE list, the aggregate checks run before a generator's own type check.
+table outer_gen_test
+|> aggregate explode_outer(id);
+
+table outer_gen_test
+|> aggregate explode_outer(count(*)) group by author;
 
 -- Cleanup.
 -----------

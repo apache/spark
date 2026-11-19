@@ -3428,6 +3428,20 @@ class Analyzer(
       case _ => expr
     }
 
+    /**
+     * Returns the expression to report for a nested generator. A SQL pipe operator item keeps its
+     * PipeExpression, and in |> EXTEND and |> AGGREGATE also a MultiAlias, below the top-level
+     * alias, so strip those too to report the same expression as the equivalent plain SQL query.
+     */
+    private def trimAliasAndPipeExpression(expr: NamedExpression): Expression =
+      trimAlias(expr) match {
+        case PipeExpression(m: MultiAlias, _, _) => trimAlias(m)
+        case PipeExpression(child, _, _) => child
+        case other => other
+      }
+
+    // ValidateAndStripPipeExpressions.isReadyGeneratorItem recognizes the same generator shapes
+    // under a SQL pipe operator's PipeExpression; keep the two in sync.
     private object AliasedGenerator {
       /**
        * Extracts a [[Generator]] expression, any names assigned by aliases to the outputs
@@ -3452,11 +3466,13 @@ class Analyzer(
 
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
-        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
+        throw QueryCompilationErrors.nestedGeneratorError(
+          trimAliasAndPipeExpression(nestedGenerator))
 
       case Aggregate(_, aggList, _, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
-        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
+        throw QueryCompilationErrors.nestedGeneratorError(
+          trimAliasAndPipeExpression(nestedGenerator))
 
       case Aggregate(_, aggList, _, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
