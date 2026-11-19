@@ -569,12 +569,18 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       "constant-only bound" -> (attribute > 10),
       "negative watermark term" -> (attribute + timeWithWatermark > 10)
     ).foreach { case (name, condition) =>
-      assertNotSupportedInStreamingPlan(
-        s"$joinType join with stream-stream relations and $name",
-        leftRelation.join(rightRelation, joinType = joinType, condition = Some(condition)),
-        OutputMode.Append(),
-        Seq("is not supported without a watermark in the join keys, or a watermark on " +
-          "the nullable side and an appropriate range condition"))
+      val plan =
+        leftRelation.join(rightRelation, joinType = joinType, condition = Some(condition))
+      // A left semi join keeps the earlier acceptance, although such a bound evicts nothing.
+      if (joinType == LeftSemi) {
+        assertSupportedInStreamingPlan(
+          s"$joinType join with stream-stream relations and $name", plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(
+          s"$joinType join with stream-stream relations and $name", plan, OutputMode.Append(),
+          Seq("is not supported without a watermark in the join keys, or a watermark on " +
+            "the nullable side and an appropriate range condition"))
+      }
     }
   }
 
