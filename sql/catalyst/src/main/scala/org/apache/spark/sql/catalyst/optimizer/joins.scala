@@ -95,18 +95,38 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  /**
+   * Returns the condition of the filter above all the joins from the conditions kept there, each
+   * with the index of the join or filter it is written in. That join or filter removes a row on
+   * which its condition is NULL, so the conditions written above it are not evaluated on the row,
+   * but `NULL AND x` evaluates `x`. So the kept conditions of each join or filter but the last are
+   * wrapped as `coalesce(<their AND>, false)`, whose FALSE skips the conditions after them. The
+   * kept conditions of one join or filter stay in a plain AND, as they are written.
+   */
+  private def keptCondition(kept: Seq[(Expression, Int)]): Option[Expression] = {
+    val groups = kept.groupBy(_._2).toSeq.sortBy(_._1).map(_._2.map(_._1))
+    groups.lastOption.map { last =>
+      val lower = groups.init.map(g => Coalesce(Seq(g.reduceLeft(And), Literal.FalseLiteral)))
+      (lower ++ last).reduceLeft(And)
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
-    case p @ ExtractFiltersAndInnerJoins(input, conditions)
-        if input.size > 2 && conditions.nonEmpty =>
+    case p @ ExtractFiltersAndInnerJoins(input, conditionGroups)
+        if input.size > 2 && conditionGroups.nonEmpty =>
       // The first join that covers the references of a condition can be below the filter or the
       // join that the condition is written in, where it would be evaluated on rows that a join
       // above removes. So the conditions that may not move (see `splitMovable`) stay in a filter
-      // above all the joins. `conditions` are in their written order: the ones of a lower join or
-      // filter before the ones above it. A movable condition written after a kept one can not
-      // fail, so it goes into a join, and any filter that `createOrderedJoin` adds only has
-      // conditions written before the kept ones.
-      val (movable, keptAbove) = splitMovable(conditions, input.map(_._1))
+      // above all the joins (see `keptCondition`). `conditions` are in their written order: the
+      // ones of a lower join or filter before the ones above it. A movable condition written
+      // after a kept one can not fail, so it goes into a join, and any filter that
+      // `createOrderedJoin` adds only has conditions written before the kept ones.
+      val conditions = conditionGroups.flatten
+      val (movableWithGroup, keptWithGroup) = splitMovableBy(
+        conditionGroups.zipWithIndex.flatMap { case (group, i) => group.map((_, i)) },
+        input.map(_._1))(_._1)
+      val movable = movableWithGroup.map(_._1)
       val joined = if (conf.starSchemaDetection && !conf.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
@@ -118,7 +138,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         createOrderedJoin(input, movable)
       }
-      val reordered = keptAbove.reduceLeftOption(And).map(Filter(_, joined)).getOrElse(joined)
+      val reordered = keptCondition(keptWithGroup).map(Filter(_, joined)).getOrElse(joined)
 
       if (p.sameOutput(reordered)) {
         reordered

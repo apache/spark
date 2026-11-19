@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Divide, EvalMode, Expression, If, IsNull, Literal, NumericEvalContext, RaiseError, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Coalesce, Divide, EvalMode, Expression, If, IsNull, Literal, NumericEvalContext, RaiseError, Rand}
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -67,7 +67,7 @@ class JoinOptimizationSuite extends PlanTest {
     def testExtractCheckCross(plan: LogicalPlan,
         expected: Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]): Unit = {
       assert(
-        ExtractFiltersAndInnerJoins.unapply(plan) === expected.map(e => (e._1, e._2)))
+        ExtractFiltersAndInnerJoins.unapply(plan).map(e => (e._1, e._2.flatten)) === expected)
     }
 
     testExtract(x, None)
@@ -172,6 +172,29 @@ class JoinOptimizationSuite extends PlanTest {
     val answer = x.join(testRelation1, condition = Some($"a" === $"d" && divide($"b", $"d") > 1))
       .join(z, condition = Some($"d" === $"e" && $"b" > $"f"))
       .where(Rand(0) > 0.1 && divide($"b", $"f") > 1 && $"q" > 0)
+
+    val reordered = ReorderJoin(query.analyze)
+    comparePlans(reordered, answer.analyze)
+    assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
+  }
+
+  test("SPARK-62069: reorder inner joins without evaluating a kept condition on the rows that a " +
+    "lower join removes") {
+    // The lower join removes a row on which its condition is NULL, so the condition of the join
+    // above is not evaluated on the row. So the conditions kept above the joins from the lower
+    // join are wrapped with coalesce, which makes `NULL AND x` FALSE without evaluating x, while
+    // they stay in a plain AND with each other. Only ReorderJoin runs.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val z = LocalRelation($"e".int, $"f".int)
+    val lower = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom")))) &&
+      divide($"b", $"d") > 1
+    val upper = divide($"a", $"f") > 1
+    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d" && lower))
+      .join(z, condition = Some($"c" === $"e" && upper))
+    val answer = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
+      .join(z, condition = Some($"c" === $"e"))
+      .where(Coalesce(Seq(lower, Literal(false))) && upper)
 
     val reordered = ReorderJoin(query.analyze)
     comparePlans(reordered, answer.analyze)

@@ -307,14 +307,28 @@ trait PredicateHelper extends AliasHelper with Logging {
   protected def splitMovable(
       conditions: Seq[Expression],
       plans: Seq[LogicalPlan],
-      afterBarrier: Boolean = false): (Seq[Expression], Seq[Expression]) = {
+      afterBarrier: Boolean = false): (Seq[Expression], Seq[Expression]) =
+    splitMovableBy(conditions, plans, afterBarrier)(identity)
+
+  /**
+   * [[splitMovable]] over items that each hold a conjunct, which `conjunct` returns, so that the
+   * caller can keep track of where each conjunct comes from.
+   */
+  protected def splitMovableBy[T](
+      items: Seq[T],
+      plans: Seq[LogicalPlan],
+      afterBarrier: Boolean = false)(conjunct: T => Expression): (Seq[T], Seq[T]) = {
     val (leading, following) = if (afterBarrier) {
-      (Nil, conditions)
+      (Nil, items)
     } else {
-      conditions.span(cond => cond.deterministic && !cond.throwable)
+      items.span { item =>
+        val cond = conjunct(item)
+        cond.deterministic && !cond.throwable
+      }
     }
     lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
-    val (cannotFail, stayUp) = following.partition { cond =>
+    val (cannotFail, stayUp) = following.partition { item =>
+      val cond = conjunct(item)
       ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
     }
     (leading ++ cannotFail, stayUp)
