@@ -57,6 +57,22 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
   protected def astBuilder: DataTypeAstBuilder
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    val currentOrigin = CurrentOrigin.get
+    currentOrigin.positionMapper match {
+      case Some(mapper) if mapper.substitutedText != command =>
+        val originalOrigin = currentOrigin.copy(
+          startIndex = currentOrigin.startIndex.map(mapper.mapToOriginal),
+          stopIndex = currentOrigin.stopIndex.map(mapper.mapStopToOriginal),
+          sqlText = Some(mapper.originalText),
+          positionMapper = None)
+        CurrentOrigin.withOrigin(originalOrigin) {
+          parseCommand(command)(toResult)
+        }
+      case _ => parseCommand(command)(toResult)
+    }
+  }
+
+  private def parseCommand[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
@@ -152,9 +168,9 @@ case object ParseErrorListener extends BaseErrorListener {
       e: RecognitionException): Unit = {
     val start = offendingSymbol match {
       case token: CommonToken =>
-        Origin(Some(line), Some(token.getCharPositionInLine))
+        SparkParserUtils.position(token)
       case _ =>
-        Origin(Some(line), Some(charPositionInLine))
+        SparkParserUtils.position(line, charPositionInLine)
     }
     e match {
       case sre: SparkRecognitionException if sre.errorClass.isDefined =>
