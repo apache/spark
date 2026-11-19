@@ -81,8 +81,7 @@ case class SortMergeJoinExec(
     val supportsKeyNullability = leftKeys.length == 1 ||
       (leftKeys.forall(!_.nullable) && rightKeys.forall(!_.nullable))
 
-    if (leftKeys.isEmpty ||
-        !supportsKeyNullability ||
+    if (!supportsKeyNullability ||
         !leftKeys.forall(isNullOnNullPadding(_, left.outputSet)) ||
         !rightKeys.forall(isNullOnNullPadding(_, right.outputSet))) {
       Nil

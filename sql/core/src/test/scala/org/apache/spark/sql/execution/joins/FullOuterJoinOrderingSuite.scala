@@ -118,7 +118,7 @@ class FullOuterJoinOrderingSuite
           .select(coalesce(col("l.k1"), col("r.k1")).as("k1"),
             coalesce(col("l.k2"), col("r.k2")).as("k2"))
         assert(fullOuterJoin(df).outputOrdering.isEmpty)
-        assert(df.collect().toSeq == Seq(Row(2, null), Row(1, 0)))
+        checkAnswer(df, Seq(Row(2, null), Row(1, 0)))
         val sorted = df.sortWithinPartitions("k1", "k2")
         assert(numSorts(sorted.queryExecution.executedPlan) == 3)
         assert(sorted.collect().toSeq == Seq(Row(1, 0), Row(2, null)))
