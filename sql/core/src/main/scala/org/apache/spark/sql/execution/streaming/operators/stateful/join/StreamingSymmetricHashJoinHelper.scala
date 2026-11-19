@@ -307,8 +307,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // So does a checkpoint written without the join output watermark check for an input that
         // the default mode would evict by another column, since for such a checkpoint that check
         // only warns about a later operator that drops the rows this eviction emits late.
+        // An input without its own watermark that the condition bounds only through a cast gets
+        // no cutoff.
         // TODO: [SPARK-62044] An input bounded only through a column cast to TIMESTAMP is still
-        //  evicted by its event time with the cast column's cutoff, which can be too early.
+        //  evicted by its event time with the cast column's cutoff, which can be too early, or not
+        //  at all when it has no watermark of its own.
         def solve(watermark: Option[Long]): Option[(Attribute, Long, Boolean)] = {
           val picked = if (useFirstEventTimeColumn) None else {
             pickStateValueWatermarkColumn(oneSideInputAttributes, otherSideInputAttributes,

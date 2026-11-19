@@ -657,7 +657,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
 
   // An earlier version kept the rows of an input without its own watermark out of the V4 index.
   // Outer joins would never emit them, while inner and left semi joins still find them.
-  for (joinType <- Seq("left_outer", "right_outer", "inner", "left_semi")) {
+  for (joinType <- Seq("left_outer", "right_outer", "full_outer", "inner", "left_semi")) {
     test(s"V4 restart from an older checkpoint for an input without its own watermark, $joinType") {
       withJoinConf(4) {
         withTempDir { checkpoint =>

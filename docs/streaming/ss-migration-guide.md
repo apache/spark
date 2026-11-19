@@ -80,18 +80,21 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   on new right rows, and the output watermark of the join for an input that gets no cutoff. So an
   input bounded only by such conjuncts does not make the query fail as described above.
 
-## Upgrading from Structured Streaming 4.3 to 4.4
-
-- Since Spark 4.4, a stream-stream join also evicts the state of an input without its own
+- Since Spark 4.5, a stream-stream join also evicts the state of an input without its own
   watermark when the other input's watermark and a range condition bound one of its TIMESTAMP
   columns, for example `leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND rightTime +
   INTERVAL 5 SECONDS` with a watermark only on `rightTime`. Earlier versions kept such state
   forever and never emitted the unmatched rows of an outer join. With state format version 4, an
   outer join that emits the unmatched rows of such an input cannot restart from a checkpoint of an
-  earlier version, or after a change of `spark.sql.streaming.statefulOperator.allowMultiple`;
-  start it with a new checkpoint. Other joins restart and keep the rows stored before the
-  restart. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
-  the earlier behavior.
+  earlier version, or of a query started with
+  `spark.sql.streaming.statefulOperator.allowMultiple` set to false; start it with a new
+  checkpoint. Other joins restart with state format version 4 and keep the rows stored before the
+  restart. With state format versions 1 to 3, every such join restarts and evicts the rows stored
+  before the restart once the cutoff passes them, and an outer join emits the unmatched ones then.
+  With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
+  behavior.
+
+## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
