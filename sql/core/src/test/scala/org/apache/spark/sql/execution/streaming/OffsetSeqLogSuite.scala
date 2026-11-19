@@ -52,6 +52,21 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key).contains("false"))
   }
 
+  test("SPARK-62057: old checkpoints keep pruning empty streaming union children") {
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    val entry = SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN
+    assert(!metadata.conf.contains(entry.key))
+    assert(OffsetSeqMetadata.readValue(metadata, entry).toBoolean)
+  }
+
+  test("SPARK-62057: new checkpoints keep empty streaming union children") {
+    val metadata = OffsetSeqMetadata(
+      batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(
+      SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key).contains("false"))
+  }
+
   test("SPARK-60632: regex pattern cost estimate is version 0 for old checkpoints") {
     val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     val metadata = offsetSeq.metadataOpt.get
