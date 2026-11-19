@@ -400,7 +400,19 @@ private[spark] class MemoryStore(
           classTag))
     }
 
-    Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
+    try {
+      Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
+    } catch {
+      case t: Throwable =>
+        // The caller never receives a PartiallySerializedBlock here, so discard it to close its
+        // still-open stream. Keep `t` so that the task is still reported as killed.
+        try {
+          res.swap.foreach(_.discard())
+        } catch {
+          case cleanupError: Throwable if cleanupError ne t => t.addSuppressed(cleanupError)
+        }
+        throw t
+    }
     res
   }
 

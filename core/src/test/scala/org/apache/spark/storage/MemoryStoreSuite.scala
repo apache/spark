@@ -690,6 +690,33 @@ class MemoryStoreSuite
     assert(CloseTrackingCompressionCodec.closed.get === 1)
   }
 
+  test("SPARK-62048: putIteratorAsBytes closes the compression stream when the task is killed " +
+      "while unrolling") {
+    val (memoryStore, _) = makeMemoryStore(12000, closeTrackingSerializerManager())
+    val tc = TaskContext.empty()
+    TaskContext.setTaskContext(tc)
+    try {
+      // Task.kill() marks the context as interrupted before it interrupts the task thread, so
+      // unrolling stops with a partially serialized block and then the task is killed.
+      tc.markInterrupted("test kill")
+      Thread.currentThread().interrupt()
+      val e = intercept[TaskKilledException] {
+        memoryStore.putIteratorAsBytes(
+          rdd(0, 0), Iterator.fill[Any](10)(new Array[Byte](10)), ClassTag.Any, MemoryMode.ON_HEAP)
+      }
+      assert(e.reason === "test kill")
+      assert(e.getSuppressed.isEmpty)
+      assert(CloseTrackingCompressionCodec.opened.get === 1)
+      assert(CloseTrackingCompressionCodec.closed.get === 1)
+      assert(!memoryStore.contains(rdd(0, 0)))
+      // Checked while the task context is set, since unroll memory is tracked per task.
+      assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+    } finally {
+      Thread.interrupted()
+      TaskContext.unset()
+    }
+  }
+
   test("SPARK-62048: putIteratorAsBytes hands the compression stream off on success and on " +
       "partial unroll") {
     val (memoryStore, _) = makeMemoryStore(8400, closeTrackingSerializerManager())
