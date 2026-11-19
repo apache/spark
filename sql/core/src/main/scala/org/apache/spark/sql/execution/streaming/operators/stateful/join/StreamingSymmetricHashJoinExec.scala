@@ -745,19 +745,19 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-    // The join condition bounds the column that the value predicate tests, so a row with a NULL
-    // in it can never match, and `column <= cutoff` never holds for it. The legacy mode tests the
-    // event time even when the condition bounds another column.
+    // When the join condition bounds the column that the value predicate tests, a row with a NULL
+    // in it can never match, and `column <= cutoff` never holds for it. The legacy mode, and the
+    // default mode for an input bounded only through a column cast to TIMESTAMP, test the event
+    // time, which the condition need not bound.
     private[this] val isEvictionColumnNull: UnsafeRow => Boolean = stateWatermarkPredicate match {
-      case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _))
-          if allowMultipleStatefulOperators =>
+      case Some(JoinStateValueWatermarkPredicate(LessThanOrEqual(column, _), _, _, true)) =>
         Predicate.create(IsNull(column), inputAttributes).eval _
       case _ => _ => false
     }
 
     // Such a row is not stored, but an earlier version or the legacy mode can have stored one.
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
-      case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
+      case Some(JoinStateValueWatermarkPredicate(expr, _, _, _)) =>
         val predicate = Predicate.create(expr, inputAttributes)
         (row: UnsafeRow) => predicate.eval(row) || isEvictionColumnNull(row)
       case _ =>
@@ -991,7 +991,7 @@ case class StreamingSymmetricHashJoinExec(
                 watermarkMsToStateTimestamp(stateWatermark),
                 prevStateWatermark.map(watermarkMsToStateTimestamp))
           }
-        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
+        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark, _)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
               s.evictByValueCondition(stateValueWatermarkPredicateFunc)
@@ -1028,7 +1028,7 @@ case class StreamingSymmetricHashJoinExec(
                 watermarkMsToStateTimestamp(stateWatermark),
                 prevStateWatermark.map(watermarkMsToStateTimestamp))
           }
-        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
+        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark, _)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
               s.evictAndReturnByValueCondition(stateValueWatermarkPredicateFunc)
