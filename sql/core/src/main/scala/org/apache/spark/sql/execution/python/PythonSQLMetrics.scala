@@ -75,6 +75,7 @@ object PythonSQLMetrics {
       "pythonNumPipelinedTasks" -> "number of pipelined Python worker tasks")
   }
 
+  // In nanoseconds, with the unit in each key and name, like pythonTimingMetricsDesc.
   val pythonPhaseTimingMetricsDesc: Map[String, String] = {
     Map(
       "pythonDataReadTimeNs" -> "time to read and deserialize Arrow data (ns)",
