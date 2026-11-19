@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkArithmeticException, SparkConf, SparkNumberFormatException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Expression,
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, EvalOnlyWhen, Expression,
   ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
   PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
@@ -1779,6 +1779,232 @@ class SubquerySuite extends SharedSparkSession
             |    )
             |) = 2""".stripMargin),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-61482: a Python UDF over an aggregate in COUNT-bug handling runs only where " +
+      "it is needed") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val inv = TestFailingPythonUDF(name = "inv")
+    registerTestUDF(inv, spark)
+
+    // Every outer row has matching inner rows, so count(*) is never 0. Before this change the
+    // Python UDF was lifted out of the conditional branch and inv(0) from the zero-row result
+    // was evaluated for every outer row, failing even here; now it runs only for outer rows
+    // without matching inner rows, of which there are none.
+    withTempView("lo", "ri") {
+      Seq(2, 3, 6).toDF("a").createOrReplaceTempView("lo")
+      Seq((2, 3.0), (2, 3.0), (3, 2.0), (6, 1.0)).toDF("c", "d").createOrReplaceTempView("ri")
+
+      checkAnswer(
+        sql("SELECT lo.a, (SELECT sum(x) FROM (SELECT inv(count(*)) AS x FROM ri " +
+          "WHERE ri.c = lo.a)) FROM lo ORDER BY lo.a"),
+        Row(2, 50) :: Row(3, 100) :: Row(6, 100) :: Nil)
+      // The same in a LATERAL subquery.
+      checkAnswer(
+        sql("SELECT lo.a, t.x FROM lo, LATERAL (SELECT inv(count(*)) AS x FROM ri " +
+          "WHERE ri.c = lo.a) t ORDER BY lo.a"),
+        Row(2, 50) :: Row(3, 100) :: Row(6, 100) :: Nil)
+
+      // With the config off, the UDF is evaluated for every row again and the query fails.
+      withSQLConf(
+          SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key -> "false") {
+        val e = intercept[Exception] {
+          sql("SELECT lo.a, (SELECT sum(x) FROM (SELECT inv(count(*)) AS x FROM ri " +
+            "WHERE ri.c = lo.a)) FROM lo").collect()
+        }
+        assert(e.getMessage.contains("ZeroDivisionError"))
+      }
+    }
+  }
+
+  test("SPARK-61482: a Python UDF over an aggregate is evaluated for the non-matching outer " +
+      "rows and interleaved with the matching ones in input order") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    // Identity UDFs, so a non-matching outer row evaluates udf(0) = 0 and the query returns
+    // results. Odd `a` have no matching `ri` row, so the conditional branch is taken and the UDF
+    // is evaluated for them; even `a` match, so the UDF is skipped and the row streams. `udf` is
+    // deterministic (its result over zero rows is reused), `rnd` is marked non-deterministic (so
+    // it goes through the buffered path that interleaves the skipped rows back in order).
+    val udf = TestPythonUDF(name = "udf")
+    registerTestUDF(udf, spark)
+    val rnd = TestPythonUDF(name = "rnd", deterministic = false)
+    registerTestUDF(rnd, spark)
+
+    withTempView("lo", "ri") {
+      (1 to 8).toDF("a").createOrReplaceTempView("lo")
+      Seq(2, 4, 6, 8).toDF("c").createOrReplaceTempView("ri")
+
+      // A small batch size, so the buffered path sends several batches rather than one.
+      withSQLConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH.key -> "2") {
+        val expected = (1 to 8).map(a => Row(a, if (a % 2 == 0) 1 else 0))
+        // Nested so that it is decorrelated through DecorrelateInnerQuery's domain join (a single
+        // top-level aggregate would go through constructLeftJoins; see SPARK-61660).
+        for (name <- Seq("udf", "rnd")) {
+          val scalar = s"SELECT lo.a, (SELECT sum(x) FROM (SELECT $name(count(*)) AS x FROM ri " +
+            "WHERE ri.c = lo.a)) FROM lo ORDER BY lo.a"
+          checkAnswer(sql(scalar), expected)
+          // The query gets the marker (the count-bug subquery is decorrelated into the main plan).
+          assert(
+            sql(scalar).queryExecution.optimizedPlan.exists(
+              _.expressions.exists(_.exists(_.isInstanceOf[EvalOnlyWhen]))),
+            s"the $name query should get an EvalOnlyWhen marker")
+        }
+        // The same through a LATERAL join.
+        checkAnswer(
+          sql("SELECT lo.a, t.x FROM lo, LATERAL (SELECT udf(count(*)) AS x FROM ri " +
+            "WHERE ri.c = lo.a) t ORDER BY lo.a"),
+          expected)
+      }
+    }
+  }
+
+  test("SPARK-61482: an IN subquery with a UDF over an aggregate runs the UDF only where " +
+      "needed") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val inv = TestFailingPythonUDF(name = "inv")
+    registerTestUDF(inv, spark)
+
+    withTempView("lo", "ri") {
+      // Every outer row matches, so inv(0) from the zero-row result must not run.
+      Seq(2, 6).toDF("a").createOrReplaceTempView("lo")
+      Seq(2, 6).toDF("c").createOrReplaceTempView("ri")
+      // inv(count(*)) = inv(1) = 100 for each matching row, so 100 is in the subquery result;
+      // RewritePredicateSubquery turns the IN predicate into a semi join.
+      val in = "SELECT lo.a FROM lo WHERE 100 IN " +
+        "(SELECT inv(count(*)) FROM ri WHERE ri.c = lo.a) ORDER BY lo.a"
+      checkAnswer(sql(in), Row(2) :: Row(6) :: Nil)
+      assert(
+        sql(in).queryExecution.optimizedPlan.exists(
+          _.expressions.exists(_.exists(_.isInstanceOf[EvalOnlyWhen]))),
+        "the IN subquery should get an EvalOnlyWhen marker")
+      // With the config off, inv(0) is evaluated for every row again and the query fails.
+      withSQLConf(
+          SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key -> "false") {
+        val e = intercept[Exception](sql(in).collect())
+        assert(e.getMessage.contains("ZeroDivisionError"))
+      }
+      // An outer row with no matching row genuinely evaluates inv(0), so it still fails.
+      sql("SELECT * FROM VALUES (2), (3), (6) AS t(a)").createOrReplaceTempView("lo")
+      val e = intercept[Exception](sql(in).collect())
+      assert(e.getMessage.contains("ZeroDivisionError"))
+    }
+  }
+
+  test("SPARK-61482: an EXISTS subquery is unaffected, since its output is pruned") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val inv = TestFailingPythonUDF(name = "inv")
+    registerTestUDF(inv, spark)
+
+    withTempView("lo", "ri") {
+      Seq(2, 6).toDF("a").createOrReplaceTempView("lo")
+      Seq(2, 6).toDF("c").createOrReplaceTempView("ri")
+      // The subquery's output (the UDF) is pruned before ExtractPythonUDFs runs, so inv is never
+      // evaluated and the result does not depend on the config; no marker is added.
+      val ex = "SELECT lo.a FROM lo WHERE EXISTS " +
+        "(SELECT inv(count(*)) FROM ri WHERE ri.c = lo.a) ORDER BY lo.a"
+      checkAnswer(sql(ex), Row(2) :: Row(6) :: Nil)
+      assert(
+        !sql(ex).queryExecution.optimizedPlan.exists(
+          _.expressions.exists(_.exists(_.isInstanceOf[EvalOnlyWhen]))),
+        "an EXISTS subquery should have no marker")
+      withSQLConf(
+          SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key -> "false") {
+        checkAnswer(sql(ex), Row(2) :: Row(6) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-61482: a scalar pandas UDF over an aggregate is evaluated through the row path") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPandasUDFs)
+
+    // A scalar pandas UDF is evaluated by ArrowEvalPythonExec; with the marker's condition it
+    // reads rows instead of columnar input. `pdf` is the identity, so a matching row (count 1)
+    // gives 1 and a non-matching row gives pdf(0) = 0.
+    val pdf = TestScalarPandasUDF(name = "pdf")
+    registerTestUDF(pdf, spark)
+
+    withTempView("lo", "ri") {
+      (1 to 6).toDF("a").createOrReplaceTempView("lo")
+      Seq(2, 4, 6).toDF("c").createOrReplaceTempView("ri")
+      val scalar = "SELECT lo.a, (SELECT sum(x) FROM (SELECT pdf(count(*)) AS x FROM ri " +
+        "WHERE ri.c = lo.a)) FROM lo ORDER BY lo.a"
+      checkAnswer(sql(scalar), (1 to 6).map(a => Row(a, if (a % 2 == 0) 1 else 0)))
+      // The pandas UDF (evaluated by ArrowEvalPythonExec) gets the marker; that it reads rows
+      // rather than columnar input with a condition is covered by ExtractPythonUDFsSuite.
+      assert(
+        sql(scalar).queryExecution.optimizedPlan.exists(
+          _.expressions.exists(_.exists(_.isInstanceOf[EvalOnlyWhen]))),
+        "the pandas query should get an EvalOnlyWhen marker")
+    }
+  }
+
+  test("SPARK-61482: a failing Python UDF over an aggregate still fails for a non-matching " +
+      "outer row") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val inv = TestFailingPythonUDF(name = "inv")
+    registerTestUDF(inv, spark)
+
+    withTempView("lo", "ri") {
+      // `3` has no matching row, so its zero-row count(*) = 0 reaches inv(0) and fails; the
+      // matching rows never evaluate the UDF.
+      Seq(2, 3, 6).toDF("a").createOrReplaceTempView("lo")
+      Seq(2, 6).toDF("c").createOrReplaceTempView("ri")
+      val e = intercept[Exception] {
+        sql("SELECT lo.a, (SELECT sum(x) FROM (SELECT inv(count(*)) AS x FROM ri " +
+          "WHERE ri.c = lo.a)) FROM lo").collect()
+      }
+      assert(e.getMessage.contains("ZeroDivisionError"))
+    }
+  }
+
+  test("SPARK-61482: a guarded Python UDF keeps working and its plan has no marker") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val inv = TestFailingPythonUDF(name = "inv")
+    registerTestUDF(inv, spark)
+
+    // The UDF is guarded by the aggregate value, so over zero rows the branch folds away and no
+    // UDF is left in the zero-row result; the marker is dropped and the plan matches the one
+    // without this change, computing the same result for every outer row, matched or not.
+    val guarded =
+      "SELECT l.a, (SELECT sum(d) FROM (SELECT CASE WHEN count(*) = 0 THEN 0 " +
+        "ELSE inv(100 div count(*)) END AS d FROM r WHERE r.c = l.a)) FROM l ORDER BY l.a"
+    checkAnswer(
+      sql(guarded),
+      Row(null, 0) :: Row(null, 0) :: Row(1, 0) :: Row(1, 0) :: Row(2, 2) :: Row(2, 2) ::
+        Row(3, 1) :: Row(6, 1) :: Nil)
+    assert(
+      !sql(guarded).queryExecution.optimizedPlan.exists(
+        _.expressions.exists(_.exists(_.isInstanceOf[EvalOnlyWhen]))),
+      "a guarded UDF should leave no EvalOnlyWhen marker in the plan")
+
+    // An unguarded UDF over an aggregate keeps the marker.
+    val unguarded =
+      "SELECT l.a, (SELECT sum(d) FROM (SELECT inv(count(*)) AS d FROM r WHERE r.c = l.a)) " +
+        "FROM l WHERE l.a IN (2, 3, 6)"
+    assert(
+      sql(unguarded).queryExecution.optimizedPlan.exists(
+        _.expressions.exists(_.exists(_.isInstanceOf[EvalOnlyWhen]))),
+      "an unguarded UDF over an aggregate should keep an EvalOnlyWhen marker")
   }
 
   test("SPARK-28441: COUNT bug with nasty predicate expr with PythonUDF") {

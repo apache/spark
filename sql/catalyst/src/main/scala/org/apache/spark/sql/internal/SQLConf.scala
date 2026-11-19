@@ -7024,6 +7024,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateInnerQuery.evalCountBugUdfConditionally.enabled")
+      .internal()
+      .doc("When true, a Python or external UDF in the zero-row result of a COUNT-bug rewrite " +
+        "in DecorrelateInnerQuery is evaluated only for the outer rows that take that branch, " +
+        "so such a UDF no longer runs (and possibly fails) on rows that have matching inner " +
+        "rows. When false, revert to evaluating the UDF for every row, which can fail a query " +
+        "that references the UDF's result only for rows without matching inner rows. Only " +
+        "effective for the subqueries whose COUNT bug DecorrelateInnerQuery handles, which needs " +
+        "'" + DECORRELATE_INNER_QUERY_ENABLED.key + "' to be true.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG =
     buildConf("spark.sql.optimizer.decorrelateSubqueryPreventConstantHoldingForCountBug.enabled")
       .internal()
