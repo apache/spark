@@ -2113,6 +2113,17 @@ table outer_gen_test
 |> extend posexplode_outer(array(1, 2)) as (p, v)
 |> select id, t, p, v;
 
+-- A parenthesized alias list keeps its names when another generator in the same list is planned
+-- first, after the input plan resolves.
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(array('x', 'y')) as (pos, b)
+|> select id, a, pos, b;
+
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, e, p, v;
+
 -- Outer generators: negative tests.
 --------------------------------------
 

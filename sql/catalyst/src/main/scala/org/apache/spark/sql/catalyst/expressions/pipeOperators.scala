@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.MultiAlias
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -64,36 +64,36 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
 
 /**
  * Validates and strips PipeExpression nodes from a logical plan once their children are ready:
- * either resolved, or a generator item whose arguments are resolved (see `isReadyGeneratorItem`).
+ * either resolved, or a generator item whose arguments are resolved.
+ *
+ * A generator item ([[GeneratorItem]]) is a generator, optionally wrapped in GeneratorOuter (for
+ * the *_outer functions) and then in MultiAlias (for a parenthesized alias list). Neither wrapper
+ * ever reports itself resolved, and the generator itself may only become resolved after this rule
+ * runs, when type coercion fixes its arguments (for example, stack(2, id, null)). So the
+ * PipeExpression is stripped as soon as the generator's arguments are resolved, keeping both
+ * wrappers in place for ExtractGenerator to plan; otherwise ExtractGenerator sees the
+ * PipeExpression above the generator and rejects it as nested inside another expression.
  */
 case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(PIPE_EXPRESSION), ruleId) {
     case node: LogicalPlan =>
       node.resolveExpressions {
-        case p: PipeExpression if p.child.resolved || isReadyGeneratorItem(p.child) =>
+        // |> EXTEND and |> AGGREGATE wrap a parenthesized alias list item whole, as
+        // UnresolvedAlias(PipeExpression(MultiAlias(...))). Replace the whole item with the
+        // MultiAlias, as ResolveAliases would, to get the shape plain SQL produces. Leaving
+        // UnresolvedAlias(MultiAlias(...)) instead lets ExtractGenerator trim the MultiAlias, and
+        // with it the names, if it rebuilds the list before ResolveAliases runs.
+        case UnresolvedAlias(p @ PipeExpression(m @ GeneratorItem(g, Some(_), _), _, _), _)
+            if g.childrenResolved =>
+          validateAndStripPipeExpression(p, m)
+        case p: PipeExpression if p.child.resolved || isReadyUnaliasedGeneratorItem(p.child) =>
           validateAndStripPipeExpression(p, p.child)
       }
   }
 
-  /**
-   * Returns true for a generator item that ExtractGenerator plans, once the generator's arguments
-   * are resolved: a generator, optionally wrapped in GeneratorOuter (for the *_outer functions)
-   * and then in MultiAlias (for a parenthesized alias list). ExtractGenerator replaces both
-   * wrappers when it plans Generate; ResolveAliases only removes the UnresolvedAlias above a
-   * MultiAlias. Neither wrapper ever reports itself resolved, and the generator itself may only
-   * become resolved after this rule runs, when type coercion fixes its arguments (for example,
-   * stack(2, id, null)). So the PipeExpression is stripped as soon as the arguments are resolved,
-   * keeping both wrappers in place; otherwise ExtractGenerator sees the PipeExpression above the
-   * generator and rejects it as nested inside another expression.
-   *
-   * These are the shapes that ExtractGenerator's AliasedGenerator plans, without the Alias the
-   * parser puts above the PipeExpression; keep the two in sync.
-   */
-  private def isReadyGeneratorItem(e: Expression): Boolean = e match {
-    case MultiAlias(g: Generator, _) => isReadyGeneratorItem(g)
-    case GeneratorOuter(g) => g.childrenResolved
-    case g: Generator => g.childrenResolved
+  private def isReadyUnaliasedGeneratorItem(e: Expression): Boolean = e match {
+    case GeneratorItem(g, None, _) => g.childrenResolved
     case _ => false
   }
 
@@ -104,8 +104,8 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
    * @param pipeExpression The [[PipeExpression]] containing metadata about the pipe clause.
    * @param child The child expression to validate and return. It is either resolved, or a
    *              generator item whose arguments are resolved but which is not resolved itself:
-   *              a [[Generator]], optionally wrapped in [[GeneratorOuter]] and then in a
-   *              MultiAlias. The aggregate checks run before such a generator's own type check.
+   *              a [[GeneratorItem]]. The aggregate checks run before such a generator's own
+   *              type check.
    * @return The child expression after validation.
    */
   def validateAndStripPipeExpression(

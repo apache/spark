@@ -5829,6 +5829,37 @@ Project [id#x, t#x, p#x, v#x]
 
 
 -- !query
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(array('x', 'y')) as (pos, b)
+|> select id, a, pos, b
+-- !query analysis
+Project [id#x, a#x, pos#x, b#x]
++- Project [id#x, arr#x, a#x, pos#x, b#x]
+   +- Generate posexplode(array(x, y)), false, [pos#x, b#x]
+      +- Generate explode(array(1, 2)), false, [a#x]
+         +- SubqueryAlias tab
+            +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, e, p, v
+-- !query analysis
+Project [id#x, t#x, e#x, p#x, v#x]
++- Project [id#x, author#x, tags#x, t#x, e#x, p#x, v#x]
+   +- Generate posexplode(array(1, 2)), true, [p#x, v#x]
+      +- Generate explode(array(1)), false, [e#x]
+         +- Project [id#x, author#x, tags#x, t#x]
+            +- Generate explode(tags#x), true, [t#x]
+               +- SubqueryAlias outer_gen_test
+                  +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                        +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
 table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query analysis

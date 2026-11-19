@@ -3440,8 +3440,6 @@ class Analyzer(
         case other => other
       }
 
-    // ValidateAndStripPipeExpressions.isReadyGeneratorItem recognizes the same generator shapes
-    // under a SQL pipe operator's PipeExpression; keep the two in sync.
     private object AliasedGenerator {
       /**
        * Extracts a [[Generator]] expression, any names assigned by aliases to the outputs
@@ -3450,10 +3448,9 @@ class Analyzer(
        * @return (the [[Generator]], seq of output names, outer flag)
        */
       def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
-        case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
-        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some((g, names, true))
-        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
-        case MultiAlias(g: Generator, names) if g.resolved => Some((g, names, false))
+        case Alias(GeneratorItem(g, None, outer), name) if g.resolved =>
+          Some((g, name :: Nil, outer))
+        case GeneratorItem(g, Some(names), outer) if g.resolved => Some((g, names, outer))
         case _ => None
       }
     }
