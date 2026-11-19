@@ -1118,6 +1118,14 @@ class FilterPushdownSuite extends PlanTest {
           .select($"a", $"f", g as "g", j as "j")
           .where(Not($"g" === $"j") && (Not($"j") || $"f"))
           .analyze)
+      // Nor when the column that can fail comes from one side of a join below the projection.
+      val joinedUdf = testStringRelation
+        .select($"a", $"b", $"e", udfF as "f")
+        .join(LocalRelation($"x".int), Inner, Some($"a" === $"x"))
+        .select($"a", $"f", g as "g", j as "j")
+        .where(Not($"g" === $"j") && ($"j" || $"f"))
+        .analyze
+      comparePlans(PushPredicateThroughNonJoin(joinedUdf), joinedUdf)
       // Nor when the layer would also compute an alias that can fail and that no condition
       // reads, as it shares the regex of j: h calls a UDF over it.
       val udfOverRegex = ScalaUDF((s: Boolean) => s, BooleanType, Seq(j), Seq(None),
