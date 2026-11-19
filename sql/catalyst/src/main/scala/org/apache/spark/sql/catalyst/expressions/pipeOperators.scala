@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -62,36 +63,46 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
 }
 
 /**
- * Validates and strips PipeExpression nodes from a logical plan once the child expressions are
- * resolved.
+ * Validates and strips PipeExpression nodes from a logical plan once their children are ready:
+ * either resolved, or a generator item that ExtractGenerator plans later (see
+ * `isResolvedGeneratorItem`).
  */
 case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(PIPE_EXPRESSION), ruleId) {
     case node: LogicalPlan =>
       node.resolveExpressions {
-        case p: PipeExpression if p.child.resolved || isResolvedOuterGenerator(p.child) =>
+        case p: PipeExpression if p.child.resolved || isResolvedGeneratorItem(p.child) =>
           validateAndStripPipeExpression(p, p.child)
       }
   }
 
-  // GeneratorOuter is never resolved because ExtractGenerator replaces it. Strip the wrapper once
-  // the inner generator is resolved; otherwise ExtractGenerator sees
-  // PipeExpression(GeneratorOuter(...)) as a generator nested inside another expression.
-  private def isResolvedOuterGenerator(e: Expression): Boolean = e match {
+  /**
+   * Returns true for the generator items that ExtractGenerator plans but that never report
+   * themselves resolved: an outer generator (GeneratorOuter is replaced by ExtractGenerator), and
+   * a generator with a parenthesized alias list (MultiAlias is replaced by ResolveAliases or
+   * ExtractGenerator). The PipeExpression must be stripped once the generator inside is resolved,
+   * keeping GeneratorOuter and MultiAlias in place; otherwise ExtractGenerator sees the
+   * PipeExpression above the generator and rejects it as nested inside another expression.
+   */
+  private def isResolvedGeneratorItem(e: Expression): Boolean = e match {
     case GeneratorOuter(g) => g.resolved
+    case MultiAlias(GeneratorOuter(g), _) => g.resolved
+    case MultiAlias(g: Generator, _) => g.resolved
     case _ => false
   }
 
   /**
-   * Validates aggregate function constraints for a [[PipeExpression]] and returns the resolved
-   * child expression (stripping the [[PipeExpression]] wrapper).
+   * Validates aggregate function constraints for a [[PipeExpression]] and returns its child
+   * expression (stripping the [[PipeExpression]] wrapper).
    *
    * This method is shared between the fixed-point analyzer rule and the single-pass resolver.
    *
    * @param pipeExpression The [[PipeExpression]] containing metadata about the pipe clause.
-   * @param resolvedChild The resolved child expression to validate and return.
-   * @return The resolved child expression after validation.
+   * @param resolvedChild The child expression to validate and return. It is resolved, except for
+   *                      the generator items accepted by `isResolvedGeneratorItem`, whose
+   *                      generator is resolved but whose GeneratorOuter or MultiAlias is not.
+   * @return The child expression after validation.
    */
   def validateAndStripPipeExpression(
       pipeExpression: PipeExpression,

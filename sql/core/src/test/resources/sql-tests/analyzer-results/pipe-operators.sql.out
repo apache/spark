@@ -5584,6 +5584,116 @@ Project [col#x]
 
 -- !query
 table outer_gen_test
+|> extend posexplode_outer(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query analysis
+Project [id#x, pos#x, tag#x]
++- Project [id#x, author#x, tags#x, pos#x, tag#x]
+   +- Generate posexplode(tags#x), true, [pos#x, tag#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(map_from_arrays(tags, tags)) as (k, v)
+|> select id, k, v
+-- !query analysis
+Project [id#x, k#x, v#x]
++- Project [id#x, author#x, tags#x, k#x, v#x]
+   +- Generate explode(map_from_arrays(tags#x, tags#x)), true, [k#x, v#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend inline_outer(transform(tags, t -> named_struct('tag', t, 'len', length(t)))) as (tag, len)
+|> select id, tag, len
+-- !query analysis
+Project [id#x, tag#x, len#x]
++- Project [id#x, author#x, tags#x, tag#x, len#x]
+   +- Generate inline(transform(tags#x, lambdafunction(named_struct(tag, lambda t#x, len, length(lambda t#x)), lambda t#x, false))), true, [tag#x, len#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query analysis
+Project [id#x, pos#x, tag#x]
++- Project [id#x, author#x, tags#x, pos#x, tag#x]
+   +- Generate posexplode(tags#x), false, [pos#x, tag#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(collect_list(id)) as (pos, id) group by author
+-- !query analysis
+Project [author#x, pos#x, id#x]
++- Generate posexplode(_gen_input_0#x), true, [pos#x, id#x]
+   +- Aggregate [author#x], [author#x, collect_list(id#x, 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(map_from_arrays(collect_list(id), collect_list(id))) as (k, v)
+   group by author
+-- !query analysis
+Project [author#x, k#x, v#x]
++- Generate explode(_gen_input_0#x), true, [k#x, v#x]
+   +- Aggregate [author#x], [author#x, map_from_arrays(collect_list(id#x, 0, 0, true), collect_list(id#x, 0, 0, true)) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate inline_outer(collect_list(named_struct('id', id, 'n', size(tags)))) as (id, n)
+   group by author
+-- !query analysis
+Project [author#x, id#x, n#x]
++- Generate inline(_gen_input_0#x), true, [id#x, n#x]
+   +- Aggregate [author#x], [author#x, collect_list(named_struct(id, id#x, n, size(tags#x, false)), 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode(collect_list(id)) as (pos, id) group by author
+-- !query analysis
+Project [author#x, pos#x, id#x]
++- Generate posexplode(_gen_input_0#x), false, [pos#x, id#x]
+   +- Aggregate [author#x], [author#x, collect_list(id#x, 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -5636,6 +5746,63 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 63,
     "fragment" : "collect_list(tags)"
   } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode_outer(collect_list(tags)) as (pos, tag)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "collect_list(tags#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 66,
+    "fragment" : "collect_list(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(tags) as (pos, tag)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(posexplode(tags#x)) AS (pos, tag)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 70,
+    "fragment" : "posexplode_outer(tags) as (pos, tag)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend upper(explode_outer(tags)) as (a, b)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"pipeexpression(multialias(upper(generatorouter(explode(tags)))))\""
+  }
 }
 
 

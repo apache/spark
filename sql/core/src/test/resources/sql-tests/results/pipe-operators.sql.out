@@ -5110,6 +5110,110 @@ NULL
 
 -- !query
 table outer_gen_test
+|> extend posexplode_outer(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query schema
+struct<id:int,pos:int,tag:string>
+-- !query output
+1	0	sql
+1	1	spark
+2	0	delta
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(map_from_arrays(tags, tags)) as (k, v)
+|> select id, k, v
+-- !query schema
+struct<id:int,k:string,v:string>
+-- !query output
+1	spark	spark
+1	sql	sql
+2	delta	delta
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend inline_outer(transform(tags, t -> named_struct('tag', t, 'len', length(t)))) as (tag, len)
+|> select id, tag, len
+-- !query schema
+struct<id:int,tag:string,len:int>
+-- !query output
+1	spark	5
+1	sql	3
+2	delta	5
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query schema
+struct<id:int,pos:int,tag:string>
+-- !query output
+1	0	sql
+1	1	spark
+2	0	delta
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(collect_list(id)) as (pos, id) group by author
+-- !query schema
+struct<author:string,pos:int,id:int>
+-- !query output
+ann	0	1
+ann	1	3
+bob	0	2
+bob	1	4
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(map_from_arrays(collect_list(id), collect_list(id))) as (k, v)
+   group by author
+-- !query schema
+struct<author:string,k:int,v:int>
+-- !query output
+ann	1	1
+ann	3	3
+bob	2	2
+bob	4	4
+
+
+-- !query
+table outer_gen_test
+|> aggregate inline_outer(collect_list(named_struct('id', id, 'n', size(tags)))) as (id, n)
+   group by author
+-- !query schema
+struct<author:string,id:int,n:int>
+-- !query output
+ann	1	2
+ann	3	0
+bob	2	1
+bob	4	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode(collect_list(id)) as (pos, id) group by author
+-- !query schema
+struct<author:string,pos:int,id:int>
+-- !query output
+ann	0	1
+ann	1	3
+bob	0	2
+bob	1	4
+
+
+-- !query
+table outer_gen_test
 |> select upper(explode_outer(tags))
 -- !query schema
 struct<>
@@ -5168,6 +5272,69 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 63,
     "fragment" : "collect_list(tags)"
   } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode_outer(collect_list(tags)) as (pos, tag)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "collect_list(tags#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 66,
+    "fragment" : "collect_list(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(tags) as (pos, tag)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(posexplode(tags#x)) AS (pos, tag)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 70,
+    "fragment" : "posexplode_outer(tags) as (pos, tag)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend upper(explode_outer(tags)) as (a, b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"pipeexpression(multialias(upper(generatorouter(explode(tags)))))\""
+  }
 }
 
 

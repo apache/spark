@@ -2040,6 +2040,37 @@ table outer_gen_test
 |> aggregate collect_list(id) as ids
 |> select explode_outer(ids);
 
+-- Generators with a parenthesized alias list in the pipe EXTEND and AGGREGATE lists.
+table outer_gen_test
+|> extend posexplode_outer(tags) as (pos, tag)
+|> select id, pos, tag;
+
+table outer_gen_test
+|> extend explode_outer(map_from_arrays(tags, tags)) as (k, v)
+|> select id, k, v;
+
+table outer_gen_test
+|> extend inline_outer(transform(tags, t -> named_struct('tag', t, 'len', length(t)))) as (tag, len)
+|> select id, tag, len;
+
+table outer_gen_test
+|> extend posexplode(tags) as (pos, tag)
+|> select id, pos, tag;
+
+table outer_gen_test
+|> aggregate posexplode_outer(collect_list(id)) as (pos, id) group by author;
+
+table outer_gen_test
+|> aggregate explode_outer(map_from_arrays(collect_list(id), collect_list(id))) as (k, v)
+   group by author;
+
+table outer_gen_test
+|> aggregate inline_outer(collect_list(named_struct('id', id, 'n', size(tags)))) as (id, n)
+   group by author;
+
+table outer_gen_test
+|> aggregate posexplode(collect_list(id)) as (pos, id) group by author;
+
 -- Outer generators: negative tests.
 --------------------------------------
 
@@ -2054,6 +2085,16 @@ table outer_gen_test
 -- The pipe EXTEND list does not allow aggregate functions.
 table outer_gen_test
 |> extend explode_outer(collect_list(tags));
+
+-- A parenthesized alias list over an outer generator follows the same pipe rules.
+table outer_gen_test
+|> extend posexplode_outer(collect_list(tags)) as (pos, tag);
+
+table outer_gen_test
+|> aggregate posexplode_outer(tags) as (pos, tag);
+
+table outer_gen_test
+|> extend upper(explode_outer(tags)) as (a, b);
 
 -- Cleanup.
 -----------
