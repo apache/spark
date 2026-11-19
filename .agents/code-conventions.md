@@ -13,6 +13,4 @@ Keep source lines within 100 characters — the linters enforce this for Scala, 
 
 This is only a hint: it approximates the linters' exemptions (imports, URLs) rather than matching them exactly, so it can over- or under-report. The linters remain the source of truth.
 
-Every new source file starts with the Apache License header; copy it from a neighboring file of the same type. The license check in CI (`dev/check-license`) fails without it.
-
-Keep public Scala and Java APIs binary compatible; the MiMa check in CI (`dev/mima`) reports changes that are not. When MiMa flags a change that is intended, add an exclusion with a `// [SPARK-xxxxx]` comment to the `vNNexcludes` section of `project/MimaExcludes.scala` for the version the change first ships in (see `.agents/versioning.md`).
+Keep Scala and Java binary compatibility, including `private[spark]` and other package-private members of public classes, which compile to public bytecode. Two checks in CI enforce it: `dev/mima`, with exclusions in `project/MimaExcludes.scala`, and `dev/connect-jvm-client-mima-check`, which compares the Connect Scala client with the `sql` module in both directions and keeps its exclusions in `CheckConnectJvmClientCompatibility.scala`. When a check flags an intended change, add an exclusion with a `// [SPARK-xxxxx]` comment to that check's file.

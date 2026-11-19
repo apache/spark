@@ -1,5 +1,8 @@
 # Pull Request Workflow
 
+- PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag comes from the `COMPONENTS` registry in `dev/merge_spark_pr.py`, the source of truth: each entry pairs a PR-title tag with its canonical JIRA component name and accepted aliases (e.g. `Documentation` → `[DOC]`, `Pandas API on Spark` → `[PS]`, `SQL` → `[SQL]`). Read that registry to pick the right tag.
+- Use `[FOLLOWUP]` only for small PRs that directly modify or correct unreleased earlier PRs. For separately planned work, non-trivial changes, or work outside the earlier JIRA's scope, create a separate JIRA ticket for each PR and use the normal title format without `[FOLLOWUP]`.
+
 Infer the PR title from the changes. If no ticket ID is given and the PR is not draft, WIP, MINOR, or TRIVIAL, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 
     python3 dev/create_spark_jira.py "<title>" -c <component> { -t <type> | -p <parent-jira-id> }
