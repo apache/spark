@@ -240,6 +240,9 @@ abstract class StreamExecution(
         // TODO(SPARK-61998): With artifact isolation on, each run gives its Python workers its
         //  own artifact UUID, so each executor that runs its Python tasks keeps one more Python
         //  worker pool until it stops.
+        // TODO(SPARK-62045): The Python workers that StreamingPythonRunner starts on the driver,
+        //  for the transformWithState pre-init step and for Spark Connect foreachBatch, get no
+        //  artifact UUID or files root, so they do not see the session's files yet.
         if (sparkSessionForStream.sessionState.conf.getConf(
             SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED)) {
           JobArtifactSet.withActiveJobArtifactState(sparkSessionForStream.artifactManager.state) {

@@ -1547,6 +1547,82 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
     }
   }
 
+  /**
+   * Writes one row of a new session with the streaming writer of a Python data source that reads
+   * a file of the session, and returns what the writer wrote.
+   */
+  private def writeWithSessionFile(propagateArtifactState: Boolean): Seq[String] = {
+    val fileName = "stream_writer_session_file.txt"
+    val sourceName = "SessionFileStreamWriterDataSource"
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamWriter
+         |from pyspark.sql.datasource import WriterCommitMessage
+         |
+         |class FileStreamWriter(DataSourceStreamWriter):
+         |    def __init__(self, options):
+         |        self.options = options
+         |    def write(self, iterator):
+         |        import os
+         |        from pyspark import SparkFiles, TaskContext
+         |        rows = list(iterator)
+         |        if rows:
+         |            with open(SparkFiles.get("$fileName")) as f:
+         |                content = f.read()
+         |            name = f"{TaskContext.get().partitionId()}.txt"
+         |            with open(os.path.join(self.options["path"], name), "w") as out:
+         |                out.write(content)
+         |        return WriterCommitMessage()
+         |
+         |class $sourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "value INT"
+         |    def streamWriter(self, schema, overwrite):
+         |        return FileStreamWriter(self.options)
+         |""".stripMargin
+    // A new session, so that its file is not visible to the other tests.
+    val session = spark.newSession()
+    session.conf.set(
+      SQLConf.STREAMING_PROPAGATE_ARTIFACT_STATE_ENABLED.key, propagateArtifactState.toString)
+    var written: Seq[String] = Nil
+    withTempDir { dir =>
+      val file = new File(dir, fileName)
+      Files.writeString(file.toPath, "session file")
+      session.artifactManager.addArtifact(Paths.get(s"files/$fileName"), file.toPath, None)
+      session.dataSource.registerPython(
+        sourceName, createUserDefinedPythonDataSource(sourceName, dataSourceScript))
+      val outputDir = new File(dir, "output")
+      outputDir.mkdir()
+      val inputData = MemoryStream[Int](session)
+      val q = inputData.toDF().writeStream
+        .format(sourceName)
+        .option("checkpointLocation", new File(dir, "checkpoint").getAbsolutePath)
+        .start(outputDir.getAbsolutePath)
+      try {
+        inputData.addData(1)
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+      written = outputDir.listFiles().toSeq.map(f => Files.readString(f.toPath))
+    }
+    written
+  }
+
+  test("SPARK-61959: Stream writer reads the files of the session") {
+    assume(shouldTestPandasUDFs)
+    assert(writeWithSessionFile(propagateArtifactState = true) === Seq("session file"))
+  }
+
+  test("SPARK-61959: Stream writer misses the files of the session without propagation") {
+    assume(shouldTestPandasUDFs)
+    // The previous behavior: the writer looks in the default files directory.
+    val e = intercept[StreamingQueryException] {
+      writeWithSessionFile(propagateArtifactState = false)
+    }
+    assert(e.getMessage.contains("FileNotFoundError"), e.getMessage)
+  }
+
   // Verify that commit runner work correctly with large timeout interval.
   test(s"data source stream write, trigger interval=20 seconds") {
     assume(shouldTestPandasUDFs)

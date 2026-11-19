@@ -5570,7 +5570,9 @@ object SQLConf {
         "data sources on the executors and on the driver, the writers of its Python data " +
         "sources on the executors, and other code that runs on the stream thread outside the " +
         "execution of a batch, such as SparkFiles.get or SparkContext.addFile in a source or " +
-        "in the onQueryStarted callback of a listener. This only " +
+        "in the onQueryStarted callback of a listener. It does not cover the Python foreach " +
+        "writer of Spark Connect, which keeps the artifacts of the session that starts the " +
+        "query (SPARK-61997). This only " +
         "matters when artifact isolation is on. Set to false to restore the previous behavior " +
         "for all of them, where they use the default files directory and artifacts of the " +
         "Spark context, or a fixed directory for the driver-side reader of a Python data source.")
