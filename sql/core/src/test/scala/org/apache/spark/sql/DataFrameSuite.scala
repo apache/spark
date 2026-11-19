@@ -3061,8 +3061,9 @@ class DataFrameSuite extends SharedSparkSession
     // With UDF results that can be null too, the split keeps the non-deterministic condition
     // ahead of the conditions written after it, so, with and without codegen, it returns the rows
     // that evaluating the conditions as written gives: `rand(10)` sees every row, and the first
-    // condition holds where it is above 0.5. `InferFiltersFromConstraints` infers no `isnotnull`
-    // check over these columns, as they can fail (SPARK-61823).
+    // condition holds where it is above 0.5, as does the split-off plan: by default,
+    // `InferFiltersFromConstraints` infers no `isnotnull` check over these columns, as they can
+    // fail (SPARK-61823).
     val nullableF = udf((i: Long) => if (i % 7 == 3) null else java.lang.Long.valueOf(i))
     val nullableH = udf((i: Long) => if (i % 5 == 1) null else java.lang.Long.valueOf(i))
     def nullableDf: DataFrame = spark.range(0, 100, 1, 1)
@@ -3076,14 +3077,17 @@ class DataFrameSuite extends SharedSparkSession
     val writtenOrderIds = Seq(
       (0 until 100).filter(i => randAbove(i) && fAtLeast50(i)),
       (0 until 100).filter(i => randAbove(i) && hAtLeast50(i) && fAtLeast50(i)))
-    for (codegen <- Seq(true, false)) {
+    for (split <- Seq(true, false); codegen <- Seq(true, false)) {
       withSQLConf(
-        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "true",
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString,
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
         nullableQueries.zip(writtenOrderIds).foreach { case (q, ids) =>
-          assert(udfProjects(q).size > 1, "The split did not apply:\n" +
-            q.queryExecution.optimizedPlan)
-          assert(q.collect().map(_.getLong(0)).toSeq === ids.map(_.toLong), s"codegen=$codegen")
+          if (split) {
+            assert(udfProjects(q).size > 1, "The split did not apply:\n" +
+              q.queryExecution.optimizedPlan)
+          }
+          assert(q.collect().map(_.getLong(0)).toSeq === ids.map(_.toLong),
+            s"split=$split, codegen=$codegen")
         }
       }
     }

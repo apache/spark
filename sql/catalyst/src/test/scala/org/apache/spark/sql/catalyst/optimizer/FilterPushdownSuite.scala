@@ -890,21 +890,19 @@ class FilterPushdownSuite extends PlanTest {
       val two = query($"f" && Not($"g" === $"j") && $"j" && (Not($"j") || $"f"))
       check(Optimize.execute(two), twoAnswer)
       check(PushPredicateThroughNonJoin(two), twoAnswer)
-      // Also when that alias, computed in an earlier layer, can fail, as the filter of that layer
-      // reads it, which computes it on every row that reaches the next one. Checked after one
-      // application of the rule: later passes would place the condition there even if this one
-      // did not, so the whole batch cannot tell.
-      val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
-        udfDeterministic = true)
+      // Also when such a condition reads a column below the projection that cannot fail, as f
+      // when the plan computes it in a projection of its own.
       check(PushPredicateThroughNonJoin(testStringRelation
-          .select($"a", udfF as "f", g as "g", j as "j")
-          .where($"f" && Not($"g" === $"j") && $"j" && (Not($"j") || $"f"))
+          .select($"a", $"b", $"e", f as "f")
+          .where($"f")
+          .select($"a", $"f", g as "g", j as "j")
+          .where(Not($"g" === $"j") && ($"j" || $"f"))
           .analyze),
         testStringRelation
-          .select($"a", $"b", $"e", udfF as "f")
+          .select($"a", $"b", $"e", f as "f")
           .where($"f")
           .select($"a", $"b", $"e", $"f", j as "j")
-          .where($"j" && (Not($"j") || $"f"))
+          .where($"j" || $"f")
           .select($"a", $"f", g as "g", $"j")
           .where(Not($"g" === $"j")))
       // `f != g AND j AND f`: (f != g) does not need every expensive alias, so it does not end
@@ -1043,22 +1041,36 @@ class FilterPushdownSuite extends PlanTest {
             .analyze)
       }
       // Nor when a condition after the one that ends the split reads an alias that can fail,
-      // which a lower layer computes as it shares work with the alias read there, but no filter
-      // there reads: under whole-stage codegen, the layer's filter would compute it first. One
-      // application of the rule, as a later pass pushes `f2 > 0` below the top projection anyway.
+      // computed in a lower layer: with whole-stage codegen, a filter computes the alias where it
+      // first reads it, so the layer's filter would compute one that no filter below reads, such
+      // as `f2`, computed with `g2` as they share work. Also in the whole batch, where the later
+      // passes see `f2` as a column below the projection, and also when the filter below reads
+      // the alias, as `f` in `f AND g != j AND (NOT j OR f)`.
       val shared = ScalaUDF((s: String) => s, StringType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       val failing = ScalaUDF((s: String) => s.length, IntegerType, Seq(shared), Seq(None),
         udfDeterministic = true)
-      comparePlans(PushPredicateThroughNonJoin(testStringRelation
+      comparePlans(Optimize.execute(testStringRelation
           .select($"a", shared as "g2", failing as "f2", g as "g", j as "j")
-          .where($"g2" =!= "x" && Not($"g" === $"j") && $"f2" > 0)
+          .where($"g2" =!= "x" && Not($"g" === $"j") && ($"f2" > 0 || $"j"))
           .analyze),
         testStringRelation
           .select($"a", $"b", $"e", shared as "g2", failing as "f2")
           .where($"g2" =!= "x")
           .select($"a", $"g2", $"f2", g as "g", j as "j")
-          .where(Not($"g" === $"j") && $"f2" > 0)
+          .where(Not($"g" === $"j") && ($"f2" > 0 || $"j"))
+          .analyze)
+      val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
+        udfDeterministic = true)
+      comparePlans(Optimize.execute(testStringRelation
+          .select($"a", udfF as "f", g as "g", j as "j")
+          .where($"f" && Not($"g" === $"j") && (Not($"j") || $"f"))
+          .analyze),
+        testStringRelation
+          .select($"a", $"b", $"e", udfF as "f")
+          .where($"f")
+          .select($"a", $"f", g as "g", j as "j")
+          .where(Not($"g" === $"j") && (Not($"j") || $"f"))
           .analyze)
       // Nor when the layer would also compute an alias that can fail and that no condition
       // reads, as it shares the regex of j: h calls a UDF over it.
