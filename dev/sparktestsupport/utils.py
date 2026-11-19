@@ -128,7 +128,9 @@ def parse_test_modules(value: str) -> list[modules.Module]:
     if not names:
         raise ArgumentTypeError("no module names were provided")
     by_name = {module.name: module for module in modules.all_modules}
-    unknown = list(dict.fromkeys(name for name in names if name not in by_name))
+    missing = set(names) - by_name.keys()
+    # Keep unknown names in the order they were provided.
+    unknown = [name for name in dict.fromkeys(names) if name in missing]
     if unknown:
         unknown_str = ", ".join(repr(name) for name in unknown)
         supported_str = ", ".join(sorted(by_name))
