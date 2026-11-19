@@ -3560,6 +3560,47 @@ class PlanParserSuite extends AnalysisTest {
         |)""".stripMargin)).size == 1)
   }
 
+  test("BIN BY: a join keyword after the clause starts the join, not a table alias") {
+    val binBy = "metrics BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' HOUR " +
+      "DISTRIBUTE UNIFORM (value))"
+    Seq("false", "true").foreach { enforceReserved =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> enforceReserved) {
+        Seq(
+          "LEFT JOIN t ON metrics.k = t.k" -> LeftOuter,
+          "RIGHT JOIN t ON metrics.k = t.k" -> RightOuter,
+          "FULL JOIN t ON metrics.k = t.k" -> FullOuter,
+          "INNER JOIN t ON metrics.k = t.k" -> Inner,
+          "LEFT SEMI JOIN t ON metrics.k = t.k" -> LeftSemi,
+          "LEFT ANTI JOIN t ON metrics.k = t.k" -> LeftAnti,
+          "CROSS JOIN t" -> Cross,
+          "NATURAL JOIN t" -> NaturalJoin(Inner),
+          "NATURAL LEFT JOIN t" -> NaturalJoin(LeftOuter)).foreach { case (join, joinType) =>
+          val clue = s"$join, enforceReservedKeywords=$enforceReserved"
+          val joins = parsePlan(s"SELECT * FROM $binBy $join").collect { case j: Join => j }
+          assert(joins.map(_.joinType) == Seq(joinType), clue)
+          assert(joins.head.left.isInstanceOf[UnresolvedBinBy], clue)
+        }
+
+        // A table alias before the join keyword still names the BIN BY output.
+        val aliasedJoins = parsePlan(s"SELECT * FROM $binBy b LEFT JOIN t ON b.k = t.k")
+          .collect { case j: Join => j }
+        assert(aliasedJoins.map(_.joinType) == Seq(LeftOuter))
+        aliasedJoins.head.left match {
+          case SubqueryAlias(alias, _: UnresolvedBinBy) => assert(alias.name == "b")
+          case other => fail(s"expected an aliased BIN BY, got:\n$other")
+        }
+
+        // A quoted join keyword is still a valid table alias.
+        val quoted = parsePlan(s"SELECT * FROM $binBy AS `left`")
+        val aliases = quoted.collect { case s: SubqueryAlias if s.alias == "left" => s }
+        assert(aliases.size == 1)
+        assert(aliases.head.child.isInstanceOf[UnresolvedBinBy])
+      }
+    }
+  }
+
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)()
 
