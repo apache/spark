@@ -497,6 +497,35 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-62070: Check constraint of CREATE TABLE comparing a CHAR column") {
+    // CREATE TABLE stores the predicate without padding 'OPEN' to the length of `status`, so a
+    // write pads it, whether it converts the predicate back or parses `predicateSql`, which
+    // `current_date()` makes it do, also under the legacy config.
+    Seq(
+      ("status = 'OPEN'", "OPEN", true, false),
+      ("status <> 'CLOSED'", "CLOSED", false, false),
+      ("status = 'OPEN' AND closed <= current_date()", "OPEN", true, false),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false, false),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false, true)
+    ).foreach { case (cond, status, accepted, legacy) =>
+      withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT.key -> legacy.toString) {
+        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+          sql(s"CREATE TABLE $t (id INT, status CHAR(10), closed DATE, " +
+            s"CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+          val insert = s"INSERT INTO $t VALUES (1, '$status', DATE'2000-01-01')"
+          if (accepted) {
+            sql(insert)
+            checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+          } else {
+            val error = intercept[SparkRuntimeException](sql(insert))
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"$cond $legacy")
+            checkAnswer(spark.table(t), Nil)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60032: Check constraint added by ALTER TABLE with an error in a branch") {
     // The optimizer keeps an expression that fails in a branch that may not run, and so does the
     // check for the current date.
