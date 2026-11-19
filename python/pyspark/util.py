@@ -726,12 +726,12 @@ class PythonEvalType:
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: "ArrowGroupedAggIncrementalPartialUDFType" = 255
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: "ArrowGroupedAggIncrementalFinalUDFType" = 256
 
-    # Window aggregation with an incremental ``Aggregator``. A window has no shuffle, so each
-    # frame's rows are folded with ``reduce`` (from ``zero``) and finished with ``finish``.
+    # Window aggregation with an incremental ``Aggregator``. A window partition is evaluated
+    # within one task, so there is no PARTIAL/FINAL split and no ``merge``: each frame's rows are
+    # folded with ``reduce`` and ``finish`` produces its value. An unbounded frame (the whole
+    # partition) is folded once; a bounded frame is folded per row, extending the previous row's
+    # buffer while the lower bound stays fixed.
     SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: "ArrowWindowAggIncrementalUDFType" = 257
-
-    # Scalar Arrow UDF evaluated by embedded CPython in the executor JVM.
-    SQL_SCALAR_ARROW_INPROCESS_UDF: int = 258
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301

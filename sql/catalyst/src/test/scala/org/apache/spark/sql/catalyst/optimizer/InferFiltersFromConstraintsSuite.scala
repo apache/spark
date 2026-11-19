@@ -449,6 +449,46 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Some("l.x".attr === "r.y".attr))
   }
 
+  test("SPARK-61823: a constraint over a column that can fail is not inferred as a filter") {
+    // `i` can fail as the cast does, and `j` as it reads `i`, also through the sample, the
+    // projection and the filter above them. So no constraint over either, e.g. `i > 0` from
+    // `i = k AND k > 0`, goes ahead of the condition, while one over the non-deterministic `r`,
+    // which is computed on every row, does.
+    val projected = LocalRelation($"s".string, $"k".int)
+      .select($"k", Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("i"),
+        (Rand(1) * $"k").as("r"))
+      .sample(0.0, 0.5, withReplacement = false, 1L)
+      .select($"k", $"i", IsNull($"i").as("j"), $"r")
+    val condition = $"i" === $"k" && $"k" > 0 && $"j" && $"r" > 0.5
+    comparePlans(
+      InferFiltersFromConstraints(projected.where($"k" > 1).where(condition).analyze),
+      projected.where(IsNotNull($"k") && $"k" > 1).where(IsNotNull($"r") && condition).analyze)
+  }
+
+  test("SPARK-61921: a constraint over a column that can fail through a sort, a limit, an " +
+    "offset, a join or an aggregate is not inferred as a filter") {
+    // `i` can fail as the cast does, also through the sort, the limits, the offset and the join,
+    // and so can the aggregate result `c`. So no constraint over either, e.g. `i > 0` from
+    // `i = k AND k > 0`, goes ahead of the condition, while one over `g`, a grouping key, `m`, an
+    // aggregate function, or `f`, a non-deterministic result computed for every group, does.
+    val left = LocalRelation($"s".string, $"k".int)
+      .select($"k", Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("i"))
+      .orderBy($"k".asc)
+      .limit(5)
+      .offset(1)
+    val right = LocalRelation($"g".int, $"t".string)
+      .groupBy($"g")($"g", max($"g").as("m"),
+        Cast(max($"t"), IntegerType, evalMode = EvalMode.ANSI).as("c"),
+        Cast(Rand(1) * max($"g"), IntegerType, evalMode = EvalMode.ANSI).as("f"))
+    val joined = left.join(right)
+    val condition =
+      $"i" === $"k" && $"k" > 0 && $"c" === $"m" && $"m" > 0 && $"f" > 0 && $"g" > 0
+    comparePlans(
+      InferFiltersFromConstraints(joined.where(condition).analyze),
+      joined.where(IsNotNull($"k") && IsNotNull($"m") && IsNotNull($"f") && IsNotNull($"g") &&
+        condition).analyze)
+  }
+
   test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
     "instead of the root level nested type") {
     val structTestRelation = LocalRelation($"a".struct(StructType(

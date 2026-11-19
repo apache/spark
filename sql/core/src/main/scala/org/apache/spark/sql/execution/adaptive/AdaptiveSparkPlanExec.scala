@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -154,6 +155,9 @@ case class AdaptiveSparkPlanExec(
     // EnsureRequirements
     Seq(
       CoalesceBucketsInJoin,
+      // Must run before `ensureRequirements`, which then plans the query without the semi joins
+      // this rule drops.
+      ChoosePerPartitionRuntimeFilters(ensureRequirements, unionConf),
       RemoveRedundantProjects,
       // Must run before `ensureRequirements`, which asks a `UnionExec` what it reports: it
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
@@ -583,7 +587,8 @@ case class AdaptiveSparkPlanExec(
                     failedStageCancellationResults += stage.resultOption
                     uncancelledObsoleteStageIds ++= obsoleteStageIds
                   }
-                  logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+                  logError(log"Exception in cancelling obsolete query stage: " +
+                    log"${MDC(QUERY_PLAN, stage.treeString)}", t)
                   Seq.empty
               }
             } else {

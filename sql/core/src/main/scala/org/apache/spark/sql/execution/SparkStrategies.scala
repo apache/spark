@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -85,19 +84,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
       p.setLogicalLink(logicalPlan)
       p
-    }
-  }
-
-  /**
-   * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
-   * relation carries a real-time mode duration -- the same signal that decides whether to plan
-   * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
-   */
-  private def isRealTimeMode(plan: LogicalPlan): Boolean = {
-    plan.collectLeaves().exists {
-      case s: StreamingDataSourceV2ScanRelation =>
-        s.relation.realTimeModeDuration.isDefined
-      case _ => false
     }
   }
 
@@ -532,7 +518,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // result back for the whole batch. Plan the streamline operator instead, which merges
             // each input row against state; Update mode can emit an intermediate result per
             // input.
-            if (isRealTimeMode(child) ||
+            if (SparkStrategies.isRealTimeMode(child) ||
               conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
               AggUtils.planStreamlineStreamingAggregation(
                 normalizedGroupingExpressions,
@@ -869,7 +855,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           eventTimeWatermarkForEviction = None,
           planLater(child),
           isStreaming = true,
-          isRealTimeMode = isRealTimeMode(plan),
+          isRealTimeMode = SparkStrategies.isRealTimeMode(plan),
           hasInitialState,
           initialStateGroupingAttrs,
           initialStateDataAttrs,
@@ -939,17 +925,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case e @ ArrowEvalPython(
-          udfs, requiredChildOutput, resultAttrs, child,
-          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
-        InProcessPythonUDFBuilder.checkConfiguration(conf)
-        // The in-process evaluator passes through the whole child, so drop what is not required.
-        val exec = InProcessArrowEvalPythonExec(udfs, resultAttrs, planLater(child))
-        if (requiredChildOutput == child.output) {
-          exec :: Nil
-        } else {
-          ProjectExec(e.output, exec) :: Nil
-        }
       case ArrowEvalPython(udfs, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child), evalType)(
           conf.arrowPySparkUDFColumnarInputEnabled) :: Nil
@@ -1252,6 +1227,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         r.name
       case _ =>
         "unknown"
+    }
+  }
+}
+
+object SparkStrategies {
+  /**
+   * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
+   * relation carries a real-time mode duration -- the same signal that decides whether to plan
+   * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
+   */
+  private[sql] def isRealTimeMode(plan: LogicalPlan): Boolean = {
+    plan.collectLeaves().exists {
+      case s: StreamingDataSourceV2ScanRelation =>
+        s.relation.realTimeModeDuration.isDefined
+      case _ => false
     }
   }
 }

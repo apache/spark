@@ -872,7 +872,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val alwaysTrueRef = alwaysTrue.toAttribute.withNullability(true)
               val expressions = ArrayBuffer.empty[NamedExpression]
               // Create new aliases for aggregate expressions that have non-null default
-              // values and reconstruct the output with the `alwaysTrue` marker.
+              // values, or default values that can't be evaluated statically (see
+              // `RewriteCorrelatedScalarSubquery.tryEvalExpr`), and reconstruct the output with
+              // the `alwaysTrue` marker.
               val projectList = newAggregate.aggregateExpressions.map { a =>
                 resultMap.get(a.exprId) match {
                   // Aggregate expression is not subject to the count bug.
@@ -883,7 +885,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
                     a.toAttribute.withNullability(true)
                   case Some(default) =>
                     assert(a.isInstanceOf[Alias], s"Cannot have non-aliased expression $a in " +
-                      s"aggregate that evaluates to non-null value with zero tuples.")
+                      s"aggregate that may not evaluate to null with zero tuples.")
                     val newAttr = a.newInstance()
                     val ref = newAttr.toAttribute.withNullability(true)
                     expressions += newAttr
