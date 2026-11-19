@@ -88,6 +88,15 @@ class StreamingJoinHelperSuite extends AnalysisTest {
     assert(column(expiry > rightTime && leftTime > rightTime) === Some(leftTime))
     assert(column(expiry > rightTime) === Some(expiry))
     assert(column(Cast(leftNtz, TimestampType, Some("UTC")) > rightTime) === None)
+
+    // Among other TIMESTAMP columns, the first in input order wins.
+    val deadline = AttributeReference("deadline", TimestampType)()
+    Seq(Seq(leftTime, expiry, deadline) -> expiry, Seq(leftTime, deadline, expiry) -> deadline)
+      .foreach { case (inputAttributes, expected) =>
+        assert(StreamingJoinHelper.getStateValueWatermarkColumn(inputAttributes,
+          AttributeSet(Seq(rightTime)), Some(rightTime <= expiry && rightTime <= deadline),
+          Some(10000L)).map(_._1) === Some(expected))
+      }
   }
 
   test("extract watermark from time condition") {

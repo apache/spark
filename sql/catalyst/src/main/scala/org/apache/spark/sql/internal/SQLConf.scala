@@ -4404,12 +4404,14 @@ object SQLConf {
       .internal()
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("How state format version 4 of stream-stream joins orders the state of an input that " +
-        "it evicts by a range condition. 0: by the event time of the input, as in 4.3 and " +
+        "it evicts by a range condition. 0: by the event time of the input, as in 4.4 and " +
         "earlier and with spark.sql.streaming.statefulOperator.allowMultiple set to false. 1: by " +
-        "the column that the condition bounds. A streaming query keeps the version recorded in " +
-        "its checkpoint, and one restarted from a checkpoint without it uses 0. With 0, a join " +
-        "whose condition does not bound the event time of such an input fails to restart.")
-      .version("4.4.0")
+        "the column that the default mode evicts the input by, which is the event time for an " +
+        "input bounded only through a column cast to TIMESTAMP. A streaming query keeps the " +
+        "version recorded in its checkpoint, and one restarted from a checkpoint without it uses " +
+        "0. With 0, the default mode fails to run a join that evicts such an input by a " +
+        "TIMESTAMP column other than its event time.")
+      .version("4.5.0")
       .intConf
       .checkValue(v => v == 0 || v == 1, "Valid versions are 0 and 1")
       .createWithDefault(1)
