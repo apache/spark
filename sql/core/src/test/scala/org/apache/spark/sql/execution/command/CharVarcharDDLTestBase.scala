@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 
 trait CharVarcharDDLTestBase extends QueryTest {
 
@@ -250,6 +251,7 @@ class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with Shar
   }
 }
 
+@DataSourceV2Test
 class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestBase
   with SharedSparkSession {
   override def format: String = "foo"

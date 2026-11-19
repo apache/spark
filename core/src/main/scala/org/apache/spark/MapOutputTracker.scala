@@ -233,8 +233,9 @@ private class ShuffleStatus(
     val preStatus =
       if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
     if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
-      logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
-        s"${status.checksumValue} for task ${status.mapId}.")
+      logInfo(log"Checksum of map output changes from " +
+        log"${MDC(OLD_VALUE, preStatus.checksumValue)} to " +
+        log"${MDC(NEW_VALUE, status.checksumValue)} for task ${MDC(MAP_ID, status.mapId)}.")
       checksumMismatchIndices.add(mapIndex)
       isChecksumMismatch = true
     }
@@ -1644,8 +1645,9 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
               val deserializedStale = MapOutputTracker.deserializeStaleMapIndexes(fetchedBytes._3)
               staleMapIndexes.put(shuffleId, deserializedStale)
               if (!deserializedStale.isEmpty) {
-                logInfo(s"Got stale pushed partition indexes for shuffle $shuffleId: " +
-                  deserializedStale.asScala.mkString(","))
+                logInfo(log"Got stale pushed partition indexes for shuffle " +
+                  log"${MDC(SHUFFLE_ID, shuffleId)}: " +
+                  log"${MDC(PARTITION_IDS, deserializedStale.asScala.mkString(","))}")
               }
             } catch {
               case e: SparkException =>

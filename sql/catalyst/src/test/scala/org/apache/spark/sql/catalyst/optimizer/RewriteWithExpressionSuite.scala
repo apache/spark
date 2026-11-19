@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DeleteFromTable, ExternalLookupJoin, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DeleteFromTable, ExternalLookupCacheOptions, ExternalLookupJoin, LocalRelation, LogicalPlan, MergeRows, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
@@ -760,6 +761,34 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(Optimizer.execute(plan), testRelation.select(inlinedExpr.as("col")))
   }
 
+  test("SPARK-61920: a With in a MERGE instruction is not pre-evaluated under MergeRows") {
+    val Seq(a, b) = testRelation.output
+    def mergeRows(instruction: MergeRows.Instruction): MergeRows = MergeRows(
+      isSourceRowPresent = TrueLiteral,
+      isTargetRowPresent = TrueLiteral,
+      matchedInstructions = Seq(MergeRows.Discard(a === 0), instruction),
+      notMatchedInstructions = Nil,
+      notMatchedBySourceInstructions = Nil,
+      checkCardinality = false,
+      output = testRelation.output,
+      child = testRelation)
+
+    // `MergeRowsExec` evaluates an instruction only for the rows that reach it, here the rows the
+    // `Discard` does not take, while a `Project` under `MergeRows` would evaluate the definition
+    // for every row. Not cheap and referenced twice, it stays a `With` in the instruction.
+    val kept = mergeRows(MergeRows.Keep(MergeRows.Update,
+      With(a + b) { case Seq(ref) => ref >= 1 && ref <= 10 }, testRelation.output))
+    comparePlans(Optimizer.execute(kept), kept)
+
+    // A definition that gains nothing from memoizing is inlined, as in a conditional branch.
+    def nullIfZero(e: Expression): Expression = If(e === 0, Literal(null, IntegerType), e)
+    val inlined = mergeRows(MergeRows.Keep(MergeRows.Update, TrueLiteral,
+      Seq(With(a) { case Seq(ref) => nullIfZero(ref) }, b)))
+    comparePlans(
+      Optimizer.execute(inlined),
+      mergeRows(MergeRows.Keep(MergeRows.Update, TrueLiteral, Seq(nullIfZero(a), b))))
+  }
+
   test("WITH expression in grouping exprs") {
     val a = testRelation.output.head
     val expr1 = With(a + 1) { case Seq(ref) =>
@@ -1019,9 +1048,10 @@ class RewriteWithExpressionSuite extends PlanTest {
     val lookup = LocalRelation($"id".int, $"department".string)
     val keysEqual = stream.output.head === lookup.output.head
     val department = Upper(lookup.output(1))
+    val noCache = ExternalLookupCacheOptions(enabled = false, maxBytes = 1, ttlMillis = 0)
     val join = ExternalLookupJoin(stream, lookup, Inner,
       Some(keysEqual && With(department) { case Seq(ref) => ref >= "A" && ref <= "Z" }),
-      lookup.output)
+      noCache, lookup.output)
     assert(RewriteWithExpression(join) ===
       join.copy(condition = Some(keysEqual && (department >= "A" && department <= "Z"))))
   }

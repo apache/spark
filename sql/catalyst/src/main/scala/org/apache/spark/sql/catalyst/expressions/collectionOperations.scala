@@ -121,7 +121,7 @@ trait BinaryArrayExpressionWithImplicitCast
   since = "1.5.0",
   group = "collection_funcs")
 case class Size(child: Expression, legacySizeOfNull: Boolean)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes with NoThrow {
 
   def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 

@@ -667,8 +667,6 @@ class ResolverGuard(
       Some("legacyCTEPrecedencePolicy")
     } else if (!conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT)) {
       Some("prioritizeOrdinalResolutionInSortDisabled")
-    } else if (conf.getConf(SQLConf.PERSISTENT_CATALOG_FIRST)) {
-      Some("persistentCatalogFirst")
     } else {
       None
     }

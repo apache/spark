@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.client
 import io.grpc.ManagedChannel
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.TIMEOUT
 
 // This is common state shared between the blocking and non-blocking stubs.
 //
@@ -34,7 +35,7 @@ class SparkConnectStubState(
   val rpcDeadlines: RpcDeadlines = configuration.rpcDeadlines
 
   if (log.isInfoEnabled) {
-    logInfo(s"Spark Connect RPC deadlines: $rpcDeadlines")
+    logInfo(log"Spark Connect RPC deadlines: ${MDC(TIMEOUT, rpcDeadlines)}")
   }
 
   // Manages the retry handler logic used by the stubs.

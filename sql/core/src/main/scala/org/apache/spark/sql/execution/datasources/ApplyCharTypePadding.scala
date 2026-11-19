@@ -101,7 +101,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
    * the data source compares with the stored values. To match what a read of the table returns,
    * the condition evaluates the read-side padding of the columns itself, after its comparisons are
    * padded. The data source can only delete with such a filter if it supports the padding, e.g.
-   * `CHAR_READ_SIDE_PADDING`.
+   * `CHAR_READ_SIDE_PADDING`, or, with V1 filters, the IN or equality that `PredicateUtils.toV1`
+   * converts it into.
    */
   private def padDeleteConditions(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) {

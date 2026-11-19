@@ -724,6 +724,21 @@ object SQLConf {
     .stringConf
     .createWithDefault("catalyst")
 
+  val PYTHON_UDF_TRANSPILE_NULL_STRICTNESS =
+    buildConf("spark.sql.experimental.optimizer.transpileNullStrictness")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .doc("Controls how the Python UDF transpiler handles null/None semantics for ordering " +
+      "comparisons (``<``, ``<=``, ``>``, ``>=``). Under ``strict`` (the default) a NULL " +
+      "operand causes the expression to raise an error, matching Python's TypeError. Under " +
+      "``loose`` a NULL operand silently propagates as NULL instead of raising, which allows " +
+      "more UDFs to be transpiled at the cost of minor semantic divergence on NULL inputs.")
+    .version("4.4.0")
+    .stringConf
+    .checkValue(
+      v => v == "strict" || v == "loose",
+      "Invalid value. Must be 'strict' or 'loose'.")
+    .createWithDefault("strict")
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -978,7 +993,8 @@ object SQLConf {
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
-        "query. This is to prevent driver OOMs with too many Bloom filters.")
+        "query. This is to prevent driver OOMs with too many Bloom filters. Per-partition " +
+        "runtime bloom filters count apart, under a limit of the same value.")
       .version("3.3.0")
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold should be >= 0")
@@ -993,11 +1009,38 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.perPartition.enabled")
+      .doc("When true, a runtime bloom filter can be built per partition, for a creation side " +
+        "too big for a bloom filter of all its keys. This needs the join key of each side of a " +
+        "join to come from a V2 scan, and both scans to report a keyed partitioning by the same " +
+        "partition transform of that key (other than identity), with " +
+        "spark.sql.sources.v2.bucketing.enabled and " +
+        s"${RUNTIME_BLOOM_FILTER_ENABLED.key} both true. Each partition of the " +
+        "application side is then checked against the bloom filter of the matching partition " +
+        "of the creation side, in a semi join. The semi join calls the function of the " +
+        "partition transform on each row of both sides, so that function must implement " +
+        "`produceResult` or `invoke`. That semi join is dropped when it adds a shuffle or cuts " +
+        "the tasks that read the application side, or when it would sit in more than one " +
+        "place, as below a union. To check the shuffles and the tasks, Spark plans the query " +
+        "once more, and up to once more for each semi join. Adaptive query execution does that " +
+        "again on each re-planning before the semi join runs. Each bloom filter is sized for an " +
+        "even share of the creation side over its partition keys. The semi join is also dropped " +
+        "when that share is over spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold. " +
+        "The number of per-partition bloom filters has a limit of its own, the value of " +
+        s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
+        "limit, no per-partition one is added either.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject a bloom filter, unless the creation side is fully " +
-        "materialized and has accurate statistics.")
+        "materialized and has accurate statistics. A per-partition bloom filter needs only an " +
+        "even share of the creation side over its partition keys to be under it.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
@@ -1278,6 +1321,40 @@ object SQLConf {
     .version("1.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
+
+  val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
+    .internal()
+    .doc("When true, a non-equi join whose condition is a range predicate (a value in a " +
+      "range, two ranges overlapping, or a single `<`/`<=`/`>`/`>=` comparison) may be " +
+      "planned as a broadcast range join instead of a broadcast nested loop join. Each " +
+      "range key must be deterministic, of boolean, integer, floating-point, decimal, " +
+      "string, binary, date, or timestamp type, and drawn entirely from one side. Planning " +
+      "still requires a side that is broadcastable by size or by a BROADCAST hint and that " +
+      "BroadcastRangeJoinExec can build: either side for inner joins, the right side for " +
+      "left outer, semi, and anti joins, the left side for right outer joins, and never a " +
+      "full outer join. An unsupported hinted side, a full outer join, and an unhinted join " +
+      "with no small side keep the previous plan (a cartesian product for an inner join, " +
+      "otherwise a nested loop join). The broadcast side is sorted and indexed once, which " +
+      "evaluates the range key of every broadcast row. When probing, each row of the other " +
+      "side evaluates its range key and reads only the part of the index that can match it. " +
+      "Keys are evaluated before any pair is tested, so a key expression that throws can " +
+      "fail a query that a nested loop join would have completed. The range join is much " +
+      "faster when that part is small. It can be slower under interleaved overlap, where " +
+      "the tree cannot prune whole miss runs; collated string and other boxed key families " +
+      "reach that regime sooner than long-specialized keys (including float and double), " +
+      "while fully overlapping builds stay near parity via the all-covering shortcut. Tiny " +
+      "builds (a handful of ranges) skip the tree walk and scan stored rows linearly so they " +
+      "stay near parity with the nested loop join. Building the index costs driver-side work " +
+      "that grows with the broadcast side and can outweigh the scans the range join saves - " +
+      "most visibly when a BROADCAST hint forces a large build side that only a handful of " +
+      "streamed rows ever probe, where that one-time cost has few scans to amortize against. " +
+      "BroadcastExchangeExec also charges the index's retained memory against " +
+      "maxBroadcastTableSize, so a hinted or raised-threshold build can fail where a nested " +
+      "loop join ran. This is disabled by default.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
 
   val SHUFFLE_HASH_JOIN_FACTOR =
     buildConfFromConfigFile[Int]("spark.sql.shuffledHashJoinFactor")
@@ -1807,10 +1884,10 @@ object SQLConf {
     buildConf("spark.sql.subexpressionElimination.filterExec.enabled")
       .internal()
       .doc("When true (and subexpression elimination is enabled), FilterExec whole-stage " +
-        "codegen eliminates common subexpressions shared across its predicates. When false, " +
-        "FilterExec falls back to the predicate codegen that loads input columns lazily and " +
-        "short-circuits, avoiding eager materialization of all predicate-referenced columns on " +
-        "every row. Only affects FilterExec; subexpression elimination elsewhere is unaffected.")
+        "codegen eliminates the common subexpressions shared across its predicates when one " +
+        "of them is not cheap. When false, FilterExec falls back to the predicate codegen " +
+        "without subexpression elimination. Only affects FilterExec; subexpression elimination " +
+        "elsewhere is unaffected.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -1865,6 +1942,20 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
+
+  val INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED =
+    buildConf("spark.sql.optimizer.inferFiltersAcrossAsOfJoin.enabled")
+      .internal()
+      .doc("When true, the query optimizer infers filters for the inputs of a sort-merge " +
+        "AS-OF join from its ON condition and its other input, such as `q.k = 7` from " +
+        "`ON t.k = q.k` and `t.k = 7`, but never a filter that can fail, and only IS NOT NULL " +
+        "while spark.sql.legacy.inferFailableFiltersFromConstraints is true. When false, it " +
+        "infers no filter across such a join, while each input keeps the filters inferred " +
+        "from its own constraints and other joins keep theirs.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val PROPAGATE_DISTINCT_KEYS_ENABLED =
     buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
@@ -2543,6 +2634,23 @@ object SQLConf {
       .checkValue(_ > 0, "External lookup join max batch bytes must be positive")
       .createWithDefaultString("64m")
 
+  val JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS =
+    buildConf("spark.sql.join.externalLookup.realTimeMode.maxBatchRows")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Number of stream rows at which an external lookup join stops adding rows to a " +
+        "lookup request in Real-Time Mode. A Real-Time Mode batch runs until its duration " +
+        "elapses, not until its input ends, so a row in a request that is not full waits for " +
+        "more rows or for the end of the batch. With the default of 1, the join sends each " +
+        "row's request as soon as it reads the row, and the lookup cache, when enabled, serves " +
+        "keys that repeat. A larger value sends fewer requests, but a row can wait longer for " +
+        "its output. A request also keeps the other bounds of a micro-batch request, which " +
+        "spark.sql.join.externalLookup.maxBatchBytes describes. Micro-batch queries do not use " +
+        "this configuration.")
+      .version("4.4.0")
+      .intConf
+      .checkValue(_ > 0, "External lookup join real-time mode max batch rows must be positive")
+      .createWithDefault(1)
+
   val JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED =
     buildConf("spark.sql.join.externalLookup.startupCheck.enabled")
       .internal()
@@ -2559,6 +2667,50 @@ object SQLConf {
       .version("4.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED =
+    buildConf("spark.sql.join.externalLookup.cache.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("When true, external lookup join caches the complete lookup result of each key, " +
+        "including a key with no result, within a task, per input partition (a task that reads " +
+        "several input partitions, e.g. after coalesce, has one cache per partition). A cached " +
+        "result is reused as it was read. A left semi or left anti join caches one row of a " +
+        "key instead when any row of the key gives its answer. This configuration can be " +
+        "overridden per join with the EXTERNAL_LOOKUP hint option 'cache_enabled', a string " +
+        "parameter of the form key=value such as 'cache_enabled=false'. A string parameter of " +
+        "the hint that does not contain '=' names a relation. At present, a join whose source " +
+        "serves a range comparison (<, <=, >, >=) with a stream-side value caches nothing, " +
+        "whatever this configuration or the hint option says.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val JOIN_EXTERNAL_LOOKUP_CACHE_MAX_BYTES =
+    buildConf("spark.sql.join.externalLookup.cache.maxBytes")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Maximum size of one external lookup join cache, that is per input partition of a " +
+        "task: the binary size of its lookup keys and of their result rows, after lookup-side " +
+        "projections and filters, plus a fixed overhead per key and per row for the objects " +
+        "that hold them. Beyond it, the least recently " +
+        "used keys are evicted. A key whose result rows take more than a sixteenth of it is " +
+        "returned but not cached. It can be overridden per join with the EXTERNAL_LOOKUP hint " +
+        "option 'cache_max_bytes'.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "External lookup join cache max bytes must be positive")
+      .createWithDefaultString("16m")
+
+  val JOIN_EXTERNAL_LOOKUP_CACHE_TTL =
+    buildConf("spark.sql.join.externalLookup.cache.ttl")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Time-to-live of a cached external lookup join result, such as 30s or 10m, counted " +
+        "from when the result is cached, not from its last use. A number without a unit is in " +
+        "milliseconds. A value of 0 disables expiration. It can be overridden per join with the " +
+        "EXTERNAL_LOOKUP hint option 'cache_ttl'.")
+      .version("4.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ >= 0, "External lookup join cache TTL must be non-negative")
+      .createWithDefault(0L)
 
   val INTERRUPT_ON_CANCEL = buildConf("spark.sql.execution.interruptOnCancel")
     .doc("When true, all running tasks will be interrupted if one cancels a query.")
@@ -3133,12 +3285,12 @@ object SQLConf {
     buildConf("spark.sql.legacy.persistentCatalogFirst")
       .internal()
       .version("4.2.0")
-      .doc("When true (legacy), partially qualified function names like 'builtin.func' or " +
-        "'session.func' resolve to the persistent catalog first. When false (default), the " +
+      .doc("When true (default), partially qualified function names like 'builtin.func' or " +
+        "'session.func' resolve to the current catalog first. When false (legacy), the " +
         "system catalog is prioritized (system.builtin.func or system.session.func).")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PATH_ENABLED =
     buildConf("spark.sql.path.enabled")
@@ -4162,8 +4314,11 @@ object SQLConf {
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
-      .doc("When true, Spark will validate if renamed checkpoint file exists.")
-      .internal()
+      .doc("When true, after renaming a checkpoint file from its temporary file, Spark " +
+        "verifies that the renamed file exists and fails the write if it does not, instead " +
+        "of committing a batch whose checkpoint file is missing. This adds one existence " +
+        "check per checkpoint file written. Consider enabling it when the checkpoint " +
+        "location is on an object store whose rename is not guaranteed to be atomic.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -4694,6 +4849,18 @@ object SQLConf {
         "the predicate of a condition that reads the current time, date, catalog, user and the " +
         "like, if Spark can build one, with their values at the time of the ALTER TABLE, as " +
         "before, so that a write that can read the predicate back compares with those values.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT =
+    buildConf("spark.sql.legacy.useCurrentConfigsForCheckConstraint")
+      .internal()
+      .doc("When true, a write parses and analyzes the SQL text of a CHECK constraint under the " +
+        "SQL configs of the current active SparkSession, instead of the default values of the " +
+        "configs that change how the text reads, and a DDL does not reject a condition that " +
+        "reads differently under those default values.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -6015,19 +6182,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PYTHON_UDF_IN_PROCESS_FULL_VALIDATION =
-    buildConf("spark.sql.execution.pythonUDF.inProcess.fullValidation.enabled")
-      .doc("When true, in-process Python UDFs fully validate the Arrow structure of each " +
-        "result, including every offset of variable-width and nested values, before the JVM " +
-        "reads it. The JVM reads result buffers without bounds checks, so a malformed result, " +
-        "such as one built from raw buffers, can produce wrong values or crash the executor. " +
-        "String values are not checked for valid UTF-8. When false, only constant-time Arrow " +
-        "validation is performed. Worker-based Arrow UDFs do not validate their results.")
-      .version("4.4.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(true)
-
   val PYTHON_UDF_DETAILED_TIMING_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.detailedTiming.enabled")
       .internal()
@@ -6514,6 +6668,18 @@ object SQLConf {
         "fixed-width bin boundaries.")
       .internal()
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val GAP_FILL_ENABLED =
+    buildConf("spark.sql.gapFillRelationOperator.enabled")
+      .doc("Gate for the GAP FILL relation operator, which is under development. GAP FILL " +
+        "queries are rejected whatever the value. When true, the rejection waits until the " +
+        "input relation resolves, so errors that leave it unresolved, such as a missing " +
+        "table, are reported first.")
+      .internal()
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
@@ -9704,6 +9870,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
 
+  def runtimeBloomFilterPerPartitionEnabled: Boolean =
+    getConf(RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED)
+
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
 
@@ -10089,6 +10258,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyInferFailableFiltersFromConstraints: Boolean =
     getConf(LEGACY_INFER_FAILABLE_FILTERS_FROM_CONSTRAINTS)
 
+  def inferFiltersAcrossAsOfJoinEnabled: Boolean = getConf(INFER_FILTERS_ACROSS_AS_OF_JOIN_ENABLED)
+
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
@@ -10208,6 +10379,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def broadcastRangeJoinEnabled: Boolean = getConf(BROADCAST_RANGE_JOIN_ENABLED)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 
