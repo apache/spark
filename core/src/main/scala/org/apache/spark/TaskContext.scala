@@ -220,6 +220,9 @@ abstract class TaskContext extends Serializable {
    * avoiding stale data being merged without detection.
    *
    * The callback runs on the same executor thread that sends the status update.
+   *
+   * Exceptions thrown by the listener are only logged by the executor. They do not mark the task
+   * as failed, since the driver has already been told that it succeeded.
    */
   private[spark] def addPostStatusUpdateListener(listener: PostStatusUpdateListener): TaskContext
 

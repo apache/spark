@@ -583,6 +583,43 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         assert(!q.isActive)
         assert(listener.terminate.nonEmpty)
       }
+      spark.streams.removeListener(listener)
+      // Wait for the executionThread to complete. See SPARK-58000.
+      Thread.sleep(5000)
+    }
+  }
+
+  test("SPARK-60131: removing an unregistered listener keeps the other listeners") {
+    // The bug needs exactly one registered listener.
+    assert(spark.streams.listListeners().isEmpty)
+    val listener = new MyListener()
+    spark.streams.addListener(listener)
+
+    val q = spark.readStream
+      .format("rate")
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    try {
+      eventually(timeout(30.seconds)) {
+        assert(listener.progress.nonEmpty)
+      }
+
+      spark.streams.removeListener(new MyListener())
+      assert(spark.streams.listListeners().toSeq == Seq(listener))
+
+      // The registered listener still receives events.
+      val numProgress = listener.progress.length
+      eventually(timeout(30.seconds)) {
+        assert(listener.progress.length > numProgress)
+      }
+    } finally {
+      q.stop()
+      spark.streams.removeListener(listener)
+      // Wait for the executionThread to complete. See SPARK-58000.
+      Thread.sleep(5000)
     }
   }
 
@@ -770,6 +807,19 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   }
 
   // Tests for DataStreamReader.name() method
+  test("stream reader table source name is serialized") {
+    Seq(None, Some("orders_source")).foreach { sourceName =>
+      val reader = spark.readStream.option("maxFilesPerTrigger", "1")
+      sourceName.foreach(reader.name)
+      val read = reader.table("db.orders").plan.getRoot.getRead
+      assert(read.getIsStreaming)
+      assert(read.getNamedTable.getUnparsedIdentifier == "db.orders")
+      assert(read.getNamedTable.getOptionsMap.get("maxFilesPerTrigger") == "1")
+      assert(read.getNamedTable.hasSourceName == sourceName.isDefined)
+      sourceName.foreach(name => assert(read.getNamedTable.getSourceName == name))
+    }
+  }
+
   testWithSourceEvolution("stream reader name() with valid source names") {
     Seq("mySource", "my_source", "MySource123", "_private", "source_123_test", "123source")
       .foreach { name =>

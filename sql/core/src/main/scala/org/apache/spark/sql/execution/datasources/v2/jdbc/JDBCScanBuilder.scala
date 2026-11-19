@@ -98,6 +98,8 @@ case class JDBCScanBuilder(
 
   private var pushedGroupBys: Option[Array[String]] = None
 
+  private var pushedAggregation: Option[Aggregation] = None
+
   override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
     lazy val fieldNames = aggregation.groupByExpressions()(0) match {
       case field: FieldReference => field.fieldNames
@@ -139,6 +141,7 @@ case class JDBCScanBuilder(
       finalSchema = JDBCRDD.getQueryOutputSchema(aggQuery, jdbcOptions, dialect)
       pushedAggregateList = selectList
       pushedGroupBys = Some(compiledGroupBys)
+      pushedAggregation = Some(aggregation)
       true
     } catch {
       case NonFatal(e) =>
@@ -341,6 +344,7 @@ case class JDBCScanBuilder(
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
       if (orders.exists(containsUnsupportedCharPad)) return false
+      if (!dialect.supportsTopN(orders, pushedAggregation)) return false
       val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit

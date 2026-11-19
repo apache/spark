@@ -274,7 +274,6 @@ try:
             "pyspark",
             "pyspark.core",
             "pyspark.cloudpickle",
-            "pyspark.inprocess",
             "pyspark.eval_handlers",
             "pyspark.messages",
             "pyspark.messages.socket",

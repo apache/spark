@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Parser tests for AUTO CDC syntax.
@@ -42,6 +43,7 @@ import org.apache.spark.sql.types.IntegerType
  * Both forms support `STORED AS SCD TYPE 1|2`, `IGNORE NULL UPDATES [ON ...]`, and, under SCD
  * Type 2, `TRACK HISTORY ON ...`.
  */
+@DataSourceV2Test
 class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   protected lazy val parser = new SparkSqlParser()
 

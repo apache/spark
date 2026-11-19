@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression,
   ExternalUserDefinedFunction, JoinedRow, MutableProjection, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ConditionalUDFEvaluation, SparkPlan}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.externalUDF.ExecuteExternalUDFExec._
 import org.apache.spark.sql.execution.python.HybridRowQueue
@@ -69,12 +69,18 @@ import org.apache.spark.udf.worker.core.WorkerMessages
  * @param udf UDF expression evaluated by the worker session.
  * @param resultAttr Output attribute for the UDF expression.
  * @param child Child plan providing input rows.
+ * @param evalCondition If defined, the UDF is evaluated only for the child rows where this
+ *                      deterministic condition is true (see `EvalOnlyWhen` and
+ *                      `ConditionalUDFEvaluation`), and the other rows pass through with a null
+ *                      result. The flow-control note above then applies to the queue of skipped
+ *                      rows in `ConditionalUDFEvaluation` as well.
  */
 @Experimental
 case class ExecuteExternalUDFExec(
     udf: ExternalUserDefinedFunction,
     resultAttr: Attribute,
-    child: SparkPlan)
+    child: SparkPlan,
+    evalCondition: Option[Expression] = None)
   extends ExternalUDFExec {
 
   override def workerSpec: UDFWorkerSpecification = udf.workerSpec
@@ -96,71 +102,84 @@ case class ExecuteExternalUDFExec(
     val maxBytesPerBatch = conf.arrowMaxBytesPerBatch
     val preparedInit = prepareInit(inputSchema, outputSchema, timeZoneId, largeVarTypes)
 
-    child.execute().mapPartitionsInternal { rows =>
+    val childOutput = child.output
+    child.execute().mapPartitionsInternal { input =>
       val context = TaskContext.get()
       ensureTaskContextSupported(context)
-      val projection = MutableProjection.create(argumentExpressions, child.output)
-      projection.initialize(context.partitionId())
+      def evaluate(rows: Iterator[InternalRow]): Iterator[InternalRow] = {
+        val projection = MutableProjection.create(argumentExpressions, childOutput)
+        projection.initialize(context.partitionId())
 
-      val queue = HybridRowQueue(context.taskMemoryManager(), child.output.length)
-      context.addTaskCompletionListener[Unit](_ => queue.close())
+        val queue = HybridRowQueue(context.taskMemoryManager(), childOutput.length)
+        context.addTaskCompletionListener[Unit](_ => queue.close())
 
-      var inputRowCount = 0L
-      var outputRowCount = 0L
-      val projectedRows = rows.map { row =>
-        queue.add(row.asInstanceOf[UnsafeRow])
-        inputRowCount += 1
-        projection(row)
-      }
+        var inputRowCount = 0L
+        var outputRowCount = 0L
+        val projectedRows = rows.map { row =>
+          queue.add(row.asInstanceOf[UnsafeRow])
+          inputRowCount += 1
+          projection(row)
+        }
 
-      withUDFWorkerSession(context) { session =>
-        session.init(PythonInitAdapter.build(preparedInit, context))
+        withUDFWorkerSession(context) { session =>
+          session.init(PythonInitAdapter.build(preparedInit, context))
 
-        val batches = ArrowConverters.toBatchIterator(
-          projectedRows,
-          inputSchema,
-          maxRecordsPerBatch,
-          maxBytesPerBatch,
-          timeZoneId,
-          true,
-          largeVarTypes,
-          context)
-        val requests = batches.map(WorkerMessages.dataRequest)
-        val udfResults = new ArrowResponseRowIterator(
-          session.process(requests),
-          outputSchema,
-          timeZoneId,
-          largeVarTypes,
-          context)
+          val batches = ArrowConverters.toBatchIterator(
+            projectedRows,
+            inputSchema,
+            maxRecordsPerBatch,
+            maxBytesPerBatch,
+            timeZoneId,
+            true,
+            largeVarTypes,
+            context)
+          val requests = batches.map(WorkerMessages.dataRequest)
+          val udfResults = new ArrowResponseRowIterator(
+            session.process(requests),
+            outputSchema,
+            timeZoneId,
+            largeVarTypes,
+            context)
 
-        val joined = new JoinedRow
-        val resultProjection = UnsafeProjection.create(output, output)
-        resultProjection.initialize(context.partitionId())
-        var cardinalityVerified = false
+          val joined = new JoinedRow
+          val resultProjection = UnsafeProjection.create(output, output)
+          resultProjection.initialize(context.partitionId())
+          var cardinalityVerified = false
 
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val hasNextResult = udfResults.hasNext
-            if (!hasNextResult && !cardinalityVerified) {
-              cardinalityVerified = true
-              if (inputRowCount != outputRowCount) {
-                throw cardinalityMismatch(inputRowCount, outputRowCount)
+          new Iterator[InternalRow] {
+            override def hasNext: Boolean = {
+              val hasNextResult = udfResults.hasNext
+              if (!hasNextResult && !cardinalityVerified) {
+                cardinalityVerified = true
+                if (inputRowCount != outputRowCount) {
+                  throw cardinalityMismatch(inputRowCount, outputRowCount)
+                }
               }
+              hasNextResult
             }
-            hasNextResult
-          }
 
-          override def next(): InternalRow = {
-            if (!hasNext) Iterator.empty.next()
-            if (queue.getNumElementsQueued() == 0L) {
-              val outputRowsLowerBound = outputRowCount + udfResults.bufferedRowCount
-              throw cardinalityMismatch(inputRowCount, s"at least $outputRowsLowerBound")
+            override def next(): InternalRow = {
+              if (!hasNext) Iterator.empty.next()
+              if (queue.getNumElementsQueued() == 0L) {
+                val outputRowsLowerBound = outputRowCount + udfResults.bufferedRowCount
+                throw cardinalityMismatch(inputRowCount, s"at least $outputRowsLowerBound")
+              }
+              val udfResult = udfResults.next()
+              outputRowCount += 1
+              resultProjection(joined(queue.remove(), udfResult))
             }
-            val udfResult = udfResults.next()
-            outputRowCount += 1
-            resultProjection(joined(queue.remove(), udfResult))
           }
         }
+      }
+      evalCondition match {
+        case Some(condition) =>
+          // The result does not depend on the row when the UDF is deterministic and its
+          // arguments have no references, so the first evaluated row's result can be reused.
+          val resultIsConstant = ConditionalUDFEvaluation.resultIsRowIndependent(Seq(udf))
+          ConditionalUDFEvaluation(
+            input, condition, childOutput, childOutput, Seq(resultAttr), context,
+            lockFree = false, resultIsConstant = resultIsConstant)(evaluate)
+        case None => evaluate(input)
       }
     }
   }

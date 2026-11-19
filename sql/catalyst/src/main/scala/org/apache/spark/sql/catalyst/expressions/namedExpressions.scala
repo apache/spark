@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, CharVarcharUtils, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -463,6 +463,13 @@ case class OuterReference(e: NamedExpression)
   extends LeafExpression with NamedExpression with Unevaluable {
   override def dataType: DataType = e.dataType
   override def nullable: Boolean = e.nullable
+  // Forward only the raw CHAR/VARCHAR type when aliased. Other keys are not forwarded; some,
+  // such as the SQL UDF parameter and auto-generated alias markers, must not leak.
+  override lazy val metadata: Metadata = CharVarcharUtils.getRawTypeString(e.metadata) match {
+    case Some(rawType) => new MetadataBuilder()
+      .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, rawType).build()
+    case None => Metadata.empty
+  }
   override def prettyName: String = "outer"
 
   override def sql: String =

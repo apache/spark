@@ -280,8 +280,8 @@ returning the first match:
 
 | `spark.sql.legacy.persistentCatalogFirst` | Mini-path tried in order |
 | :-------------------------------------- | :----------------------- |
-| `false` (default) | the system namespace (`system.session.x` / `system.builtin.x`), then the current catalog's `session.x` / `builtin.x` |
-| `true` (legacy)   | the current catalog's `session.x` / `builtin.x`, then the system namespace (`system.session.x` / `system.builtin.x`) |
+| `true` (default)  | the current catalog's `session.x` / `builtin.x`, then the system namespace (`system.session.x` / `system.builtin.x`) |
+| `false` (legacy)  | the system namespace (`system.session.x` / `system.builtin.x`), then the current catalog's `session.x` / `builtin.x` |
 
 ### Unqualified (1 part) &mdash; `object`
 

@@ -23,11 +23,13 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{InMemoryRelationCatalog, TableSummary}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 /**
  * The class contains tests for the `SHOW TABLES` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
   // Extended JSON now uses TableSummary.tableType(), and TableCatalog.listTableSummaries

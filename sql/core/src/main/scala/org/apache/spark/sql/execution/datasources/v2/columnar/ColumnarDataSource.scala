@@ -45,6 +45,14 @@ trait ColumnarDataSource {
   def capabilities(): util.Set[TableCapability] =
     util.EnumSet.of(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
 
+  /**
+   * Returns whether the batch planners of this data source use the domains of the columns that
+   * the filters of a query constrain, see [[ColumnarBatchPlanner.pushDomains]]. Spark derives the
+   * domains, and creates the planner of a scan to push them down to, only when it is true: by
+   * default, a data source takes no domain.
+   */
+  def supportsDomainPushdown(): Boolean = false
+
   /** Returns the planner of a batch scan of the given schema. */
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
@@ -81,11 +89,19 @@ trait ColumnarDataSource {
 
 /**
  * Plans a batch scan of a [[ColumnarDataSource]], on the driver. Spark pushes operations down by
- * calling, each at most once and in this order, `pushLimit` and `pruneColumns`, then plans the
- * scan with `plan`, at most once. Only the [[PartitionReaderFactory]] of the planned scan is
- * serialized to the executors.
+ * calling, each at most once and in this order, `pushDomains`, `pushLimit` and `pruneColumns`,
+ * then plans the scan with `plan`, at most once. Only the [[PartitionReaderFactory]] of the
+ * planned scan is serialized to the executors.
  */
 trait ColumnarBatchPlanner {
+
+  /**
+   * Returns whether the reader uses each domain to skip data: the domains of the columns that the
+   * filters of the query constrain, at least one. Spark evaluates the filters after reading
+   * anyway, and shows the filters of the used domains as pushed in the plan. Spark only calls it
+   * for a data source whose [[ColumnarDataSource.supportsDomainPushdown]] is true.
+   */
+  def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = domains.map(_ => false)
 
   /** Returns whether the reader returns at most `limit` rows. Spark applies it again anyway. */
   def pushLimit(limit: Int): Boolean = false
@@ -132,7 +148,7 @@ trait ColumnarStreamReader {
   /**
    * Returns the latest offset available, within a limit.
    *
-   * @param start the offset that the next micro-batch starts after: the end of the last
+   * @param start the starting progress boundary of the next micro-batch: the end of the last
    *              micro-batch, or the initial offset before the first one
    * @param limit `ReadLimit.allAvailable()`, or the default read limit: the latest offset is then
    *              the end of the data of the next micro-batch. Spark only passes the default read
@@ -143,8 +159,10 @@ trait ColumnarStreamReader {
   def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String
 
   /**
-   * Plans the partitions that read the data after `start` up to and including `end`. Spark plans
-   * each range once, also for a micro-batch that reads the source several times.
+   * Plans the partitions that read the data between the progress boundaries `start` and `end`,
+   * which the data source maps to records: equal boundaries describe no data, and adjacent ranges
+   * must neither repeat nor skip records. Spark plans each range once, also for a micro-batch
+   * that reads the source several times.
    */
   def partitions(start: String, end: String): Array[InputPartition]
 
@@ -155,7 +173,7 @@ trait ColumnarStreamReader {
    */
   def readerFactory(): PartitionReaderFactory
 
-  /** Tells the data source that Spark has processed all the data up to and including `end`. */
+  /** Tells the data source that Spark has processed all the data before the boundary `end`. */
   def commit(end: String): Unit = {}
 
   def stop(): Unit = {}
@@ -185,9 +203,10 @@ trait ColumnarWriter extends Serializable {
 }
 
 /**
- * Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. Spark
- * does not abort a micro-batch once the writer committed it, but a restarted query may abort a
- * micro-batch that a writer of an earlier run of the query committed.
+ * Writes data to a [[ColumnarDataSource]] for a streaming write, for a single micro-batch: Spark
+ * creates a new writer for each micro-batch, and does not call a writer after it committed or
+ * aborted its micro-batch. Spark does not abort a micro-batch once the writer committed it, but a
+ * restarted query may abort a micro-batch that a writer of an earlier run of the query committed.
  */
 trait ColumnarStreamWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long, epochId: Long): DataWriter[ColumnarBatch]
