@@ -27,13 +27,16 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 - Since Spark 4.5, a non-deterministic nested field access above a stream-stream join, such as
   `s.arr[CAST(rand() * 10 AS INT)].x`, is evaluated once for each joined row. Previously, it was
-  evaluated below the join, once for each input row of the side that outputs `s`, which gave every
-  joined row built from one input row the same value (see
-  [SPARK-62042](https://issues.apache.org/jira/browse/SPARK-62042)). This can change what that side
-  of the join outputs, and with it the schema of the join's state. Such a query then fails to
-  restart from a checkpoint written by an earlier version, with
-  `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE`. To recalculate outputs, discard the checkpoint and
-  replay previous inputs.
+  evaluated below the join, once for each input row of the side that outputs `s`, and the join's
+  state kept the result, so every joined row built from one input row got the same value,
+  including joined rows produced in later micro-batches (see
+  [SPARK-62042](https://issues.apache.org/jira/browse/SPARK-62042)). This change can alter the
+  columns that side outputs, and with them the schema of the join's state. Such a query then fails
+  to restart from a checkpoint written by an earlier version, with
+  `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE`: the state in that checkpoint holds the value computed
+  below the join for each stored row, not the `s.arr` that the access reads, so the query cannot
+  continue from it with correct results. To recalculate outputs, discard the checkpoint and replay
+  previous inputs.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
