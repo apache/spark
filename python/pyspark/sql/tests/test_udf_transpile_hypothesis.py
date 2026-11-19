@@ -400,7 +400,7 @@ def str_endswith(s, p):
 
 
 def str_contains(s, p):
-    # Exercises ``p in s`` (SPARK-XXXXX) with a column needle, so a NULL on
+    # Exercises ``p in s`` (SPARK-62076) with a column needle, so a NULL on
     # either side runs through the raise guard.
     return p in s
 

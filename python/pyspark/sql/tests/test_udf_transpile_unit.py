@@ -2620,7 +2620,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertNotIn("raise_error", self._optimized_plan(df.select(u("s"))))
 
     def test_udf_transpile_string_in(self):
-        # SPARK-XXXXX: `p in s` and `p not in s` lower to Catalyst contains and match
+        # SPARK-62076: `p in s` and `p not in s` lower to Catalyst contains and match
         # Python, including the empty substring. A NULL operand raises like CPython,
         # a proven-non-null branch skips the guard, and a non-string column or a
         # list on the right falls back to Python.

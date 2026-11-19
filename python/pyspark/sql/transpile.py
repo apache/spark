@@ -48,7 +48,7 @@ Other methods, and the optional ``start``/``end`` arguments, stay interpreted
 Python.
 
 ``p in s`` and ``p not in s`` lower to Catalyst ``contains`` when both operands
-are strings (SPARK-XXXXX). A NULL operand raises, as ``in`` would on ``None`` in
+are strings (SPARK-62076). A NULL operand raises, as ``in`` would on ``None`` in
 Python. Membership in a list, tuple, set, or dict stays interpreted Python.
 
 A lambda is lowered only when its source names it directly and alone: bind it
@@ -934,7 +934,7 @@ class CatalystTranspiler(AbstractTranspiler):
                             params, left, comp, lambda l, r: l >= r, ">="
                         )
                     case ast.In() | ast.NotIn():
-                        # SPARK-XXXXX: ``p in s`` on strings is Catalyst ``contains(s,
+                        # SPARK-62076: ``p in s`` on strings is Catalyst ``contains(s,
                         # p)``. Python raises on a ``None`` operand, while ``contains``
                         # returns NULL, so guard like ``str.startswith``.
                         if any(self._category(params, n) != "string" for n in (left, comp)):
