@@ -543,7 +543,7 @@ class SQLFunctionSuite extends SharedSparkSession {
         sql(s"CREATE OR REPLACE FUNCTION perm_q_tbl() RETURNS TABLE (a INT) RETURN SELECT $call")
         checkAnswer(sql("SELECT * FROM perm_q_tbl()"), Row(1))
       }
-      // A builtin.-qualified name that exists nowhere is an unresolved routine.
+      // A name qualified with `builtin.` that exists nowhere is an unresolved routine.
       val e = intercept[AnalysisException] {
         sql("CREATE OR REPLACE FUNCTION perm_q() RETURNS INT RETURN builtin.nope()")
       }
@@ -633,7 +633,7 @@ class SQLFunctionSuite extends SharedSparkSession {
       // The legacy flag re-allows only the forms earlier versions accepted at creation.
       val legacyKey = SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key
       withUserDefinedFunction("perm_legacy" -> false, "perm_legacy_tbl" -> false,
-          "perm_mid" -> false, "perm_outer" -> false) {
+          "perm_mid" -> false, "perm_legacy_outer" -> false, "perm_outer" -> false) {
         withSQLConf(legacyKey -> "true") {
           Seq("temp_tbl()", "IDENTIFIER('temp_tbl')()").foreach { call =>
             sql("CREATE OR REPLACE FUNCTION perm_legacy_tbl() RETURNS TABLE (a INT) " +
@@ -645,6 +645,9 @@ class SQLFunctionSuite extends SharedSparkSession {
             sql(s"CREATE OR REPLACE FUNCTION perm_legacy() RETURNS INT RETURN $call")
             checkAnswer(sql("SELECT perm_legacy()"), Row(1))
           }
+          // So is a call to a function that depends on one.
+          sql("CREATE FUNCTION perm_legacy_outer() RETURNS INT RETURN perm_legacy()")
+          checkAnswer(sql("SELECT perm_legacy_outer()"), Row(1))
           Seq(
             "RETURNS INT RETURN temp_fn()",
             "RETURNS INT RETURN session.temp_fn()",
@@ -676,6 +679,13 @@ class SQLFunctionSuite extends SharedSparkSession {
           val e = intercept[AnalysisException](sql(s"CREATE FUNCTION perm_outer() $body"))
           assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
           assert(e.getMessageParameters.get("tempObjName") == "`temp_tbl`", e.getMessage)
+        }
+        // And a temp scalar function that a called function binds.
+        Seq("RETURNS INT RETURN perm_legacy()",
+          "RETURNS TABLE (a INT) RETURN SELECT perm_legacy() AS a").foreach { body =>
+          val e = intercept[AnalysisException](sql(s"CREATE FUNCTION perm_outer() $body"))
+          assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$body: ${e.getMessage}")
+          assert(e.getMessageParameters.get("tempObjName") == "`temp_fn`", e.getMessage)
         }
       }
     }
@@ -794,6 +804,27 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60805: a called function's call counts only when resolution binds a temp function") {
+    withUserDefinedFunction("perm_lower" -> false, "perm_explode" -> false, "perm_outer" -> false) {
+      sql("CREATE FUNCTION perm_lower() RETURNS STRING RETURN lower('A')")
+      sql("CREATE FUNCTION perm_explode() RETURNS TABLE (col INT) " +
+        "RETURN SELECT * FROM explode(array(1, 2))")
+      try {
+        // The called functions still bind the built-ins, not these temp functions.
+        sql("CREATE TEMPORARY FUNCTION lower(x STRING) RETURNS STRING RETURN 'temp'")
+        sql("CREATE TEMPORARY FUNCTION explode(x INT) RETURNS INT RETURN x")
+        sql("CREATE FUNCTION perm_outer() RETURNS STRING RETURN perm_lower()")
+        checkAnswer(sql("SELECT perm_outer()"), Row("a"))
+        sql("CREATE OR REPLACE FUNCTION perm_outer() RETURNS TABLE (col INT) " +
+          "RETURN SELECT * FROM perm_explode()")
+        checkAnswer(sql("SELECT * FROM perm_outer()"), Seq(Row(1), Row(2)))
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS lower")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS explode")
+      }
+    }
+  }
+
   test("SPARK-60805: builtin./session. calls fall back to a same-named persistent schema") {
     Seq("builtin", "session").foreach { schema =>
       withDatabase(schema) {
@@ -831,7 +862,7 @@ class SQLFunctionSuite extends SharedSparkSession {
     withDatabase("session") {
       sql("CREATE DATABASE session")
       sql("CREATE FUNCTION session.sf() RETURNS INT RETURN 3")
-      withUserDefinedFunction("sf" -> true, "perm_sf" -> false) {
+      withUserDefinedFunction("sf" -> true, "perm_sf" -> false, "perm_sf_outer" -> false) {
         sql("CREATE TEMPORARY FUNCTION sf() RETURNS INT RETURN 7")
         val createPerm = "CREATE OR REPLACE FUNCTION perm_sf() RETURNS INT RETURN session.sf()"
         // By default the temp function owns `session.sf`.
@@ -847,9 +878,11 @@ class SQLFunctionSuite extends SharedSparkSession {
           assert(cycle.getCondition == "CYCLIC_FUNCTION_REFERENCE", cycle.getMessage)
         }
         withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
-          // The persistent function owns it.
+          // The persistent function owns it, also when reached through another function.
           sql(createPerm)
           checkAnswer(sql("SELECT perm_sf()"), Row(3))
+          sql("CREATE FUNCTION perm_sf_outer() RETURNS INT RETURN perm_sf()")
+          checkAnswer(sql("SELECT perm_sf_outer()"), Row(3))
           val cycle = intercept[AnalysisException] {
             sql("CREATE OR REPLACE FUNCTION session.sf() RETURNS INT RETURN session.sf()")
           }

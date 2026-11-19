@@ -4721,8 +4721,8 @@ object SQLConf {
       .internal()
       .doc("When true, CREATE FUNCTION for a persistent SQL function accepts the temporary " +
         "function references that earlier versions did not detect: an unqualified call to a " +
-        "temporary table function, a temporary table function reached through another SQL " +
-        "function the body calls, a call through an IDENTIFIER clause, and a `session.` call " +
+        "temporary table function, a temporary function reached through another SQL function " +
+        "the body calls, a call through an IDENTIFIER clause, and a `session.` call " +
         "that a persistent function in a schema named `session` also matches. Called from a " +
         "session without the temporary function, such a function fails, or for the `session.` " +
         "call, runs the persistent function instead.")
