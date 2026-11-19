@@ -22,7 +22,7 @@ import java.net.{InetAddress, InetSocketAddress, SocketException, StandardProtoc
 import java.net.SocketTimeoutException
 import java.nio.channels._
 import java.nio.file.Files
-import java.util.Arrays
+import java.util.{Arrays, Locale}
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
@@ -142,12 +142,13 @@ private[spark] class PythonWorkerFactory(
   @GuardedBy("self")
   private var lastActivityNs = 0L
 
-  // Before the monitor thread starts, because it can fail.
   private val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
-    sys.env.getOrElse("PYTHONPATH", ""),
-    globalPythonFilesPath)
+    sys.env.getOrElse("PYTHONPATH", ""))
+
+  // Before the monitor thread starts, because it can fail.
+  private val globalPythonPath = globalPythonFilesPath
 
   new MonitorThread().start()
 
@@ -157,11 +158,19 @@ private[spark] class PythonWorkerFactory(
   /**
    * SPARK-62000: The Python path of the Python files that the application was started with, for
    * the workers of a session with artifact isolation, like the global JARs that the class loader
-   * of such a session inherits (SPARK-51537). The workers add the session's own files in front
-   * of it. It takes the copies of these files in the default files directory, where spark-submit
-   * and `SparkContext` put them outside YARN, so that it works on every host. It adds only these
-   * files, not the rest of that directory. YARN also puts them on the PYTHONPATH of its
-   * application master and executors, but not of a client-mode driver.
+   * of such a session inherits (SPARK-51537). The workers get it in `SPARK_GLOBAL_PYTHON_PATH`
+   * and add it when they set up the files of a task, as the workers of a session without
+   * isolation add the default files directory and its archives. The session's own files still
+   * come first, because the workers start in the session's folder, which Python puts first on
+   * sys.path, and add the session's archives in front of these files.
+   * It is not on the PYTHONPATH that the workers start with, so a file named like a module of
+   * the standard library cannot stop them from starting.
+   *
+   * It takes the copies of these files in the default files directory, so that it works on every
+   * host. spark-submit makes them in client mode outside YARN, and PySpark when it starts the
+   * driver. A JVM driver on YARN in client mode and an application in standalone cluster deploy
+   * mode get no copies. It adds only the modules and the `.zip`, `.egg` and `.jar` archives, as
+   * PySpark does, not the rest of that directory.
    */
   private def globalPythonFilesPath: String = {
     val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
@@ -174,7 +183,10 @@ private[spark] class PythonWorkerFactory(
         .map(path => new File(rootDir, new File(Utils.resolveURI(path).getPath).getName))
         .distinct
         .filter(_.isFile)
-      val (modules, packages) = files.partition(_.getName.endsWith(".py"))
+      val modules = files.filter(_.getName.endsWith(".py"))
+      val packages = files.filter { file =>
+        Seq(".zip", ".egg", ".jar").exists(file.getName.toLowerCase(Locale.ROOT).endsWith)
+      }
       // A package is imported from its archive, and a module from a directory, which holds
       // only the modules.
       PythonUtils.mergePythonPaths(packages.map(_.getPath) ++
@@ -311,6 +323,9 @@ private[spark] class PythonWorkerFactory(
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)
+      if (globalPythonPath.nonEmpty) {
+        workerEnv.put("SPARK_GLOBAL_PYTHON_PATH", globalPythonPath)
+      }
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
       if (isUnixDomainSock) {
@@ -388,6 +403,9 @@ private[spark] class PythonWorkerFactory(
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
+        if (globalPythonPath.nonEmpty) {
+          workerEnv.put("SPARK_GLOBAL_PYTHON_PATH", globalPythonPath)
+        }
         if (isUnixDomainSock) {
           workerEnv.put(
             "PYTHON_WORKER_FACTORY_SOCK_DIR",

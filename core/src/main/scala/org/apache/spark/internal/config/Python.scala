@@ -97,15 +97,20 @@ private[spark] object Python {
   val PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED =
     ConfigBuilder("spark.python.isolatedSession.globalPyFiles.enabled")
       .internal()
-      .doc("When true, the Python workers of a session with artifact isolation, such as a " +
-        "Spark Connect session, can also import the Python files that the application was " +
-        "started with (--py-files or spark.submit.pyFiles), after the session's own files, " +
-        "except the workers of a YARN client-mode driver, which gets no copies of these " +
-        "files. Only these files are added, not the other files of the default files " +
-        "directory. Set to false when starting the application to restore the previous " +
-        "behavior, where these workers can only import the session's own Python files, except " +
-        "on YARN's application master and executors, which YARN gives these files on their " +
-        "PYTHONPATH.")
+      .doc("When true, the Python workers that run in the folder of a session with artifact " +
+        "isolation, such as those of Python UDFs, UDTFs and data sources in a Spark Connect " +
+        "session, can also import the Python files that the application was started with " +
+        "(--py-files or spark.submit.pyFiles): the modules and the .zip, .egg and .jar " +
+        "archives among them that have a copy in the default files directory. spark-submit " +
+        "makes these copies in client mode outside YARN, and PySpark does when it starts the " +
+        "driver; a JVM driver on YARN in client mode and an application in standalone cluster " +
+        "deploy mode get none. The workers add these files when they set up a task, and the " +
+        "session's own files still come first. Workers started without the session's artifact " +
+        "state, such as the Spark Connect foreachBatch and streaming listener workers, keep " +
+        "their previous path. Set to false when starting the application to restore the " +
+        "previous behavior, where these workers can only import the session's own Python " +
+        "files, except on YARN's application master and executors, which YARN gives these " +
+        "files on their PYTHONPATH.")
       .version("4.5.0")
       .booleanConf
       .createWithDefault(true)

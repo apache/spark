@@ -54,17 +54,27 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
     } finally {
       out.close()
     }
-    Seq(module, clash, pkg).map(_.getAbsolutePath)
+    // Named like modules of the standard library that a Python worker imports when it starts:
+    // the workers must not have them on their path until they have started.
+    val token = new File(dir, "token.py")
+    Files.writeString(token.toPath, "raise ImportError('shadowed the standard library')")
+    val shadow = new File(dir, "global_py_files_shadow.zip")
+    val shadowOut = new ZipOutputStream(Files.newOutputStream(shadow.toPath))
+    try {
+      shadowOut.putNextEntry(new ZipEntry("signal/__init__.py"))
+      shadowOut.write("raise ImportError('shadowed the standard library')".getBytes("UTF-8"))
+      shadowOut.closeEntry()
+    } finally {
+      shadowOut.close()
+    }
+    Seq(module, clash, pkg, token, shadow).map(_.getAbsolutePath)
   }
 
-  // Other files of the application: a module that is not one of its Python files, and one
-  // named like a module of the standard library that a Python worker imports when it starts.
+  // Another file of the application: a module that is not one of its Python files.
   private lazy val otherFiles: Seq[String] = {
     val unlisted = new File(filesDir, "global_py_files_unlisted.py")
     Files.writeString(unlisted.toPath, "value = 'unlisted'")
-    val token = new File(filesDir, "token.py")
-    Files.writeString(token.toPath, "raise ImportError('shadowed the standard library')")
-    Seq(unlisted, token).map(_.getAbsolutePath)
+    Seq(unlisted).map(_.getAbsolutePath)
   }
 
   // As spark-submit does with --py-files and --files outside YARN, except that the Python files
@@ -85,6 +95,14 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
        |from pyspark.sql.functions import AnalyzeResult
        |from pyspark.sql.types import StringType, StructType
        |
+       |def check_start_path():
+       |    # The application's Python files are added after the worker has started.
+       |    import os
+       |    added = [p for p in os.environ["SPARK_GLOBAL_PYTHON_PATH"].split(os.pathsep) if p]
+       |    start = os.environ.get("PYTHONPATH", "").split(os.pathsep)
+       |    if not added or any(p in start for p in added):
+       |        raise Exception(f"Unexpected start path {start} for {added}")
+       |
        |class $udtfName:
        |    @staticmethod
        |    def analyze():
@@ -95,6 +113,7 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
        |            raise Exception("Imported a file that is not a Python file of the application")
        |        except ModuleNotFoundError:
        |            pass
+       |        check_start_path()
        |        return AnalyzeResult(
        |            schema=StructType()
        |                .add("module", StringType())
@@ -110,6 +129,7 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
        |            raise Exception("Imported a file that is not a Python file of the application")
        |        except ModuleNotFoundError:
        |            pass
+       |        check_start_path()
        |        yield (
        |            global_py_files_module.value,
        |            global_py_files_pkg.value,
@@ -149,7 +169,7 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
     val conf = spark.sparkContext.conf
     conf.set(PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED, false)
     try {
-      // A new session has new Python workers, which read the config when they start.
+      // A new session gets a new Python worker factory, which reads the config when it is created.
       val e = intercept[Exception](runUDTF(spark.newSession()))
       assert(e.getMessage.contains("No module named 'global_py_files_module'"), e.getMessage)
     } finally {
