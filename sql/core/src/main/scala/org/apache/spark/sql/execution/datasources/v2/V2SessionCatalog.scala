@@ -294,8 +294,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
-    // The dedicated CatalogTable fields hold these values, not properties; keep them unless a
-    // change names the key.
+    // These live in dedicated CatalogTable fields and `properties` may not hold them; keep the
+    // fields unless a change names the key.
     val comment = if (namesProperty(changes, TableCatalog.PROP_COMMENT)) {
       properties.get(TableCatalog.PROP_COMMENT)
     } else {
