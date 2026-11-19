@@ -2692,10 +2692,11 @@ object SQLConf {
 
   val MAX_SCAN_BYTES = buildConf("spark.sql.execution.maxScanBytes")
     .doc("The maximum number of bytes a query may read from its data sources, including in " +
-      "its subqueries. A query that reads more is cancelled and fails with " +
-      "SCAN_BYTES_LIMIT_EXCEEDED. This is a best-effort guard against mistakes rather than a " +
-      "hard cap or an enforced policy: a session can change it. Spark learns how much the " +
-      "tasks of a query have read from the executor heartbeats " +
+      "its subqueries. Once Spark learns that a query has read more, it cancels the jobs of the " +
+      "query, which then fails with SCAN_BYTES_LIMIT_EXCEEDED unless it has already finished " +
+      "or it fails with another error. This is a best-effort guard against mistakes rather " +
+      "than a hard cap or an enforced policy: a session can change it. Spark learns how much " +
+      "the tasks of a query have read from the executor heartbeats " +
       "(spark.executor.heartbeatInterval) and when a task ends, so a query can read more " +
       "than the limit before it is cancelled: about what all its running tasks read in one " +
       "heartbeat interval, which grows with the size of the cluster. Only the bytes that a " +
