@@ -19,6 +19,10 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.connector.read.{StorageFilter, StorageFilterRequest}
 
-/** The [[StorageFilterRequest]] Spark builds once per scan and sends with each of its tasks. */
+/**
+ * The [[StorageFilterRequest]] the readers of a scan get. Spark builds one per scan and sends it
+ * with each of its tasks. With a per-partition runtime bloom filter, a task builds one for each
+ * partition key of its splits that has a bloom filter, see `PerPartitionStorageFilterRDD`.
+ */
 case class StorageFilterRequestImpl(filter: StorageFilter, appendsCheckedColumn: Boolean)
   extends StorageFilterRequest
