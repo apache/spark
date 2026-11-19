@@ -27,7 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Or, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, IsNull, JoinedRow, LessThanOrEqual, Literal, Or, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -366,11 +366,12 @@ case class StreamingSymmetricHashJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     // The legacy mode orders the V4 state of an input by its event time (index version 0), so its
     // checkpoints cannot evict that state by another column. Index version 1 orders it by the
-    // column that the default mode picks, which the legacy mode cannot evict. A checkpoint of an
-    // earlier version passes: it restores index version 0, and the join output watermark check as
-    // false, for which the default mode keeps the event time.
+    // column that the default mode picks, which the legacy mode cannot evict, except a column cast
+    // to TIMESTAMP, by which version 2 also orders it. A checkpoint of an earlier version passes:
+    // it restores index version 0, and the join output watermark check as false, for which the
+    // default mode keeps the event time.
     val indexVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION)
-    if (stateFormatVersion == 4 && (indexVersion == 0 || !allowMultipleStatefulOperators)) {
+    if (stateFormatVersion == 4 && (indexVersion < 2 || !allowMultipleStatefulOperators)) {
       Seq((LeftSide, stateWatermarkPredicates.left, left.output, right.output),
           (RightSide, stateWatermarkPredicates.right, right.output, left.output)).foreach {
         case (side, predicate, attributes, otherAttributes) =>
@@ -382,7 +383,13 @@ case class StreamingSymmetricHashJoinExec(
             predicate.collect { case _: JoinStateValueWatermarkPredicate =>
               pickStateValueWatermarkColumn(attributes, otherAttributes, condition.full, Some(0L),
                 conf.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK))
-            }.flatten.map { case (c, _) => attributes.indexWhere(_.semanticEquals(c)) }
+            }.flatten.collect {
+              // With version 1, the default mode orders only by a cast, and the legacy mode by
+              // anything else. With version 2, only the legacy mode gets here.
+              case (c, _) if indexVersion == 2 ||
+                  c.isInstanceOf[Cast] == allowMultipleStatefulOperators =>
+                attributes.indexWhere(c.references.contains)
+            }
           }
           column.filterNot(eventTime.contains).foreach { i =>
             throw new AnalysisException(
@@ -729,7 +736,10 @@ case class StreamingSymmetricHashJoinExec(
       joinStoreGenerator = joinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark = joinKeyOrdinalForWatermark,
       stateValueWatermarkColumnOrdinal =
-        stateValueWatermarkColumnOrdinal(stateWatermarkPredicate, inputAttributes))
+        stateValueWatermarkColumnOrdinal(stateWatermarkPredicate, inputAttributes),
+      stateValueWatermarkCast = stateWatermarkPredicate.collect {
+        case JoinStateValueWatermarkPredicate(LessThanOrEqual(c: Cast, _), _, _, _) => c
+      })
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 

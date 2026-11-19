@@ -26,14 +26,15 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 ## Upgrading from Structured Streaming 4.4 to 4.5
 
 - Since Spark 4.5, a stream-stream join evicts the state of an input with its own watermark by
-  another TIMESTAMP column of that input when the join condition limits how long a row of that
-  input can match only through that column, for example through `expiry` in
-  `rightTime BETWEEN leftTime AND expiry`. Earlier versions evicted by the event time, and could
-  emit outer join rows too early and lose matches. Such a join can emit rows below its output
-  watermark, which still assumes eviction by the event time, so in append mode a new query fails
-  when an operator that drops late rows by an event time that can come from that input follows
-  it, as described below for an input whose state is never evicted, unless the condition also
-  bounds the event time of that input by the other input's watermark. In such a join, and in a
+  another TIMESTAMP column of that input, or by another column of it cast to TIMESTAMP, when the
+  join condition limits how long a row of that input can match only through that column or cast,
+  for example through `expiry` in `rightTime BETWEEN leftTime AND expiry`, or through
+  `CAST(leftDate AS TIMESTAMP)`. Earlier versions evicted by the event time, and could emit outer
+  join rows too early and lose matches. Such a join can emit rows below its output watermark,
+  which still assumes eviction by the event time, so in append mode a new query fails when an
+  operator that drops late rows by an event time that can come from that input follows it, as
+  described below for an input whose state is never evicted, unless the condition also bounds the
+  event time of that input by the other input's watermark. In such a join, and in a
   time-interval join such as
   `rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES`, a row whose eviction column is
   NULL can never match: an outer join now emits it when it arrives, and no join keeps it in state.
