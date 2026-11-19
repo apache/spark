@@ -190,7 +190,7 @@ case class EvalColumnarUDFsExec(
             }
             // This node closes the results, and the child still owns its columns: it can use
             // them again for its next batch. So a result that is a column of the child, or a
-            // field of one, is not kept as a result, and is rejected.
+            // vector inside one, is not kept as a result, and is rejected.
             if (result != null && isInputColumn(batch, result)) {
               throw new SparkRuntimeException(
                 errorClass = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",

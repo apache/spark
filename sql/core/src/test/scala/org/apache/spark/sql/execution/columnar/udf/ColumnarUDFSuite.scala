@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.{array, col, count, lit, map, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.types.{ArrayType, FileType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, FileType, LongType, MapType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -700,6 +700,62 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         exception = intercept[AnalysisException](spark.udf.registerColumnar(file)),
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
         parameters = Map("routineName" -> "`file_udf`"))
+    }
+  }
+
+  test("CHAR and VARCHAR in the types of a function") {
+    val result = ColumnarUserDefinedFunction.create(
+      "varchar_result", Seq(StringType), VarcharType(3), new ShoutFunction)
+    val argument = ColumnarUserDefinedFunction.create(
+      "char_argument", Seq(ArrayType(CharType(3))), LongType, new AddOneFunction)
+    Seq(result, argument).foreach { udf =>
+      checkError(
+        exception = intercept[AnalysisException](udf(col("s"))),
+        condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+        parameters = Map.empty)
+    }
+    withUserDefinedFunction("varchar_result" -> true) {
+      spark.udf.registerColumnar(result)
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT varchar_result('a')")),
+        condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "varchar_result('a')", start = 7, stop = 25))
+    }
+    // With the legacy conf, they are replaced with STRING.
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      val df = spark.range(1).select(result(lit("abc")).as("r"))
+      assert(df.schema("r").dataType == StringType)
+      assert(evalNodes(df.queryExecution.executedPlan).head.udfs.head.inputTypes ==
+        Seq(StringType))
+      assert(df.collect().length == 1)
+    }
+    // As first-class types, they are kept.
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val call = result(lit("abc")).expr
+      assert(call.dataType == VarcharType(3))
+    }
+  }
+
+  test("null arguments of the factory methods") {
+    val types: Seq[DataType] = Seq(LongType)
+    val function = new AddOneFunction
+    Seq[() => Any](
+      () => ColumnarUserDefinedFunction.create(null, types, LongType, function),
+      () => ColumnarUserDefinedFunction.create("f", null.asInstanceOf[Seq[Nothing]], LongType),
+      () => ColumnarUserDefinedFunction.create(
+        "f", null.asInstanceOf[Array[DataType]], LongType, function),
+      () => ColumnarUserDefinedFunction.create("f", Seq(LongType, null), LongType, function),
+      () => ColumnarUserDefinedFunction.create("f", types, null, function),
+      () => ColumnarUserDefinedFunction.create("f", types, LongType, null),
+      () => ColumnarUserDefinedFunction.create("f", types, LongType)
+        .withEngineImplementation(null),
+      () => ColumnarUDFImplementation.create(null, Map.empty[String, String]),
+      () => ColumnarUDFImplementation.create("kind", null.asInstanceOf[Map[String, String]]),
+      () => ColumnarUDFImplementation.create(
+        "kind", null.asInstanceOf[java.util.Map[String, String]])
+    ).foreach { create =>
+      intercept[IllegalArgumentException](create())
     }
   }
 }

@@ -70,12 +70,15 @@ object ColumnarUDFImplementation {
    *                   path of a library and the name of the function in it.
    */
   def create(kind: String, properties: JMap[String, String]): ColumnarUDFImplementation = {
+    require(kind != null, "The kind of an implementation cannot be null.")
+    require(properties != null, "The properties of an implementation cannot be null.")
     new ColumnarUDFImplementation(
       kind, Collections.unmodifiableMap(new JHashMap[String, String](properties)))
   }
 
   /** Creates an implementation of the given kind, from a Scala map. */
   def create(kind: String, properties: Map[String, String]): ColumnarUDFImplementation = {
+    require(properties != null, "The properties of an implementation cannot be null.")
     create(kind, properties.asJava)
   }
 }

@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.classic.SparkSession;
 import org.apache.spark.sql.columnar.ColumnarScalarFunction;
@@ -83,6 +84,14 @@ public class JavaColumnarUDFSuite {
     Assertions.assertTrue(addOne.deterministic());
     Assertions.assertTrue(addOne.nullable());
 
+    // A later change of the array does not change the function.
+    DataType[] types = { DataTypes.LongType };
+    ColumnarUserDefinedFunction copied =
+      ColumnarUserDefinedFunction.create("copied", types, DataTypes.LongType, new AddOne());
+    types[0] = DataTypes.StringType;
+    Assertions.assertEquals(1, copied.inputTypes().length());
+    Assertions.assertEquals(DataTypes.LongType, copied.inputTypes().apply(0));
+
     List<Row> applied = spark.range(3).select(addOne.apply(col("id"))).collectAsList();
     Assertions.assertEquals(3, applied.size());
     for (int i = 0; i < 3; i++) {
@@ -105,6 +114,8 @@ public class JavaColumnarUDFSuite {
     Assertions.assertEquals("some-engine", implementation.kind());
     Assertions.assertEquals(1, implementation.properties().size());
     Assertions.assertEquals("/lib.so", implementation.properties().get("library"));
+    Assertions.assertThrows(UnsupportedOperationException.class,
+      () -> implementation.properties().put("k", "v"));
 
     ColumnarUserDefinedFunction engineOnly = ColumnarUserDefinedFunction
       .create("java_engine_only", new DataType[] { DataTypes.LongType }, DataTypes.LongType)
@@ -113,5 +124,12 @@ public class JavaColumnarUDFSuite {
       .asNonNullable();
     Assertions.assertFalse(engineOnly.deterministic());
     Assertions.assertFalse(engineOnly.nullable());
+
+    // Spark cannot run the function, and the error names the kinds of its implementations.
+    SparkUnsupportedOperationException e = Assertions.assertThrows(
+      SparkUnsupportedOperationException.class,
+      () -> spark.range(1).select(engineOnly.apply(col("id"))).collectAsList());
+    Assertions.assertEquals("COLUMNAR_UDF_NOT_EXECUTABLE", e.getCondition());
+    Assertions.assertEquals("[some-engine]", e.getMessageParameters().get("kinds"));
   }
 }

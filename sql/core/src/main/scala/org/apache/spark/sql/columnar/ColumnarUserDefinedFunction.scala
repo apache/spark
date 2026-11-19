@@ -20,6 +20,7 @@ package org.apache.spark.sql.columnar
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.{ColumnarUDF, Expression, NamedArgumentExpression}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -94,6 +95,8 @@ final class ColumnarUserDefinedFunction private (
    */
   def withEngineImplementation(
       implementation: ColumnarUDFImplementation): ColumnarUserDefinedFunction = {
+    require(implementation != null,
+      "An implementation of a columnar user-defined function cannot be null.")
     new ColumnarUserDefinedFunction(
       name, inputTypes, dataType, function, engineImplementations :+ implementation,
       deterministic, nullable)
@@ -123,9 +126,14 @@ final class ColumnarUserDefinedFunction private (
       throw QueryCompilationErrors.wrongNumArgsError(
         name, Seq(inputTypes.length), children.length)
     }
+    // As for the other kinds of functions, CHAR and VARCHAR are not types of a function, unless
+    // they are first-class types: they fail, or are replaced with STRING when the legacy conf
+    // says so. This reads the conf of the session that builds the call.
+    val checkedInputTypes = inputTypes.map(CharVarcharUtils.failIfHasCharVarchar)
+    val checkedDataType = CharVarcharUtils.failIfHasCharVarchar(dataType)
     ColumnarUDF(
-      name, function, engineImplementations, inputTypes, dataType, children, deterministic,
-      nullable)
+      name, function, engineImplementations, checkedInputTypes, checkedDataType, children,
+      deterministic, nullable)
   }
 
   /** Returns a `Column` that evaluates this function with the given arguments. */
@@ -158,20 +166,21 @@ object ColumnarUserDefinedFunction {
       inputTypes: Seq[DataType],
       dataType: DataType,
       function: ColumnarScalarFunction): ColumnarUserDefinedFunction = {
+    checkSignature(name, inputTypes, dataType)
     require(function != null, "The function of a columnar user-defined function cannot be null.")
     new ColumnarUserDefinedFunction(name, inputTypes, dataType, Some(function), Nil, true, true)
   }
 
   /**
    * Creates a deterministic function that can return null, with an implementation that Spark
-   * runs. This is the variant for Java.
+   * runs. This is the variant for Java, which copies the array.
    */
   def create(
       name: String,
       inputTypes: Array[DataType],
       dataType: DataType,
       function: ColumnarScalarFunction): ColumnarUserDefinedFunction = {
-    create(name, inputTypes.toImmutableArraySeq, dataType, function)
+    create(name, copyOf(inputTypes), dataType, function)
   }
 
   /**
@@ -187,17 +196,33 @@ object ColumnarUserDefinedFunction {
       name: String,
       inputTypes: Seq[DataType],
       dataType: DataType): ColumnarUserDefinedFunction = {
+    checkSignature(name, inputTypes, dataType)
     new ColumnarUserDefinedFunction(name, inputTypes, dataType, None, Nil, true, true)
   }
 
   /**
    * Creates a deterministic function that can return null, with no implementation that Spark
-   * runs. This is the variant for Java.
+   * runs. This is the variant for Java, which copies the array.
    */
   def create(
       name: String,
       inputTypes: Array[DataType],
       dataType: DataType): ColumnarUserDefinedFunction = {
-    create(name, inputTypes.toImmutableArraySeq, dataType)
+    create(name, copyOf(inputTypes), dataType)
+  }
+
+  private def checkSignature(name: String, inputTypes: Seq[DataType], dataType: DataType): Unit = {
+    require(name != null, "The name of a columnar user-defined function cannot be null.")
+    require(inputTypes != null && !inputTypes.contains(null),
+      "The argument types of a columnar user-defined function cannot be null.")
+    require(dataType != null,
+      "The result type of a columnar user-defined function cannot be null.")
+  }
+
+  // A copy, so that a later change of the array does not change the function.
+  private def copyOf(inputTypes: Array[DataType]): Seq[DataType] = {
+    require(inputTypes != null,
+      "The argument types of a columnar user-defined function cannot be null.")
+    inputTypes.clone().toImmutableArraySeq
   }
 }
