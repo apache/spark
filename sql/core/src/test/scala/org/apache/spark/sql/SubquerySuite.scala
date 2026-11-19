@@ -3848,6 +3848,29 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60501: a Python UDF over the result of a lower aggregate runs only for outer rows " +
+      "without matching rows") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    registerTestUDF(TestFailingPythonUDF(name = "inv"), spark)
+    withTempView("lo", "lo7", "ri") {
+      Seq(2, 3, 6).toDF("a").createOrReplaceTempView("lo")
+      Seq(2, 3, 6, 7).toDF("a").createOrReplaceTempView("lo7")
+      Seq((2, 3L), (2, 3L), (3, 2L), (6, 1L)).toDF("c", "d").createOrReplaceTempView("ri")
+      val subquery = "(SELECT SUM(x) FROM (SELECT inv(COALESCE(MAX(ri.d), 0)) AS x FROM ri " +
+        "WHERE ri.c = o.a))"
+      // Every outer row of lo has matching rows, so inv(0), the value over no rows, is not
+      // computed (SPARK-61482).
+      checkAnswer(sql(s"SELECT o.a, $subquery FROM lo o"),
+        Row(2, 33) :: Row(3, 50) :: Row(6, 100) :: Nil)
+      // The outer row 7 has no matching rows, so inv(0) is computed for it and fails.
+      val e = intercept[Exception](sql(s"SELECT o.a, $subquery FROM lo7 o").collect())
+      assert(e.getMessage.contains("ZeroDivisionError"))
+      checkAnswer(sql("SELECT o.a, (SELECT COUNT(*) FROM (SELECT inv(MAX(ri.d)) AS x FROM ri " +
+        "WHERE ri.c = o.a)) FROM lo7 o"), Row(2, 1) :: Row(3, 1) :: Row(6, 1) :: Row(7, 1) :: Nil)
+    }
+  }
+
   test("SPARK-60501: a non-deterministic input of the operator with the subquery keeps the " +
       "count bug handling of before") {
     withTempView("b") {
