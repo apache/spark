@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.StoredExpressionFunctions
-import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, ColumnarUDF, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{EvalColumnarUDFs, Filter, Join, LogicalPlan}
 import org.apache.spark.sql.columnar.{ColumnarScalarFunction, ColumnarUDFImplementation, ColumnarUserDefinedFunction}
@@ -111,6 +111,25 @@ class CounterFunction extends ColumnarScalarFunction {
     var i = 0
     while (i < n) {
       out.putLong(i, counter.incrementAndGet())
+      i += 1
+    }
+    out
+  }
+}
+
+/** Returns a vector that holds one value, whatever the number of rows. */
+class ShortVectorFunction extends ColumnarScalarFunction {
+  override def eval(args: ColumnarBatch): ColumnVector = new OnHeapColumnVector(1, LongType)
+}
+
+/** Returns its argument as a vector of the given type. */
+class StringCopyFunction(resultType: DataType) extends ColumnarScalarFunction {
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    val n = args.numRows()
+    val out = new OnHeapColumnVector(n, resultType)
+    var i = 0
+    while (i < n) {
+      out.putByteArray(i, args.column(0).getUTF8String(i).getBytes)
       i += 1
     }
     out
@@ -282,6 +301,10 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         checkAnswer(
           sql("SELECT DISTINCT add_one(sum(v) OVER (PARTITION BY k)) FROM t"),
           Seq(Row(19L), Row(13L), Row(16L)))
+        // Equal calls over an aggregate function that appears twice are evaluated once.
+        val equalCalls = sql("SELECT add_one(sum(v)), add_one(sum(v)) + 1 FROM t")
+        checkAnswer(equalCalls, Row(46L, 47L))
+        assert(evalNodes(equalCalls.queryExecution.executedPlan).flatMap(_.udfs).length == 1)
       }
     }
   }
@@ -475,6 +498,12 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     val node = evalNodes(df.queryExecution.executedPlan).head
     assert(node.udfs.length == 2)
 
+    // One call that is selected twice is evaluated once, and both columns read its result.
+    val call = counter(col("id"))
+    val twice = spark.range(0, 10, 1, 1).select(call.as("a"), call.as("b"))
+    assert(evalNodes(twice.queryExecution.executedPlan).head.udfs.length == 1)
+    checkAnswer(twice, (1 to 10).map(i => Row(i.toLong, i.toLong)))
+
     // Equal calls of a deterministic function share a result.
     val shared = spark.range(5).select(addOne(col("id")), addOne(col("id")) + 1)
     checkAnswer(shared, (0 until 5).map(i => Row(i + 1L, i + 2L)))
@@ -520,6 +549,19 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
           parameters = Map("name" -> "identity"))
       }
     }
+  }
+
+  test("a function that returns a vector that is too short fails") {
+    val short = ColumnarUserDefinedFunction.create(
+      "short", Seq(LongType), LongType, new ShortVectorFunction)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.range(0, 10, 1, 1).select(short(col("id"))).collect()
+      },
+      condition = "COLUMNAR_UDF_RESULT_TOO_SHORT",
+      parameters = Map("name" -> "short", "actualRows" -> "1", "expectedRows" -> "10"))
+    // A batch of one row fits.
+    assert(spark.range(0, 1, 1, 1).select(short(col("id"))).collect().length == 1)
   }
 
   test("a function that returns a vector of another type fails") {
@@ -729,11 +771,31 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       assert(evalNodes(df.queryExecution.executedPlan).head.udfs.head.inputTypes ==
         Seq(StringType))
       assert(df.collect().length == 1)
+      val call = argument(array(lit("a"))).expr.asInstanceOf[ColumnarUDF]
+      assert(call.inputTypes == Seq(ArrayType(StringType)))
     }
-    // As first-class types, they are kept.
+    // As first-class types, they are kept, and the vector of a result can be of the declared
+    // type or of the STRING type.
     withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
-      val call = result(lit("abc")).expr
-      assert(call.dataType == VarcharType(3))
+      Seq(StringType, VarcharType(3)).foreach { vectorType =>
+        val copy = ColumnarUserDefinedFunction.create(
+          "copy", Seq(StringType), VarcharType(3), new StringCopyFunction(vectorType))
+        val df = Seq("abc").toDF("s").select(copy(col("s")).as("r"))
+        assert(df.schema("r").dataType == VarcharType(3))
+        checkAnswer(df, Row("abc"))
+      }
+      // A vector of another type is still rejected.
+      val wrongType = ColumnarUserDefinedFunction.create(
+        "wrong_type", Seq(LongType), VarcharType(3), new AddOneFunction)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.range(1).select(wrongType(col("id"))).collect()
+        },
+        condition = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
+        parameters = Map(
+          "name" -> "wrong_type",
+          "actualType" -> "\"BIGINT\"",
+          "expectedType" -> "\"VARCHAR(3)\""))
     }
   }
 

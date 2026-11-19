@@ -185,6 +185,38 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def columnarUDFNotExecutableError(name: String, kinds: Seq[String]): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "COLUMNAR_UDF_NOT_EXECUTABLE",
+      messageParameters = Map("name" -> name, "kinds" -> kinds.mkString("[", ", ", "]")))
+  }
+
+  def columnarUDFResultIsArgumentError(name: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
+      messageParameters = Map("name" -> name))
+  }
+
+  def columnarUDFResultTooShortError(name: String, actualRows: Int, expectedRows: Int)
+      : Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_TOO_SHORT",
+      messageParameters = Map(
+        "name" -> name,
+        "actualRows" -> actualRows.toString,
+        "expectedRows" -> expectedRows.toString))
+  }
+
+  def columnarUDFResultTypeMismatchError(
+      name: String, actualType: Option[DataType], expectedType: DataType): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
+      messageParameters = Map(
+        "name" -> name,
+        "actualType" -> actualType.map(toSQLType).getOrElse("NULL"),
+        "expectedType" -> toSQLType(expectedType)))
+  }
+
   def pythonUDFRowSizeExceededError(
       maxRowSize: Long, actualRowSize: Long): RuntimeException = {
     new SparkRuntimeException(

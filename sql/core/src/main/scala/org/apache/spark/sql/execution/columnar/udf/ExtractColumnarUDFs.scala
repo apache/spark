@@ -114,6 +114,8 @@ object ExtractColumnarUDFs extends Rule[LogicalPlan] with PredicateHelper {
       case agg: Aggregate if agg.aggregateExpressions.exists(hasUDFOverAggregate(_, agg)) =>
         val projectList = mutable.ArrayBuffer[NamedExpression]()
         val aggregateExpressions = mutable.ArrayBuffer[NamedExpression]()
+        // Equal expressions share an alias, so that equal calls over them stay equal.
+        val aliases = mutable.HashMap[Expression, NamedExpression]()
         agg.aggregateExpressions.foreach { expr =>
           if (hasUDFOverAggregate(expr, agg)) {
             // The aggregate computes what the calls read, and the project above evaluates
@@ -122,6 +124,8 @@ object ExtractColumnarUDFs extends Rule[LogicalPlan] with PredicateHelper {
               case e: Expression if belongsToAggregate(e, agg) =>
                 val named = e match {
                   case n: NamedExpression => n
+                  case other if other.deterministic =>
+                    aliases.getOrElseUpdate(other.canonicalized, Alias(other, "agg")())
                   case other => Alias(other, "agg")()
                 }
                 if (!aggregateExpressions.exists(_.exprId == named.exprId)) {
@@ -158,9 +162,12 @@ object ExtractColumnarUDFs extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def extract(plan: LogicalPlan): LogicalPlan = {
+    // An `ExpressionSet` keeps every expression that is not deterministic, so one call of such
+    // a function that the operator holds twice, as when a `Column` is selected twice, is in it
+    // twice. It is one call, with one `resultId`, and is evaluated once.
     val udfs = ExpressionSet(plan.expressions.flatMap(collectEvaluableUDFs))
       .filter(_.references.subsetOf(plan.inputSet))
-      .toSeq.asInstanceOf[Seq[ColumnarUDF]]
+      .toSeq.asInstanceOf[Seq[ColumnarUDF]].distinct
     if (udfs.isEmpty) {
       plan
     } else {

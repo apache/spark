@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.columnar.udf
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, BindReferences, BoundReference, ColumnarUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{EvalColumnarUDFs, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.columnar.ColumnarScalarFunction
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy, UnaryExecNode}
@@ -82,11 +82,8 @@ case class EvalColumnarUDFsExec(
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val driverFunctions: Array[ColumnarScalarFunction] = udfs.map { udf =>
       udf.function.getOrElse {
-        throw new SparkUnsupportedOperationException(
-          errorClass = "COLUMNAR_UDF_NOT_EXECUTABLE",
-          messageParameters = Map(
-            "name" -> udf.name,
-            "kinds" -> udf.engineImplementations.map(_.kind).mkString("[", ", ", "]")))
+        throw QueryExecutionErrors.columnarUDFNotExecutableError(
+          udf.name, udf.engineImplementations.map(_.kind))
       }
     }.toArray
     // The closures of the nodes of a stage are serialized together, so the nodes would share one
@@ -109,10 +106,10 @@ case class EvalColumnarUDFsExec(
       udfs.map(_.children.map(_.dataType.catalogString).mkString(", ")).toArray
     val resultTypes: Array[DataType] = udfs.map(_.dataType).toArray
     // A column vector has the SQL type of a user-defined type, so the type of a result is
-    // compared with the declared type after the same replacement.
-    val resultVectorTypes: Array[DataType] = resultTypes.map(_.transformRecursively {
-      case udt: UserDefinedType[_] => udt.sqlType
-    })
+    // compared with the declared type after the same replacement. CHAR and VARCHAR, which a
+    // declared type has when they are first-class types, are compared as STRING, so that the
+    // vector of such a result can be of either type.
+    val resultVectorTypes: Array[DataType] = resultTypes.map(EvalColumnarUDFsExec.vectorType)
     val numOutputRows = longMetric("numOutputRows")
     val numOutputBatches = longMetric("numOutputBatches")
     val evalTime = longMetric("evalTime")
@@ -192,21 +189,21 @@ case class EvalColumnarUDFsExec(
             // them again for its next batch. So a result that is a column of the child, or a
             // vector inside one, is not kept as a result, and is rejected.
             if (result != null && isInputColumn(batch, result)) {
-              throw new SparkRuntimeException(
-                errorClass = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
-                messageParameters = Map("name" -> names(i)))
+              throw QueryExecutionErrors.columnarUDFResultIsArgumentError(names(i))
             }
-            // Set before the check, so that a vector of the wrong type is closed as well.
+            // Set before the checks, so that a vector that fails them is closed as well.
             newResults(i) = result
-            if (result == null ||
-                !DataType.equalsStructurally(result.dataType(), resultVectorTypes(i), true)) {
-              val actualType = if (result == null) "NULL" else toSQLType(result.dataType())
-              throw new SparkRuntimeException(
-                errorClass = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
-                messageParameters = Map(
-                  "name" -> names(i),
-                  "actualType" -> actualType,
-                  "expectedType" -> toSQLType(resultTypes(i))))
+            if (result == null || !EvalColumnarUDFsExec.hasType(result, resultVectorTypes(i))) {
+              throw QueryExecutionErrors.columnarUDFResultTypeMismatchError(
+                names(i), Option(result).map(_.dataType()), resultTypes(i))
+            }
+            // A vector that is too short would be read past its end by the operators above.
+            // Only a writable vector tells how many values it can hold.
+            result match {
+              case w: WritableColumnVector if w.getCapacity < numRows =>
+                throw QueryExecutionErrors.columnarUDFResultTooShortError(
+                  names(i), w.getCapacity, numRows)
+              case _ =>
             }
             columns(numInputColumns + i) = newResults(i)
             i += 1
@@ -222,4 +219,19 @@ case class EvalColumnarUDFsExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): EvalColumnarUDFsExec =
     copy(child = newChild)
+}
+
+object EvalColumnarUDFsExec {
+
+  /** The type that the vector of a result of the given type has. */
+  private def vectorType(dataType: DataType): DataType = {
+    CharVarcharUtils.replaceCharVarcharWithStringAlways(dataType.transformRecursively {
+      case udt: UserDefinedType[_] => udt.sqlType
+    })
+  }
+
+  private def hasType(result: ColumnVector, expected: DataType): Boolean = {
+    DataType.equalsStructurally(result.dataType(), expected, true) ||
+      DataType.equalsStructurally(vectorType(result.dataType()), expected, true)
+  }
 }

@@ -70,7 +70,7 @@ case class ColumnarUDF(
 
   override def prettyName: String = name
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
+  override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}"
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): ColumnarUDF = copy(children = newChildren)

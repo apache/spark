@@ -1254,6 +1254,12 @@
     ],
     "sqlState" : "39000"
   },
+  "COLUMNAR_UDF_RESULT_TOO_SHORT" : {
+    "message" : [
+      "The columnar function <name> returned a vector that holds <actualRows> values for a batch of <expectedRows> rows."
+    ],
+    "sqlState" : "39000"
+  },
   "COLUMNAR_UDF_RESULT_TYPE_MISMATCH" : {
     "message" : [
       "The columnar function <name> returned a vector of the type <actualType>, but its return type is <expectedType>."
