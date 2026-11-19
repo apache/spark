@@ -97,13 +97,18 @@ object NameStreamingSources extends Rule[LogicalPlan] {
           h: HasStreamingSourceIdentifyingName, sourceIdentifyingName) =>
         h.withSourceIdentifyingName(sourceIdentifyingName)
 
-      // Handle SubqueryAlias wrapping a streaming relation - this happens when resolving
-      // streaming tables from catalogs (e.g., Delta tables via .table() API).
-      // Propagate the name through the SubqueryAlias to the inner streaming relation.
-      case NamedStreamingRelation(
-          sa @ SubqueryAlias(_, h: HasStreamingSourceIdentifyingName),
-          sourceIdentifyingName) =>
-        sa.copy(child = h.withSourceIdentifyingName(sourceIdentifyingName))
+      // Changelog resolution can insert projections and stateful operators. Follow the
+      // single streaming child, leaving batch inputs (such as initial state) untouched.
+      // Never assign one source name to multiple streaming branches.
+      case NamedStreamingRelation(child, sourceIdentifyingName)
+          if child.children.count(_.isStreaming) == 1 =>
+        child.mapChildren { input =>
+          if (input.isStreaming) {
+            propagateSourceNames(NamedStreamingRelation(input, sourceIdentifyingName))
+          } else {
+            input
+          }
+        }
 
       // Fallback for resolved children that don't implement HasStreamingSourceIdentifyingName.
       // This includes:

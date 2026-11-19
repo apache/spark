@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, SubqueryAlias, Union}
 import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned, UserProvided}
 import org.apache.spark.sql.internal.SQLConf
@@ -206,6 +206,41 @@ class NameStreamingSourcesSuite extends AnalysisTest {
         case other =>
           fail(s"Expected SubqueryAlias wrapping StreamingRelationV2 but got $other")
       }
+    }
+  }
+
+  test("propagates names through the changelog output boundary") {
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      Seq(UserProvided("cdc"), FlowAssigned("cdc")).foreach { name =>
+        val source = createStreamingRelationV2()
+        val project = Project(source.output, source)
+        project.setTagValue(Project.hiddenOutputTag, Seq.empty[Attribute])
+        val boundary = SubqueryAlias("table", SubqueryAlias("changelog", project))
+        val result = NameStreamingSources(NamedStreamingRelation(boundary, name))
+
+        assert(result.resolved)
+        assert(result.collect {
+          case source: StreamingRelationV2 => source.sourceIdentifyingName
+        } == Seq(name))
+        val resultProject = result.collectFirst { case p: Project => p }.get
+        assert(resultProject.getTagValue(Project.hiddenOutputTag).contains(Seq.empty))
+        assert(result.metadataOutput.isEmpty)
+      }
+    }
+  }
+
+  test("does not propagate one name to multiple sources below the output boundary") {
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val sources = Union(Seq(createStreamingRelationV2(), createStreamingRelationV2()))
+      val boundary = SubqueryAlias("changelog", Project(sources.output, sources))
+      val result = NameStreamingSources(
+        NamedStreamingRelation(boundary, UserProvided("cdc")))
+
+      assert(!result.resolved)
+      assert(result.collect {
+        case source: StreamingRelationV2 => source.sourceIdentifyingName
+      } == Seq(Unassigned, Unassigned))
+      assert(result.collect { case n: NamedStreamingRelation => n }.size == 1)
     }
   }
 

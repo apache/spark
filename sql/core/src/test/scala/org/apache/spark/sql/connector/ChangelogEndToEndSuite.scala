@@ -686,6 +686,78 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     }
   }
 
+  test("named streaming changelogs preserve source names through post-processing") {
+    val metadataColumn = new MetadataColumn {
+      override def name(): String = "_metadata"
+      override def dataType(): StructType = new StructType()
+        .add("row_id", LongType, nullable = false)
+      override def isNullable(): Boolean = false
+    }
+    val postProcessing = ChangelogProperties(
+      containsCarryoverRows = true,
+      containsIntermediateChanges = true,
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdPaths = Seq(Seq("_metadata", "row_id")),
+      rowVersionName = Some("_commit_version"),
+      metadataColumns = Seq(metadataColumn))
+
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val cases = Seq(
+        (ChangelogProperties(), "none"),
+        (postProcessing, "none"),
+        (postProcessing, "dropCarryovers"),
+        (postProcessing, "netChanges"))
+      cases.zipWithIndex.foreach { case ((properties, mode), i) =>
+        catalog.setChangelogProperties(ident, properties)
+        val computeUpdates = mode != "none"
+        val sqlText = s"SELECT * FROM STREAM $fullTableName CHANGES FROM VERSION 1 " +
+          s"WITH (deduplicationMode = '$mode', computeUpdates = '$computeUpdates') " +
+          "IDENTIFIED BY cdc"
+        val streams = Seq(
+          spark.readStream.name("cdc").option("startingVersion", "1")
+            .option("deduplicationMode", mode).option("computeUpdates", computeUpdates.toString)
+            .changes(fullTableName),
+          sql(sqlText))
+        streams.zipWithIndex.foreach { case (stream, api) =>
+          val analyzed = stream.queryExecution.analyzed
+          assert(analyzed.collect {
+            case source: StreamingRelationV2 => source.sourceIdentifyingName
+          } == Seq(UserProvided("cdc")))
+          assert(stream.schema.fieldNames.toSeq ==
+            Seq("id", "data", "_change_type", "_commit_version", "_commit_timestamp"))
+          assert(analyzed.metadataOutput.isEmpty)
+          checkError(
+            intercept[AnalysisException] {
+              stream.select(stream.metadataColumn("_metadata")).schema
+            },
+            condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+            parameters = Map("objectName" -> "`_metadata`"),
+            queryContext = if (api == 1) {
+              Array(ExpectedContext(sqlText, 0, sqlText.length - 1))
+            } else {
+              Array.empty
+            })
+
+          // Execute the basic named read as well as checking all rewritten plan shapes.
+          if (i == 0) {
+            catalog.addChangeRows(ident, Seq(
+              makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
+            val queryName = s"cdc_named_boundary_$api"
+            val query = stream.writeStream.format("memory").queryName(queryName).start()
+            try {
+              query.processAllAvailable()
+              checkAnswer(spark.table(queryName),
+                Seq(Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L))))
+            } finally {
+              query.stop()
+              catalog.clearChangeRows(ident)
+            }
+          }
+        }
+      }
+    }
+  }
+
   // ---------- Streaming: error cases ----------
 
   test("streaming changes() rejects user-specified schema") {
