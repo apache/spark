@@ -5003,12 +5003,14 @@ abstract class JsonSuite
   test("SPARK-60217 decompression option rejects an invalid codec") {
     withTempPath { dir =>
       Seq("""{"a": 1}""").toDF().write.text(dir.getCanonicalPath)
-      checkErrorMatchPVals(
+      checkError(
         exception = intercept[SparkIllegalArgumentException] {
           spark.read.option("decompression", "illegal").json(dir.getCanonicalPath).collect()
         },
         condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
-        parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+        sqlState = Some("56038"),
+        parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*"),
+        matchPVals = true
       )
     }
   }

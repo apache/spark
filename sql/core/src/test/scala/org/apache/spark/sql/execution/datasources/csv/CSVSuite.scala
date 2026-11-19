@@ -4451,12 +4451,14 @@ abstract class CSVSuite
   }
 
   test("SPARK-60217 decompression option rejects an invalid codec") {
-    checkErrorMatchPVals(
+    checkError(
       exception = intercept[SparkIllegalArgumentException] {
         spark.read.option("decompression", "illegal").csv(testFile(carsFile)).collect()
       },
       condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
-      parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+      sqlState = Some("56038"),
+      parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*"),
+      matchPVals = true
     )
   }
 

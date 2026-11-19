@@ -71,8 +71,10 @@ object CompressionCodecs {
     codecName
   }
 
-  // Whether `ReflectionUtils.newInstance(clazz, conf)` can produce a `CompressionCodec`, checked
-  // by reflection only: the class is never instantiated on the driver.
+  // Whether `clazz` has the shape `ReflectionUtils.newInstance(clazz, conf)` needs to produce a
+  // codec: a concrete `CompressionCodec` with a no-argument constructor. This is checked by
+  // reflection only, so the class is never instantiated on the driver, and a class that passes can
+  // still fail when the read task creates it.
   private def isCreatableCodecClass(clazz: Class[_]): Boolean = {
     classOf[CompressionCodec].isAssignableFrom(clazz) &&
       !clazz.isInterface &&

@@ -699,14 +699,21 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       for ((file, _) <- archives; codec <- Seq(classOf[GzipCodec].getName, "")) {
         val conf = new Configuration()
         conf.set(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF, codec)
-        val e = intercept[SparkUnsupportedOperationException] {
-          SupportsArchiveFormat.readArchiveEntries(
-              new Path(file.toURI), conf, archivePathFilter = None) { (entry, _) =>
-            Iterator.single(entry.getName)
-          }.toList
+        withClue(s"${file.getName} with codec '$codec': ") {
+          checkError(
+            exception = intercept[SparkUnsupportedOperationException] {
+              SupportsArchiveFormat.readArchiveEntries(
+                  new Path(file.toURI), conf, archivePathFilter = None) { (entry, _) =>
+                Iterator.single(entry.getName)
+              }.toList
+            },
+            condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+            sqlState = Some("0A000"),
+            parameters = Map(
+              "option" -> "\"decompression\"",
+              "path" -> s".*${Pattern.quote(file.getName)}"),
+            matchPVals = true)
         }
-        assert(e.getCondition == "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
-          s"${file.getName} with codec '$codec'")
       }
     }
   }

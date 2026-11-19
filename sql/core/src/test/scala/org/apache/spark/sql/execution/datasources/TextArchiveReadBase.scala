@@ -101,14 +101,16 @@ trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
           writeArchive(archive, Seq("a.txt" -> textBytes("line1\n")))
           // Raised while planning the scan, so `ignoreCorruptFiles` cannot skip the archive.
           withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
-            checkErrorMatchPVals(
+            checkError(
               exception = intercept[SparkUnsupportedOperationException] {
                 read(archive.getCanonicalPath, Map("decompression" -> "gzip")).collect()
               },
               condition = "UNSUPPORTED_FEATURE.DECOMPRESSION_CODEC_FOR_ARCHIVE",
+              sqlState = Some("0A000"),
               parameters = Map(
                 "option" -> "\"decompression\"",
-                "path" -> s".*${Pattern.quote(archive.getName)}"))
+                "path" -> s".*${Pattern.quote(archive.getName)}"),
+              matchPVals = true)
           }
         }
       }
