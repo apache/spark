@@ -37,7 +37,7 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
 
   for {
     version <- Seq(2, 3, 4)
-    joinType <- Seq("left_outer", "right_outer")
+    joinType <- Seq("left_outer", "right_outer", "full_outer")
   } {
     test(s"range eviction needs only the opposite watermark, V$version $joinType") {
       withSQLConf(
@@ -50,25 +50,23 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
           .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
         val rightData = rightInput.toDF().toDF("rightKey", "time")
           .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
-        // Only the input whose rows are not preserved has a watermark.
-        val left = if (joinType == "right_outer") {
-          leftData.withWatermark("leftTime", "10 seconds")
-        } else {
+        // Only one input has a watermark: the one whose rows are not preserved, and the right
+        // input of a full outer join, whose unmatched rows are then never emitted.
+        val watermarkOnLeft = joinType == "right_outer"
+        val left = if (watermarkOnLeft) leftData.withWatermark("leftTime", "10 seconds") else {
           leftData
         }
-        val right = if (joinType == "left_outer") {
+        val right = if (watermarkOnLeft) rightData else {
           rightData.withWatermark("rightTime", "10 seconds")
-        } else {
-          rightData
         }
         val joined = left.join(right, expr("leftKey = rightKey AND " +
           "leftTime BETWEEN rightTime - INTERVAL 5 SECONDS AND " +
           "rightTime + INTERVAL 5 SECONDS"), joinType)
           .select($"leftKey", $"rightKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
-        val stateInput = if (joinType == "left_outer") leftInput else rightInput
-        val watermarkInput = if (joinType == "left_outer") rightInput else leftInput
+        val stateInput = if (watermarkOnLeft) rightInput else leftInput
+        val watermarkInput = if (watermarkOnLeft) leftInput else rightInput
         def unmatched(key: Int): Row = {
-          if (joinType == "left_outer") Row(key, null, 5, null) else Row(null, key, null, 5)
+          if (watermarkOnLeft) Row(null, key, null, 5) else Row(key, null, 5, null)
         }
         withTempDir { checkpoint =>
           testStream(joined)(
@@ -130,10 +128,11 @@ class StreamingJoinOneSidedWatermarkSuite extends StateStoreMetricsTest {
         withTempDir { checkpoint =>
           testStream(result)(
             StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-            AddData(stateInput, (1, 5)), CheckNewAnswer(),
+            // The row with key 4 never matches.
+            AddData(stateInput, (1, 5), (4, 5)), CheckNewAnswer(),
             AddData(watermarkInput, (1, 8)), CheckNewAnswer(matched(1, 5, 8)),
             AddData(watermarkInput, (2, 30)), CheckNewAnswer(),
-            // At watermark 20 the row at 5 s of the input without a watermark is evicted.
+            // At watermark 20 the rows at 5 s of the input without a watermark are evicted.
             AddData(watermarkInput, (2, 40)), CheckNewAnswer(),
             Execute { q =>
               val numRows = q.lastProgress.stateOperators.head.numRowsTotal

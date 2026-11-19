@@ -311,8 +311,11 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         // only warns about a later operator that drops the rows this eviction emits late. So does
         // an input whose event time the rising-only rule holds back and whose other column has
         // only an inexact cutoff (see StreamingJoinHelper.getStateValueWatermarkColumn).
+        // An input without its own watermark that the condition bounds only through a cast gets
+        // no cutoff.
         // TODO: [SPARK-62044] An input bounded only through a column cast to TIMESTAMP is still
-        //  evicted by its event time with the cast column's cutoff, which can be too early.
+        //  evicted by its event time with the cast column's cutoff, which can be too early, or not
+        //  at all when it has no watermark of its own.
         def solve(watermark: Option[Long]): Option[(Attribute, Long, Boolean)] = {
           val picked = if (useFirstEventTimeColumn) None else {
             pickStateValueWatermarkColumn(oneSideInputAttributes, otherSideInputAttributes,

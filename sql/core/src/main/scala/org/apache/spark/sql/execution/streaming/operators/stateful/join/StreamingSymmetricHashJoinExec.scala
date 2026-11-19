@@ -370,7 +370,11 @@ case class StreamingSymmetricHashJoinExec(
     // earlier version passes: it restores index version 0, and the join output watermark check as
     // false, for which the default mode keeps the event time. Index version 0 keeps the rows of an
     // input without an event time out of the index. Such rows are never evicted, which only an
-    // outer join that emits the unmatched rows of that input cannot accept.
+    // outer join that emits the unmatched rows of that input cannot accept, so it fails with a
+    // checkpoint started in the legacy mode.
+    // TODO: A legacy-mode run of a version 1 checkpoint is not checked for an input without an
+    //  event time. That input has no predicate in the legacy mode, so the rows of the run get no
+    //  index entry, and the default mode never evicts them afterwards.
     val indexVersion = conf.getConf(SQLConf.STREAMING_JOIN_STATE_V4_INDEX_VERSION)
     if (stateFormatVersion == 4 && (indexVersion == 0 || !allowMultipleStatefulOperators)) {
       Seq((LeftSide, stateWatermarkPredicates.left, left.output, right.output),
