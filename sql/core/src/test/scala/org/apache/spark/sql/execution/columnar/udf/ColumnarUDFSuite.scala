@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.columnar.udf
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.arrow.vector.BigIntVector
+
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.StoredExpressionFunctions
@@ -35,7 +37,8 @@ import org.apache.spark.sql.functions.{array, col, count, lit, map, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types.{ArrayType, CharType, DataType, FileType, LongType, MapType, StringType, StructField, StructType, VarcharType}
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
 
 /** Adds one to a bigint, and keeps nulls. */
@@ -120,6 +123,25 @@ class CounterFunction extends ColumnarScalarFunction {
 /** Returns a vector that holds one value, whatever the number of rows. */
 class ShortVectorFunction extends ColumnarScalarFunction {
   override def eval(args: ColumnarBatch): ColumnVector = new OnHeapColumnVector(1, LongType)
+}
+
+/**
+ * Returns its argument as an Arrow vector, whose value count is the given one, or the number of
+ * rows when there is none.
+ */
+class ArrowCopyFunction(valueCount: Option[Int]) extends ColumnarScalarFunction {
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    val n = args.numRows()
+    val vector = new BigIntVector("result", ArrowUtils.rootAllocator)
+    vector.allocateNew(n)
+    var i = 0
+    while (i < n) {
+      vector.set(i, args.column(0).getLong(i))
+      i += 1
+    }
+    vector.setValueCount(valueCount.getOrElse(n))
+    new ArrowColumnVector(vector)
+  }
 }
 
 /** Returns its argument as a vector of the given type. */
@@ -562,6 +584,21 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       parameters = Map("name" -> "short", "actualRows" -> "1", "expectedRows" -> "10"))
     // A batch of one row fits.
     assert(spark.range(0, 1, 1, 1).select(short(col("id"))).collect().length == 1)
+  }
+
+  test("a function that returns an Arrow vector with too few values fails") {
+    // The vector has room for every row, but its value count is 1.
+    val short = ColumnarUserDefinedFunction.create(
+      "short_arrow", Seq(LongType), LongType, new ArrowCopyFunction(Some(1)))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.range(0, 10, 1, 1).select(short(col("id"))).collect()
+      },
+      condition = "COLUMNAR_UDF_RESULT_TOO_SHORT",
+      parameters = Map("name" -> "short_arrow", "actualRows" -> "1", "expectedRows" -> "10"))
+    val copy = ColumnarUserDefinedFunction.create(
+      "copy_arrow", Seq(LongType), LongType, new ArrowCopyFunction(None))
+    checkAnswer(spark.range(0, 10, 1, 1).select(copy(col("id"))), (0L until 10L).map(Row(_)))
   }
 
   test("a function that returns a vector of another type fails") {

@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types.{DataType, StructType, UserDefinedType}
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
 /** Plans the evaluation of columnar user-defined functions. */
@@ -198,11 +198,16 @@ case class EvalColumnarUDFsExec(
                 names(i), Option(result).map(_.dataType()), resultTypes(i))
             }
             // A vector that is too short would be read past its end by the operators above.
-            // Only a writable vector tells how many values it can hold.
+            // A writable vector tells how many values it can hold, and an Arrow vector how
+            // many values it has, which its count of nulls also depends on. Other vectors do
+            // not tell either.
             result match {
               case w: WritableColumnVector if w.getCapacity < numRows =>
                 throw QueryExecutionErrors.columnarUDFResultTooShortError(
                   names(i), w.getCapacity, numRows)
+              case a: ArrowColumnVector if a.getValueVector.getValueCount < numRows =>
+                throw QueryExecutionErrors.columnarUDFResultTooShortError(
+                  names(i), a.getValueVector.getValueCount, numRows)
               case _ =>
             }
             columns(numInputColumns + i) = newResults(i)
