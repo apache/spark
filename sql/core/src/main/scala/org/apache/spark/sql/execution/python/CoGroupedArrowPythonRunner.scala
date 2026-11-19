@@ -111,6 +111,15 @@ class CoGroupedArrowPythonRunner(
       private var leftGroupArrowWriter: ArrowWriterWrapper = null
       private var rightGroupArrowWriter: ArrowWriterWrapper = null
 
+      // Closes the root and allocator of the side being written if the task completes before the
+      // end of the cogroup. One listener serves all the cogroups, and at most one side is open at
+      // a time. As with the listener added by `PythonArrowInput.newWriter`, it runs after the
+      // writer is done.
+      context.addTaskCompletionListener[Unit] { _ =>
+        if (leftGroupArrowWriter != null) leftGroupArrowWriter.close()
+        if (rightGroupArrowWriter != null) rightGroupArrowWriter.close()
+      }
+
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
@@ -146,8 +155,7 @@ class CoGroupedArrowPythonRunner(
         if (nextBatchInLeftGroup != null) {
           if (leftGroupArrowWriter == null) {
             leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
-              timeZoneId, pythonExec + " (left)",
-              largeVarTypes, dataOut, context)
+              timeZoneId, pythonExec + " (left)", largeVarTypes, dataOut)
             // Set the unloader with compression after creating the writer
             leftGroupArrowWriter.unloader = createUnloader(leftGroupArrowWriter.root)
           }
@@ -169,8 +177,7 @@ class CoGroupedArrowPythonRunner(
         } else if (nextBatchInRightGroup != null) {
           if (rightGroupArrowWriter == null) {
             rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(rightSchema,
-              timeZoneId, pythonExec + " (right)",
-              largeVarTypes, dataOut, context)
+              timeZoneId, pythonExec + " (right)", largeVarTypes, dataOut)
             // Set the unloader with compression after creating the writer
             rightGroupArrowWriter.unloader = createUnloader(rightGroupArrowWriter.root)
           }
