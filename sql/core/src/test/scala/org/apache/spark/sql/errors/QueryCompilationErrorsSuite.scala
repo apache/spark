@@ -1160,6 +1160,22 @@ class QueryCompilationErrorsSuite
     )
   }
 
+  test("TABLE_DATABASE_NOT_SPECIFIED: table does not specify database") {
+    val identifier = TableIdentifier("t")
+    val table = CatalogTable(
+      identifier = identifier,
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType())
+    checkError(
+      exception = intercept[AnalysisException] {
+        table.database
+      },
+      condition = "TABLE_DATABASE_NOT_SPECIFIED",
+      parameters = Map("identifier" -> identifier.toString)
+    )
+  }
+
   test("UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION: unknown function resource type") {
     checkError(
       exception = intercept[AnalysisException] {
