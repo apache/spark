@@ -660,6 +660,7 @@ trait UnresolvedStarBase extends Star with Unevaluable {
  *                     expressions removed by EXCEPT. If present, the length of this list must
  *                     be the same as the length of the EXCEPT list. This supports replacing
  *                     expressions instead of excluding them from the original SELECT list.
+ *                     With replacements, each EXCEPT name must resolve to a top-level column.
  */
 case class UnresolvedStarExceptOrReplace(
     target: Option[Seq[String]],
@@ -723,20 +724,26 @@ case class UnresolvedStarExceptOrReplace(
       case except: NamedExpression => except -> Seq.empty
     }
 
-    // Each replacement takes the place of the column that its except names. Two copies of the
-    // same column, as in `SELECT x, x`, resolve to one attribute, so a replacement for that name
-    // is ambiguous, as it would be for two different columns with the name.
-    val replacementsByColumn = replacements.map { replacementList =>
-      assert(exceptPairs.size == replacementList.size,
-        "The number of replacements must be the same as the number of excepts")
-      excepts.zip(exceptPairs).foreach { case (exceptParts, (column, _)) =>
-        val copies = expandedCols.map(_.toAttribute).filter(_.semanticEquals(column.toAttribute))
-        if (copies.size > 1) {
-          throw QueryCompilationErrors.ambiguousReferenceError(
-            UnresolvedAttribute(exceptParts).name, copies)
+    // Each replacement takes the place of the top-level column that its except names. Two copies
+    // of the same column, as in `SELECT x, x`, resolve to one attribute, so a replacement for that
+    // name is ambiguous, as it would be for two different columns with the name.
+    val replacementsByColumn: AttributeMap[NamedExpression] = replacements match {
+      case Some(replacementList) =>
+        assert(exceptPairs.size == replacementList.size,
+          "The number of replacements must be the same as the number of excepts")
+        if (exceptPairs.exists { case (_, nestedColumn) => nestedColumn.nonEmpty }) {
+          throw SparkException.internalError(
+            "An EXCEPT name with a replacement must resolve to a top-level column")
         }
-      }
-      AttributeMap(exceptPairs.map(_._1.toAttribute).zip(replacementList))
+        excepts.zip(exceptPairs).foreach { case (exceptParts, (column, _)) =>
+          val copies = expandedCols.map(_.toAttribute).filter(_.semanticEquals(column.toAttribute))
+          if (copies.size > 1) {
+            throw QueryCompilationErrors.ambiguousReferenceError(
+              UnresolvedAttribute(exceptParts).name, copies)
+          }
+        }
+        AttributeMap(exceptPairs.map(_._1.toAttribute).zip(replacementList))
+      case None => AttributeMap.empty
     }
 
     // Filter columns which correspond to ones listed in the except list and return a new list of
@@ -799,9 +806,9 @@ case class UnresolvedStarExceptOrReplace(
             errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
             messageParameters = Map(
               "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
-        // found a match and the 'replacements' list is populated - replace the column
-        case (col, Some(_)) if replacementsByColumn.nonEmpty =>
-          replacementsByColumn.get(col.toAttribute)
+        // found a match with a replacement - replace the column
+        case (col, Some(_)) if replacementsByColumn.contains(col.toAttribute) =>
+          replacementsByColumn(col.toAttribute)
       }
     }
 

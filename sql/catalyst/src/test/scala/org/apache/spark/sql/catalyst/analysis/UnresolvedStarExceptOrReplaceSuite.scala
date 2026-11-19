@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /**
  * Tests [[UnresolvedStarExceptOrReplace]] replacements, including a node that holds several EXCEPT
@@ -58,5 +59,30 @@ class UnresolvedStarExceptOrReplaceSuite extends SparkFunSuite {
     val star = UnresolvedStarExceptOrReplace(
       target = None, excepts = Seq(Seq("x")), replacements = None)
     assert(star.expand(LocalRelation(x, x, y), caseInsensitiveResolution) == Seq(y))
+  }
+
+  test("a replacement for a nested EXCEPT name is an internal error") {
+    val col = AttributeReference(
+      "col", StructType(Seq(StructField("i1", IntegerType), StructField("i2", IntegerType))))()
+    val star = UnresolvedStarExceptOrReplace(
+      target = None,
+      excepts = Seq(Seq("col", "i1")),
+      replacements = Some(Seq(Alias(Literal(42), "i1")())))
+    checkError(
+      exception = intercept[SparkException] {
+        star.expand(LocalRelation(col), caseInsensitiveResolution)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "An EXCEPT name with a replacement must resolve to a top-level column"))
+  }
+
+  test("a qualified EXCEPT name with a replacement replaces its column") {
+    val x = $"x".int.withQualifier(Seq("t"))
+    val y = $"y".string.withQualifier(Seq("t"))
+    val newX = Alias(Literal(1), "x")()
+    val star = UnresolvedStarExceptOrReplace(
+      target = None, excepts = Seq(Seq("t", "x")), replacements = Some(Seq(newX)))
+    assert(star.expand(LocalRelation(x, y), caseInsensitiveResolution) == Seq(newX, y))
   }
 }

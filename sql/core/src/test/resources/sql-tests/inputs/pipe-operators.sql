@@ -372,6 +372,9 @@ table t
 select x, x from t
 |> set x = 1;
 
+select x, * from t
+|> set x = 1;
+
 -- SET with an alias.
 table t
 |> set x = 1 as z;
