@@ -2069,6 +2069,74 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
     }
   }
 
+  for {
+    joinType <- Seq("inner", "left_outer", "full_outer")
+    windowKey <- Seq(true, false)
+    nullsInFirstBatch <- Seq(true, false)
+  } {
+    val keyType = if (windowKey) "window" else "timestamp"
+    val batch = if (nullsInFirstBatch) "the first" else "a later"
+    test(s"SPARK-62046: $joinType join with NULL watermarked $keyType keys in $batch batch") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val nullInput = MemoryStream[Int]
+      val rightInput = MemoryStream[(Int, Int)]
+      val leftWithTime = leftInput.toDF().toDF("lk", "t")
+        .select($"lk", timestamp_seconds($"t").as("lt"))
+        .withWatermark("lt", "10 seconds")
+      val keyed = leftWithTime.select($"lk",
+        (if (windowKey) window($"lt", "10 seconds") else $"lt").as("lw"))
+      // A union keeps the watermark on lw, which is NULL for the rows of nullInput.
+      val left = keyed.union(nullInput.toDF().toDF("lk")
+        .select($"lk", lit(null).cast(keyed.schema("lw").dataType).as("lw")))
+      // The right key has no watermark and is NULL for a negative input.
+      val rightTime = when($"s" >= 0, timestamp_seconds($"s"))
+      val rightKey = if (windowKey) {
+        when($"s" >= 0, struct(rightTime.as("start"),
+          (rightTime + expr("INTERVAL 10 SECONDS")).as("end")))
+      } else {
+        rightTime
+      }
+      val right = rightInput.toDF().toDF("rk", "s").select($"rk", rightKey.as("rw"))
+      val (leftEnd, rightEnd) = if (windowKey) ($"lw.end", $"rw.end") else ($"lw", $"rw")
+      val joined = left.join(right, expr("lk = rk AND lw = rw"), joinType)
+        .select($"lk", leftEnd.cast("long"), $"rk", rightEnd.cast("long"))
+
+      // Left time 5 is in window [0, 10).
+      val (rightStart, end) = if (windowKey) (0, 10) else (5, 5)
+      val matched = Row(1, end, 1, end)
+      // NULL keys never match, so an outer join outputs them at once, padded with NULLs.
+      val nullRows = joinType match {
+        case "left_outer" => Seq(Row(7, null, null, null))
+        case "full_outer" => Seq(Row(7, null, null, null), Row(null, null, 7, null))
+        case _ => Nil
+      }
+      val addMatching = Seq(AddData(leftInput, (1, 5)), AddData(rightInput, (1, rightStart)))
+      val addNulls = Seq(AddData(nullInput, 7), AddData(rightInput, (7, -1)))
+      val firstBatches = if (nullsInFirstBatch) {
+        Seq(StreamProgressLockedActions(addMatching ++ addNulls),
+          CheckNewAnswer(matched +: nullRows: _*))
+      } else {
+        Seq(StreamProgressLockedActions(addMatching), CheckNewAnswer(matched),
+          StreamProgressLockedActions(addNulls), CheckNewAnswer(nullRows: _*))
+      }
+
+      // Without constraint propagation, no inferred IS NOT NULL filter removes the NULL keys
+      // before the join, so every side of each join type sees them.
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+        testStream(joined)(firstBatches ++ Seq(
+          // The watermark moves to 90 seconds, and the next batch evicts the rows at 5 and 10.
+          AddData(leftInput, (2, 100)),
+          CheckNewAnswer(),
+          AddData(leftInput),
+          CheckNewAnswer(),
+          // Only the left row at 100 stays in state; the NULL-key rows were never stored.
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsTotal == 1
+          }): _*)
+      }
+    }
+  }
 }
 
 /** Adds tests that are specific to state format V1-V3 (not compatible with V4). */
@@ -2373,6 +2441,49 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
       // right: (6, 6L), (8, 8L)
       assertNumStateRows(total = 15, updated = 7)
     )
+  }
+
+  Seq(true, false).foreach { windowKey =>
+    val keyType = if (windowKey) "window" else "timestamp"
+    test(s"NULL $keyType event-time join key") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val leftWithTime = leftInput.toDF().toDF("lk", "t")
+        .select($"lk", timestamp_seconds($"t").as("lt"))
+        .withWatermark("lt", "10 seconds")
+      val rightWithInput = rightInput.toDF().toDF("rk", "s")
+      // The right key has no watermark and is NULL for a negative input.
+      val rightTime = when($"s" >= 0, timestamp_seconds($"s"))
+      val (left, right) = if (windowKey) {
+        (leftWithTime.select($"lk", window($"lt", "10 seconds").as("lw")),
+          rightWithInput.select($"rk", when($"s" >= 0, struct(rightTime.as("start"),
+            (rightTime + expr("INTERVAL 10 SECONDS")).as("end"))).as("rw")))
+      } else {
+        (leftWithTime.select($"lk", $"lt".as("lw")),
+          rightWithInput.select($"rk", rightTime.as("rw")))
+      }
+      val keyEnd = if (windowKey) Seq("lw.end", "rw.end") else Seq("lw", "rw")
+      val joined = left.join(right, expr("lk = rk AND lw = rw"), "full_outer")
+        .select($"lk", col(keyEnd(0)).cast("long"), $"rk", col(keyEnd(1)).cast("long"))
+      // Left time 5 is in window [0, 10).
+      val (matchingStart, length) = if (windowKey) (0, 10L) else (5, 0L)
+
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(joined)(
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 5)),
+            AddData(rightInput, (1, -1), (1, matchingStart), (4, 20)))),
+          // The NULL-key row can never match, so it is output at once and not stored.
+          CheckNewAnswer(Row(1, matchingStart + length, 1, matchingStart + length),
+            Row(null, null, 1, null)),
+          // The watermark moves to 90 seconds.
+          AddData(leftInput, (2, 100)),
+          CheckNewAnswer(),
+          AddData(leftInput),
+          CheckNewAnswer(Row(null, null, 4, 20 + length)),
+          assertNumStateRows(total = 1, updated = 4))
+      }
+    }
   }
 }
 

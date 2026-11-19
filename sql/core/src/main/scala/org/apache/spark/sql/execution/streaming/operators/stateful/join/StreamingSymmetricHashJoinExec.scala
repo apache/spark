@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, GenericInternalRow, IsNotNull, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -680,9 +680,12 @@ case class StreamingSymmetricHashJoinExec(
       joinStateManagerStoreGenerator: JoinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark: Option[Int]) {
 
-    // Filter the joined rows based on the given condition.
-    val preJoinFilter =
-      Predicate.create(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
+    // Filter the joined rows based on the given condition. A row whose watermarked join key is
+    // NULL can never match, and eviction by that key may never reach it, so it fails this filter.
+    val preJoinFilter = Predicate.create(
+      (preJoinFilterExpr ++ joinKeyOrdinalForWatermark.map(i => IsNotNull(joinKeys(i))))
+        .reduceOption(And).getOrElse(Literal(true)),
+      inputAttributes).eval _
 
     private val joinStateManager = SymmetricHashJoinStateManager(
       joinSide = joinSide,
