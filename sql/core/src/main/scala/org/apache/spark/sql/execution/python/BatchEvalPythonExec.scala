@@ -41,7 +41,8 @@ case class BatchEvalPythonExec(
     udfs: Seq[PythonUDF],
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
-    child: SparkPlan)
+    child: SparkPlan,
+    override val evalCondition: Option[Expression] = None)
   extends EvalPythonExec with PythonPickleBatchMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
