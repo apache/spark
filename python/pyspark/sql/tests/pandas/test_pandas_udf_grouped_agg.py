@@ -1202,17 +1202,23 @@ class GroupedAggPandasUDFTestsMixin:
         def spellings(s: pd.Series) -> str:
             return ",".join(sorted(s))
 
-        self.spark.udf.register("spellings", spellings)
+        # Both the view and the function are registered through the temp_view/temp_func
+        # context managers so they are dropped even when the assertion fails, and the
+        # later tests of this mixin and its Connect parity class do not depend on test
+        # order.
+        with self.temp_view("t"), self.temp_func("spellings"):
+            df.createOrReplaceTempView("t")
+            self.spark.udf.register("spellings", spellings)
 
-        result = self.spark.sql(
-            "SELECT s, sw, spellings(s) AS sp "
-            "FROM (SELECT s, session_window(ts, '10 minutes') AS sw FROM t) sub "
-            "GROUP BY s, sw"
-        ).select("sp")
+            result = self.spark.sql(
+                "SELECT s, sw, spellings(s) AS sp "
+                "FROM (SELECT s, session_window(ts, '10 minutes') AS sw FROM t) sub "
+                "GROUP BY s, sw"
+            ).select("sp")
 
-        # The three rows still merge into one session through the subquery, and the UDF
-        # receives each row's own spelling of the grouping column.
-        assertDataFrameEqual(result, [Row(sp="FOO,foo,foo")])
+            # The three rows still merge into one session through the subquery, and the
+            # UDF receives each row's own spelling of the grouping column.
+            assertDataFrameEqual(result, [Row(sp="FOO,foo,foo")])
 
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
