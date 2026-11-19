@@ -208,9 +208,9 @@ class UpdatingSessionsIterator(
   // from the appended field. The session column is matched by expression ID rather than
   // by attribute equality: the session attribute in the grouping list can carry a
   // qualifier that the input column lacks, as when the session window is computed in a
-  // subquery or CTE and grouped outside, and the DISTINCT-aggregate and pandas
-  // grouped-aggregate plans that consume this iterator read the grouping columns from
-  // the rows it emits.
+  // subquery or CTE and grouped outside, and the DISTINCT-aggregate, pandas
+  // grouped-aggregate and Python UDAF aggregation plans that consume this iterator read
+  // the grouping columns from the rows it emits.
   private[this] val restoreProj = GenerateUnsafeProjection.generate(
     inputSchema.map(attr =>
       if (attr.exprId == sessionExpression.exprId) mergedSessionReference else attr),
