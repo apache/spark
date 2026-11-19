@@ -379,5 +379,3 @@ select nullif((select max(id) from range(1, 4)), 0);
 -- correlated; expected (1, NULL), (2, 30)
 select c1, nullif((select max(c2) from values (1, 10), (1, 20), (2, 30) as t2(k, c2)
   where t2.k = t1.c1), 20) from values (1), (2) as t1(c1);
-
-set spark.sql.alwaysInlineCommonExpr=true;

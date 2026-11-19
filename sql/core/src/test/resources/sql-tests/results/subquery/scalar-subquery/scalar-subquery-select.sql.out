@@ -895,11 +895,3 @@ struct<c1:int,nullif(scalarsubquery(c1), 20):int>
 -- !query output
 1	NULL
 2	30
-
-
--- !query
-set spark.sql.alwaysInlineCommonExpr=true
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.alwaysInlineCommonExpr	true

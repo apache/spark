@@ -1616,9 +1616,3 @@ Project [c1#x, nullif(scalar-subquery#x [c1#x], 20) AS nullif(scalarsubquery(c1)
 :           +- LocalRelation [k#x, c2#x]
 +- SubqueryAlias t1
    +- LocalRelation [c1#x]
-
-
--- !query
-set spark.sql.alwaysInlineCommonExpr=true
--- !query analysis
-SetCommand (spark.sql.alwaysInlineCommonExpr,Some(true))
