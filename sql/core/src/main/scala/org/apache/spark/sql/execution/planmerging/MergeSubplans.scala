@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.planmerging
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{NonGroupingAggregateReference, ScalarSubqueryReference}
+import org.apache.spark.sql.catalyst.optimizer.{NonGroupingAggregateReference, PerPartitionRuntimeFilterSubquery, ScalarSubqueryReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, LogicalPlan, OneRowRelation, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CTE, NO_GROUPING_AGGREGATE_REFERENCE, SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CTE, NO_GROUPING_AGGREGATE_REFERENCE, PER_PARTITION_RUNTIME_FILTER_SUBQUERY, SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -225,10 +225,19 @@ object MergeSubplans extends Rule[LogicalPlan] {
     }
 
     // Calculate the level propagated from subquery plans, which is the maximum level of the
-    // subqueries of the node + 1 or 0 if the node has no subqueries.
+    // subqueries of the node + 1 or 0 if the node has no subqueries. The plan of a per-partition
+    // runtime filter placeholder propagates its own level.
     var levelFromSubqueries = 0
     val nodeSubqueriesWithReferences =
-      plan.transformExpressionsWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
+      plan.transformExpressionsWithPruning(
+          _.containsAnyPattern(SCALAR_SUBQUERY, PER_PARTITION_RUNTIME_FILTER_SUBQUERY)) {
+        // The placeholder of a per-partition runtime bloom filter is not merged, since its plan is
+        // the creation side of a semi join. So the node needs no level above that plan. The
+        // subqueries in its plan can be merged.
+        case p: PerPartitionRuntimeFilterSubquery =>
+          val (planWithReferences, level) = insertReferences(p.plan, true, planMergers)
+          levelFromSubqueries = levelFromSubqueries.max(level)
+          p.withNewPlan(planWithReferences)
         case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
           val (planWithReferences, level) = insertReferences(s.plan, true, planMergers)
 
@@ -307,7 +316,7 @@ object MergeSubplans extends Rule[LogicalPlan] {
   //   if the plan is merged from multiple subqueries or to `original plan` if it isn't.
   private def removeReferences(
       plan: LogicalPlan,
-      subplansByLevel: ArrayBuffer[IndexedSeq[LogicalPlan]]) = {
+      subplansByLevel: ArrayBuffer[IndexedSeq[LogicalPlan]]): LogicalPlan = {
     plan.transformUpWithPruning(
         _.containsAnyPattern(NO_GROUPING_AGGREGATE_REFERENCE, SCALAR_SUBQUERY_REFERENCE)) {
       case ngar: NonGroupingAggregateReference =>
@@ -324,7 +333,10 @@ object MergeSubplans extends Rule[LogicalPlan] {
             Project(projectList, OneRowRelation())
           case o => o
         }
-      case o => o.transformExpressionsUpWithPruning(_.containsPattern(SCALAR_SUBQUERY_REFERENCE)) {
+      case o => o.transformExpressionsUpWithPruning(
+          _.containsAnyPattern(NO_GROUPING_AGGREGATE_REFERENCE, SCALAR_SUBQUERY_REFERENCE)) {
+        case p: PerPartitionRuntimeFilterSubquery =>
+          p.withNewPlan(removeReferences(p.plan, subplansByLevel))
         case ssr: ScalarSubqueryReference =>
           subplansByLevel(ssr.level)(ssr.mergedPlanIndex) match {
             case cte: CTERelationDef =>

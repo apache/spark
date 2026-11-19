@@ -1446,8 +1446,8 @@ object StateStore extends Logging {
         task(processUnloadedOnly)
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Error running maintenance task, " +
-            s"processUnloadedOnly=$processUnloadedOnly", e)
+          logWarning(log"Error running maintenance task, " +
+            log"processUnloadedOnly=${MDC(LogKeys.PROCESS_UNLOADED_ONLY, processUnloadedOnly)}", e)
           throw e
       }
     }

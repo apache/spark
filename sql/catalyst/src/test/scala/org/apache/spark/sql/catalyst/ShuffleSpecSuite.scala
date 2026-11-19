@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, FlipLowBitFunction, NonScalarBucketFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, YearMonthIntervalType}
 
 class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
@@ -769,8 +769,9 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // Nothing casts a transform's arguments, the bucket count included, to its function's
     // `inputTypes()` after analysis, so the call would get the raw values. So the gates require
     // the arguments to suit the input types in number and type: types stored alike go as they
-    // are, and a narrower numeric argument, integral or floating-point, is cast, which gives the
-    // value Java's widening gave a magic `invoke`. Anything else is refused.
+    // are, apart from two datetime or interval types, see the table below, and a narrower numeric
+    // argument, integral or floating-point, is cast, which gives the value Java's widening gave a
+    // magic `invoke`. Anything else is refused.
     def bucketFunction(declared: DataType*): ScalarFunction[Int] = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = declared.toArray
       override def resultType(): DataType = IntegerType
@@ -834,28 +835,51 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       }
     }
 
-    // A `years`-like transform over a `DATE` column. A `DATE` matches only a declared `DATE`, as
-    // Iceberg's `years` declares, and an `INT`, which a `DATE` is held as. Not a `TIMESTAMP`, as
-    // the test catalog's `years` declares, which is held as a `BIGINT`, since its cast takes the
-    // session time zone. Nor a `TIMESTAMP_NTZ`, also held as a `BIGINT`.
-    val d = AttributeReference("d", DateType)()
+    // A `years`-like transform over a datetime or interval column. A `DATE` matches only a
+    // declared `DATE`, as Iceberg's `years` declares, and an `INT`, which a `DATE` is held as. Not
+    // a `TIMESTAMP`, as the test catalog's `years` declares, which is held as a `BIGINT`, since
+    // its cast takes the session time zone. Nor a `TIMESTAMP_NTZ`, also held as a `BIGINT`.
+    // SPARK-60813 and SPARK-61650: two datetime or interval types go as they are only where
+    // `TransformExpression.datetimeCastKeepsValue` says. A datetime type against the integer it
+    // is held as is taken as it is.
+    // (the column's type, the function's input type, whether Spark can evaluate the transform)
     Seq(
-      DateType -> true,
-      TimestampType -> false,
-      IntegerType -> true,
-      TimestampNTZType -> false
-    ).foreach { case (declared, evaluable) =>
-      val yearsSpec = spec(TransformExpression(bucketFunction(declared), Seq(d)), InternalRow(1))
-      val identity = spec(d, InternalRow(1))
+      (DateType, DateType, true),
+      (DateType, TimestampType, false),
+      (DateType, IntegerType, true),
+      (DateType, TimestampNTZType, false),
+      (TimeType(), TimestampType, false),
+      (TimeType(), TimestampNTZType, false),
+      (TimeType(), DayTimeIntervalType(), false),
+      (YearMonthIntervalType(), DateType, false),
+      (DayTimeIntervalType(), TimestampType, false),
+      (TimestampNTZType, TimestampType, false),
+      (TimestampType, TimestampNTZType, false),
+      (TimeType(3), TimeType(6), true),
+      (TimeType(6), TimeType(3), false),
+      (DayTimeIntervalType(0, 1), DayTimeIntervalType(), true),
+      (DayTimeIntervalType(), DayTimeIntervalType(0, 1), false),
+      (YearMonthIntervalType(0, 0), YearMonthIntervalType(), true),
+      (YearMonthIntervalType(), YearMonthIntervalType(0, 0), false),
+      (TimestampNTZNanosType(7), TimestampNTZNanosType(9), true),
+      (TimestampNTZNanosType(9), TimestampNTZNanosType(7), false),
+      (TimestampLTZNanosType(7), TimestampLTZNanosType(9), true),
+      (TimestampType, LongType, true),
+      (YearMonthIntervalType(), IntegerType, true)
+    ).foreach { case (columnType, declared, evaluable) =>
+      val name = s"$columnType against $declared"
+      val column = AttributeReference("c", columnType)()
+      val years = spec(TransformExpression(bucketFunction(declared), Seq(column)), InternalRow(1))
+      val identity = spec(column, InternalRow(1))
       withSQLConf(
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
           SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        assert(identity.areKeysCompatible(yearsSpec, allowReduce = true) == evaluable,
-          s"DATE against $declared")
+        assert(identity.areKeysCompatible(years, allowReduce = true) == evaluable, name)
+        assert(years.areKeysCompatible(identity, allowReduce = true) == evaluable, name)
       }
       withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
-        assert(yearsSpec.canEvaluatePartitioning == evaluable, s"DATE against $declared")
+        assert(years.canEvaluatePartitioning == evaluable, name)
       }
     }
   }

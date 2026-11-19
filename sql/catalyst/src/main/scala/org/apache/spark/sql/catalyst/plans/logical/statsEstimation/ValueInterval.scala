@@ -53,7 +53,8 @@ object ValueInterval {
       min: Option[Any],
       max: Option[Any],
       dataType: DataType): ValueInterval = dataType match {
-    case _: StringType | BinaryType => new DefaultValueInterval()
+    // Types that cannot be converted to Double, e.g. string/binary, have an unknown range.
+    case _ if !EstimationUtils.canConvertToDouble(dataType) => new DefaultValueInterval()
     case _ if min.isEmpty || max.isEmpty => new NullValueInterval()
     case _ =>
       NumericValueInterval(

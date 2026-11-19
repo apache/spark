@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Partition, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, RDD, SortedMergeCoalescedRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparabl
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Physical operator that groups input partitions by their partition keys.
@@ -39,9 +40,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * storage-partitioned joins to align partitions from different sides of the join.
  *
  * Everything that says how the node was decided is `@transient`, since only the driver plans and
- * the executors read the groups through [[GroupedPartitionCoalescer]] rather than through this
- * node. The two partitionings are not, matching `ShuffleExchangeExec`'s, since they are what the
- * node claims rather than how it arrived at the claim.
+ * groups the partitions, through [[GroupedPartitionCoalescer]], and the executors read the
+ * coalesced partitions rather than this node. The two partitionings are not, matching
+ * `ShuffleExchangeExec`'s, since they are what the node claims rather than how it arrived at the
+ * claim.
  *
  * @param child The child plan providing bucketed/partitioned input
  * @param grouping What this node does to the child's partitions, derived once at planning time by
@@ -872,34 +874,69 @@ private[sql] object GroupPartitionsExec {
  *
  * Unlike Spark's default coalescer which tries to minimize data movement, this coalescer
  * groups partitions based on their partition keys to maintain the grouping semantics
- * required for storage-partitioned operations.
+ * required for storage-partitioned operations. When nothing in the parent's narrow lineage is
+ * persisted, a group names a location if it has several partitions, shares none of them with
+ * another group, and more of its partitions prefer one host than any other host. Every other
+ * group leaves its location to the scheduler.
  *
  * @param groupedPartitions Sequence where each element is a sequence of input partition
- *                         indices that should be grouped together
+ *                         indices that should be grouped together. Only the driver reads it,
+ *                         so it is not serialized into tasks.
  */
 class GroupedPartitionCoalescer(
-    val groupedPartitions: Seq[Seq[Int]]
+    @transient val groupedPartitions: Seq[Seq[Int]]
   ) extends PartitionCoalescer with Serializable {
 
   override def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
+    require(groupedPartitions.size == maxPartitions, s"GroupedPartitionCoalescer has " +
+      s"${groupedPartitions.size} groups but was asked for $maxPartitions partitions")
+    // Groups that share partitions, as the slots of a key under `REPLICATED_FOR_JOIN` do, would all
+    // name the same host when one is ahead, and a zip copies it into every task of the key. Left to
+    // the scheduler, each task gets the locations of the zip's first side that has any, as on
+    // master: its own split's when the split side comes first.
+    lazy val shared =
+      groupedPartitions.flatten.groupMapReduce(identity)(_ => 1)(_ + _).filter(_._2 > 1).keySet
+    // The scheduler looks cached blocks up when it submits each stage, while a group gets its
+    // location once, when the partitions are computed.
+    lazy val persisted =
+      (parent +: parent.getNarrowAncestors).exists(_.getStorageLevel != StorageLevel.NONE)
     groupedPartitions.map { partitionIndices =>
-      val partitions = new ArrayBuffer[Partition](partitionIndices.size)
-      val preferredLocations = new ArrayBuffer[String](partitionIndices.size)
-      partitionIndices.foreach { partitionIndex =>
-        val partition = parent.partitions(partitionIndex)
-        partitions += partition
-        preferredLocations ++= parent.preferredLocations(partition)
-      }
-      // Select the most common location as the preferred location
-      val preferredLocation = preferredLocations
-        .groupBy(identity)
-        .view.mapValues(_.size)
-        .maxByOption(_._2)
-        .map(_._1)
-      val partitionGroup = new PartitionGroup(preferredLocation)
+      // Read the partitions before the vote: otherwise the scheduler would compute them while it
+      // holds its cache-location map, against the lock order that `DAGScheduler` documents.
+      val partitions = partitionIndices.map(parent.partitions(_))
+      // A group of one leaves its location to the scheduler, which then offers every location of
+      // its partition. The checks above run only for groups of several partitions.
+      val votes = partitionIndices.size > 1 && !partitionIndices.exists(shared) && !persisted
+      val partitionGroup =
+        new PartitionGroup(if (votes) preferredLocation(parent, partitionIndices) else None)
       partitionGroup.partitions ++= partitions
       partitionGroup
     }.toArray
+  }
+
+  /**
+   * The host that more of the given partitions prefer than any other host, or the only location
+   * that they name on it, such as an executor. With no host ahead it is None, and the scheduler
+   * offers the locations of the first partition that has any. Naming a tied host would mostly
+   * narrow that offer, though in a group of three or more that partition can miss them. As in
+   * `DefaultPartitionCoalescer`, a partition's locations are the ones the scheduler would use
+   * for it, found through the parent's lineage, since a parent such as a scan's mapped RDD
+   * reports none of its own.
+   */
+  private def preferredLocation(parent: RDD[_], partitionIndices: Seq[Int]): Option[String] = {
+    val locations = partitionIndices.map(parent.context.getPreferredLocs(parent, _))
+    // A partition counts once for each host, however it names the host.
+    val counts = locations.flatMap(_.map(_.host).distinct).groupBy(identity).view
+      .mapValues(_.size).toSeq
+    val top = counts.map(_._2).maxOption
+    counts.collect { case (host, count) if top.contains(count) => host } match {
+      case Seq(host) =>
+        locations.flatten.filter(_.host == host).map(_.toString).distinct match {
+          case Seq(location) => Some(location)
+          case _ => Some(host)
+        }
+      case _ => None
+    }
   }
 }
 
