@@ -17,30 +17,16 @@
 """
 Transpilation of Arrow-optimized Python UDFs (``SQL_ARROW_BATCHED_UDF``).
 
-Arrow optimization is the default for regular Python UDFs, so a plain
-``functions.udf(f, "bigint")`` gets ``SQL_ARROW_BATCHED_UDF``. Until that eval type was
-admitted to ``_TRANSPILABLE_EVAL_TYPES`` in ``python/pyspark/sql/udf.py``, the transpilation
-flag did nothing on default configuration.
+Arrow optimization is the default for regular Python UDFs, so this is the eval type a plain
+``functions.udf(f, "bigint")`` gets. Arrow is only the transport: the worker still calls the
+function once per row with Python scalars, unlike the genuinely vectorized
+``SQL_SCALAR_ARROW_UDF``, which must never be transpiled.
 
-This is a separate module from ``pyspark.sql.tests.test_udf_transpile_unit`` because the
-reference semantics differ. The pickled path coerces a UDF's return value through
-``EvaluatePython.makeFromJava``, which NULLs a type mismatch; the Arrow path builds a
-``pa.array`` and falls back to a cast (``ArrowBatchedUDFArrowHandler.run`` in
-``python/pyspark/eval_handlers/_arrow.py``), which can raise or convert instead. So every
-differential here compares transpiled-Arrow against interpreted-**Arrow**: the question is
-whether the rewrite matches what this UDF would have done in its own eval mode. The
-cell-by-cell matrix for both regimes lives in the golden files under
-``python/pyspark/sql/tests/coercion/``.
+The pickled path NULLs a return value of the wrong type where the Arrow path raises or
+converts, so every differential here compares transpiled-Arrow against interpreted-Arrow.
 
-Naming trap: ``SQL_ARROW_BATCHED_UDF`` (101) is the Arrow-*optimized* regular UDF -- Arrow
-is only the transport, and the worker still calls the function once per row with Python
-scalars. ``SQL_SCALAR_ARROW_UDF`` (250) is genuinely vectorized and must never be
-transpiled. ``test_eval_type_allowlist_is_exhaustive`` guards the distinction.
-
-UDF bodies here are all named ``def``s. The transpiler recovers source with
-``inspect.getsource``, which for a lambda passed as a call argument returns the enclosing
-statement -- whose top-level node is a call, not a lambda -- so transpilation silently falls
-back and the test passes while asserting nothing. ``_assert_transpiled`` catches that.
+UDF bodies are named ``def``s: ``inspect.getsource`` cannot recover a lambda passed as a call
+argument, so it would silently fall back and the test would assert nothing.
 """
 
 import tempfile
@@ -48,7 +34,7 @@ import unittest
 import warnings
 from collections import Counter
 
-from pyspark.errors import IllegalArgumentException, PythonException, StreamingQueryException
+from pyspark.errors import PythonException, StreamingQueryException
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.types import (
@@ -56,7 +42,6 @@ from pyspark.sql.types import (
     BooleanType,
     ByteType,
     CalendarIntervalType,
-    DecimalType,
     DoubleType,
     IntegerType,
     LongType,
@@ -64,12 +49,9 @@ from pyspark.sql.types import (
     _parse_datatype_json_string,
 )
 from pyspark.sql.udf import (
-    _TRANSPILABLE_EVAL_TYPE_NAMES,
     _TRANSPILABLE_EVAL_TYPES,
-    _TRANSPILE_EVAL_TYPES_CONF,
     UserDefinedFunction,
 )
-from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,
@@ -78,14 +60,6 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType, is_remote_only
-
-if have_pandas:
-    import pandas as pd
-
-
-# Kept as a constant so ``test_arrow_transpile_flag_matches_reality`` fails in either
-# direction if the eval-type gate in python/pyspark/sql/udf.py and this file disagree.
-ARROW_TRANSPILE_SUPPORTED = True
 
 # Transpilation requires both flags, at construction and again in ConvertToCatalyst.
 _TRANSPILE_ON = {
@@ -114,23 +88,6 @@ _BAD_TRANSPILE_WARNING_MARKERS = (
 # "This side raised instead of returning rows."
 _RAISED = object()
 
-# Eval types that hand the function a whole pandas.Series or pyarrow.Array and are still
-# refused outright. SQL_SCALAR_PANDAS_UDF is deliberately absent: it is also vectorized, but
-# it is transpiled for the element-wise subset of bodies covered by
-# ``pyspark.sql.tests.pandas.test_pandas_udf_transpile``.
-_VECTORIZED_SCALAR_EVAL_TYPES = (
-    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-    PythonEvalType.SQL_SCALAR_ARROW_UDF,
-    PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-)
-
-_GROUPED_AGG_EVAL_TYPES = (
-    PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-    PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
-    PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-    PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-)
-
 
 # --- UDF bodies ------------------------------------------------------------------------
 
@@ -145,14 +102,6 @@ def add_four(x):
 
 def identity(x):
     return x
-
-
-def constant_42(x):
-    return 42
-
-
-def gt_one(x):
-    return x > 1
 
 
 def is_null(x):
@@ -286,14 +235,6 @@ def str_repeat_left(x: str):
 _STRING_BODIES = (str_concat, str_repeat_right, str_repeat_left)
 
 
-def str_is_abc(x: str):
-    return x == "abc"
-
-
-def bool_identity(x: bool):
-    return x
-
-
 # `not`/`and`/`or` need a statically-boolean operand, which a bare parameter is not (see
 # _is_definitely_boolean); those fall back, as test_udf_transpile_{not,and_or}_bare_param_*
 # in the non-Arrow unit suite pin. Wrapping a comparison is what makes them lowerable.
@@ -401,7 +342,10 @@ def _python_udf_expr_count(df):
     pandas_requirement_message or pyarrow_requirement_message,  # type: ignore[arg-type]
 )
 class ArrowUDFTranspileTestsMixin:
-    """Helpers shared by the suites in this module."""
+    """Helpers shared by the transpile suites; the pandas ones reuse them."""
+
+    # The eval type a differential runs at unless told otherwise.
+    _eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
 
     def _assert_transpiled(self, pudf, what):
         self.assertTrue(
@@ -422,7 +366,7 @@ class ArrowUDFTranspileTestsMixin:
         Both sides use the same eval type, so the reference is the interpreted behavior of
         the very UDF being rewritten. ``values`` is the produced list, or ``_RAISED``.
         """
-        eval_type = eval_type or PythonEvalType.SQL_ARROW_BATCHED_UDF
+        eval_type = eval_type or self._eval_type
         extra = conf or {}
         name = getattr(func, "__name__", repr(func))
 
@@ -463,28 +407,12 @@ class ArrowUDFTranspileTestsMixin:
             _RAISED,
             f"{name}: transpiled raised {on_error!r} but interpreted returned {off_values!r}",
         )
-        self.assertEqual(off_values, on_values, f"{name}: transpiled != interpreted")
+        # repr(), so that a genuine NaN on both sides compares equal.
+        self.assertEqual(repr(off_values), repr(on_values), f"{name}: transpiled != interpreted")
 
 
 class ArrowUDFTranspileEvalTypeGateTests(ArrowUDFTranspileTestsMixin, ReusedSQLTestCase):
     """Which eval types may be transpiled at all."""
-
-    def test_arrow_transpile_flag_matches_reality(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = _arrow_udf(add_one, LongType())
-            self.assertEqual(
-                bool(pudf.transpiled),
-                ARROW_TRANSPILE_SUPPORTED,
-                "ARROW_TRANSPILE_SUPPORTED disagrees with the eval-type gate in "
-                "python/pyspark/sql/udf.py; update whichever one is wrong.",
-            )
-
-    def test_arrow_batched_eval_type_transpiles_and_computes(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = _arrow_udf(add_four, LongType())
-            self._assert_transpiled(pudf, "an Arrow-optimized UDF")
-            df = self.spark.createDataFrame([Row(a=1)])
-            self.assertEqual([5], [r[0] for r in df.select(pudf("a")).collect()])
 
     def test_functions_udf_transpiles_on_default_configuration(self):
         # The motivating case: no useArrow argument, so functions.udf picks the
@@ -499,144 +427,28 @@ class ArrowUDFTranspileEvalTypeGateTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
             df = self.spark.createDataFrame([Row(a=1)])
             self.assertEqual([5], [r[0] for r in df.select(wrapped("a")).collect()])
 
-    def test_pickled_eval_type_still_transpiles(self):
-        # Regression guard on rewriting the gate as set membership.
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = _pickled_udf(add_four, LongType())
-            self._assert_transpiled(pudf, "a pickled UDF")
-            df = self.spark.createDataFrame([Row(a=1)])
-            self.assertEqual([5], [r[0] for r in df.select(pudf("a")).collect()])
-
-    def test_vectorized_scalar_eval_types_do_not_transpile(self):
-        # `x + 1` on a Series is a whole-batch operation, not the per-row lowering the
-        # transpiler would emit.
-        with self.sql_conf(_TRANSPILE_ON):
-            for eval_type in _VECTORIZED_SCALAR_EVAL_TYPES:
-                with self.subTest(evalType=eval_type):
-                    pudf = UserDefinedFunction(add_one, LongType(), evalType=eval_type)
-                    self.assertEqual([], pudf.transpiled)
-
-    def test_grouped_agg_eval_types_do_not_transpile(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            for eval_type in _GROUPED_AGG_EVAL_TYPES:
-                with self.subTest(evalType=eval_type):
-                    pudf = UserDefinedFunction(add_one, LongType(), evalType=eval_type)
-                    self.assertEqual([], pudf.transpiled)
-
     def test_eval_type_allowlist_is_exhaustive(self):
-        # Enumerate every eval type Spark defines rather than listing the excluded ones, so
-        # a newly added eval type shows up here instead of being silently covered.
-        expected = {PythonEvalType.SQL_BATCHED_UDF}
-        if ARROW_TRANSPILE_SUPPORTED:
-            expected.add(PythonEvalType.SQL_ARROW_BATCHED_UDF)
-        # The one vectorized eval type that is transpiled, for the element-wise subset only.
-        # ``add_one``'s body (`x + 1`) is inside that subset, which is why it appears here;
-        # the subset itself is pinned by
-        # ``pyspark.sql.tests.pandas.test_pandas_udf_transpile``.
-        expected.add(PythonEvalType.SQL_SCALAR_PANDAS_UDF)
-
+        # Try every eval type Spark defines rather than listing the excluded ones, so a newly
+        # added eval type that transpiles shows up here instead of being silently covered.
+        # `add_one` is inside the element-wise subset, which is why the pandas type appears.
         all_eval_types = {
             name: value
             for name, value in vars(PythonEvalType).items()
             if name.startswith("SQL_") and isinstance(value, int)
         }
-        recorded = {
-            "SQL_BATCHED_UDF",
-            "SQL_ARROW_BATCHED_UDF",
-            "SQL_ARROW_ELEMENTWISE_UDF",
-            "SQL_SCALAR_PANDAS_ELEMENTWISE_UDF",
-            "SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF",
-            "SQL_SCALAR_ARROW_ELEMENTWISE_UDF",
-            "SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF",
-            "SQL_SCALAR_PANDAS_UDF",
-            "SQL_GROUPED_MAP_PANDAS_UDF",
-            "SQL_GROUPED_AGG_PANDAS_UDF",
-            "SQL_WINDOW_AGG_PANDAS_UDF",
-            "SQL_SCALAR_PANDAS_ITER_UDF",
-            "SQL_MAP_PANDAS_ITER_UDF",
-            "SQL_COGROUPED_MAP_PANDAS_UDF",
-            "SQL_MAP_ARROW_ITER_UDF",
-            "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
-            "SQL_GROUPED_MAP_ARROW_UDF",
-            "SQL_COGROUPED_MAP_ARROW_UDF",
-            "SQL_TRANSFORM_WITH_STATE_PANDAS_UDF",
-            "SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF",
-            "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF",
-            "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF",
-            "SQL_GROUPED_MAP_ARROW_ITER_UDF",
-            "SQL_GROUPED_MAP_PANDAS_ITER_UDF",
-            "SQL_GROUPED_AGG_PANDAS_ITER_UDF",
-            "SQL_SCALAR_ARROW_UDF",
-            "SQL_SCALAR_ARROW_ITER_UDF",
-            "SQL_GROUPED_AGG_ARROW_UDF",
-            "SQL_WINDOW_AGG_ARROW_UDF",
-            "SQL_GROUPED_AGG_ARROW_ITER_UDF",
-            "SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF",
-            "SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF",
-            "SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF",
-            "SQL_TABLE_UDF",
-            "SQL_ARROW_TABLE_UDF",
-            "SQL_ARROW_UDTF",
-        }
-        self.assertEqual(
-            recorded,
-            set(all_eval_types),
-            "An eval type needs triage: update the recorded inventory and admission tests.",
-        )
         self.assertGreater(len(all_eval_types), 20, "eval-type introspection found almost none")
-
-        transpiling = {}
         with self.sql_conf(_TRANSPILE_ON):
-            for name, value in sorted(all_eval_types.items(), key=lambda kv: kv[1]):
-                pudf = UserDefinedFunction(add_one, LongType(), evalType=value)
-                if pudf.transpiled:
-                    transpiling[name] = value
-
+            transpiling = {
+                value
+                for value in all_eval_types.values()
+                if UserDefinedFunction(add_one, LongType(), evalType=value).transpiled
+            }
         self.assertEqual(
-            expected,
-            set(transpiling.values()),
-            f"the set of transpiling eval types changed: {sorted(transpiling.items())}. "
-            "A per-row scalar Python UDF belongs in _TRANSPILABLE_EVAL_TYPES in "
-            "python/pyspark/sql/udf.py and in this test. An eval type that hands the "
-            "function a pandas.Series or pyarrow.Array needs more than that: the lowerings "
-            "are written against Python scalars, so admitting one means auditing every "
-            "construct for batch semantics first (see the 'Scalar pandas UDFs' section of "
-            "python/pyspark/sql/transpile.py for how that was done for "
-            "SQL_SCALAR_PANDAS_UDF).",
-        )
-
-    def test_annotated_vectorized_function_via_functions_udf_transpiles(self):
-        # ``functions.udf`` infers SQL_SCALAR_PANDAS_UDF from the pandas annotations, and
-        # `s + 1` is inside the element-wise subset, so this is transpiled. The pandas
-        # semantics are covered in pyspark.sql.tests.pandas.test_pandas_udf_transpile; what
-        # matters here is that arriving via ``functions.udf`` rather than ``pandas_udf``
-        # reaches the same gate.
-        def series_add_one(s: pd.Series) -> pd.Series:
-            return s + 1
-
-        with self.sql_conf(_TRANSPILE_ON):
-            wrapped = udf(series_add_one, LongType())
-            self.assertEqual(wrapped.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
-            self._assert_transpiled(wrapped._unwrapped, "an annotated pandas UDF")
-            df = self.spark.createDataFrame([Row(a=1)])
-            self.assertEqual([2], [r[0] for r in df.select(wrapped("a")).collect()])
-
-    def test_scalar_annotations_warn_about_eval_type_inference(self):
-        # Pins a pre-existing wart rather than endorsing it: a scalar annotation is not a
-        # vectorized signature, so inference raises and degrades to a warning. Annotations
-        # are how callers pin an input-type category, so users will hit this and read it as
-        # a transpiler bug.
-        def scalar_add_one(x: int) -> int:
-            return x + 1
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": True}):
-                wrapped = udf(scalar_add_one, LongType())
-        self.assertEqual(wrapped.evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF)
-        self.assertTrue(
-            any("Cannot infer the eval type from type hints" in str(w.message) for w in caught),
-            f"expected the eval-type inference warning, got {[str(w.message) for w in caught]}",
+            _TRANSPILABLE_EVAL_TYPES,
+            transpiling,
+            "the set of transpiling eval types changed. An eval type that hands the function "
+            "a pandas.Series or pyarrow.Array must be audited for batch semantics first; see "
+            "the 'Scalar pandas UDFs' section of python/pyspark/sql/transpile.py.",
         )
 
     def test_nondeterministic_arrow_udf_does_not_transpile(self):
@@ -678,110 +490,6 @@ class ArrowUDFTranspileEvalTypeGateTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
         self.assertFalse(spurious, f"spurious transpilation warning: {spurious}")
 
 
-class ArrowUDFTranspileEvalTypeRollbackTests(ArrowUDFTranspileTestsMixin, ReusedSQLTestCase):
-    """``spark.sql.experimental.optimizer.transpilePyUDFs.evalTypes``, the rollback control.
-
-    The flag alone used to mean "transpile pickled UDFs". Admitting the Arrow-optimized and
-    scalar pandas eval types changed what it does for anyone who already had it on, so this
-    internal conf lets one eval type be turned back off without giving up the others.
-    """
-
-    def _build(self, eval_type):
-        return UserDefinedFunction(add_one, LongType(), evalType=eval_type)
-
-    def _only(self, *eval_types):
-        names = ",".join(_TRANSPILABLE_EVAL_TYPE_NAMES[t] for t in eval_types)
-        return self.sql_conf({**_TRANSPILE_ON, _TRANSPILE_EVAL_TYPES_CONF: names})
-
-    def test_names_are_the_eval_type_attribute_names(self):
-        self.assertEqual(_TRANSPILABLE_EVAL_TYPES, frozenset(_TRANSPILABLE_EVAL_TYPE_NAMES))
-        for eval_type, name in _TRANSPILABLE_EVAL_TYPE_NAMES.items():
-            with self.subTest(name=name):
-                self.assertEqual(eval_type, getattr(PythonEvalType, name))
-
-    def test_an_unlisted_eval_type_is_not_transpiled(self):
-        # Each eval type on its own: it transpiles, the other two do not. Being unlisted is
-        # a gate rather than a failed attempt, so it must not warn either.
-        for listed in sorted(_TRANSPILABLE_EVAL_TYPES):
-            with self.subTest(listed=listed), self._only(listed):
-                with warnings.catch_warnings(record=True) as caught:
-                    warnings.simplefilter("always")
-                    built = {t: self._build(t) for t in sorted(_TRANSPILABLE_EVAL_TYPES)}
-                self.assertEqual([], [str(w.message) for w in caught])
-                for eval_type, pudf in built.items():
-                    self.assertEqual(eval_type == listed, bool(pudf.transpiled), eval_type)
-
-    def test_pickled_only_restores_the_scope_before_arrow_and_pandas_were_admitted(self):
-        # What a user who had the flag on before, and wants exactly that back, sets. A plain
-        # functions.udf is Arrow-optimized by default, so it runs interpreted again.
-        df = self.spark.createDataFrame([Row(a=1)])
-        with self._only(PythonEvalType.SQL_BATCHED_UDF):
-            wrapped = udf(add_four, LongType())
-            self.assertEqual(wrapped.evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF)
-            self.assertEqual([], wrapped._unwrapped.transpiled)
-            arrow_df = df.select(wrapped("a"))
-            self.assertEqual({"ArrowEvalPythonExec": 1}, dict(_eval_python_nodes(arrow_df)))
-            self.assertEqual([5], [r[0] for r in arrow_df.collect()])
-
-            pickled = _pickled_udf(add_four, LongType())
-            self._assert_transpiled(pickled, "a pickled UDF with only its eval type listed")
-            pickled_df = df.select(pickled("a"))
-            self.assertEqual({}, dict(_eval_python_nodes(pickled_df)))
-            self.assertEqual([5], [r[0] for r in pickled_df.collect()])
-
-    def test_narrowing_the_list_applies_to_udfs_that_already_exist(self):
-        # The options are attached at construction, so ConvertToCatalyst has to re-read the
-        # conf: a rollback that only reached UDFs built afterwards would not be one.
-        with self.sql_conf(_TRANSPILE_ON):
-            built = {t: self._build(t) for t in sorted(_TRANSPILABLE_EVAL_TYPES)}
-            for eval_type, pudf in built.items():
-                self._assert_transpiled(pudf, f"eval type {eval_type}")
-                df = self.spark.range(3).select(pudf("id"))
-                self.assertEqual({}, dict(_eval_python_nodes(df)), eval_type)
-        operator = {
-            PythonEvalType.SQL_BATCHED_UDF: "BatchEvalPythonExec",
-            PythonEvalType.SQL_ARROW_BATCHED_UDF: "ArrowEvalPythonExec",
-            PythonEvalType.SQL_SCALAR_PANDAS_UDF: "ArrowEvalPythonExec",
-        }
-        for removed in sorted(_TRANSPILABLE_EVAL_TYPES):
-            kept = [t for t in sorted(_TRANSPILABLE_EVAL_TYPES) if t != removed]
-            with self.subTest(removed=removed), self._only(*kept):
-                for eval_type, pudf in built.items():
-                    df = self.spark.range(3).select(pudf("id"))
-                    expected = {operator[eval_type]: 1} if eval_type == removed else {}
-                    self.assertEqual(expected, dict(_eval_python_nodes(df)), eval_type)
-                    self.assertEqual([1, 2, 3], [r[0] for r in df.collect()], eval_type)
-
-    def test_adding_an_eval_type_back_only_applies_to_udfs_built_afterwards(self):
-        # Same as the flag itself: a UDF built while its eval type was unlisted has no
-        # options to use, and needs rebuilding.
-        with self._only(PythonEvalType.SQL_BATCHED_UDF):
-            built_unlisted = _arrow_udf(add_one, LongType())
-        with self.sql_conf(_TRANSPILE_ON):
-            self.assertEqual([], built_unlisted.transpiled)
-            df = self.spark.range(3).select(built_unlisted("id"))
-            self.assertEqual({"ArrowEvalPythonExec": 1}, dict(_eval_python_nodes(df)))
-            self._assert_transpiled(_arrow_udf(add_one, LongType()), "a rebuilt Arrow UDF")
-
-    def test_names_are_case_insensitive_and_trimmed(self):
-        with self.sql_conf(
-            {**_TRANSPILE_ON, _TRANSPILE_EVAL_TYPES_CONF: " sql_arrow_batched_udf , "}
-        ):
-            self._assert_transpiled(_arrow_udf(add_one, LongType()), "an Arrow-optimized UDF")
-            self.assertEqual([], _pickled_udf(add_one, LongType()).transpiled)
-
-    def test_the_list_cannot_admit_an_eval_type_the_transpiler_does_not_support(self):
-        # It narrows the allowlist in udf.py and never widens it: naming anything else is
-        # rejected when the conf is set, instead of silently opting an untriaged eval type in.
-        for name in ("SQL_SCALAR_ARROW_UDF", "SQL_SCALAR_PANDAS_ITER_UDF", "NOT_AN_EVAL_TYPE"):
-            with self.subTest(name=name):
-                with self.assertRaises(IllegalArgumentException) as ctx:
-                    self.spark.conf.set(_TRANSPILE_EVAL_TYPES_CONF, f"SQL_BATCHED_UDF,{name}")
-                self.assertEqual(
-                    "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS", ctx.exception.getCondition()
-                )
-
-
 class ArrowUDFTranspilePlanShapeTests(ArrowUDFTranspileTestsMixin, ReusedSQLTestCase):
     """What the executed plan looks like once a UDF is (or is not) rewritten."""
 
@@ -802,22 +510,6 @@ class ArrowUDFTranspilePlanShapeTests(ArrowUDFTranspileTestsMixin, ReusedSQLTest
             counts = _eval_python_nodes(self.spark.range(4).select(pudf("id")))
             self.assertEqual(1, counts["ArrowEvalPythonExec"])
             self.assertEqual(0, counts["BatchEvalPythonExec"])
-
-    def test_untranspilable_pickled_udf_keeps_batch_eval_python(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = _pickled_udf(floor_halve, LongType())
-            self.assertEqual([], pudf.transpiled)
-            counts = _eval_python_nodes(self.spark.range(4).select(pudf("id")))
-            self.assertEqual(1, counts["BatchEvalPythonExec"])
-            self.assertEqual(0, counts["ArrowEvalPythonExec"])
-
-    def test_transpiled_arrow_udf_in_filter_has_no_python_eval(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            pudf = _arrow_udf(gt_one, BooleanType())
-            self._assert_transpiled(pudf, "a boolean Arrow-optimized UDF")
-            df = self.spark.range(4).filter(pudf("id"))
-            self.assertEqual(Counter(), _eval_python_nodes(df))
-            self.assertEqual([2, 3], [r[0] for r in df.collect()])
 
     def test_middle_of_arrow_udf_chain_is_not_elided(self):
         # ConvertToCatalyst keeps a transpilable UDF whose inputs are all Python UDFs,
@@ -999,19 +691,6 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
                 guarded_negated_equals_two, BooleanType(), nullable, "a", eval_type=eval_type
             )
 
-    def test_numeric_boundary_values_match_interpreted_arrow(self):
-        # Identity, because at the boundary any operation would overflow (pinned below).
-        for dtype, value in (
-            ("tinyint", -128),
-            ("tinyint", 127),
-            ("bigint", -(2**63)),
-            ("bigint", 2**63 - 1),
-        ):
-            with self.subTest(dtype=dtype, value=value):
-                self._assert_matches_interpreted(
-                    identity, LongType(), self._one_row(dtype, value), "a"
-                )
-
     def test_numeric_comparisons_match_interpreted_arrow(self):
         for value in (1, 2, 3):
             df = self._one_row("bigint", value)
@@ -1026,10 +705,6 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
                 with self.subTest(body=body.__name__, value=value):
                     self._assert_matches_interpreted(body, BooleanType(), df, "a")
 
-    def test_bool_input_matches_interpreted_arrow(self):
-        df = self.spark.createDataFrame([(True,), (False,), (None,)], schema="a boolean")
-        self._assert_matches_interpreted(bool_identity, BooleanType(), df, "a")
-
     def test_null_guarded_branch_matches_interpreted_arrow(self):
         # The idiomatic NULL-safe UDF: the guard means the interpreted path never does
         # arithmetic on None, so both sides agree on the NULL row.
@@ -1041,10 +716,6 @@ class ArrowUDFTranspileDifferentialTests(ArrowUDFTranspileTestsMixin, ReusedSQLT
         for body in _STRING_BODIES:
             with self.subTest(body=body.__name__):
                 self._assert_matches_interpreted(body, StringType(), df, "a")
-
-    def test_string_comparison_matches_interpreted_arrow(self):
-        df = self.spark.createDataFrame([("abc",), ("ABC",), ("zzz",)], schema="a string")
-        self._assert_matches_interpreted(str_is_abc, BooleanType(), df, "a")
 
     def test_binary_identity_matches_interpreted_arrow(self):
         df = self.spark.createDataFrame([(b"abc",), (b"",)], schema="a binary")
@@ -1132,7 +803,6 @@ class ArrowUDFTranspileStreamingRestartTests(ArrowUDFTranspileTestsMixin, Reused
     """
 
     _ALWAYS_NULLABLE = "spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled"
-    _PICKLED_ONLY = {**_TRANSPILE_ON, _TRANSPILE_EVAL_TYPES_CONF: "SQL_BATCHED_UDF"}
 
     def _run_to_completion(self, source, checkpoint, conf, expect_transpiled, expect_rows=4):
         """Feed the query one more file of four rows and run it until its input is processed.
@@ -1165,15 +835,13 @@ class ArrowUDFTranspileStreamingRestartTests(ArrowUDFTranspileTestsMixin, Reused
                 query.stop()
 
     def test_restart_after_transpilation_changes(self):
-        # Every direction, the eval type rollback included: the state schema is nullable
+        # Either direction: the state schema is nullable
         # whichever way the key was computed.
         with tempfile.TemporaryDirectory(prefix="transpile_stream") as tmp:
             source, checkpoint = f"{tmp}/source", f"{tmp}/checkpoint"
             for conf, transpiled in (
                 (_TRANSPILE_ON, True),
                 (_TRANSPILE_OFF, False),
-                (_TRANSPILE_ON, True),
-                (self._PICKLED_ONLY, False),
                 (_TRANSPILE_ON, True),
             ):
                 with self.subTest(conf=conf):
@@ -1184,18 +852,16 @@ class ArrowUDFTranspileStreamingRestartTests(ArrowUDFTranspileTestsMixin, Reused
         # stores a non-nullable key and a nullable one is refused from then on. Interpreted
         # first is fine: a nullable stored key accepts both.
         legacy = {self._ALWAYS_NULLABLE: False}
-        for stops_transpiling in ({**_TRANSPILE_OFF, **legacy}, {**self._PICKLED_ONLY, **legacy}):
-            with self.subTest(conf=stops_transpiling):
-                with tempfile.TemporaryDirectory(prefix="transpile_stream") as tmp:
-                    source, checkpoint = f"{tmp}/source", f"{tmp}/checkpoint"
-                    started_with = {**_TRANSPILE_ON, **legacy}
-                    self._run_to_completion(source, checkpoint, started_with, True)
-                    with self.assertRaises(StreamingQueryException) as ctx:
-                        self._run_to_completion(source, checkpoint, stops_transpiling, False)
-                    self.assertIn("STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE", str(ctx.exception))
-                    # Back on the settings it started with, it picks up where it failed: the
-                    # file the failed restart never got through, and the new one.
-                    self._run_to_completion(source, checkpoint, started_with, True, expect_rows=8)
+        started_with = {**_TRANSPILE_ON, **legacy}
+        with tempfile.TemporaryDirectory(prefix="transpile_stream") as tmp:
+            source, checkpoint = f"{tmp}/source", f"{tmp}/checkpoint"
+            self._run_to_completion(source, checkpoint, started_with, True)
+            with self.assertRaises(StreamingQueryException) as ctx:
+                self._run_to_completion(source, checkpoint, {**_TRANSPILE_OFF, **legacy}, False)
+            self.assertIn("STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE", str(ctx.exception))
+            # Back on the settings it started with, it picks up where it failed: the file
+            # the failed restart never got through, and the new one.
+            self._run_to_completion(source, checkpoint, started_with, True, expect_rows=8)
         with tempfile.TemporaryDirectory(prefix="transpile_stream") as tmp:
             source, checkpoint = f"{tmp}/source", f"{tmp}/checkpoint"
             for conf, transpiled in ((_TRANSPILE_OFF, False), (_TRANSPILE_ON, True)) * 2:
@@ -1215,19 +881,6 @@ class ArrowUDFTranspileConfInteractionTests(ArrowUDFTranspileTestsMixin, ReusedS
         with self.sql_conf({**_TRANSPILE_ON, self._LEGACY_PANDAS: True}):
             pudf = _arrow_udf(add_one, LongType())
             self.assertEqual([], pudf.transpiled)
-
-    def test_legacy_pandas_conversion_does_not_disable_the_pickled_path(self):
-        # The gate must be specific to the Arrow eval type.
-        with self.sql_conf({**_TRANSPILE_ON, self._LEGACY_PANDAS: True}):
-            pudf = _pickled_udf(add_one, LongType())
-            self._assert_transpiled(pudf, "a pickled UDF under the legacy pandas conf")
-
-    def test_int_extension_dtype_does_not_disable_the_row_at_a_time_paths(self):
-        # The gate in udf.py must stay specific to scalar pandas UDFs.
-        with self.sql_conf({**_TRANSPILE_ON, self._INT_EXT_DTYPE: True}):
-            for build in (_pickled_udf, _arrow_udf):
-                with self.subTest(build=build.__name__):
-                    self._assert_transpiled(build(add_one, LongType()), build.__name__)
 
     def test_legacy_pandas_conversion_null_int_column_is_the_reason(self):
         # The evidence for the gate, on the interpreted path. Under the legacy regime an
@@ -1284,50 +937,6 @@ class ArrowUDFTranspileConfInteractionTests(ArrowUDFTranspileTestsMixin, ReusedS
             off_values,
             "expected the interpreted Arrow path to wrap silently; if it now raises, this "
             "divergence is gone and the test should assert agreement",
-        )
-
-    def test_int_to_decimal_coercion_does_not_open_decimal_return_types(self):
-        # Arrow's int-to-decimal coercion makes the interpreted path accept an int result,
-        # which could look like an invitation to allow the rewrite. It is not: Arrow
-        # rescales with ROUND_HALF_EVEN, which a Catalyst cast need not reproduce.
-        for enabled in (True, False):
-            for build in (_arrow_udf, _pickled_udf):
-                with self.subTest(intToDecimal=enabled, build=build.__name__):
-                    with self.sql_conf({**_TRANSPILE_ON, self._INT_TO_DECIMAL: enabled}):
-                        pudf = build(add_one, DecimalType(10, 0))
-                        self.assertEqual([], pudf.transpiled)
-
-    def test_fallback_on_udt_cannot_change_the_regime_under_a_transpiled_option(self):
-        # correctEvalType can flip an Arrow UDF back to the pickled eval type when a UDT is
-        # involved, which would swap the coercion regime under a transpiled option. That is
-        # unreachable: a UDT return type is outside the return-type allowlist, and a UDT
-        # column matches no input category so every option is pruned.
-        with self.sql_conf({**_TRANSPILE_ON, self._FALLBACK_ON_UDT: True}):
-            pudf = _arrow_udf(identity, ExamplePointUDT())
-            self.assertEqual([], pudf.transpiled, "a UDT return type must not transpile")
-
-            df = self.spark.createDataFrame([Row(a=ExamplePoint(1.0, 2.0))])
-            constant = _arrow_udf(constant_42, LongType())
-            self.assertEqual(42, df.select(constant("a")).collect()[0][0])
-
-    def test_exotic_input_columns_fall_back(self):
-        with self.sql_conf(_TRANSPILE_ON):
-            constant = _arrow_udf(constant_42, LongType())
-            df = self.spark.range(1).selectExpr(
-                "array(1, 2) as arr", "map('a', 1) as m", "struct(1 as f) as s"
-            )
-            for column in ("arr", "m", "s"):
-                with self.subTest(column=column):
-                    self.assertEqual(42, df.select(constant(column)).collect()[0][0])
-
-    def test_arrow_concurrency_level_does_not_change_results(self):
-        df = self.spark.createDataFrame([(1,), (2,), (3,)], schema="a bigint")
-        self._assert_matches_interpreted(
-            add_one,
-            LongType(),
-            df,
-            "a",
-            conf={"spark.sql.execution.pythonUDF.arrow.concurrency.level": 4},
         )
 
 

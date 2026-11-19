@@ -1376,20 +1376,6 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Whether [[SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES]] lets this call be rewritten. The list
-   * governs the scalar eval types `udf.py` transpiles, so anything else -- an aggregate, which
-   * only a hand-built or custom-transpiled call can be -- is not its to turn down. A scalar UDF
-   * of an eval type the list cannot name is never rewritten.
-   */
-  private def evalTypeIsEnabled(e: Expression): Boolean = e match {
-    case u: PythonUDF =>
-      SQLConf.TRANSPILABLE_PYTHON_UDF_EVAL_TYPES.contains(u.evalType) &&
-        conf.getConf(SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES)
-          .contains(PythonEvalType.toString(u.evalType))
-    case _ => true
-  }
-
-  /**
    * Converts the transpiled calls in one expression, leaving every argument at its use sites -- and
    * so keeping the Python UDF for a call that owes one of them a single evaluation.
    *
@@ -1428,14 +1414,6 @@ object ConvertToCatalyst extends Rule[LogicalPlan] with PredicateHelper {
           logWarning(log"Skipping Python UDF transpilation: " +
             log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
-          keepPython
-        } else if (!evalTypeIsEnabled(s.pythonUDFExpr)) {
-          // udf.py attaches no options for an eval type missing from this list, but the list can
-          // be narrowed after the UDF was built -- rolling an eval type back is what it is for --
-          // so re-check here like the flag above.
-          logWarning(log"Skipping Python UDF transpilation: " +
-            log"${MDC(LogKeys.CONFIG, SQLConf.PYTHON_UDF_TRANSPILE_EVAL_TYPES.key)} does not " +
-            log"list the eval type of this Python UDF. Falling back to interpreted Python.")
           keepPython
         } else if (conf.legacyPandasConversionUDF &&
             isPythonUDFWithEvalType(s.pythonUDFExpr, PythonEvalType.SQL_ARROW_BATCHED_UDF)) {
