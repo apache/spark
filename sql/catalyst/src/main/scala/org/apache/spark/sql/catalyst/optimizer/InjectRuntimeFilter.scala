@@ -84,14 +84,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * The partition transform of the creation side, when the application side can get a
    * per-partition bloom filter. It needs a V2 scan under each side that reports a keyed
    * partitioning by the same transform of its join key (`pairedPartitionTransforms`). A
-   * per-partition bloom filter is a semi join of the application side with one bloom filter per
-   * partition key of the creation side.
+   * per-partition bloom filter has one bloom filter per partition key of the creation side.
    *
    * `injectPerPartitionBloomFilter` then adds its [[PerPartitionRuntimeFilterSubquery]]. Predicate
-   * pushdown moves it along the key. [[InsertPerPartitionRuntimeFilterJoins]] then builds the semi
-   * join where it landed. `ChoosePerPartitionRuntimeFilters` keeps the semi join only when it adds
-   * no shuffle and cuts no tasks that read the application side, and the creation side has enough
-   * partition keys for the size threshold.
+   * pushdown moves it along the key. [[CleanupPerPartitionRuntimeFilters]] then gives it way to
+   * `true`.
    *
    * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
    */
@@ -159,15 +156,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // `filterApplicationSidePlan` with the placeholder of a per-partition bloom filter of its key,
-  // over the partition transform `creation` of the creation side. The aggregate of its semi join
-  // reads the creation side again, apart from the join. So a creation side gives none when:
+  // over the partition transform `creation` of the creation side. Its aggregate reads the creation
+  // side again, apart from the join. So a creation side gives none when:
   //  - it has a Python or external UDF, or is not deterministic, as for the bloom filter of the
   //    whole creation side;
   //  - it reads a V2 scan with a pushed operation that does not work on each row by itself, such as
   //    a limit. Such a scan can return other rows when read again (see `canEvaluateAgain`).
   // A creation side also gives none when it needs more partition keys than a `bucket` transform
-  // gives (its buckets and null). `ChoosePerPartitionRuntimeFilters` would drop the semi join, and
-  // its placeholder would keep another join on the key from getting one.
+  // gives (its buckets and null). Its bloom filters would always be dropped, and its placeholder
+  // would keep another join on the key from getting one.
   private def injectPerPartitionBloomFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
@@ -549,8 +546,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // `plan` without the placeholders of per-partition bloom filters, which joins below added. A
-  // creation side leaves them out, since a copy there would count as a second one, and the original
-  // would get no semi join.
+  // creation side leaves them out, since a copy there would count as a second one.
   private def withoutPerPartitionRuntimeFilters(plan: LogicalPlan): LogicalPlan =
     plan.transformUpWithPruning(_.containsPattern(PER_PARTITION_RUNTIME_FILTER_SUBQUERY)) {
       case WithPlaceholders(conjuncts, _, child) => withoutPlaceholders(conjuncts, child)
@@ -636,10 +632,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  // Whether `plan` already holds a per-partition bloom filter of `key`. It is a placeholder, or the
-  // semi join that an earlier optimizer pass built, as when the recursion of a recursive CTE is
-  // optimized again. Each holds the key as pushdown left it, rewritten through the aliases it
-  // passed. So the keys are compared by the scan column they come from.
+  // Whether `plan` already holds a placeholder of a per-partition bloom filter of `key`. It holds
+  // the key as pushdown left it, rewritten through the aliases it passed. So the keys are compared
+  // by the scan column they come from.
   private def hasPerPartitionRuntimeFilter(plan: LogicalPlan, key: Expression): Boolean = {
     def columnOf(k: Expression, below: LogicalPlan): Option[Expression] =
       findExpressionAndTrackLineageDown(k, below).map(_._1)
@@ -648,8 +643,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       columnOf(k, below).exists(c => column.exists(_.semanticEquals(c)))
     plan.exists {
       case WithPlaceholders(_, placeholders, child) => placeholders.exists(p => isKey(p.key, child))
-      case join: Join =>
-        PerPartitionRuntimeFilterSubquery.semiJoinKey(join).exists(isKey(_, join.left))
       case _ => false
     }
   }
@@ -795,8 +788,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                   }
               }
             // Bloom filters of the whole creation side come first. Only a pair of keys that gets
-            // none on either side can get a per-partition one. So a semi join never reads one side
-            // again where a bloom filter reads the other side again.
+            // none on either side can get a per-partition one. So a per-partition bloom filter
+            // never reads one side again where a bloom filter reads the other side again.
             if (!injectOnOneSide(perPartition = false)) {
               injectOnOneSide(perPartition = true)
             }

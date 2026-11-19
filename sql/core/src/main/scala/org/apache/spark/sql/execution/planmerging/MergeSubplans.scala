@@ -232,8 +232,8 @@ object MergeSubplans extends Rule[LogicalPlan] {
       plan.transformExpressionsWithPruning(
           _.containsAnyPattern(SCALAR_SUBQUERY, PER_PARTITION_RUNTIME_FILTER_SUBQUERY)) {
         // The placeholder of a per-partition runtime bloom filter is not merged, since its plan is
-        // the creation side of a semi join. So the node needs no level above that plan. The
-        // subqueries in its plan can be merged.
+        // the creation side of an aggregate of its own. So the node needs no level above that
+        // plan. The subqueries in its plan can be merged.
         case p: PerPartitionRuntimeFilterSubquery =>
           val (planWithReferences, level) = insertReferences(p.plan, true, planMergers)
           levelFromSubqueries = levelFromSubqueries.max(level)
