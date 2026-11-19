@@ -311,8 +311,8 @@ VALUES (0), (1) tab(col)
 
 Sets columns of the input table to the result of evaluating the provided expressions. If a column
 appears in the input table, `EVAL` replaces it in place, as `SET` does. Otherwise, `EVAL` appends it
-after the existing columns, as `EXTEND` does. Each such column reference may appear in the input
-table at most once.
+after the existing columns, as `EXTEND` does. A name that matches more than one column of the
+input table fails with `AMBIGUOUS_REFERENCE`.
 
 It is possible to perform multiple assignments in a single `EVAL` clause. Each assignment may refer
 to the result of previous assignments, including columns that previous assignments appended.

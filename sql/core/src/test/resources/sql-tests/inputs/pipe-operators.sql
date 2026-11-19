@@ -460,6 +460,19 @@ table t
 select 1 as eval
 |> eval eval = eval + 1;
 
+-- Replacing a struct column in place with a value of another type.
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2);
+
+-- EVAL on an empty input.
+table t
+|> where false
+|> eval z = x + 1, x = 0;
+
+-- IDENTIFIER names the assigned column.
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1;
+
 -- A view whose definition adds a column with EVAL.
 create or replace temporary view pipe_eval_view as
 table t
@@ -483,12 +496,19 @@ select x, (table other |> eval z = a + x |> aggregate max(z)) as m from t;
 select 1 as a, 2 as a
 |> eval a = 3;
 
+-- EVAL with a column name that matches two copies of the same column.
+select x, x from t
+|> eval x = 1;
+
 -- EVAL appends z to the columns of t, so this scalar subquery returns more than one column.
 select (table t |> eval z = 1 |> limit 1) from values (0) as o(z);
 
--- Aggregate functions are not allowed in EVAL, including in an assignment that adds a column.
+-- Aggregate functions are not allowed in EVAL, whether the assignment adds or replaces a column.
 table t
 |> eval z = sum(x);
+
+table t
+|> eval x = sum(x);
 
 -- EVAL with an alias.
 table t
@@ -1996,6 +2016,8 @@ drop temporary variable extend;
 select x | eval from values (1, 2) as v(x, eval);
 
 select x | eval as y from values (1, 2) as v(x, eval);
+
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3;
 
 -- Single PIPE token with configuration disabled: negative tests.
 ------------------------------------------------------------------

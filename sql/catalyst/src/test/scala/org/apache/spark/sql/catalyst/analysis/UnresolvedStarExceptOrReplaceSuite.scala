@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 /**
- * Tests [[UnresolvedStarExceptOrReplace]] with `appendMissingReplacements` on a node that holds
- * several EXCEPT names. Pipe `|> EVAL` builds one node per assignment, so SQL tests only reach the
- * single-name case.
+ * Tests [[UnresolvedStarExceptOrReplace]] with `appendMissingReplacements`, including a node
+ * that holds several EXCEPT names. Pipe `|> EVAL` builds one node per assignment, so SQL tests
+ * only reach the single-name case.
  */
 class UnresolvedStarExceptOrReplaceSuite extends SparkFunSuite {
 
@@ -43,5 +44,37 @@ class UnresolvedStarExceptOrReplaceSuite extends SparkFunSuite {
 
     assert(star.expand(LocalRelation(x, y), caseInsensitiveResolution) ==
       Seq(newX, y, newB, newC))
+  }
+
+  test("appending missing replacements rejects a name that two copies of one column share") {
+    val x = $"x".int
+    val star = UnresolvedStarExceptOrReplace(
+      target = None,
+      excepts = Seq(Seq("x")),
+      replacements = Some(Seq(Alias(Literal(1), "x")())),
+      appendMissingReplacements = true)
+    checkError(
+      exception = intercept[AnalysisException] {
+        star.expand(LocalRelation(x, x), caseInsensitiveResolution)
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      parameters = Map("name" -> "`x`", "referenceNames" -> "[`x`, `x`]"))
+  }
+
+  test("appending missing replacements requires one replacement per EXCEPT name") {
+    Seq(None, Some(Seq.empty[NamedExpression])).foreach { replacements =>
+      val star = UnresolvedStarExceptOrReplace(
+        target = None,
+        excepts = Seq(Seq("x")),
+        replacements = replacements,
+        appendMissingReplacements = true)
+      checkError(
+        exception = intercept[SparkException] {
+          star.expand(LocalRelation($"x".int), caseInsensitiveResolution)
+        },
+        condition = "INTERNAL_ERROR",
+        parameters = Map(
+          "message" -> "Appending missing replacements requires one replacement per except"))
+    }
   }
 }

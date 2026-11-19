@@ -1164,6 +1164,35 @@ struct<eval:int>
 
 
 -- !query
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2)
+-- !query schema
+struct<col:struct<s:int>,x:int>
+-- !query output
+{"s":5}	1
+
+
+-- !query
+table t
+|> where false
+|> eval z = x + 1, x = 0
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+
+
+
+-- !query
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+2	abc	1
+2	def	1
+
+
+-- !query
 create or replace temporary view pipe_eval_view as
 table t
 |> eval z = x + 1
@@ -1232,6 +1261,30 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select x, x from t
+|> eval x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, x from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
 select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
 -- !query schema
 struct<>
@@ -1256,6 +1309,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 table t
 |> eval z = sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = sum(x)
 -- !query schema
 struct<>
 -- !query output
@@ -4911,6 +4988,14 @@ select x | eval as y from values (1, 2) as v(x, eval)
 struct<y:int>
 -- !query output
 3
+
+
+-- !query
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3
+-- !query schema
+struct<x:int,eval:int>
+-- !query output
+1	2
 
 
 -- !query

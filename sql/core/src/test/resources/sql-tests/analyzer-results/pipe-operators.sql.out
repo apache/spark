@@ -1247,6 +1247,39 @@ Project [(eval#x + 1) AS eval#x]
 
 
 -- !query
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2)
+-- !query analysis
+Project [named_struct(s, (col#x.i1 + col#x.i2)) AS col#x, x#x]
++- Project [col#x, x#x]
+   +- SubqueryAlias spark_catalog.default.st
+      +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table t
+|> where false
+|> eval z = x + 1, x = 0
+-- !query analysis
+Project [0 AS x#x, y#x, z#x]
++- Project [x#x, y#x, (x#x + 1) AS z#x]
+   +- Filter false
+      +- PipeOperator
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1
+-- !query analysis
+Project [(z#x + 1) AS x#x, y#x, z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 create or replace temporary view pipe_eval_view as
 table t
 |> eval z = x + 1
@@ -1326,6 +1359,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select x, x from t
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, x from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
 select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1348,6 +1403,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 table t
 |> eval z = sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = sum(x)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -5417,6 +5494,15 @@ select x | eval as y from values (1, 2) as v(x, eval)
 Project [(x#x | eval#x) AS y#x]
 +- SubqueryAlias v
    +- LocalRelation [x#x, eval#x]
+
+
+-- !query
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3
+-- !query analysis
+Project [x#x, eval#x]
++- Filter ((x#x | eval#x) = 3)
+   +- SubqueryAlias v
+      +- LocalRelation [x#x, eval#x]
 
 
 -- !query

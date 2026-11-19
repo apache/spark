@@ -645,11 +645,34 @@ class PlanParserSuite extends AnalysisTest {
       val stars = pipeAssignmentStars(parsePlan("TABLE t | EVAL z = 1 | WHERE z > 0"))
       assert(stars.map(_.excepts) == Seq(Seq(Seq("z"))))
       assert(stars.forall(_.appendMissingReplacements))
+      val identifierStars = pipeAssignmentStars(parsePlan("TABLE t | EVAL IDENTIFIER('z') = 1"))
+      assert(identifierStars.map(_.excepts) == Seq(Seq(Seq("z"))))
+      checkError(
+        exception = parseException("SELECT col FROM st | EVAL col.i1 = 42"),
+        condition = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> ("SQL pipe syntax |> EVAL operator with multi-part " +
+          "assignment key (only single-part keys are allowed)")),
+        context = ExpectedContext(fragment = "col.i1 = 42", start = 26, stop = 36))
       // Without an assignment after it, `| eval` is a bitwise OR with a column named eval.
       assertEqual("SELECT 1 | eval FROM t", table("t").select(Literal(1) | $"eval"))
       assertEqual("SELECT a | eval AS b FROM t", table("t").select(($"a" | $"eval").as("b")))
       assertEqual("SELECT a | eval b FROM t", table("t").select(($"a" | $"eval").as("b")))
+      assertEqual(
+        "SELECT a | eval IDENTIFIER('b') FROM t", table("t").select(($"a" | $"eval").as("b")))
       assertEqual("SELECT a | eval.f FROM t", table("t").select($"a" | $"eval.f"))
+      // Also when `=` follows a token that ends the expression.
+      Seq(
+        "(a | eval) = 1",
+        "(a | eval) == 1",
+        "(a | eval).f = 1",
+        "abs(a | eval) = 1",
+        "arr[a | eval] = 1",
+        "CASE WHEN c THEN a | eval END = 1").foreach { condition =>
+        val filters = parsePlan(s"SELECT * FROM t WHERE $condition").collect {
+          case f: Filter => f.condition
+        }
+        assert(filters.exists(_.exists(_ == ($"a" | $"eval"))), condition)
+      }
     }
     withSQLConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED.key -> "false") {
       assert(parseException("TABLE t | EVAL z = 1").getCondition == "PARSE_SYNTAX_ERROR")

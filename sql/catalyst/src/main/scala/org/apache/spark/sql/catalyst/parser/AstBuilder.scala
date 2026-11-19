@@ -8471,10 +8471,8 @@ class AstBuilder extends DataTypeAstBuilder
         }.get
       val projectList: Seq[NamedExpression] = Seq(UnresolvedStar(None)) ++ extendExpressions
       Project(projectList, left)
-    }.getOrElse(Option(ctx.SET).map { _ =>
-      visitOperatorPipeSetOrEval(ctx, left, PipeOperators.setClause)
-    }.getOrElse(Option(ctx.EVAL).map { _ =>
-      visitOperatorPipeSetOrEval(ctx, left, PipeOperators.evalClause)
+    }.getOrElse(Option(ctx.SET).orElse(Option(ctx.EVAL)).map { _ =>
+      visitOperatorPipeSetOrEval(ctx, left, appendMissingColumns = ctx.EVAL != null)
     }.getOrElse(Option(ctx.DROP).map { _ =>
       val ids: Seq[Seq[String]] = ctx.multipartIdentifierList().multipartIdentifier.asScala
         .toSeq.map(visitMultipartIdentifier)
@@ -8514,15 +8512,19 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, PipeOperator(left), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    )))))))))))))))
+    ))))))))))))))
   }
 
   /**
-   * Builds the pipe operator SET or EVAL, named by `clause`. Both replace an assigned column that
-   * exists in place. EVAL appends a column that does not exist, as EXTEND would, where SET fails.
+   * Builds the pipe operator SET, or EVAL if `appendMissingColumns`. Both replace an assigned
+   * column that exists in place. EVAL appends a column that does not exist, as EXTEND would, where
+   * SET fails.
    */
   private def visitOperatorPipeSetOrEval(
-      ctx: OperatorPipeRightSideContext, left: LogicalPlan, clause: String): LogicalPlan = {
+      ctx: OperatorPipeRightSideContext,
+      left: LogicalPlan,
+      appendMissingColumns: Boolean): LogicalPlan = {
+    val clause = if (appendMissingColumns) PipeOperators.evalClause else PipeOperators.setClause
     val assignments = ctx.operatorPipeSetAssignmentSeq()
     withOrigin(assignments) {
       if (!assignments.DOT.isEmpty) {
@@ -8533,16 +8535,12 @@ class AstBuilder extends DataTypeAstBuilder
     }
     val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
       visitOperatorPipeSetAssignmentSeq(assignments)
-    val appendMissingColumns = clause == PipeOperators.evalClause
     var plan = left
     setIdentifiers.zip(setTargets).foreach {
-      case (_, _: Alias) =>
-        operationNotAllowed(
-          s"SQL pipe syntax |> $clause operator with an alias assigned with [AS] aliasName", ctx)
       case (ident, target) =>
         // Add an UnresolvedStarExceptOrReplace to exclude the assigned column from the relation
         // and add the new expression to the projection list.
-        // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
+        // Use a PipeExpression to make sure it does not contain any aggregate functions.
         val replacement = Alias(PipeExpression(target, isAggregate = false, clause), ident)()
         val projectList: Seq[NamedExpression] =
           Seq(UnresolvedStarExceptOrReplace(
@@ -8559,7 +8557,8 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitOperatorPipeSetAssignmentSeq(
       ctx: OperatorPipeSetAssignmentSeqContext): (Seq[String], Seq[Expression]) = {
     withOrigin(ctx) {
-      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
+      val setIdentifiers: Seq[String] =
+        ctx.errorCapturingIdentifier().asScala.map(getIdentifierText).toSeq
       val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
       (setIdentifiers, setTargets)
     }

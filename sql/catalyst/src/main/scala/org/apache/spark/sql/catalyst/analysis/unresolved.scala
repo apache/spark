@@ -682,17 +682,41 @@ case class UnresolvedStarExceptOrReplace(
    *    case of nested columns in the except list (in order to rewrite structs)
    */
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
-    if (appendMissingReplacements) {
-      return expandStarAppendingMissingReplacements(parameters)
-    }
     // Use the expandStar method to get a seq of NamedExpressions corresponding to
     // the star expansion. This will yield a list of top-level columns from the logical plan's
     // output, or in the case of struct expansion (e.g. target=`x` for SELECT x.*) it will give
     // a seq of NamedExpressions corresponding to struct fields.
     val expandedCols = super.expandStar(parameters)
 
+    // With appendMissingReplacements, only the excepts that match a column replace it. The
+    // replacements of the other excepts are appended after the expanded columns.
+    val (presentExcepts, presentReplacements, appendedReplacements) =
+      if (appendMissingReplacements) {
+        val replacementList = replacements match {
+          case Some(list) if list.size == excepts.size => list
+          case _ => throw SparkException.internalError(
+            "Appending missing replacements requires one replacement per except")
+        }
+        val expandedAttributes = AttributeSeq(expandedCols.map(_.toAttribute))
+        val (present, missing) = excepts.zip(replacementList).partition { case (exceptParts, _) =>
+          expandedAttributes.resolve(exceptParts, parameters.resolver).exists { column =>
+            // Two copies of the same column, as in `SELECT x, x`, resolve to one attribute, so
+            // replacing it is ambiguous, as it would be for two different columns with the name.
+            val copies = expandedAttributes.attrs.filter(_.semanticEquals(column.toAttribute))
+            if (copies.size > 1) {
+              throw QueryCompilationErrors.ambiguousReferenceError(
+                UnresolvedAttribute(exceptParts).name, copies)
+            }
+            true
+          }
+        }
+        (present.map(_._1), Some(present.map(_._2)), missing.map(_._2))
+      } else {
+        (excepts, replacements, Nil)
+      }
+
     // resolve except list with respect to the expandedCols
-    val resolvedExcepts = excepts.map { exceptParts =>
+    val resolvedExcepts = presentExcepts.map { exceptParts =>
       AttributeSeq(expandedCols.map(_.toAttribute))
         .resolve(exceptParts, parameters.resolver)
         .getOrElse {
@@ -762,7 +786,7 @@ case class UnresolvedStarExceptOrReplace(
       // If the 'replacements' list is populated to indicate we should replace excepted columns
       // with new expressions, we must have the same number of replacements as excepts. Keep an
       // index to track the current replacement.
-      replacements.foreach { r =>
+      presentReplacements.foreach { r =>
         assert(excepts.size == r.size,
           "The number of replacements must be the same as the number of excepts")
       }
@@ -798,41 +822,15 @@ case class UnresolvedStarExceptOrReplace(
           throw new AnalysisException(
             errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
             messageParameters = Map(
-              "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
+              "columns" -> presentExcepts.map(_.mkString(".")).mkString(", ")))
         // found a match and the 'replacements' list is populated - replace the column
-        case (_, Some(_)) if replacements.nonEmpty =>
+        case (_, Some(_)) if presentReplacements.nonEmpty =>
           replacementIndex += 1
-          replacements.get(replacementIndex - 1)
+          presentReplacements.get(replacementIndex - 1)
       }
     }
 
-    filterColumns(expandedCols, exceptPairs)
-  }
-
-  /**
-   * Expands the star, replacing the columns that match an EXCEPT name and appending the
-   * replacements of the EXCEPT names that match no column, in EXCEPT list order.
-   */
-  private def expandStarAppendingMissingReplacements(
-      parameters: ExpandStarParameters): Seq[NamedExpression] = {
-    val replacementList = replacements match {
-      case Some(list) if list.size == excepts.size => list
-      case _ => throw SparkException.internalError(
-        "Appending missing replacements requires one replacement per except")
-    }
-    val expandedAttributes = AttributeSeq(super.expandStar(parameters).map(_.toAttribute))
-    val (presentExceptsAndReplacements, missingExceptsAndReplacements) =
-      excepts.zip(replacementList).partition { case (exceptParts, _) =>
-        expandedAttributes.resolve(exceptParts, parameters.resolver).isDefined
-      }
-    // The regular expansion replaces the present names. It resolves them a second time, which
-    // keeps the replacement logic in one place.
-    val expandedWithPresentColumnsReplaced = copy(
-      excepts = presentExceptsAndReplacements.map(_._1),
-      replacements = Some(presentExceptsAndReplacements.map(_._2)),
-      appendMissingReplacements = false
-    ).expandStar(parameters)
-    expandedWithPresentColumnsReplaced ++ missingExceptsAndReplacements.map(_._2)
+    filterColumns(expandedCols, exceptPairs) ++ appendedReplacements
   }
 }
 
