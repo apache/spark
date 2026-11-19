@@ -142,9 +142,13 @@ class StreamingJoinEqualityWatermarkSuite extends StreamTest {
       withJoinConf(version) {
         val (leftInput, rightInput, joined) = crossedKeyJoin()
         testStream(joined)(
-          // The row can never match, and the key predicate on lb never evicts it.
+          // The row can never match, so it is not stored, although the next eviction would remove
+          // it. Only the two rows with key 6 are stored.
           MultiAddData(leftInput, (5, -1), (6, 60))(rightInput, (6, 60)),
-          CheckNewAnswer(Row(5, null, null, null), Row(6, 60, 6, 60)))
+          CheckNewAnswer(Row(5, null, null, null), Row(6, 60, 6, 60)),
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsUpdated == 2
+          })
       }
     }
   }
