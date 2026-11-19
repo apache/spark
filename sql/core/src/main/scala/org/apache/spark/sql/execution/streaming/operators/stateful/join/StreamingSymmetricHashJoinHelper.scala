@@ -73,12 +73,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
   }
   /**
    * Predicate for watermark on state values. See [[JoinStateKeyWatermarkPredicate]] for
-   * the semantics of `stateWatermark` and `prevStateWatermark`.
+   * the semantics of `stateWatermark` and `prevStateWatermark`. `conditionBoundsColumn` is true
+   * when the join condition bounds the column that `expr` tests, so that a row with a NULL in it
+   * can never match.
    */
   case class JoinStateValueWatermarkPredicate(
       expr: Expression,
       stateWatermark: Long,
-      prevStateWatermark: Option[Long] = None)
+      prevStateWatermark: Option[Long] = None,
+      conditionBoundsColumn: Boolean = false)
     extends JoinStateWatermarkPredicate {
     def desc: String = "value predicate"
   }
@@ -213,7 +216,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       condition: Option[Expression],
       eventTimeWatermarkForEviction: Option[Long],
       eventTimeWatermarkForLateEvents: Option[Long],
-      useFirstEventTimeColumn: Boolean): JoinStateWatermarkPredicates = {
+      useFirstEventTimeColumn: Boolean,
+      isFirstBatch: Boolean = true): JoinStateWatermarkPredicates = {
 
     // Perform assertions against multiple event time columns in the same DataFrame. This method
     // assumes there is only one event time column per each side (left / right) and it is not very
@@ -263,42 +267,51 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         }
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val eventTime = oneSideInputAttributes.find(_.metadata.contains(delayKey))
-        // The legacy mode with a single global watermark keeps applying a cutoff on any column of
-        // this input to the event time. So does the default mode when the condition bounds no
-        // TIMESTAMP column, such as through a DATE column cast to TIMESTAMP only.
-        def solve(watermark: Option[Long]): Option[(Attribute, Long)] = {
-          def wholeInput = eventTime.flatMap { e =>
-            StreamingJoinHelper.getStateValueWatermark(
-              attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-              attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-              condition,
-              watermark).map(e -> _)
-          }
-          if (useFirstEventTimeColumn) {
-            wholeInput
-          } else {
+        def wholeInput(watermark: Option[Long]): Option[Long] =
+          StreamingJoinHelper.getStateValueWatermark(
+            attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+            attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
+            condition,
+            watermark)
+        // The column that evicts this input, its cutoff, and whether the condition bounds that
+        // column. The legacy mode with a single global watermark keeps applying a cutoff on any
+        // column of this input to the event time. So does the default mode when the condition
+        // bounds no TIMESTAMP column, such as through a DATE column cast to TIMESTAMP only.
+        // TODO: [SPARK-62044] An input bounded only through a column cast to TIMESTAMP is still
+        //  evicted by its event time with the cast column's cutoff, which can be too early.
+        def solve(watermark: Option[Long]): Option[(Attribute, Long, Boolean)] = {
+          val picked = if (useFirstEventTimeColumn) None else {
             StreamingJoinHelper.getStateValueWatermarkColumn(oneSideInputAttributes,
-              AttributeSet(otherSideInputAttributes), condition, watermark).orElse(wholeInput)
+              AttributeSet(otherSideInputAttributes), condition, watermark)
+          }
+          picked.map { case (c, w) => (c, w, true) }.orElse {
+            for (e <- eventTime; w <- wholeInput(watermark)) yield (e, w, false)
           }
         }
-        solve(eventTimeWatermarkForEviction).flatMap { case (column, stateValueWatermark) =>
+        solve(eventTimeWatermarkForEviction).flatMap { case (column, stateValueWatermark, bounds) =>
           // A row can pass late-input filtering but already be eligible for eviction in this
           // batch. When the previous join-derived state cutoff is ahead of the late-input
           // watermark, a new row can fall at or below that cutoff. V4 must scan from the
           // beginning to find such rows. Late-input filtering bounds only the event time, so a
-          // cutoff on another column always scans from the beginning. The bound is solved over
-          // the whole input, as earlier versions and the legacy mode evicted only up to it.
+          // cutoff on another column always scans from the beginning. In a later batch of a run,
+          // the previous batch evicted the event time up to its own cutoff at the late-input
+          // watermark, and new rows lie above that watermark. In the first batch, the state can
+          // come from an earlier version or the legacy mode, which evicted only up to the cutoff
+          // solved over the whole input.
           val prevStateValueWatermark = eventTimeWatermarkForLateEvents.filter { _ =>
             eventTime.exists(_.semanticEquals(column))
           }.flatMap { lateWatermark =>
-            StreamingJoinHelper.getStateValueWatermark(
-              attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
-              attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
-              condition,
-              Some(lateWatermark)).filter(_ <= lateWatermark)
+            if (bounds && !isFirstBatch) {
+              solve(Some(lateWatermark)).map { case (_, cutoff, _) =>
+                math.min(cutoff, lateWatermark)
+              }
+            } else {
+              wholeInput(Some(lateWatermark)).filter(_ <= lateWatermark)
+            }
           }
           watermarkExpression(Some(column), Some(stateValueWatermark)).map { e =>
-            JoinStateValueWatermarkPredicate(e, stateValueWatermark, prevStateValueWatermark)
+            JoinStateValueWatermarkPredicate(
+              e, stateValueWatermark, prevStateValueWatermark, conditionBoundsColumn = bounds)
           }
         }
       } else {

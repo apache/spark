@@ -144,7 +144,8 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
         val (leftInput, rightInput, result) =
           joinWithExpiry("rightTime BETWEEN leftTime AND expiry", joinType)
         testStream(result)(
-          // The row can never match, and the eviction predicate on expiry never removes it.
+          // The row can never match, so it is not stored, although the next eviction would remove
+          // it.
           StreamProgressLockedActions(Seq(
             AddData(leftInput, (1, 100L, -1L), (2, 100L, 700L)), AddData(rightInput, (2, 150L)))),
           CheckNewAnswer(Row(1, null, 100L), Row(2, 150L, 100L)),
@@ -163,6 +164,52 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
             AddData(leftInput, (1, -1L, 700L), (2, 100L, 700L)), AddData(rightInput, (2, 150L)))),
           CheckNewAnswer(Row(1, null, null), Row(2, 150L, 100L)),
           assertNumStateRows(total = 2, updated = 2))
+      }
+    }
+  }
+
+  // The condition bounds the left input only through leftDate cast to TIMESTAMP, so the left
+  // input is evicted by leftTime with the cutoff from leftDate, as in earlier versions. A negative
+  // start gives a NULL leftTime, which the condition does not reference.
+  private def joinWithDate(joinType: String)
+      : (MemoryStream[(Int, Long, Int)], MemoryStream[(Int, Long)], DataFrame) = {
+    val leftInput = MemoryStream[(Int, Long, Int)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "start", "day")
+      .select($"leftKey", when($"start" >= 0, timestamp_seconds($"start")).as("leftTime"),
+        date_add(lit("1970-01-01").cast("date"), $"day").as("leftDate"))
+      .withWatermark("leftTime", "60 seconds")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "60 seconds")
+    val result = left.join(right,
+      expr("leftKey = rightKey AND CAST(leftDate AS TIMESTAMP) >= rightTime"), joinType)
+      .select($"leftKey", $"rightTime".cast("long").as("matchTime"), $"leftTime".cast("long"))
+    (leftInput, rightInput, result)
+  }
+
+  for {
+    version <- Seq(2, 4)
+    joinType <- Seq("inner", "left_outer")
+  } {
+    test(s"an input bounded only through a cast column keeps the earlier eviction, " +
+        s"V$version $joinType") {
+      withJoinConf(version) {
+        val (leftInput, rightInput, result) = joinWithDate(joinType)
+        testStream(result)(
+          // The left row with a NULL leftTime and a leftDate of one day matches.
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, -1L, 1), (2, 100L, 0)), AddData(rightInput, (1, 100L)))),
+          CheckNewAnswer(Row(1, 100L, null)),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (8, 400L, 0)), AddData(rightInput, (1, 400L)))),
+          CheckNewAnswer(Row(1, 400L, null)),
+          // The cutoff on leftTime is 340 s. State format 4 indexed the NULL leftTime as 0 and
+          // evicted it in the last batch.
+          AddData(rightInput, (1, 500L)),
+          CheckNewAnswer(
+            (if (version == 2) Seq(Row(1, 500L, null)) else Nil) ++
+              (if (joinType == "left_outer") Seq(Row(2, null, 100L)) else Nil): _*))
       }
     }
   }
@@ -386,6 +433,87 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
           StartStream(checkpointLocation = checkpoint.getCanonicalPath),
           AddData(rightInput, (9, 1300L)),
           CheckNewAnswer(Row(1, null, 900L)))
+      }
+    }
+  }
+
+  // Within a run, the V4 scan of the left input starts at the event time's own cutoff, which is
+  // above the cutoff from expiry.
+  test("V4 range eviction by the event time over several batches of a run") {
+    withJoinConf(4) {
+      val (leftInput, rightInput, result) = joinWithExpiry("leftTime >= " +
+        "rightTime - INTERVAL 10 SECONDS AND expiry >= rightTime - INTERVAL 100 SECONDS",
+        "left_outer")
+      testStream(result)(
+        StreamProgressLockedActions(Seq(
+          AddData(leftInput, (1, 900L, 5000L), (8, 1000L, 5000L)),
+          AddData(rightInput, (9, 1000L)))),
+        CheckNewAnswer(),
+        // The watermark is 940 s, so the cutoff on leftTime is 930 s.
+        AddData(rightInput, (9, 1000L)),
+        CheckNewAnswer(Row(1, null, 900L)),
+        StreamProgressLockedActions(Seq(
+          AddData(leftInput, (2, 1200L, 5000L)), AddData(rightInput, (9, 1300L)))),
+        CheckNewAnswer(),
+        // The watermark is 1140 s, so the cutoff on leftTime is 1130 s.
+        AddData(rightInput, (2, 1300L)),
+        CheckNewAnswer(Row(8, null, 1000L)),
+        AddData(rightInput, (9, 1300L)),
+        CheckNewAnswer())
+    }
+  }
+
+  // A legacy-mode restart of a checkpoint that orders the state by the event time works.
+  test("V4 restart in the legacy mode of a join evicted by the event time") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, result) = joinWithExpiry(
+          "rightTime BETWEEN leftTime AND leftTime + INTERVAL 10 MINUTES", "left_outer")
+        testStream(result)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 100L, 700L), (2, 100L, 700L)), AddData(rightInput, (9, 100L)))),
+          CheckNewAnswer(),
+          StopStream)
+        assert(indexVersion(checkpoint) === Some("1"))
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          testStream(result)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(rightInput, (1, 160L)),
+            CheckNewAnswer(Row(1, 160L, 100L)),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, 1000L, 1600L)), AddData(rightInput, (9, 1000L)))),
+            CheckNewAnswer(),
+            AddData(rightInput, (9, 1000L)),
+            CheckNewAnswer(Row(2, null, 100L)))
+        }
+      }
+    }
+  }
+
+  test("V4 restart in the legacy mode fails for the right input that is evicted by another " +
+      "column") {
+    withJoinConf(4) {
+      withTempDir { checkpoint =>
+        val (leftInput, rightInput, result) =
+          joinWithExpiry("rightTime BETWEEN leftTime AND expiry", "right_outer")
+        testStream(result)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          StreamProgressLockedActions(Seq(
+            AddData(leftInput, (1, 100L, 700L)), AddData(rightInput, (9, 100L)))),
+          CheckNewAnswer(),
+          StopStream)
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+          testStream(result)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(rightInput, (9, 400L)),
+            ExpectFailure[AnalysisException] { e =>
+              checkError(
+                e.asInstanceOf[AnalysisException],
+                condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+                parameters = Map("side" -> "right", "column" -> "`expiry`"))
+            })
+        }
       }
     }
   }
