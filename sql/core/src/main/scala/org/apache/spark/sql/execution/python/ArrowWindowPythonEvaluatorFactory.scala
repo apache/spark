@@ -259,8 +259,8 @@ class ArrowWindowPythonEvaluatorFactory(
       )
       val grouping = UnsafeProjection.create(partitionSpec, childOutput)
       // The bytes are checked first, so a key spelled like its group's first row costs
-      // one byte comparison and only keys whose bytes differ pay the ordering comparison;
-      // most checks here compare a row against the first row of the group it belongs to.
+      // one byte comparison and only keys whose bytes differ pay the ordering comparison,
+      // which keeps the single byte comparison this loop made before it used the collation.
       val groupKeyEqualityCheck = UnsafeRowUtils.rowEqualityChecker(
         partitionSpec.map(_.dataType), checkBytesFirst = true)
 
