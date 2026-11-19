@@ -378,14 +378,15 @@ object SQLConf {
       .internal()
       .version("4.4.0")
       .doc(
-        "When true, a column in a SELECT list that references the output of a preceding " +
-        "generator in the same SELECT list, such as `tag` in " +
-        "`SELECT explode(tags) AS tag, upper(tag)`, or `col`, the default output name of " +
-        "`explode` without an alias, in `SELECT explode(tags), upper(col)`, is resolved to the " +
-        "generator output, even if an outer query column or a SQL variable has the same name. " +
+        "When true, a column in a SELECT list, including the list of the `|> SELECT` and " +
+        "`|> EXTEND` pipe operators, that references the output of a preceding generator in the " +
+        "same list, such as `tag` in `SELECT explode(tags) AS tag, upper(tag)`, or `col`, the " +
+        "default output name of `explode` without an alias, in " +
+        "`SELECT explode(tags), upper(col)`, is resolved to the generator output, even if an " +
+        "outer query column, a SQL function parameter, or a SQL variable has the same name. " +
         "In a SELECT list with aggregation, which can not reference the generator output, such " +
         "a column fails with UNRESOLVED_COLUMN instead. When false, it is resolved to the outer " +
-        "query column or the SQL variable.")
+        "query column, the SQL function parameter, or the SQL variable.")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
