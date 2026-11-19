@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
+import org.apache.spark.sql.catalyst.analysis.{UnsupportedOperationChecker, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -857,8 +857,15 @@ class IncrementalExecution(
   /** no need to try-catch again as this is already done once */
   override def assertAnalyzed(): Unit = analyzed
 
-  /** No need assert supported, as this check has already been done */
-  override def assertSupported(): Unit = { }
+  /**
+   * The checks have been done when the query started, except one that the first batch does, once
+   * the confs of the checkpoint are restored.
+   */
+  override def assertSupported(): Unit = {
+    if (isFirstBatch && sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(analyzed, outputMode)
+    }
+  }
 
   /**
    * Should the MicroBatchExecution run another batch based on this execution and the current
