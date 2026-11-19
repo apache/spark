@@ -66,13 +66,17 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * @param attributesWithEventWatermark  attributes of the other side which has a watermark column
    * @param joinCondition                 join condition
    * @param eventWatermark                watermark defined on the input event data
+   * @param risingCutoffsOnly             whether only conjuncts whose cutoff rises with the
+   *                                      watermark give a cutoff. Earlier versions also took
+   *                                      constant-only and negative-sign conjuncts.
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      risingCutoffsOnly: Boolean = true): Option[Long] = {
 
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
@@ -82,8 +86,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
-        getStateWatermarkFromLessThenPredicate(
-          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
+        getStateWatermarkFromLessThenPredicate(l, r, attributesToFindStateWatermarkFor,
+          attributesWithEventWatermark, eventWatermark, risingCutoffsOnly)
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error trying to extract state constraint from condition " +
@@ -155,7 +159,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       rightExpr: Expression,
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
-      eventWatermark: Option[Long]): Option[Long] = {
+      eventWatermark: Option[Long],
+      risingCutoffsOnly: Boolean): Option[Long] = {
 
     val attributesInCondition =
       leftExpr.collect { case a: AttributeReference => a } ++
@@ -215,7 +220,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     val watermarkTerms = terms.filter(_.references.exists { a =>
       attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey)
     })
-    if (watermarkTerms.size != 1 || watermarkTerms.head.isInstanceOf[UnaryMinus]) {
+    if (risingCutoffsOnly &&
+        (watermarkTerms.size != 1 || watermarkTerms.head.isInstanceOf[UnaryMinus])) {
       return None
     }
 
