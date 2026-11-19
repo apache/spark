@@ -175,6 +175,49 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
   }
 
+  /**
+   * Values covering what a Parquet string writer has to get right: nulls, empty and repeated
+   * values that feed the dictionary, multi-byte and surrogate-pair UTF-8, values long enough to
+   * force dictionary fallback, and embedded NULs. Independent of the writer settings and of how
+   * a test stores each value, so it is built once for the whole suite.
+   */
+  private lazy val reusedStringTestValues: Seq[String] = {
+    // scalastyle:off nonascii
+    val long = "very-long-\u96ea" * 1024
+    (0 until 1024).map { id =>
+      id % 8 match {
+        case 0 => null
+        case 1 => ""
+        case 2 => "repeated"
+        case 3 => "\u96ea\u2603\u00e9\ud801\udc00"
+        case 4 if id >= 256 => s"id-$id-" + "x" * 128
+        case 5 if id >= 256 => long
+        case 6 => "\u0000inside\u0000"
+        case _ => "escape-\"\\\n\t"
+      }
+    }
+    // scalastyle:on nonascii
+  }
+
+  private def parquetStringWriterConf: Configuration = {
+    val conf = spark.sessionState.newHadoopConf()
+    ParquetWriteSupport.setSchema(new StructType().add("text", StringType), conf)
+    conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, "false")
+    conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
+    conf.set(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key, "false")
+    conf.set(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key, "false")
+    conf
+  }
+
+  private class InternalRowParquetWriterBuilder(path: Path)
+    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](path) {
+
+    override protected def self(): InternalRowParquetWriterBuilder = this
+
+    override protected def getWriteSupport(conf: Configuration): WriteSupport[InternalRow] =
+      new ParquetWriteSupport
+  }
+
   test("SPARK-60321: string writer reuses the backing array of a UTF8String slice") {
     val bytes = "prefix-value-suffix".getBytes(UTF_8)
     Seq(0 -> "prefix", 7 -> "value").foreach { case (offset, expected) =>
@@ -2717,49 +2760,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         assert(causes(e).exists(c =>
           Option(c.getMessage).exists(_.contains("[a] optional int32 a"))), e)
     }
-  }
-
-  /**
-   * Values covering what a Parquet string writer has to get right: nulls, empty and repeated
-   * values that feed the dictionary, multi-byte and surrogate-pair UTF-8, values long enough to
-   * force dictionary fallback, and embedded NULs. Independent of the writer settings and of how
-   * a test stores each value, so it is built once for the whole suite.
-   */
-  private lazy val reusedStringTestValues: Seq[String] = {
-    // scalastyle:off nonascii
-    val long = "very-long-\u96ea" * 1024
-    (0 until 1024).map { id =>
-      id % 8 match {
-        case 0 => null
-        case 1 => ""
-        case 2 => "repeated"
-        case 3 => "\u96ea\u2603\u00e9\ud801\udc00"
-        case 4 if id >= 256 => s"id-$id-" + "x" * 128
-        case 5 if id >= 256 => long
-        case 6 => "\u0000inside\u0000"
-        case _ => "escape-\"\\\n\t"
-      }
-    }
-    // scalastyle:on nonascii
-  }
-
-  private def parquetStringWriterConf: Configuration = {
-    val conf = spark.sessionState.newHadoopConf()
-    ParquetWriteSupport.setSchema(new StructType().add("text", StringType), conf)
-    conf.set(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, "false")
-    conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
-    conf.set(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key, "false")
-    conf.set(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key, "false")
-    conf
-  }
-
-  private class InternalRowParquetWriterBuilder(path: Path)
-    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](path) {
-
-    override protected def self(): InternalRowParquetWriterBuilder = this
-
-    override protected def getWriteSupport(conf: Configuration): WriteSupport[InternalRow] =
-      new ParquetWriteSupport
   }
 }
 
