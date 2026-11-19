@@ -856,15 +856,15 @@ case class Cast(
 
   override def contextIndependentFoldable: Boolean = {
     child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType) &&
-      !castsSpecialDatetimeValue
+      specialDatetimeValue.isEmpty
   }
 
   /**
-   * Whether this casts a special value such as 'today' or 'epoch', which `SpecialDatetimeValues`
+   * The special value that this casts, such as 'today' or 'epoch', which `SpecialDatetimeValues`
    * replaces with its value. Evaluating the cast does not give that value.
    */
-  private[sql] def castsSpecialDatetimeValue: Boolean = SpecialDatetimeValues.rewrites(dataType) &&
-    SpecialDatetimeValues.constantString(this).exists(SpecialDatetimeValues.replaces(_, dataType))
+  private[sql] lazy val specialDatetimeValue: Option[UTF8String] =
+    SpecialDatetimeValues.specialValueOf(this)
 
   def ansiEnabled: Boolean = {
     evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)

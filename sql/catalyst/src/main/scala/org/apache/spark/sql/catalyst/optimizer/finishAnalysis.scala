@@ -324,7 +324,7 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   private[sql] def rewrites(dt: DataType): Boolean = conv.isDefinedAt(dt)
 
   /** Whether this rule replaces a cast of `s` to `dt` with the value of a special value. */
-  private[sql] def replaces(s: UTF8String, dt: DataType): Boolean =
+  private def replaces(s: UTF8String, dt: DataType): Boolean =
     conv.lift(dt).exists(_(s.toString, java.time.ZoneOffset.UTC).isDefined)
 
   /**
@@ -348,6 +348,24 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
       }
     case _ => None
   }
+
+  /**
+   * The special value that `cast` casts, such as 'today' or 'epoch', which this rule replaces with
+   * its value, or None if it casts something else.
+   */
+  private[sql] def specialValueOf(cast: Cast): Option[UTF8String] =
+    if (rewrites(cast.dataType)) constantString(cast).filter(replaces(_, cast.dataType)) else None
+
+  /**
+   * The value of `s` cast to `dt` if `s` is 'epoch', whose value depends neither on the time zone
+   * nor on the current date, or None otherwise.
+   */
+  private[sql] def epochValue(s: UTF8String, dt: DataType): Option[Literal] =
+    if (DateTimeUtils.isEpochSpecialValue(s.toString)) {
+      conv.lift(dt).flatMap(_(s.toString, java.time.ZoneOffset.UTC)).map(Literal(_, dt))
+    } else {
+      None
+    }
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
     case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>

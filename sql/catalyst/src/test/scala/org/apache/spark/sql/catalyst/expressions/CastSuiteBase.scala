@@ -2587,7 +2587,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       cast(Literal(" Epoch "), DateType),
       cast(Concat(Seq(Literal("tomor"), Literal("row"))), DateType),
       cast(Literal("now"), TimestampNTZType),
-      cast(Literal("yesterday"), TimestampNTZType)
+      cast(Literal("yesterday"), TimestampNTZType),
+      cast(Literal("today"), TimestampNTZNanosType(9)),
+      cast(Literal("epoch"), TimestampNTZNanosType(7))
     ).foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
       assert(!expr.contextIndependentFoldable,
@@ -2596,7 +2598,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // Other strings are cast as they are evaluated.
     Seq(
       cast(Literal("abc"), DateType),
-      cast(Literal("2023-01-01 00:00:00"), TimestampNTZType)
+      cast(Literal("2023-01-01 00:00:00"), TimestampNTZType),
+      cast(Literal("2023-01-01 00:00:00"), TimestampNTZNanosType(9))
     ).foreach { expr =>
       assert(expr.contextIndependentFoldable,
         s"Expression $expr should be context independent foldable")

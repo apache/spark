@@ -286,12 +286,9 @@ object CheckConstraint {
    * from a VARIANT, or of a string that only the optimizer makes constant.
    */
   private def castReadsCurrentDate(cast: Cast): Boolean = {
-    val completesTime = TimestampFamily.isLtz(cast.dataType)
-    (completesTime || SpecialDatetimeValues.rewrites(cast.dataType)) &&
-      SpecialDatetimeValues.constantString(cast).exists { s =>
-        SpecialDatetimeValues.readsCurrentDate(s, cast.dataType) ||
-          (completesTime && DateTimeUtils.isTimeOnlyTimestamp(s))
-      }
+    cast.specialDatetimeValue.exists(SpecialDatetimeValues.readsCurrentDate(_, cast.dataType)) ||
+      (TimestampFamily.isLtz(cast.dataType) &&
+        SpecialDatetimeValues.constantString(cast).exists(DateTimeUtils.isTimeOnlyTimestamp))
   }
 
   /**

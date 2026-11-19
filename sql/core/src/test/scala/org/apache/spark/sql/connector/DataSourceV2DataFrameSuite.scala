@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, DataSourceV2ScanRelation, ReplaceTableExec}
 import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DateType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.tags.DataSourceV2Test
@@ -1143,7 +1143,8 @@ class DataSourceV2DataFrameSuite
 
   test("SPARK-60451: default values and generated columns on a special datetime value") {
     // Evaluating a cast does not give the value of a special value such as 'today' or 'epoch'. As
-    // with `current_date()`, these columns have no V2 expression, so writes read their SQL text.
+    // with `current_date()`, columns on one that reads the current date have no V2 expression, so
+    // writes read their SQL text. 'epoch' has a fixed value.
     val t = "testcat.ns.t"
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
@@ -1156,7 +1157,7 @@ class DataSourceV2DataFrameSuite
                  |) USING foo""".stripMargin)
           val cols = catalog("testcat").loadTable(Identifier.of(Array("ns"), "t")).columns()
           assert(cols(1).defaultValue().getExpression == null, ansi)
-          assert(cols(2).defaultValue().getExpression == null, ansi)
+          assert(cols(2).defaultValue().getExpression == LiteralValue(0, DateType), ansi)
           assert(cols(3).columnGenerationExpression().getExpression == null, ansi)
           sql(s"INSERT INTO $t (id) VALUES (1)")
           // The date can change between the INSERT and the SELECT.
