@@ -68,9 +68,12 @@ def _list_grouped_function_infos(jvm):
             group=group))
 
     # Groups expression info by each group value
-    grouped_infos = itertools.groupby(sorted(infos, key=lambda x: x.group), key=lambda x: x.group)
-    # Then, sort expression infos in each group by name
-    return [(k, sorted(g, key=lambda x: x.name)) for k, g in grouped_infos]
+    grouped_infos = itertools.groupby(
+        sorted(infos, key=lambda x: (x.group or "", x.name, x.usage or "", x.examples or "")),
+        key=lambda x: x.group)
+    # Then, sort expression infos in each group by name with a stable tie-breaker
+    return [(k, sorted(g, key=lambda x: (x.name, x.usage or "", x.examples or "")))
+            for k, g in grouped_infos]
 
 
 # TODO(SPARK-31499): Needs to add a column to describe arguments and their types

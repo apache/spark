@@ -233,7 +233,7 @@ def _list_function_infos(jvm):
             since=jinfo.getSince(),
             deprecated=jinfo.getDeprecated(),
             group=group))
-    return sorted(infos, key=lambda i: i.name)
+    return sorted(infos, key=lambda i: (i.name, i.usage or "", i.examples or ""))
 
 
 def _list_grouped_function_infos(jvm):
@@ -244,7 +244,7 @@ def _list_grouped_function_infos(jvm):
     infos = _list_function_infos(jvm)
     # Group by category
     grouped = itertools.groupby(
-        sorted(infos, key=lambda x: (x.group or "", x.name)),
+        sorted(infos, key=lambda x: (x.group or "", x.name, x.usage or "", x.examples or "")),
         key=lambda x: x.group
     )
     return [(k, list(g)) for k, g in grouped]
