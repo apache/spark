@@ -23,6 +23,17 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.4 to 4.5
+
+- Since Spark 4.5, a non-deterministic nested field access above a stream-stream join, such as
+  `s.arr[CAST(rand() * 10 AS INT)].x`, is evaluated once for each joined row. Previously, it was
+  evaluated below the join, once for each input row of the side that outputs `s`, which gave every
+  joined row built from one input row the same value (see
+  [SPARK-62042](https://issues.apache.org/jira/browse/SPARK-62042)). This changes the schema of the
+  join's state, so such a query fails to restart from a checkpoint written by an earlier version,
+  with `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE`. To recalculate outputs, discard the checkpoint and
+  replay previous inputs.
+
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected

@@ -94,12 +94,14 @@ object NestedColumnAliasing {
     case Project(projectList, Filter(condition, child)) if
         SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       rewritePlanIfSubsetFieldsUsed(
-        plan, projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
+        plan, projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq,
+        collectorBelow(child))
 
     case Project(projectList, child) if
         SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       rewritePlanIfSubsetFieldsUsed(
-        plan, projectList ++ child.expressions, child.producedAttributes.toSeq)
+        plan, projectList ++ child.expressions, child.producedAttributes.toSeq,
+        collectorBelow(child))
 
     case p if SQLConf.get.nestedSchemaPruningEnabled && canPruneOn(p) =>
       rewritePlanIfSubsetFieldsUsed(
@@ -110,12 +112,15 @@ object NestedColumnAliasing {
 
   /**
    * Rewrites a plan with aliases if only a subset of the nested fields are used.
+   * `extractor` collects the candidates to alias, as in [[getAttributeToExtractValues]].
    */
   def rewritePlanIfSubsetFieldsUsed(
       plan: LogicalPlan,
       exprList: Seq[Expression],
-      exclusiveAttrs: Seq[Attribute]): Option[LogicalPlan] = {
-    val attrToExtractValues = getAttributeToExtractValues(exprList, exclusiveAttrs)
+      exclusiveAttrs: Seq[Attribute],
+      extractor: (Expression) => Seq[Expression] = collectRootReferenceAndExtractValue(_))
+    : Option[LogicalPlan] = {
+    val attrToExtractValues = getAttributeToExtractValues(exprList, exclusiveAttrs, extractor)
     if (attrToExtractValues.isEmpty) {
       None
     } else {
@@ -218,22 +223,38 @@ object NestedColumnAliasing {
     case _ => false
   }
 
-  private def canAlias(ev: Expression): Boolean = {
+  /**
+   * The collector of the candidates to alias below `child`. Below a [[Join]], it does not return
+   * an access whose only sources of non-determinism are input file functions: see
+   * [[isNondeterministicOnlyThroughInputFile]].
+   */
+  private def collectorBelow(child: LogicalPlan): (Expression) => Seq[Expression] = {
+    val exemptInputFile = !child.isInstanceOf[Join]
+    collectRootReferenceAndExtractValue(_, exemptInputFile)
+  }
+
+  private def canAlias(ev: Expression, exemptInputFile: Boolean): Boolean = {
     // we can not alias the attr from lambda variable whose expr id is not available
     !ev.exists(_.isInstanceOf[NamedLambdaVariable]) && ev.references.size == 1 &&
       // An alias is evaluated once per row of the operator's input. Below an operator that
       // repeats input rows, such as a Join, a Generate or a Sample with replacement, a
       // non-deterministic access would then give every row built from one input row the same
-      // value. For such an access, collectRootReferenceAndExtractValue returns only the
-      // deterministic extractions and columns below it, which the callers may alias instead.
-      (ev.deterministic || isNondeterministicOnlyThroughInputFile(ev))
+      // value. So a non-deterministic access is not aliased, unless `exemptInputFile` is true
+      // and its only sources of non-determinism are input file functions. For an access that is
+      // not aliased, collectRootReferenceAndExtractValue returns the extractions and columns
+      // below it that canAlias accepts, which the callers may alias instead.
+      (ev.deterministic || (exemptInputFile && isNondeterministicOnlyThroughInputFile(ev)))
   }
 
   /**
    * Whether the only sources of non-determinism in `e` are input file functions. These functions
-   * have one value per input row, but only before any shuffle: above a shuffle they return an
-   * empty string or -1. So an access whose non-determinism comes only from them can still be
-   * aliased, and the alias keeps the value for the row's file.
+   * return the file of the row that a file scan in the same task is producing. Where no scan is
+   * producing a row, such as above a shuffle, above a Sort that reads all of its input before it
+   * returns a row, or on a side of a Join that reads no file, they return an empty string or -1.
+   * Below an operator with one child, an access whose non-determinism comes only from them is
+   * still aliased, so it keeps the values these functions have below the operator. Below a Join
+   * it is not: the side that outputs the struct may read no file, while above the Join the
+   * functions can return the file of the other side's row.
    */
   private def isNondeterministicOnlyThroughInputFile(e: Expression): Boolean =
     e.transform {
@@ -247,14 +268,23 @@ object NestedColumnAliasing {
    * - [[GetStructField]] or [[GetArrayStructFields]] on top of other [[ExtractValue]]s
    *   or special expressions.
    */
-  private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
+  private def collectRootReferenceAndExtractValue(
+      e: Expression,
+      exemptInputFile: Boolean = true): Seq[Expression] = e match {
     case _: AttributeReference => Seq(e)
-    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) if canAlias(e) => Seq(e)
+    case GetStructField(_: ExtractValue | _: AttributeReference, _, _)
+        if canAlias(e, exemptInputFile) => Seq(e)
     case GetArrayStructFields(_: MapValues |
                               _: MapKeys |
                               _: ExtractValue |
-                              _: AttributeReference, _, _, _, _) if canAlias(e) => Seq(e)
-    case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndExtractValue)
+                              _: AttributeReference, _, _, _, _)
+        if canAlias(e, exemptInputFile) => Seq(e)
+    // TODO: For a non-deterministic index into an array of structs, such as
+    // `s.arr[CAST(rand() * 10 AS INT)].x`, this returns `s.arr`, so the operator carries every
+    // field of the elements. Aliasing `s.arr.x`, a GetArrayStructFields, and indexing it above
+    // the operator would carry only `x`.
+    case es if es.children.nonEmpty =>
+      es.children.flatMap(collectRootReferenceAndExtractValue(_, exemptInputFile))
     case _ => Seq.empty
   }
 
@@ -265,7 +295,7 @@ object NestedColumnAliasing {
   def getAttributeToExtractValues(
       exprList: Seq[Expression],
       exclusiveAttrs: Seq[Attribute],
-      extractor: (Expression) => Seq[Expression] = collectRootReferenceAndExtractValue)
+      extractor: (Expression) => Seq[Expression] = collectRootReferenceAndExtractValue(_))
     : Map[Attribute, Seq[ExtractValue]] = {
 
     val nestedFieldReferences = new mutable.ArrayBuffer[ExtractValue]()
