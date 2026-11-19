@@ -26,7 +26,7 @@ import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.connector.catalog.{Column, GenerationExpression, Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
@@ -2682,6 +2682,15 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           spark.table(s"testcat.$tblName"),
           Row(new java.math.BigDecimal("1.1234567891"),
             new java.math.BigDecimal("1.26215515697488187881")))
+      }
+    }
+  }
+
+  test("SPARK-61922: a generation expression reads the TIME type setting of the session") {
+    // The setting defaults to true only in tests, so false shows that the session value is kept.
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> enabled.toString) {
+        assert(StoredExpressionText.fixedConf(conf).isTimeTypeEnabled == enabled)
       }
     }
   }

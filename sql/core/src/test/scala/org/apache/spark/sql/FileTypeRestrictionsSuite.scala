@@ -43,13 +43,14 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
 
-  // A FILE without a qualifier, at the top level and nested.
+  // A FILE without a qualifier, at the top level and nested, with the path that an error reports
+  // for a column `c` of this type and the type at that path.
   private val unqualifiedFileTypes = Seq(
-    "FILE",
-    "ARRAY<FILE>",
-    "MAP<STRING, FILE>",
-    "STRUCT<f1: FILE>",
-    "STRUCT<f1: INT, f2: STRUCT<f3: ARRAY<FILE>>>")
+    ("FILE", "`c`", "\"FILE\""),
+    ("ARRAY<FILE>", "`c`", "\"ARRAY<FILE>\""),
+    ("MAP<STRING, FILE>", "`c`", "\"MAP<STRING, FILE>\""),
+    ("STRUCT<f1: FILE>", "`c`.`f1`", "\"FILE\""),
+    ("STRUCT<f1: INT, f2: STRUCT<f3: ARRAY<FILE>>>", "`c`.`f2`.`f3`", "\"ARRAY<FILE>\""))
 
   private val externalFile = "SELECT CAST(NULL AS FILE EXTERNAL) AS f"
 
@@ -63,13 +64,14 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
   test("a table column definition requires FILE EXTERNAL") {
     Seq("testcat.t", "t").foreach { table =>
       val provider = if (table.startsWith("testcat")) "" else "USING parquet"
-      unqualifiedFileTypes.foreach { dataType =>
+      unqualifiedFileTypes.foreach { case (dataType, colName, reportedType) =>
         withTable(table) {
           checkError(
             exception = intercept[AnalysisException] {
               sql(s"CREATE TABLE $table (id INT, c $dataType) $provider")
             },
-            condition = "FILE_TYPE_MISSING_QUALIFIER")
+            condition = "FILE_TYPE_MISSING_QUALIFIER",
+            parameters = Map("colName" -> colName, "dataType" -> reportedType))
         }
       }
     }
@@ -85,26 +87,39 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("REPLACE TABLE testcat.t (id INT, c FILE)")
         },
-        condition = "FILE_TYPE_MISSING_QUALIFIER")
+        condition = "FILE_TYPE_MISSING_QUALIFIER",
+        parameters = Map("colName" -> "`c`", "dataType" -> "\"FILE\""))
     }
   }
 
   test("ALTER TABLE ADD COLUMNS and REPLACE COLUMNS require FILE EXTERNAL") {
     withTable("testcat.t") {
       sql("CREATE TABLE testcat.t (id INT)")
-      unqualifiedFileTypes.foreach { dataType =>
+      unqualifiedFileTypes.foreach { case (dataType, colName, reportedType) =>
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE testcat.t ADD COLUMN c $dataType")
           },
-          condition = "FILE_TYPE_MISSING_QUALIFIER")
+          condition = "FILE_TYPE_MISSING_QUALIFIER",
+          parameters = Map("colName" -> colName, "dataType" -> reportedType))
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE testcat.t REPLACE COLUMNS (id INT, c $dataType)")
           },
-          condition = "FILE_TYPE_MISSING_QUALIFIER")
+          condition = "FILE_TYPE_MISSING_QUALIFIER",
+          parameters = Map("colName" -> colName, "dataType" -> reportedType))
       }
       sql("ALTER TABLE testcat.t ADD COLUMN c FILE EXTERNAL")
+    }
+    // A FILE added to a struct is reported at its full path.
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, s STRUCT<x: INT>)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE testcat.t ADD COLUMN s.y FILE")
+        },
+        condition = "FILE_TYPE_MISSING_QUALIFIER",
+        parameters = Map("colName" -> "`s`.`y`", "dataType" -> "\"FILE\""))
     }
   }
 
@@ -118,6 +133,23 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           },
           condition = "FILE_TYPE_UNKNOWN_WRITE",
           parameters = Map("colNames" -> "[`f`]"))
+        // A FILE in a struct field is reported at the field.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE $table $provider AS " +
+              "SELECT 1 AS id, named_struct('a', 1, 'f', CAST(NULL AS FILE)) AS s")
+          },
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> "[`s`.`f`]"))
+        // Every FILE without a qualifier is reported, in the order of the columns and fields.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE $table $provider AS SELECT 1 AS id, " +
+              "named_struct('a', CAST(NULL AS FILE), 'b', CAST(NULL AS FILE)) AS s, " +
+              "CAST(NULL AS FILE) AS f")
+          },
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> "[`s`.`a`, `s`.`b`, `f`]"))
         // IF NOT EXISTS does not skip the check when the table exists.
         sql(s"CREATE TABLE $table (id INT) $provider")
         checkError(
@@ -137,7 +169,10 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       val schema = spark.table("testcat.t").schema
       Seq(
         "SELECT 1 AS id, named_struct('a', 1) AS s, CAST(NULL AS FILE) AS f" -> "[`f`]",
-        "SELECT 1 AS id, named_struct('a', 1, 'f', CAST(NULL AS FILE)) AS s" -> "[`s`.`f`]"
+        "SELECT 1 AS id, named_struct('a', 1, 'f', CAST(NULL AS FILE)) AS s" -> "[`s`.`f`]",
+        // A new struct column reports the path of its FILE field.
+        "SELECT 1 AS id, named_struct('a', 1) AS s, named_struct('f', CAST(NULL AS FILE)) AS s2" ->
+          "[`s2`.`f`]"
       ).foreach { case (query, colNames) =>
         checkError(
           exception = intercept[AnalysisException] {
@@ -208,6 +243,16 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+    // A FILE in a struct is reported by its path.
+    withTempView("v") {
+      sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, named_struct('f', CAST(NULL AS FILE)) AS s")
+      withTable("t") {
+        checkError(
+          exception = intercept[AnalysisException](sql("CREATE TABLE t LIKE v")),
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> "[`s`.`f`]"))
+      }
+    }
     // A FILE EXTERNAL can be copied.
     withTempView("v") {
       withTable("testcat.t") {
@@ -228,6 +273,9 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       s"CREATE TABLE testcat.t $columns LOCALLY ORDERED BY bucket(4, f)" -> file,
       "CREATE TABLE testcat.t (id INT, s STRUCT<f: FILE EXTERNAL>) ORDERED BY s" ->
         ("`s`", "\"STRUCT<f: FILE EXTERNAL>\""),
+      // A field of a struct is reported by its full path.
+      "CREATE TABLE testcat.t (id INT, s STRUCT<f: FILE EXTERNAL>) ORDERED BY s.f" ->
+        ("`s`.`f`", "\"FILE EXTERNAL\""),
       s"REPLACE TABLE testcat.t $columns ORDERED BY f" -> file,
       s"CREATE TABLE testcat.t ORDERED BY f $query" -> file,
       s"REPLACE TABLE testcat.t ORDERED BY f $query" -> file
@@ -241,11 +289,13 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     analyze("CREATE TABLE testcat.t (id INT, f FILE EXTERNAL) ORDERED BY id")
   }
 
-  test("a FILE column cannot be a partition or clustering column") {
+  test("a FILE column cannot be a partition, bucket or clustering column") {
     Seq(
       ("PARTITIONED BY (f)", "PARTITION_COLUMN"),
-      ("PARTITIONED BY (bucket(4, f))", "PARTITION_COLUMN"),
-      ("CLUSTERED BY (f) INTO 4 BUCKETS", "PARTITION_COLUMN"),
+      ("PARTITIONED BY (bucket(4, f))", "BUCKET_COLUMN"),
+      ("CLUSTERED BY (f) INTO 4 BUCKETS", "BUCKET_COLUMN"),
+      ("CLUSTERED BY (f) SORTED BY (id) INTO 4 BUCKETS", "BUCKET_COLUMN"),
+      ("CLUSTERED BY (id) SORTED BY (f) INTO 4 BUCKETS", "BUCKET_SORT_COLUMN"),
       ("CLUSTER BY (f)", "CLUSTERING_COLUMN")).foreach { case (clause, usage) =>
       Seq("testcat.t", "t").foreach { table =>
         val provider = if (table.startsWith("testcat")) "" else "USING parquet"
@@ -314,14 +364,33 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
             "CLUSTER BY (arr.f)")
         },
         condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
-        parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+        parameters = Map("colName" -> "`arr`.`f`", "dataType" -> "\"FILE EXTERNAL\""))
     }
     withTable("testcat.t") {
       sql("CREATE TABLE testcat.t (id INT, arr ARRAY<STRUCT<f: FILE EXTERNAL>>)")
       checkError(
         exception = intercept[AnalysisException](sql("ALTER TABLE testcat.t CLUSTER BY (arr.f)")),
         condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
-        parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+        parameters = Map("colName" -> "`arr`.`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    }
+  }
+
+  test("CLUSTER BY a field of a struct") {
+    withTable("t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          analyze("CREATE TABLE t (id INT, s STRUCT<f: FILE EXTERNAL>) USING parquet " +
+            "CLUSTER BY (s.f)")
+        },
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+        parameters = Map("colName" -> "`s`.`f`", "dataType" -> "\"FILE EXTERNAL\""))
+    }
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, s STRUCT<f: FILE EXTERNAL>)")
+      checkError(
+        exception = intercept[AnalysisException](sql("ALTER TABLE testcat.t CLUSTER BY (s.f)")),
+        condition = "FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.CLUSTERING_COLUMN",
+        parameters = Map("colName" -> "`s`.`f`", "dataType" -> "\"FILE EXTERNAL\""))
     }
   }
 
@@ -333,7 +402,8 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE testcat.t ALTER COLUMN $column TYPE FILE")
           },
-          condition = "FILE_TYPE_MISSING_QUALIFIER")
+          condition = "FILE_TYPE_MISSING_QUALIFIER",
+          parameters = Map("colName" -> s"`$column`", "dataType" -> "\"FILE\""))
       }
       checkError(
         exception = intercept[AnalysisException] {
@@ -365,6 +435,16 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
               "newType" -> sqlType),
             context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
       }
+    }
+    // A field of a struct is reported at its full path.
+    withTable("testcat.t") {
+      sql("CREATE TABLE testcat.t (id INT, s STRUCT<x: INT>)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE testcat.t ALTER COLUMN s.x TYPE FILE")
+        },
+        condition = "FILE_TYPE_MISSING_QUALIFIER",
+        parameters = Map("colName" -> "`s`.`x`", "dataType" -> "\"FILE\""))
     }
   }
 
@@ -543,7 +623,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           sql(s"CREATE TEMPORARY FUNCTION fn$signature")
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> "`fn`"))
+        parameters = Map("routineName" -> "`fn`"))
     }
     Seq(
       "RETURNS MAP<FILE, INT> RETURN NULL",
@@ -554,7 +634,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           sql(s"CREATE TEMPORARY FUNCTION fn(x INT) $body")
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-        parameters = Map("routineType" -> "function", "routineName" -> "`fn`"))
+        parameters = Map("routineName" -> "`fn`"))
     }
     withUserDefinedFunction("fn" -> true) {
       sql("CREATE TEMPORARY FUNCTION fn(x FILE) RETURNS FILE RETURN x")
@@ -571,26 +651,26 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           spark.udf.register("file_udf", fileUdf, FileType.external)
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> "`file_udf`"))
+        parameters = Map("routineName" -> "`file_udf`"))
       checkError(
         exception = intercept[AnalysisException] {
           spark.udf.register("file_udf", fileUdf, MapType(FileType(), IntegerType))
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-        parameters = Map("routineType" -> "function", "routineName" -> "`file_udf`"))
+        parameters = Map("routineName" -> "`file_udf`"))
       // A UDF that is not registered is checked when it is used in a query.
       checkError(
         exception = intercept[AnalysisException] {
           spark.range(1).select(udf(fileUdf, FileType.external).withName("inline_udf")(col("id")))
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> "`inline_udf`"))
+        parameters = Map("routineName" -> "`inline_udf`"))
       checkError(
         exception = intercept[AnalysisException] {
           spark.udf.register("file_udaf", new FileTypeUDAF(FileType.external))
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> "`file_udaf`"))
+        parameters = Map("routineName" -> "`file_udaf`"))
       // A FILE map key is found in an array element and in a map value.
       Seq(
         ArrayType(MapType(FileType(), IntegerType)),
@@ -600,7 +680,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
             spark.udf.register("file_udf", fileUdf, dataType)
           },
           condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-          parameters = Map("routineType" -> "function", "routineName" -> "`file_udf`"))
+          parameters = Map("routineName" -> "`file_udf`"))
       }
       spark.udf.register("file_udf", fileUdf, FileType())
       spark.udf.register("file_udaf", new FileTypeUDAF(FileType()))
@@ -620,7 +700,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           sql("SELECT class_udaf(id) FROM range(1)")
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> "`class_udaf`"))
+        parameters = Map("routineName" -> "`class_udaf`"))
     }
   }
 
@@ -634,7 +714,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           analyze("SELECT testcat.ns.file_fn(id) FROM range(1)")
         },
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> "`file_fn`"))
+        parameters = Map("routineName" -> "`file_fn`"))
       catalog.createFunction(ident, new FileTypeFunction(FileType()))
       analyze("SELECT testcat.ns.file_fn(id) FROM range(1)")
     } finally {
@@ -667,14 +747,14 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       checkError(
         exception = intercept[AnalysisException](register()),
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-        parameters = Map("routineType" -> "function", "routineName" -> s"`$name`"))
+        parameters = Map("routineName" -> s"`$name`"))
     }
     checkError(
       exception = intercept[AnalysisException] {
         spark.udf.registerPython("py_udf", pythonUdf(MapType(FileType(), IntegerType)))
       },
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
-      parameters = Map("routineType" -> "function", "routineName" -> "`py_udf`"))
+      parameters = Map("routineName" -> "`py_udf`"))
 
     // A Python UDF that is not registered is checked when it is used in a query.
     checkError(
@@ -682,7 +762,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
         spark.range(1).select(pythonUdf(FileType.external)(col("id")))
       },
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
-      parameters = Map("routineType" -> "function", "routineName" -> "`py_udf`"))
+      parameters = Map("routineName" -> "`py_udf`"))
 
     // A plain FILE is accepted, and a UDTF with an analyze method has no static return type.
     withUserDefinedFunction("py_udf" -> true, "py_udtf" -> true) {

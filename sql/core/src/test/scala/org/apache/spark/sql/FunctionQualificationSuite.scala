@@ -1177,16 +1177,16 @@ class FunctionQualificationSuite extends SharedSparkSession {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
       // builtin.abs does NOT exist in the persistent 'builtin' database.
-      // With default persistentCatalogFirst=false, builtin.abs resolves to system builtin.
+      // The persistent 'builtin' schema has no abs, so builtin.abs falls back to system builtin.
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
     }
   }
 
-  test("SECTION 16: Default persistentCatalogFirst is false - system wins without config") {
+  test("SECTION 16: Default persistentCatalogFirst is true - current catalog wins without config") {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
       sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
-      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(-500))
       checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
       sql("DROP FUNCTION IF EXISTS builtin.abs")
     }
