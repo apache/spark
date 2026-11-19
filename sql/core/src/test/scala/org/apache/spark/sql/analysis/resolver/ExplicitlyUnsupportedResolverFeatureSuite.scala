@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver
 }
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -157,6 +158,11 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
       )
       checkResolution(s"SELECT $exists AS e, $scalar AS `exists(c)` FROM n1", shouldPass = true)
       checkResolution(s"SELECT c FROM n1 WHERE $exists", shouldPass = true)
+      // The post-resolution rules change the plans of these subqueries, but not their outer
+      // references or their SQL, so they are kept.
+      checkResolution("SELECT EXISTS (SELECT 1 FROM n2 WHERE n1.c = n2.c5) FROM n1",
+        shouldPass = true)
+      checkResolution("SELECT EXISTS (SELECT 1 FROM n2) FROM n1", shouldPass = true)
 
       // Dual run falls back to the fixed-point Analyzer, which names the columns after the
       // changed outer references.
@@ -166,6 +172,14 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
         val df = spark.sql(query)
         assert(df.columns.toSeq == Seq("exists(c, c)", "scalarsubquery(c, c)"))
         assert(df.collect().toSeq == Seq(Row(true, 1)))
+
+        // An unaliased column of a DataFrame is named after its SQL too.
+        val n1 = spark.createDataFrame(spark.table("n1").collectAsList(), spark.table("n1").schema)
+        val existsColumn = expr("EXISTS (SELECT 1 FROM n2 WHERE c IN (n2.c5, n2.s))")
+        val dfExists = n1.select(existsColumn)
+        assert(dfExists.columns.toSeq == Seq("exists(c, c)"))
+        assert(dfExists.collect().toSeq == Seq(Row(true)))
+        assert(n1.select(existsColumn.as("e")).columns.toSeq == Seq("e"))
       }
     }
   }

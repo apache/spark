@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Attribute,
@@ -107,7 +109,7 @@ object ApplyCharTypePaddingHelper {
       // CHAR column and a STRING column that is not padded at all, split the IN into an OR of
       // INs whose elements are each padded the same way, so that the value is padded for the
       // elements of each IN on its own. `InWithMixedPadding` describes how the list is split, and
-      // which elements are not padded yet.
+      // the TODO in `inElementPadding` lists the elements that are not padded yet.
       case i @ InWithMixedPadding(groups) =>
         val newIns = groups.map { group =>
           singleNodePaddingForStringComparison(i.copy(list = group), padCharCol)
@@ -126,11 +128,10 @@ object ApplyCharTypePaddingHelper {
           .flatMap {
             case c: CharType =>
               // Compute the length of every list element in place, so that each length stays
-              // aligned with the element it came from. NULL elements have no length: they can
-              // never match, so they are left untouched instead of being padded.
-              val literalCharLengths = list.map { lit =>
-                Option(lit.eval().asInstanceOf[UTF8String]).map(_.numChars())
-              }
+              // aligned with the element it came from. NULL elements, and elements that fail to
+              // evaluate, have no length: they can never match, so they are left untouched
+              // instead of being padded.
+              val literalCharLengths = list.map(literalCharLength)
               val targetLen = (c.length +: literalCharLengths.flatten).max
               Some(
                 i.copy(
@@ -224,7 +225,8 @@ object ApplyCharTypePaddingHelper {
    */
   private object InWithMixedPadding {
     def unapply(in: In): Option[Seq[Seq[Expression]]] = in.value match {
-      case AttrOrOuterRef(attr) if in.resolved =>
+      // A list of only constants is padded the same way, so do not parse any raw type for it.
+      case AttrOrOuterRef(attr) if in.resolved && !in.list.forall(_.foldable) =>
         // Parse the raw type of the value once, not once per element.
         CharVarcharUtils.getRawType(attr.metadata).flatMap { valueRawType =>
           val valueIsChar = valueRawType.isInstanceOf[CharType]
@@ -250,6 +252,22 @@ object ApplyCharTypePaddingHelper {
     }
   }
 
+  /**
+   * Returns the length of a foldable string expression compared with a CHAR column, or `None` if
+   * it is NULL or fails to evaluate. A foldable expression that fails, such as
+   * `element_at(array('a'), 10)` with ANSI mode on, is only evaluated when the query reaches it,
+   * e.g. not in a conditional branch that is not taken, or not after an element of an IN list
+   * that matches, so evaluating it here must not fail the analysis. Such an expression can
+   * never match, so it does not need to be padded.
+   */
+  private def literalCharLength(lit: Expression): Option[Int] = {
+    try {
+      Option(lit.eval().asInstanceOf[UTF8String]).map(_.numChars())
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
   private def padAttrLitCmp(
       expr: Expression,
       metadata: Metadata,
@@ -258,11 +276,7 @@ object ApplyCharTypePaddingHelper {
     if (expr.dataType.isInstanceOf[StringType]) {
       CharVarcharUtils.getRawType(metadata).flatMap {
         case c: CharType =>
-          val str = lit.eval().asInstanceOf[UTF8String]
-          if (str == null) {
-            None
-          } else {
-            val stringLitLen = str.numChars()
+          literalCharLength(lit).flatMap { stringLitLen =>
             if (c.length < stringLitLen) {
               Some(Seq(createStringRPad(expr, Literal(stringLitLen)), lit))
             } else if (c.length > stringLitLen) {

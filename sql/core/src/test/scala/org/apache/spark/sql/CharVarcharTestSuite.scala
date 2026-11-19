@@ -740,12 +740,50 @@ trait CharVarcharTestSuite extends QueryTest {
     // element written ahead of it matches.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("t") {
-        sql(s"CREATE TABLE t(c CHAR(2), c2 CHAR(2), c5 CHAR(5), s STRING, arr ARRAY<STRING>) " +
-          s"USING $format")
-        sql("INSERT INTO t VALUES ('a', 'a', 'b', 'x', array('y'))")
+        sql(s"CREATE TABLE t(i INT, c CHAR(2), c2 CHAR(2), c5 CHAR(5), c5a CHAR(5), s STRING, " +
+          s"arr ARRAY<STRING>) USING $format")
+        sql("INSERT INTO t VALUES (1, 'a', 'a', 'b', 'a', 'x', array('y'))")
         val cond = "c IN (s, c2, element_at(arr, 10), c5)"
         testConditions(spark.table("t"), Seq((cond, true)))
         checkAnswer(spark.table("t").where(cond).select("c"), Row("a "))
+
+        // The matching element needs padding: a CHAR column of another length, or a string
+        // literal shorter than the value. Check each condition on its own, as an element that
+        // fails and is shared by several items of a SELECT list may be evaluated for all of them.
+        Seq(
+          "c IN (s, c5a, element_at(arr, 10))" -> true,
+          "c NOT IN (s, c5a, element_at(arr, 10))" -> false,
+          "c IN (s, 'a', c5, element_at(arr, 10))" -> true,
+          "c NOT IN (s, 'a', c5, element_at(arr, 10))" -> false
+        ).foreach { case (cond, expected) =>
+          testConditions(spark.table("t"), Seq((cond, expected)))
+        }
+        // If no element matches and one is NULL, the IN is NULL, like the OR of the equalities.
+        checkAnswer(
+          sql("SELECT c IN (s, c5, CAST(NULL AS STRING), element_at(arr, 1)), " +
+            "c NOT IN (s, c5, CAST(NULL AS STRING), element_at(arr, 1)) FROM t"),
+          Row(null, null))
+
+        // A constant that fails is only evaluated when the query reaches it, so the analysis must
+        // not evaluate it to pad it.
+        checkAnswer(
+          sql("SELECT CASE WHEN i > 0 THEN c IN (c2, element_at(array('a'), 10)) END FROM t"),
+          Row(true))
+        checkAnswer(
+          sql("SELECT CASE WHEN i > 0 THEN c IN ('a', element_at(array('a'), 10)) END FROM t"),
+          Row(true))
+        checkAnswer(
+          sql("SELECT CASE WHEN i < 0 THEN c = element_at(array('a'), 10) END FROM t"),
+          Row(null))
+        assert(sql("SELECT c IN (c5, element_at(array('a'), 10)) FROM t").schema.length == 1)
+        // A constant that can fail but does not is padded like a string literal.
+        testConditions(spark.table("t"), Seq(("c IN (c5, element_at(array('a'), 1))", true)))
+
+        // A list that mixes padding kinds but pads nothing, as c2 has the length of c, keeps its
+        // IN.
+        val ins = spark.table("t").selectExpr("c IN (c2, s)").queryExecution.analyzed
+          .flatMap(_.expressions.flatMap(_.collect { case i: In => i }))
+        assert(ins.length == 1 && ins.head.list.length == 2)
       }
     }
   }
