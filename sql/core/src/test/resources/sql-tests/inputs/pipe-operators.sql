@@ -500,6 +500,9 @@ select 1 as a, 2 as a
 select x, x from t
 |> eval x = 1;
 
+select x, * from t
+|> eval x = 1;
+
 -- EVAL appends z to the columns of t, so this scalar subquery returns more than one column.
 select (table t |> eval z = 1 |> limit 1) from values (0) as o(z);
 

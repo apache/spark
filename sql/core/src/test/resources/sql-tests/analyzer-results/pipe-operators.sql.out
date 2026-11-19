@@ -1381,6 +1381,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select x, * from t
+|> eval x = 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, * from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
 select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
