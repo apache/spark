@@ -85,6 +85,7 @@ object TreePattern extends Enumeration  {
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
   val PARSE_SQL: Value = Value
+  val PER_PARTITION_RUNTIME_FILTER_SUBQUERY: Value = Value
   val PIPE_EXPRESSION: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value
@@ -218,6 +219,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_BIN_BY: Value = Value
   val UNRESOLVED_DEDUPLICATE: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
+  val UNRESOLVED_GAP_FILL: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_INSERT: Value = Value

@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{FIELD_NAME, NEW_VALUE, OLD_VALUE}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
   caseInsensitiveResolution,
@@ -335,9 +336,9 @@ object SchemaInferenceUtils extends Logging {
     val target = stripHandledMetadata(targetField.metadata)
     if (current != target) {
       logWarning(
-        s"Field ${pathToField.mkString(".")} has metadata changes that pipeline schema " +
-          s"synchronization does not propagate and will be ignored. " +
-          s"Current: ${current.json}, Target: ${target.json}")
+        log"Field ${MDC(FIELD_NAME, pathToField.mkString("."))} has metadata changes that " +
+          log"pipeline schema synchronization does not propagate and will be ignored. " +
+          log"Current: ${MDC(OLD_VALUE, current.json)}, Target: ${MDC(NEW_VALUE, target.json)}")
     }
   }
 

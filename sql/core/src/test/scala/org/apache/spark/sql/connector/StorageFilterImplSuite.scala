@@ -27,8 +27,10 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, LongType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.tags.DataSourceV2Test
 
 /** Tests the Catalyst-backed [[StorageFilterImpl]] a connector's reader evaluates. */
+@DataSourceV2Test
 class StorageFilterImplSuite extends SparkFunSuite {
 
   private val k = AttributeReference("k", LongType)()

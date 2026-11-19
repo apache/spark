@@ -2,64 +2,64 @@
 BYTE_STREAM_SPLIT INT32
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) 6973P-C
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 BYTE_STREAM_SPLIT INT32:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Spark vectorized readIntegers                         2              2           1        678.5           1.5       1.0X
-Spark vectorized readIntegersAsLongs                  2              2           0        658.0           1.5       1.0X
-Spark vectorized readIntegersAsDoubles                2              2           0        644.8           1.6       1.0X
-parquet-mr readInteger (per-value)                    5              6           1        205.7           4.9       0.3X
+Spark vectorized readIntegers                         2              2           0        568.5           1.8       1.0X
+Spark vectorized readIntegersAsLongs                  2              2           0        475.8           2.1       0.8X
+Spark vectorized readIntegersAsDoubles                2              2           0        481.4           2.1       0.8X
+parquet-mr readInteger (per-value)                    8              9           1        124.6           8.0       0.2X
 
 
 ================================================================================================
 BYTE_STREAM_SPLIT INT64
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) 6973P-C
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 BYTE_STREAM_SPLIT INT64:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Spark vectorized readLongs                            5              6           1        206.6           4.8       1.0X
-Spark vectorized readLongsAsInts                      5              6           1        205.0           4.9       1.0X
-parquet-mr readLong (per-value)                      10             11           1        105.1           9.5       0.5X
+Spark vectorized readLongs                            6              6           0        169.9           5.9       1.0X
+Spark vectorized readLongsAsInts                      6              7           0        164.3           6.1       1.0X
+parquet-mr readLong (per-value)                      13             13           1         82.7          12.1       0.5X
 
 
 ================================================================================================
 BYTE_STREAM_SPLIT FLOAT
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) 6973P-C
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 BYTE_STREAM_SPLIT FLOAT:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Spark vectorized readFloats                           2              2           0        670.0           1.5       1.0X
-Spark vectorized readFloatsAsDoubles                  2              2           0        638.0           1.6       1.0X
-parquet-mr readFloat (per-value)                      5              6           1        206.5           4.8       0.3X
+Spark vectorized readFloats                           2              2           0        566.3           1.8       1.0X
+Spark vectorized readFloatsAsDoubles                  2              2           0        503.7           2.0       0.9X
+parquet-mr readFloat (per-value)                      9              9           0        123.2           8.1       0.2X
 
 
 ================================================================================================
 BYTE_STREAM_SPLIT DOUBLE
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) 6973P-C
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 BYTE_STREAM_SPLIT DOUBLE:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Spark vectorized readDoubles                          5              6           1        207.2           4.8       1.0X
-parquet-mr readDouble (per-value)                    10             11           1        105.2           9.5       0.5X
+Spark vectorized readDoubles                          6              6           0        169.2           5.9       1.0X
+parquet-mr readDouble (per-value)                    13             13           1         82.4          12.1       0.5X
 
 
 ================================================================================================
 BYTE_STREAM_SPLIT FLBA
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-Intel(R) Xeon(R) 6973P-C
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 BYTE_STREAM_SPLIT FLBA:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------------
-Spark vectorized readBinary (width=12)                              14             16           1         74.6          13.4       1.0X
-Spark per-value readBinary (old updater path, width=12)             17             19           4         61.3          16.3       0.8X
-parquet-mr readBinary (per-value, width=12)                         24             28           4         43.2          23.2       0.6X
+Spark vectorized readBinary (width=12)                              25             26           1         41.8          23.9       1.0X
+Spark per-value readBinary (old updater path, width=12)             28             29           1         37.4          26.7       0.9X
+parquet-mr readBinary (per-value, width=12)                         33             34           1         31.5          31.8       0.8X
 
 

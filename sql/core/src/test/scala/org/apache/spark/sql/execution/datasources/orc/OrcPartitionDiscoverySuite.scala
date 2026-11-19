@@ -25,6 +25,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -169,6 +170,7 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
   }
 }
 
+@DataSourceV2Test
 class OrcPartitionDiscoverySuite extends OrcPartitionDiscoveryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
 
