@@ -248,13 +248,14 @@ object NestedColumnAliasing {
 
   /**
    * Whether the only sources of non-determinism in `e` are input file functions. These functions
-   * return the file of the row that a file scan in the same task is producing. Where no scan is
-   * producing a row, such as above a shuffle, above a Sort that reads all of its input before it
-   * returns a row, or on a side of a Join that reads no file, they return an empty string or -1.
-   * Below an operator with one child, an access whose non-determinism comes only from them is
-   * still aliased, so it keeps the values these functions have below the operator. Below a Join
-   * it is not: the side that outputs the struct may read no file, while above the Join the
-   * functions can return the file of the other side's row.
+   * describe the file block of the row that a file scan in the task evaluating them is
+   * producing. Where no scan is producing a row, such as above a shuffle, above a Sort, which
+   * reads all of its input before it returns a row, or on a side of a Join that reads no file,
+   * they return an empty string or -1. Below an operator with one child, an access whose
+   * non-determinism comes only from them is still aliased, so it keeps the values these
+   * functions have below the operator. Below a Join it is not: the side that outputs the struct
+   * may read no file, while above the Join the functions can describe the file block of the
+   * other side's row.
    */
   private def isNondeterministicOnlyThroughInputFile(e: Expression): Boolean =
     e.transform {

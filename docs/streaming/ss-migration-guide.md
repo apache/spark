@@ -29,9 +29,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   `s.arr[CAST(rand() * 10 AS INT)].x`, is evaluated once for each joined row. Previously, it was
   evaluated below the join, once for each input row of the side that outputs `s`, which gave every
   joined row built from one input row the same value (see
-  [SPARK-62042](https://issues.apache.org/jira/browse/SPARK-62042)). This changes the schema of the
-  join's state, so such a query fails to restart from a checkpoint written by an earlier version,
-  with `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE`. To recalculate outputs, discard the checkpoint and
+  [SPARK-62042](https://issues.apache.org/jira/browse/SPARK-62042)). This can change what that side
+  of the join outputs, and with it the schema of the join's state. Such a query then fails to
+  restart from a checkpoint written by an earlier version, with
+  `STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE`. To recalculate outputs, discard the checkpoint and
   replay previous inputs.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4

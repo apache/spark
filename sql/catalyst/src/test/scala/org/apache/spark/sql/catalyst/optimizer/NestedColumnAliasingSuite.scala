@@ -1056,31 +1056,42 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("SPARK-62042: Do not alias nested field accesses that use input file functions below " +
       "a Join") {
     // The side of the Join that outputs `s` may read no file, while above the Join the input file
-    // function can return the file of the other side's row.
+    // function can describe the file block of the other side's row.
     val other = LocalRelation($"rid".int)
+    val withMap = LocalRelation(
+      $"id".int,
+      $"s".struct(StructType.fromDDL("m map<string, struct<x: int, y: int>>, e int")))
+    // `s.arr[index].x` for an index built from each input file function, and the map access
+    // `s.m[input_file_name()].x`: the relation, the field of `s` that is aliased below the Join,
+    // and the access built on that field.
+    val accesses: Seq[(LogicalPlan, String, Expression => Expression)] =
+      inputFileIndexes.map { index =>
+        (withArray, "arr", (arr: Expression) => elementX(arr, index))
+      } :+ ((withMap, "m",
+        (m: Expression) => GetStructField(GetMapValue(m, InputFileName()), 0, Some("x"))))
     // A Project over the Join, and a Project over a Filter over the Join.
-    for (index <- inputFileIndexes; withFilter <- Seq(false, true)) {
+    for ((relation, field, access) <- accesses; withFilter <- Seq(false, true)) {
       def above(access: Expression, plan: LogicalPlan): LogicalPlan =
         if (withFilter) plan.where(access > 0).select(access.as("v"))
         else plan.select(access.as("v"))
       val query = above(
-        elementX($"s".getField("arr"), index),
-        withArray.join(other, condition = Some($"id" === $"rid"))).analyze
+        access($"s".getField(field)),
+        relation.join(other, condition = Some($"id" === $"rid"))).analyze
       val optimized = Optimize.execute(query)
 
       val join = optimized.collectFirst { case j: Join => j }.get
       assert(join.children.forall(_.deterministic),
         s"an access that uses an input file function is evaluated below the Join:\n$optimized")
-      // Only the deterministic `s.arr` is aliased below the Join, and the element is picked
-      // above it. With the Filter, the rule first aliases `s.arr` between the Filter and the
-      // Join, and then below the Join, which leaves a Project above the Join that renames the
-      // alias.
+      // Only the deterministic `s.arr` or `s.m` is aliased below the Join, and the access is
+      // evaluated above it. With the Filter, the rule first aliases the field between the Filter
+      // and the Join, and then below the Join, which leaves a Project above the Join that renames
+      // the alias.
       val aliases = collectGeneratedAliases(optimized)
-      val aliasedJoin = withArray.select($"id", $"s".getField("arr").as(aliases(0)))
+      val aliasedJoin = relation.select($"id", $"s".getField(field).as(aliases(0)))
         .join(other, condition = Some($"id" === $"rid"))
       val planBelow =
         if (withFilter) aliasedJoin.select($"${aliases(0)}".as(aliases(0))) else aliasedJoin
-      val expected = above(elementX($"${aliases(0)}", index), planBelow).analyze
+      val expected = above(access($"${aliases(0)}"), planBelow).analyze
       comparePlans(optimized, expected)
     }
   }
