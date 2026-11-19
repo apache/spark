@@ -3428,8 +3428,13 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint))
         if canPushThrough(joinType) =>
-      val (movable, stayUp) =
-        splitMovable(splitConjunctivePredicates(filterCondition), Seq(left, right))
+      // An inner join evaluates its condition before the filter, so the filter's conditions are
+      // written after it, as at the end of its ON clause, and a non-deterministic or throwable
+      // conjunct of it keeps the ones that can fail in place.
+      val afterBarrier = joinType.isInstanceOf[InnerLike] &&
+        joinCondition.exists(cond => !cond.deterministic || cond.throwable)
+      val (movable, stayUp) = splitMovable(
+        splitConjunctivePredicates(filterCondition), Seq(left, right), afterBarrier)
       val (leftFilterConditions, rightFilterConditions, commonMovable) =
         splitBySide(movable, left, right)
       val commonFilterCondition = commonMovable ++ stayUp
@@ -3441,7 +3446,8 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           // don't push throwable expressions into join condition, nor the other conjuncts that
-          // may not move
+          // may not move. The ones that move may go ahead of the join condition: when it has a
+          // non-deterministic or throwable conjunct, only the ones that can not fail move.
           val (newJoinConditions, notInJoin) = commonMovable.partition(canEvaluateWithinJoin)
           val others = notInJoin ++ stayUp
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)

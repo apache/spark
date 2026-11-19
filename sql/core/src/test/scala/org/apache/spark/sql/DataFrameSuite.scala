@@ -3184,6 +3184,20 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62091: a filter condition that can fail is not pushed through an inner join " +
+    "ahead of its throwable condition") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // The CASE WHEN of the join condition is false on the pair whose ids are 3, the only one
+      // where the divisions are by zero.
+      val joined = spark.range(0, 10, 1, 1).toDF("l")
+        .join(spark.range(0, 10, 1, 1).toDF("r"),
+          $"l" === $"r" && when($"l" < 0, raise_error(lit("neg"))).otherwise($"l" =!= 3))
+      val expected = (4L to 9L).map(i => Row(i, i))
+      checkAnswer(joined.where(lit(10L) / ($"l" + $"r" - 6) > 0), expected)
+      checkAnswer(joined.where(lit(10L) / ($"l" - 3) > 0), expected)
+    }
+  }
+
   test("SPARK-61921: an inferred filter over a column that can fail is not evaluated ahead of " +
     "the condition through a limit, a sort, a join or an aggregate") {
     withSQLConf(

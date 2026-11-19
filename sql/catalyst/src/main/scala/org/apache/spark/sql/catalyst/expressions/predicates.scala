@@ -299,11 +299,20 @@ trait PredicateHelper extends AliasHelper with Logging {
    * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
    * dropped. The conjuncts that may not move are returned in their written order.
+   *
+   * If `afterBarrier` is true, the conjuncts are evaluated after a condition that they may not
+   * move ahead of, as if after a non-deterministic or throwable conjunct, so only the ones that
+   * can not fail may move.
    */
   protected def splitMovable(
       conditions: Seq[Expression],
-      plans: Seq[LogicalPlan]): (Seq[Expression], Seq[Expression]) = {
-    val (leading, following) = conditions.span(cond => cond.deterministic && !cond.throwable)
+      plans: Seq[LogicalPlan],
+      afterBarrier: Boolean = false): (Seq[Expression], Seq[Expression]) = {
+    val (leading, following) = if (afterBarrier) {
+      (Nil, conditions)
+    } else {
+      conditions.span(cond => cond.deterministic && !cond.throwable)
+    }
     lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
     val (cannotFail, stayUp) = following.partition { cond =>
       ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)

@@ -1249,6 +1249,27 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
   }
 
+  test("SPARK-62091: joins: do not push a condition that can fail ahead of a throwable " +
+    "condition of an inner join") {
+    // The divisions are built in ANSI mode, where they can fail. An inner join evaluates its
+    // condition before the filter above it, so after the throwable conjunct of the join
+    // condition, a filter condition that can fail stays above the join, whichever sides it
+    // reads. A condition that can not fail is pushed, or moved into the join condition.
+    def divide(l: Expression, r: Expression): Expression =
+      Divide(l, r, NumericEvalContext(EvalMode.ANSI))
+    val throwing = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testRelation
+      .join(testRelation1, condition = Some($"a" === $"d" && throwing))
+      .where(divide($"b", $"d") > 1 && divide($"c", Literal(2)) > 1 && $"b" > 1 && $"c" === $"d")
+
+    val correctAnswer = testRelation.where($"b" > 1)
+      .join(testRelation1, condition = Some($"c" === $"d" && $"a" === $"d" && throwing))
+      .where(divide($"b", $"d") > 1 && divide($"c", Literal(2)) > 1)
+      .analyze
+
+    comparePlans(PushPredicateThroughJoin(originalQuery.analyze), correctAnswer)
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery("x")
     val y = testRelation1.subquery("y")
