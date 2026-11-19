@@ -289,7 +289,7 @@ class SparkSessionGetOrCreateDataFrameTests(ReusedSQLTestCase):
     def test_recomputes_when_the_stored_dataset_has_no_marker(self):
         with tempfile.TemporaryDirectory(prefix="get_or_create") as d:
             path = os.path.join(d, "ids")
-            self.spark.range(100).write.parquet(path)
+            self.spark.range(2).write.parquet(path)
 
             df = self.spark.getOrCreateDataFrame(path, lambda: self.spark.range(3))
             self.assertEqual(df.count(), 3)

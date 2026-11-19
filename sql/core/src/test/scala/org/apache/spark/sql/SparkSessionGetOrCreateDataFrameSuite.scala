@@ -53,7 +53,7 @@ class SparkSessionGetOrCreateDataFrameSuite extends QueryTest with SharedSparkSe
   test("SPARK-60775: recomputes when the stored dataset has no marker") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(100).toDF().write.parquet(path)
+      spark.range(2).toDF().write.parquet(path)
 
       checkAnswer(spark.getOrCreateDataFrame(path, () => spark.range(3).toDF()), threeRows)
     }
