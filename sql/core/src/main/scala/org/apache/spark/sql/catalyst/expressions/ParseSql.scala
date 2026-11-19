@@ -68,8 +68,11 @@ import org.apache.spark.unsafe.types.UTF8String
     without aborting the batch. Each statement is analyzed against the session as it is,
     without being executed, so a DECLARE, CREATE, USE, or SET does not affect later
     statements. `CALL` is analyzed but the procedure is not run. A SQL script calling
-    `parse_sql` does not lend it its locals or cursors. `ANALYZE` inherits the invoker's
-    current catalog, schema, and SQL path and does not change them. Analysis may still
+    `parse_sql` does not lend it its locals or cursors. `ANALYZE` uses the invoker's current
+    catalog, schema, and SQL path unless `current_catalog`, `current_schema`, or
+    `current_path` gives one for the call; the session is not changed. The body of an
+    `EXECUTE IMMEDIATE` is analyzed with the invoker's catalog, schema, and path even when
+    the call gives its own. Analysis may still
     run time-travel subqueries, infer file schemas, and call Python UDTF `analyze`.
     Statement length excludes surrounding
     whitespace and the terminating semicolon. Session parser extensions are not applied.
@@ -98,12 +101,14 @@ import org.apache.spark.unsafe.types.UTF8String
         Must be a constant string. NULL or omitted keeps the invoker's path. A blank path
         uses the conf default path. The path feature is enabled for this call only.
       * variables - Optional constant array of `named_struct('name', ..., 'type', ...)`
-        entries. Each name is a session variable that `ANALYZE` treats as declared with
-        the DDL type; the variable is not created.
+        entries. Each name is a variable that `ANALYZE` treats as declared with the DDL
+        type: a session variable (`v`, `session.v`, or `system.session.v`) or a qualified
+        local such as a procedure parameter (`proc.p`). The variable is not created.
       * relations - Optional constant array of `named_struct('name', ..., 'schema', ...)`
         entries. Each name is a relation that `ANALYZE` treats as existing with the DDL
-        schema; nothing is created. Query sources and DML targets resolve to the entry.
-        DDL and other commands that name a table act on the catalog's own objects.
+        schema; nothing is created. Query sources and INSERT targets resolve to the entry.
+        DDL and other commands that name a table act on the catalog's own objects, and a
+        table read by a persistent view's body is not replaced.
       * parameter_markers - Optional constant array of `named_struct('name', ..., 'type', ...)`
         entries. The name is `?` for a positional marker or the marker name for a named
         marker. A marker without a type leaves the statement unresolved.
@@ -123,9 +128,9 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   note = """
     Requires spark.sql.function.parseSql.enabled=true. The result type is STRING JSON.
-    ANALYZE needs an active session, and `sqlStmt` and `mode` must be constant for the
-    query (DATATYPE_MISMATCH.NON_FOLDABLE_INPUT otherwise); a DataFrame column of
-    statements can use PARSE only. Each JSON object has `start` (1-based character
+    ANALYZE needs an active session, and every argument must be constant for the query
+    (DATATYPE_MISMATCH.NON_FOLDABLE_INPUT otherwise); a DataFrame column of statements
+    can use PARSE only. Each JSON object has `start` (1-based character
     offset in the batch), `length`, and `parse_success`. Parse success also has
     `statement_identifier` / `statement_code` (ISO/IEC 9075-2:2023 Table 39). ANALYZE
     adds `analyze_success`. Optional fields are omitted when empty:

@@ -24,7 +24,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, SuppliedRelationRegistry}
 import org.apache.spark.sql.connector.catalog.{
   Identifier, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog
@@ -395,7 +395,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("ANALYZE current_path override is restored on the invoker") {
+  test("ANALYZE current_path leaves the invoker's SET PATH unchanged") {
     withSQLConf(
         SQLConf.PARSE_SQL_ENABLED.key -> "true",
         SQLConf.PATH_ENABLED.key -> "true") {
@@ -1185,7 +1185,6 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-
   test("ANALYZE current_schema applies to one call and leaves the session unchanged") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       sql("CREATE DATABASE parse_sql_per_call_a")
@@ -1238,6 +1237,108 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         assert(inherited \ "analyze_success" === JBool(false))
       } finally {
         sql("DROP DATABASE IF EXISTS parse_sql_per_call_c CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_catalog matches the session catalog in any case") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_d")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_d.t (a INT) USING parquet")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM t; SELECT a FROM parse_sql_missing_t', " +
+            "'ANALYZE', 'SPARK_CATALOG', 'parse_sql_per_call_d')")
+        assert(result.head \ "analyze_success" === JBool(true))
+        assert(result.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_d", "t"))))
+        // A statement that fails analysis is still qualified with the call's schema.
+        assert(result(1) \ "analyze_success" === JBool(false))
+        assert(result(1) \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_d", "parse_sql_missing_t"))))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_d CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_schema qualifies persistent function references with the call") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_e")
+      try {
+        sql("CREATE FUNCTION parse_sql_per_call_e.parse_sql_f() RETURNS INT RETURN 1")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT parse_sql_f() AS x', 'ANALYZE', NULL, " +
+            "'parse_sql_per_call_e')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "function_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_e", "parse_sql_f"))))
+      } finally {
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_e CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_path expands PATH to the invoker's path") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.PATH_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_per_call_f")
+      try {
+        sql("CREATE TABLE parse_sql_per_call_f.parse_sql_path_t (a INT) USING parquet")
+        sql("SET PATH = spark_catalog.parse_sql_per_call_f, system.builtin")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM parse_sql_path_t', 'ANALYZE', " +
+            "current_path => 'PATH, system.session')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_per_call_f", "parse_sql_path_t"))))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP DATABASE IF EXISTS parse_sql_per_call_f CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE current_path orders a temp function before a builtin of the same name") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      spark.udf.register("upper", (s: String) => s.length)
+      try {
+        val builtinFirst = evalCall(
+          "SELECT parse_sql('SELECT upper(''a'') AS x', 'ANALYZE', " +
+            "current_path => 'system.builtin, system.session')")
+        assert(builtinFirst.head \ "select_list" === typedColumns("x" -> jsonString),
+          builtinFirst)
+        val sessionFirst = evalCall(
+          "SELECT parse_sql('SELECT upper(''a'') AS x', 'ANALYZE', " +
+            "current_path => 'system.session, system.builtin')")
+        assert(sessionFirst.head \ "select_list" === typedColumns("x" -> jsonInt),
+          sessionFirst)
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("upper", ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a table read by a persistent view") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_view_base") {
+        withView("parse_sql_evolving_v") {
+          sql("CREATE TABLE parse_sql_view_base (a INT) USING parquet")
+          sql("CREATE VIEW parse_sql_evolving_v WITH SCHEMA EVOLUTION AS " +
+            "SELECT * FROM parse_sql_view_base")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT * FROM parse_sql_evolving_v', 'ANALYZE', " +
+              "relations => array(named_struct(" +
+              "'name', 'spark_catalog.default.parse_sql_view_base', " +
+              "'schema', 'b STRING')))")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+          // A view WITH SCHEMA EVOLUTION would write an overlay's schema to the catalog.
+          val stored = spark.sessionState.catalog.getTableMetadata(
+            TableIdentifier("parse_sql_evolving_v"))
+          assert(stored.schema.fieldNames.toSeq === Seq("a"))
+        }
       }
     }
   }
@@ -1345,18 +1446,20 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       val json = spark.sql(
         """SELECT parse_sql(
-          |  'SELECT parm1 AS x',
+          |  'SELECT proc.parm1 AS x; SELECT parm1 AS x',
           |  'ANALYZE',
           |  variables => array(named_struct('name', 'proc.parm1', 'type', 'STRING')))
           |""".stripMargin).head().getString(0)
-      val miss = parse(json) match {
-        case JArray(List(value: JObject)) => value
-        case other => fail(s"expected one statement object, got: $other")
+      val (hit, miss) = parse(json) match {
+        case JArray(List(first: JObject, second: JObject)) => (first, second)
+        case other => fail(s"expected two statement objects, got: $other")
       }
-      assert(miss \ "analyze_success" === JBool(false))
+      assert(hit \ "analyze_success" === JBool(true), json)
+      assert(hit \ "select_list" === JArray(List(
+        JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))), json)
+      assert(miss \ "analyze_success" === JBool(false), json)
     }
   }
-
 
   test("ANALYZE resolves injected relations from a DDL column list") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {

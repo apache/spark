@@ -170,12 +170,9 @@ class VariableResolution(
       None
     } else {
       SuppliedVariableRegistry.lookup(nameParts, conf.resolver).map { dataType =>
-        val ns = if (namePartsCaseAdjusted.length > 1) {
-          Array(namePartsCaseAdjusted.dropRight(1).last)
-        } else {
-          Array("")
-        }
-        val ident = Identifier.of(ns, namePartsCaseAdjusted.last)
+        // A session name has one part, so a local has a qualifier.
+        val ident = Identifier.of(
+          Array(namePartsCaseAdjusted.dropRight(1).last), namePartsCaseAdjusted.last)
         VariableReference(
           nameParts,
           FakeLocalCatalog,

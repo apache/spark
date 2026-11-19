@@ -31,8 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
  * calls cannot observe each other and a failed call cannot leave the session changed.
  *
  * The SQL path is the call's own when `pathOverride` is given, else the wrapped manager's.
- * Temp state is read from the wrapped manager. Mutators throw, because an analysis-scoped
- * manager must not change anything.
+ * Temp variables are read from the wrapped manager; temp views come from the v1 copy. Mutators
+ * throw, because an analysis-scoped manager must not change anything.
  */
 private[sql] class AnalysisCatalogManager(
     delegate: CatalogManager,
@@ -42,6 +42,9 @@ private[sql] class AnalysisCatalogManager(
     // None keeps the invoker's path. Some(None) uses the conf default path. Some(Some(e)) is
     // the call's own resolved path.
     pathOverride: Option[Option[Seq[SessionPathEntry]]]) extends CatalogManager {
+
+  // Unqualified function lookups in the per-call v1 catalog follow this call's path.
+  perCallV1.bindCatalogManagerForSessionFunctionKinds(this)
 
   // ---- Underlying state: the call's own catalog, namespace and v1 catalog. ----
   override def defaultSessionCatalog: CatalogPlugin = delegate.defaultSessionCatalog

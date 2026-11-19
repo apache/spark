@@ -96,7 +96,7 @@ class SessionCatalog(
     hadoopConf: Configuration,
     val parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader,
-    functionExpressionBuilder: FunctionExpressionBuilder,
+    private[sql] val functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL,
     defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {

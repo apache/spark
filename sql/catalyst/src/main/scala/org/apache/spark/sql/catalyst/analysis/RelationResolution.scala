@@ -251,7 +251,7 @@ class RelationResolution(
    * Like [[lookupTempView]], a persistent view body only sees the temp views it
    * referred to when it was created.
    */
-  def lookupSuppliedTempRelation(
+  private def lookupSuppliedTempRelation(
       name: Seq[String],
       identity: Seq[String]): Option[LogicalPlan] = {
     if (isResolvingView && !isReferredTempViewName(name)) None
@@ -262,7 +262,7 @@ class RelationResolution(
    * Schema-only stand-in for a caller-supplied relation identity. Eclipses the
    * real object of that identity for this analysis.
    */
-  def lookupSuppliedRelation(identity: Seq[String]): Option[LogicalPlan] = {
+  private def lookupSuppliedRelation(identity: Seq[String]): Option[LogicalPlan] = {
     SuppliedRelationRegistry.lookup(identity, conf.resolver).map { schema =>
       val local = LocalRelation(schema)
       local.setTagValue(SuppliedRelationRegistry.IDENTITY_TAG, identity)
@@ -277,10 +277,10 @@ class RelationResolution(
       u: UnresolvedRelation,
       identifier: Seq[String],
       finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+    val supplied = lookupSuppliedPersistentRelation(identifier)
+    if (supplied.isDefined) return supplied
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
-        val nameParts = ident.toQualifiedNameParts(catalog)
-        lookupSuppliedRelation(nameParts).orElse {
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
         val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
         val finalOptions = u.clearWritePrivileges.options
@@ -384,6 +384,7 @@ class RelationResolution(
             } yield {
               val updatedRelation = cached.copy(options = finalOptions)
               updatedRelation.copyTagsFrom(cached)
+              val nameParts = ident.toQualifiedNameParts(catalog)
               val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
               tableCache.update(tableKey, cached.table)
               relationCache.update(key, aliasedRelation)
@@ -408,8 +409,24 @@ class RelationResolution(
               loaded.map(cloneWithPlanId(_, planId))
             }
           }
-        }
       case _ => None
+    }
+  }
+
+  /**
+   * A caller-supplied relation whose identity is `identifier` qualified as persistent. A view
+   * body reads the catalog's tables: an overlay there would change the view's schema, which
+   * a view WITH SCHEMA EVOLUTION writes back to the catalog during analysis.
+   */
+  private def lookupSuppliedPersistentRelation(identifier: Seq[String]): Option[LogicalPlan] = {
+    if (SuppliedRelationRegistry.get().isEmpty || isResolvingView) {
+      None
+    } else {
+      expandIdentifier(identifier) match {
+        case CatalogAndIdentifier(catalog, ident) =>
+          lookupSuppliedRelation(ident.toQualifiedNameParts(catalog))
+        case _ => None
+      }
     }
   }
 
