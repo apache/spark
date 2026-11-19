@@ -848,7 +848,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
+    _.containsAnyPattern(IF, CASE_WHEN, EVAL_ONLY_WHEN), ruleId) {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
@@ -859,6 +859,19 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
         if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+      // Drop a UDF evaluation marker (see `EvalOnlyWhen`) once the optimizer has removed every
+      // Python and external UDF from its child, so the plan matches the one without the marker.
+      // The marker's condition equals this branch's condition, so `If(c, EvalOnlyWhen(c, e), f)`
+      // is `If(c, e, f)`.
+      case If(cond, EvalOnlyWhen(markerCond, child), falseValue)
+        if cond.deterministic && cond.semanticEquals(markerCond) &&
+          !EvalOnlyWhen.hasLiftedUDF(child) =>
+        If(cond, child, falseValue)
+      // A marker whose condition folded to a constant: it is `child` when always true, and null
+      // otherwise (the branch is never taken).
+      case EvalOnlyWhen(TrueLiteral, child) => child
+      case EvalOnlyWhen(FalseLiteral | Literal(null, _), child) =>
+        Literal.create(null, child.dataType)
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
       case If(cond, l @ Literal(null, _), TrueLiteral) if !cond.nullable => Or(Not(cond), l)
       case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
