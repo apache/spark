@@ -416,12 +416,12 @@ class ArtifactManagerSuite extends SharedSparkSession {
     }
     // The paths of the artifacts of a session under the URI of the file server, which differs
     // between runs, and the names of the other ones.
+    def normalize(uris: Seq[String]): Seq[String] = uris.map { uri =>
+      val i = uri.indexOf("/artifacts/")
+      if (i >= 0) uri.substring(i) else uri.substring(uri.lastIndexOf('/'))
+    }.sorted
     def list(session: SparkSession, kind: String): Seq[String] =
-      session.sql(s"LIST $kind").collect().map { row =>
-        val uri = row.getString(0)
-        val i = uri.indexOf("/artifacts/")
-        if (i >= 0) uri.substring(i) else uri.substring(uri.lastIndexOf('/'))
-      }.sorted.toSeq
+      normalize(session.sql(s"LIST $kind").collect().map(_.getString(0)).toSeq)
 
     // Added to the SparkContext outside of any session, as with --jars, --files and --archives.
     val contextFile = newFile("context.txt").toString
@@ -464,6 +464,14 @@ class ArtifactManagerSuite extends SharedSparkSession {
       // The SparkContext lists those of every session.
       assert(sc.listFiles().exists(_.contains(root)))
       assert(sc.listArchives().exists(_.contains(root)))
+      // So does a session with the legacy flag, as before Spark 4.4.
+      session2.conf.set(SQLConf.LEGACY_LIST_ALL_SESSIONS_RESOURCES.key, "true")
+      assert(list(session2, "FILES") == normalize(sc.listFiles()))
+      assert(list(session2, "JARS") == normalize(sc.listJars()))
+      assert(list(session2, "ARCHIVES") == normalize(sc.listArchives()))
+      assert(list(session2, "FILES").contains(s"$root/files/listed.txt"))
+      assert(list(session2, "JARS").contains(s"$root/jars/listed.jar"))
+      assert(list(session2, "ARCHIVES").contains(s"$root/archives/listed.zip#my_files"))
     } finally {
       session1.artifactManager.cleanUpResourcesForTesting()
       Seq(sc.addedFiles, sc.addedJars, sc.addedArchives).zip(contextKeys).foreach {

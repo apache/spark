@@ -23,6 +23,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
@@ -64,7 +65,8 @@ case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
  * [[org.apache.spark.SparkContext]] outside of any session, such as with `--jars`, `--files` and
  * `--archives`, but not those of the other sessions. Otherwise, as in `spark-shell`, in PySpark
  * when PySpark creates the [[org.apache.spark.SparkContext]], and in sessions whose builder enables
- * Hive support, these are all those added to the [[org.apache.spark.SparkContext]].
+ * Hive support, or with `spark.sql.legacy.listAllSessionsResources`, these are all those added to
+ * the [[org.apache.spark.SparkContext]].
  */
 private object SessionResources {
   // The key of what is added to the SparkContext outside of any session.
@@ -75,10 +77,12 @@ private object SessionResources {
       added: SparkContext => collection.Map[String, collection.Map[String, Long]],
       all: SparkContext => Seq[String]): Seq[String] = {
     val sc = sparkSession.sparkContext
+    val listAllSessions =
+      sparkSession.sessionState.conf.getConf(SQLConf.LEGACY_LIST_ALL_SESSIONS_RESOURCES)
     Option(sparkSession.artifactManager.state) match {
-      case Some(state) =>
+      case Some(state) if !listAllSessions =>
         Seq(state.uuid, DefaultKey).flatMap(added(sc).get).flatMap(_.keys).distinct
-      case None => all(sc)
+      case _ => all(sc)
     }
   }
 

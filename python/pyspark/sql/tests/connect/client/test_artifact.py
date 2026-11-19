@@ -223,6 +223,13 @@ class ArtifactTestsMixin:
         ).create()
         self.assertFalse(any("my_listed_" in p for p in other_session.listFiles()))
         self.assertFalse(any("my_listed_" in p for p in other_session.listArchives()))
+        # With the legacy flag, as before Spark 4.4, it lists those of every session.
+        other_session.conf.set("spark.sql.legacy.listAllSessionsResources", "true")
+        try:
+            self.assertTrue(any("my_listed_file" in p for p in other_session.listFiles()))
+            self.assertTrue(any("my_listed_archive" in p for p in other_session.listArchives()))
+        finally:
+            other_session.conf.unset("spark.sql.legacy.listAllSessionsResources")
         self.check_list_files_and_archives(other_session)
 
     def test_list_files_and_archives_added_with_sql(self):
