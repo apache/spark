@@ -377,6 +377,39 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-60830: a join side unique on a CHAR/VARCHAR column stays unique through a cast") {
+    // The key is cast to STRING by the comparison under either conf, and explicitly otherwise.
+    val modes = firstClassCharVarcharConfs.map(c => Seq(c.key -> "true") -> "s = g.c") :+
+      (Seq.empty[(String, String)] -> "s = CAST(g.c AS STRING)")
+    for ((modeConfs, condition) <- modes; cbo <- Seq("true", "false");
+         colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
+      withSQLConf(Seq(SQLConf.CBO_ENABLED.key -> cbo) ++ modeConfs: _*) {
+        val tableName = "char_varchar_unique_join_key"
+        val stringTable = "char_varchar_unique_join_strings"
+        withTable(tableName, stringTable) {
+          sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
+          sql(s"CREATE TABLE $stringTable(s STRING) USING parquet")
+          Seq(tableName, stringTable).foreach { t =>
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+          }
+          val clue = s"$modeConfs, CBO $cbo, $colType"
+          val grouped = s"(SELECT c FROM $tableName GROUP BY c) g"
+          // The left outer join with the unique side adds no rows, so it is removed.
+          val leftJoin = sql(s"SELECT s FROM $stringTable LEFT JOIN $grouped ON $condition")
+          assert(leftJoin.queryExecution.optimizedPlan.collectFirst { case j: Join => j }.isEmpty,
+            clue)
+          assert(leftJoin.count() == 1000, clue)
+          // The size-only estimate of the inner join is the sum of the sides, not their product.
+          val join = sql(s"SELECT * FROM $stringTable JOIN $grouped ON $condition")
+            .queryExecution.optimizedPlan.collectFirst { case j: Join => j }
+            .getOrElse(fail(s"no join, $clue"))
+          assert(join.stats.sizeInBytes ==
+            join.left.stats.sizeInBytes + join.right.stats.sizeInBytes, clue)
+        }
+      }
+    }
+  }
+
   test("SPARK-60830: partition pruning estimates a filter on a first-class CHAR/VARCHAR column") {
     for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {

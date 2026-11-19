@@ -254,11 +254,11 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       a.copy(child = p.copy(child = right))
 
     case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
-        if right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
+        if right.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(rightKeys))) &&
           p.references.subsetOf(left.outputSet) =>
       p.copy(child = left)
     case p @ Project(_, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
-        if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
+        if left.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(leftKeys))) &&
           p.references.subsetOf(right.outputSet) =>
       p.copy(child = right)
   }

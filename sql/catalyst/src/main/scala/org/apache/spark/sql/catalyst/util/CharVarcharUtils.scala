@@ -425,6 +425,17 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Strips a cast of a CHAR, VARCHAR or STRING value to a STRING of the same collation, such as
+   * the one a comparison with a STRING adds when CHAR and VARCHAR are first-class types. Such a
+   * cast returns the value unchanged, so the result is unique, or estimated, as the child is.
+   */
+  def stripCastToPlainString(e: Expression): Expression = e match {
+    case Cast(child, to: StringType, _, _) if StringHelper.plainStringType(child.dataType) == to =>
+      child
+    case _ => e
+  }
+
+  /**
    * Return expressions to apply char type padding for the string comparison between the given
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
    * the longer length.

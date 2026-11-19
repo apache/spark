@@ -258,10 +258,10 @@ case class FilterEstimation(
   /**
    * Returns the column under the read-side padding or check that a scan wraps a CHAR or VARCHAR
    * column in, and under the cast to STRING that a comparison adds when CHAR and VARCHAR are
-   * first-class types (see `EstimationUtils.stripCastToPlainString`).
+   * first-class types (see `CharVarcharUtils.stripCastToPlainString`).
    */
   private def unwrapCharVarcharRead(e: Expression): Expression = {
-    stripCastToPlainString(e) match {
+    CharVarcharUtils.stripCastToPlainString(e) match {
       case CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, _, _) => attr
       case attr: Attribute => attr
       case _ => e

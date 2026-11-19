@@ -23,9 +23,10 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExpressionSet, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, ExpressionSet, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{CharType, IntegerType, StringType, VarcharType}
 
 class DistinctKeyVisitorSuite extends PlanTest {
 
@@ -148,6 +149,35 @@ class DistinctKeyVisitorSuite extends PlanTest {
     checkDistinctAttributes(
       Distinct(t1).join(Distinct(t2), Cross, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set.empty)
+  }
+
+  test("SPARK-60830: Join's distinct attributes through a cast of a CHAR/VARCHAR key to STRING") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      // A comparison of a first-class CHAR or VARCHAR column with a STRING casts it to STRING,
+      // which keeps the value, so a side unique on the column stays unique on the cast.
+      val s = AttributeReference("s", StringType)()
+      val strings = Distinct(LocalRelation(s))
+      Seq(CharType(5), VarcharType(5)).foreach { dt =>
+        val k = AttributeReference("k", dt)()
+        val unique = Distinct(LocalRelation(k))
+        checkDistinctAttributes(
+          unique.join(strings, Inner, Some(Cast(k, StringType) === s)),
+          Set(ExpressionSet(Seq(k)), ExpressionSet(Seq(s))))
+        checkDistinctAttributes(
+          strings.join(unique, LeftOuter, Some(s === Cast(k, StringType))),
+          Set(ExpressionSet(Seq(s))))
+        // A cast to another collation can make different values equal, so it is not stripped.
+        checkDistinctAttributes(
+          unique.join(strings, LeftOuter,
+            Some(Cast(k, StringType("UTF8_LCASE")) === Cast(s, StringType("UTF8_LCASE")))),
+          Set.empty)
+      }
+      // Nor is a cast of a column of another type: only the STRING side is unique on its key.
+      val uniqueInts = Distinct(LocalRelation(a))
+      checkDistinctAttributes(
+        uniqueInts.join(strings, Inner, Some(Cast(a, StringType) === s)),
+        Set(ExpressionSet(Seq(a))))
+    }
   }
 
   test("Project's distinct attributes") {

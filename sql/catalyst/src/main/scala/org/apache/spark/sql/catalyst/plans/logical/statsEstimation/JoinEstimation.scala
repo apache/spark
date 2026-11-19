@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 
 case class JoinEstimation(join: Join) extends Logging {
@@ -59,8 +60,8 @@ case class JoinEstimation(join: Join) extends Logging {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
       // A key cast to a STRING of its own collation is estimated as the key itself.
-      val strippedLeftKeys = leftKeys.map(stripCastToPlainString)
-      val strippedRightKeys = rightKeys.map(stripCastToPlainString)
+      val strippedLeftKeys = leftKeys.map(CharVarcharUtils.stripCastToPlainString)
+      val strippedRightKeys = rightKeys.map(CharVarcharUtils.stripCastToPlainString)
       val joinKeyPairs = extractJoinKeysWithColStats(strippedLeftKeys, strippedRightKeys)
       val leftSideUniqueness =
         left.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedLeftKeys)))
