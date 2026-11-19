@@ -53,6 +53,16 @@ trait AliasHelper {
   }
 
   /**
+   * The plain renames among `exprs`: each output attribute that is an alias of an input attribute.
+   * An alias of an expression is not followed, so a caller's expression keeps referencing an
+   * output attribute the child does not produce, which the caller's own check rejects.
+   */
+  protected def getRenameMap(exprs: Iterable[NamedExpression]): AttributeMap[Attribute] =
+    AttributeMap(exprs.collect {
+      case a @ Alias(child: AttributeReference, _) => (a.toAttribute, child: Attribute)
+    })
+
+  /**
    * Replace all attributes, that reference an alias, with the aliased expression
    */
   protected def replaceAlias(

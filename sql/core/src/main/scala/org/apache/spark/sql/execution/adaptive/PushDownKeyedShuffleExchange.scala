@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, AttributeSet, Expression, ExprUtils, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -49,12 +49,13 @@ import org.apache.spark.sql.internal.SQLConf
  * partitioned window, a final window group limit, a deterministic projection or filter, a local
  * sort, a generate and a broadcast join's streamed side, and retargets only when the plan reuses
  * neither shuffle, the layout offers at least the hash shuffle's partition count, no crossed
- * expression evaluates differently, and the whole plan still validates under the preparation's root
- * distribution.
+ * expression evaluates differently, the layout stays evaluable on rows a crossed operator removes,
+ * the rebuilt subtree reports the layout, and the whole plan still validates under the
+ * preparation's root distribution.
  */
 case class PushDownKeyedShuffleExchange(
     ensureRequirements: EnsureRequirements,
-    queryContainsSubqueries: Boolean) extends Rule[SparkPlan] {
+    queryContainsSubqueries: Boolean) extends Rule[SparkPlan] with AliasHelper {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED) ||
@@ -67,26 +68,50 @@ case class PushDownKeyedShuffleExchange(
     lazy val sharedExchanges: Set[SparkPlan] =
       if (conf.exchangeReuseEnabled) AQEUtils.duplicatedShuffleForms(plan) else Set.empty
 
-    val pushed = plan.transformUp {
-      // The layout has to be able to serve as a shuffle's template, as
-      // `KeyedShuffleSpec.canCreatePartitioning` asks of one it lays another child out on.
-      case keyedExchange @ ShuffleExchangeExec(
-          keyed: KeyedPartitioning, _, ENSURE_REQUIREMENTS, _, _) if keyed.canTemplateShuffle =>
-        pushDown(keyedExchange, sharedExchanges).getOrElse(keyedExchange)
+    // The layout has to be able to serve as a shuffle's template, as
+    // `KeyedShuffleSpec.canCreatePartitioning` asks of one it lays another child out on.
+    def isCandidate(plan: SparkPlan): Boolean = plan match {
+      case ShuffleExchangeExec(keyed: KeyedPartitioning, _, ENSURE_REQUIREMENTS, _, _) =>
+        keyed.canTemplateShuffle
+      case _ => false
     }
-    if (pushed.fastEquals(plan) ||
-        !ValidateRequirements.validateWithOrigins(
-          pushed, ensureRequirements.requiredDistribution)) {
+
+    // The rewrite one candidate reports, or `current` when it declines.
+    def rewrite(current: SparkPlan)(select: ShuffleExchangeExec => Boolean): SparkPlan =
+      current.transformUp {
+        case exchange: ShuffleExchangeExec if select(exchange) =>
+          pushDown(exchange, sharedExchanges).getOrElse(exchange)
+      }
+
+    def validated(plan: SparkPlan): Boolean =
+      ValidateRequirements.validateWithOrigins(plan, ensureRequirements.requiredDistribution)
+
+    // One pass rewrites every candidate, and the whole plan is validated once. Only when that
+    // check refuses a rewrite does the per-candidate retry below run, so a refusal on one branch
+    // does not undo the others in the rare case that the whole-plan check fails.
+    val pushed = rewrite(plan)(isCandidate)
+    if (pushed.fastEquals(plan)) {
       plan
-    } else {
+    } else if (validated(pushed)) {
       pushed
+    } else {
+      // `collect` visits a node before its children, so a candidate above another is retried
+      // first. A rewrite rebuilds only the path from the candidate to the root, copies the hash
+      // shuffle's child, and leaves a sibling subtree in place, so every other candidate keeps
+      // its instance: one cannot sit in another's crossed operators, where a walk stops at a
+      // keyed shuffle it cannot retarget.
+      plan.collect { case exchange: ShuffleExchangeExec if isCandidate(exchange) => exchange }
+        .foldLeft(plan) { (current, keyedExchange) =>
+          val rewritten = rewrite(current)(_.eq(keyedExchange))
+          if (!rewritten.fastEquals(current) && validated(rewritten)) rewritten else current
+        }
     }
   }
 
   /**
    * `keyedExchange`'s child with the hash shuffle below it retargeted to the layout
    * `keyedExchange` reports, or `None` when the walk cannot reach a hash shuffle that can take
-   * the layout, or the plan reuses either shuffle. The result reports the layout.
+   * the layout, the plan reuses either shuffle, or the rebuilt subtree does not report the layout.
    */
   private def pushDown(
       keyedExchange: ShuffleExchangeExec,
@@ -100,9 +125,10 @@ case class PushDownKeyedShuffleExchange(
     def retargetStreamed(
         join: BinaryExecNode,
         buildSide: BuildSide,
-        layout: KeyedPartitioning): Option[SparkPlan] = {
+        layout: KeyedPartitioning,
+        dropsRows: Boolean): Option[SparkPlan] = {
       val streamed = if (buildSide == BuildLeft) join.right else join.left
-      retarget(streamed, layout).map { child =>
+      retarget(streamed, layout, dropsRows).map { child =>
         val children = if (buildSide == BuildLeft) {
           Seq(join.left, child)
         } else {
@@ -116,18 +142,26 @@ case class PushDownKeyedShuffleExchange(
     def retargetChild(
         operator: UnaryExecNode,
         childLayout: KeyedPartitioning,
+        dropsRows: Boolean,
         admit: KeyedPartitioning => Boolean = _ => true): Option[SparkPlan] = {
       if (admit(childLayout)) {
-        retarget(operator.child, childLayout).map(child => operator.withNewChildren(Seq(child)))
+        retarget(operator.child, childLayout, dropsRows)
+          .map(child => operator.withNewChildren(Seq(child)))
       } else {
         None
       }
     }
 
-    def retarget(plan: SparkPlan, layout: KeyedPartitioning): Option[SparkPlan] = plan match {
+    // `dropsRows` says that an operator above this point removes rows, so the layout is evaluated
+    // on rows that operator would have removed.
+    def retarget(
+        plan: SparkPlan,
+        layout: KeyedPartitioning,
+        dropsRows: Boolean): Option[SparkPlan] = plan match {
       case hashExchange @ ShuffleExchangeExec(hash: HashPartitioning, _, ENSURE_REQUIREMENTS, _, _)
           if hash.numPartitions <= layout.numPartitions &&
             layout.expressions.forall(_.references.subsetOf(hashExchange.child.outputSet)) &&
+            (!dropsRows || layout.expressions.forall(ExprUtils.canEvaluateUnconditionally)) &&
             !sharedExchanges.contains(keyedExchange.canonicalized) &&
             !sharedExchanges.contains(hashExchange.canonicalized) =>
         // `EnsureRequirements` builds the layout with `KeyedShuffleSpec.createPartitioning`, which
@@ -141,36 +175,45 @@ case class PushDownKeyedShuffleExchange(
         Option.when(PartitioningOrigin.validateNode(retargeted))(retargeted)
 
       case project: ProjectExec if project.expressions.forall(_.deterministic) =>
-        rebind(layout, project).flatMap(retargetChild(project, _))
+        rebind(layout, project.projectList, project.child.outputSet)
+          .flatMap(childLayout => retargetChild(project, childLayout, dropsRows))
       case filter: FilterExec if filter.expressions.forall(_.deterministic) =>
-        retargetChild(filter, layout)
+        retargetChild(filter, layout, dropsRows = true)
       case sort: SortExec if !sort.global =>
-        retargetChild(sort, layout)
+        retargetChild(sort, layout, dropsRows)
       case generate: GenerateExec if generate.expressions.forall(_.deterministic) =>
-        retargetChild(generate, layout)
+        retargetChild(generate, layout, dropsRows || !generate.outer)
 
       case aggregate: BaseAggregateExec
           if !aggregate.isStreaming && aggregate.expressions.forall(_.deterministic) =>
-        rebind(layout, aggregate).flatMap(childLayout =>
-          retargetChild(aggregate, childLayout, layout =>
-            aggregate.requiredChildDistributionExpressions.exists(servesClustering(layout, _))))
+        rebind(layout, aggregate.resultExpressions, aggregate.child.outputSet)
+          .flatMap(childLayout =>
+            retargetChild(aggregate, childLayout, dropsRows, candidate =>
+              aggregate.requiredChildDistributionExpressions.exists(
+                servesClustering(candidate, _))))
       case window: WindowExecBase if window.expressions.forall(_.deterministic) =>
-        retargetChild(window, layout,
+        retargetChild(window, layout, dropsRows,
           childLayout => servesClustering(childLayout, window.partitionSpec))
       case wgl: WindowGroupLimitExec if wgl.mode == FinalWindowGroupLimit =>
-        retargetChild(wgl, layout, childLayout => servesClustering(childLayout, wgl.partitionSpec))
+        // The final limit keeps the top rows of each partition and drops the rest.
+        retargetChild(wgl, layout, dropsRows = true,
+          childLayout => servesClustering(childLayout, wgl.partitionSpec))
 
+      // A crossed broadcast join can remove rows of its streamed side, so the layout has to be
+      // evaluable on rows the join drops.
       case join: BroadcastHashJoinExec if join.condition.forall(_.deterministic) =>
-        retargetStreamed(join, join.buildSide, layout)
+        retargetStreamed(join, join.buildSide, layout, dropsRows = true)
       case join: BroadcastNestedLoopJoinExec if join.condition.forall(_.deterministic) =>
-        retargetStreamed(join, join.buildSide, layout)
+        retargetStreamed(join, join.buildSide, layout, dropsRows = true)
 
       case _ => None
     }
 
-    retarget(keyedExchange.child, layout).filter { moved =>
-      PartitioningCollection.representativeOf(moved.outputPartitioning)
-        .exists(_.semanticEquals(layout))
+    retarget(keyedExchange.child, layout, dropsRows = false).filter { moved =>
+      PartitioningCollection.flatten(moved.outputPartitioning).exists {
+        case p: Expression => p.semanticEquals(layout)
+        case _ => false
+      }
     }
   }
 
@@ -182,29 +225,23 @@ case class PushDownKeyedShuffleExchange(
     keys.nonEmpty && layout.satisfies(ClusteredDistribution(keys))
 
   /**
-   * `layout` rewritten from `operator`'s output attributes into its child's, or `None` when one of
-   * its expressions references an attribute the operator computes, which the child does not have.
-   * Only a plain rename is followed (`c1 AS x` becomes `c1`), as in `PushDownLocalSort`.
+   * `layout` rewritten from `outputExprs`' output attributes into the child's, or `None` when one
+   * of its expressions still references an attribute the child does not produce, such as one an
+   * expression alias computes. Only a plain rename is followed (`c1 AS x` becomes `c1`), as in
+   * `PushDownLocalSort`.
    */
   private def rebind(
       layout: KeyedPartitioning,
-      operator: UnaryExecNode): Option[KeyedPartitioning] = {
-    val outputExprs: Seq[Expression] = operator match {
-      case project: ProjectExec => project.projectList
-      case aggregate: BaseAggregateExec => aggregate.resultExpressions
-      case _ => Nil
-    }
-    val aliases = AttributeMap(outputExprs.collect {
-      case a @ Alias(child: AttributeReference, _) => (a.toAttribute, child: Attribute)
-    })
-    val rebound = if (aliases.isEmpty) {
+      outputExprs: Seq[NamedExpression],
+      childOutput: AttributeSet): Option[KeyedPartitioning] = {
+    val renames = getRenameMap(outputExprs)
+    val rebound = if (renames.isEmpty) {
       layout
     } else {
       layout.copy(expressions = layout.expressions.map(_.transformUp {
-        case a: Attribute => aliases.getOrElse(a, a)
+        case a: Attribute => renames.getOrElse(a, a)
       }))
     }
-    Option.when(rebound.expressions.forall(
-      _.references.subsetOf(operator.child.outputSet)))(rebound)
+    Option.when(rebound.expressions.forall(_.references.subsetOf(childOutput)))(rebound)
   }
 }

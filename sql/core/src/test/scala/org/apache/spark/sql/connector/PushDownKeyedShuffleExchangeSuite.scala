@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.window.{Final, Partial => WGLPartial, Wind
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions.{col, udaf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.sql.types.{FloatType, LongType, StringType}
 
 class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase {
 
@@ -165,18 +165,34 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
     check(query, expected, expectedShuffles = 2)
     check(query, expected, expectedShuffles = 1,
       SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "true")
-  }
-
-  test("non-adaptive plans keep both shuffles") {
-    loadData()
-    withSQLConf(
+    // The non-adaptive list applies the same gate.
+    def nonAdaptivePlan(allow: String): SparkPlan = withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ALLOW_WITH_SUBQUERIES_ENABLED.key -> allow,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val df = sql(query)
+      checkAnswer(df, expected)
+      df.queryExecution.executedPlan
+    }
+    assert(shuffles(nonAdaptivePlan("false")).size == 2)
+    assert(shuffles(nonAdaptivePlan("true")).size == 1)
+  }
+
+  test("non-adaptive plans are rewritten too") {
+    loadData()
+    def plan(rule: String): SparkPlan = withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> rule,
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       val df = sql(aggregateJoin)
       checkAnswer(df, aggregateJoinAnswer)
-      assert(shuffles(df.queryExecution.executedPlan).size == 2)
+      df.queryExecution.executedPlan
     }
+    assert(shuffles(plan("false")).size == 2)
+    assert(shuffles(plan("true")).size == 1)
   }
 
   test("session window aggregate") {
@@ -317,6 +333,67 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
          |  FROM testcat.ns.$purchases GROUP BY item_id, price
          |) p ON i.id = p.item_id""".stripMargin,
       Seq(Row(1L, 1L), Row(1L, 1L), Row(2L, 1L), Row(3L, 1L)),
+      expectedShuffles = 1)
+  }
+
+  test("a layout on a subset of the group keys is refused when all keys are required") {
+    loadData()
+    val query =
+      s"""SELECT i.id, p.cnt FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id, price, count(*) AS cnt
+         |  FROM testcat.ns.$purchases GROUP BY item_id, price
+         |) p ON i.id = p.item_id""".stripMargin
+    val expected = Seq(Row(1L, 1L), Row(1L, 1L), Row(2L, 1L), Row(3L, 1L))
+    check(query, expected, expectedShuffles = 2,
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true")
+    // A layout covering every key is still admitted under the same setting.
+    check(aggregateJoin, aggregateJoinAnswer, expectedShuffles = 1,
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true")
+  }
+
+  test("a layout held by a later keyed member is admitted") {
+    loadData()
+    // The aggregate outputs `item_id` and an alias of it, so the layout is not the first keyed
+    // member of the reported collection.
+    check(
+      s"""SELECT i.id, p.k, p.total FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id, item_id AS k, sum(price) AS total
+         |  FROM testcat.ns.$purchases GROUP BY item_id
+         |) p ON i.id = p.item_id""".stripMargin,
+      Seq(Row(1L, 1L, 40.0), Row(1L, 1L, 40.0), Row(2L, 2L, 10.0), Row(3L, 3L, 25.5)),
+      expectedShuffles = 1)
+  }
+
+  test("a failable layout expression is not moved below a filter") {
+    loadData()
+    createTable("keyed_codes", Array(Column.create("id", LongType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.keyed_codes VALUES (1), (3)")
+    createTable("codes",
+      Array(Column.create("code", StringType), Column.create("price", FloatType)), Array.empty)
+    sql("INSERT INTO testcat.ns.codes VALUES ('1', 40.0), ('3', 15.5), ('n/a', 1.0)")
+    // The keyed shuffle evaluates `cast(code as bigint)` only on the groups `having` keeps, so the
+    // rewrite must not move it below the filter, where the 'n/a' group would reach the cast.
+    withPushDownConf() {
+      val df = sql(
+        s"""SELECT k.id, p.total FROM testcat.ns.keyed_codes k
+           |JOIN (
+           |  SELECT code, sum(price) AS total FROM testcat.ns.codes
+           |  GROUP BY code HAVING sum(price) > 10
+           |) p ON k.id = CAST(p.code AS BIGINT)""".stripMargin)
+      checkAnswer(df, Seq(Row(1L, 40.0), Row(3L, 15.5)))
+      assert(shuffles(df.queryExecution.executedPlan).size == 2,
+        df.queryExecution.executedPlan)
+    }
+    // An identity layout is total, so a filter does not stop the rewrite.
+    check(
+      s"""SELECT i.id, p.total FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id, sum(price) AS total FROM testcat.ns.$purchases
+         |  GROUP BY item_id HAVING sum(price) > 15
+         |) p ON i.id = p.item_id""".stripMargin,
+      Seq(Row(1L, 40.0), Row(1L, 40.0), Row(3L, 25.5)),
       expectedShuffles = 1)
   }
 
@@ -817,6 +894,40 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
       expectedShuffles = 2)
   }
 
+  test("every independent candidate is rewritten") {
+    loadData()
+    // Two branches, so the rewrite of the first must not hide the second candidate. `max` keeps
+    // the branches from sharing an exchange.
+    val other =
+      s"""SELECT i.id, p.total FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT item_id, max(price) AS total
+         |  FROM testcat.ns.$purchases GROUP BY item_id HAVING max(price) > 0
+         |) p ON i.id = p.item_id""".stripMargin
+    val otherAnswer = Seq(Row(1L, 40.0f), Row(1L, 40.0f), Row(2L, 10.0f), Row(3L, 25.5f))
+    withPushDownConf() {
+      val plan = run(s"$aggregateJoin UNION ALL $other", aggregateJoinAnswer ++ otherAnswer)
+      assert(shuffles(plan).size == 2, plan)
+    }
+  }
+
+  test("a refused candidate does not revert another branch") {
+    loadData()
+    // The hint is elided and recorded, so the second branch keeps both shuffles; the first branch
+    // is independent of it and must still lose one.
+    val hinted =
+      s"""SELECT i.id, p.total FROM testcat.ns.$items i
+         |JOIN (
+         |  SELECT /*+ REPARTITION(item_id) */ item_id, max(price) AS total
+         |  FROM testcat.ns.$purchases GROUP BY item_id HAVING max(price) > 0
+         |) p ON i.id = p.item_id""".stripMargin
+    val hintedAnswer = Seq(Row(1L, 40.0f), Row(1L, 40.0f), Row(2L, 10.0f), Row(3L, 25.5f))
+    withPushDownConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true") {
+      val plan = run(s"$aggregateJoin UNION ALL $hinted", aggregateJoinAnswer ++ hintedAnswer)
+      assert(shuffles(plan).size == 3, plan)
+    }
+  }
+
   test("outer joins") {
     loadData()
     check(
@@ -906,12 +1017,14 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "false",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       // The prepared non-adaptive plan places the keyed shuffle above the aggregate and the hash
-      // shuffle under it; the rule is what AQE preparation runs on that shape.
+      // shuffle under it; the rule is what preparation runs on that shape. The rule is off while
+      // the plan is planned so that it is handed to `apply` below unrewritten.
       val plan = sql(bucketedJoin).queryExecution.executedPlan
+      withSQLConf(SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true") {
       val rule = PushDownKeyedShuffleExchange(EnsureRequirements(), queryContainsSubqueries = false)
 
       def exchanges(plan: SparkPlan): Seq[ShuffleExchangeExec] =
@@ -967,7 +1080,8 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
       assert(keyedPartitions < exchanges(wider)
         .filterNot(_.outputPartitioning.isInstanceOf[KeyedPartitioning])
         .head.outputPartitioning.numPartitions, wider)
-      assert(rule.apply(wider) eq wider, wider)
+        assert(rule.apply(wider) eq wider, wider)
+      }
     }
   }
 
