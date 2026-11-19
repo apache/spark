@@ -136,6 +136,77 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     }
   }
 
+  // The left input is bounded only through a DATE column cast to TIMESTAMP. The cast takes the
+  // session time zone, so the date of day 5 ends the range at day 5 08:00 UTC.
+  private def joinWithCastDate(joinType: String)
+      : (MemoryStream[(Int, Long, Int)], MemoryStream[(Int, Long)], DataFrame) = {
+    val leftInput = MemoryStream[(Int, Long, Int)]
+    val rightInput = MemoryStream[(Int, Long)]
+    val left = leftInput.toDF().toDF("leftKey", "time", "day")
+      .select($"leftKey", timestamp_seconds($"time").as("leftTime"),
+        date_from_unix_date($"day").as("leftDate"))
+      .withWatermark("leftTime", "1 hour")
+    val right = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+      .withWatermark("rightTime", "1 hour")
+    val condition = expr(
+      "leftKey = rightKey AND rightTime BETWEEN leftTime AND CAST(leftDate AS TIMESTAMP)")
+    val result = left.join(right, condition, joinType)
+      .select($"leftKey", $"rightTime".cast("long").as("matchTime"), $"leftTime".cast("long"))
+    (leftInput, rightInput, result)
+  }
+
+  for {
+    version <- Seq(2, 3, 4)
+    joinType <- Seq("inner", "left_outer")
+  } {
+    test(s"range eviction uses the bounded cast, V$version $joinType") {
+      withJoinConf(version) {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          val (day, hour) = (86400L, 3600L)
+          val (leftInput, rightInput, result) = joinWithCastDate(joinType)
+          testStream(result)(
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, day, 5), (2, day, 5)), AddData(rightInput, (9, day)))),
+            CheckNewAnswer(),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, 5 * day + 3 * hour, 9)),
+              AddData(rightInput, (9, 5 * day + 3 * hour)))),
+            CheckNewAnswer(),
+            // The watermark is day 5 02:00 UTC, past leftTime and the UTC midnight of day 5.
+            AddData(rightInput, (9, 5 * day + 3 * hour)),
+            CheckNewAnswer(),
+            AddData(rightInput, (1, 5 * day + 5 * hour)),
+            CheckNewAnswer(Row(1, 5 * day + 5 * hour, day)),
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (8, 6 * day, 9)), AddData(rightInput, (9, 6 * day)))),
+            CheckNewAnswer(),
+            AddData(rightInput, (9, 6 * day)),
+            CheckNewAnswer((if (joinType == "left_outer") Seq(Row(2, null, day)) else Nil): _*))
+        }
+      }
+    }
+  }
+
+  test("V4 fails with an index version that orders a cast-bounded input by the event time") {
+    Seq("0", "1").foreach { version =>
+      withJoinConf(4) {
+        withSQLConf(indexVersionKey -> version) {
+          val (leftInput, rightInput, result) = joinWithCastDate("left_outer")
+          testStream(result)(
+            StreamProgressLockedActions(Seq(
+              AddData(leftInput, (1, 86400L, 5)), AddData(rightInput, (9, 86400L)))),
+            ExpectFailure[AnalysisException] { e =>
+              checkError(
+                e.asInstanceOf[AnalysisException],
+                condition = "STREAMING_JOIN_STATE_V4_CHECKPOINT_INCOMPATIBLE",
+                parameters = Map("side" -> "left", "column" -> "`leftDate`"))
+            })
+        }
+      }
+    }
+  }
+
   for {
     version <- Seq(2, 4)
     joinType <- Seq("left_outer", "right_outer")
@@ -170,8 +241,8 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
   }
 
   // The condition bounds the left input only through leftDate cast to TIMESTAMP, so the left
-  // input is evicted by leftTime with the cutoff from leftDate, as in earlier versions. A negative
-  // start gives a NULL leftTime, which the condition does not reference.
+  // input is evicted by that cast. A negative start gives a NULL leftTime, which the condition
+  // does not reference.
   private def joinWithDate(joinType: String)
       : (MemoryStream[(Int, Long, Int)], MemoryStream[(Int, Long)], DataFrame) = {
     val leftInput = MemoryStream[(Int, Long, Int)]
@@ -193,7 +264,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
     version <- Seq(2, 4)
     joinType <- Seq("inner", "left_outer")
   } {
-    test(s"an input bounded only through a cast column keeps the earlier eviction, " +
+    test(s"a row with a NULL event time of an input evicted by the cast keeps its matches, " +
         s"V$version $joinType") {
       withJoinConf(version) {
         val (leftInput, rightInput, result) = joinWithDate(joinType)
@@ -205,12 +276,10 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
           StreamProgressLockedActions(Seq(
             AddData(leftInput, (8, 400L, 0)), AddData(rightInput, (1, 400L)))),
           CheckNewAnswer(Row(1, 400L, null)),
-          // The cutoff on leftTime is 340 s. State format 4 indexed the NULL leftTime as 0 and
-          // evicted it in the last batch.
+          // The cutoff on the cast is 340 s, below every leftDate in the session time zone, so no
+          // left row is evicted, and the row with a NULL leftTime still matches.
           AddData(rightInput, (1, 500L)),
-          CheckNewAnswer(
-            (if (version == 2) Seq(Row(1, 500L, null)) else Nil) ++
-              (if (joinType == "left_outer") Seq(Row(2, null, 100L)) else Nil): _*))
+          CheckNewAnswer(Row(1, 500L, null)))
       }
     }
   }
@@ -389,7 +458,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
             AddData(leftInput, (1, 100L, 700L), (2, 100L, 700L)), AddData(rightInput, (9, 100L)))),
           CheckNewAnswer(),
           StopStream)
-        assert(indexVersion(checkpoint) === Some("1"))
+        assert(indexVersion(checkpoint) === Some("2"))
         removeIndexVersion(checkpoint)
         testStream(result)(
           StartStream(checkpointLocation = checkpoint.getCanonicalPath),
@@ -423,7 +492,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
               CheckNewAnswer(),
               StopStream)
           }
-          assert(indexVersion(checkpoint) === Some(if (legacyFirst) "0" else "1"))
+          assert(indexVersion(checkpoint) === Some(if (legacyFirst) "0" else "2"))
           withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> legacyFirst.toString) {
             testStream(result)(
               StartStream(checkpointLocation = checkpoint.getCanonicalPath),
@@ -436,7 +505,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
               })
           }
           // The failed restart keeps the recorded version.
-          assert(indexVersion(checkpoint) === Some(if (legacyFirst) "0" else "1"))
+          assert(indexVersion(checkpoint) === Some(if (legacyFirst) "0" else "2"))
         }
       }
     }
@@ -517,7 +586,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
             AddData(leftInput, (1, 100L, 700L), (2, 100L, 700L)), AddData(rightInput, (9, 100L)))),
           CheckNewAnswer(),
           StopStream)
-        assert(indexVersion(checkpoint) === Some("1"))
+        assert(indexVersion(checkpoint) === Some("2"))
         withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
           testStream(result)(
             StartStream(checkpointLocation = checkpoint.getCanonicalPath),
@@ -578,7 +647,7 @@ class StreamingJoinRangeEvictionSuite extends StateStoreMetricsTest {
               CheckNewAnswer(),
               StopStream)
           }
-          assert(indexVersion(checkpoint) === Some("1"))
+          assert(indexVersion(checkpoint) === Some("2"))
           withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
             testStream(result)(
               StartStream(checkpointLocation = checkpoint.getCanonicalPath),

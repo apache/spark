@@ -4406,15 +4406,16 @@ object SQLConf {
       .doc("How state format version 4 of stream-stream joins orders the state of an input that " +
         "it evicts by a range condition. 0: by the event time of the input, as in 4.4 and " +
         "earlier and with spark.sql.streaming.statefulOperator.allowMultiple set to false. 1: by " +
-        "the column that the default mode evicts the input by, which is the event time for an " +
-        "input bounded only through a column cast to TIMESTAMP. A streaming query keeps the " +
-        "version recorded in its checkpoint, and one restarted from a checkpoint without it uses " +
-        "0. With 0, the default mode fails to run a join that evicts such an input by a " +
-        "TIMESTAMP column other than its event time.")
+        "the TIMESTAMP column that the default mode evicts the input by, and by the event time " +
+        "for an input bounded only through a column cast to TIMESTAMP. 2: also by a column cast " +
+        "to TIMESTAMP that the condition bounds. A streaming query keeps the version recorded in " +
+        "its checkpoint, and one restarted from a checkpoint without it uses 0. With 0, the " +
+        "default mode fails to run a join that evicts such an input by a TIMESTAMP column other " +
+        "than its event time, and with 0 or 1, one that evicts it by a cast.")
       .version("4.5.0")
       .intConf
-      .checkValue(v => v == 0 || v == 1, "Valid versions are 0 and 1")
-      .createWithDefault(1)
+      .checkValue(v => v >= 0 && v <= 2, "Valid versions are 0, 1 and 2")
+      .createWithDefault(2)
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")

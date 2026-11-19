@@ -249,7 +249,8 @@ class SymmetricHashJoinStateManagerV4(
     joinStoreGenerator: JoinStateManagerStoreGenerator,
     joinKeyOrdinalForWatermark: Option[Int] = None,
     readOnly: Boolean = false,
-    stateValueWatermarkColumnOrdinal: Option[Int] = None)
+    stateValueWatermarkColumnOrdinal: Option[Int] = None,
+    stateValueWatermarkCast: Option[Expression] = None)
   extends SymmetricHashJoinStateManager with SupportsEvictByTimestamp with Logging {
 
   // TODO: [SPARK-55729] Once the new state manager is integrated to stream-stream join operator,
@@ -284,8 +285,14 @@ class SymmetricHashJoinStateManagerV4(
 
   private val random = new scala.util.Random(System.currentTimeMillis())
   private val bucketCountForNoEventTime = 1024
+  // A column cast to TIMESTAMP, such as a DATE column, orders the state by the value of the cast.
+  private val castTimestampProjection =
+    stateValueWatermarkCast.map(c => UnsafeProjection.create(Seq(c), inputValueAttributes))
   private val extractEventTimeFn: UnsafeRow => Long = { row =>
     timestampColIdxOpt match {
+      case Some(_) if castTimestampProjection.isDefined =>
+        castTimestampProjection.get(row).getLong(0)
+
       case Some(idx) =>
         val attr = inputValueAttributes(idx)
 
@@ -2196,13 +2203,15 @@ object SymmetricHashJoinStateManager {
       joinStoreGenerator: JoinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark: Option[Int] = None,
       readOnly: Boolean = false,
-      stateValueWatermarkColumnOrdinal: Option[Int] = None): SymmetricHashJoinStateManager = {
+      stateValueWatermarkColumnOrdinal: Option[Int] = None,
+      stateValueWatermarkCast: Option[Expression] = None): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 4) {
       new SymmetricHashJoinStateManagerV4(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator, joinKeyOrdinalForWatermark, readOnly, stateValueWatermarkColumnOrdinal
+        joinStoreGenerator, joinKeyOrdinalForWatermark, readOnly, stateValueWatermarkColumnOrdinal,
+        stateValueWatermarkCast
       )
     } else if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(

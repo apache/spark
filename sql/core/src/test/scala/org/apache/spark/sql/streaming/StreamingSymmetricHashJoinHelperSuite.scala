@@ -94,14 +94,14 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
         .left.get.asInstanceOf[JoinStateValueWatermarkPredicate]
     assert(predicate(rightTime <= expiry, legacyMode = false).conditionBoundsColumn)
     assert(!predicate(rightTime <= expiry, legacyMode = true).conditionBoundsColumn)
-    // The condition bounds only leftDate, so the input falls back to its event time and keeps the
-    // scan start solved over the whole input in every batch.
+    // The condition bounds only leftDate cast to TIMESTAMP, which evicts the input. Late-input
+    // filtering does not bound the cast, so the scan starts from the beginning in every batch.
     val castBounded = Cast(leftDate, TimestampType, Some("UTC")) >= rightTime
     Seq(true, false).foreach { isFirstBatch =>
       val p = predicate(castBounded, legacyMode = false, isFirstBatch)
-      assert(p.expr.references === AttributeSet(leftTime))
-      assert(!p.conditionBoundsColumn)
-      assert(p.prevStateWatermark === Some(99999L))
+      assert(p.expr.references === AttributeSet(leftDate))
+      assert(p.conditionBoundsColumn)
+      assert(p.prevStateWatermark === None)
     }
   }
 
