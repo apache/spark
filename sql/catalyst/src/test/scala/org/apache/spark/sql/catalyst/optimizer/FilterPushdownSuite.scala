@@ -891,7 +891,8 @@ class FilterPushdownSuite extends PlanTest {
       check(Optimize.execute(two), twoAnswer)
       check(PushPredicateThroughNonJoin(two), twoAnswer)
       // Also when such a condition reads a column below the projection that cannot fail, as f
-      // when the plan computes it in a projection of its own.
+      // when the plan computes it in a projection of its own, also two projections below, or as
+      // the result r of an aggregation.
       check(PushPredicateThroughNonJoin(testStringRelation
           .select($"a", $"b", $"e", f as "f")
           .where($"f")
@@ -904,6 +905,29 @@ class FilterPushdownSuite extends PlanTest {
           .select($"a", $"b", $"e", $"f", j as "j")
           .where($"j" || $"f")
           .select($"a", $"f", g as "g", $"j")
+          .where(Not($"g" === $"j")))
+      val fTwoBelow = testStringRelation
+        .select($"a", $"b", $"e", f as "f")
+        .where($"f")
+        .select($"a", $"b", $"e", $"f")
+      check(PushPredicateThroughNonJoin(fTwoBelow
+          .select($"a", $"f", g as "g", j as "j")
+          .where(Not($"g" === $"j") && ($"j" || $"f"))
+          .analyze),
+        fTwoBelow
+          .select($"a", $"b", $"e", $"f", j as "j")
+          .where($"j" || $"f")
+          .select($"a", $"f", g as "g", $"j")
+          .where(Not($"g" === $"j")))
+      val agg = testStringRelation.groupBy($"e")($"e", max($"e").rlike("^1") as "r")
+      check(PushPredicateThroughNonJoin(agg
+          .select($"r", g as "g", j as "j")
+          .where(Not($"g" === $"j") && ($"j" || $"r"))
+          .analyze),
+        agg
+          .select($"e", $"r", j as "j")
+          .where($"j" || $"r")
+          .select($"r", g as "g", $"j")
           .where(Not($"g" === $"j")))
       // `f != g AND j AND f`: (f != g) does not need every expensive alias, so it does not end
       // the split, and the split places the conditions in their written order, although filtering
@@ -1060,6 +1084,14 @@ class FilterPushdownSuite extends PlanTest {
           .select($"a", $"g2", $"f2", g as "g", j as "j")
           .where(Not($"g" === $"j") && ($"f2" > 0 || $"j"))
           .analyze)
+      // Nor through a cheap alias of the projection, as x over f2.
+      val xOverF2 = testStringRelation
+        .select($"a", $"b", $"e", shared as "g2", failing as "f2")
+        .where($"g2" =!= "x")
+        .select($"a", $"e", $"f2", ($"f2" > 0) as "x", g as "g", j as "j")
+        .where(Not($"g" === $"j") && ($"x" || $"j"))
+        .analyze
+      comparePlans(PushPredicateThroughNonJoin(xOverF2), xOverF2)
       val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       comparePlans(Optimize.execute(testStringRelation

@@ -857,7 +857,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // `java.util.regex` matches `*` over a single character in a loop, where a quantified group
     // or a `{}` quantifier recurses (see `isStackSafePattern`). 2^20 supplementary characters
     // (4 MB) on each side of the match, also with a non-binary collation, in interpreted and
-    // codegen mode. The input is bound from a row, so that a failure does not print it.
+    // codegen mode. The input is bound from a row, so that the expression, which an exception
+    // message prints, does not hold it.
     val half = new String(Character.toChars(0x1F600)) * (1 << 20)
     val row = create_row(half + "a" + half)
     Seq(StringType, StringType("UTF8_LCASE")).foreach { dataType =>

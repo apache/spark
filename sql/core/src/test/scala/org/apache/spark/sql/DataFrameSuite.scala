@@ -3061,9 +3061,9 @@ class DataFrameSuite extends SharedSparkSession
     // With UDF results that can be null too, the split keeps the non-deterministic condition
     // ahead of the conditions written after it, so, with and without codegen, it returns the rows
     // that evaluating the conditions as written gives: `rand(10)` sees every row, and the first
-    // condition holds where it is above 0.5, as does the split-off plan: by default,
-    // `InferFiltersFromConstraints` infers no `isnotnull` check over these columns, as they can
-    // fail (SPARK-61823).
+    // condition holds where it is above 0.5. So does the split-off plan: unless
+    // `spark.sql.legacy.inferFailableFiltersFromConstraints` is on, `InferFiltersFromConstraints`
+    // infers no `isnotnull` check over these columns, as they can fail (SPARK-61823).
     val nullableF = udf((i: Long) => if (i % 7 == 3) null else java.lang.Long.valueOf(i))
     val nullableH = udf((i: Long) => if (i % 5 == 1) null else java.lang.Long.valueOf(i))
     def nullableDf: DataFrame = spark.range(0, 100, 1, 1)

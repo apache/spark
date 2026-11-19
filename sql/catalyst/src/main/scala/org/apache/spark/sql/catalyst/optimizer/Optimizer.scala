@@ -3259,26 +3259,27 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * first non-deterministic one, are filtered on in a layer below it, in their written order, when
    * nothing there can fail: none of these conditions can fail with the aliases of the projection
    * inlined (`cannotFail`, which also accepts LIKE and RLIKE whose pattern
-   * `StringRegexExpression.cannotFailPattern` accepts), nor reads a column below the projection
-   * that can fail (`failableOutputWith`, with `cannotFail`), and no alias the layer computes can
-   * fail. Under whole-stage codegen, a projection computes a column only where an operator above
-   * first reads it, so a column that can fail, also one a lower layer computes because it shares
-   * expensive work with another, would be computed in the layer's filter. This also holds in the
-   * later passes, where the aliases computed in a lower layer are columns below the projection. The
-   * layer is also only added while it still leaves an expensive alias for a later one and none of
-   * the aliases it leaves shares expensive work with one it computes, which would then run twice; a
-   * condition that would break this stays above. So the layer itself only drops rows earlier. It
-   * can compute an alias on rows that a later rewrite of the condition ending the split, or a check
-   * inferred for it, would have dropped first, which costs time but cannot fail. For example, with
-   * `f` and `g` the only expensive aliases, LIKE or RLIKE with such a pattern under version 0 of
-   * the regex pattern cost estimate, `f != g AND f` computes `f` and filters on `f` below `f != g`,
-   * which stays above the projection. The check is conservative: when the layer would compute an
-   * alias that can fail, such as a UDF, or a condition after the one ending the split can fail,
-   * nothing is filtered on below it. Later passes split each layer the same way, so in a layer's
-   * filter a condition that cannot fail can likewise be filtered on below the first one, when that
-   * one needs every expensive alias the layer computes: with `j` expensive too,
-   * `f != g AND j AND f` filters on `f`, then on `f != g`, then on `j`. Among the conditions that
-   * cannot fail, the split does not otherwise order by cost: in this example, and in
+   * `StringRegexExpression.cannotFailPattern` accepts), nor reads, with them inlined, a column
+   * below the projection that can fail (`failableOutputWith`, with `cannotFail`), and no alias the
+   * layer computes can fail. Under whole-stage codegen, a projection computes a column, apart from
+   * the common subexpressions it computes up front, only where an operator above first reads it, so
+   * a column that can fail, also one a lower layer computes because it shares expensive work with
+   * another, would be computed in the layer's filter. This also holds in the later passes, where
+   * the aliases computed in a lower layer are columns below the projection. The layer is also only
+   * added while it still leaves an expensive alias for a later one and none of the aliases it
+   * leaves shares expensive work with one it computes, which would then run twice; a condition that
+   * would break this stays above. So the layer itself only drops rows earlier. It can compute an
+   * alias on rows that a later rewrite of the condition ending the split, or a check inferred for
+   * it, would have dropped first, which costs time but cannot fail. For example, with `f` and `g`
+   * the only expensive aliases, LIKE or RLIKE with such a pattern under version 0 of the regex
+   * pattern cost estimate, `f != g AND f` computes `f` and filters on `f` below `f != g`, which
+   * stays above the projection. The check is conservative: when the layer would compute an alias
+   * that can fail, such as a UDF, or a condition after the one ending the split can fail or reads a
+   * column below that can fail, nothing is filtered on below it. Later passes split each layer the
+   * same way, so in a layer's filter a condition that cannot fail can likewise be filtered on below
+   * the first one, when that one needs every expensive alias the layer computes: with `j` expensive
+   * too, `f != g AND j AND f` filters on `f`, then on `f != g`, then on `j`. Among the conditions
+   * that cannot fail, the split does not otherwise order by cost: in this example, and in
    * `(f || g) AND j`, it computes `f` and `g` on more rows than filtering on `j` first would
    * (SPARK-61680).
    *
@@ -3371,9 +3372,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // (see the docstring).
         lazy val failableBelow = failableOutputWith(project.child, cannotFail)
         val followingCannotFail = following.forall { idx =>
-          val cond = conds(idx)._2
-          cannotFail(replaceAlias(cond, aliasMap)) &&
-            !cond.references.exists(failableBelow.contains)
+          val inlined = replaceAlias(conds(idx)._2, aliasMap)
+          cannotFail(inlined) && !inlined.references.exists(failableBelow.contains)
         }
         val (deferred, deferredNeeded) = (if (followingCannotFail) following else Nil)
           .foldLeft((Set.empty[Int], AttributeSet.empty)) { case ((taken, unit), idx) =>
@@ -3395,7 +3395,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // The head still ends the split after this layer, and no condition this layer leaves
           // could join another one: the expensive aliases left only shrink, this layer computes
           // no alias that can fail, and a throwable alias sharing no Python UDF with an alias a
-          // condition needs is never pulled into its unit.
+          // condition needs is never pulled into the unit of a condition that does not read it.
           (deferredNeeded, inFilter.map(conds), rest.map(conds), true)
         }
       } else {
