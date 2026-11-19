@@ -186,7 +186,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
     // NOTE: `FilterExec.doConsume`'s CSE branch inlines the same interleaving so it can
-    // emit CSE state precomputes between the IsNotNull checks and each otherPred body.
+    // emit CSE state precomputes between the IsNotNull checks (and the loads of the otherPred's
+    // columns) and each otherPred body.
     // Any change to this algorithm must be mirrored there (and vice versa).
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
@@ -299,9 +300,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       it; else if `r` is covered by `notNullAttributes` through some complex
     //       `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic `IsNotNull(r)` so
     //       the tightened-output binding below is safe without evaluating the
-    //       throw-capable inner expression. Then emit the otherPred's CSE precompute
-    //       and body. Remaining notNullPreds (including complex-child forms whose refs
-    //       got synthetic coverage) emit after all otherPreds.
+    //       throw-capable inner expression. Then load the otherPred's columns, and emit
+    //       its CSE precompute and body. Remaining notNullPreds (including complex-child
+    //       forms whose refs got synthetic coverage) emit after all otherPreds.
     //   (c) CSE state materialization: binding otherPreds (and the CSE analysis)
     //       against `output` (with `notNullAttributes` tightened to non-nullable)
     //       requires that the matching IsNotNull has already short-circuited -- else
@@ -310,45 +311,58 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       without consulting `isNull_X`. The (b) interleaving gives us that ordering
     //       for free, since the IsNotNull check fires before the CSE precompute keyed
     //       off the same reference.
-    // Only take the CSE path when there is actually a common subexpression to eliminate. That
-    // path emits the `inputVarsEvalCode` prologue below, which eagerly evaluates every
-    // `otherPreds` input column at the top of the row loop -- required so eliminated
-    // subexpressions can be materialized into shared variables, but it defeats the
-    // short-circuiting the non-CSE path gets from loading columns lazily, just before the
-    // predicate that needs them. With no common subexpression the prologue is pure overhead
-    // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
-    // fall back to `generatePredicateCode`.
+    // Only take the CSE path when there is actually a common subexpression to eliminate, and
+    // one of them is not cheap; otherwise fall back to `generatePredicateCode`. Kept inline, a
+    // state computes the repeated expression once, before the first conjunct that references it,
+    // instead of at each occurrence, so it adds no local variable, but when the code of the
+    // states together exceeds `methodSplitThreshold` and the parameters of each fit in a Java
+    // method, each common subexpression becomes a method with up to two mutable fields, which is
+    // known only once the states are generated, after this gate. Caching a cheap subexpression
+    // does not pay for that.
     //
-    // A *cheap* common subexpression does not count either. Caching a cheap load saves nothing:
-    // the non-CSE path already loads each column lazily into a variable on demand, so taking the
-    // CSE path for it would only add the eager prologue that decodes every referenced column up
-    // front. Note bare columns never reach this point: `EquivalentExpressions` skips
+    // Note bare columns never reach this point: `EquivalentExpressions` skips
     // `LeafExpression`s (which includes `BoundReference`/`Attribute`), and
     // `splitConjunctivePredicates` feeds each conjunct to a separate `addExprTree` call, so a
     // column repeated across conjuncts (e.g. the `c >= lo` / `c <= hi` that `c BETWEEN lo AND hi`
     // lowers to) is never recorded as a common subexpression. The cheap-but-recorded case is a
     // shared *non-leaf* such as a struct field access -- `s.x > 5 AND s.x < 100` shares
     // `GetStructField(s, x)` -- which is just a slot read. Require a non-cheap common
-    // subexpression (per `CollapseProject.isCheap`) so such filters keep the lazy,
-    // short-circuiting path and only genuine repeated computation takes the CSE path.
+    // subexpression (per `CollapseProject.isCheap`) so such filters keep the path without
+    // elimination and only genuine repeated computation takes the CSE path.
     //
     // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
     // turned off independently of subexpression elimination elsewhere.
-    val (prologueCode, predicateCode) =
+    val predicateCode =
       if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
           otherPreds.nonEmpty &&
           otherPredsEquivalentExpressions.getCommonSubexpressions
             .exists(!CollapseProject.isCheap(_))) {
-        // Pre-evaluate input variables before CSE analysis: CSE clears
-        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
-        // fails when otherPreds reference the same input columns that CSE already
-        // consumed.
-        val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
-        val inputVarsEvalCode = evaluateRequiredVariables(
-          child.output, input, otherPredInputAttrs)
-
-        val subExprs =
-          ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
+        // Generate the CSE states with the code of the input columns hidden. Generating a state
+        // reads the columns it needs from `ctx.currentVars` (the same `ExprCode`s as `input`),
+        // taking their code into the state's own code (or, when the states are split into
+        // functions, into `exprCodesNeedEvaluate`) and clearing it there. A conjunct before the
+        // first state that reads a column would then read it undeclared, and two states reading
+        // the same column would declare it twice. So the states are generated with
+        // `ctx.currentVars` swapped for copies whose code is blank: `input` keeps its code, the
+        // states read only the columns' variables, and each column is loaded below just before
+        // the first check or conjunct that reads it, as `generatePredicateCode` does.
+        // `exprCodesNeedEvaluate`, which only the split fills, is then empty, as asserted, and is
+        // not emitted, unlike in `ProjectExec`, which evaluates its states up front: each column
+        // is loaded below, and a split state takes the columns it reads as parameters. Copies
+        // that keep the code would not do: kept inline, a state would declare a column that the
+        // loads below declare too, and split, the column's code would reach
+        // `exprCodesNeedEvaluate`.
+        val savedVars = ctx.currentVars
+        ctx.currentVars = input.map(_.copy(code = EmptyBlock)).toIndexedSeq
+        val subExprs = try {
+          val subExprs =
+            ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
+          assert(subExprs.exprCodesNeedEvaluate.isEmpty,
+            "the states must not carry the code of an input column")
+          subExprs
+        } finally {
+          ctx.currentVars = savedVars
+        }
 
         // Group CSE states by the index of the first otherPred that references them.
         // `evaluateSubExprEliminationState` recursively emits each state's children
@@ -402,6 +416,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
                     parts.append('\n')
                   }
                 }
+                // Load the columns of the conjunct before its CSE states: a state first
+                // referenced by this conjunct is part of it, so it reads a subset of them.
+                val columnsCode = evaluateRequiredVariables(child.output, input, orig.references)
+                if (columnsCode.nonEmpty) {
+                  parts.append(columnsCode)
+                  parts.append('\n')
+                }
                 statesByFirstUse.get(idx).foreach { states =>
                   parts.append(ctx.evaluateSubExprEliminationState(states))
                   parts.append('\n')
@@ -427,10 +448,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           case (p, i) if !generatedIsNotNullChecks(i) => genNotNull(p)
         }.mkString("\n")
 
-        (inputVarsEvalCode, predCode + "\n" + leftoverNotNull)
+        predCode + "\n" + leftoverNotNull
       } else {
-        ("", generatePredicateCode(
-          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
+        generatePredicateCode(
+          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
       }
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
@@ -445,7 +466,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $prologueCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
