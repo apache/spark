@@ -1442,7 +1442,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         f"$dataKB%.2f KB"
       }
 
-      // Log the timings in milliseconds, as before.
+      // The log line reports milliseconds.
       def millis(micros: Long): Long = TimeUnit.MICROSECONDS.toMillis(micros)
       logInfo(log"Times: total = ${MDC(TOTAL_TIME, millis(total))}, " +
         log"boot = ${MDC(TIME, millis(boot))}, init = ${MDC(TIME, millis(init))}, " +

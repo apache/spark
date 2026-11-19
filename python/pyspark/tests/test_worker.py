@@ -363,7 +363,9 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertEqual(read_int(outfile), SpecialLengths.METRICS_DATA)
 
     def test_metrics_report_uses_microseconds(self):
-        worker_input = self._worker_input(self._command(lambda _, it: (x * 2 for x in it)), [1, 2])
+        # Sleep 2 ms per row, so that the execution duration is at least 4 ms.
+        command = self._command(lambda _, it: (time.sleep(0.002) or x * 2 for x in it))
+        worker_input = self._worker_input(command, [1, 2])
         outfile = self._run(worker_input)
         self._read_init_response(outfile)
         ser = CPickleSerializer()
@@ -378,9 +380,12 @@ class WorkerInitResponseTests(unittest.TestCase):
         for timestamp in (boot, init, finish):
             self.assertLess(abs(now - timestamp), 60_000_000)
         self.assertTrue(boot <= init <= finish)
-        # Allow for the wall clock's resolution, which is coarse on some platforms.
+        # Allow for the wall clock's resolution, which is coarse on some platforms, and for the
+        # wall clock being adjusted while the duration is measured with another clock.
+        duration = report["pythonExecutionDurationUs"]
         resolution = int(time.get_clock_info("time").resolution * 1_000_000) + 1
-        self.assertLessEqual(report["pythonExecutionDurationUs"], finish - init + resolution)
+        self.assertLessEqual(duration, finish - init + resolution + duration // 100)
+        self.assertGreaterEqual(duration, 4_000)
 
     def test_payload_error_is_reported_in_init_response(self):
         worker_input = self._worker_input(self._framed(b"not a pickle"), [1])

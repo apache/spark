@@ -604,6 +604,10 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                         self.assertEqual(plan.children().size(), 1)
                         plan = plan.children().apply(0)
                     metrics = plan.metrics()
+                    # Spark has no microsecond timing type: the timings are sums named "(us)".
+                    for name in phase_names:
+                        self.assertEqual(metrics.apply(name).metricType(), "sum", name)
+                        self.assertTrue(metrics.apply(name).name().get().endswith(" (us)"), name)
                     self.assertEqual(metrics.apply("pythonNumPipelinedTasks").value(), 0)
                     self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
                     self.assertEqual(
