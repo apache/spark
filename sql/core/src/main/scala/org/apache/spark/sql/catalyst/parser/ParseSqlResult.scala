@@ -451,8 +451,9 @@ object ParseSqlResult {
   private def parseKnownVariable(spec: (String, String)): (Seq[String], DataType) = {
     val (name, typeDdl) = spec
     val parts = parseKnownName(name, "variables")
-    // A variable name has at most three parts, as in system.session.v.
-    if (parts.length > 3) {
+    // A session variable has at most three parts (system.session.v), a local two (proc.p).
+    val maxParts = if (SuppliedVariableRegistry.isSessionName(parts)) 3 else 2
+    if (parts.length > maxParts) {
       throw QueryExecutionErrors.invalidParseSqlContext("variables", name)
     }
     val dataType = try {

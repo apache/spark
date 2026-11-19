@@ -72,7 +72,8 @@ import org.apache.spark.unsafe.types.UTF8String
     catalog, schema, and SQL path unless `current_catalog`, `current_schema`, or
     `current_path` gives one for the call; the session is not changed. The body of an
     `EXECUTE IMMEDIATE` is analyzed with the invoker's catalog, schema, and path even when
-    the call gives its own, and with the call's `variables` and `relations`. Analysis may still
+    the call gives its own. It sees the call's `variables` and `relations`, whose
+    unqualified names are qualified with the call's catalog and schema. Analysis may still
     run time-travel subqueries, infer file schemas, and call Python UDTF `analyze`.
     Statement length excludes surrounding
     whitespace and the terminating semicolon. Session parser extensions are not applied.

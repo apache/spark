@@ -1804,14 +1804,16 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("ANALYZE reports a variable name with more than three parts as JSON") {
+  test("ANALYZE reports a variable name with too many parts as JSON") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
-      val result = evalCall(
-        "SELECT parse_sql('SELECT 1 AS a', 'ANALYZE', variables => array(named_struct(" +
-          "'name', 'a.system.session.v', 'type', 'INT')))")
-      assert(result.head \ "analyze_success" === JBool(false))
-      assert(result.head \ "error" \ "errorClass" ===
-        JString("INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT"))
+      Seq("a.system.session.v", "a.b.v").foreach { name =>
+        val result = evalCall(
+          "SELECT parse_sql('SELECT 1 AS a', 'ANALYZE', variables => array(named_struct(" +
+            s"'name', '$name', 'type', 'INT')))")
+        assert(result.head \ "analyze_success" === JBool(false), name)
+        assert(result.head \ "error" \ "errorClass" ===
+          JString("INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT"), name)
+      }
     }
   }
 
