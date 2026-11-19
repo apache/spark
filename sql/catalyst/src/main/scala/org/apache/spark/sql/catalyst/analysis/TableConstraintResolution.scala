@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, RowLevelWrite, V2WriteCommand}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CheckInvariant, EqualNullSafe, EqualTo, Expression, If, Literal, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, ReplaceData, RowLevelWrite, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.LAMBDA_VARIABLE
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, OPERATION_COLUMN}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
@@ -96,15 +97,16 @@ private[sql] class TableConstraintResolution(
       catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql))
 
   /**
-   * For each generated column whose value was provided by the write, add a CheckInvariant that
-   * validates the column value matches the generation expression. Generated columns Spark
-   * auto-filled are excluded: ResolveOutputRelation marks them in the table output and their
-   * values are correct by construction.
+   * Validates generated values against their generation expressions. For INSERT,
+   * WriteOutputResolution marks auto-filled columns so their checks can be skipped. UPDATE and
+   * MERGE validate every generated column in updated or inserted rows, including computed values.
+   * DELETE, delta delete records and unchanged rows copied by group-based writes are exempt.
    */
   private def buildGeneratedColumnConstraints(
       r: DataSourceV2Relation,
       v2Write: V2WriteCommand): Seq[Expression] = {
-    if (!GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table, r.table.columns())) {
+    val generationExpressions = GeneratedColumn.expressionReaders(r)
+    if (generationExpressions.isEmpty) {
       return Seq.empty
     }
 
@@ -123,10 +125,9 @@ private[sql] class TableConstraintResolution(
 
     // Use V2 columns from the table to access both V2 expressions and SQL strings.
     r.table.columns().flatMap { col =>
-      GeneratedColumn.columnGenerationExpression(col)
+      generationExpressions.get(col.name)
         .filter(_ => !autoFilledGenCols.exists(n => resolver(n, col.name)))
-        .map { genExpr =>
-          val reader = new GeneratedColumn.ExpressionReader(r, col.name, genExpr)
+        .map { reader =>
           val catalystExpr = reader.toCatalyst()
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
@@ -142,11 +143,23 @@ private[sql] class TableConstraintResolution(
             s"${col.name} <=> $genExprSql")
           // Analyze the check under the settings an auto-filled value is analyzed under, so that a
           // row Spark auto-filled passes it when a later write carries it.
-          reader.analyze(
+          val invariant = reader.analyze(
             check(catalystExpr),
             check(reader.toCatalyst(StoredExpressionText.parseWithSessionAnsi)),
             v2Write.query.output,
             analyze)
+          v2Write match {
+            // MERGE and split UPDATE deltas also contain deletes, whose row values may be null.
+            case _: WriteDelta =>
+              val isDelete = EqualTo(
+                UnresolvedAttribute.quoted(OPERATION_COLUMN), Literal(DELETE_OPERATION))
+              If(isDelete, Literal.TrueLiteral, invariant)
+            case _: ReplaceData =>
+              val isCopy = EqualTo(
+                UnresolvedAttribute.quoted(OPERATION_COLUMN), Literal(COPY_OPERATION))
+              If(isCopy, Literal.TrueLiteral, invariant)
+            case _ => invariant
+          }
         }
     }.toSeq
   }

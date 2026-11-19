@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, GeneratedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -796,7 +796,7 @@ class Analyzer(
       ResolveZip ::
       FlattenSequentialStreamingUnion ::
       ValidateSequentialStreamingUnion ::
-      ResolveRowLevelCommandAssignments ::
+      new ResolveRowLevelCommandAssignments(execute) ::
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
@@ -1819,6 +1819,14 @@ class Analyzer(
             def findAttrInTarget(name: String): Option[Attribute] = {
               targetTable.output.find(targetAttr => conf.resolver(name, targetAttr.name))
             }
+            val generatedColumns = targetTable.collectFirst {
+              case ExtractV2Table(t) if m.rewritable =>
+                GeneratedColumn.generationExpressions(t).keySet
+            }.getOrElse(Set.empty)
+            val starTargetAttrs = targetTable.output.filterNot { attr =>
+              generatedColumns.contains(attr.name) &&
+                !sourceTable.output.exists(sourceAttr => conf.resolver(sourceAttr.name, attr.name))
+            }
             val newMatchedActions = m.matchedActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
@@ -1846,7 +1854,7 @@ class Analyzer(
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  targetTable.output.map { attr =>
+                  starTargetAttrs.map { attr =>
                     Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }
@@ -1886,7 +1894,7 @@ class Analyzer(
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  targetTable.output.map { attr =>
+                  starTargetAttrs.map { attr =>
                     Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }

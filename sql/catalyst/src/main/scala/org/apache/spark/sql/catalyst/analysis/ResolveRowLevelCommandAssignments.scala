@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InsertAction, LogicalPlan, MergeIntoTable, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
@@ -39,7 +39,8 @@ import org.apache.spark.sql.internal.connector.SupportsConfigurableSchemaAlignme
  * This rule does not apply to tables that accept any schema. Such tables must inject their own
  * rules to resolve assignments.
  */
-object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
+class ResolveRowLevelCommandAssignments(analyze: LogicalPlan => LogicalPlan)
+  extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -50,9 +51,12 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       validateStoreAssignmentPolicy()
       val (newTable, metadataAttrMap) = cleanAttrMetadata(u.table)
       val padded = padTargetReferences(u, u.table)
-      val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output,
+      val alignedAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output,
         padded.assignments, fromStar = false, coerceNestedTypes = false,
-        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck(u.table))
+        ansiStoreAssignmentCastCheck = ansiStoreAssignmentCastCheck(u.table),
+        generatedColumns = generatedColumnNames(u.table))
+      val newAssignments = RowLevelAssignmentResolution.resolveGeneratedColumnAssignments(
+        u.table, alignedAssignments, analyze)
       padded.copy(table = newTable, assignments = newAssignments).rewriteAttrs(metadataAttrMap)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
@@ -62,25 +66,28 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       validateStoreAssignmentPolicy()
       val coerceNestedTypes = conf.coerceMergeNestedTypes && m.withSchemaEvolution
       val castCheck = ansiStoreAssignmentCastCheck(m.targetTable)
+      val generatedColumns = generatedColumnNames(m.targetTable)
       val (newTargetTable, metadataAttrMap) = cleanAttrMetadata(m.targetTable)
       val padded = padTargetReferences(m, m.targetTable)
       padded.copy(
         targetTable = newTargetTable,
         matchedActions = RowLevelAssignmentResolution.alignActions(
-          m.targetTable.output,
+          m.targetTable,
           padded.matchedActions,
           coerceNestedTypes,
-          castCheck),
+          castCheck, generatedColumns, analyze),
         notMatchedActions = RowLevelAssignmentResolution.alignActions(
-          m.targetTable.output,
+          m.targetTable,
           padded.notMatchedActions,
           coerceNestedTypes,
-          castCheck),
+          castCheck, generatedColumns, analyze,
+          shareAssignedValues = m.matchedActions.isEmpty && m.notMatchedActions.size == 1 &&
+            m.notMatchedBySourceActions.isEmpty),
         notMatchedBySourceActions = RowLevelAssignmentResolution.alignActions(
-          m.targetTable.output,
+          m.targetTable,
           padded.notMatchedBySourceActions,
           coerceNestedTypes,
-          castCheck)).rewriteAttrs(metadataAttrMap)
+          castCheck, generatedColumns, analyze)).rewriteAttrs(metadataAttrMap)
 
     case m: MergeIntoTable if shouldAlignAssignments(m) && containsFinalSchema(m) =>
       resolveAssignments(m)
@@ -120,6 +127,12 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   private def containsFinalSchema(m: MergeIntoTable): Boolean = {
     !m.schemaEvolutionEnabled || (m.schemaEvolutionReady && m.pendingSchemaChanges.isEmpty)
+  }
+
+  private def generatedColumnNames(table: LogicalPlan): Set[String] = {
+    table.collectFirst {
+      case ExtractV2Table(t) => GeneratedColumn.generationExpressions(t).keySet
+    }.getOrElse(Set.empty)
   }
 
   private def ansiStoreAssignmentCastCheck(target: LogicalPlan): AnsiStoreAssignmentCastCheck = {

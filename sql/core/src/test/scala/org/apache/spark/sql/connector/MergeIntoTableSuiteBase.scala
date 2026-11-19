@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
@@ -1949,6 +1949,58 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         Seq(
           Row(1, 100, "hr"), // unchanged
           Row(2, 5, "software"))) // update
+    }
+  }
+
+  test("MERGE defers constant-folding failures in unselected actions") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary BIGINT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        Seq((1, 10L, "hr")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+        val merge =
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED AND s.salary < 0 THEN UPDATE SET salary = 1 DIV 0
+             |WHEN MATCHED THEN UPDATE SET salary = s.salary
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 1 DIV 0, s.dep)
+             |WHEN NOT MATCHED BY SOURCE THEN UPDATE SET salary = 1 DIV 0
+             |""".stripMargin
+        sql(merge)
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 10L, "hr"))
+
+        Seq((1, -1L, "hr")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+        val error = intercept[SparkArithmeticException] {
+          sql(merge)
+        }
+        assert(error.getCondition == "DIVIDE_BY_ZERO")
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 10L, "hr"))
+      }
+    }
+  }
+
+  test("MERGE defers constant-folding failures in later clause conditions") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+        Seq((1, 10, "hr")).toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED AND t.salary > 0 THEN UPDATE SET salary = s.salary
+             |WHEN MATCHED AND 1 DIV 0 = 1 THEN DELETE
+             |WHEN NOT MATCHED AND 1 DIV 0 = 1 THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, s.dep)
+             |WHEN NOT MATCHED BY SOURCE AND 1 DIV 0 = 1 THEN DELETE
+             |""".stripMargin)
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 10, "hr"))
+      }
     }
   }
 

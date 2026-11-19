@@ -18,14 +18,17 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, MetadataAttribute}
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, ExprId, MetadataAttribute, UnaryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, MergeAction, UpdateAction}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, LogicalPlan, MergeAction, UpdateAction}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
+import org.apache.spark.sql.types.DataType
 
 /** Assignment validation and value conversion for UPDATE and MERGE actions. */
-private[sql] object RowLevelAssignmentResolution {
+private[sql] object RowLevelAssignmentResolution extends SQLConfHelper {
 
   def metadataColumnAssignmentErrors(assignments: Seq[Assignment]): Seq[String] = {
     assignments.map(_.key).filter(_.resolved).flatMap(_.references)
@@ -64,24 +67,117 @@ private[sql] object RowLevelAssignmentResolution {
     Assignment(cleanedKey, finalValue)
   }
 
+  /**
+   * Fills omitted generated-column assignments for UPDATE and MERGE actions, including INSERT
+   * actions within MERGE. Regular INSERT uses WriteOutputResolution instead.
+   *
+   * For g GENERATED ALWAYS AS (a * 2), UPDATE t SET a = b + 1, b = 100 must assign
+   * g = (old.b + 1) * 2. Resolve the generation expression against attributes for the new values,
+   * then substitute the aligned assignments while preserving their references to the original row.
+   * UPDATE and projection-based insert-only MERGE project shared assignment values in the rewrite.
+   * Explicitly supplied generated values pass through for validation against the final row.
+   */
+  def resolveGeneratedColumnAssignments(
+      table: LogicalPlan,
+      assignments: Seq[Assignment],
+      analyze: LogicalPlan => LogicalPlan,
+      shareAssignedValues: Boolean = true): Seq[Assignment] = {
+    if (!assignments.exists(_.value.isInstanceOf[GeneratedColumnAssignmentValue])) {
+      return assignments
+    }
+
+    val relation = table.collectFirst { case r: DataSourceV2Relation => r }.get
+    val generationExpressions = GeneratedColumn.expressionReaders(relation)
+    // For the example above, pair a with Alias(old.b + 1, "a") and b with Alias(100, "b").
+    // Each alias has a fresh attribute ID, distinct from the original table column.
+    val assigned = assignments.collect {
+      case Assignment(attr: Attribute, value)
+          if !value.isInstanceOf[GeneratedColumnAssignmentValue] =>
+        attr -> Alias(value, attr.name)()
+    }
+    // input exposes the new a and b; valuesByAttribute maps them to old.b + 1 and 100.
+    // When sharing is enabled, preserve each alias ID in a marker for the rewrite.
+    val input = assigned.map(_._2.toAttribute)
+    val valuesByAttribute = AttributeMap(assigned.map { case (_, alias) =>
+      val value = if (shareAssignedValues) {
+        GeneratedColumnSharedAssignmentValue(alias.child, alias.exprId)
+      } else {
+        alias.child
+      }
+      alias.toAttribute -> value
+    })
+
+    val generatedAssignments = assignments.map {
+      case Assignment(attr: Attribute, _: GeneratedColumnAssignmentValue) =>
+        // Bind g's a * 2 to input's new a, not the table's original a.
+        val resolved = generationExpressions(attr.name).resolve(input, analyze) { expr =>
+          Cast(expr, attr.dataType, Some(conf.sessionLocalTimeZone), ansiEnabled = true)
+        }
+        // Substitute once to get (old.b + 1) * 2, with a shared marker if enabled.
+        val generated = resolved.transform {
+          case a: AttributeReference if valuesByAttribute.contains(a) => valuesByAttribute(a)
+        }
+        resolveAssignment(Assignment(attr, generated))
+      case assignment => assignment
+    }
+
+    // Only a needs sharing in this example. Match its assignment to the marker used by g,
+    // so the rewrite can project old.b + 1 once and use the result for both a and g.
+    val sharedIds = generatedAssignments.flatMap(_.value.collect {
+      case value: GeneratedColumnSharedAssignmentValue => value.id
+    }).toSet
+    val sharedByTarget = AttributeMap(assigned.collect {
+      case (attr, alias) if sharedIds.contains(alias.exprId) =>
+        attr -> GeneratedColumnSharedAssignmentValue(alias.child, alias.exprId)
+    })
+    generatedAssignments.map {
+      case Assignment(attr: Attribute, _) if sharedByTarget.contains(attr) =>
+        Assignment(attr, sharedByTarget(attr))
+      case assignment => assignment
+    }
+  }
+
   def alignActions(
-      attrs: Seq[Attribute],
+      table: LogicalPlan,
       actions: Seq[MergeAction],
       coerceNestedTypes: Boolean,
-      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck): Seq[MergeAction] = {
+      ansiStoreAssignmentCastCheck: AnsiStoreAssignmentCastCheck,
+      generatedColumns: Set[String],
+      analyze: LogicalPlan => LogicalPlan,
+      shareAssignedValues: Boolean = false): Seq[MergeAction] = {
     actions.map {
       case u @ UpdateAction(_, assignments, fromStar) =>
-        u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments,
-          fromStar, coerceNestedTypes, ansiStoreAssignmentCastCheck))
+        val aligned = AssignmentUtils.alignUpdateAssignments(table.output, assignments,
+          fromStar, coerceNestedTypes, ansiStoreAssignmentCastCheck, generatedColumns)
+        u.copy(assignments = resolveGeneratedColumnAssignments(
+          table, aligned, analyze, shareAssignedValues))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>
-        i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments,
-          coerceNestedTypes, ansiStoreAssignmentCastCheck))
+        val aligned = AssignmentUtils.alignInsertAssignments(table.output, assignments,
+          coerceNestedTypes, ansiStoreAssignmentCastCheck, generatedColumns)
+        i.copy(assignments = resolveGeneratedColumnAssignments(
+          table, aligned, analyze, shareAssignedValues))
       case other =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3052",
           messageParameters = Map("other" -> other.toString))
     }
   }
+}
+
+/**
+ * An assigned value that a row-level rewrite shares with omitted generated columns.
+ *
+ * For g GENERATED ALWAYS AS (a * 2), UPDATE t SET a = b + 1, b = 100 uses markers with the
+ * same ID around old.b + 1 in both a's assignment and g's expression. The rewrite projects
+ * old.b + 1 once as v and replaces both markers with v, so a = v and g = v * 2.
+ */
+private[sql] case class GeneratedColumnSharedAssignmentValue(child: Expression, id: ExprId)
+  extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = child.nullable
+  override protected def withNewChildInternal(
+      newChild: Expression): GeneratedColumnSharedAssignmentValue =
+    copy(child = newChild)
 }
