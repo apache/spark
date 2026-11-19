@@ -156,6 +156,52 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
+  /**
+   * Checks for a stateful operator after a stream-stream join whose state of an input has no
+   * cutoff, as [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. A query from
+   * a checkpoint without `STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK` only logs a warning.
+   */
+  def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled &&
+      SQLConf.get.getConf(SQLConf.STATEFUL_OPERATOR_CHECK_JOIN_OUTPUT_WATERMARK)
+    try {
+      plan.foreach { subPlan =>
+        if (outputMode == InternalOutputModes.Append && isStatefulOperation(subPlan)) {
+          subPlan.foreach {
+            case j: Join if j ne subPlan =>
+              joinInputWithoutStateCutoff(j).foreach { side =>
+                throwError("Detected pattern of possible 'correctness' issue: the state of the " +
+                  s"$side input of a stream-stream join has no cutoff, so the join can emit its " +
+                  "old rows below its output watermark, and a later stateful operator drops them " +
+                  "as late. Add a watermark in the join keys or a range condition that bounds " +
+                  "that input by the other input's watermark, or set " +
+                  "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
+              }
+            case _ =>
+          }
+        }
+      }
+    } catch {
+      case e: AnalysisException if !failWhenDetected =>
+        logWarning(log"${MDC(ANALYSIS_ERROR, e.message)};\n${MDC(QUERY_PLAN, plan)}", e)
+    }
+  }
+
+  // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
+  // it: no watermark in the join keys, and no range condition that bounds the input by the
+  // watermark of the other input. A left semi join only emits stored left rows.
+  private def joinInputWithoutStateCutoff(join: Join): Option[String] = join match {
+    case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
+        !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
+      Seq(("left", left, right), ("right", right, left)).take(if (joinType == LeftSemi) 1 else 2)
+        .collectFirst {
+          case (side, input, other) if input.output.exists(hasEventTimeCol) &&
+              StreamingJoinHelper.getStateValueWatermark(
+                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty => side
+        }
+    case _ => None
+  }
+
   private def checkAvroSupportForStatefulOperator(p: LogicalPlan): Option[String] = p match {
     // TODO: remove operators from this list as support for avro encoding is added
     case s: Aggregate if s.isStreaming => Some("aggregation")
