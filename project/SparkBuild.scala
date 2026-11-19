@@ -1255,6 +1255,10 @@ object UDFWorkerRuntime {
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.(sf|dsa|rsa)$") =>
         MergeStrategy.discard
+      // Guava 33.7+ ships module-info.class at the jar root; older jars used
+      // META-INF/versions/<n>/module-info.class. Drop both so the relocated
+      // runtime jar does not keep an unrelocated com.google.common module.
+      case "module-info.class" => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT)
           .matches("meta-inf/versions/[^/]+/module-info\\.class") => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>

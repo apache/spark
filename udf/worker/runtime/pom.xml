@@ -180,6 +180,8 @@
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
+                <!-- Guava 33.7+ ships module-info.class at the jar root. -->
+                <exclude>module-info.class</exclude>
                 <exclude>META-INF/versions/*/module-info.class</exclude>
               </excludes>
             </filter>
