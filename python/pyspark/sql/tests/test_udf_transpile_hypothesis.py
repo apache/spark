@@ -52,11 +52,13 @@ To run locally::
     RUN_HYPOTHESIS=1 RUN_HYPOTHESIS_MAX_EXAMPLES=1000 \
         python/run-tests --testnames pyspark.sql.tests.test_udf_transpile_hypothesis
 
-Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test example count
-(default 1000). Each generated example runs two full Spark jobs (a
-transpiled-vs-interpreted differential), so CI caps this at 50 via
+Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test row count
+(default 1000). Hypothesis draws the rows in batches of ``_BATCH_ROWS`` and a
+batch runs at most four Spark jobs (a transpiled-vs-interpreted differential
+for the rows plain Python accepts, and one for those it raises on), where
+each row used to run two (SPARK-62040). CI caps the count at 50 via
 ``build_and_test.yml`` to stay under ``PYSPARK_TEST_TIMEOUT``; the explicit
-``@example`` edge seeds always run on top of the generated ones regardless.
+``@example`` edge seeds always run on top as one more batch.
 """
 
 import os
@@ -64,14 +66,7 @@ import unittest
 import warnings
 from typing import Optional
 
-from pyspark.sql import Row
-from pyspark.sql.types import (
-    BooleanType,
-    LongType,
-    StringType,
-    StructField,
-    StructType,
-)
+from pyspark.sql.types import BooleanType, LongType, StringType
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_package
@@ -117,8 +112,11 @@ if _have_hypothesis:
     # The ``function_scoped_fixture` health check is suppressed because we intentionally reuse the
     # class-level SparkSession across examples; the per-example ``deadline`` is disabled because
     # Spark task execution is much slower than hypothesis's default budget.
+    # One Hypothesis example is a batch of rows that share a DataFrame, so
+    # ``max_examples`` counts batches (SPARK-62040).
+    _BATCH_ROWS = 10
     _hyp_settings = settings(
-        max_examples=_DEFAULT_MAX_EXAMPLES,
+        max_examples=-(-_DEFAULT_MAX_EXAMPLES // _BATCH_ROWS),
         deadline=None,
         suppress_health_check=[HealthCheck.function_scoped_fixture],
     )
@@ -240,23 +238,13 @@ if _have_hypothesis:
         ("ab", "abc"),
     )
 
-    def _seed_examples(values, key="value"):
-        """Stack one ``@example`` decorator per seed value."""
+    def _batch(row_strategy):
+        """A batch of ``_BATCH_ROWS`` rows, each a tuple of UDF arguments."""
+        return st.lists(row_strategy, min_size=_BATCH_ROWS, max_size=_BATCH_ROWS)
 
-        def wrapper(method):
-            for v in reversed(values):
-                method = example(**{key: v})(method)
-            return method
-
-        return wrapper
-
-    def _seed_pair_examples(pairs, keys=("x", "y")):
-        def wrapper(method):
-            for v0, v1 in reversed(pairs):
-                method = example(**{keys[0]: v0, keys[1]: v1})(method)
-            return method
-
-        return wrapper
+    def _seed_rows(values):
+        """Add the seed values as one explicit batch, one row for each value."""
+        return example(rows=[v if isinstance(v, tuple) else (v,) for v in values])
 
 
 # ---- The UDF templates we exercise --------------------------------------
@@ -424,7 +412,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
     )
 
     def _run(self, func, return_type, df, *udf_arg_columns, kwargs=None):
-        """Run ``func`` as a UDF with transpilation on and off, return both rows.
+        """Run ``func`` as a UDF with transpilation on and off, return both columns.
 
         ``udf_arg_columns`` and ``kwargs`` mirror what a caller would
         write at the dataframe API: positional column names go in
@@ -459,9 +447,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                     "meaningless without it",
                 )
                 try:
-                    transpiled_value = df.select(
-                        transpiled_udf(*udf_arg_columns, **kwargs)
-                    ).collect()[0][0]
+                    transpiled_rows = df.select(transpiled_udf(*udf_arg_columns, **kwargs))
+                    transpiled_value = [r[0] for r in transpiled_rows.collect()]
                 except Exception as e:
                     transpiled_value = _SENTINEL_RAISED
                     transpiled_error = e
@@ -489,9 +476,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         ):
             interpreted_udf = UserDefinedFunction(func, return_type)
             try:
-                interpreted_value = df.select(
-                    interpreted_udf(*udf_arg_columns, **kwargs)
-                ).collect()[0][0]
+                interpreted_rows = df.select(interpreted_udf(*udf_arg_columns, **kwargs))
+                interpreted_value = [r[0] for r in interpreted_rows.collect()]
             except Exception as e:
                 interpreted_value = _SENTINEL_RAISED
                 interpreted_error = e
@@ -509,100 +495,96 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
 
         return transpiled_value, interpreted_value
 
-    def _single_arg_df(self, value, dtype):
-        schema = StructType([StructField("a", dtype, nullable=True)])
-        return self.spark.createDataFrame([Row(a=value)], schema=schema)
+    def _assert_matches(self, func, return_type, schema, rows, *udf_arg_columns, kwargs=None):
+        """Assert ``func`` gives the same value transpiled and interpreted on every row.
 
-    def _two_long_arg_df(self, x, y):
-        schema = StructType(
-            [
-                StructField("a", LongType(), nullable=True),
-                StructField("b", LongType(), nullable=True),
-            ]
-        )
-        return self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+        Each row holds the arguments in the order of ``func``'s parameters. One
+        raising row fails a whole Spark job, so the rows the plain Python call
+        accepts and the rows it raises on go in separate DataFrames (SPARK-62040).
+        ``_run`` then compares each batch the way it compared a single row.
+        """
+        quiet, raising = [], []
+        for row in rows:
+            try:
+                func(*row)
+            except Exception:
+                raising.append(row)
+            else:
+                quiet.append(row)
+        func_name = getattr(func, "__name__", repr(func))
+        for batch in (quiet, raising):
+            if batch:
+                df = self.spark.createDataFrame(batch, schema)
+                transpiled, interpreted = self._run(
+                    func, return_type, df, *udf_arg_columns, kwargs=kwargs
+                )
+                self.assertEqual(transpiled, interpreted, f"{func_name} mismatch on {batch!r}")
 
     if _have_hypothesis:
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_plus_four_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(plus_four, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"plus_four mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_EDGES)
+        def test_plus_four_matches_python(self, rows):
+            self._assert_matches(plus_four, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_plus_four_unsafe_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(plus_four_unsafe, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"plus_four mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_EDGES)
+        def test_plus_four_unsafe_matches_python(self, rows):
+            self._assert_matches(plus_four_unsafe, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_plus_four_with_else_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(plus_four_with_else, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"plus_four_with_else mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_EDGES)
+        def test_plus_four_with_else_matches_python(self, rows):
+            self._assert_matches(plus_four_with_else, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
-        def test_is_none_branch_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(is_none_branch, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"is_none_branch mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_long_strategy)))
+        @_seed_rows(_LONG_EDGES)
+        def test_is_none_branch_matches_python(self, rows):
+            self._assert_matches(is_none_branch, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_bool_strategy)
-        @_seed_examples(_BOOL_EDGES)
-        def test_truthy_bool_branch_matches_python(self, value):
+        @given(rows=_batch(st.tuples(_bool_strategy)))
+        @_seed_rows(_BOOL_EDGES)
+        def test_truthy_bool_branch_matches_python(self, rows):
             # bare ``if x:`` on a bool-annotated parameter transpiles correctly.
             # NULL is treated as falsy (coalesce(x, False)), matching Python's
             # ``None is falsy`` semantics.
-            df = self._single_arg_df(value, BooleanType())
-            transpiled, interpreted = self._run(truthy_bool_branch, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"truthy_bool_branch mismatch on {value!r}")
+            self._assert_matches(truthy_bool_branch, LongType(), "a boolean", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
+        @given(rows=_batch(st.tuples(_long_arith_strategy)))
         # add_then_mod is the case that surfaced the Python-vs-SQL mod
         # sign mismatch; the seed values cover the four sign combinations
         # of `(x + 7) % 5` so we always re-prove the pmod fix on every
         # run regardless of the random seed.
-        @_seed_examples((*_LONG_ARITH_EDGES, -2, -8, 8, 100, -100))
-        def test_add_then_mod_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(add_then_mod, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"add_then_mod mismatch on {value!r}")
+        @_seed_rows((*_LONG_ARITH_EDGES, -2, -8, 8, 100, -100))
+        def test_add_then_mod_matches_python(self, rows):
+            self._assert_matches(add_then_mod, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_minus_two_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(minus_two, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"minus_two mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_EDGES)
+        def test_minus_two_matches_python(self, rows):
+            self._assert_matches(minus_two, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_times_three_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(times_three, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"times_three mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_EDGES)
+        def test_times_three_matches_python(self, rows):
+            self._assert_matches(times_three, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_bool_strategy)
-        @_seed_examples(_BOOL_EDGES)
-        def test_negate_truthy_falls_back(self, value):
+        @given(rows=_batch(st.tuples(_bool_strategy)))
+        @_seed_rows(_BOOL_EDGES)
+        def test_negate_truthy_falls_back(self, rows):
             # `if not x:` where x is a bare parameter name is unknown-type at
             # transpile time. The transpiler must refuse (Spark's `~` is
             # bitwise, not Python truthiness) and fall back to interpreted Python.
-            df = self._single_arg_df(value, BooleanType())
+            df = self.spark.createDataFrame(rows, "a boolean")
             with self.sql_conf(
                 {
                     "spark.sql.experimental.optimizer.transpilePyUDFs": True,
@@ -615,22 +597,20 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                     pudf.transpiled,
                     "negate_truthy: bare `not x` must NOT transpile",
                 )
-                interpreted = df.select(pudf("a")).collect()[0][0]
-            expected = 0 if not value else 1
-            self.assertEqual(interpreted, expected, f"negate_truthy mismatch on {value!r}")
+                interpreted = [r[0] for r in df.select(pudf("a")).collect()]
+            expected = [0 if not value else 1 for (value,) in rows]
+            self.assertEqual(interpreted, expected, f"negate_truthy mismatch on {rows!r}")
 
         @_hyp_settings
-        @given(x=_long_arith_strategy, y=_long_arith_strategy)
-        @_seed_pair_examples(_LONG_ARITH_PAIR_EDGES)
-        def test_add_two_matches_python(self, x, y):
-            df = self._two_long_arg_df(x, y)
-            transpiled, interpreted = self._run(add_two, LongType(), df, "a", "b")
-            self.assertEqual(transpiled, interpreted, f"add_two mismatch on (x={x!r}, y={y!r})")
+        @given(rows=_batch(st.tuples(_long_arith_strategy, _long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_PAIR_EDGES)
+        def test_add_two_matches_python(self, rows):
+            self._assert_matches(add_two, LongType(), "a long, b long", rows, "a", "b")
 
         @_hyp_settings
-        @given(x=_long_arith_strategy, y=_long_arith_strategy)
-        @_seed_pair_examples(_LONG_ARITH_PAIR_EDGES)
-        def test_add_two_named_args_matches_python(self, x, y):
+        @given(rows=_batch(st.tuples(_long_arith_strategy, _long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_PAIR_EDGES)
+        def test_add_two_named_args_matches_python(self, rows):
             # Same UDF as above but called with kwargs (and intentionally
             # in reversed order) to exercise the named-argument codepath
             # documented in the udf() reference. The Python side resolves
@@ -638,119 +618,86 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # transpiled side has to align ``_udf_param_0`` /
             # ``_udf_param_1`` with the same resolved positions, so any
             # mistake here produces a swapped-argument bug.
-            df = self._two_long_arg_df(x, y)
-            transpiled, interpreted = self._run(
-                add_two,
-                LongType(),
-                df,
-                kwargs={"y": "b", "x": "a"},
-            )
-            self.assertEqual(
-                transpiled,
-                interpreted,
-                f"add_two named-args mismatch on (x={x!r}, y={y!r})",
+            self._assert_matches(
+                add_two, LongType(), "a long, b long", rows, kwargs={"y": "b", "x": "a"}
             )
 
         @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy)
-        @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
-        def test_both_positive_matches_python(self, x, y):
-            df = self._two_long_arg_df(x, y)
-            transpiled, interpreted = self._run(both_positive, BooleanType(), df, "a", "b")
-            self.assertEqual(
-                transpiled, interpreted, f"both_positive mismatch on (x={x!r}, y={y!r})"
-            )
+        @given(rows=_batch(st.tuples(_long_strategy, _long_strategy)))
+        @_seed_rows(_BOOLEAN_PAIR_EDGES)
+        def test_both_positive_matches_python(self, rows):
+            self._assert_matches(both_positive, BooleanType(), "a long, b long", rows, "a", "b")
 
         @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy)
-        @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
-        def test_either_positive_matches_python(self, x, y):
-            df = self._two_long_arg_df(x, y)
-            transpiled, interpreted = self._run(either_positive, BooleanType(), df, "a", "b")
-            self.assertEqual(
-                transpiled, interpreted, f"either_positive mismatch on (x={x!r}, y={y!r})"
-            )
+        @given(rows=_batch(st.tuples(_long_strategy, _long_strategy)))
+        @_seed_rows(_BOOLEAN_PAIR_EDGES)
+        def test_either_positive_matches_python(self, rows):
+            self._assert_matches(either_positive, BooleanType(), "a long, b long", rows, "a", "b")
 
         @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy)
-        @_seed_pair_examples(_LONG_PAIR_EDGES)
-        def test_eq_pair_matches_python(self, x, y):
+        @given(rows=_batch(st.tuples(_long_strategy, _long_strategy)))
+        @_seed_rows(_LONG_PAIR_EDGES)
+        def test_eq_pair_matches_python(self, rows):
             # Python's ``==`` has different NULL semantics from SQL ``=``:
             # ``None == None`` is True, ``None == n`` is False. The
             # transpiler's _lower_eq reproduces those semantics, so the
             # transpiled and interpreted runs must agree on every NULL
             # combination as well as the non-NULL cases.
-            df = self._two_long_arg_df(x, y)
-            transpiled, interpreted = self._run(eq_pair, BooleanType(), df, "a", "b")
-            self.assertEqual(transpiled, interpreted, f"eq_pair mismatch on (x={x!r}, y={y!r})")
+            self._assert_matches(eq_pair, BooleanType(), "a long, b long", rows, "a", "b")
 
         @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy)
-        @_seed_pair_examples(_LONG_PAIR_EDGES)
-        def test_neq_pair_matches_python(self, x, y):
+        @given(rows=_batch(st.tuples(_long_strategy, _long_strategy)))
+        @_seed_rows(_LONG_PAIR_EDGES)
+        def test_neq_pair_matches_python(self, rows):
             # Sister of ``test_eq_pair_matches_python`` for the NotEq arm.
-            df = self._two_long_arg_df(x, y)
-            transpiled, interpreted = self._run(neq_pair, BooleanType(), df, "a", "b")
-            self.assertEqual(transpiled, interpreted, f"neq_pair mismatch on (x={x!r}, y={y!r})")
+            self._assert_matches(neq_pair, BooleanType(), "a long, b long", rows, "a", "b")
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
-        def test_eq_zero_matches_python(self, value):
+        @given(rows=_batch(st.tuples(_long_strategy)))
+        @_seed_rows(_LONG_EDGES)
+        def test_eq_zero_matches_python(self, rows):
             # Single-arg ``x == 0`` with a None guard, exercising _lower_eq's
             # non-None-on-both-sides arm.
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(eq_zero, BooleanType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"eq_zero mismatch on {value!r}")
+            self._assert_matches(eq_zero, BooleanType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
-        def test_neq_zero_matches_python(self, value):
+        @given(rows=_batch(st.tuples(_long_strategy)))
+        @_seed_rows(_LONG_EDGES)
+        def test_neq_zero_matches_python(self, rows):
             # Sister of ``test_eq_zero_matches_python`` for the NotEq arm.
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(neq_zero, BooleanType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"neq_zero mismatch on {value!r}")
+            self._assert_matches(neq_zero, BooleanType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_long_arith_strategy)
-        @_seed_examples(_LONG_ARITH_EDGES)
-        def test_lambda_plus_four_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(lambda_plus_four, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"lambda_plus_four mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_long_arith_strategy)))
+        @_seed_rows(_LONG_ARITH_EDGES)
+        def test_lambda_plus_four_matches_python(self, rows):
+            self._assert_matches(lambda_plus_four, LongType(), "a long", rows, "a")
 
         @_hyp_settings
-        @given(value=_case_str_strategy)
-        @_seed_examples(_STR_EDGES)
-        def test_str_upper_matches_python(self, value):
-            df = self._single_arg_df(value, StringType())
-            transpiled, interpreted = self._run(str_upper, StringType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"str_upper mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_case_str_strategy)))
+        @_seed_rows(_STR_EDGES)
+        def test_str_upper_matches_python(self, rows):
+            self._assert_matches(str_upper, StringType(), "a string", rows, "a")
 
         @_hyp_settings
-        @given(value=_case_str_strategy)
-        @_seed_examples(_STR_EDGES)
-        def test_str_lower_matches_python(self, value):
-            df = self._single_arg_df(value, StringType())
-            transpiled, interpreted = self._run(str_lower, StringType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"str_lower mismatch on {value!r}")
+        @given(rows=_batch(st.tuples(_case_str_strategy)))
+        @_seed_rows(_STR_EDGES)
+        def test_str_lower_matches_python(self, rows):
+            self._assert_matches(str_lower, StringType(), "a string", rows, "a")
 
         @_hyp_settings
-        @given(pair=_str_pair_strategy)
-        @_seed_examples(_STR_PAIR_EDGES, key="pair")
-        def test_str_startswith_matches_python(self, pair):
-            df = self.spark.createDataFrame([pair], "a string, b string")
-            transpiled, interpreted = self._run(str_startswith, BooleanType(), df, "a", "b")
-            self.assertEqual(transpiled, interpreted, f"str_startswith mismatch on {pair!r}")
+        @given(rows=_batch(_str_pair_strategy))
+        @_seed_rows(_STR_PAIR_EDGES)
+        def test_str_startswith_matches_python(self, rows):
+            self._assert_matches(
+                str_startswith, BooleanType(), "a string, b string", rows, "a", "b"
+            )
 
         @_hyp_settings
-        @given(pair=_str_pair_strategy)
-        @_seed_examples(_STR_PAIR_EDGES, key="pair")
-        def test_str_endswith_matches_python(self, pair):
-            df = self.spark.createDataFrame([pair], "a string, b string")
-            transpiled, interpreted = self._run(str_endswith, BooleanType(), df, "a", "b")
-            self.assertEqual(transpiled, interpreted, f"str_endswith mismatch on {pair!r}")
+        @given(rows=_batch(_str_pair_strategy))
+        @_seed_rows(_STR_PAIR_EDGES)
+        def test_str_endswith_matches_python(self, rows):
+            self._assert_matches(str_endswith, BooleanType(), "a string, b string", rows, "a", "b")
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):
