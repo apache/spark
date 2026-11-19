@@ -50,6 +50,10 @@ create temporary view lateral_test_t3(c1, c2)
 create temporary view lateral_test_t4(c1, c2)
   as values (0, 1), (0, 2), (1, 1), (1, 3);
 
+create temporary view outer_gen_test(id, author, tags)
+  as values (1, 'ann', array('sql', 'spark')), (2, 'bob', array('delta')), (3, 'ann', array()),
+    (4, 'bob', null);
+
 create temporary view natural_join_test_t1 as select * from values
   ("one", 1), ("two", 2), ("three", 3) as natural_join_test_t1(k, v1);
 
@@ -1999,6 +2003,57 @@ from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
 from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
 |> as x
 |> select x.h.a;
+
+-- Outer generators: positive tests.
+--------------------------------------
+
+-- Outer generators are allowed as top-level items in the pipe SELECT list, as in a plain SELECT.
+table outer_gen_test
+|> select id, explode_outer(tags) as tag;
+
+table outer_gen_test
+|> select id, posexplode_outer(tags);
+
+table outer_gen_test
+|> select id, inline_outer(transform(tags, t -> named_struct('tag', t)));
+
+table outer_gen_test
+|> select id, explode_outer(map_from_arrays(tags, tags));
+
+-- Outer generators in the pipe EXTEND list.
+table outer_gen_test
+|> extend explode_outer(tags) as tag
+|> select id, tag;
+
+-- Outer generators in the pipe SET list.
+table outer_gen_test
+|> set tags = explode_outer(tags)
+|> select id, tags;
+
+-- Outer generators over aggregate functions in the pipe AGGREGATE list.
+table outer_gen_test
+|> aggregate explode_outer(collect_list(id)) as id group by author;
+
+-- Outer generators over the result of a global aggregation with no input rows.
+table outer_gen_test
+|> where id > 10
+|> aggregate collect_list(id) as ids
+|> select explode_outer(ids);
+
+-- Outer generators: negative tests.
+--------------------------------------
+
+-- Outer generators nested inside other expressions are not allowed, as in a plain SELECT.
+table outer_gen_test
+|> select upper(explode_outer(tags));
+
+-- The pipe AGGREGATE list requires an aggregate function.
+table outer_gen_test
+|> aggregate explode_outer(tags);
+
+-- The pipe EXTEND list does not allow aggregate functions.
+table outer_gen_test
+|> extend explode_outer(collect_list(tags));
 
 -- Cleanup.
 -----------

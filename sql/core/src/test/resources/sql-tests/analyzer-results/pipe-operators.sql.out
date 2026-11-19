@@ -204,6 +204,16 @@ CreateViewCommand `lateral_test_t4`, [(c1,None), (c2,None)], values (0, 1), (0, 
 
 
 -- !query
+create temporary view outer_gen_test(id, author, tags)
+  as values (1, 'ann', array('sql', 'spark')), (2, 'bob', array('delta')), (3, 'ann', array()),
+    (4, 'bob', null)
+-- !query analysis
+CreateViewCommand `outer_gen_test`, [(id,None), (author,None), (tags,None)], values (1, 'ann', array('sql', 'spark')), (2, 'bob', array('delta')), (3, 'ann', array()),
+    (4, 'bob', null), false, false, LocalTempView, UNSUPPORTED, true
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
 create temporary view natural_join_test_t1 as select * from values
   ("one", 1), ("two", 2), ("three", 3) as natural_join_test_t1(k, v1)
 -- !query analysis
@@ -5464,6 +5474,169 @@ Project [h#x.a AS a#x]
 +- SubqueryAlias x
    +- SubqueryAlias tab
       +- LocalRelation [id#x, h#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(tags) as tag
+-- !query analysis
+Project [id#x, tag#x]
++- Generate explode(tags#x), true, [tag#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, posexplode_outer(tags)
+-- !query analysis
+Project [id#x, pos#x, col#x]
++- Generate posexplode(tags#x), true, [pos#x, col#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, inline_outer(transform(tags, t -> named_struct('tag', t)))
+-- !query analysis
+Project [id#x, tag#x]
++- Generate inline(transform(tags#x, lambdafunction(named_struct(tag, lambda t#x), lambda t#x, false))), true, [tag#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(map_from_arrays(tags, tags))
+-- !query analysis
+Project [id#x, key#x, value#x]
++- Generate explode(map_from_arrays(tags#x, tags#x)), true, [key#x, value#x]
+   +- SubqueryAlias outer_gen_test
+      +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+            +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as tag
+|> select id, tag
+-- !query analysis
+Project [id#x, tag#x]
++- Project [id#x, author#x, tags#x, tag#x]
+   +- Generate explode(tags#x), true, [tag#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> set tags = explode_outer(tags)
+|> select id, tags
+-- !query analysis
+Project [id#x, tags#x]
++- Project [id#x, author#x, tags#x]
+   +- Generate explode(tags#x), true, [tags#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(collect_list(id)) as id group by author
+-- !query analysis
+Project [author#x, id#x]
++- Generate explode(_gen_input_0#x), true, [id#x]
+   +- Aggregate [author#x], [author#x, collect_list(id#x, 0, 0, true) AS _gen_input_0#x]
+      +- SubqueryAlias outer_gen_test
+         +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+            +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> where id > 10
+|> aggregate collect_list(id) as ids
+|> select explode_outer(ids)
+-- !query analysis
+Project [col#x]
++- Generate explode(ids#x), true, [col#x]
+   +- Aggregate [collect_list(id#x, 0, 0, true) AS ids#x]
+      +- Filter (id#x > 10)
+         +- PipeOperator
+            +- SubqueryAlias outer_gen_test
+               +- View (`outer_gen_test`, [id#x, author#x, tags#x])
+                  +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS author#x, cast(col3#x as array<string>) AS tags#x]
+                     +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+table outer_gen_test
+|> select upper(explode_outer(tags))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"pipeexpression(upper(generatorouter(explode(tags))))\""
+  }
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(tags)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(explode(tags#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 53,
+    "fragment" : "explode_outer(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(collect_list(tags))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "collect_list(tags#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 46,
+    "stopIndex" : 63,
+    "fragment" : "collect_list(tags)"
+  } ]
+}
 
 
 -- !query

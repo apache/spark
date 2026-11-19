@@ -70,9 +70,17 @@ case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
     _.containsPattern(PIPE_EXPRESSION), ruleId) {
     case node: LogicalPlan =>
       node.resolveExpressions {
-        case p: PipeExpression if p.child.resolved =>
+        case p: PipeExpression if p.child.resolved || isResolvedOuterGenerator(p.child) =>
           validateAndStripPipeExpression(p, p.child)
       }
+  }
+
+  // GeneratorOuter is never resolved because ExtractGenerator replaces it. Strip the wrapper once
+  // the inner generator is resolved; otherwise ExtractGenerator sees
+  // PipeExpression(GeneratorOuter(...)) as a generator nested inside another expression.
+  private def isResolvedOuterGenerator(e: Expression): Boolean = e match {
+    case GeneratorOuter(g) => g.resolved
+    case _ => false
   }
 
   /**
