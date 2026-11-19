@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.LeftSingle
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -167,6 +168,16 @@ class LogicalPlanSuite extends SparkFunSuite {
     val query = Range(0, 100, 1, 10)
     assert(query.where(Literal.FalseLiteral).maxRows.contains(0))
     assert(query.where(Literal.FalseLiteral).maxRowsPerPartition.contains(0))
+  }
+
+  test("SPARK-61891: a left single join outputs at most as many rows as its left side") {
+    val join = Join(Range(0, 10, 1, 1), Range(0, 100, 1, 1), LeftSingle, None, JoinHint.NONE)
+    assert(join.maxRows === Some(10))
+
+    // The bound of the left side holds without a bound of the right side.
+    val unbounded = Join(Range(0, 10, 1, 1), UnresolvedRelation(Seq("t")), LeftSingle, None,
+      JoinHint.NONE)
+    assert(unbounded.maxRows === Some(10))
   }
 
   test("SPARK-46285: foreachWithSubqueries") {

@@ -21,6 +21,7 @@ import java.io.File
 import java.util
 import java.util.Optional
 import java.util.OptionalLong
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 
@@ -2437,6 +2438,48 @@ class CatalystFilterLimitScanBuilder(options: CaseInsensitiveStringMap)
     } else {
       super.createReaderFactory()
     }
+  }
+}
+
+/**
+ * Serves `i` from 1 to 10 and takes a pushed LIMIT in whole. As a LIMIT without ORDER BY may, each
+ * read returns other rows: the n-th read starts at the n-th row. Its size estimate is tiny.
+ */
+class RotatingLimitDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new SimpleScanBuilder with SupportsPushDownLimit with SupportsReportStatistics {
+        private var limit = 10
+
+        override def pushLimit(limit: Int): Boolean = {
+          this.limit = limit
+          true
+        }
+
+        override def isPartiallyPushed: Boolean = false
+
+        override def estimateStatistics(): Statistics = new Statistics {
+          override def sizeInBytes(): OptionalLong = OptionalLong.of(1L)
+          override def numRows(): OptionalLong = OptionalLong.empty()
+        }
+
+        override def planInputPartitions(): Array[InputPartition] =
+          Array(RangeInputPartition(0, limit))
+
+        override def createReaderFactory(): PartitionReaderFactory = RotatingLimitReaderFactory
+      }
+  }
+}
+
+object RotatingLimitReaderFactory extends PartitionReaderFactory {
+  private val reads = new AtomicInteger
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val RangeInputPartition(_, limit) = partition
+    val start = reads.getAndIncrement()
+    new ValuesReaderFactory(TestingV2Source.schema)
+      .createReader(ValuesInputPartition((start until start + limit).map(_ % 10 + 1)))
   }
 }
 

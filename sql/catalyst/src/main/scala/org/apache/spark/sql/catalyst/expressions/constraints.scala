@@ -167,7 +167,9 @@ case class CheckConstraint(
    * `AddCheckConstraint.storeAnalyzedQuery` calls this at the end of the analysis of an ALTER
    * TABLE. CREATE and REPLACE TABLE never decide, and store the predicate if there is one.
    *
-   * A write parses `condition` again, with its own settings. It cannot bind a parameter marker
+   * A write parses `condition` again, under the settings of `StoredExpressionText.fixedConf`, which
+   * keep some of its own, or with its own settings under
+   * `spark.sql.legacy.useCurrentConfigsForCheckConstraint`. It cannot bind a parameter marker
    * that the legacy parameter substitution leaves there, resolves an IDENTIFIER clause in its own
    * session, and does not resolve a column qualified by the table name the way ALTER TABLE does.
    * It also resolves a name such as `current_date` or `user` to the function or to a column,
@@ -464,6 +466,9 @@ case class CheckInvariant(
   override def children: Seq[Expression] = child +: columnExtractors.map(_._2)
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = false
+  // A violating row fails the write, so the optimizer must not evaluate this on rows that are
+  // not written, e.g. by pushing it below a join.
+  override lazy val throwable: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType != BooleanType) {
