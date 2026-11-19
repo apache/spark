@@ -61,20 +61,28 @@ private[sql] class TableConstraintResolution(
   /**
    * The output of the query of a write, with the CHAR and VARCHAR types of the table columns that
    * `TableOutputResolver` removes from it. A CHECK condition resolved against it pads a string
-   * literal compared with a CHAR column, as the stored values are padded.
+   * literal compared with a CHAR column, as the stored values are padded. A write that treats CHAR
+   * as STRING does not pad the values, so the output is kept as it is: `ApplyCharTypePadding` skips
+   * such a write, but not a condition read from its text under the fixed settings.
    */
   private def withCharVarcharTypes(
       output: Seq[Attribute],
       r: DataSourceV2Relation): Seq[Attribute] = {
-    val resolver = catalogManager.v1SessionCatalog.conf.resolver
-    val charVarcharColumns =
-      r.table.columns().filter(c => CharVarcharUtils.hasCharVarchar(c.dataType()))
-    output.map { a =>
-      charVarcharColumns.find(c => resolver(c.name(), a.name)).fold(a) { c =>
-        a.withMetadata(new MetadataBuilder().withMetadata(a.metadata)
-          .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY,
-            c.dataType().catalogString)
-          .build())
+    val conf = SQLConf.get
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
+      output
+    } else {
+      val resolver = catalogManager.v1SessionCatalog.conf.resolver
+      val charVarcharColumns =
+        r.table.columns().filter(c => CharVarcharUtils.hasCharVarchar(c.dataType()))
+      output.map { a =>
+        charVarcharColumns.find(c => resolver(c.name(), a.name)).fold(a) { c =>
+          a.withMetadata(new MetadataBuilder().withMetadata(a.metadata)
+            .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY,
+              c.dataType().catalogString)
+            .build())
+        }
       }
     }
   }
@@ -100,8 +108,8 @@ private[sql] class TableConstraintResolution(
   /**
    * Reads a CHECK condition from its text, independently of the settings of the writer. Only the
    * condition is analyzed under the fixed settings, and the query of the write is not analyzed
-   * again. The result is resolved against the same attributes as the query, so it can go to the
-   * [[Filter]] above the query as it is.
+   * again. The result is resolved against attributes with the same expression IDs as the output of
+   * the query, so it can go to the [[Filter]] above the query as it is.
    */
   private def readCheckInvariant(c: Check, input: Seq[Attribute]): Expression = {
     try {

@@ -498,31 +498,52 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   }
 
   test("SPARK-62070: Check constraint of CREATE TABLE comparing a CHAR column") {
-    // CREATE TABLE stores the predicate without padding 'OPEN' to the length of `status`, so a
-    // write pads it, whether it converts the predicate back or parses `predicateSql`, which
-    // `current_date()` makes it do, also under the legacy config.
+    // CREATE TABLE stores the predicate without padding 'OPEN' to the length of `status`.
+    // A write pads it when it converts the predicate back.
+    // A write also pads it when it parses `predicateSql`, which `current_date()` makes it do,
+    // with or without the legacy config for CHECK constraints.
+    // A write that treats CHAR as STRING pads neither the values nor the literal.
     Seq(
-      ("status = 'OPEN'", "OPEN", true, false),
-      ("status <> 'CLOSED'", "CLOSED", false, false),
-      ("status = 'OPEN' AND closed <= current_date()", "OPEN", true, false),
-      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false, false),
-      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false, true)
-    ).foreach { case (cond, status, accepted, legacy) =>
-      withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT.key -> legacy.toString) {
-        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-          sql(s"CREATE TABLE $t (id INT, status CHAR(10), closed DATE, " +
-            s"CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
-          val insert = s"INSERT INTO $t VALUES (1, '$status', DATE'2000-01-01')"
+      ("status = 'OPEN'", "OPEN", true, Nil),
+      ("status <> 'CLOSED'", "CLOSED", false, Nil),
+      ("status = 'OPEN' AND closed <= current_date()", "OPEN", true, Nil),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false, Nil),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false,
+        Seq(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT.key -> "true")),
+      ("status <> 'CLOSED' AND closed <= current_date()", "CLOSED", false,
+        Seq(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true"))
+    ).foreach { case (cond, status, accepted, confs) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, status CHAR(10), closed DATE, " +
+          s"CONSTRAINT c1 CHECK ($cond)) $defaultUsing")
+        val insert = s"INSERT INTO $t VALUES (1, '$status', DATE'2000-01-01')"
+        withSQLConf(confs: _*) {
           if (accepted) {
             sql(insert)
-            checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
           } else {
             val error = intercept[SparkRuntimeException](sql(insert))
-            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"$cond $legacy")
-            checkAnswer(spark.table(t), Nil)
+            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", s"$cond $confs")
           }
         }
+        checkAnswer(spark.table(t).select("id"), if (accepted) Seq(Row(1)) else Nil)
       }
+    }
+  }
+
+  test("SPARK-62070: UPDATE and MERGE with a check constraint comparing a CHAR column") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, status CHAR(10), " +
+        s"CONSTRAINT c1 CHECK (status <> 'CLOSED')) $defaultUsing")
+      sql(s"INSERT INTO $t VALUES (1, 'OPEN')")
+      Seq(
+        s"UPDATE $t SET status = 'CLOSED'",
+        s"MERGE INTO $t t USING (SELECT 1 AS id) s ON t.id = s.id " +
+          "WHEN MATCHED THEN UPDATE SET status = 'CLOSED'"
+      ).foreach { stmt =>
+        val error = intercept[SparkRuntimeException](sql(stmt))
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", stmt)
+      }
+      checkAnswer(spark.table(t), Row(1, "OPEN      "))
     }
   }
 
