@@ -538,7 +538,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case _: DayTimeIntervalType => JDBCValueGetter.DayTimeIntervalGetter(dialect)
     case _: ArrayType if metadata.contains("pg_bit_array_type") =>
       JDBCValueGetter.PostgresBitArrayGetter
-    case at: ArrayType => JDBCValueGetter.ArrayGetter(at, dialect, metadata)
+    case at: ArrayType =>
+      JDBCValueGetter.ArrayGetter(at, dialect, metadata, options.flatMap(calendarFor))
     case NullType => JDBCValueGetter.NullGetter
     case _ => throw QueryExecutionErrors.unsupportedJdbcTypeError(dt.catalogString)
   }
@@ -662,9 +663,21 @@ object JdbcUtils extends Logging with SQLConfHelper {
               case _ => throw QueryExecutionErrors.nestedArraysUnsupportedError()
             }
 
+            val calendarZone = options.timestampCalendarTimeZone.map(_.toZoneId)
+
+            def toCalendarZoneWallClock(value: Any, zone: java.time.ZoneId): Any = value match {
+              case t: java.sql.Timestamp =>
+                java.sql.Timestamp.valueOf(java.time.LocalDateTime.ofInstant(t.toInstant, zone))
+              case i: Instant =>
+                java.sql.Timestamp.valueOf(java.time.LocalDateTime.ofInstant(i, zone))
+              case other => other
+            }
+
             def toArray(seq: scala.collection.Seq[Any], dt: DataType): Array[Any] = dt match {
               case ArrayType(et0, _) =>
                 seq.map(i => toArray(i.asInstanceOf[scala.collection.Seq[Any]], et0)).toArray
+              case TimestampType if calendarZone.isDefined =>
+                seq.map(toCalendarZoneWallClock(_, calendarZone.get)).toArray
               case _ => seq.toArray
             }
 
