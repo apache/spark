@@ -46,6 +46,15 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   checkpoint. With `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep
   the earlier behavior.
 
+- Since Spark 4.5, a stream-stream join whose inputs have watermarks on different equality keys,
+  for example `la = ra AND lb = rb` with watermarks on `la` and `rb`, evicts the state of each
+  input by the key that the opposite input's watermark bounds. Earlier versions evicted both by
+  the same key and could lose matches. With state format version 4, such a join cannot restart
+  from a checkpoint of an earlier version, or after a change of
+  `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new checkpoint. With
+  `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
+  behavior.
+
 - Since Spark 4.5, a new streaming query in append mode fails when its first micro-batch is
   planned if an operator that drops late rows, such as a window aggregation, follows a
   stream-stream join and its event time can come from an input of the join whose state is never
@@ -60,15 +69,6 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   Queries restarted from checkpoints written before Spark 4.5 only log a warning.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
-
-- Since Spark 4.4, a stream-stream join whose inputs have watermarks on different equality keys,
-  for example `la = ra AND lb = rb` with watermarks on `la` and `rb`, evicts the state of each
-  input by the key that the opposite input's watermark bounds. Earlier versions evicted both by
-  the same key and could lose matches. With state format version 4, such a join cannot restart
-  from a checkpoint of an earlier version, or after a change of
-  `spark.sql.streaming.statefulOperator.allowMultiple`; start it with a new checkpoint. With
-  `spark.sql.streaming.statefulOperator.allowMultiple` set to false, joins keep the earlier
-  behavior.
 
 - Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
   because their optimizer rewrites introduce streaming aggregations after the initial
