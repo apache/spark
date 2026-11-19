@@ -4410,7 +4410,7 @@ object SQLConf {
         "or, in a full outer join without a watermarked equality key, the join never evicts " +
         "that input, so its unmatched rows are never output. When false, only the check of " +
         "earlier versions applies.")
-      .version("4.4.0")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
