@@ -751,8 +751,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                     messageParameters={"arg_name": "weights", "arg_value": str(w)},
                 )
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        # The JVM method takes a list of Doubles, which a Python int in the list does not match.
+        double_weights = [float(w) for w in weights]
         df_array = self._jdf.randomSplit(
-            _to_list(self.sparkSession._sc, cast(List["ColumnOrName"], weights)), int(seed)
+            _to_list(self.sparkSession._sc, cast(List["ColumnOrName"], double_weights)),
+            int(seed),
         )
         return [DataFrame(df, self.sparkSession) for df in df_array]
 

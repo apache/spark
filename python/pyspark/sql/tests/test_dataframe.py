@@ -818,6 +818,18 @@ class DataFrameTestsMixin:
         cnts = [df.count() for i in range(10)]
         self.assertEqual(1, len(set(cnts)))
 
+    def test_random_split_int_weights(self):
+        # SPARK-62073: integer weights split the rows like the equal float weights.
+        df = self.spark.range(100)
+        int_splits = df.randomSplit([1, 2], 24)
+        float_splits = df.randomSplit([1.0, 2.0], 24)
+        self.assertEqual(len(int_splits), 2)
+        self.assertEqual(
+            [sorted(row.id for row in split.collect()) for split in int_splits],
+            [sorted(row.id for row in split.collect()) for split in float_splits],
+        )
+        self.assertEqual(sum(split.count() for split in int_splits), 100)
+
     def test_toDF_with_string(self):
         df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
         data = [("John", 30), ("Alice", 25), ("Bob", 28)]
