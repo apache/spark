@@ -22,7 +22,8 @@ import java.util
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
+import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, NameStreamingSources}
+import org.apache.spark.sql.catalyst.plans.logical.TransformWithState
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, UserProvided}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.Changelog.{
@@ -755,6 +756,55 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
           }
         }
       }
+    }
+  }
+
+  for {
+    hasInitialState <- Seq(false, true)
+    streamingInitialState <- Seq(false, true)
+  } {
+    test(s"source naming preserves initial-state inputs: hasInitialState=$hasInitialState, " +
+        s"streamingInitialState=$streamingInitialState") {
+      catalog.setChangelogProperties(ident, ChangelogProperties(
+        containsIntermediateChanges = true,
+        rowIdNames = Seq("id")))
+      withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+        val stream = spark.readStream.name("original")
+          .option("deduplicationMode", "netChanges").changes(fullTableName)
+        val stateful = stream.queryExecution.analyzed.collectFirst {
+          case tws: TransformWithState => tws
+        }.get
+        val initialState = if (streamingInitialState) stateful.child else stateful.initialState
+        val withInitialState = stateful.copy(
+          hasInitialState = hasInitialState, initialState = initialState)
+        val wrapper = NamedStreamingRelation(withInitialState, UserProvided("replacement"))
+        val result = NameStreamingSources(wrapper)
+        val resultStateful = result.collectFirst { case tws: TransformWithState => tws }.get
+        assert(resultStateful.initialState eq initialState)
+        if (streamingInitialState) {
+          assert(result.fastEquals(wrapper))
+        } else {
+          assert(result.collect { case n: NamedStreamingRelation => n }.isEmpty)
+          assert(result.collect {
+            case source: StreamingRelationV2 => source.sourceIdentifyingName
+          } == Seq(UserProvided("replacement")))
+        }
+      }
+    }
+  }
+
+  test("source naming remains attached to the changelog input of a stream-static join") {
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val stream = spark.readStream.name("cdc").changes(fullTableName)
+      val joined = stream.join(spark.range(1L, 2L), Seq("id"))
+      val analyzed = joined.queryExecution.analyzed
+
+      assert(analyzed.collect {
+        case source: StreamingRelationV2 => source.sourceIdentifyingName
+      } == Seq(UserProvided("cdc")))
+      assert(analyzed.collect { case n: NamedStreamingRelation => n }.isEmpty)
+      assert(joined.schema.fieldNames.toSeq ==
+        Seq("id", "data", "_change_type", "_commit_version", "_commit_timestamp"))
     }
   }
 
