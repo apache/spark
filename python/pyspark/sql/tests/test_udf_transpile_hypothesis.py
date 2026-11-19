@@ -352,12 +352,9 @@ lambda_plus_four = lambda x: x + 4 if x is not None else 0  # noqa: E731
 # ----------------------------------------------------------------------------
 
 
-class TranspileDifferentialMixin:
-    """The transpiled-vs-interpreted harness, shared with the per-target suites.
-
-    Mix into a ``ReusedSQLTestCase``. ``test_udf_transpile_java_hypothesis.py`` reuses it
-    with the ``java`` target named.
-    """
+@unittest.skipUnless(_have_hypothesis and _hypothesis_enabled and _regular_spark, _skip_reason)
+class UDFTranspileHypothesisTests(ReusedSQLTestCase):
+    """Compare transpiled vs. interpreted Python UDF output on Hypothesis-generated inputs."""
 
     # Markers we treat as "transpilation didn't actually happen" -- if any
     # warning matches one of these, the differential comparison would
@@ -370,16 +367,7 @@ class TranspileDifferentialMixin:
         "ANSI mode",
     )
 
-    def _run(
-        self,
-        func,
-        return_type,
-        df,
-        *udf_arg_columns,
-        kwargs=None,
-        transpile_conf=None,
-        plan_marker=None,
-    ):
+    def _run(self, func, return_type, df, *udf_arg_columns, kwargs=None):
         """Run ``func`` as a UDF with transpilation on and off, return both rows.
 
         ``udf_arg_columns`` and ``kwargs`` mirror what a caller would
@@ -393,12 +381,6 @@ class TranspileDifferentialMixin:
         transpilation-related warning may fire. Without these checks both
         runs could silently fall back to interpreted Python and the
         differential assertion would succeed for the wrong reason.
-
-        ``transpile_conf`` is merged into the "on" run's conf, e.g. to name a
-        transpiler. ``plan_marker``, when given, must appear in the "on" run's
-        optimized plan: ``transpiled`` being non-empty only says an option was
-        built, and the analyzer still drops every option whose input categories
-        do not match the column types, silently leaving interpreted Python.
         """
         func_name = getattr(func, "__name__", repr(func))
         kwargs = kwargs or {}
@@ -408,7 +390,6 @@ class TranspileDifferentialMixin:
             # Transpilation requires ANSI; pin it on so the test result
             # doesn't depend on the surrounding session default.
             "spark.sql.ansi.enabled": True,
-            **(transpile_conf or {}),
         }
         transpiled_error: Optional[Exception] = None
         with warnings.catch_warnings(record=True) as caught:
@@ -421,17 +402,10 @@ class TranspileDifferentialMixin:
                     f"{func_name!r} -- the differential comparison would be "
                     "meaningless without it",
                 )
-                transpiled_df = df.select(transpiled_udf(*udf_arg_columns, **kwargs))
-                if plan_marker is not None:
-                    plan = transpiled_df._jdf.queryExecution().optimizedPlan().toString()
-                    self.assertIn(
-                        plan_marker,
-                        plan,
-                        f"{func_name!r} did not run as {plan_marker} -- the differential "
-                        "comparison would be interpreted against interpreted",
-                    )
                 try:
-                    transpiled_value = transpiled_df.collect()[0][0]
+                    transpiled_value = df.select(
+                        transpiled_udf(*udf_arg_columns, **kwargs)
+                    ).collect()[0][0]
                 except Exception as e:
                     transpiled_value = _SENTINEL_RAISED
                     transpiled_error = e
@@ -491,11 +465,6 @@ class TranspileDifferentialMixin:
             ]
         )
         return self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
-
-
-@unittest.skipUnless(_have_hypothesis and _hypothesis_enabled and _regular_spark, _skip_reason)
-class UDFTranspileHypothesisTests(TranspileDifferentialMixin, ReusedSQLTestCase):
-    """Compare transpiled vs. interpreted Python UDF output on Hypothesis-generated inputs."""
 
     if _have_hypothesis:
 

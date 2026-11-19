@@ -27,35 +27,26 @@ import org.apache.spark.sql.classic.{ClassicConversions, ColumnConversions}
 import org.apache.spark.sql.types.DataType
 
 /**
- * Py4J entry for the `java` transpiler. Lives in `sql/core` because building
- * a [[Column]] needs the classic conversions, which catalyst cannot see.
- * Types cross as JSON, like every other Python-to-JVM hand-off here.
+ * Py4J entry point for the `java` UDF transpiler. In `sql/core` because building a [[Column]]
+ * needs the classic conversions.
  */
 object TranspiledJavaUDFBuilder {
 
   /**
-   * @param name the UDF's name, used for display and to seed the generated method's name
-   * @param body Java statements ending in a `return`, reading the parameters named by `argNames`
-   * @param argNames the generated method's parameter names, parallel to `children`
-   * @param children the argument columns, which the caller has already cast to `inputTypesJson`
-   * @param inputTypesJson one JSON data type per child, each within the expression's boxed ABI
-   * @param returnTypeJson the JSON data type the body returns
+   * @param name the UDF's name
+   * @param body the method body, reading its arguments as `_udf_arg_0`, `_udf_arg_1`, ...
+   * @param children the argument columns, already cast to `LongType` or `BooleanType`
+   * @param returnTypeJson the body's result type as JSON
    */
   def create(
       name: String,
       body: String,
-      argNames: JList[String],
       children: JList[Column],
-      inputTypesJson: JList[String],
       returnTypeJson: String): Column = {
     val expr = TranspiledJavaUDF(
-      name = name,
-      body = body,
-      argNames = argNames.asScala.toSeq,
-      children = children.asScala.map(ColumnConversions.expression).toSeq,
-      inputTypes = inputTypesJson.asScala.map(DataType.fromJson).toSeq,
-      dataType = DataType.fromJson(returnTypeJson))
-    // Compile now, while a failure can still be a skipped option.
+      name, body, children.asScala.map(ColumnConversions.expression).toSeq,
+      DataType.fromJson(returnTypeJson))
+    // Compile now, while a failure can still skip this option.
     expr.validate()
     ClassicConversions.column(expr)
   }

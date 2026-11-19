@@ -17,179 +17,96 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, LongType, StringType}
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.expressions.{TranspiledJavaUDFHelpers => H}
+import org.apache.spark.sql.types.{BooleanType, LongType}
 
 /**
- * Tests [[TranspiledJavaUDF]] over hand-written bodies, so what is under test is the expression --
- * the boxed ABI, the two compile paths, the name handling -- and not the Python lowering that will
- * produce those bodies. `checkEvaluation` runs the interpreted path and both codegen paths, which
- * is what pins the claim that one `body` string cannot make `eval` and `doGenCode` disagree.
+ * [[TranspiledJavaUDF]] over hand-written bodies, and the helpers generated bodies call.
+ * `checkEvaluation` runs the interpreted path and the codegen paths over the same body.
  */
 class TranspiledJavaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  private def udf(
-      body: String,
-      children: Seq[Expression],
-      inputTypes: Seq[DataType],
-      dataType: DataType,
-      name: String = "f"): TranspiledJavaUDF = {
-    val argNames = children.indices.map(i => s"_udf_arg_$i")
-    TranspiledJavaUDF(name, body, argNames, children, inputTypes, dataType)
-  }
+  private val helpers = H.getClass.getName.stripSuffix("$")
 
-  test("numeric body over both eval paths") {
-    checkEvaluation(
-      udf("return _udf_arg_0 + 1;", Seq(Literal(1L)), Seq(LongType), LongType),
-      2L)
-  }
+  private def udf(body: String, children: Expression*): TranspiledJavaUDF =
+    TranspiledJavaUDF("f", body, children, LongType)
 
-  test("string body uses UTF8String") {
-    checkEvaluation(
-      udf(
-        """return UTF8String.concat(_udf_arg_0, UTF8String.fromString("x"));""",
-        Seq(Literal("a")),
-        Seq(StringType),
-        StringType),
-      "ax")
-  }
-
-  test("boolean and double bodies") {
-    checkEvaluation(
-      udf("return _udf_arg_0 > 0.5;", Seq(Literal(0.75)), Seq(DoubleType), BooleanType),
-      true)
-    checkEvaluation(
-      udf("return _udf_arg_0 * 2.0;", Seq(Literal(1.5)), Seq(DoubleType), DoubleType),
-      3.0)
-  }
-
-  test("a null argument arrives as Java null, and null out is SQL NULL") {
-    // The body decides what a None means, exactly as the Python function would. Nothing upstream
-    // turns a NULL into a default first, which is the point of the boxed ABI.
-    val nullIn = udf(
-      "if (_udf_arg_0 == null) { return -1L; } return _udf_arg_0;",
-      Seq(Literal.create(null, LongType)),
-      Seq(LongType),
-      LongType)
-    checkEvaluation(nullIn, -1L)
-
-    val nullOut = udf(
-      "return null;",
-      Seq(Literal(1L)),
-      Seq(LongType),
-      LongType)
-    checkEvaluation(nullOut, null)
-  }
-
-  test("multi-statement body with a local and an early return") {
-    // The capability the Catalyst target cannot reach: it refuses a body with more than one
-    // top-level statement, bar the `if test: return a` / `return b` early-return shape.
+  test("a multi-statement body runs on both eval paths") {
     val body =
-      """
-        |long doubled = _udf_arg_0 * 2;
-        |if (doubled > 10) {
-        |  return 10L;
-        |}
-        |long result = doubled + 1;
-        |return result;
-      """.stripMargin
-    checkEvaluation(udf(body, Seq(Literal(3L)), Seq(LongType), LongType), 7L)
-    checkEvaluation(udf(body, Seq(Literal(9L)), Seq(LongType), LongType), 10L)
+      s"""
+         |Long doubled = $helpers.multiply(_udf_arg_0, Long.valueOf(2L));
+         |if ($helpers.isTrue($helpers.greaterThan(doubled, Long.valueOf(10L)))) {
+         |  return 10L;
+         |}
+         |return $helpers.add(doubled, Long.valueOf(1L));
+       """.stripMargin
+    checkEvaluation(udf(body, Literal(3L)), 7L)
+    checkEvaluation(udf(body, Literal(9L)), 10L)
   }
 
-  test("a parameter read many times is still one child") {
-    // What makes the pre-evaluation machinery unnecessary on this path: the repeats are reads of a
-    // Java local inside `body`, so the plan sees one argument.
-    val e = udf(
-      "return _udf_arg_0 + _udf_arg_0 + _udf_arg_0;",
-      Seq(Literal(2L)),
-      Seq(LongType),
-      LongType)
-    assert(e.children.length === 1)
-    checkEvaluation(e, 6L)
+  test("NULL arrives as Java null, and Java null leaves as NULL") {
+    checkEvaluation(
+      udf("return _udf_arg_0 == null ? Long.valueOf(-1L) : _udf_arg_0;",
+        Literal.create(null, LongType)),
+      -1L)
+    checkEvaluation(udf("return null;", Literal(1L)), null)
+    checkEvaluation(
+      TranspiledJavaUDF("g", "return _udf_arg_0;", Seq(Literal(true)), BooleanType), true)
   }
 
-  test("floorDiv and floorMod reproduce Python's // and %") {
-    // Verified against CPython: -7 // 3 == -3, 7 // -3 == -3, -7 % 3 == 2, 7 % -3 == -2. Java's
-    // own `/` and `%` give -2 and -1 for the first of each, which is why the lowering must emit
-    // the Math helpers rather than the operators.
-    def floorDiv(a: Long, b: Long): TranspiledJavaUDF = udf(
-      "return Math.floorDiv(_udf_arg_0, _udf_arg_1);",
-      Seq(Literal(a), Literal(b)), Seq(LongType, LongType), LongType)
-    def floorMod(a: Long, b: Long): TranspiledJavaUDF = udf(
-      "return Math.floorMod(_udf_arg_0, _udf_arg_1);",
-      Seq(Literal(a), Literal(b)), Seq(LongType, LongType), LongType)
-
-    checkEvaluation(floorDiv(-7L, 3L), -3L)
-    checkEvaluation(floorDiv(7L, -3L), -3L)
-    checkEvaluation(floorMod(-7L, 3L), 2L)
-    checkEvaluation(floorMod(7L, -3L), -2L)
-  }
-
-  test("addExact raises on overflow where plain + would wrap") {
-    checkExceptionInExpression[ArithmeticException](
-      udf(
-        "return Math.addExact(_udf_arg_0, 1L);",
-        Seq(Literal(Long.MaxValue)),
-        Seq(LongType),
-        LongType),
-      "long overflow")
-  }
-
-  test("expensive is true and deterministic derives from the children") {
-    val overLiteral = udf("return _udf_arg_0;", Seq(Literal(1L)), Seq(LongType), LongType)
-    assert(overLiteral.expensive, "a transpiled body is worth no less than a ScalaUDF")
-    assert(overLiteral.deterministic)
-
-    // Not overridden, so a draw in an argument makes the call nondeterministic -- which is what
-    // stops a rule duplicating it and drawing twice.
-    val overRand = udf("return _udf_arg_0;", Seq(Rand(1L)), Seq(DoubleType), DoubleType)
-    assert(!overRand.deterministic)
+  test("two calls with the same name in one generated class stay separate") {
+    val plusOne = udf(s"return $helpers.add(_udf_arg_0, Long.valueOf(1L));", Literal(10L))
+    val timesTen = udf(s"return $helpers.multiply(_udf_arg_0, Long.valueOf(10L));", Literal(10L))
+    checkEvaluation(Add(plusOne, timesTen), 111L)
   }
 
   test("a name that is not a Java identifier still compiles") {
     checkEvaluation(
-      udf("return _udf_arg_0 + 1;", Seq(Literal(1L)), Seq(LongType), LongType,
-        name = "my udf-with.punctuation!"),
-      2L)
-    // A name that cannot start an identifier gets a prefix rather than a compile error.
-    checkEvaluation(
-      udf("return _udf_arg_0 + 1;", Seq(Literal(1L)), Seq(LongType), LongType, name = "9lives"),
-      2L)
+      TranspiledJavaUDF("<lambda> 9!", "return _udf_arg_0;", Seq(Literal(1L)), LongType), 1L)
   }
 
-  test("two same-named UDFs in one generated class do not clobber each other") {
-    // `addNewFunction` keys on the method name, so without a fresh name per call site the second
-    // body would silently replace the first and both calls would return the same thing.
-    val plusOne = udf("return _udf_arg_0 + 1;", Seq(Literal(10L)), Seq(LongType), LongType)
-    val timesTen = udf("return _udf_arg_0 * 10;", Seq(Literal(10L)), Seq(LongType), LongType)
-    checkEvaluation(Add(plusOne, timesTen), 111L)
+  test("input and result types are limited to bigint and boolean") {
+    assert(udf("return 1L;", Literal(1L)).checkInputDataTypes().isSuccess)
+    assert(udf("return 1L;", Literal("a")).checkInputDataTypes().isFailure)
+    assert(TranspiledJavaUDF("f", "return 1L;", Seq(Literal(1L)), BooleanType)
+      .checkInputDataTypes().isSuccess)
   }
 
-  test("input types are checked without implicit coercion") {
-    // A string column must not satisfy a numeric lowering: Python raises TypeError there, so
-    // silently coercing would diverge. The transpiler casts its arguments, so a mismatch here
-    // means a hand-built or mis-pruned option.
-    val mismatched = udf("return _udf_arg_0 + 1;", Seq(Literal("a")), Seq(LongType), LongType)
-    assert(mismatched.checkInputDataTypes().isFailure)
-
-    val matched = udf("return _udf_arg_0 + 1;", Seq(Literal(1L)), Seq(LongType), LongType)
-    assert(matched.checkInputDataTypes().isSuccess)
+  test("expensive, and deterministic only when the children are") {
+    assert(udf("return 1L;", Literal(1L)).expensive)
+    assert(udf("return 1L;", Literal(1L)).deterministic)
+    assert(!udf("return 1L;", Cast(Rand(1L), LongType)).deterministic)
   }
 
   test("validate fails for a body that does not compile") {
-    // `TranspiledJavaUDFBuilder` calls this so a lowering bug skips the option at definition,
-    // not the query once the option is in the plan.
-    val bad = udf("return not_a_symbol;", Seq(Literal(1L)), Seq(LongType), LongType)
-    val e = intercept[Exception](bad.validate())
+    val e = intercept[Exception](udf("return not_a_symbol;", Literal(1L)).validate())
     assert(e.getMessage.contains("not_a_symbol"))
-    udf("return _udf_arg_0;", Seq(Literal(1L)), Seq(LongType), LongType).validate()
   }
 
-  test("parallel-field requirement is enforced") {
-    val e = intercept[IllegalArgumentException] {
-      TranspiledJavaUDF("f", "return 1L;", Seq("a", "b"), Seq(Literal(1L)), Seq(LongType), LongType)
-    }
-    assert(e.getMessage.contains("must be parallel"))
+  test("// and % floor like Python") {
+    assert(H.floorDivide(-7L, 3L) === -3L)
+    assert(H.floorDivide(7L, -3L) === -3L)
+    assert(H.mod(-7L, 3L) === 2L)
+    assert(H.mod(7L, -3L) === -2L)
+  }
+
+  test("overflow and zero divisors raise Spark's errors") {
+    def errorClass(f: => Any): String = intercept[SparkArithmeticException](f).getCondition
+    assert(errorClass(H.add(Long.MaxValue, 1L)) === "ARITHMETIC_OVERFLOW")
+    assert(errorClass(H.negate(Long.MinValue)) === "ARITHMETIC_OVERFLOW")
+    // `Math.floorDiv(Long.MinValue, -1)` would wrap.
+    assert(errorClass(H.floorDivide(Long.MinValue, -1L)) === "ARITHMETIC_OVERFLOW")
+    assert(errorClass(H.floorDivide(1L, 0L)) === "DIVIDE_BY_ZERO")
+    assert(errorClass(H.mod(1L, 0L)) === "REMAINDER_BY_ZERO")
+  }
+
+  test("None raises in arithmetic and ordering but not in == or not") {
+    intercept[SparkRuntimeException](H.add(null, 1L))
+    intercept[SparkRuntimeException](H.lessThan(1L, null))
+    assert(H.equalsLong(null, null) === true)
+    assert(H.equalsLong(null, 1L) === false)
+    assert(H.not(null) === true)
+    assert(!H.isTrue(null))
   }
 }

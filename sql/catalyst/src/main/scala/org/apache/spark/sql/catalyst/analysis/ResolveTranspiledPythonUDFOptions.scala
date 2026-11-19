@@ -89,9 +89,6 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   "bool"    -> BooleanType
   //   "binary"  -> BinaryType
   //
-  // "integral" / "fractional" are the java target's names for the same types as
-  // "integer" / "float".
-  //
   // Two deliberate exclusions keep the transpiled semantics faithful to Python:
   // - DecimalType is NOT matched by any numeric category: Python receives
   //   decimal.Decimal objects, which raise TypeError when mixed with float
@@ -112,9 +109,6 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
         case ("float", dt) =>
           dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
         case ("numeric", dt) => dt.isInstanceOf[NumericType] && !dt.isInstanceOf[DecimalType]
-        // No DecimalType exclusion needed: it is a FractionalType, never an IntegralType.
-        case ("integral", dt) => dt.isInstanceOf[IntegralType]
-        case ("fractional", dt) => dt.isInstanceOf[FractionalType] && !dt.isInstanceOf[DecimalType]
         case ("string", st: StringType) => st.isUTF8BinaryCollation
         case ("bool", dt) => dt.isInstanceOf[BooleanType]
         case ("binary", dt) => dt.isInstanceOf[BinaryType]
