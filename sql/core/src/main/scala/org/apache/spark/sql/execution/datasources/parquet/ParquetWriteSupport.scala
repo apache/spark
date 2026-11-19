@@ -245,18 +245,17 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       case _: StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
           val value = row.getUTF8String(ordinal)
-          // Mark the bytes as reused so Parquet copies values that it retains.
           recordConsumer.addBinary(value.getBaseObject match {
             case bytes: Array[Byte] =>
+              // Mark the bytes as reused so Parquet copies values that it retains.
               if (value.getBaseOffset == Platform.BYTE_ARRAY_OFFSET &&
                   value.numBytes() == bytes.length) {
-                // Use the smaller wrapper for whole-array strings to avoid extra allocation.
                 Binary.fromReusedByteArray(bytes)
               } else {
                 Binary.fromReusedByteArray(bytes,
                   (value.getBaseOffset - Platform.BYTE_ARRAY_OFFSET).toInt, value.numBytes())
               }
-            case _ => Binary.fromReusedByteArray(value.getBytes)
+            case _ => Binary.fromConstantByteArray(value.getBytes)
           })
 
       case TimestampType =>

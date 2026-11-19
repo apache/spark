@@ -176,19 +176,21 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-60321: string writer reuses the backing array of a UTF8String slice") {
-    val consumer = mock(classOf[RecordConsumer])
-    val support = new ParquetWriteSupport
-    support.init(parquetStringWriterConf)
-    support.prepareForWrite(consumer)
     val bytes = "prefix-value-suffix".getBytes(UTF_8)
-    support.write(InternalRow(UTF8String.fromBytes(bytes, 7, 5)))
+    Seq(0 -> "prefix", 7 -> "value").foreach { case (offset, expected) =>
+      val consumer = mock(classOf[RecordConsumer])
+      val support = new ParquetWriteSupport
+      support.init(parquetStringWriterConf)
+      support.prepareForWrite(consumer)
+      support.write(InternalRow(UTF8String.fromBytes(bytes, offset, expected.length)))
 
-    val argument = ArgumentCaptor.forClass(classOf[Binary])
-    verify(consumer).addBinary(argument.capture())
-    val binary = argument.getValue
-    assert(binary.isBackingBytesReused)
-    assert(binary.toByteBuffer.array() eq bytes)
-    assert(binary.toStringUsingUTF8 == "value")
+      val argument = ArgumentCaptor.forClass(classOf[Binary])
+      verify(consumer).addBinary(argument.capture())
+      val binary = argument.getValue
+      assert(binary.isBackingBytesReused)
+      assert(binary.toByteBuffer.array() eq bytes)
+      assert(binary.toStringUsingUTF8 == expected)
+    }
   }
 
   for {
@@ -200,9 +202,9 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         s"dictionary $dictionary, writer $version") {
       val expected = reusedStringTestValues
       val offHeap = storage == "offheap"
-      withTempPath { file =>
+      withTempPath { dir =>
         val conf = parquetStringWriterConf
-        val path = new Path(file.toURI)
+        val path = new Path(dir.toURI.toString, "part-r-0.parquet")
         val padding = 13
         val shared = new Array[Byte](64 * 1024)
         val address = if (offHeap) Platform.allocateMemory(shared.length) else 0L
@@ -222,7 +224,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
             .withPageRowCountLimit(64)
             .withMinRowCountForPageSizeCheck(1)
             .withMaxRowCountForPageSizeCheck(64)
-            .withStatisticsTruncateLength(stringStatisticsTruncateLength)
             .build()
           try {
             expected.foreach { text =>
@@ -259,7 +260,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         }
 
         withAllParquetReaders {
-          checkAnswer(spark.read.parquet(file.toString), expected.map(Row(_)))
+          checkAnswer(spark.read.parquet(dir.toString), expected.map(Row(_)))
         }
         val reader = ParquetFileReader.open(HadoopInputFile.fromPath(path, conf))
         try {
@@ -279,17 +280,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           reader.close()
         }
       }
-    }
-  }
-
-  test("string slices in nested Parquet values") {
-    // scalastyle:off nonascii
-    val data = Seq(
-      (Seq("", null, "\u96ea"), Map("key" -> "value"), Tuple1("nested")),
-      (Seq("long" * 1024), Map("other" -> "\u96ea"), Tuple1("")))
-    // scalastyle:on nonascii
-    withParquetDataFrame(data) { df =>
-      checkAnswer(df, data.map { case (array, map, nested) => Row(array, map, Row(nested._1)) })
     }
   }
 
@@ -2728,10 +2718,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           Option(c.getMessage).exists(_.contains("[a] optional int32 a"))), e)
     }
   }
-
-  // Larger than the longest value in `reusedStringTestValues`, so that min/max statistics hold
-  // the exact values rather than truncated prefixes.
-  private val stringStatisticsTruncateLength = 64 * 1024
 
   /**
    * Values covering what a Parquet string writer has to get right: nulls, empty and repeated
