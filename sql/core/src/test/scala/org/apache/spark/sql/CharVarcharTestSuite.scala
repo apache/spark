@@ -84,11 +84,7 @@ trait CharVarcharTestSuite extends QueryTest {
     assertLengthCheckFailure(() => sql(query))
   }
 
-  def assertLengthCheckFailure(func: () => Unit): Unit = {
-    assertLengthCheckFailure(func, limit = 5)
-  }
-
-  def assertLengthCheckFailure(func: () => Unit, limit: Int): Unit = {
+  def assertLengthCheckFailure(func: () => Unit, limit: Int = 5): Unit = {
     checkError(
       exception = intercept[SparkRuntimeException](func()),
       condition = "EXCEED_LIMIT_LENGTH",
