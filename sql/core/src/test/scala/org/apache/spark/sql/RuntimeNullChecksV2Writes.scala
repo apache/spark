@@ -395,11 +395,9 @@ class RuntimeNullChecksV2Writes extends SharedSparkSession {
   }
 
   protected def assertNotNullException(colPath: Seq[String])(f: => Any): Unit = {
-    val e = intercept[SparkRuntimeException](f)
-    e.getCause match {
-      case _ if e.getCondition == "NOT_NULL_ASSERT_VIOLATION" =>
-      case other =>
-        fail(s"Unexpected exception cause: $other")
-    }
+    checkError(
+      exception = intercept[SparkRuntimeException](f),
+      condition = "NOT_NULL_ASSERT_VIOLATION",
+      parameters = Map("walkedTypePath" -> colPath.mkString("\n", "\n", "\n")))
   }
 }
