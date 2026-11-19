@@ -781,13 +781,13 @@ class DatasetUnpivotSuite extends SharedSparkSession {
   }
 
   test("SPARK-62051: unpivot of a column made nullable by an outer join") {
-    val left = Seq(1, 2).toDF("a")
+    val left = Seq((1, 10), (2, 20)).toDF("a", "x")
     val right = Seq(2).toDF("b")
     // `right("b")` is resolved as non-nullable, and becomes nullable after resolution
     checkAnswer(
       left.join(right, left("a") === right("b"), "left_outer")
-        .unpivot(Array(left("a")), Array(right("b")), "col", "value"),
-      Row(1, "b", null) :: Row(2, "b", 2) :: Nil)
+        .unpivot(Array(left("a")), Array(left("x"), right("b")), "col", "value"),
+      Row(1, "x", 10) :: Row(1, "b", null) :: Row(2, "x", 20) :: Row(2, "b", 2) :: Nil)
   }
 
   test("ORDER BY on a column dropped by UNPIVOT is rejected") {
