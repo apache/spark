@@ -72,9 +72,9 @@ class WorkerMetrics:
     """One collector per Python worker process, reset by the worker before each task.
 
     set stores a supplied value; increment adds to a counter.
-    set_current_timestamp reads the clock and keeps epoch nanoseconds.
+    set_current_timestamp stores the epoch nanoseconds under name, appending "Ns".
     measure creates timer scopes that accumulate nanoseconds in a separate shared dictionary.
-    to_dict reports timestamps and durations in microseconds, appending "Us" to their names.
+    to_dict combines both dictionaries, appending "Ns" to the duration names.
     """
 
     _instance: ClassVar[Optional["WorkerMetrics"]] = None
@@ -94,17 +94,15 @@ class WorkerMetrics:
 
     def reset(self) -> None:
         """Start fresh task state while keeping the singleton's identity."""
-        # Counters and spill byte counts need no conversion at report time.
+        # Counters, spill byte counts, and epoch timestamps need no conversion at report time.
         self._values_in_report_units: dict[str, int] = {}
-        # Epoch timestamps, converted at report time like the durations.
-        self._timestamps_ns: dict[str, int] = {}
         # Existing timers keep the old dictionary. A fresh dictionary keeps their
         # measurements out of the next task's report.
         self._duration_totals_ns: dict[str, int] = {}
 
     def set_current_timestamp(self, name: str) -> None:
-        """Read the current clock and store it under name, reported in epoch microseconds."""
-        self._timestamps_ns[name] = time.time_ns()
+        """Read the current clock and store its epoch nanoseconds under name + "Ns"."""
+        self.set(name + "Ns", time.time_ns())
 
     def set(self, name: str, value: int) -> None:
         """Store the supplied value unchanged, replacing any earlier value."""
@@ -126,12 +124,10 @@ class WorkerMetrics:
     def to_dict(self) -> dict[str, int]:
         """Build the numeric report dictionary consumed by report_metrics.
 
-        Counters and bytes already have their reporting units. Epoch timestamps and the
-        accumulated duration totals are converted from nanoseconds to microseconds and reported
-        with "Us" appended to their names.
+        Counters, bytes, and epoch timestamps already have their reporting units. The
+        accumulated duration totals are reported in nanoseconds, with "Ns" appended to their names.
         """
         return {
             **self._values_in_report_units,
-            **{name + "Us": ns // 1_000 for name, ns in self._timestamps_ns.items()},
-            **{name + "Us": ns // 1_000 for name, ns in self._duration_totals_ns.items()},
+            **{name + "Ns": ns for name, ns in self._duration_totals_ns.items()},
         }

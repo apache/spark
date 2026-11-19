@@ -566,11 +566,11 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
 
         constant = udf(lambda: 7, "long", useArrow=True)
         phase_names = (
-            "pythonDataReadTimeUs",
-            "pythonInputPreparationTimeUs",
-            "pythonUDFExecutionTimeUs",
-            "pythonOutputPreparationTimeUs",
-            "pythonDataWriteTimeUs",
+            "pythonDataReadTimeNs",
+            "pythonInputPreparationTimeNs",
+            "pythonUDFExecutionTimeNs",
+            "pythonOutputPreparationTimeNs",
+            "pythonDataWriteTimeNs",
         )
         with self.sql_conf(
             {
@@ -604,10 +604,10 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                         self.assertEqual(plan.children().size(), 1)
                         plan = plan.children().apply(0)
                     metrics = plan.metrics()
-                    # Spark has no microsecond timing type: the timings are sums named "(us)".
+                    # The timings are nanosecond timing metrics named "(ns)".
                     for name in phase_names:
-                        self.assertEqual(metrics.apply(name).metricType(), "sum", name)
-                        self.assertTrue(metrics.apply(name).name().get().endswith(" (us)"), name)
+                        self.assertEqual(metrics.apply(name).metricType(), "nsTiming", name)
+                        self.assertTrue(metrics.apply(name).name().get().endswith(" (ns)"), name)
                     self.assertEqual(metrics.apply("pythonNumPipelinedTasks").value(), 0)
                     self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
                     self.assertEqual(
@@ -616,16 +616,17 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                     phases = [metrics.apply(name).value() for name in phase_names]
                     self.assertTrue(all(value >= 0 for value in phases))
                     if num_rows:
-                        # Microsecond sums: every phase did measurable work on these rows.
-                        for name, value in zip(phase_names, phases):
-                            self.assertGreater(value, 0, name)
+                        for name in phase_names:
+                            self.assertFalse(metrics.apply(name).isZero(), name)
                     if num_rows and concurrency == 0:
-                        self.assertGreaterEqual(phases[2], 2_000 * num_rows)
-                    elif not num_rows:
+                        self.assertGreaterEqual(phases[2], 2_000_000 * num_rows)
+                    elif num_rows:
+                        self.assertGreater(phases[2], 0)
+                    else:
                         self.assertEqual(phases[1:4], [0, 0, 0])
-                    processing = metrics.apply("pythonProcessingTimeUs").value()
+                    processing = metrics.apply("pythonProcessingTimeNs").value()
                     self.assertLessEqual(sum(phases), processing)
-                    self.assertLessEqual(processing, metrics.apply("pythonTotalTimeUs").value())
+                    self.assertLessEqual(processing, metrics.apply("pythonTotalTimeNs").value())
 
     def test_phase_metrics_not_collected_by_default(self):
         add_one = udf(lambda value: value + 1, "long", useArrow=True)
@@ -647,17 +648,17 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             metrics = run()
 
         detailed_metrics = (
-            "pythonDataReadTimeUs",
-            "pythonInputPreparationTimeUs",
-            "pythonUDFExecutionTimeUs",
-            "pythonOutputPreparationTimeUs",
-            "pythonDataWriteTimeUs",
+            "pythonDataReadTimeNs",
+            "pythonInputPreparationTimeNs",
+            "pythonUDFExecutionTimeNs",
+            "pythonOutputPreparationTimeNs",
+            "pythonDataWriteTimeNs",
             "pythonNumTimingReports",
             "pythonNumTimedBatches",
         )
         for name in detailed_metrics:
             self.assertEqual(metrics.apply(name).value(), 0, name)
-        self.assertTrue(metrics.contains("pythonProcessingTimeUs"))
+        self.assertTrue(metrics.contains("pythonProcessingTimeNs"))
         self.assertTrue(metrics.contains("pythonNumPipelinedTasks"))
 
     def test_phase_metrics_follow_execution_config(self):
@@ -785,8 +786,8 @@ class ArrowStreamTimingTests(unittest.TestCase):
                 self.assertEqual(
                     report,
                     {
-                        "pythonDataReadTimeUs": source.read_ns // 1_000,
-                        "pythonDataWriteTimeUs": write_ns // 1_000,
+                        "pythonDataReadTimeNs": source.read_ns,
+                        "pythonDataWriteTimeNs": write_ns,
                     },
                 )
 

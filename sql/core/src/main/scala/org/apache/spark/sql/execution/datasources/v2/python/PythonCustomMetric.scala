@@ -47,7 +47,7 @@ object PythonCustomMetric {
     PythonSQLMetrics.pythonSizeMetricsDesc.keys
       .map(_ -> new SQLMetric("size", -1)).toMap ++
       PythonSQLMetrics.pythonTimingMetricsDesc.keys
-        .map(_ -> new SQLMetric("sum", -1)).toMap ++
+        .map(_ -> new SQLMetric("nsTiming", -1)).toMap ++
       PythonSQLMetrics.pythonOtherMetricsDesc.keys
         .map(_ -> new SQLMetric("sum", -1)).toMap
   }
