@@ -139,4 +139,15 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
     val code = udf.genCode(new CodegenContext).code.toString
     assert(!code.contains("fieldName") && !code.contains("udfName") && !code.contains("outputName"))
   }
+
+  test("SPARK-61935: nullable when the input of a primitive parameter can be null") {
+    def stringIntUdf(s: Expression, i: Expression): ScalaUDF = ScalaUDF(
+      (str: String, n: Int) => str.length + n, IntegerType, s :: i :: Nil,
+      Option(resolvedEncoder[String]()) :: Option(resolvedEncoder[Int]()) :: Nil,
+      udfNullable = false)
+    assert(!stringIntUdf(Literal.create(null, StringType), Literal(1)).nullable)
+    assert(stringIntUdf(Literal("a"), Literal.create(null, IntegerType)).nullable)
+    // the implicit cast of a string to the primitive parameter can return null
+    assert(stringIntUdf(Literal("a"), Literal("1")).nullable)
+  }
 }

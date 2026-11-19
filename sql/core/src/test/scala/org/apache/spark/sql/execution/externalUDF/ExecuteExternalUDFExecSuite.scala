@@ -38,8 +38,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.resource.{CpuAmount, ResourceInformation}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression,
-  ExternalUserDefinedFunction, IsNull}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualTo,
+  Expression, ExternalUserDefinedFunction, IsNull, Literal, Remainder}
 import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
@@ -278,8 +278,9 @@ object ExecuteExternalUDFExecSuite {
       requestCount: LongAccumulator,
       closeCount: LongAccumulator,
       terminalMetrics: Option[ExecutionMetrics],
-      cancelOnClose: Boolean)
-    extends ExecuteExternalUDFExec(udf, resultAttr, child) {
+      cancelOnClose: Boolean,
+      evalCondition: Option[Expression] = None)
+    extends ExecuteExternalUDFExec(udf, resultAttr, child, evalCondition) {
 
     override protected def createUDFWorkerSession(
         securityScope: Option[WorkerSecurityScope]): WorkerSession = {
@@ -314,7 +315,8 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       LongType,
       udfNullable = false,
       terminalMetrics = terminalMetrics,
-      cancelOnClose = cancelOnClose)
+      cancelOnClose = cancelOnClose,
+      evalCondition = None)
   }
 
   private def testExecution(
@@ -330,7 +332,8 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       udfDataType,
       udfNullable,
       terminalMetrics = None,
-      cancelOnClose = false)
+      cancelOnClose = false,
+      evalCondition = None)
   }
 
   private def testExecution(
@@ -340,7 +343,8 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       udfDataType: DataType,
       udfNullable: Boolean,
       terminalMetrics: Option[ExecutionMetrics],
-      cancelOnClose: Boolean): TestExecution = {
+      cancelOnClose: Boolean,
+      evalCondition: Option[Expression]): TestExecution = {
     val udf = ExternalUserDefinedFunction(
       name = Some("identity"),
       workerSpec = UDFWorkerSpecification.getDefaultInstance,
@@ -375,7 +379,8 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
         requestCount,
         closeCount,
         terminalMetrics,
-        cancelOnClose),
+        cancelOnClose,
+        evalCondition),
       requestCount,
       closeCount)
   }
@@ -756,5 +761,32 @@ class ExecuteExternalUDFExecSuite extends QueryTest with SharedSparkSession {
       assert(execution.requestCount.value === 1L)
       assert(execution.closeCount.value === 1L)
     }
+  }
+
+  test("SPARK-61482: an external UDF with a condition runs only for the rows that need it") {
+    val child = spark.range(0L, 6L, 1L, 1).queryExecution.executedPlan
+    val id = child.output.head
+    // Keep the even ids; the echo worker returns the id for them, null for the rest.
+    val even = EqualTo(Remainder(id, Literal(2L)), Literal(0L))
+    val execution = testExecution(
+      EchoResponses, child, Seq(id), LongType, udfNullable = true,
+      terminalMetrics = None, cancelOnClose = false, evalCondition = Some(even))
+    val rows = execution.plan.executeCollect()
+      .map(r => (r.getLong(0), if (r.isNullAt(1)) None else Some(r.getLong(1)))).toSeq
+    assert(rows == Seq(
+      (0L, Some(0L)), (1L, None), (2L, Some(2L)), (3L, None), (4L, Some(4L)), (5L, None)))
+  }
+
+  test("SPARK-61482: an external UDF whose condition is never true starts no worker session") {
+    val child = spark.range(0L, 6L, 1L, 1).queryExecution.executedPlan
+    val id = child.output.head
+    val execution = testExecution(
+      EchoResponses, child, Seq(id), LongType, udfNullable = true,
+      terminalMetrics = None, cancelOnClose = false, evalCondition = Some(Literal(false)))
+    val rows = execution.plan.executeCollect()
+      .map(r => (r.getLong(0), r.isNullAt(1))).toSeq
+    assert(rows == (0L until 6L).map(i => (i, true)))
+    assert(execution.requestCount.value === 0L)
+    assert(execution.closeCount.value === 0L)
   }
 }

@@ -51,10 +51,12 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
         f.deterministic && f.references.nonEmpty &&
           !f.references.subsetOf(left.outputSet) && !f.references.subsetOf(right.outputSet)
       }
-      lazy val leftExtraCondition =
-        filtersOfBothSide.flatMap(extractPredicatesWithinOutputSet(_, left.outputSet))
-      lazy val rightExtraCondition =
-        filtersOfBothSide.flatMap(extractPredicatesWithinOutputSet(_, right.outputSet))
+      // As in PushPredicateThroughJoin, a throwable predicate is not pushed: below the join, it
+      // would also run on the rows that the join condition does not evaluate it on.
+      lazy val leftExtraCondition = filtersOfBothSide
+        .flatMap(extractPredicatesWithinOutputSet(_, left.outputSet)).filterNot(_.throwable)
+      lazy val rightExtraCondition = filtersOfBothSide
+        .flatMap(extractPredicatesWithinOutputSet(_, right.outputSet)).filterNot(_.throwable)
 
       if (alreadyProcessed || (leftExtraCondition.isEmpty && rightExtraCondition.isEmpty)) {
         j
