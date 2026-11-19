@@ -343,3 +343,41 @@ SELECT (SELECT t1.* FROM (SELECT 3 AS col1) AS t1 LIMIT 1) FROM VALUES(1) AS t1(
 
 -- Outer star expansion through a derived table wrapper
 SELECT (SELECT * FROM (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1)) FROM VALUES(1) AS t1(col1);
+
+-- Functions rewritten into an expression that references an argument more than once (nullif,
+-- between, decode) over scalar subqueries, aggregates, windows and lambdas.
+set spark.sql.alwaysInlineCommonExpr=true;
+
+-- expected 3
+select nullif((select max(id) from range(1, 4)), 0);
+
+-- expected three
+select decode((select max(id) from range(1, 4)), 1, 'one', 3, 'three', 'other');
+
+-- correlated; expected (1, NULL), (2, 30)
+select c1, nullif((select max(c2) from values (1, 10), (1, 20), (2, 30) as t2(k, c2)
+  where t2.k = t1.c1), 20) from values (1), (2) as t1(c1);
+
+-- correlated; expected (1, true), (2, false)
+select c1, (select max(c2) from values (1, 10), (2, 30) as t2(k, c2) where t2.k = t1.c1)
+  between 5 and 15 from values (1), (2) as t1(c1);
+
+-- aggregate argument; expected 2
+select nullif(max(c1), 1) from values (1), (2) as t(c1);
+
+-- window argument; expected (1, 1), (2, NULL)
+select c1, nullif(sum(c1) over (order by c1), 3) from values (1), (2) as t(c1);
+
+-- lambda argument; expected [NULL, 1, 2]
+select transform(array(0, 1, 2), x -> nullif(x, 0));
+
+set spark.sql.alwaysInlineCommonExpr=false;
+
+-- expected 3
+select nullif((select max(id) from range(1, 4)), 0);
+
+-- correlated; expected (1, NULL), (2, 30)
+select c1, nullif((select max(c2) from values (1, 10), (1, 20), (2, 30) as t2(k, c2)
+  where t2.k = t1.c1), 20) from values (1), (2) as t1(c1);
+
+set spark.sql.alwaysInlineCommonExpr=true;

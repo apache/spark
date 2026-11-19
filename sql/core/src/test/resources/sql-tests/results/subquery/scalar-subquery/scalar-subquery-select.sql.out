@@ -800,3 +800,106 @@ SELECT (SELECT * FROM (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1)) FROM VAL
 struct<scalarsubquery(col1):int>
 -- !query output
 1
+
+
+-- !query
+set spark.sql.alwaysInlineCommonExpr=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.alwaysInlineCommonExpr	true
+
+
+-- !query
+select nullif((select max(id) from range(1, 4)), 0)
+-- !query schema
+struct<nullif(scalarsubquery(), 0):bigint>
+-- !query output
+3
+
+
+-- !query
+select decode((select max(id) from range(1, 4)), 1, 'one', 3, 'three', 'other')
+-- !query schema
+struct<decode(scalarsubquery(), 1, one, 3, three, other):string>
+-- !query output
+three
+
+
+-- !query
+select c1, nullif((select max(c2) from values (1, 10), (1, 20), (2, 30) as t2(k, c2)
+  where t2.k = t1.c1), 20) from values (1), (2) as t1(c1)
+-- !query schema
+struct<c1:int,nullif(scalarsubquery(c1), 20):int>
+-- !query output
+1	NULL
+2	30
+
+
+-- !query
+select c1, (select max(c2) from values (1, 10), (2, 30) as t2(k, c2) where t2.k = t1.c1)
+  between 5 and 15 from values (1), (2) as t1(c1)
+-- !query schema
+struct<c1:int,between(scalarsubquery(c1), 5, 15):boolean>
+-- !query output
+1	true
+2	false
+
+
+-- !query
+select nullif(max(c1), 1) from values (1), (2) as t(c1)
+-- !query schema
+struct<nullif(max(c1), 1):int>
+-- !query output
+2
+
+
+-- !query
+select c1, nullif(sum(c1) over (order by c1), 3) from values (1), (2) as t(c1)
+-- !query schema
+struct<c1:int,nullif(sum(c1) OVER (ORDER BY c1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 3):bigint>
+-- !query output
+1	1
+2	NULL
+
+
+-- !query
+select transform(array(0, 1, 2), x -> nullif(x, 0))
+-- !query schema
+struct<transform(array(0, 1, 2), lambdafunction(nullif(namedlambdavariable(), 0), namedlambdavariable())):array<int>>
+-- !query output
+[null,1,2]
+
+
+-- !query
+set spark.sql.alwaysInlineCommonExpr=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.alwaysInlineCommonExpr	false
+
+
+-- !query
+select nullif((select max(id) from range(1, 4)), 0)
+-- !query schema
+struct<nullif(scalarsubquery(), 0):bigint>
+-- !query output
+3
+
+
+-- !query
+select c1, nullif((select max(c2) from values (1, 10), (1, 20), (2, 30) as t2(k, c2)
+  where t2.k = t1.c1), 20) from values (1), (2) as t1(c1)
+-- !query schema
+struct<c1:int,nullif(scalarsubquery(c1), 20):int>
+-- !query output
+1	NULL
+2	30
+
+
+-- !query
+set spark.sql.alwaysInlineCommonExpr=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.alwaysInlineCommonExpr	true
