@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrd
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, SupportsRealTimeMode, SupportsRealTimeRead}
 import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead.RecordStatus
+import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.util.{Clock, CollectionAccumulator, SystemClock}
 import org.apache.spark.util.ArrayImplicits._
@@ -121,7 +122,7 @@ case class RealTimeStreamScanExec(
     @transient stream: MicroBatchStream,
     @transient start: Offset,
     batchDurationMs: Long)
-    extends DataSourceV2ScanExecBase {
+    extends LeafExecNode with DataSourceV2ScanExecBase {
 
   assert(stream.isInstanceOf[SupportsRealTimeMode])
 

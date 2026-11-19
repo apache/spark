@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SortOrder}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, SparkDataStream}
-import org.apache.spark.sql.execution.StreamSourceAwareSparkPlan
+import org.apache.spark.sql.execution.{LeafExecNode, StreamSourceAwareSparkPlan}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -36,7 +36,7 @@ case class MicroBatchScanExec(
     @transient end: Offset,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None)
-  extends DataSourceV2ScanExecBase
+  extends LeafExecNode with DataSourceV2ScanExecBase
   with StreamSourceAwareSparkPlan {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.

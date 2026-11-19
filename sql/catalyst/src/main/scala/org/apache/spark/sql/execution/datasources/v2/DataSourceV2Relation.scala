@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering, SupportsStorageFilters}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
@@ -343,8 +344,8 @@ case class DataSourceV2ScanRelation(
    * [[SupportsStorageFilters.storageFilterAttributes]], matched by name. Only top-level
    * declarations count, and a declared column the scan does not read is left out, since no offered
    * filter can reference it. Empty when the scan does not implement that interface. Unlike runtime
-   * filtering, there is no "fully pushed" set, since a storage filter always stays in the plan
-   * above the scan.
+   * filtering, there is no "fully pushed" set, since a storage filter, or a condition that implies
+   * it, always stays in the plan above the scan.
    */
   lazy val storageFilterAttrs: AttributeSet = scan match {
     case s: SupportsStorageFilters =>
@@ -353,6 +354,24 @@ case class DataSourceV2ScanRelation(
       AttributeSet(output.filter(a => declared.exists(resolver(a.name, _))))
     case _ => AttributeSet.empty
   }
+
+  /**
+   * Whether this is a read of a group-based row-level operation, which replaces the groups its
+   * scan returns.
+   */
+  def isGroupBasedRead: Boolean = relation.table match {
+    case t: RowLevelOperationTable => !t.operation.isInstanceOf[SupportsDelta]
+    case _ => false
+  }
+
+  /**
+   * Whether this is the read of a group-based DELETE, which counts the deleted rows from the rows
+   * its scan returns.
+   */
+  def isGroupBasedDeleteRead: Boolean = isGroupBasedRead && (relation.table match {
+    case t: RowLevelOperationTable => t.operation.command() == RowLevelOperation.Command.DELETE
+    case _ => false
+  })
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
 

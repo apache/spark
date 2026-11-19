@@ -18,13 +18,21 @@
 package org.apache.spark.sql.execution
 
 /**
- * Marker trait for execution nodes that are safe to use with SortedMergeCoalescedRDD
+ * Trait for execution nodes that are safe to use with SortedMergeCoalescedRDD
  * (concurrent k-way merge). Nodes implementing this trait must store no per-partition
  * mutable state in shared plan-node instance fields; all per-partition state must be
  * captured inside the partition's iterator closure (e.g. via the
  * PartitionEvaluatorFactory pattern).
  *
- * A `GroupPartitionsExec` planned with a k-way merge fails at execution if a node below it does
- * not mix this in, e.g. one that a rule put there after `EnsureRequirements`.
+ * A `GroupPartitionsExec` planned with a k-way merge fails at execution if a node whose rows reach
+ * it, see `kWayMergeInputs`, does not mix this in, e.g. one that a rule put there after
+ * `EnsureRequirements`.
  */
-trait SafeForKWayMerge
+trait SafeForKWayMerge { self: SparkPlan =>
+
+  /**
+   * The children whose rows this node returns, which the k-way merge reads through this node. They
+   * must be safe for the merge too.
+   */
+  def kWayMergeInputs: Seq[SparkPlan] = children
+}

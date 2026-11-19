@@ -1016,17 +1016,22 @@ object SQLConf {
         "join to come from a V2 scan, and both scans to report a keyed partitioning by the same " +
         "partition transform of that key (other than identity), with " +
         "spark.sql.sources.v2.bucketing.enabled and " +
-        s"${RUNTIME_BLOOM_FILTER_ENABLED.key} both true. Each partition of the " +
-        "application side is then checked against the bloom filter of the matching partition " +
-        "of the creation side, in a semi join. The semi join calls the function of the " +
-        "partition transform on each row of both sides, so that function must implement " +
-        "`produceResult` or `invoke`. That semi join is dropped when it adds a shuffle or cuts " +
-        "the tasks that read the application side, or when it would sit in more than one " +
-        "place, as below a union. To check the shuffles and the tasks, Spark plans the query " +
-        "once more, and up to once more for each semi join. Adaptive query execution does that " +
-        "again on each re-planning before the semi join runs. Each bloom filter is sized for an " +
-        "even share of the creation side over its partition keys. The semi join is also dropped " +
-        "when that share is over spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold. " +
+        s"${RUNTIME_BLOOM_FILTER_ENABLED.key} both true. The scan of the application side must " +
+        "also take a storage filter on the key, see " +
+        "spark.sql.sources.v2.storageFilterPushdown.enabled. Each split of that scan then gets " +
+        "a bloom filter of the creation side's keys with the split's partition key, and a split " +
+        "with none is not read. The creation side is grouped by the partition transform, which " +
+        "calls its function on each row. So that function must implement `produceResult` or " +
+        "`invoke`. A per-partition bloom filter is dropped when it would sit anywhere but right " +
+        "above the scan, or in more than one place, as below a union. It is also dropped when " +
+        "a task reads only some of the splits of a key, as under a join that shuffles the scan. " +
+        "Each such task would read the creation side again. Partially clustered distribution " +
+        "keeps the per-partition bloom filter. To check the tasks, Spark plans the query once " +
+        "more. Adaptive query execution does that again on each re-planning. Each bloom filter " +
+        "is sized for an even share of the creation side over its partition keys. A " +
+        "per-partition bloom filter is also dropped when that share is over " +
+        "spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold. " +
+        "The read of a DELETE that rewrites whole groups of rows, such as files, gets none. " +
         "The number of per-partition bloom filters has a limit of its own, the value of " +
         s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
         "limit, no per-partition one is added either.")
@@ -3066,7 +3071,8 @@ object SQLConf {
         "source V2 scan that implements SupportsStorageFilters and declares the filter's " +
         "columns. Its readers may apply it while they read, to skip reading the other columns " +
         "of the rows it rejects. The filter also stays in the post-scan filter, so the answer " +
-        "does not change. " +
+        "does not change. A per-partition runtime bloom filter is not kept there, since the " +
+        "join above the scan implies it. " +
         s"${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} is the V1 Parquet file source's own conf.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)

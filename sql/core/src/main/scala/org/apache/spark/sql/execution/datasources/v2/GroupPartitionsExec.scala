@@ -128,11 +128,12 @@ case class GroupPartitionsExec(
    * where this check passes, and `UnknownPartitioning`, where re-deriving reports the same thing.
    *
    * The comparison is by reference for a child that reports the same object, which the columnar and
-   * codegen wrappers do. A rule that rewrites a subquery in the runtime or storage filters of a
-   * `BatchScanExec` after `EnsureRequirements` rebuilds it, so there it compares the partition keys
-   * by value. Such rules are `PlanAdaptiveDynamicPruningFilters` and `ReuseAdaptiveSubquery` with
-   * AQE, and `ReuseExchangeAndSubquery` without it. The rebuilt node shares the input partitions
-   * the first one planned (`PlannedScan`), so its keys come from the same partitions.
+   * codegen wrappers do. A rule after `EnsureRequirements` that rewrites a subquery in the runtime
+   * or storage filters of a `BatchScanExec` rebuilds the scan. So does one that rewrites the
+   * aggregate below the scan. This node then compares the partition keys by value. The rules for
+   * the filters are `PlanAdaptiveDynamicPruningFilters` and `ReuseAdaptiveSubquery` with AQE, and
+   * `ReuseExchangeAndSubquery` without it. The rebuilt node shares the input partitions the first
+   * one planned (`PlannedScan`), so its keys come from the same partitions.
    *
    * Asked on the read rather than in `withNewChildInternal` because canonicalization rebuilds this
    * node over a canonicalized child whose partitioning cannot be read at all: a canonicalized
@@ -248,7 +249,8 @@ case class GroupPartitionsExec(
   //
   // To be conservative, we use a whitelist. An unknown node type counts as unsafe, so the merge
   // is not planned and the node concatenates. Only node types explicitly confirmed to store no
-  // per-partition state in shared (plan node) instance fields are permitted.
+  // per-partition state in shared (plan node) instance fields are permitted where their rows reach
+  // this node.
   //
   // --- Interaction with late plan-tree mutations ---
   //
@@ -261,11 +263,15 @@ case class GroupPartitionsExec(
   // whitelist so the evaluation stays consistent. So is the `DebugExec` that the `debug()` helper
   // (`org.apache.spark.sql.execution.debug`) wraps every node in without AQE. A rule that breaks
   // this under a planned merge fails the query at execution, see `checkPlannedMergeRuns`.
-  @transient private lazy val childIsSafeForKWayMerge: Boolean =
-    !child.exists {
-      case _: SafeForKWayMerge => false
-      case _ => true
-    }
+  @transient private lazy val childIsSafeForKWayMerge: Boolean = unsafeForKWayMerge(child).isEmpty
+
+  // The first node from `plan` down through `kWayMergeInputs` that does not mix in
+  // `SafeForKWayMerge`, if any.
+  private def unsafeForKWayMerge(plan: SparkPlan): Option[SparkPlan] = plan match {
+    case safe: SafeForKWayMerge => safe.kWayMergeInputs.iterator.flatMap(unsafeForKWayMerge)
+      .nextOption()
+    case unsafe => Some(unsafe)
+  }
 
   // A merge by an empty ordering would run but sort nothing.
   require(sortedMergeOrdering.forall(_.nonEmpty), "A k-way merge needs an ordering to merge by")
@@ -366,13 +372,14 @@ case class GroupPartitionsExec(
   /**
    * Fails a planned merge that would not run. The parent's required ordering was checked against
    * the merge, so no sort was added above it. A rule after `EnsureRequirements` can still put a
-   * node outside the `SafeForKWayMerge` whitelist below this one. This node would then concatenate
-   * and hand the parent unsorted rows. No built-in rule does that, see `childIsSafeForKWayMerge`.
+   * node outside the `SafeForKWayMerge` whitelist where its rows reach this one. This node would
+   * then concatenate and hand the parent unsorted rows. No built-in rule does that, see
+   * `childIsSafeForKWayMerge`.
    * Like `checkChildStillMatches`, this makes the failure explicit if one starts.
    */
   private def checkPlannedMergeRuns(): Unit = {
     if (mergeIsPlanned && !childIsSafeForKWayMerge) {
-      val blocker = child.find(!_.isInstanceOf[SafeForKWayMerge]).map(_.nodeName)
+      val blocker = unsafeForKWayMerge(child).map(_.nodeName)
       throw SparkException.internalError(
         "GroupPartitionsExec was planned with a k-way merge, but its child holds " +
           s"${blocker.getOrElse("a node")}, which does not mix in SafeForKWayMerge")

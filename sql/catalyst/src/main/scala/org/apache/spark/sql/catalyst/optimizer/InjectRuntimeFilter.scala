@@ -83,12 +83,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   /**
    * The partition transform of the creation side, when the application side can get a
    * per-partition bloom filter. It needs a V2 scan under each side that reports a keyed
-   * partitioning by the same transform of its join key (`pairedPartitionTransforms`). A
-   * per-partition bloom filter has one bloom filter per partition key of the creation side.
+   * partitioning by the same transform of its join key, and the scan of the application side to
+   * take a storage filter on the key (`perPartitionCreationTransform`). A per-partition bloom
+   * filter is a storage filter of that scan, with one bloom filter per partition key of the
+   * creation side. Each split of the scan gets the bloom filter of its own partition key.
    *
    * `injectPerPartitionBloomFilter` then adds its [[PerPartitionRuntimeFilterSubquery]]. Predicate
-   * pushdown moves it along the key. [[CleanupPerPartitionRuntimeFilters]] then gives it way to
-   * `true`.
+   * pushdown moves it along the key. [[CleanupPerPartitionRuntimeFilters]] keeps it only where it
+   * landed right above that scan, and the V2 scan strategy gives it to the scan.
+   * `SizePerPartitionStorageFilters` then sizes it or drops it.
    *
    * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
    */
@@ -99,46 +102,43 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     if (!conf.runtimeBloomFilterPerPartitionEnabled) {
       None
     } else {
-      pairedPartitionTransforms(filterApplicationSideKey, filterApplicationSidePlan,
-        filterCreationSide.key, filterCreationSide.plan).collect {
-        case (_, creation)
-            if !hasPerPartitionRuntimeFilter(filterApplicationSidePlan, filterApplicationSideKey) =>
-          creation
-      }
+      perPartitionCreationTransform(filterApplicationSideKey, filterApplicationSidePlan,
+        filterCreationSide.key, filterCreationSide.plan)
+        .filterNot(_ => hasPerPartitionRuntimeFilter(filterApplicationSidePlan,
+          filterApplicationSideKey))
     }
   }
 
   /**
-   * The partition transforms of an application side's key and a creation side's key (see
-   * `partitionTransform`), when both have one and they are the same function.
+   * The partition transform of a creation side's key, when the application side's key can get a
+   * per-partition bloom filter from it. Both keys need a partition transform (see
+   * `partitionTransform`) of the same function, and the scan of the application side's key needs
+   * to take a storage filter on it (`PerPartitionRuntimeFilterSubquery.storageFilterColumnsOf`).
    */
-  private[optimizer] def pairedPartitionTransforms(
+  private[optimizer] def perPartitionCreationTransform(
       applicationKey: Expression,
       applicationPlan: LogicalPlan,
       creationKey: Expression,
-      creationPlan: LogicalPlan): Option[(TransformExpression, TransformExpression)] =
+      creationPlan: LogicalPlan): Option[TransformExpression] =
     for {
-      application <- partitionTransform(applicationKey, applicationPlan)
-      creation <- partitionTransform(creationKey, creationPlan)
+      (application, column, scan) <- partitionTransform(applicationKey, applicationPlan)
+      if PerPartitionRuntimeFilterSubquery.storageFilterColumnsOf(scan).contains(column)
+      (creation, _, _) <- partitionTransform(creationKey, creationPlan)
       if application.isSameFunction(creation)
-    } yield (application, creation)
+    } yield creation
 
   /**
-   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`.
-   * Defined when:
+   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`, with
+   * the scan's column and the scan. Defined when:
    *  - V2 bucketing is on;
    *  - `key` is one of the scan's columns, followed down through `plan`;
    *  - the scan reports a keyed partitioning by a single transform of that column;
-   *  - the transform is deterministic, since both sides of the semi join evaluate it;
+   *  - the transform is deterministic, since the aggregate of the creation side groups by it;
    *  - Spark can evaluate the transform (`TransformExpression.evaluableFunction`).
-   *
-   * The semi join is correct whatever lies between `plan` and the scan, since it checks each row
-   * against the bloom filter of its own partition key. A row whose partition key is null passes it,
-   * so the transform may return null for any key.
    */
   private def partitionTransform(
       key: Expression,
-      plan: LogicalPlan): Option[TransformExpression] = {
+      plan: LogicalPlan): Option[(TransformExpression, Attribute, DataSourceV2ScanRelation)] = {
     if (!conf.v2BucketingEnabled) {
       None
     } else {
@@ -148,7 +148,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             case Seq(t @ TransformExpression(_, Seq(child), _, _, _))
                 if child.semanticEquals(column) && t.function.isDeterministic &&
                   t.evaluableFunction.isDefined =>
-              t.copy(children = Seq(key))
+              (t.copy(children = Seq(key)), column, scan)
           }
         case _ => None
       }
@@ -156,15 +156,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // `filterApplicationSidePlan` with the placeholder of a per-partition bloom filter of its key,
-  // over the partition transform `creation` of the creation side. Its aggregate reads the creation
-  // side again, apart from the join. So a creation side gives none when:
+  // over the partition transform `creation` of the creation side. The aggregate that builds the
+  // bloom filters reads the creation side again, apart from the join. So a creation side gives
+  // none when:
   //  - it has a Python or external UDF, or is not deterministic, as for the bloom filter of the
   //    whole creation side;
   //  - it reads a V2 scan with a pushed operation that does not work on each row by itself, such as
   //    a limit. Such a scan can return other rows when read again (see `canEvaluateAgain`).
   // A creation side also gives none when it needs more partition keys than a `bucket` transform
-  // gives (its buckets and null). Its bloom filters would always be dropped, and its placeholder
-  // would keep another join on the key from getting one.
+  // gives (its buckets and null). `SizePerPartitionStorageFilters` would drop the storage filter,
+  // and its placeholder would keep another join on the key from getting one.
   private def injectPerPartitionBloomFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
@@ -546,7 +547,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // `plan` without the placeholders of per-partition bloom filters, which joins below added. A
-  // creation side leaves them out, since a copy there would count as a second one.
+  // creation side leaves them out. A copy there would count as a second one, and the original would
+  // get no storage filter.
   private def withoutPerPartitionRuntimeFilters(plan: LogicalPlan): LogicalPlan =
     plan.transformUpWithPruning(_.containsPattern(PER_PARTITION_RUNTIME_FILTER_SUBQUERY)) {
       case WithPlaceholders(conjuncts, _, child) => withoutPlaceholders(conjuncts, child)
@@ -632,9 +634,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  // Whether `plan` already holds a placeholder of a per-partition bloom filter of `key`. It holds
-  // the key as pushdown left it, rewritten through the aliases it passed. So the keys are compared
-  // by the scan column they come from.
+  // Whether `plan` already holds a placeholder of a per-partition bloom filter of `key`. That can
+  // be one an earlier optimizer pass kept, as when the recursion of a recursive CTE is optimized
+  // again. A placeholder holds the key as pushdown left it, rewritten through the aliases it
+  // passed. So the keys are compared by the scan column they come from.
   private def hasPerPartitionRuntimeFilter(plan: LogicalPlan, key: Expression): Boolean = {
     def columnOf(k: Expression, below: LogicalPlan): Option[Expression] =
       findExpressionAndTrackLineageDown(k, below).map(_._1)

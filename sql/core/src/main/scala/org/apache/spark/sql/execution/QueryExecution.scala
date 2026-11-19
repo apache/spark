@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, QueryStageExec}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{SizePerPartitionStorageFilters, TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -833,11 +833,18 @@ object QueryExecution {
     // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
     // from the same values however long preparation takes.
     val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
+    val ensureRequirements = EnsureRequirements()
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
+      // Must run before `EnsureRequirements`, which can put a node between the partial and the
+      // final aggregate of a per-partition bloom filter. This rule sizes both. It must also run
+      // before `PlanDynamicPruningFilters`, which reuses a broadcast for a DPP filter only when it
+      // matches the filter's build plan. That plan has no per-partition bloom filters. So a scan
+      // this rule plans without its bloom filters lets the broadcast above it match.
+      SizePerPartitionStorageFilters(ensureRequirements, unionConf),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
@@ -845,7 +852,7 @@ object QueryExecution {
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
       // decision under the same value the exchanges were planned against.
       new SnapshotUnionPreparationConf(unionConf),
-      EnsureRequirements(),
+      ensureRequirements,
       // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
       // the answer to fix is the one the exchanges around it were planned against.
       new StampUnionDecisions(unionConf),
