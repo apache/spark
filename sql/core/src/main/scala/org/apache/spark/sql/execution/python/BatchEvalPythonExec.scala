@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.ByteArrayOutputStream
+import java.util.function.ToLongFunction
 
 import scala.jdk.CollectionConverters._
 
@@ -27,13 +28,13 @@ import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalBinaryViewType, PhysicalDataType, PhysicalStringType, PhysicalVariantType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{
-  BinaryType, DataType, GeographyType, GeometryType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 
 /**
  * A physical plan that evaluates a [[PythonUDF]]
@@ -163,10 +164,25 @@ class BatchEvalPythonEvaluatorFactory(
 }
 
 object BatchEvalPythonExec {
-  private def isSupportedProjectedInputType(dataType: DataType): Boolean = dataType match {
-    case _: StringType | BinaryType => true
-    case _: GeometryType | _: GeographyType => true
-    case _ => false
+  // Keep per-argument size reads primitive to avoid boxing on every input row.
+  private def projectedInputPayloadSizer(
+      dataType: DataType,
+      ordinal: Int): Option[ToLongFunction[InternalRow]] = dataType match {
+    case udt: UserDefinedType[_] => projectedInputPayloadSizer(udt.sqlType, ordinal)
+    case _ => PhysicalDataType(dataType) match {
+      case _: PhysicalStringType =>
+        Some(row => row.getUTF8String(ordinal).numBytes.toLong)
+      case PhysicalBinaryType =>
+        Some(row => row.getBinary(ordinal).length.toLong)
+      case PhysicalBinaryViewType =>
+        Some(row => row.getBinaryView(ordinal).numBytes().toLong)
+      case PhysicalVariantType =>
+        Some(row => {
+          val variant = row.getVariant(ordinal)
+          variant.getValue.length.toLong + variant.getMetadata.length.toLong
+        })
+      case _ => None
+    }
   }
 
   /**
@@ -175,8 +191,8 @@ object BatchEvalPythonExec {
    */
   private[python] def projectedInputPayloadSizeEstimator(
       inputTypes: Seq[DataType]): Option[InternalRow => Long] = {
-    val projectedPayloads = inputTypes.zipWithIndex.collect {
-      case (dataType, ordinal) if isSupportedProjectedInputType(dataType) => (ordinal, dataType)
+    val projectedPayloads = inputTypes.zipWithIndex.flatMap { case (dataType, ordinal) =>
+      projectedInputPayloadSizer(dataType, ordinal).map(size => (ordinal, size))
     }.toArray
     if (projectedPayloads.isEmpty) {
       None
@@ -185,15 +201,9 @@ object BatchEvalPythonExec {
         var estimatedBytes = 0L
         var i = 0
         while (i < projectedPayloads.length) {
-          val (ordinal, dataType) = projectedPayloads(i)
-          if (!row.isNullAt(ordinal)) {
-            estimatedBytes += (dataType match {
-              case _: StringType => row.getUTF8String(ordinal).numBytes.toLong
-              case BinaryType => row.getBinary(ordinal).length.toLong
-              case _: GeometryType | _: GeographyType =>
-                row.getBinaryView(ordinal).numBytes().toLong
-              case _ => 0L
-            })
+          val payload = projectedPayloads(i)
+          if (!row.isNullAt(payload._1)) {
+            estimatedBytes += payload._2.applyAsLong(row)
           }
           i += 1
         }

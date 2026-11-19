@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.python
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import net.razorvine.pickle.Unpickler
+
 import org.apache.spark.{SparkRuntimeException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
@@ -35,7 +37,7 @@ import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{BinaryView, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 
 class BatchEvalPythonExecSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -98,20 +100,52 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
     assert(estimate(projectedRow) === 6000L)
     assert(estimate(InternalRow(null, null, 1)) === 0L)
 
-    // Geometry and Geography arguments are sized by their BinaryView byte count.
-    val geoRow = new GenericInternalRow(Array[Any](
+    // Mixed rows sum all supported payloads, including both parts of a variant.
+    val mixedRow = new GenericInternalRow(Array[Any](
+      UTF8String.fromString("s" * 100),
       BinaryView.fromBytes(Array.fill[Byte](1500)(1)),
-      BinaryView.fromBytes(Array.fill[Byte](700)(1))))
-    val geoEstimate = BatchEvalPythonExec
-      .projectedInputPayloadSizeEstimator(Seq(
-        GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID),
-        GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID)))
+      BinaryView.fromBytes(Array.fill[Byte](700)(1)),
+      new VariantVal(Array.fill[Byte](300)(1), Array.fill[Byte](200)(1))))
+    val mixedTypes = Seq[DataType](
+      StringType,
+      GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID),
+      GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID),
+      VariantType)
+    val mixedEstimate = BatchEvalPythonExec
+      .projectedInputPayloadSizeEstimator(mixedTypes)
       .get
-    assert(geoEstimate(geoRow) === 2200L)
+    assert(mixedEstimate(mixedRow) === 2800L)
+    assert(mixedEstimate(UnsafeProjection.create(mixedTypes.toArray).apply(mixedRow)) === 2800L)
+    assert(mixedEstimate(InternalRow(null, null, null, null)) === 0L)
 
     // Fixed-width and nested inputs are intentionally not estimated.
     assert(BatchEvalPythonExec
       .projectedInputPayloadSizeEstimator(Seq(IntegerType, ArrayType(StringType)))
+      .isEmpty)
+  }
+
+  test("SPARK-59824: projected UDF input payload estimator unwraps UDT storage types") {
+    val inputs = Seq[(DataType, Any, Long)](
+      (StringType, UTF8String.fromString("s" * 2000), 2000L),
+      (BinaryType, Array.fill[Byte](4000)(1), 4000L),
+      (GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID),
+        BinaryView.fromBytes(Array.fill[Byte](1500)(1)), 1500L),
+      (GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID),
+        BinaryView.fromBytes(Array.fill[Byte](700)(1)), 700L),
+      (VariantType, new VariantVal(Array.fill[Byte](300)(1), Array.fill[Byte](200)(1)), 500L))
+    def udt(dataType: DataType): DataType =
+      new PythonUserDefinedType(dataType, "test.UDT", "")
+    inputs.foreach { case (dataType, value, expectedSize) =>
+      Seq(udt(dataType), udt(udt(dataType))).foreach { inputType =>
+        val estimate = BatchEvalPythonExec
+          .projectedInputPayloadSizeEstimator(Seq(IntegerType, inputType))
+          .get
+        assert(estimate(InternalRow(1, value)) === expectedSize)
+        assert(estimate(InternalRow(1, null)) === 0L)
+      }
+    }
+    assert(BatchEvalPythonExec
+      .projectedInputPayloadSizeEstimator(Seq(udt(ArrayType(StringType))))
       .isEmpty)
   }
 
@@ -122,6 +156,46 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
     // scalastyle:off nonascii
     assert(estimate(InternalRow(UTF8String.fromString("\u20ac" * 1000))) === 3000L)
     // scalastyle:on nonascii
+  }
+
+  test("SPARK-59824: pickle UDF row-size guard rejects geo payloads before conversion") {
+    EvaluatePython.registerPicklers()
+    val fraction = 1000.0 / Runtime.getRuntime.maxMemory()
+    val threshold = (Runtime.getRuntime.maxMemory() * fraction).toLong
+    val geoTypes = Seq(
+      GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID),
+      GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+    for (geoType <- geoTypes; maxBytesPerBatch <- Seq(-1L, 2048L)) {
+      val schema = new StructType().add("s", StringType).add("g", geoType)
+      val factory = new BatchEvalPythonEvaluatorFactory(
+        childOutput = Seq.empty,
+        udfs = Seq.empty,
+        output = Seq.empty,
+        batchSize = 1,
+        maxBytesPerBatch = maxBytesPerBatch,
+        pythonMetrics = Map.empty,
+        jobArtifactUUID = None,
+        sessionUUID = None,
+        binaryAsBytes = false,
+        rowSizeGuardEnabled = true,
+        rowSizeGuardMaxRowHeapFraction = fraction)
+
+      // Malformed geo bytes would fail conversion if it ran before the guard.
+      val oversizedRows = Seq(
+        InternalRow(null, BinaryView.fromBytes(Array.fill[Byte](1200)(1))),
+        InternalRow(UTF8String.fromString("s" * 600),
+          BinaryView.fromBytes(Array.fill[Byte](600)(1))))
+      oversizedRows.foreach { row =>
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            factory.getInputIterator(Iterator(row), schema).next()
+          },
+          condition = "UDF_LIMITS.ROW_SIZE",
+          parameters = Map("maxRowSize" -> threshold.toString, "actualRowSize" -> "1200"))
+      }
+      val nullGeoRow = InternalRow(UTF8String.fromString("s" * threshold.toInt), null)
+      assert(factory.getInputIterator(Iterator(nullGeoRow), schema).size === 1)
+    }
   }
 
   test("SPARK-59824: pickle UDF row-size guard rejects a computed projected argument") {
@@ -198,17 +272,20 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
       UTF8String.fromString("x" * (expectedMaxRowSize.toInt + 1)))
     val schema = StructType.fromDDL("s STRING")
     EvaluatePython.registerPicklers()
-    def inputIterator(enabled: Boolean): Iterator[Array[Byte]] = withSQLConf(
+    def inputBatch(enabled: Boolean): Array[Byte] = withSQLConf(
         SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_ENABLED.key -> enabled.toString,
         SQLConf.PYTHON_UDF_ROW_SIZE_GUARD_MAX_ROW_HEAP_FRACTION.key ->
           maxRowHeapFraction.toString) {
-      plan.testEvaluatorFactory.getInputIterator(Iterator(oversizedRow), schema)
+      plan.testEvaluatorFactory.getInputIterator(Iterator(oversizedRow), schema).next()
     }
 
-    assert(inputIterator(enabled = false).next().nonEmpty)
+    val unpickled = new Unpickler().loads(inputBatch(enabled = false)).asInstanceOf[Array[_]]
+    assert(unpickled.length === 1)
+    assert(unpickled.head.asInstanceOf[Array[_]].toSeq ===
+      Seq("x" * (expectedMaxRowSize.toInt + 1)))
     checkError(
       exception = intercept[SparkRuntimeException] {
-        inputIterator(enabled = true).next()
+        inputBatch(enabled = true)
       },
       condition = "UDF_LIMITS.ROW_SIZE",
       parameters = Map(
