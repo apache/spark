@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
-import org.apache.spark.sql.execution.streaming.runtime.IncrementalExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -251,10 +251,12 @@ object SQLExecution extends Logging {
     }
     // A root execution with a scan limit is tracked by the listener that enforces the limit. The
     // jobs of its nested executions have its root execution ID and its job tag, so they count
-    // towards the same limit. Streaming queries are not limited.
+    // towards the same limit. Streaming queries are not limited: neither their batches nor the
+    // queries that their sources run on the thread of the stream while they plan a batch, with
+    // whichever session they hold. The thread of a stream has its query ID for as long as it runs.
     val maxScanBytes = sparkSession.sessionState.conf.getConf(SQLConf.MAX_SCAN_BYTES)
     val scanLimitListener = if (existingRootId == null && maxScanBytes >= 0 &&
-        !queryExecution.isInstanceOf[IncrementalExecution]) {
+        sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null) {
       val listener = sparkSession.sharedState.scanLimitListener
       listener.register(executionId, maxScanBytes, executionIdJobTag(sparkSession, executionId))
       Some(listener)

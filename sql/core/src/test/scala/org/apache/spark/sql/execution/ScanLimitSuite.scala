@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -33,6 +34,9 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
 
   // Keeps a task running for much longer than it takes to cancel its query.
   private val block = udf((id: Long) => { Thread.sleep(30000); id })
+
+  // Slow enough for several heartbeats to report what the task has read.
+  private val slow = udf((id: Long) => { Thread.sleep(200); id })
 
   /** Runs `f` with the path of a Parquet file that has the IDs 0 to 3. */
   private def withData(f: String => Unit): Unit = {
@@ -111,8 +115,6 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
   test("streaming queries are not limited") {
     withData { path =>
       withTempView("stream") {
-        // Slow enough for several heartbeats to report what the task has read.
-        val slow = udf((id: Long) => { Thread.sleep(200); id })
         withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1") {
           val query = spark.readStream.schema("id LONG").parquet(path).select(slow($"id"))
             .writeStream.format("memory").queryName("stream").start()
@@ -123,6 +125,21 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
           }
         }
         checkAnswer(spark.table("stream"), spark.range(4).toDF())
+      }
+    }
+  }
+
+  test("the queries that a stream runs outside its batches are not limited") {
+    withData { path =>
+      withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1") {
+        // A source may run queries on the thread of the stream while it plans a batch, with the
+        // session it was created with rather than the session of the stream.
+        spark.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, "stream")
+        try {
+          checkAnswer(spark.read.parquet(path).select(slow($"id")), spark.range(4).toDF())
+        } finally {
+          spark.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, null)
+        }
       }
     }
   }
