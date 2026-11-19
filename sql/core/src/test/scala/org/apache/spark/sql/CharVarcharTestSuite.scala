@@ -85,10 +85,14 @@ trait CharVarcharTestSuite extends QueryTest {
   }
 
   def assertLengthCheckFailure(func: () => Unit): Unit = {
+    assertLengthCheckFailure(func, limit = 5)
+  }
+
+  def assertLengthCheckFailure(func: () => Unit, limit: Int): Unit = {
     checkError(
       exception = intercept[SparkRuntimeException](func()),
       condition = "EXCEED_LIMIT_LENGTH",
-      parameters = Map("limit" -> "5")
+      parameters = Map("limit" -> limit.toString)
     )
   }
 
@@ -4162,12 +4166,8 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
             sql(
               s"""CREATE TABLE std_part_oversize (id INT, p $typ(2))
                  |USING $format LOCATION '$path'""".stripMargin)
-            checkError(
-              exception = intercept[SparkRuntimeException] {
-                sql("SELECT * FROM std_part_oversize").collect()
-              },
-              condition = "EXCEED_LIMIT_LENGTH",
-              parameters = Map("limit" -> "2"))
+            assertLengthCheckFailure(
+              () => sql("SELECT * FROM std_part_oversize").collect(), limit = 2)
           }
         }
       }
@@ -4188,13 +4188,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           withTable("t") {
             sql("SELECT '123456' as col").write.format(format).save(dir.toString)
             sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
-            checkError(
-              exception = intercept[SparkRuntimeException] {
-                sql("SELECT * FROM t").collect()
-              },
-              condition = "EXCEED_LIMIT_LENGTH",
-              parameters = Map("limit" -> "2")
-            )
+            assertLengthCheckFailure(() => sql("SELECT * FROM t").collect(), limit = 2)
           }
         }
       }
@@ -4235,9 +4229,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
             sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ext " +
               "WHERE c LIKE 'x%'"),
             Row("<x    >", "<yz>"))
-          intercept[SparkRuntimeException] {
-            sql("INSERT INTO std_ext VALUES ('too-long', 'ok')").collect()
-          }
+          assertLengthCheckFailure("INSERT INTO std_ext VALUES ('too-long', 'ok')")
         }
       }
       // Bypass-writer oversize non-blank values fail on scan.
@@ -4248,13 +4240,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(
             s"""CREATE EXTERNAL TABLE std_ext_oversize (c CHAR(3))
                |USING $format LOCATION '$path'""".stripMargin)
-          checkError(
-            exception = intercept[SparkRuntimeException] {
-              sql("SELECT * FROM std_ext_oversize").collect()
-            },
-            condition = "EXCEED_LIMIT_LENGTH",
-            parameters = Map("limit" -> "3")
-          )
+          assertLengthCheckFailure(() => sql("SELECT * FROM std_ext_oversize").collect(), limit = 3)
         }
       }
     }
