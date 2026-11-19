@@ -22,21 +22,14 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 trait PythonSQLMetrics { self: SparkPlan =>
   protected val pythonMetrics: Map[String, SQLMetric] = {
-    sizeMetricsDesc.map { case (k, v) =>
+    PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
-    } ++ timingMetricsDesc.map { case (k, v) =>
+    } ++ PythonSQLMetrics.pythonTimingMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createTimingMetric(sparkContext, v)
-    } ++ otherMetricsDesc.map { case (k, v) =>
+    } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
     } ++ additionalMetrics
   }
-
-  // The metrics and their descriptions, by kind. An operator may override them, e.g. to leave
-  // out metrics it never records. They are read during construction, so an override must not
-  // depend on the operator's own fields.
-  protected def sizeMetricsDesc: Map[String, String] = PythonSQLMetrics.pythonSizeMetricsDesc
-  protected def timingMetricsDesc: Map[String, String] = PythonSQLMetrics.pythonTimingMetricsDesc
-  protected def otherMetricsDesc: Map[String, String] = PythonSQLMetrics.pythonOtherMetricsDesc
 
   // Hook for subtraits to add operator-specific metrics on top of the shared ones above. Default
   // empty so the shared trait stays minimal; see [[PythonPickleBatchMetrics]].

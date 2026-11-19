@@ -255,6 +255,14 @@ which eliminates the slow rename. In this case users must be extra careful to av
 the checkpoint location among multiple queries running parallelly as that could lead to corruption
 of the checkpointing data.
 
+1. Rename-based checkpoint file managers, including the default, write each checkpoint file to a
+temporary file and then rename it into place, trusting the rename as long as it does not throw.
+On an object store whose rename is not guaranteed to be atomic, consider setting
+`spark.sql.streaming.checkpoint.renamedFileCheck.enabled` to `true`. Spark then verifies that each
+checkpoint file exists after the rename and fails the write if it does not, instead of committing
+a batch whose checkpoint file is missing, which would make later restarts of the query fail.
+The check adds one existence request per checkpoint file written, so it is disabled by default.
+
 ## Committing work into cloud storage safely and fast.
 
 As covered earlier, commit-by-rename is dangerous on any object store which

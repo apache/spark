@@ -248,9 +248,16 @@ private[sql] object PlanExternalUDFs
         }
 
         val resultAttr = AttributeReference("externalUDF", udf.dataType)()
+        // Evaluate the UDF only for the rows that need it (see `EvalOnlyWhen`).
+        val evalCondition = EvalOnlyWhen.udfConditions(
+          plan.expressions,
+          _.isInstanceOf[ExternalUserDefinedFunction],
+          _.asInstanceOf[ExternalUserDefinedFunction].resultId)
+          .getOrElse(udf.resultId, None)
+          .filter(_.references.subsetOf(plan.children(childIndex).outputSet))
         val newChildren = plan.children.zipWithIndex.map { case (child, index) =>
           if (index == childIndex) {
-            ExecuteExternalUDF(udf, resultAttr, child)
+            ExecuteExternalUDF(udf, resultAttr, child, evalCondition)
           } else {
             child
           }
