@@ -2200,6 +2200,52 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-61857: time-zone dependent expressions are not pushed down with " +
+      "timestampCalendarTimeZone") {
+    withSQLConf(
+        "spark.sql.catalog.h2tzfn" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2tzfn.url" -> url,
+        "spark.sql.catalog.h2tzfn.driver" -> "org.h2.Driver",
+        "spark.sql.catalog.h2tzfn.pushDownAggregate" -> "true",
+        "spark.sql.catalog.h2tzfn.pushDownLimit" -> "true",
+        "spark.sql.catalog.h2tzfn.timestampCalendarTimeZone" -> "UTC",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+      val hourFive = sql("SELECT name FROM h2tzfn.test.datetime WHERE hour(time1) = 5")
+      checkFiltersRemoved(hourFive, removed = false)
+      checkKeywordsNotExistsInExplain(hourFive, ExtendedMode, "EXTRACT(HOUR FROM TIME1)")
+      checkAnswer(hourFive, Seq(Row("amy"), Row("alex")))
+      checkAnswer(sql("SELECT name FROM h2tzfn.test.datetime WHERE hour(time1) = 0"), Seq())
+
+      val afterDate = sql("SELECT name FROM h2tzfn.test.datetime WHERE time1 > date1")
+      checkFiltersRemoved(afterDate, removed = false)
+      checkAnswer(afterDate, Seq(Row("amy"), Row("alex")))
+
+      val byDate = sql("SELECT CAST(time1 AS DATE), COUNT(*) FROM h2tzfn.test.datetime " +
+        "GROUP BY CAST(time1 AS DATE)")
+      checkAggregateRemoved(byDate, removed = false)
+      checkAnswer(byDate, Seq(
+        Row(java.sql.Date.valueOf("2022-05-18"), 1L),
+        Row(java.sql.Date.valueOf("2022-05-19"), 1L)))
+
+      val countAfter = sql("SELECT SUM(CASE WHEN time1 > TIMESTAMP '2022-05-18 03:00:00' " +
+        "THEN 1 ELSE 0 END) FROM h2tzfn.test.datetime")
+      checkAggregateRemoved(countAfter, removed = false)
+      checkAnswer(countAfter, Seq(Row(2L)))
+
+      val topN = sql("SELECT name FROM h2tzfn.test.datetime " +
+        "ORDER BY time1 > TIMESTAMP '2022-05-18 03:00:00', name DESC LIMIT 1")
+      checkSortRemoved(topN, removed = false)
+      checkLimitRemoved(topN, removed = false)
+      checkAnswer(topN, Seq(Row("amy")))
+    }
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Kolkata") {
+      val hourZero = sql("SELECT name FROM h2.test.datetime WHERE hour(time1) = 0")
+      checkFiltersRemoved(hourZero)
+      checkPushedInfo(hourZero, "EXTRACT(HOUR FROM TIME1) = 0")
+    }
+  }
+
   private def checkFiltersRemoved(df: DataFrame, removed: Boolean = true): Unit = {
     val filters = df.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f

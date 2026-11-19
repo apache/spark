@@ -301,7 +301,7 @@ private[sql] case class JDBCRelation(
       val dialect = JdbcDialects.get(jdbcOptions.url)
       filters.filter { f =>
         val predicate = f.toV2
-        JdbcUtils.containsCalendarTimeZoneTimestampLiteral(predicate, jdbcOptions) ||
+        JdbcUtils.dependsOnTimeZoneWithCalendarOption(predicate, jdbcOptions) ||
           dialect.compileExpression(predicate).isEmpty
       }
     } else {
@@ -313,7 +313,7 @@ private[sql] case class JDBCRelation(
     // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
     val pushedPredicates = if (jdbcOptions.pushDownPredicate) {
       filters.map(_.toV2)
-        .filterNot(JdbcUtils.containsCalendarTimeZoneTimestampLiteral(_, jdbcOptions))
+        .filterNot(JdbcUtils.dependsOnTimeZoneWithCalendarOption(_, jdbcOptions))
     } else {
       Array.empty[Predicate]
     }

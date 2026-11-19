@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
-import org.apache.spark.sql.connector.expressions.{Expression, LiteralValue, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression, Extract, LiteralValue, NamedReference}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
@@ -450,15 +450,31 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Whether `expr` has a TimestampType or TimestampLTZNanosType literal, which would be rendered
-   * for the database without `timestampCalendarTimeZone`. Such expressions are not pushed down
-   * when the option is set, so Spark evaluates them on the values read in the option's time zone.
+   * Whether `expr` depends on the time zone in a way the database cannot reproduce when
+   * `timestampCalendarTimeZone` is set: it has a timestamp literal, a cast from or to a timestamp
+   * type (or a cast with an unknown input type), or an EXTRACT from a timestamp column (or from a
+   * source whose type is unknown). The database evaluates these on its own wall clock, while
+   * Spark reads the values in the option's time zone, so such expressions are not pushed down.
+   * `columnType` resolves a column reference to its type in the scan.
    */
-  def containsCalendarTimeZoneTimestampLiteral(expr: Expression, options: JDBCOptions): Boolean =
+  def dependsOnTimeZoneWithCalendarOption(
+      expr: Expression,
+      options: JDBCOptions,
+      columnType: Array[String] => Option[DataType] = _ => None): Boolean =
     options.timestampCalendarTimeZone.isDefined && {
+      def isTimestamp(dataType: DataType): Boolean =
+        dataType == TimestampType || dataType.isInstanceOf[TimestampLTZNanosType]
       def walk(e: Expression): Boolean = e match {
-        case l: LiteralValue[_] =>
-          l.dataType == TimestampType || l.dataType.isInstanceOf[TimestampLTZNanosType]
+        case l: LiteralValue[_] => isTimestamp(l.dataType)
+        case c: V2Cast =>
+          c.expressionDataType == null || isTimestamp(c.expressionDataType) ||
+            isTimestamp(c.dataType) || walk(c.expression)
+        case x: Extract =>
+          val sourceIsTimestamp = x.source match {
+            case ref: NamedReference => columnType(ref.fieldNames).forall(isTimestamp)
+            case _ => true
+          }
+          sourceIsTimestamp || walk(x.source)
         case _ => Option(e.children()).exists(_.exists(walk))
       }
       walk(expr)

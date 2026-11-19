@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JD
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 case class JDBCScanBuilder(
     session: SparkSession,
@@ -81,9 +81,17 @@ case class JDBCScanBuilder(
     }
   }
 
+  private def columnType(fieldNames: Array[String]): Option[DataType] = fieldNames match {
+    case Array(name) =>
+      (finalSchema.fields ++ schema.fields)
+        .find(f => if (isCaseSensitive) f.name == name else f.name.equalsIgnoreCase(name))
+        .map(_.dataType)
+    case _ => None
+  }
+
   private def cannotPushDown(expr: Expression): Boolean =
     containsUnsupportedCharPad(expr) ||
-      JdbcUtils.containsCalendarTimeZoneTimestampLiteral(expr, jdbcOptions)
+      JdbcUtils.dependsOnTimeZoneWithCalendarOption(expr, jdbcOptions, columnType)
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {

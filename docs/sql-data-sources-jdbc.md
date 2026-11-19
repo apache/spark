@@ -402,7 +402,7 @@ logging into the data sources.
     <td><code>timestampCalendarTimeZone</code></td>
     <td>(none)</td>
     <td>
-      When set, Spark reads and writes TIMESTAMP values in this time zone instead of the JVM default time zone. Set it to the time zone the database session uses for timestamps, for example <code>UTC</code> or <code>Asia/Kolkata</code>, when the two differ and values come out shifted. Only applies to TIMESTAMP columns, not TIMESTAMP_NTZ. When set, filters, aggregates, joins and sorts that contain timestamp values are evaluated by Spark instead of the database. An invalid time zone fails the query. If not set, the JVM default time zone is used.
+      When set, Spark reads and writes TIMESTAMP values in this time zone instead of the JVM default time zone. Set it to the time zone the database session uses for timestamps, for example <code>UTC</code> or <code>Asia/Kolkata</code>, when the two differ and values come out shifted. Only applies to TIMESTAMP columns, not TIMESTAMP_NTZ. When set, filters, aggregates, joins and sorts that use a timestamp literal, a cast to or from a timestamp, or a date or time part of a TIMESTAMP column (such as <code>hour(ts)</code>) are evaluated by Spark instead of the database. Comparisons between TIMESTAMP columns, and sorts, <code>MIN</code> and <code>MAX</code> on them, are still pushed down. An invalid time zone fails the query. If not set, the JVM default time zone is used.
     </td>
     <td>read/write</td>
   </tr>
