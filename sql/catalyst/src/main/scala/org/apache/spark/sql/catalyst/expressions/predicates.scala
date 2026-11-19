@@ -292,10 +292,11 @@ trait PredicateHelper extends AliasHelper with Logging {
 
   /**
    * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
-   * others, by pushing them below a join or moving them into the condition of a join, and the
-   * ones that may not. A non-deterministic or throwable conjunct may not, and nor may a conjunct
-   * written after it that can fail: one that [[ExprUtils.canEvaluateUnconditionally]] rejects or
-   * that reads a column of `plans`, the inputs of the joins, that can fail (see
+   * others, by pushing them below a join, moving them into the condition of a join or combining
+   * them into the filter below, and the ones that may not. A non-deterministic or throwable
+   * conjunct may not, and nor may a conjunct written after it that can fail: one that
+   * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
+   * inputs of the joins or of the filter below, that can fail (see
    * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
    * dropped. The conjuncts that may not move are returned in their written order.
    */
