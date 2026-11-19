@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
 
-import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, RowOrdering, UnsafeRow}
 import org.apache.spark.sql.types._
 
 object UnsafeRowUtils {
@@ -245,6 +245,11 @@ object UnsafeRowUtils {
    * different binary representations, so the checker falls back to an ordering-based
    * comparison that applies to all fields.
    *
+   * Keys holding a CALENDAR INTERVAL use the generated comparator, because the
+   * interpreted ordering cannot compare intervals (their physical ordering is
+   * unsupported); the generated comparator is the one the planner's sort applies to
+   * such keys.
+   *
    * `checkBytesFirst` controls whether that fallback compares the key bytes before the
    * ordering, and is only observable for non-binary-stable keys: byte-identical rows
    * compare equal under every collation and SQL ordering, so a byte-first check answers
@@ -260,12 +265,21 @@ object UnsafeRowUtils {
     if (dataTypes.forall(isBinaryStable)) {
       (key1, key2) => key1.equals(key2)
     } else {
-      val ordering = InterpretedOrdering.forSchema(dataTypes.toIndexedSeq)
+      val ordering = if (dataTypes.exists(containsCalendarInterval)) {
+        RowOrdering.createNaturalAscendingOrdering(dataTypes)
+      } else {
+        InterpretedOrdering.forSchema(dataTypes.toIndexedSeq)
+      }
       if (checkBytesFirst) {
         (key1, key2) => key1.equals(key2) || ordering.compare(key1, key2) == 0
       } else {
         (key1, key2) => ordering.compare(key1, key2) == 0
       }
     }
+  }
+
+  private def containsCalendarInterval(dataType: DataType): Boolean = dataType.existsRecursively {
+    case CalendarIntervalType => true
+    case _ => false
   }
 }

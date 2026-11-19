@@ -43,6 +43,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExtendedSQLTest
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -3762,6 +3763,81 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
               |  count(*) FROM t4
               |  GROUP BY s, i, session_window(ts, '10 minutes')""".stripMargin),
         Row(1, 900L, 2L) :: Row(2, 600L, 1L) :: Nil)
+    }
+  }
+
+  test("session window aggregation groups collated keys holding a calendar interval") {
+    // A grouping key with a non-binary collated string and a CALENDAR INTERVAL reaches
+    // both session iterators, and their group-key checker must compare the interval:
+    // the interpreted ordering cannot (its physical ordering is unsupported), so the
+    // checker uses the generated comparator, which compares intervals with
+    // CalendarInterval.compareTo. ('foo', 1 day) and ('FOO', 1 day) are one group whose
+    // sessions merge (10:00 to 10:15), while ('foo', 2 days) is a separate group (10:08
+    // to 10:18) even though its collated string matches. The base is a view over VALUES
+    // because no file format stores intervals.
+    withTempView("t_iv") {
+      sql("""CREATE OR REPLACE TEMP VIEW t_iv AS
+            |SELECT s COLLATE UTF8_LCASE AS s, make_interval(0, 0, 0, d) AS iv, ts, v
+            |FROM VALUES
+            |  ('foo', 1, timestamp'2026-01-01 10:00:00', 1),
+            |  ('FOO', 1, timestamp'2026-01-01 10:05:00', 2),
+            |  ('foo', 2, timestamp'2026-01-01 10:08:00', 3) AS src(s, d, ts, v)""".stripMargin)
+
+      // The plain aggregate runs MergingSessionsIterator over the (s, iv) key. The sort
+      // on the collated key plus session start makes the reported spelling ('foo', the
+      // first row of each group) deterministic.
+      checkAnswer(
+        sql("""SELECT s, iv,
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(*) FROM t_iv
+              |  GROUP BY s, iv, session_window(ts, '10 minutes')""".stripMargin),
+        Row("foo", new CalendarInterval(0, 1, 0L), 900L, 2L) ::
+        Row("foo", new CalendarInterval(0, 2, 0L), 600L, 1L) :: Nil)
+
+      // The one-distinct plan runs UpdatingSessionsIterator over the same key; the
+      // spelling of the reported key depends on arrival order, so only the session
+      // length and count are asserted.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT v) FROM t_iv
+              |  GROUP BY s, iv, session_window(ts, '10 minutes')""".stripMargin),
+        Row(900L, 2L) :: Row(600L, 1L) :: Nil)
+
+      // The interval as the first grouping column reaches the same comparisons with the
+      // fields swapped.
+      checkAnswer(
+        sql("""SELECT
+              |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+              |    AS session_length,
+              |  count(DISTINCT v) FROM t_iv
+              |  GROUP BY iv, s, session_window(ts, '10 minutes')""".stripMargin),
+        Row(900L, 2L) :: Row(600L, 1L) :: Nil)
+
+      // The interval sits beside the collated string inside the struct key, so both the
+      // collation and the interval comparison recurse into it.
+      withTempView("t_st") {
+        sql("""CREATE OR REPLACE TEMP VIEW t_st AS
+              |SELECT named_struct('s', s, 'iv', iv) AS st, ts, v FROM t_iv""".stripMargin)
+
+        checkAnswer(
+          sql("""SELECT
+                |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+                |    AS session_length,
+                |  count(*) FROM t_st
+                |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+          Row(900L, 2L) :: Row(600L, 1L) :: Nil)
+
+        checkAnswer(
+          sql("""SELECT
+                |  CAST(session_window.end AS LONG) - CAST(session_window.start AS LONG)
+                |    AS session_length,
+                |  count(DISTINCT v) FROM t_st
+                |  GROUP BY st, session_window(ts, '10 minutes')""".stripMargin),
+          Row(900L, 2L) :: Row(600L, 1L) :: Nil)
+      }
     }
   }
 }

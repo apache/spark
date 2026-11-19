@@ -436,6 +436,40 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
     }
   }
 
+  test("rowEqualityChecker for grouping keys holding a CALENDAR INTERVAL") {
+    // The interpreted ordering cannot compare a CALENDAR INTERVAL (its physical ordering
+    // throws), so a key whose types hold one must use the generated comparator, which
+    // compares intervals with CalendarInterval.compareTo.
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val schema = StructType(Seq(
+      StructField("s", collatedString, nullable = false),
+      StructField("iv", CalendarIntervalType, nullable = false)))
+    val projection = UnsafeProjection.create(schema)
+    def key(s: String, days: Int): UnsafeRow = {
+      val row = new SpecificInternalRow(schema)
+      row.update(0, UTF8String.fromString(s))
+      row.update(1, new CalendarInterval(0, days, 0L))
+      projection(row).copy()
+    }
+
+    // Both checkBytesFirst forms, which agree on which keys are equal.
+    val checkers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(
+        Seq(collatedString, CalendarIntervalType), checkBytesFirst)
+    }
+
+    val fooOneDay = key("foo", 1)
+    for (checker <- checkers) {
+      // Byte-identical keys are equal.
+      assert(checker(fooOneDay, key("foo", 1)))
+      // Keys differing only in the string's case are equal under the collation.
+      assert(checker(fooOneDay, key("FOO", 1)))
+      // Keys whose intervals differ are unequal, whether or not the strings match.
+      assert(!checker(fooOneDay, key("foo", 2)))
+      assert(!checker(fooOneDay, key("FOO", 2)))
+    }
+  }
+
   test("PaddingProvider handles endianness") {
     // The following arrays contain the same 8 byte field values as represented
     // in memory on little endian and big endian platforms. They are
