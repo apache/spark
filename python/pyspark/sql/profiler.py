@@ -149,9 +149,10 @@ class WorkerSamplingProfiler:
     SamplingProfiler is a profiler for sampling profiling.
     """
 
-    # The most frames kept per sample. Pickling a call tree recurses about twice per level,
-    # which on Python 3.11 counts against the recursion limit (1000 by default), so a much
-    # deeper tree would fail the task when its result is sent.
+    # The most frames kept per sample. The worker pickles a call tree recursively, about two
+    # levels of recursion per tree level, and on Python 3.11 that counts against the
+    # recursion limit (1000 by default), so a tree of about 500 levels would fail the task.
+    # The cap also bounds the recursive copy in ProfilerCollector._sampling_profile_results.
     _MAX_STACK_DEPTH = 256
 
     def __init__(
@@ -161,6 +162,9 @@ class WorkerSamplingProfiler:
         aggregation: str = "stage",
     ) -> None:
         # Keyed by thread name, so that threads from different tasks can be merged.
+        # TODO: Group threads whose names CPython generates from process-wide counters, such
+        # as "ThreadPoolExecutor-0_0" or "Thread-1 (run)". Each new thread in a worker gets a
+        # new name, so such threads mostly keep separate call trees.
         self._callstack_data: dict[str, dict] = {}
         # Thread names by thread id, kept across samples: a thread is removed from
         # threading.enumerate() before its last frames are gone.
@@ -200,17 +204,20 @@ class WorkerSamplingProfiler:
     def _sample_loop(self) -> None:
         self_tid = threading.get_ident()
         while not self._stop_event.wait(self._sampling_interval / 1000):
-            # Take the frames first, then update the names, so that a thread started in
-            # between is found. A reused thread id gets the new thread's name.
+            # Take the frames first and then the names, so that every thread in the frames
+            # that threading.enumerate() lists by then is named.
             frames = sys._current_frames()
             self._thread_names.update(
                 (t.ident, t.name) for t in threading.enumerate() if t.ident is not None
             )
             for tid, frame in frames.items():
                 if tid != self_tid:
-                    # A thread never listed by threading.enumerate(), e.g. one started with
-                    # _thread.start_new_thread(), has no name. Its id means nothing across
-                    # tasks, so all such threads share one call tree.
+                    # A thread is named once threading.enumerate() lists it with its id.
+                    # Before that, or always if it is never listed, e.g. when started with
+                    # _thread.start_new_thread(), it goes under the name last seen for its id,
+                    # which a reused id keeps from an exited thread, or else under
+                    # "<unknown thread>", one call tree for all of them, since thread ids mean
+                    # nothing across tasks.
                     self._add_sample(self._thread_names.get(tid, "<unknown thread>"), frame)
 
     def _add_sample(self, thread_name: str, frame: Optional[FrameType]) -> None:
@@ -221,8 +228,9 @@ class WorkerSamplingProfiler:
             frames.append(frame)
             frame = frame.f_back
 
-        # Keep the outermost frames of a deeper stack, so that all samples share their roots,
-        # and count the samples that go deeper under one "<truncated>" node.
+        # Keep the outermost frames, so that each sample keeps its real root and the trees
+        # still merge, and count a deeper sample once under a "<truncated>" child of its last
+        # kept frame.
         idents = [self._get_ident_from_frame(f) for f in reversed(frames[-self._MAX_STACK_DEPTH :])]
         if len(frames) > self._MAX_STACK_DEPTH:
             idents.append("<truncated>")

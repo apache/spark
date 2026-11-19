@@ -170,8 +170,9 @@ class SamplingResultParam(AccumulatorParam[Dict[str, Any]]):
 
     @staticmethod
     def addInPlace(value1: Dict[str, Any], value2: Dict[str, Any]) -> Dict[str, Any]:
-        # Merge with an explicit stack rather than recursion, because a call tree is as
-        # deep as the sampled call stack, which can exceed the recursion limit.
+        # Merge with an explicit stack rather than recursion, so that the merge does not
+        # depend on the recursion limit, even though WorkerSamplingProfiler caps the depth of
+        # the call trees it sends.
         stack = [(value1, value2)]
         while stack:
             node1, node2 = stack.pop()

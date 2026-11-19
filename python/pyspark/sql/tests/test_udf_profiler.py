@@ -837,11 +837,7 @@ class UDFProfiler2TestsMixin:
                 ("query", 1, r"^sampling_query_\d+$"),
                 (None, 2, r"^sampling_stage_\d+$"),  # The default level is "stage".
             ]:
-                conf = {
-                    "spark.sql.pyspark.udf.profiler": "sampling",
-                    # Disable AQE so that the shuffle is not coalesced into one partition.
-                    "spark.sql.adaptive.enabled": "false",
-                }
+                conf = {"spark.sql.pyspark.udf.profiler": "sampling"}
                 if level is not None:
                     conf["spark.sql.pyspark.udf.profiler.samplingAggregation"] = level
                 with self.subTest(use_arrow=use_arrow, level=level), self.sql_conf(conf):
