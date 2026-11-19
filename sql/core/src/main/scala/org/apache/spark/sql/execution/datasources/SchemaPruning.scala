@@ -162,20 +162,21 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
   /**
    * The size of an array only needs its length. Returns an array of the same length that reads
-   * as little as possible: the smallest atomic field of an array of structs, like
-   * [[org.apache.spark.sql.catalyst.optimizer.RewriteSizeOfArrayStruct]] does for scan columns,
-   * and of the outer array for a nested field of an array of structs, which has the same length.
+   * as little as possible: the smallest atomic field of an array of structs, and of the outer
+   * array for a nested field of an array of structs, which has the same length.
    */
   private def lengthOnly(array: Expression): Expression = {
     def smallestField(array: Expression): Option[Expression] = array.dataType match {
       case ArrayType(StructType(fields), containsNull) if fields.length > 1 =>
         // An atomic field keeps its size when a later run sees the narrowed type, so every run
-        // picks the same one. Without one, the first field stays first, as pruning keeps order.
+        // picks the same one. Without one, `size` keeps its argument: a non-atomic field can be
+        // a whole wide struct, which the query would not read otherwise.
         val atomic = fields.zipWithIndex.filter(_._1.dataType.isInstanceOf[AtomicType])
-        val (field, ordinal) =
-          if (atomic.nonEmpty) atomic.minBy(_._1.dataType.defaultSize) else (fields.head, 0)
-        Some(GetArrayStructFields(
-          array, field, ordinal, fields.length, containsNull || field.nullable))
+        if (atomic.isEmpty) None else {
+          val (field, ordinal) = atomic.minBy(_._1.dataType.defaultSize)
+          Some(GetArrayStructFields(
+            array, field, ordinal, fields.length, containsNull || field.nullable))
+        }
       case _ => None
     }
     array match {

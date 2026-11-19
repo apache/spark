@@ -163,7 +163,8 @@ object SchemaPruning extends SQLConfHelper {
    * generator above this one, named like the element.
    *
    * If nothing of the element is read, only the array sizes are needed, so a single smallest
-   * field is kept, as in [[org.apache.spark.sql.catalyst.optimizer.GenerateOptimization]].
+   * field is kept, as in [[org.apache.spark.sql.catalyst.optimizer.GenerateOptimization]], but
+   * an atomic one first, as for the sizes read through generators.
    *
    * If the element is used whole, `input` is needed whole, e.g. `items.parts` for
    * `explode(items.parts)`, which still narrows `items` to `parts`.
@@ -193,7 +194,9 @@ object SchemaPruning extends SQLConfHelper {
       val prunedElementType = (fields, elementType) match {
         // not read: only the array sizes are needed
         case (Seq(), StructType(structFields)) if structFields.length > 1 =>
-          StructType(Array(structFields.minBy(_.dataType.defaultSize)))
+          val atomic = structFields.filter(_.dataType.isInstanceOf[AtomicType])
+          StructType(Array((if (atomic.nonEmpty) atomic else structFields)
+            .minBy(_.dataType.defaultSize)))
         case (Seq(), _) => elementType
         // used whole: the input is needed whole, which still narrows what it is extracted from
         case _ if fields.exists(_.derivedFromAtt) => elementType

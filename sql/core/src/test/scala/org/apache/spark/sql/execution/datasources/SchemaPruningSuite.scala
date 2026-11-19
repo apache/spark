@@ -1026,6 +1026,26 @@ abstract class SchemaPruningSuite
     }
   }
 
+  test("SPARK-47230: sizes of an element without atomic fields read no wide struct") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("select array(named_struct('big', named_struct('b1', 'x', 'b2', 'y'), " +
+        "'parts', array(named_struct('pid', 1, 'label', 'p')), " +
+        "'flag', named_struct('f', true))) as items from range(2)")
+        .write.format(dataSourceName).save(path)
+      withTempView("t") {
+        spark.read.format(dataSourceName).load(path).createOrReplaceTempView("t")
+        val count = sql("select count(*) from t lateral view explode(items) x as e")
+        checkGeneratorScan(count, "struct<items:array<struct<flag:struct<f:boolean>>>>")
+        checkAnswer(count, Row(2))
+        val parts = sql("select e.parts from t lateral view explode(items) x as e")
+        checkGeneratorScan(parts,
+          "struct<items:array<struct<parts:array<struct<pid:int,label:string>>>>>")
+        checkAnswer(parts, Seq.fill(2)(Row(Seq(Row(1, "p")))))
+      }
+    }
+  }
+
   test("SPARK-47230: size() of nested arrays prunes the same on every run of the rule") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
