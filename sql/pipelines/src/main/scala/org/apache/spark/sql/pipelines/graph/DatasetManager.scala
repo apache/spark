@@ -761,9 +761,8 @@ object DatasetManager extends Logging {
    * other than the reserved ones to the `CREATE TABLE` statement as a DDL option, and the record
    * would make the statement invalid. Re-runs of such a table are not supported either way: a JDBC
    * table with any table property fails on its second run, with or without the record, because
-   * `JDBCTable` reports no properties and the JDBC dialect rejects `SetProperty`. This check makes
-   * sql/pipelines depend on the concrete JDBCTableCatalog class, and a catalog that wraps it is not
-   * detected. Re-runs of JDBC tables with table properties are tracked in SPARK-62024.
+   * `JDBCTable` reports no properties and the JDBC dialect rejects `SetProperty`. Re-runs of JDBC
+   * tables with table properties are tracked in SPARK-62024.
    */
   private def resolveTableProperties(
       table: Table,
