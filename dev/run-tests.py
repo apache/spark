@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from argparse import ArgumentParser, ArgumentTypeError
+from argparse import ArgumentParser
 from collections.abc import Sequence
 from contextlib import contextmanager
 
@@ -36,8 +36,7 @@ from sparktestsupport.utils import (
     determine_modules_to_test,
     determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
-    parse_module_names,
-    resolve_test_modules,
+    parse_test_modules,
 )
 
 
@@ -401,14 +400,6 @@ def run_sparkr_tests():
         run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
     else:
         print("Ignoring SparkR tests as R was not found in PATH")
-
-
-def parse_test_modules(value: str) -> list[modules.Module]:
-    try:
-        return resolve_test_modules(parse_module_names(value))
-    except ValueError as error:
-        # argparse drops ValueError text, so we wrap it as an ArgumentTypeError.
-        raise ArgumentTypeError(str(error))
 
 
 def parse_opts():

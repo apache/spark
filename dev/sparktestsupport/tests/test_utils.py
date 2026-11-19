@@ -17,6 +17,7 @@
 
 import os
 import unittest
+from argparse import ArgumentTypeError
 from unittest import mock
 
 from sparktestsupport import modules
@@ -26,7 +27,7 @@ from sparktestsupport.utils import (
     determine_modules_to_test,
     determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
-    resolve_test_modules,
+    parse_test_modules,
 )
 
 
@@ -140,29 +141,27 @@ class DetermineModulesToTestTests(unittest.TestCase):
         self.assertCountEqual([module.name for module in result], expected)
 
 
-class ResolveTestModulesTests(unittest.TestCase):
+class ParseTestModulesTests(unittest.TestCase):
     def test_resolves_known_names_in_all_modules_order(self):
         self.assertEqual(
-            resolve_test_modules(["graphx", "core", "graphx"]),
+            parse_test_modules("graphx,core,graphx"),
             [modules.core, modules.graphx],
         )
 
-    def test_unknown_name_fails_with_clear_error(self):
-        with self.assertRaises(ValueError) as error:
-            resolve_test_modules(["core", "does-not-exist", "also-missing"])
+    def test_unknown_names_keep_input_order(self):
+        with self.assertRaises(ArgumentTypeError) as error:
+            parse_test_modules("core,does-not-exist,also-missing,does-not-exist")
         message = str(error.exception)
-        self.assertIn("unrecognized module(s): 'also-missing', 'does-not-exist'", message)
+        self.assertIn("unrecognized module(s): 'does-not-exist', 'also-missing'", message)
         supported = message.split("Supported modules: ", 1)[1]
-        self.assertIn("core", supported.split(", "))
+        self.assertEqual(
+            supported.split(", "),
+            sorted(module.name for module in modules.all_modules),
+        )
 
-    def test_empty_string_is_quoted_in_the_error(self):
-        with self.assertRaises(ValueError) as error:
-            resolve_test_modules(["core", ""])
-        self.assertIn("unrecognized module(s): ''", str(error.exception))
-
-    def test_empty_request_fails(self):
-        with self.assertRaises(ValueError) as error:
-            resolve_test_modules([])
+    def test_blank_value_fails(self):
+        with self.assertRaises(ArgumentTypeError) as error:
+            parse_test_modules(" , ")
         self.assertEqual(str(error.exception), "no module names were provided")
 
 

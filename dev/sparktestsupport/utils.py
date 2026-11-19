@@ -18,6 +18,7 @@
 import itertools
 import os
 import subprocess
+from argparse import ArgumentTypeError
 from collections.abc import Sequence
 
 from sparktestsupport import modules
@@ -111,38 +112,31 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     )
 
 
-def parse_module_names(value: str) -> list[str]:
+def parse_test_modules(value: str) -> list[modules.Module]:
     """
-    Split a comma-separated ``--modules`` value into stripped, non-empty names.
+    Resolve a comma-separated ``--modules`` value to modules from ``modules.all_modules``.
 
-    >>> parse_module_names(" core, ,graphx ")
+    Names are stripped and blank entries are ignored. The result follows
+    ``all_modules`` order and contains no duplicates. ``ArgumentTypeError`` is raised
+    when no name remains or any name is unknown. Unknown names are quoted in the
+    order given.
+
+    >>> [m.name for m in parse_test_modules(" graphx, ,core,graphx ")]
     ['core', 'graphx']
     """
-    return [name.strip() for name in value.split(",") if name.strip()]
-
-
-def resolve_test_modules(module_names: Sequence[str]) -> list[modules.Module]:
-    """
-    Resolve requested module names to Module instances from ``modules.all_modules``.
-
-    Returns modules in ``all_modules`` order. Raises ``ValueError`` when
-    ``module_names`` is empty or any name is unknown. Every unknown name is listed.
-
-    >>> [m.name for m in resolve_test_modules(["graphx", "core"])]
-    ['core', 'graphx']
-    """
-    if not module_names:
-        raise ValueError("no module names were provided")
-    by_name = {m.name: m for m in modules.all_modules}
-    unknown = sorted({name for name in module_names if name not in by_name})
+    names = [name.strip() for name in value.split(",") if name.strip()]
+    if not names:
+        raise ArgumentTypeError("no module names were provided")
+    by_name = {module.name: module for module in modules.all_modules}
+    unknown = list(dict.fromkeys(name for name in names if name not in by_name))
     if unknown:
         unknown_str = ", ".join(repr(name) for name in unknown)
         supported_str = ", ".join(sorted(by_name))
-        raise ValueError(
+        raise ArgumentTypeError(
             f"unrecognized module(s): {unknown_str}. Supported modules: {supported_str}"
         )
-    requested = set(module_names)
-    return [m for m in modules.all_modules if m.name in requested]
+    requested = set(names)
+    return [module for module in modules.all_modules if module.name in requested]
 
 
 def determine_shell_script_test_goals(
