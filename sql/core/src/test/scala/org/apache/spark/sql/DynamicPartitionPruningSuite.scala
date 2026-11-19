@@ -2018,18 +2018,43 @@ abstract class DynamicPartitionPruningSuiteBase
     assume(shouldTestPythonUDFs)
     try {
       registerTestUDF(TestPythonUDF("pyudf"), spark)
-      Seq(
-        "fact_sk f JOIN dim_store s ON pyudf(f.store_id) = s.store_id",
-        "(SELECT date_id, pyudf(store_id) AS store_id FROM fact_sk) f " +
-          "JOIN dim_store s ON f.store_id = s.store_id").foreach { join =>
-        val df = sql(s"SELECT f.date_id, f.store_id FROM $join WHERE s.country = 'NL'")
-        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
-        // A scan cannot evaluate the UDF to prune partitions, so a DPP filter would only filter
-        // rows, above another evaluation of the UDF.
-        assert(!checkUnpushedFilters(df), df.queryExecution)
-        val evals = collect(df.queryExecution.executedPlan) { case e: EvalPythonExec => e }
-        assert(evals.size === 1, df.queryExecution)
-      }
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON pyudf(f.store_id) = s.store_id
+          |WHERE s.country = 'NL'
+        """.stripMargin)
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+      // A scan cannot evaluate the UDF to prune partitions, so a DPP filter would only filter
+      // rows, above another evaluation of the UDF.
+      assert(!checkUnpushedFilters(df), df.queryExecution)
+      val evals = collect(df.queryExecution.executedPlan) { case e: EvalPythonExec => e }
+      assert(evals.size === 1, df.queryExecution)
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS pyudf")
+    }
+  }
+
+  test("SPARK-62052: keep DPP on a pruning key with a Python UDF only through an alias") {
+    import IntegratedUDFTestUtils._
+    assume(shouldTestPythonUDFs)
+    try {
+      registerTestUDF(TestPythonUDF("pyudf"), spark)
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id
+          |FROM (SELECT date_id, pyudf(store_id) AS store_id FROM fact_sk
+          |      UNION ALL
+          |      SELECT date_id, store_id FROM fact_stats) f
+          |JOIN dim_store s ON f.store_id = s.store_id
+          |WHERE s.country = 'NL'
+        """.stripMargin)
+      val rows = Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil
+      checkAnswer(df, rows ++ rows)
+      // The join key has no UDF, so the DPP filter is kept and prunes the partitions of the union
+      // branch without the UDF.
+      assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1,
+        df.queryExecution)
     } finally {
       sql("DROP TEMPORARY FUNCTION IF EXISTS pyudf")
     }

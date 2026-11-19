@@ -58,11 +58,15 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * partition column or a v2 scan that support runtime filtering on a given attribute.
    */
   def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
+    // If the key has a UDF that needs extraction, the "Extract UDFs" batch evaluates the UDF in a
+    // node of its own, between a DPP filter on the key and the scan, so the scan could not prune
+    // with the filter. The filter would only drop rows before the join, at the cost of evaluating
+    // the UDF once more on every row. A key that has such a UDF only through an alias keeps its
+    // filter: by default it stays above the projection that evaluates the UDF, and in a union it
+    // can still prune the partitions of a branch that has no such UDF.
+    if (needsUDFExtraction(Seq(a))) return None
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
     srcInfo.flatMap {
-      // The "Extract UDFs" batch evaluates such a UDF in a node of its own, between a DPP
-      // filter on this expression and the scan, so the scan could not prune with the filter.
-      case (resExp, _) if needsUDFExtraction(Seq(resExp)) => None
       case (resExp, l: LogicalRelation) =>
         l.relation match {
           case fs: HadoopFsRelation =>
