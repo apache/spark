@@ -1410,6 +1410,34 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE overlays do not replace a table read by a scalar SQL function body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_sfn_base") {
+        withUserDefinedFunction("parse_sql_sfn" -> false) {
+          sql("CREATE TABLE parse_sql_sfn_base (a INT) USING parquet")
+          sql("CREATE FUNCTION parse_sql_sfn() RETURNS INT " +
+            "RETURN (SELECT max(a) FROM parse_sql_sfn_base)")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT parse_sql_sfn() AS x', 'ANALYZE', " +
+              "relations => array(named_struct(" +
+              "'name', 'spark_catalog.default.parse_sql_sfn_base', 'schema', 'b STRING')))")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          assert(result.head \ "select_list" === typedColumns("x" -> jsonInt), result)
+        }
+      }
+    }
+  }
+
+  test("ANALYZE overlays apply to the statement an EXECUTE IMMEDIATE runs") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val result = evalCall(
+        "SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT b FROM parse_sql_ei_t''', 'ANALYZE', " +
+          "relations => array(named_struct(" +
+          "'name', 'spark_catalog.default.parse_sql_ei_t', 'schema', 'b STRING')))")
+      assert(result.head \ "analyze_success" === JBool(true), result)
+    }
+  }
+
   test("ANALYZE overlays do not replace a table read by a persistent view") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       withTable("parse_sql_view_base") {

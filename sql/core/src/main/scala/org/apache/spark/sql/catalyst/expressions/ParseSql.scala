@@ -72,7 +72,7 @@ import org.apache.spark.unsafe.types.UTF8String
     catalog, schema, and SQL path unless `current_catalog`, `current_schema`, or
     `current_path` gives one for the call; the session is not changed. The body of an
     `EXECUTE IMMEDIATE` is analyzed with the invoker's catalog, schema, and path even when
-    the call gives its own. Analysis may still
+    the call gives its own, and with the call's `variables` and `relations`. Analysis may still
     run time-travel subqueries, infer file schemas, and call Python UDTF `analyze`.
     Statement length excludes surrounding
     whitespace and the terminating semicolon. Session parser extensions are not applied.
@@ -111,7 +111,8 @@ import org.apache.spark.unsafe.types.UTF8String
         schema; nothing is created. Query sources and the targets of INSERT, UPDATE,
         DELETE, and MERGE resolve to the entry. DDL and other commands that name a table
         act on the catalog's own objects, and the body of a view or SQL function still
-        reads the real relation.
+        reads the real relation. A metric view's definition is expanded into the statement,
+        so it does see the entry.
       * parameter_markers - Optional constant array of `named_struct('name', ..., 'type', ...)`
         entries. The name is `?` for a positional marker or the marker name for a named
         marker. A marker without a type leaves the statement unresolved.
