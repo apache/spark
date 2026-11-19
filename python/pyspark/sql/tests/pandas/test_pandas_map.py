@@ -637,11 +637,11 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
                 yield combined.iloc[1:]
 
         phase_names = (
-            "pythonDataReadTime",
-            "pythonInputPreparationTime",
-            "pythonUDFExecutionTime",
-            "pythonOutputPreparationTime",
-            "pythonDataWriteTime",
+            "pythonDataReadTimeUs",
+            "pythonInputPreparationTimeUs",
+            "pythonUDFExecutionTimeUs",
+            "pythonOutputPreparationTimeUs",
+            "pythonDataWriteTimeUs",
         )
         with self.sql_conf(
             {
@@ -662,11 +662,14 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
                     self.assertEqual(
                         metrics.apply("pythonNumTimedBatches").value(), (num_rows + 1) // 2
                     )
-                    for name in phase_names:
-                        self.assertFalse(metrics.apply(name).isZero(), name)
                     phases = [metrics.apply(name).value() for name in phase_names]
-                    self.assertGreaterEqual(phases[2], 10)
-                    self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
+                    if num_rows:
+                        # Microsecond sums: every phase did measurable work on these rows.
+                        for name, value in zip(phase_names, phases):
+                            self.assertGreater(value, 0, name)
+                    self.assertGreaterEqual(phases[2], 10_000)
+                    processing = metrics.apply("pythonProcessingTimeUs").value()
+                    self.assertLessEqual(sum(phases), processing)
 
 
 if __name__ == "__main__":

@@ -523,9 +523,9 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
         self.assertEqual(self._struct_values(output), [1, 2, 3, 4, 5])
         report = metrics.to_dict()
         self.assertEqual(report["pythonNumTimedBatches"], 2)
-        self.assertEqual(report["pythonInputPreparationTime"], 2 * 3)
-        self.assertEqual(report["pythonUDFExecutionTime"], 7 + 3 * 13 + 11)
-        self.assertEqual(report["pythonOutputPreparationTime"], 3 * 5)
+        self.assertEqual(report["pythonInputPreparationTimeUs"], 2 * 3_000)
+        self.assertEqual(report["pythonUDFExecutionTimeUs"], (7 + 3 * 13 + 11) * 1_000)
+        self.assertEqual(report["pythonOutputPreparationTimeUs"], 3 * 5_000)
 
     def test_timing_with_unconsumed_input_and_early_close(self):
         metrics = WorkerMetrics()
@@ -577,7 +577,7 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
                 self.assertEqual(pulls, consumed)
                 self.assertEqual(report["pythonNumTimingReports"], 1)
                 self.assertEqual(report["pythonNumTimedBatches"], consumed)
-                self.assertEqual(report["pythonUDFExecutionTime"], 7)
+                self.assertEqual(report["pythonUDFExecutionTimeUs"], 7_000)
 
     def test_legacy_accepts_any_iterable(self):
         # With the legacy flag on (its default), a UDF may return any iterable -- here a

@@ -149,9 +149,9 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
                     self.assertEqual(
                         metrics.to_dict(),
                         {
-                            "pythonInputPreparationTime": 0,
-                            "pythonUDFExecutionTime": 0,
-                            "pythonOutputPreparationTime": 0,
+                            "pythonInputPreparationTimeUs": 0,
+                            "pythonUDFExecutionTimeUs": 0,
+                            "pythonOutputPreparationTimeUs": 0,
                             "pythonNumTimingReports": 1,
                             "pythonNumTimedBatches": 0,
                         },

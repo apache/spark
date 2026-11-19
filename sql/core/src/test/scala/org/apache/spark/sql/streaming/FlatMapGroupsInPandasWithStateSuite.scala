@@ -607,7 +607,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         assert(f.head.stateFormatVersion == 2)
         assert(f.head.metrics("numTotalStateRows").value == 1)
         assert(f.head.metrics("pythonDataSent").value > 0)
-        assert(f.head.metrics.contains("pythonDataReadTime"))
+        assert(f.head.metrics.contains("pythonDataReadTimeUs"))
         assert(f.head.metrics("pythonNumTimingReports").value == 0)
       }
     )
