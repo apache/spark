@@ -640,4 +640,26 @@ class DataFrameJoinSuite extends SharedSparkSession
 
     checkAnswer(left.join(right, condition), Row(0, 10, 1, 22))
   }
+
+  test("SPARK-62054: cost-based join reorder keeps a join condition over one side") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      withTable("s", "v", "w") {
+        Seq((-1, 10), (0, 20), (1, 20)).toDF("id", "value").write.saveAsTable("s")
+        Seq(10, 20).toDF("value").write.saveAsTable("v")
+        Seq(20).toDF("value").write.saveAsTable("w")
+        Seq("s", "v", "w").foreach { t =>
+          sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        }
+        // The throwable condition over sv stays in the join condition, and it is false on the
+        // row whose id is 0. The project in sv keeps ReorderJoin from flattening the joins.
+        val df = sql(
+          """SELECT sv.id FROM (SELECT s.id, s.value FROM s JOIN v ON s.value = v.value) sv
+            |JOIN w ON sv.value = w.value AND
+            |  CASE WHEN sv.id > 0 THEN true WHEN sv.id = 0 THEN false
+            |  ELSE raise_error('boom') END
+            |""".stripMargin)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
 }
