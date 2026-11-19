@@ -772,6 +772,48 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60805: a parameter default is checked for temp function references") {
+    withUserDefinedFunction("temp_fn" -> true, "temp_tbl" -> true, "temp_dflt" -> true,
+        "perm_one" -> false, "perm_dflt" -> false) {
+      sql("CREATE TEMPORARY FUNCTION temp_fn() RETURNS INT RETURN 2")
+      sql("CREATE TEMPORARY FUNCTION temp_tbl() RETURNS TABLE (a INT) RETURN SELECT 2")
+      Seq("temp_fn()", "session.temp_fn()", "IDENTIFIER('temp_fn')()").foreach { dflt =>
+        Seq("RETURNS INT RETURN x" -> "temp_dflt()",
+          "RETURNS TABLE (a INT) RETURN SELECT x" -> "* FROM temp_dflt()").foreach {
+          case (rest, call) =>
+            val e = intercept[AnalysisException] {
+              sql(s"CREATE FUNCTION perm_dflt(x INT DEFAULT $dflt) $rest")
+            }
+            assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"$dflt: ${e.getMessage}")
+            assert(e.getMessageParameters.get("tempObjName") == "`temp_fn`", e.getMessage)
+            // A temporary function may use it.
+            sql(s"CREATE OR REPLACE TEMPORARY FUNCTION temp_dflt(x INT DEFAULT $dflt) $rest")
+            checkAnswer(sql(s"SELECT $call"), Row(2))
+        }
+      }
+      // A default cannot reach a table function: it cannot hold a subquery.
+      val e = intercept[AnalysisException] {
+        sql("CREATE FUNCTION perm_dflt(x INT DEFAULT (SELECT a FROM temp_tbl())) " +
+          "RETURNS INT RETURN x")
+      }
+      assert(e.getCondition == "USER_DEFINED_FUNCTIONS.NOT_A_VALID_DEFAULT_EXPRESSION",
+        e.getMessage)
+      // Defaults that resolve to built-in or persistent functions are accepted.
+      sql("CREATE FUNCTION perm_one() RETURNS INT RETURN 1")
+      Seq("abs(-3)" -> 3, "perm_one()" -> 1, "IDENTIFIER('default.perm_one')()" -> 1).foreach {
+        case (dflt, expected) =>
+          sql(s"CREATE OR REPLACE FUNCTION perm_dflt(x INT DEFAULT $dflt) RETURNS INT RETURN x")
+          checkAnswer(sql("SELECT perm_dflt()"), Row(expected))
+      }
+      // Earlier versions accepted an IDENTIFIER-built call, as the legacy flag does.
+      withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+        sql("CREATE OR REPLACE FUNCTION perm_dflt(x INT DEFAULT IDENTIFIER('temp_fn')()) " +
+          "RETURNS INT RETURN x")
+        checkAnswer(sql("SELECT perm_dflt()"), Row(2))
+      }
+    }
+  }
+
   test("SPARK-60805: an IDENTIFIER-built call is a temp reference only if PATH resolves it so") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       withDatabase("path_shadow_db") {
