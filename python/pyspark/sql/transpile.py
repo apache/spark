@@ -135,12 +135,12 @@ because the state schema is recorded in the checkpoint and checked on restart.
 Stateful operators record that schema as nullable whatever the plan says
 (``spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled``, on by
 default and fixed for a query when it first starts), so such a query can be
-restarted after transpilation is turned on or off. Where that conf is off the rule is to restart with the same
-transpilation settings: a query whose state was first written with a non-nullable
-transpiled key cannot be restarted once the UDF stops being transpiled, and fails
-with ``STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE``. The other order, interpreted first
-and transpiled later, is accepted either way. Pinned by
-``ArrowUDFTranspileStreamingRestartTests`` in
+restarted after transpilation is turned on or off. Where that conf is off the rule
+is to restart with the same transpilation settings: a query whose state was first
+written with a non-nullable transpiled key cannot be restarted once the UDF stops
+being transpiled, and fails with ``STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE``. The
+other order, interpreted first and transpiled later, is accepted either way. Pinned
+by ``ArrowUDFTranspileStreamingRestartTests`` in
 ``pyspark.sql.tests.arrow.test_arrow_python_udf_transpile``.
 
 
