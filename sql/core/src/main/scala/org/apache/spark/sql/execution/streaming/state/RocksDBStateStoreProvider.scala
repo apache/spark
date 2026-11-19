@@ -1141,7 +1141,8 @@ private[sql] class RocksDBStateStoreProvider
       op
     } catch {
       case NonFatal(ex) =>
-        logWarning(s"Ignoring error while performing $opName with exception=", ex)
+        logWarning(log"Ignoring error while performing ${MDC(OP_TYPE, opName)} " +
+          log"with exception=", ex)
     }
   }
 

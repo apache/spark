@@ -31,7 +31,14 @@ from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueEr
 from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers._typing import UDF
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-from pyspark.sql.types import ArrayType, LongType, StringType, StructField, StructType
+from pyspark.sql.types import (
+    ArrayType,
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+)
 from pyspark.testing.utils import (
     PySparkBaseTestCase,
     have_pandas,
@@ -78,6 +85,12 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
     _A_PLUS_ONE = [[2, 3], [], None, [4]]
     _B_PLUS_ONE = [[[2], [3, 4]], None, [[], None], [[5]]]
     _A_TIMES_C = [[10, 40], [], None, [90]]
+
+    # A runner conf with spark.sql.execution.pandas.convertToArrowArraySafely off.
+    _UNSAFE_PANDAS_CONF = {
+        "spark.sql.session.timeZone": "UTC",
+        "spark.sql.execution.pandas.convertToArrowArraySafely": "false",
+    }
 
     @classmethod
     def _batch(cls, a=None, b=None, c=None, large_list=False):
@@ -341,6 +354,17 @@ class ArrowScalarElementwiseUDFHandlerTests(
         self.assertEqual(out[0].schema.field(0).type, pa.list_(pa.int64()))
         self.assertEqual(self._column(out), self._A)
 
+    def test_result_cast_is_safe(self):
+        # The result is cast to the declared type safely, as in the base SQL_SCALAR_ARROW_UDF
+        # path, even with spark.sql.execution.pandas.convertToArrowArraySafely off.
+        handler = self._handler(
+            self.handler_cls,
+            (lambda x: pc.add(x, 2**31 - 1), [0], {}, IntegerType()),
+            runner_conf=self._UNSAFE_PANDAS_CONF,
+        )
+        with self.assertRaisesRegex(PySparkRuntimeError, "RESULT_COLUMN_TYPES_MISMATCH"):
+            list(handler.run(0, iter([self._batch()])))
+
 
 @unittest.skipIf(
     not (have_pandas and have_pyarrow), pandas_requirement_message or pyarrow_requirement_message
@@ -538,6 +562,21 @@ class ArrowScalarIterElementwiseUDFHandlerTests(
         out = list(self._iter_handler(udf).run(0, iter([self._batch()])))
         self.assertEqual(out[0].schema.field(0).type, pa.list_(pa.int64()))
         self.assertEqual(self._column(out), self._A)
+
+    def test_result_cast_is_safe(self):
+        # The result is cast to the declared type safely, as in the base SQL_SCALAR_ARROW_ITER_UDF
+        # path, even with spark.sql.execution.pandas.convertToArrowArraySafely off.
+        def udf(batches):
+            for x in batches:
+                yield pc.add(x, 2**31 - 1)
+
+        handler = self._handler(
+            self.handler_cls,
+            (udf, [0], {}, IntegerType()),
+            runner_conf=self._UNSAFE_PANDAS_CONF,
+        )
+        with self.assertRaisesRegex(PySparkRuntimeError, "RESULT_COLUMN_TYPES_MISMATCH"):
+            list(handler.run(0, iter([self._batch()])))
 
 
 @unittest.skipIf(

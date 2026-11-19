@@ -32,12 +32,15 @@ import org.apache.spark.sql.functions.{col, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class HDFSBackedStateDataSourceChangeDataReaderSuite extends StateDataSourceChangeDataReaderSuite {
   override protected def newStateStoreProvider(): HDFSBackedStateStoreProvider =
     new HDFSBackedStateStoreProvider
 }
 
+@DataSourceV2Test
 class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
   StateDataSourceChangeDataReaderSuite {
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
@@ -146,6 +149,7 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
   }
 }
 
+@DataSourceV2Test
 class RocksDBWithCheckpointV2StateDataSourceChangeDataReaderSuite extends
   RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite {
   override def beforeAll(): Unit = {

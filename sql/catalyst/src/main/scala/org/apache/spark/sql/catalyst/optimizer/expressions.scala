@@ -142,7 +142,8 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * }}}
  *
  * Approach used:
- * - Populate a mapping of attribute => constant value by looking at all the equals predicates
+ * - Populate a mapping of attribute => constant value by looking at all the equals predicates,
+ *   except, under a `NOT`, the ones over a nullable attribute and any `EqualTo` with a NULL literal
  * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
  *   in the AND node.
  */
@@ -164,7 +165,8 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
    *   If the current node is not child of another [[And]], replace all occurrences of the
    *   attributes with the corresponding constant values.
    * - If a child of [[And]] is [[EqualTo]] or [[EqualNullSafe]], propagate the mapping
-   *   of attribute => constant.
+   *   of attribute => constant, except, under a [[Not]], for one over a nullable attribute and
+   *   for an [[EqualTo]] with a NULL literal.
    * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate empty mapping.
    * - Otherwise, stop traversal and propagate empty mapping.
    * @param condition condition to be traversed
@@ -182,16 +184,16 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
       case _ if !condition.containsAllPatterns(LITERAL, BINARY_COMPARISON) =>
         (None, AttributeMap.empty)
       case e @ EqualTo(left: AttributeReference, right: Literal)
-        if safeToReplace(left, nullIsFalse) =>
+        if safeToReplace(e, left, nullIsFalse) =>
         (None, AttributeMap(Map(left -> (right, e))))
       case e @ EqualTo(left: Literal, right: AttributeReference)
-        if safeToReplace(right, nullIsFalse) =>
+        if safeToReplace(e, right, nullIsFalse) =>
         (None, AttributeMap(Map(right -> (left, e))))
       case e @ EqualNullSafe(left: AttributeReference, right: Literal)
-        if safeToReplace(left, nullIsFalse) =>
+        if safeToReplace(e, left, nullIsFalse) =>
         (None, AttributeMap(Map(left -> (right, e))))
       case e @ EqualNullSafe(left: Literal, right: AttributeReference)
-        if safeToReplace(right, nullIsFalse) =>
+        if safeToReplace(e, right, nullIsFalse) =>
         (None, AttributeMap(Map(right -> (left, e))))
       case a: And =>
         val (newLeft, equalityPredicatesLeft) =
@@ -232,9 +234,14 @@ object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
   // expression. E.g. `SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)` where attribute `c` can be
   // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
   // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
-  // null result of the enclosed expression means.
-  private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
-    !ar.nullable || nullIsFalse
+  // null result of the enclosed expression means. So under a NOT, an `EqualTo` is propagated only
+  // if it is never NULL: not over a nullable attribute, nor with a NULL literal, which is NULL on
+  // every row even if 'c' isn't nullable. Where a NULL counts as FALSE, an AND with such an
+  // `EqualTo` is never TRUE whatever the attribute is replaced with, so propagating it there is
+  // safe. An `EqualNullSafe` is never NULL, but, as before, under a NOT it is propagated only over
+  // an attribute that is not nullable.
+  private def safeToReplace(e: BinaryComparison, ar: AttributeReference, nullIsFalse: Boolean) =
+    nullIsFalse || !(ar.nullable || e.nullable)
 
   /**
    * Replaces attributes in the comparisons of `condition` with their constant values.
@@ -552,7 +559,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
     case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
     // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
-    case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
+    // And(b, c) evaluates b also on the rows where a is true. If b can fail, Not(a) is evaluated
+    // first. It is used instead of c, which can have the operands of a in another order.
+    case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) =>
+      if (ExprUtils.canEvaluateUnconditionally(b)) And(b, c) else And(Not(a), b)
     // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
     case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
 
@@ -561,7 +571,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
     case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
     // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
-    case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
+    // Or(b, c) evaluates b also on the rows where a is false. If b can fail, Not(a) is evaluated
+    // first. It is used instead of c, which can have the operands of a in another order.
+    case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) =>
+      if (ExprUtils.canEvaluateUnconditionally(b)) Or(b, c) else Or(Not(a), b)
     // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
     case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
 
@@ -569,16 +582,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case and @ (left And right) =>
       // 1. Split left and right to get the disjunctive predicates,
       //    i.e. lhs = (a || b), rhs = (a || c)
-      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). A throwable
+      //    one is left out where the formula evaluates it on more rows, see `commonFactors`.
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
       // 4. If common is non-empty, apply the formula to get the optimized predicate:
       //    common || (ldiff && rdiff)
-      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      // 5. Else, split left and right to get the conjunctive predicates.
       //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
       //    optimized predicate: (a && b && c)
       val lhs = splitDisjunctivePredicates(left)
       val rhs = splitDisjunctivePredicates(right)
-      val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+      val common = commonFactors(lhs, rhs)
       if (common.nonEmpty) {
         val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
         val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
@@ -591,11 +605,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
         }
       } else {
-        // No common factors from disjunctive predicates, reduce common factor from conjunction
+        // No common factor to extract from disjunctive predicates, reduce one from conjunction
         val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
         val distinct = ExpressionSet(all)
         if (all.size == distinct.size) {
-          // No common factors, return the original predicate
+          // No duplicates, return the original predicate
           and
         } else {
           // (a && b) && a && (a && c) => a && b && c
@@ -607,16 +621,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case or @ (left Or right) =>
       // 1. Split left and right to get the conjunctive predicates,
       //    i.e.  lhs = (a && b), rhs = (a && c)
-      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). A throwable
+      //    one is left out where the formula evaluates it on more rows, see `commonFactors`.
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
       // 4. If common is non-empty, apply the formula to get the optimized predicate:
       //    common && (ldiff || rdiff)
-      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      // 5. Else, split left and right to get the conjunctive predicates.
       // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
       // optimized predicate: (a || b || c)
       val lhs = splitConjunctivePredicates(left)
       val rhs = splitConjunctivePredicates(right)
-      val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+      val common = commonFactors(lhs, rhs)
       if (common.nonEmpty) {
         val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
         val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
@@ -629,11 +644,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
         }
       } else {
-        // No common factors in conjunctive predicates, reduce common factor from disjunction
+        // No common factor to extract from conjunctive predicates, reduce one from disjunction
         val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
         val distinct = ExpressionSet(all)
         if (all.size == distinct.size) {
-          // No common factors, return the original predicate
+          // No duplicates, return the original predicate
           or
         } else {
           // (a || b) || a || (a || c) => a || b || c
@@ -642,6 +657,29 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     case not: Not => simplifyNot(not)
+  }
+
+  /**
+   * Returns the operands of `lhs` that are also in `rhs` and are to be evaluated ahead of the other
+   * operands, in their order in `lhs`. A throwable one is returned only if it is the same in `lhs`
+   * and `rhs`, and if, in `lhs` or in `rhs`, only the ones returned before it come before it.
+   * Otherwise, evaluating it ahead would also run it on rows where an operand before it decides the
+   * result of both `lhs` and `rhs`, or would run its own operands in an order that
+   * `semanticEquals` ignores. As in PushPredicateThroughJoin, one that can fail without being
+   * throwable, such as a division in ANSI mode, is returned anyway: it can be a join key, which a
+   * hash join evaluates on every row.
+   */
+  private def commonFactors(lhs: Seq[Expression], rhs: Seq[Expression]): Seq[Expression] = {
+    lhs.filter(e => rhs.exists(e.semanticEquals)).foldLeft(Seq.empty[Expression]) { (common, e) =>
+      def onlyCommonBefore(operands: Seq[Expression]): Boolean =
+        operands.takeWhile(!_.semanticEquals(e)).forall(o => common.exists(o.semanticEquals))
+      if (!e.throwable ||
+          (rhs.contains(e) && (onlyCommonBefore(lhs) || onlyCommonBefore(rhs)))) {
+        common :+ e
+      } else {
+        common
+      }
+    }
   }
 
   /**
@@ -810,7 +848,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(IF, CASE_WHEN), ruleId) {
+    _.containsAnyPattern(IF, CASE_WHEN, EVAL_ONLY_WHEN), ruleId) {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
@@ -821,6 +859,19 @@ object SimplifyConditionals extends Rule[LogicalPlan] {
         if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+      // Drop a UDF evaluation marker (see `EvalOnlyWhen`) once the optimizer has removed every
+      // Python and external UDF from its child, so the plan matches the one without the marker.
+      // The marker's condition equals this branch's condition, so `If(c, EvalOnlyWhen(c, e), f)`
+      // is `If(c, e, f)`.
+      case If(cond, EvalOnlyWhen(markerCond, child), falseValue)
+        if cond.deterministic && cond.semanticEquals(markerCond) &&
+          !EvalOnlyWhen.hasLiftedUDF(child) =>
+        If(cond, child, falseValue)
+      // A marker whose condition folded to a constant: it is `child` when always true, and null
+      // otherwise (the branch is never taken).
+      case EvalOnlyWhen(TrueLiteral, child) => child
+      case EvalOnlyWhen(FalseLiteral | Literal(null, _), child) =>
+        Literal.create(null, child.dataType)
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
       case If(cond, l @ Literal(null, _), TrueLiteral) if !cond.nullable => Or(Not(cond), l)
       case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
