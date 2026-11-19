@@ -662,6 +662,7 @@ class KeyGroupedPartitioningSuite
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(V2_BUCKETING_ENABLED, true)
+    .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED.key, "true")
     .set(AUTO_BROADCASTJOIN_THRESHOLD, -1L)
 
   before {
@@ -741,7 +742,8 @@ class KeyGroupedPartitioningSuite
 
   /**
    * The configuration the keyed push-down and its replays need: V2 bucketing shuffles on,
-   * coalescing off so a kept keyed scan survives, shuffled joins, and the rule on.
+   * coalescing off so a kept keyed scan survives, shuffled joins, the rule on, the keyed
+   * permission (off by default) on, and the partial replay on.
    */
   private def withReplay(f: => Unit): Unit = withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -752,6 +754,7 @@ class KeyGroupedPartitioningSuite
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED.key -> "true",
       SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "true",
       SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
         "true")(f)
@@ -797,10 +800,9 @@ class KeyGroupedPartitioningSuite
       sql("INSERT INTO testcat.ns.keyed_right VALUES " +
         "(1, 'd', timestamp'2022-01-04'), (2, 'e', timestamp'2022-01-05')")
       val previous = spark.experimental.extraStrategies
-      // Reach the rule with the exchange in place. The stock planner groups this all-keyed union
-      // before the rule sees it, and with `unionOutputPartitioning` off the rebuilt union reports
-      // the default partitioning, which no keyed target answers. An extension can introduce such
-      // an exchange as well, which this strategy stands in for.
+      // Reach the rule with the exchange in place: the stock planner groups this all-keyed union
+      // before the rule sees it, so no exchange is left to push down. An extension can introduce
+      // such an exchange as well, which this strategy stands in for.
       spark.experimental.extraStrategies = Seq(new SparkStrategy {
         override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
           case union: org.apache.spark.sql.catalyst.plans.logical.Union =>
@@ -980,12 +982,6 @@ class KeyGroupedPartitioningSuite
       val df = sql(query)
       checkAnswer(df, expected)
       check(df.queryExecution.executedPlan)
-      // The proposal holds, so no fallback runs and the replay switch cannot apply.
-      withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "false") {
-        val unreplayed = sql(query)
-        checkAnswer(unreplayed, expected)
-        check(unreplayed.queryExecution.executedPlan)
-      }
     }
   }
 
@@ -1034,7 +1030,7 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-61785: the replay falls a site back to the layout it removes") {
+  test("SPARK-61785: the hash-only pass falls a site back to the layout it removes") {
     withReplay {
       createTable("fallback_a", columns, Array(Expressions.identity("id")))
       createTable("fallback_pa", columns, Array.empty[Transform])
@@ -1046,8 +1042,8 @@ class KeyGroupedPartitioningSuite
       sql("INSERT INTO testcat.ns.fallback_b VALUES " +
         "(2, 'b', timestamp'2022-01-06'), (3, 'e', timestamp'2022-01-07')")
       // The first site's keyed target outranks its repartition leg but cannot pair with the join
-      // partner, so the replay takes the layout of the exchange that site removes, which the
-      // repartition leg reports. The other site keeps its keyed target.
+      // partner, so the hash-only pass takes the layout of the exchange that site removes, which
+      // the repartition leg reports. The replay then keeps the other site's keyed target.
       val df = sql(
         """SELECT id, data, rn FROM (
           |  SELECT /*+ MERGE(u, p) */ u.id, u.data, u.rn FROM (
@@ -1109,217 +1105,6 @@ class KeyGroupedPartitioningSuite
       assert(exchangesOverUnion(plan).size === 1, s"expected one rejected site:\n$plan")
       assert(exchangeKinds(plan) === (1, 1, 1), s"unexpected shuffle kinds:\n$plan")
       assert(hasGroupedUnion(plan), s"expected the kept site:\n$plan")
-    }
-  }
-
-  test("SPARK-61785: two keyed sites that cannot pair keep the layouts they remove") {
-    withSQLConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0") {
-      withReplay {
-        createTable("retry_a", columns, Array(Expressions.identity("id")))
-        createTable("retry_b", columns, Array(Expressions.identity("id")))
-        createTable("retry_plain", columns, Array.empty[Transform])
-        sql("INSERT INTO testcat.ns.retry_a VALUES " +
-          "(1, 'a1', timestamp'2022-01-01'), (1, 'a2', timestamp'2022-01-02'), " +
-          "(2, 'c1', timestamp'2022-01-03'), (2, 'c2', timestamp'2022-01-04')")
-        sql("INSERT INTO testcat.ns.retry_b VALUES " +
-          "(1, 'b1', timestamp'2022-01-05'), (2, 'd1', timestamp'2022-01-06'), " +
-          "(3, 'e1', timestamp'2022-01-07')")
-        sql("INSERT INTO testcat.ns.retry_plain VALUES (1, 'p1', timestamp'2022-01-08')")
-        // Both sides of the join are sites, with keyed targets of 2 and 3 partitions: neither
-        // target pairs with the other side, so the whole plan rejects the first pass. The
-        // repartition legs report the layout of the exchange each site removes, so the replay
-        // pushes both unions down on it.
-        val query = """SELECT l.id, l.rn, r.rn FROM (
-          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
-          |    SELECT id, data FROM testcat.ns.retry_a
-          |    UNION ALL SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.retry_plain
-          |    UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) l
-          |  JOIN (SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
-          |    SELECT id, data FROM testcat.ns.retry_b
-          |    UNION ALL SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.retry_plain
-          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))) r
-          |    ON l.id = r.id""".stripMargin
-        val expected = Seq(
-          Row(1, 1, 1), Row(1, 1, 2), Row(1, 2, 1), Row(1, 2, 2),
-          Row(1, 3, 1), Row(1, 3, 2), Row(1, 4, 1), Row(1, 4, 2),
-          Row(2, 1, 1), Row(2, 1, 2), Row(2, 2, 1), Row(2, 2, 2))
-        def check(plan: SparkPlan): Unit = {
-          assert(satisfiesRequirements(plan))
-          assert(!hasGroupedUnion(plan), s"no keyed target survives:\n$plan")
-          assert(exchangesOverUnion(plan).isEmpty, s"both sites are pushed down:\n$plan")
-          val unions = collect(plan) { case union: UnionExec => union }
-          assert(unions.length === 2)
-          assert(unions.forall(union =>
-            union.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
-              union.outputPartitioning.numPartitions === 2),
-            s"both unions take the layout they remove:\n$plan")
-          assert(exchangeKinds(plan) === (0, 4, 1), s"unexpected shuffle kinds:\n$plan")
-        }
-        val df = sql(query)
-        checkAnswer(df, expected)
-        check(df.queryExecution.executedPlan)
-        // With the replay off, the whole plan falls back to the retry on the layouts it removes,
-        // which settles the same plan.
-        withSQLConf(
-            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "false") {
-          val retried = sql(query)
-          checkAnswer(retried, expected)
-          check(retried.queryExecution.executedPlan)
-        }
-      }
-    }
-  }
-
-  test("SPARK-61785: paired sites keep the hash target they share") {
-    withSQLConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0") {
-      withReplay {
-        createTable("pair_a", columns, Array(Expressions.identity("id")))
-        createTable("pair_plain", columns, Array.empty[Transform])
-        sql("INSERT INTO testcat.ns.pair_a VALUES " +
-          "(1, 'a', timestamp'2022-01-01'), (2, 'b', timestamp'2022-01-02'), " +
-          "(3, 'c', timestamp'2022-01-03')")
-        sql("INSERT INTO testcat.ns.pair_plain VALUES (1, 'p', timestamp'2022-01-04')")
-        // Both windows sit on a hash(id, 2) exchange and the join pairs them. The left union
-        // ranks its keyed table first beside two legs that offer hash(id, 3); the right union
-        // offers hash(id, 3) only. The keyed target cannot pair with the right window, and
-        // neither window pairs with the other's exchange on its own, so the whole plan rejects
-        // the proposal; the hash target the two unions share keeps both sites.
-        val query = """SELECT u.id, u.data, u.rn, p.rn AS prn FROM (
-          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
-          |    SELECT id, data FROM testcat.ns.pair_a
-          |    UNION ALL SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.pair_plain
-          |    UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) u
-          |  JOIN (SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
-          |    SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.pair_plain
-          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))) p
-          |    ON u.id = p.id""".stripMargin
-        val expected = Seq(Row(1, "a", 1, 1), Row(1, "p", 2, 1), Row(1, "x", 3, 1),
-          Row(2, "b", 1, 1))
-        def check(plan: SparkPlan): Unit = {
-          assert(satisfiesRequirements(plan))
-          assert(!hasGroupedUnion(plan), s"no keyed target survives:\n$plan")
-          assert(exchangesOverUnion(plan).isEmpty, s"both sites are pushed down:\n$plan")
-          val unions = collect(plan) { case union: UnionExec => union }
-          assert(unions.length === 2)
-          assert(unions.forall(union =>
-            union.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
-              union.outputPartitioning.numPartitions === 3),
-            s"both unions take the target they share:\n$plan")
-        }
-        val df = sql(query)
-        checkAnswer(df, expected)
-        check(df.queryExecution.executedPlan)
-        // With the replay off, the rejected proposal keeps the same hash-only pass.
-        withSQLConf(
-            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "false") {
-          val hashOnly = sql(query)
-          checkAnswer(hashOnly, expected)
-          check(hashOnly.queryExecution.executedPlan)
-        }
-      }
-    }
-  }
-
-  test("SPARK-61785: two join inputs keep the hash target they share") {
-    withSQLConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0",
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "true") {
-      withReplay {
-        createTable("inputs_a", columns, Array(Expressions.identity("id")))
-        createTable("inputs_plain", columns, Array.empty[Transform])
-        sql("INSERT INTO testcat.ns.inputs_a VALUES " +
-          "(1, 'a', timestamp'2022-01-01'), (2, 'b', timestamp'2022-01-02'), " +
-          "(3, 'c', timestamp'2022-01-03')")
-        sql("INSERT INTO testcat.ns.inputs_plain VALUES (1, 'p', timestamp'2022-01-04')")
-        // The join's joint attempt takes the left input's keyed target, which the right input
-        // cannot pair with; the attempt's hash-only retry then puts both inputs on the target
-        // they share, so the plan is accepted without a fallback.
-        val query = """SELECT /*+ MERGE(u, p) */ u.id, u.data, p.data FROM (
-          |  SELECT id, data FROM testcat.ns.inputs_a
-          |  UNION ALL SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.inputs_plain
-          |  UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data)) u
-          |  JOIN (SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.inputs_plain
-          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data)) p
-          |    ON u.id = p.id""".stripMargin
-        val expected = Seq(Row(1, "a", "p"), Row(1, "p", "p"), Row(1, "x", "p"),
-          Row(2, "b", "y"))
-        def check(df: DataFrame): Unit = {
-          checkAnswer(df, expected)
-          val plan = df.queryExecution.executedPlan
-          assert(satisfiesRequirements(plan))
-          assert(!hasGroupedUnion(plan), s"no keyed target survives:\n$plan")
-          assert(exchangesOverUnion(plan).isEmpty, s"both inputs are pushed down:\n$plan")
-          val unions = collect(plan) { case union: UnionExec => union }
-          assert(unions.length === 2)
-          assert(unions.forall(union =>
-            union.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
-              union.outputPartitioning.numPartitions === 3),
-            s"both inputs take the target they share:\n$plan")
-        }
-        check(sql(query))
-        // The in-pass retry already settles the join, so both replay settings take this path.
-        withSQLConf(
-            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED.key -> "false") {
-          check(sql(query))
-        }
-      }
-    }
-  }
-
-  test("SPARK-61785: a failed joint attempt keeps the base push-down") {
-    withSQLConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0",
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "true") {
-      withReplay {
-        createTable("resid_a", columns, Array(Expressions.identity("id")))
-        createTable("resid_b", columns, Array(Expressions.identity("id")))
-        createTable("resid_plain", columns, Array.empty[Transform])
-        sql("INSERT INTO testcat.ns.resid_a VALUES " +
-          "(1, 'a', timestamp'2022-01-01'), (2, 'b', timestamp'2022-01-02'), " +
-          "(3, 'c', timestamp'2022-01-03')")
-        sql("INSERT INTO testcat.ns.resid_b VALUES " +
-          "(4, 'd', timestamp'2022-01-04'), (5, 'e', timestamp'2022-01-05')")
-        sql("INSERT INTO testcat.ns.resid_plain VALUES (1, 'p', timestamp'2022-01-06')")
-        // The join's joint attempt takes the left input's keyed target, which the right input
-        // cannot pair with. The joint attempt is retried with keyed targets off before the
-        // inputs are fixed one by one, so both inputs keep the target they share, beside the
-        // unrelated keyed site.
-        val query = """SELECT id, ud, pd FROM (
-          |  SELECT /*+ MERGE(u, p) */ u.id, u.data AS ud, p.data AS pd FROM (
-          |    SELECT id, data FROM testcat.ns.resid_a
-          |    UNION ALL SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.resid_plain
-          |    UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data)) u
-          |  JOIN (SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.resid_plain
-          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data)) p
-          |    ON u.id = p.id
-          |  UNION ALL
-          |  SELECT id, data AS ud, cast(rn AS string) AS pd FROM (
-          |    SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
-          |      SELECT id, data FROM testcat.ns.resid_b
-          |      UNION ALL SELECT * FROM VALUES (4, 'z') AS q(id, data)) s) t)""".stripMargin
-        val expected = Seq(Row(1, "a", "p"), Row(1, "p", "p"), Row(1, "x", "p"),
-          Row(2, "b", "y"), Row(4, "d", "1"), Row(4, "z", "2"), Row(5, "e", "1"))
-        val df = sql(query)
-        checkAnswer(df, expected)
-        val plan = df.queryExecution.executedPlan
-        assert(satisfiesRequirements(plan))
-        assert(hasGroupedUnion(plan), s"the unrelated site keeps its keyed layout:\n$plan")
-        assert(exchangesOverUnion(plan).isEmpty, s"the join inputs are pushed down:\n$plan")
-        // With keyed targets off the join's joint attempt picks the shared hash target, and the
-        // unrelated site keeps its own exchange.
-        withSQLConf(
-            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED.key -> "false") {
-          val hashOnly = sql(query)
-          checkAnswer(hashOnly, expected)
-          val hashPlan = hashOnly.queryExecution.executedPlan
-          assert(satisfiesRequirements(hashPlan))
-          assert(!hasGroupedUnion(hashPlan), s"no keyed target survives:\n$hashPlan")
-          assert(exchangesOverUnion(hashPlan).size === 1,
-            s"only the unrelated site keeps its exchange:\n$hashPlan")
-        }
-      }
     }
   }
 
@@ -1398,6 +1183,197 @@ class KeyGroupedPartitioningSuite
           assert(satisfiesRequirements(plan))
           assert(exchangesOverUnion(plan).size === 1,
             s"only the keyed exchange remains:\n$plan")
+        }
+      }
+    }
+  }
+
+  test("SPARK-61785: two keyed sites that cannot pair keep the layouts they remove") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0") {
+      withReplay {
+        createTable("retry_a", columns, Array(Expressions.identity("id")))
+        createTable("retry_b", columns, Array(Expressions.identity("id")))
+        createTable("retry_plain", columns, Array.empty[Transform])
+        sql("INSERT INTO testcat.ns.retry_a VALUES " +
+          "(1, 'a1', timestamp'2022-01-01'), (1, 'a2', timestamp'2022-01-02'), " +
+          "(2, 'c1', timestamp'2022-01-03'), (2, 'c2', timestamp'2022-01-04')")
+        sql("INSERT INTO testcat.ns.retry_b VALUES " +
+          "(1, 'b1', timestamp'2022-01-05'), (2, 'd1', timestamp'2022-01-06'), " +
+          "(3, 'e1', timestamp'2022-01-07')")
+        sql("INSERT INTO testcat.ns.retry_plain VALUES (1, 'p1', timestamp'2022-01-08')")
+        // Both sides of the join are sites, with keyed targets of 2 and 3 partitions: neither
+        // target pairs with the other side, so the whole plan rejects the first pass. The
+        // repartition legs report the layout of the exchange each site removes, so the hash-only
+        // pass pushes both unions down on it.
+        val query = """SELECT l.id, l.rn, r.rn FROM (
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.retry_a
+          |    UNION ALL SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.retry_plain
+          |    UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) l
+          |  JOIN (SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.retry_b
+          |    UNION ALL SELECT /*+ REPARTITION(2, id) */ id, data FROM testcat.ns.retry_plain
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))) r
+          |    ON l.id = r.id""".stripMargin
+        val expected = Seq(
+          Row(1, 1, 1), Row(1, 1, 2), Row(1, 2, 1), Row(1, 2, 2),
+          Row(1, 3, 1), Row(1, 3, 2), Row(1, 4, 1), Row(1, 4, 2),
+          Row(2, 1, 1), Row(2, 1, 2), Row(2, 2, 1), Row(2, 2, 2))
+        def check(plan: SparkPlan): Unit = {
+          assert(satisfiesRequirements(plan))
+          assert(!hasGroupedUnion(plan), s"no keyed target survives:\n$plan")
+          assert(exchangesOverUnion(plan).isEmpty, s"both sites are pushed down:\n$plan")
+          val unions = collect(plan) { case union: UnionExec => union }
+          assert(unions.length === 2)
+          assert(unions.forall(union =>
+            union.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
+              union.outputPartitioning.numPartitions === 2),
+            s"both unions take the layout they remove:\n$plan")
+          assert(exchangeKinds(plan) === (0, 4, 1), s"unexpected shuffle kinds:\n$plan")
+        }
+        val df = sql(query)
+        checkAnswer(df, expected)
+        check(df.queryExecution.executedPlan)
+      }
+    }
+  }
+
+  test("SPARK-61785: paired sites keep the hash target they share") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0") {
+      withReplay {
+        createTable("pair_a", columns, Array(Expressions.identity("id")))
+        createTable("pair_plain", columns, Array.empty[Transform])
+        sql("INSERT INTO testcat.ns.pair_a VALUES " +
+          "(1, 'a', timestamp'2022-01-01'), (2, 'b', timestamp'2022-01-02'), " +
+          "(3, 'c', timestamp'2022-01-03')")
+        sql("INSERT INTO testcat.ns.pair_plain VALUES (1, 'p', timestamp'2022-01-04')")
+        // Both windows sit on a hash(id, 2) exchange and the join pairs them. The left union
+        // ranks its keyed table first beside a repartition leg that offers hash(id, 3); the right
+        // union offers hash(id, 3) only. The keyed target cannot pair with the right window, and
+        // neither window pairs with the other's exchange on its own, so the whole plan rejects
+        // the proposal; the hash target the two unions share keeps both sites.
+        val query = """SELECT u.id, u.data, u.rn, p.rn AS prn FROM (
+          |  SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT id, data FROM testcat.ns.pair_a
+          |    UNION ALL SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.pair_plain
+          |    UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data))) u
+          |  JOIN (SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |    SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.pair_plain
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data))) p
+          |    ON u.id = p.id""".stripMargin
+        val expected = Seq(Row(1, "a", 1, 1), Row(1, "p", 2, 1), Row(1, "x", 3, 1),
+          Row(2, "b", 1, 1))
+        def check(plan: SparkPlan): Unit = {
+          assert(satisfiesRequirements(plan))
+          assert(!hasGroupedUnion(plan), s"no keyed target survives:\n$plan")
+          assert(exchangesOverUnion(plan).isEmpty, s"both sites are pushed down:\n$plan")
+          val unions = collect(plan) { case union: UnionExec => union }
+          assert(unions.length === 2)
+          assert(unions.forall(union =>
+            union.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
+              union.outputPartitioning.numPartitions === 3),
+            s"both unions take the target they share:\n$plan")
+        }
+        val df = sql(query)
+        checkAnswer(df, expected)
+        check(df.queryExecution.executedPlan)
+      }
+    }
+  }
+
+  test("SPARK-61785: two join inputs keep the hash target they share") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "true") {
+      withReplay {
+        createTable("inputs_a", columns, Array(Expressions.identity("id")))
+        createTable("inputs_plain", columns, Array.empty[Transform])
+        sql("INSERT INTO testcat.ns.inputs_a VALUES " +
+          "(1, 'a', timestamp'2022-01-01'), (2, 'b', timestamp'2022-01-02'), " +
+          "(3, 'c', timestamp'2022-01-03')")
+        sql("INSERT INTO testcat.ns.inputs_plain VALUES (1, 'p', timestamp'2022-01-04')")
+        // The join's joint attempt takes the left input's keyed target, which the right input
+        // cannot pair with; the attempt's hash-only retry then puts both inputs on the target
+        // they share, so the plan is accepted without a fallback.
+        val query = """SELECT /*+ MERGE(u, p) */ u.id, u.data, p.data FROM (
+          |  SELECT id, data FROM testcat.ns.inputs_a
+          |  UNION ALL SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.inputs_plain
+          |  UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data)) u
+          |  JOIN (SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.inputs_plain
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data)) p
+          |    ON u.id = p.id""".stripMargin
+        val expected = Seq(Row(1, "a", "p"), Row(1, "p", "p"), Row(1, "x", "p"),
+          Row(2, "b", "y"))
+        def check(df: DataFrame): Unit = {
+          checkAnswer(df, expected)
+          val plan = df.queryExecution.executedPlan
+          assert(satisfiesRequirements(plan))
+          assert(!hasGroupedUnion(plan), s"no keyed target survives:\n$plan")
+          assert(exchangesOverUnion(plan).isEmpty, s"both inputs are pushed down:\n$plan")
+          val unions = collect(plan) { case union: UnionExec => union }
+          assert(unions.length === 2)
+          assert(unions.forall(union =>
+            union.outputPartitioning.isInstanceOf[physical.HashPartitioning] &&
+              union.outputPartitioning.numPartitions === 3),
+            s"both inputs take the target they share:\n$plan")
+        }
+        check(sql(query))
+      }
+    }
+  }
+
+  test("SPARK-61785: a failed joint attempt keeps the base push-down") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR.key -> "2.0",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "true") {
+      withReplay {
+        createTable("resid_a", columns, Array(Expressions.identity("id")))
+        createTable("resid_b", columns, Array(Expressions.identity("id")))
+        createTable("resid_plain", columns, Array.empty[Transform])
+        sql("INSERT INTO testcat.ns.resid_a VALUES " +
+          "(1, 'a', timestamp'2022-01-01'), (2, 'b', timestamp'2022-01-02'), " +
+          "(3, 'c', timestamp'2022-01-03')")
+        sql("INSERT INTO testcat.ns.resid_b VALUES " +
+          "(4, 'd', timestamp'2022-01-04'), (5, 'e', timestamp'2022-01-05')")
+        sql("INSERT INTO testcat.ns.resid_plain VALUES (1, 'p', timestamp'2022-01-06')")
+        // The join's joint attempt takes the left input's keyed target, which the right input
+        // cannot pair with. The joint attempt is retried with keyed targets off before the
+        // inputs are fixed one by one, so both inputs keep the target they share, beside the
+        // unrelated keyed site.
+        val query = """SELECT id, ud, pd FROM (
+          |  SELECT /*+ MERGE(u, p) */ u.id, u.data AS ud, p.data AS pd FROM (
+          |    SELECT id, data FROM testcat.ns.resid_a
+          |    UNION ALL SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.resid_plain
+          |    UNION ALL SELECT * FROM VALUES (1, 'x') AS v(id, data)) u
+          |  JOIN (SELECT /*+ REPARTITION(3, id) */ id, data FROM testcat.ns.resid_plain
+          |    UNION ALL SELECT * FROM VALUES (2, 'y') AS w(id, data)) p
+          |    ON u.id = p.id
+          |  UNION ALL
+          |  SELECT id, data AS ud, cast(rn AS string) AS pd FROM (
+          |    SELECT id, data, row_number() OVER (PARTITION BY id ORDER BY data) rn FROM (
+          |      SELECT id, data FROM testcat.ns.resid_b
+          |      UNION ALL SELECT * FROM VALUES (4, 'z') AS q(id, data)) s) t)""".stripMargin
+        val expected = Seq(Row(1, "a", "p"), Row(1, "p", "p"), Row(1, "x", "p"),
+          Row(2, "b", "y"), Row(4, "d", "1"), Row(4, "z", "2"), Row(5, "e", "1"))
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(satisfiesRequirements(plan))
+        assert(hasGroupedUnion(plan), s"the unrelated site keeps its keyed layout:\n$plan")
+        assert(exchangesOverUnion(plan).isEmpty, s"the join inputs are pushed down:\n$plan")
+        // With keyed targets off the join's joint attempt picks the shared hash target, and the
+        // unrelated site keeps its own exchange.
+        withSQLConf(
+            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED.key -> "false") {
+          val hashOnly = sql(query)
+          checkAnswer(hashOnly, expected)
+          val hashPlan = hashOnly.queryExecution.executedPlan
+          assert(satisfiesRequirements(hashPlan))
+          assert(!hasGroupedUnion(hashPlan), s"no keyed target survives:\n$hashPlan")
+          assert(exchangesOverUnion(hashPlan).size === 1,
+            s"only the unrelated site keeps its exchange:\n$hashPlan")
         }
       }
     }

@@ -9002,10 +9002,15 @@ object SQLConf {
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.enabled")
       .internal()
       .doc("When true, pushes an EnsureRequirements shuffle below a union during AQE query " +
-        "stage preparation. The shuffle and the target are hash or V2 keyed layouts. Eligible " +
-        "children already reporting the target keep their layouts; every other child, " +
-        "including an ineligible one that reports the target, is retargeted or given a new " +
-        "exchange. The target partition count must be at least the smaller of " +
+        "stage preparation. The shuffle and the target are hash or V2 keyed layouts. A V2 keyed " +
+        "target additionally requires " +
+        "spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled, " +
+        "which the V2 bucketing settings further gate; it is off by default. Eligible " +
+        "children already reporting the target keep their layouts; under a keyed target so do " +
+        "an unmarked child whose keys are a subset of the domain's and a marked child that " +
+        "declares the domain's list in the same order and still routes by hash. Every other " +
+        "child, including an ineligible one that reports the target, is retargeted or given a " +
+        "new exchange. The target partition count must be at least the smaller of " +
         "the replaced exchange's count and the effective initial shuffle count, and at most a " +
         s"bounded multiple of the larger; the initial count includes " +
         s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set. Requires " +
@@ -9029,11 +9034,13 @@ object SQLConf {
         "whole plan holds; otherwise it falls back to the whole-plan retry on the removed " +
         "layouts. When enabled, the rule also replays the proposal one site at a time: keyed " +
         "targets on top of the hash-only plan, or the proposal itself over the input plan when " +
-        "that pass changes nothing or fails. A site the hash-only pass left on its exchange may " +
-        "also take that exchange's layout, and in the replay over the input plan a site the " +
-        "whole plan rejects takes it. A replayed site is kept only while the whole plan still " +
-        "holds. Each replayed site re-derives the whole plan, so a rejected proposal costs " +
-        "one rewrite per candidate site when enabled.")
+        "that pass changes nothing or fails. In the replay over the input plan a site the whole " +
+        "plan rejects takes the layout of the exchange it removes; the replay visits a site " +
+        "before the sites that contain it, so a nested union can shuffle an inner site's moved " +
+        "legs a second time. A replayed site is kept only while the whole plan still holds. " +
+        "Each attempt re-derives the whole plan, and a site in the replay over the input plan " +
+        "can try two targets, so a rejected proposal costs up to two rewrites and checks per " +
+        "candidate site when enabled.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -9148,7 +9155,7 @@ object SQLConf {
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED =
     buildConf(

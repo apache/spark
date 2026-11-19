@@ -81,10 +81,10 @@ import org.apache.spark.sql.internal.SQLConf
  * `maxUnionChildren` limits all branches whose tails run within each consumer task.
  * The rebuilt child must satisfy its consumer's distribution and pair with the siblings.
  *
- * A V2 keyed target additionally requires
- * `spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled`, which the V2
- * bucketing configs further gate, and `spark.sql.unionOutputPartitioning`, since the union has
- * to report the keyed layout for the grouping above it to be built:
+ * The rule runs only with `spark.sql.unionOutputPartitioning` on, since the rebuilt union has
+ * to report the layout for the grouping above it to be built. A V2 keyed target additionally
+ * requires `spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled`, which the
+ * V2 bucketing configs further gate:
  *
  * {{{
  *   SortMergeJoin                         SortMergeJoin
@@ -126,12 +126,11 @@ import org.apache.spark.sql.internal.SQLConf
  * keyed proposal keeps the push-down the base policy gives every other site. With
  * `spark.sql.adaptive.pushDownShuffleThroughUnion.partialReplay.enabled` the rule then replays
  * keyed targets one site at a time over it, keeping a site only while the whole plan still
- * holds; a site the hash-only pass left on its exchange may also take that exchange's layout. A
- * hash-only pass that changes nothing or fails leaves the replay over the input plan instead,
- * where a rejected site takes the layout of the exchange it removes and a site no child can lay
- * out keeps the exchange it came with, and a plan no site survives falls back to the whole-plan
- * retry on the removed layouts. With the replay off, a rejected proposal keeps the hash-only
- * pass, or the retry when that pass fails.
+ * holds. A hash-only pass that changes nothing or fails leaves the replay over the input plan
+ * instead, where a rejected site takes the layout of the exchange it removes and a site no child
+ * can lay out keeps the exchange it came with, and a plan no site survives falls back to the
+ * whole-plan retry on the removed layouts. With the replay off, a rejected proposal keeps the
+ * hash-only pass, or the retry when that pass fails.
  * Every exchange the rewrite inserts or retargets below a union carries a [[PushedDownShuffle]]
  * mark naming its kind. The cost model excludes inserted exchanges, keeps retargeted ones
  * counted, and charges a union one shuffle when a direct child carries the mark; a union
@@ -193,14 +192,13 @@ case class PushDownShuffleExchangeThroughUnion(
      *    site outside the set is planned with keyed targets off, which is the base policy.
      *
      * Returns, in order: the rewritten plan; whether every target the pass adopted is the layout
-     * of the exchange it removes; the indices of the sites the pass saw, including one it could
-     * not act on because an earlier change left its child invalid; and the indices of the sites
-     * it rewrote.
+     * of the exchange it removes; and the indices of the sites the pass saw, including one it
+     * could not act on because an earlier change left its child invalid.
      */
     def rewrite(
         removedLayoutSites: Set[Int],
         rewriteSites: Option[Set[Int]],
-        keyedSites: Option[Set[Int]]): (SparkPlan, Boolean, Set[Int], Set[Int]) = {
+        keyedSites: Option[Set[Int]]): (SparkPlan, Boolean, Set[Int]) = {
       // Whether an earlier site in this pass has rewritten the plan. Until then its layouts are
       // the ones preparation produced and can be read without checking.
       var hasPushed = false
@@ -208,7 +206,6 @@ case class PushDownShuffleExchangeThroughUnion(
       var usedRemovedLayout = true
       var index = -1
       val candidateSites = mutable.Set.empty[Int]
-      val pushedSites = mutable.Set.empty[Int]
       val rewritten = plan.transformUp {
         case join: ShuffledJoin if !allowJoinInputs => join
         case operator: SparkPlan =>
@@ -246,14 +243,13 @@ case class PushDownShuffleExchangeThroughUnion(
                 usedRemovedLayout = usedRemovedLayout && operatorUsedRemovedLayout
                 if (candidate ne operator) {
                   hasPushed = true
-                  pushedSites += index
                 }
                 candidate
               }
             }
           }
       }
-      (rewritten, usedRemovedLayout, candidateSites.toSet, pushedSites.toSet)
+      (rewritten, usedRemovedLayout, candidateSites.toSet)
     }
 
     def accepted(candidate: SparkPlan): Boolean = {
@@ -272,7 +268,7 @@ case class PushDownShuffleExchangeThroughUnion(
       satisfied && !candidate.exists(node => !PartitioningOrigin.validateNode(node))
     }
 
-    val (pushed, usedRemovedLayout, candidateSites, _) =
+    val (pushed, usedRemovedLayout, candidateSites) =
       rewrite(removedLayoutSites = Set.empty, rewriteSites = None, keyedSites = None)
 
     /**
@@ -284,7 +280,7 @@ case class PushDownShuffleExchangeThroughUnion(
       if (usedRemovedLayout) {
         plan
       } else {
-        val (retried, _, _, _) =
+        val (retried, _, _) =
           rewrite(removedLayoutSites = candidateSites, rewriteSites = None, keyedSites = None)
         if (retried.fastEquals(plan) || !accepted(retried)) plan else retried
       }
@@ -298,16 +294,15 @@ case class PushDownShuffleExchangeThroughUnion(
      * layout (so the first pass already is this pass), when the pass changes nothing, or when the
      * whole plan rejects it too.
      */
-    def hashOnlyPass(): Option[(SparkPlan, Set[Int])] = {
+    def hashOnlyPass(): Option[SparkPlan] = {
       if (!policy.allowV2Bucketing ||
           !plan.exists(_.outputPartitioning.isInstanceOf[KeyedPartitioning])) {
         None
       } else {
-        val (hashOnly, _, _, hashOnlyPushed) =
+        val (hashOnly, _, _) =
           rewrite(removedLayoutSites = Set.empty, rewriteSites = None,
             keyedSites = Some(Set.empty))
-        Option.when(!hashOnly.fastEquals(plan) && accepted(hashOnly))(
-          (hashOnly, hashOnlyPushed))
+        Option.when(!hashOnly.fastEquals(plan) && accepted(hashOnly))(hashOnly)
       }
     }
 
@@ -315,32 +310,25 @@ case class PushDownShuffleExchangeThroughUnion(
      * Partially replay keyed targets one site at a time over the accepted hash-only plan. Every
      * site is re-derived on each attempt, with keyed targets off outside `adopted` and the site
      * being tried, so the other sites keep the base policy's choice. A site keeps a keyed target
-     * only while the whole plan holds; a site the hash-only pass left on its exchange may also
-     * take that exchange's layout, which the hash-only pass had no target for, and keeps it in
-     * the later attempts.
+     * only while the whole plan holds.
      */
-    def partialReplayKeyed(hashOnly: SparkPlan, hashOnlySites: Set[Int]): SparkPlan = {
+    def partialReplayKeyed(hashOnly: SparkPlan): SparkPlan = {
       var adopted = Set.empty[Int]
-      var onRemovedLayout = Set.empty[Int]
       var bestPlan = hashOnly
-      def adopt(index: Int, removedLayoutSites: Set[Int]): Boolean = {
-        val (candidate, _, _, _) = rewrite(
-          removedLayoutSites = removedLayoutSites,
+      def adopt(index: Int): Boolean = {
+        val (candidate, _, _) = rewrite(
+          removedLayoutSites = Set.empty,
           rewriteSites = None,
           keyedSites = Some(adopted + index))
         if (!candidate.fastEquals(bestPlan) && accepted(candidate)) {
           adopted += index
-          onRemovedLayout = removedLayoutSites
           bestPlan = candidate
           true
         } else {
           false
         }
       }
-      candidateSites.toSeq.sorted.foreach { index =>
-        adopt(index, onRemovedLayout) ||
-          (!hashOnlySites.contains(index) && adopt(index, onRemovedLayout + index))
-      }
+      candidateSites.toSeq.sorted.foreach(adopt)
       bestPlan
     }
 
@@ -355,7 +343,7 @@ case class PushDownShuffleExchangeThroughUnion(
       var onRemovedLayout = Set.empty[Int]
       var bestPlan = plan
       def adopt(index: Int, removedLayoutSites: Set[Int]): Boolean = {
-        val (candidate, _, _, _) = rewrite(
+        val (candidate, _, _) = rewrite(
           removedLayoutSites,
           rewriteSites = Some(adopted + index),
           keyedSites = Some(adopted + index))
@@ -392,8 +380,8 @@ case class PushDownShuffleExchangeThroughUnion(
       val partialReplay =
         conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_PARTIAL_REPLAY_ENABLED)
       hashOnlyPass() match {
-        case Some((hashOnly, hashOnlySites)) =>
-          if (partialReplay) partialReplayKeyed(hashOnly, hashOnlySites) else hashOnly
+        case Some(hashOnly) =>
+          if (partialReplay) partialReplayKeyed(hashOnly) else hashOnly
         case None =>
           if (partialReplay) partialReplayHashAndKeyed() else retryOnRemovedLayouts()
       }
@@ -434,8 +422,9 @@ case class PushDownShuffleExchangeThroughUnion(
      * grouped and its grouped form when it is not, the form `EnsureRequirements` plans. A child
      * offering nothing takes a shuffle.
      *
-     * Every keepable keyed child offers its layout, marked or not, so any of them can supply the
-     * target. Whether a marked leg is kept beside a target is settled later, in
+     * Every keepable keyed child offers its layout, marked or not; a layout that still routes
+     * undeclared keys by hash can supply the target, and one that lost its routing is laid out
+     * instead. Whether a marked leg is kept beside a target is settled later, in
      * `reportsDomain(kept = true)`: it has to declare the target's key list in the same order and
      * still route by hash, and one that fails those is laid out like any other child.
      */
@@ -559,8 +548,9 @@ case class PushDownShuffleExchangeThroughUnion(
   }
 
   /**
-   * Rewrites eligible children in order. If a joint rewrite fails, retry individual children
-   * against all current siblings, keeping children without a viable target unchanged.
+   * Rewrites eligible children in order: a joint attempt first; when it fails and keyed targets
+   * are available, a joint attempt with keyed targets off; then individual children against all
+   * current siblings, keeping children without a viable target unchanged.
    *
    * Returns the rewritten operator and whether every site used the layout of the exchange this
    * rewrite removes; a failed whole-plan check uses the latter to decide whether a retry on that
@@ -720,7 +710,11 @@ case class PushDownShuffleExchangeThroughUnion(
               }))
           } &&
           ValidateRequirements.satisfiesForPairing(
-            child +: fixed.map(_._1), required +: fixed.map(_._2))
+            child +: fixed.map(_._1), required +: fixed.map(_._2)) &&
+          // A target that loses a recorded origin is declined here, so the site falls back to
+          // its next target instead of failing the whole plan and taking the other sites'
+          // keyed targets with it.
+          !child.exists(node => !PartitioningOrigin.validateNode(node))
       }
       .map { case (target, child) =>
         (child, target.semanticEquals(prepared.removedLayout))
@@ -804,9 +798,9 @@ case class PushDownShuffleExchangeThroughUnion(
    *
    * Offers are the children that would keep their layouts (`reportsDomain`): one reporting the
    * target, or an unmarked one reporting a subset of its keys, keeps it, so it counts for both
-   * the staged pin and the
-   * count-based ranking. The set is returned with the target, since that is also how the callers
-   * ask how many children move and whether any of them is laid out at all.
+   * the staged pin and the count-based ranking. The set is returned with the target, since that
+   * is also how the callers ask how many children move and whether any of them is laid out at
+   * all.
    *
    * A keyed target also has to be a template `EnsureRequirements` would admit and one Spark can
    * evaluate, which is `KeyedShuffleSpec(keyed, required).canCreatePartitioning` and
