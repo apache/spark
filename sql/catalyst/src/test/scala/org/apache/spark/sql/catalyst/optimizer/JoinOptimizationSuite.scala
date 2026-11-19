@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Coalesce, Divide, EvalMode, Expression, If, IsNull, Literal, NumericEvalContext, RaiseError, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Divide, EvalMode, Expression, If, IsNull, Literal, NumericEvalContext, RaiseError, Rand}
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -93,6 +93,16 @@ class JoinOptimizationSuite extends PlanTest {
       Some((Seq((x, Inner), (y, Inner), (z, Cross)), Seq("x.b".attr === "y.d".attr))))
     testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Inner),
       Some((Seq((x, Cross), (y, Cross), (z, Inner)), Seq("x.b".attr === "y.d".attr))))
+
+    // The conditions of each join or filter are one group, from the bottom up.
+    assert(ExtractFiltersAndInnerJoins.unapply(
+      x.join(y, condition = Some("x.b".attr === "y.d".attr && "x.a".attr > 1))
+        .where("y.d".attr > 2)
+        .join(z, condition = Some("x.c".attr === "z.c".attr))).map(_._2) ===
+      Some(Seq(
+        Seq("x.b".attr === "y.d".attr, "x.a".attr > 1),
+        Seq("y.d".attr > 2),
+        Seq("x.c".attr === "z.c".attr))))
   }
 
   test("reorder inner joins") {
@@ -178,26 +188,18 @@ class JoinOptimizationSuite extends PlanTest {
     assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
   }
 
-  test("SPARK-62069: reorder inner joins without evaluating a kept condition on the rows that a " +
-    "lower join removes") {
+  test("SPARK-62069: do not reorder inner joins when the conditions kept above them come from " +
+    "more than one join or filter") {
     // The lower join removes a row on which its condition is NULL, so the condition of the join
-    // above is not evaluated on the row. So the conditions kept above the joins from the lower
-    // join are wrapped with coalesce, which makes `NULL AND x` FALSE without evaluating x, while
-    // they stay in a plain AND with each other. Only ReorderJoin runs.
+    // above is not evaluated on the row, but a filter above all the joins would evaluate it after
+    // the NULL with AND. Only ReorderJoin runs.
     def divide(l: Expression, r: Expression): Expression =
       Divide(l, r, NumericEvalContext(EvalMode.ANSI))
     val z = LocalRelation($"e".int, $"f".int)
-    val lower = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom")))) &&
-      divide($"b", $"d") > 1
-    val upper = divide($"a", $"f") > 1
-    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d" && lower))
-      .join(z, condition = Some($"c" === $"e" && upper))
-    val answer = testRelation.join(testRelation1, condition = Some($"a" === $"d"))
-      .join(z, condition = Some($"c" === $"e"))
-      .where(Coalesce(Seq(lower, Literal(false))) && upper)
-
-    val reordered = ReorderJoin(query.analyze)
-    comparePlans(reordered, answer.analyze)
-    assert(topFilterConjuncts(reordered) === topFilterConjuncts(answer.analyze))
+    val throwing = If($"a" > 0, $"b" > $"d", IsNull(RaiseError(Literal("boom"))))
+    val query = testRelation.join(testRelation1, condition = Some($"a" === $"d" && throwing))
+      .join(z, condition = Some($"c" === $"e" && divide($"a", $"f") > 1))
+      .analyze
+    comparePlans(ReorderJoin(query), query)
   }
 }

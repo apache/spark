@@ -2079,8 +2079,8 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-62069: reordering inner joins does not evaluate a join condition on the rows " +
-    "that a lower join removes") {
+  test("SPARK-62069: do not evaluate a join condition on the rows that a lower inner join " +
+    "removes") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("tb1", "tb2", "tb3") {
         Seq((1, 1, 5), (2, 2, 5)).toDF("k", "v", "f").write.saveAsTable("tb1")
