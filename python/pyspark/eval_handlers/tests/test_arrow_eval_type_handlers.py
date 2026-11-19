@@ -278,14 +278,14 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
                     self.assertEqual(report["pythonNumTimingReports"], 1)
                     self.assertEqual(report["pythonNumTimedBatches"], 2)
                     for name in (
-                        "pythonInputPreparationTime",
-                        "pythonUDFExecutionTime",
-                        "pythonOutputPreparationTime",
+                        "pythonInputPreparationTimeUs",
+                        "pythonUDFExecutionTimeUs",
+                        "pythonOutputPreparationTimeUs",
                     ):
                         self.assertIn(name, report)
                 else:
                     self.assertNotIn("pythonNumTimingReports", report)
-                    self.assertNotIn("pythonInputPreparationTime", report)
+                    self.assertNotIn("pythonInputPreparationTimeUs", report)
 
     def test_phase_timing_boundaries(self):
         metrics = WorkerMetrics()
@@ -360,11 +360,11 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
         self.assertEqual(output.rows_at_write, 2)
         self.assertEqual(report["pythonNumTimedBatches"], 2)
         self.assertGreater(input_ns, 0)
-        self.assertEqual(report["pythonInputPreparationTime"], input_ns // 1_000_000)
-        self.assertEqual(report["pythonUDFExecutionTime"], 300)
+        self.assertEqual(report["pythonInputPreparationTimeUs"], input_ns // 1_000)
+        self.assertEqual(report["pythonUDFExecutionTimeUs"], 300_000)
         self.assertGreater(output_ns, 0)
-        self.assertEqual(report["pythonOutputPreparationTime"], output_ns // 1_000_000)
-        self.assertEqual(report["pythonDataWriteTime"], output.write_ns // 1_000_000)
+        self.assertEqual(report["pythonOutputPreparationTimeUs"], output_ns // 1_000)
+        self.assertEqual(report["pythonDataWriteTimeUs"], output.write_ns // 1_000)
 
     def test_invokes_udf_per_row(self):
         handler = self._handler(

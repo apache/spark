@@ -61,7 +61,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
   protected def newReaderIterator(
       stream: DataInputStream,
       writer: Writer,
-      startTime: Long,
+      startTimeUs: Long,
       env: SparkEnv,
       worker: PythonWorker,
       handle: Option[PythonWorkerHandle],
@@ -69,7 +69,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       context: TaskContext): Iterator[OUT] = {
 
     new ReaderIterator(
-      stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
+      stream, writer, startTimeUs, env, worker, handle, releasedOrClosed, context) {
 
       private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"stdin reader for $pythonExec", 0, Long.MaxValue)

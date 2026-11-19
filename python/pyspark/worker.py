@@ -135,7 +135,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     try:
         metrics = WorkerMetrics()
         metrics.reset()
-        metrics.set_current_timestamp("bootTimestampMs")
+        metrics.set_current_timestamp("bootTimestamp")
         # Initialization
         init_message = message_receiver.get_init_message()
         init_info = WorkerInitInfo.from_stream(init_message)
@@ -234,7 +234,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         split_index = init_info.split_index
         del init_info
 
-        metrics.set_current_timestamp("initTimestampMs")
+        metrics.set_current_timestamp("initTimestamp")
         report_init_response(outfile)
         initialized = True
 
@@ -268,7 +268,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
 
         sampling_profiler_enabled = runner_conf.udf_profiler == "sampling"
 
-        with metrics.measure("pythonExecutionDurationMs"), capture_outputs():
+        with metrics.measure("pythonExecutionDuration"), capture_outputs():
             if profiler:
                 profiler.profile(run_process)
             elif sampling_profiler_enabled:
@@ -306,7 +306,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 print("PySpark worker failed with exception:", file=sys.stderr)
                 print(traceback.format_exc(), file=sys.stderr)
         sys.exit(-1)
-    metrics.set_current_timestamp("finishTimestampMs")
+    metrics.set_current_timestamp("finishTimestamp")
     # Spill totals are byte counts already expressed in their reporting unit.
     metrics.set("memoryBytesSpilled", shuffle.MemoryBytesSpilled)
     metrics.set("diskBytesSpilled", shuffle.DiskBytesSpilled)
