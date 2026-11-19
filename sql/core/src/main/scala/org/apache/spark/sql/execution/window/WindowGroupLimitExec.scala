@@ -22,9 +22,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.catalyst.util.{UnsafeRowKeyOperations, UnsafeRowUtils}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.{StructField, StructType}
 
 sealed trait WindowGroupLimitMode
 
@@ -206,14 +207,27 @@ class GroupedLimitIterator(
 
   val grouping = UnsafeProjection.create(partitionSpec, output)
 
-  // A non-binary-stable key (e.g. a collated STRING) makes the checker fall back to an
-  // ordering-based comparison over all fields. Float and double keys arrive already
-  // normalized by NormalizeFloatingNumbers (-0.0 becomes 0.0, NaNs are canonical), so
-  // both branches group them the same way WindowExec does. The bytes are checked first,
-  // so a key spelled like its group's first row costs one byte comparison and only keys
-  // whose bytes differ pay the ordering comparison.
-  private val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean =
-    UnsafeRowUtils.rowEqualityChecker(partitionSpec.map(_.dataType), checkBytesFirst = true)
+  // A non-binary-stable key (e.g. a collated STRING) makes group membership a collation
+  // comparison. This operator compares collated keys with the key equality
+  // (UnsafeRowKeyOperations) rather than the shared checker's ordering fallback, to
+  // avoid the interpreted ordering's work at each group boundary. Float and double keys
+  // arrive already normalized by NormalizeFloatingNumbers (-0.0 becomes 0.0, NaNs are
+  // canonical), so byte equality of their binary-stable fields matches the ordering and
+  // the groups are the ones WindowExec forms. Binary-stable keys, and keys whose types
+  // the key operations do not admit, keep the shared checker's single byte comparison.
+  private val groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean = {
+    val keyTypes = partitionSpec.map(_.dataType)
+    if (!keyTypes.forall(UnsafeRowUtils.isBinaryStable) &&
+        keyTypes.forall(UnsafeRowKeyOperations.supportsDataType)) {
+      val keySchema = StructType(keyTypes.zipWithIndex.map { case (dataType, ordinal) =>
+        StructField(s"key_$ordinal", dataType)
+      })
+      val keyOperations = new UnsafeRowKeyOperations(keySchema)
+      (key1, key2) => key1.equals(key2) || keyOperations.areEqual(key1, key2)
+    } else {
+      UnsafeRowUtils.rowEqualityChecker(keyTypes, checkBytesFirst = true)
+    }
+  }
 
   // Manage the stream and the grouping.
   var nextRow: UnsafeRow = null

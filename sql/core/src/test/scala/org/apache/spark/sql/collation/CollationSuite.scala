@@ -3499,6 +3499,81 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("WindowGroupLimitExec collation grouping with struct and array partition keys") {
+    // A struct or array key holding a mixed-spelling UTF8_LCASE string must compare over
+    // every nested field: byte grouping splits each spelling into its own group and
+    // forwards every row, while a comparison over the collated string alone would also
+    // merge keys whose other fields differ. checkAnswer alone cannot catch either (the
+    // WindowExec above the limit recomputes the answer), so the Final node's
+    // numOutputRows is asserted as in the tests above, and the answers are compared
+    // against the same query with the window group limit disabled.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      // Struct key: ('a', 1) / ('A', 1) / ('a', 1) alternate spellings of one collation
+      // group, ('a', 2) is a second group that differs only in its non-collated field.
+      withTable("t_st") {
+        sql("""CREATE TABLE t_st (st STRUCT<s: STRING COLLATE UTF8_LCASE, i INT>, ts TIMESTAMP)
+              |  USING PARQUET""".stripMargin)
+        sql("""INSERT INTO t_st VALUES
+              |  (named_struct('s', 'a', 'i', 1), timestamp'2026-01-01 10:00:00'),
+              |  (named_struct('s', 'A', 'i', 1), timestamp'2026-01-01 10:05:00'),
+              |  (named_struct('s', 'a', 'i', 1), timestamp'2026-01-01 10:08:00'),
+              |  (named_struct('s', 'a', 'i', 2), timestamp'2026-01-01 10:02:00')""".stripMargin)
+        val df = sql("""SELECT st, ts, r FROM (
+                       |  SELECT st, ts, ROW_NUMBER() OVER (PARTITION BY st ORDER BY ts) AS r
+                       |  FROM t_st) WHERE r <= 1""".stripMargin)
+        // The answer must equal the same query with the window group limit disabled:
+        // a check that wrongly merged two collation groups would drop rows the
+        // WindowExec above the limit needs.
+        val limitedAnswer = df.collect()
+        withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
+          val unlimitedAnswer = sql("""SELECT st, ts, r FROM (
+                                      |  SELECT st, ts,
+                                      |    ROW_NUMBER() OVER (PARTITION BY st ORDER BY ts) AS r
+                                      |  FROM t_st) WHERE r <= 1""".stripMargin).collect()
+          assert(limitedAnswer.toSet == unlimitedAnswer.toSet)
+        }
+        val finalForwarded = collect(df.queryExecution.executedPlan) {
+          case w: WindowGroupLimitExec if w.mode == Final =>
+            w.metrics("numOutputRows").value
+        }.sum
+        // Post-fix: one survivor per collation group ('a'/'A' with i = 1, and i = 2) =
+        // 2 rows. Pre-fix byte grouping forwards one row per byte group = 3; a
+        // comparator over the string field alone would forward 1.
+        assert(finalForwarded == 2,
+          s"WindowGroupLimitExec(Final) should forward 2 rows, got $finalForwarded")
+      }
+
+      // Array key: ['a', 'b'] / ['A', 'B'] alternate spellings of one collation group,
+      // ['a', 'c'] is a second group that differs in its second element.
+      withTable("t_arr") {
+        sql("CREATE TABLE t_arr (arr ARRAY<STRING COLLATE UTF8_LCASE>, i INT) USING PARQUET")
+        sql("""INSERT INTO t_arr VALUES
+              |  (array('a', 'b'), 1), (array('A', 'B'), 2), (array('a', 'c'), 3)""".stripMargin)
+        val df = sql("""SELECT arr, r FROM (
+                       |  SELECT arr, ROW_NUMBER() OVER (PARTITION BY arr ORDER BY i) AS r
+                       |  FROM t_arr) WHERE r <= 1""".stripMargin)
+        val limitedAnswer = df.collect()
+        withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "-1") {
+          val unlimitedAnswer = sql("""SELECT arr, r FROM (
+                                      |  SELECT arr,
+                                      |    ROW_NUMBER() OVER (PARTITION BY arr ORDER BY i) AS r
+                                      |  FROM t_arr) WHERE r <= 1""".stripMargin).collect()
+          assert(limitedAnswer.toSet == unlimitedAnswer.toSet)
+        }
+        val finalForwarded = collect(df.queryExecution.executedPlan) {
+          case w: WindowGroupLimitExec if w.mode == Final =>
+            w.metrics("numOutputRows").value
+        }.sum
+        // Post-fix: one survivor per collation group = 2 rows. Pre-fix byte grouping
+        // forwards one row per byte group = 3.
+        assert(finalForwarded == 2,
+          s"WindowGroupLimitExec(Final) should forward 2 rows, got $finalForwarded")
+      }
+    }
+  }
+
   test("session window aggregation groups collated keys (plain and distinct aggregates)") {
     // The two session-window grouping iterators compare the grouping key without the
     // session column: MergingSessionsIterator for plain aggregates, and
