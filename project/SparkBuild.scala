@@ -64,10 +64,11 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, commonUtilsJava, variant, pipelines, sparkConfig, _*
+    commonUtils, commonUtilsJava, libmpd, variant, pipelines, sparkConfig, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines", "config"
+    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "libmpd", "variant",
+    "pipelines", "config"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects ++
     udfWorkerProjects
 
@@ -419,7 +420,7 @@ object SparkBuild extends PomBuild {
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
       connectJdbc, connectClient, variant, connectShims, profiler, credentialAws,
-      commonUtilsJava, sparkConfig,
+      commonUtilsJava, libmpd, sparkConfig,
       udfWorkerProto, udfWorkerCore, udfWorkerGrpc
     ).contains(x)
   }
@@ -430,6 +431,8 @@ object SparkBuild extends PomBuild {
 
   /* Generate and pick the spark build info from extra-resources */
   enable(CommonUtils.settings)(commonUtils)
+
+  enable(LibMpd.settings)(libmpd)
 
   enable(Core.settings)(core)
 
@@ -635,6 +638,20 @@ object SparkParallelTestGrouping {
           runPolicy = Tests.SubProcess(forkOptions))
       }
     }.toSeq
+  )
+}
+
+object LibMpd {
+  lazy val settings = Seq(
+    publish / skip := true,
+    // JBR / some JDKs used for local builds lack jdk.incubator.vector.
+    javaOptions := javaOptions.value.filterNot(_.contains("jdk.incubator.vector")),
+    Test / javaOptions := (Test / javaOptions).value
+      .filterNot(_.contains("jdk.incubator.vector")),
+    // Optional prebuilt libbid jar for cross-engine benches (no sources).
+    Test / unmanagedJars ++= {
+      sys.env.get("MPD_BID_JAR").toSeq.map(file).filter(_.exists())
+    }
   )
 }
 
