@@ -58,7 +58,7 @@ case class JoinEstimation(join: Join) extends Logging {
 
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
-      // A key cast to a STRING that keeps its value is estimated as the key itself.
+      // A key cast to a STRING of its own collation is estimated as the key itself.
       val strippedLeftKeys = leftKeys.map(stripCastToPlainString)
       val strippedRightKeys = rightKeys.map(stripCastToPlainString)
       val joinKeyPairs = extractJoinKeysWithColStats(strippedLeftKeys, strippedRightKeys)

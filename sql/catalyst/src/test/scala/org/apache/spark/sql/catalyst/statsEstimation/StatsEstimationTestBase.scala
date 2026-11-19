@@ -59,7 +59,10 @@ trait StatsEstimationTestBase extends SparkFunSuite {
     DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
       StructType(Seq(StructField(colName, CharType(n))))).head)
 
-  /** A VARCHAR(n) column as a table scan outputs it, before the read-side check. */
+  /**
+   * A VARCHAR(n) column as a table scan outputs it when CHAR and VARCHAR are not first-class
+   * types; `firstClassRead` gives the read its VARCHAR type.
+   */
   def varcharAttr(colName: String, n: Int): AttributeReference =
     DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
       StructType(Seq(StructField(colName, VarcharType(n))))).head)
@@ -74,8 +77,8 @@ trait StatsEstimationTestBase extends SparkFunSuite {
     conf.setConf(if (standardSemantics) SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS
       else SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO, true)
     SQLConf.withExistingConf(conf)(CharVarcharUtils.addPaddingForScan(attr)) match {
-      case a: Attribute =>
-        a.withDataType(CharVarcharUtils.getRawType(a.metadata).getOrElse(fail(s"not CHAR: $a")))
+      case a: Attribute => a.withDataType(
+        CharVarcharUtils.getRawType(a.metadata).getOrElse(fail(s"not CHAR or VARCHAR: $a")))
       case read => read
     }
   }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
@@ -245,8 +245,8 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     assert(checkedStat(c, stat).contains(stat.copy(avgLen = Some(5), maxLen = Some(5))))
     assert(checkedStat(charAttr("w", 30), nullStat).contains(nullStat))
     // The VARCHAR check never makes a value longer, so its lengths are kept.
-    val v = varcharAttr("v", 5)
-    assert(checkedStat(v, stat).contains(stat))
+    assert(checkedStat(varcharAttr("v", 5), stat).contains(stat))
+    // An all-null VARCHAR column keeps its stats too.
     assert(checkedStat(varcharAttr("w", 30), nullStat).contains(nullStat))
   }
 
@@ -255,6 +255,10 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     // column. Short values, so that a CHAR read raises the lengths to 5.
     val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
       avgLen = Some(3), maxLen = Some(4))
+    def aliasStat(child: LogicalPlan, cast: Expression): Option[ColumnStat] = {
+      val proj = Project(Seq(Alias(cast, "c")()), child)
+      proj.stats.attributeStats.get(proj.output.head)
+    }
     for {
       column <- Seq(charAttr("c", 5), varcharAttr("c", 5))
       standardSemantics <- Seq(true, false)
@@ -266,12 +270,17 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       } else {
         stat
       }
-      val proj = Project(Seq(Alias(Cast(read, StringType), "c")()), child)
-      assert(proj.stats.attributeStats.get(proj.output.head).contains(expected), read)
-      // A cast to a length-checked type is not stripped.
-      val toVarchar = Project(Seq(Alias(Cast(read, VarcharType(2)), "c")()), child)
-      assert(toVarchar.stats.attributeStats.get(toVarchar.output.head).isEmpty, read)
+      assert(aliasStat(child, Cast(read, StringType)).contains(expected), read)
+      // Casts to a length-checked type or to another collation are not stripped.
+      assert(aliasStat(child, Cast(read, VarcharType(2))).isEmpty, read)
+      assert(aliasStat(child, Cast(read, StringType("UTF8_LCASE"))).isEmpty, read)
     }
+    // Nor is a cast of a column of another type.
+    val i = attr("i")
+    val intChild = StatsTestPlan(Seq(i), 1000, AttributeMap(Seq(i -> ColumnStat(
+      distinctCount = Some(10), min = Some(1), max = Some(10), nullCount = Some(0),
+      avgLen = Some(4), maxLen = Some(4)))))
+    assert(aliasStat(intChild, Cast(i, StringType)).isEmpty)
   }
 
   private def checkProjectStats(

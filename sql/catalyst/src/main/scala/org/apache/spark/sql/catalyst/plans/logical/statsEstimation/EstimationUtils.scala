@@ -86,8 +86,8 @@ object EstimationUtils {
       attributeStats: AttributeMap[ColumnStat],
       rowCount: BigInt): Seq[(Attribute, ColumnStat)] = {
     expressions.collect {
-      // A cast to STRING that keeps the value keeps the column's statistics, e.g. the cast that a
-      // union with a STRING column adds to a CHAR or VARCHAR column as a first-class type.
+      // A cast to a STRING of the same collation keeps the value and the column's statistics,
+      // e.g. the cast that a union with a STRING adds to a first-class VARCHAR column.
       case alias @ Alias(WithoutCastToPlainString(attr: Attribute), _)
           if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)

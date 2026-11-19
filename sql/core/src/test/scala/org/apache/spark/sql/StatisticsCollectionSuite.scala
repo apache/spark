@@ -296,7 +296,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   // the predicates below match the same rows for CHAR(5), VARCHAR(5) and STRING.
   private val fiveCharValues = "CAST(10000 + id % 10 AS STRING) FROM range(1000)"
 
-  /** Asserts both the estimated and the actual row count of the node `pick` selects. */
+  /** Asserts the estimated row count of the node `pick` selects and the query's row count. */
   private def checkRows(query: String, expectedRows: Long, clue: String)(
       pick: PartialFunction[LogicalPlan, LogicalPlan]): Unit = {
     assert(estimatedRows(query)(pick).contains(BigInt(expectedRows)), s"$clue, $query")
@@ -335,6 +335,41 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           // So is the column in a union with a STRING column.
           checkRows(s"SELECT k, count(*) FROM (SELECT c AS k FROM $tableName UNION ALL " +
               s"SELECT s FROM $stringTable) GROUP BY k", 10, clue) {
+            case a: Aggregate => a
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60830: CBO keeps CHAR/VARCHAR column statistics through an explicit cast") {
+    // Without first-class CHAR/VARCHAR types, SimplifyCasts keeps a cast to STRING of a VARCHAR
+    // column and of a CHAR join key. Other CHAR predicates are pushed below the padding Project.
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { colType =>
+      withSQLConf(
+          SQLConf.CBO_ENABLED.key -> "true",
+          SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+        val tableName = "char_varchar_explicit_cast_stats"
+        val stringTable = "char_varchar_explicit_cast_strings"
+        withTable(tableName, stringTable) {
+          sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
+          sql(s"CREATE TABLE $stringTable(s STRING) USING parquet")
+          Seq(tableName, stringTable).foreach { t =>
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+          }
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+          sql(s"ANALYZE TABLE $stringTable COMPUTE STATISTICS FOR COLUMNS s")
+
+          checkRows(s"SELECT * FROM $tableName WHERE CAST(c AS STRING) = '10003'", 100,
+              colType) {
+            case f: Filter => f
+          }
+          checkRows(s"SELECT * FROM $tableName JOIN $stringTable ON CAST(c AS STRING) = s",
+              100000, colType) {
+            case j: Join => j
+          }
+          checkRows(s"SELECT k, count(*) FROM (SELECT CAST(c AS STRING) AS k FROM $tableName) " +
+              "GROUP BY k", 10, colType) {
             case a: Aggregate => a
           }
         }
