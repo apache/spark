@@ -137,8 +137,10 @@ private[sql] class SharedState(
    * still weaken the limit.
    */
   private[sql] lazy val scanLimitListener: ScanLimitListener = {
-    val listener = new ScanLimitListener(sparkContext.cancelJobsWithTag(_, _))
-    sparkContext.listenerBus.addToQueue(listener, "scanLimit")
+    // The listener is never removed, so its function must not capture this SharedState.
+    val sc = sparkContext
+    val listener = new ScanLimitListener(sc.cancelJobsWithTag(_, _))
+    sc.listenerBus.addToQueue(listener, "scanLimit")
     listener
   }
 

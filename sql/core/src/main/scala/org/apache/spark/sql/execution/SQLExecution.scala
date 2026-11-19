@@ -202,10 +202,12 @@ object SQLExecution extends Logging {
     }
   }
 
-  /** Whether `e`, or one of its causes, is the failure of a job that was cancelled. */
-  private def isCausedByJobCancellation(e: Throwable): Boolean = {
+  /** Whether `e`, or one of its causes, is the failure of a job that was cancelled for `reason`. */
+  private def isCausedByJobCancellation(e: Throwable, reason: String): Boolean = {
     ExceptionUtils.getThrowableList(e).asScala.exists {
-      case st: SparkThrowable => st.getCondition == "SPARK_JOB_CANCELLED"
+      case st: SparkThrowable =>
+        st.getCondition == "SPARK_JOB_CANCELLED" &&
+          st.getMessageParameters.get("reason") == reason
       case _ => false
     }
   }
@@ -249,21 +251,22 @@ object SQLExecution extends Logging {
       val interruptOnCancel = sparkSession.sessionState.conf.getConf(SQLConf.INTERRUPT_ON_CANCEL)
       sc.setInterruptOnCancel(interruptOnCancel)
     }
-    // A root execution with a scan limit is tracked by the listener that enforces the limit. The
-    // jobs of its nested executions have its root execution ID and its job tag, so they count
-    // towards the same limit. Streaming queries are not limited: neither their batches nor the
-    // queries that their sources run on the thread of the stream while they plan a batch, with
-    // whichever session they hold. The thread of a stream has its query ID for as long as it runs.
     val maxScanBytes = sparkSession.sessionState.conf.getConf(SQLConf.MAX_SCAN_BYTES)
-    val scanLimitListener = if (existingRootId == null && maxScanBytes >= 0 &&
-        sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null) {
-      val listener = sparkSession.sharedState.scanLimitListener
-      listener.register(executionId, maxScanBytes, executionIdJobTag(sparkSession, executionId))
-      Some(listener)
-    } else {
-      None
-    }
+    var scanLimitListener: Option[ScanLimitListener] = None
     try {
+      // A root execution with a scan limit is tracked by the listener that enforces the limit.
+      // The jobs of its nested executions have its root execution ID and its job tag, so they
+      // count towards the same limit. Streaming queries are not limited: neither their batches
+      // nor the queries that their sources run on the thread of the stream while they plan a
+      // batch, with whichever session they hold. The thread of a stream has its query ID for as
+      // long as it runs. Creating the listener fails once the listener bus is stopped, so it is
+      // done in this `try`, whose `finally` restores the state of the thread.
+      if (existingRootId == null && maxScanBytes >= 0 &&
+          sc.getLocalProperty(StreamExecution.QUERY_ID_KEY) == null) {
+        val listener = sparkSession.sharedState.scanLimitListener
+        listener.register(executionId, maxScanBytes, executionIdJobTag(sparkSession, executionId))
+        scanLimitListener = Some(listener)
+      }
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
       // streaming queries would give us call site like "run at <unknown>:0"
@@ -332,12 +335,14 @@ object SQLExecution extends Logging {
               }
             } catch {
               case e: Throwable =>
-                // A query that went over its scan limit fails with the error of a cancelled job.
-                // Fail it with the error that names the limit instead. Any other error is kept:
-                // the query may have failed for another reason after it went over the limit.
+                // A query that went over its scan limit fails with the error of a job that the
+                // listener cancelled. Fail it with the error that names the limit instead. Any
+                // other error is kept, such as a cancellation by the user: the query may have
+                // failed for another reason after it went over the limit.
                 val error = scanLimitListener
                   .flatMap(_.bytesReadOverLimit(executionId))
-                  .filter(_ => NonFatal(e) && isCausedByJobCancellation(e))
+                  .filter(bytesRead => NonFatal(e) && isCausedByJobCancellation(
+                    e, ScanLimitListener.cancelReason(bytesRead, maxScanBytes)))
                   .map(QueryExecutionErrors.scanBytesLimitExceededError(_, maxScanBytes, e))
                   .getOrElse(e)
                 ex = Some(error)

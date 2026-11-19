@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
@@ -75,27 +76,36 @@ class ScanLimitSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("a query that fails for another reason after it read more than the limit keeps its error") {
-    withData { path =>
-      withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1") {
-        val df = spark.read.parquet(path)
-        val e = intercept[IllegalStateException] {
-          SQLExecution.withNewExecutionId(df.queryExecution) {
-            // A heartbeat may report what the task read before the task ends, and so cancel
-            // the job. Either way the query has read more than the limit once the job is over.
-            try {
-              df.queryExecution.executedPlan.executeCollect()
-            } catch {
-              case _: SparkException =>
+  // After a query read more than the limit, it may still fail for another reason, or be
+  // cancelled by the user before the listener cancels it.
+  Seq(
+    "fails for another reason" -> new IllegalStateException("unrelated"),
+    "is cancelled for another reason" ->
+      SparkCoreErrors.sparkJobCancelled(0, "part of cancelled job tags user", null)
+  ).foreach { case (failure, error) =>
+    test(s"a query that $failure after it read more than the limit keeps its error") {
+      withData { path =>
+        withSQLConf(SQLConf.MAX_SCAN_BYTES.key -> "1") {
+          val df = spark.read.parquet(path)
+          val e = intercept[Exception] {
+            SQLExecution.withNewExecutionId(df.queryExecution) {
+              // A heartbeat may report what the task read before the task ends, and so cancel
+              // the job. Either way the query has read more than the limit once the job is over.
+              try {
+                df.queryExecution.executedPlan.executeCollect()
+              } catch {
+                case _: SparkException =>
+              }
+              spark.sparkContext.listenerBus.waitUntilEmpty()
+              val executionId =
+                spark.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong
+              assert(
+                spark.sharedState.scanLimitListener.bytesReadOverLimit(executionId).isDefined)
+              throw error
             }
-            spark.sparkContext.listenerBus.waitUntilEmpty()
-            val executionId =
-              spark.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong
-            assert(spark.sharedState.scanLimitListener.bytesReadOverLimit(executionId).isDefined)
-            throw new IllegalStateException("unrelated")
           }
+          assert(e eq error)
         }
-        assert(e.getMessage == "unrelated")
       }
     }
   }
