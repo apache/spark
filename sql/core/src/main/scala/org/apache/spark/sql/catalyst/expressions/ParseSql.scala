@@ -104,13 +104,14 @@ import org.apache.spark.unsafe.types.UTF8String
       * variables - Optional constant array of `named_struct('name', ..., 'type', ...)`
         entries. Each name is a variable that `ANALYZE` treats as declared with the DDL
         type: a session variable (`v`, `session.v`, or `system.session.v`) or a qualified
-        local such as a procedure parameter (`proc.p`). The variable is not created.
+        local such as a procedure parameter (`proc.p`). The variable is not created, and
+        the body of a view or SQL function still reads the real variable.
       * relations - Optional constant array of `named_struct('name', ..., 'schema', ...)`
         entries. Each name is a relation that `ANALYZE` treats as existing with the DDL
         schema; nothing is created. Query sources and the targets of INSERT, UPDATE,
         DELETE, and MERGE resolve to the entry. DDL and other commands that name a table
-        act on the catalog's own objects, and a relation read by a view's body is not
-        replaced.
+        act on the catalog's own objects, and the body of a view or SQL function still
+        reads the real relation.
       * parameter_markers - Optional constant array of `named_struct('name', ..., 'type', ...)`
         entries. The name is `?` for a positional marker or the marker name for a named
         marker. A marker without a type leaves the statement unresolved.

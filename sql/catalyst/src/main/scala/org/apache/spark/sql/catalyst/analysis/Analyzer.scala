@@ -289,7 +289,7 @@ object AnalysisContext {
       collation = viewDesc.collation)
     context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
-    try f finally { set(originContext) }
+    try withoutSuppliedObjects(f) finally { set(originContext) }
   }
 
   def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
@@ -315,8 +315,17 @@ object AnalysisContext {
         },
       collation = function.collation)
     set(context)
-    try f finally { set(originContext) }
+    try withoutSuppliedObjects(f) finally { set(originContext) }
   }
+
+  /**
+   * A stored view or SQL function body reads the objects it was defined over, so the relations
+   * and variables a caller supplies for its statement do not apply inside it.
+   */
+  private def withoutSuppliedObjects[A](f: => A): A =
+    SuppliedRelationRegistry.create(Nil).runWith {
+      SuppliedVariableRegistry.create(Nil).runWith(f)
+    }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()

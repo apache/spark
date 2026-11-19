@@ -37,7 +37,7 @@ private[sql] object SuppliedVariableRegistry
     val entries = variables.map { case (nameParts, dataType) =>
       canonicalize(nameParts) -> dataType
     }
-    createHandle(Some(entries))
+    if (entries.isEmpty) createHandle(None) else createHandle(Some(entries))
   }
 
   def lookup(

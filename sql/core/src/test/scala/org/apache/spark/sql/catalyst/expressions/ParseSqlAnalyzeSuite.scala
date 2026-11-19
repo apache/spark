@@ -1324,7 +1324,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         sql("CREATE FUNCTION parse_sql_per_call_g.parse_sql_g() RETURNS INT RETURN 1")
         val result = evalCall(
           "SELECT parse_sql('SELECT parse_sql_g() AS x', 'ANALYZE', " +
-            "current_path => 'system.builtin, spark_catalog.parse_sql_per_call_g')")
+            "current_path => 'system.builtin, SPARK_CATALOG.PARSE_SQL_PER_CALL_G')")
         assert(result.head \ "analyze_success" === JBool(true), result)
         assert(result.head \ "function_references" === JArray(List(
           ref("spark_catalog", "parse_sql_per_call_g", "parse_sql_g"))))
@@ -1369,6 +1369,43 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
             "'name', 'system.session.parse_sql_tv_base', 'schema', 'b STRING')))")
         assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
         assert(result(1) \ "select_list" === typedColumns("b" -> jsonString), result)
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a session variable read by a temp view") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("DECLARE VARIABLE parse_sql_view_var INT DEFAULT 1")
+      try {
+        withTempView("parse_sql_var_v") {
+          sql("CREATE TEMPORARY VIEW parse_sql_var_v AS SELECT parse_sql_view_var AS x")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT x FROM parse_sql_var_v; SELECT parse_sql_view_var AS y', " +
+              "'ANALYZE', variables => array(named_struct(" +
+              "'name', 'parse_sql_view_var', 'type', 'STRING')))")
+          assert(result.head \ "select_list" === typedColumns("x" -> jsonInt), result)
+          assert(result(1) \ "select_list" === typedColumns("y" -> jsonString), result)
+        }
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS parse_sql_view_var")
+      }
+    }
+  }
+
+  test("ANALYZE overlays do not replace a table read by a SQL function body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_fn_base") {
+        withUserDefinedFunction("parse_sql_fn" -> false) {
+          sql("CREATE TABLE parse_sql_fn_base (a INT) USING parquet")
+          sql("CREATE FUNCTION parse_sql_fn() RETURNS TABLE (a INT) " +
+            "RETURN SELECT a FROM parse_sql_fn_base")
+          val result = evalCall(
+            "SELECT parse_sql('SELECT a FROM parse_sql_fn()', 'ANALYZE', " +
+              "relations => array(named_struct(" +
+              "'name', 'spark_catalog.default.parse_sql_fn_base', 'schema', 'b STRING')))")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+        }
       }
     }
   }
