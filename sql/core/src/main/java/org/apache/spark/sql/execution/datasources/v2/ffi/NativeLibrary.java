@@ -963,7 +963,7 @@ final class NativeLibrary {
   /**
    * Returns the latest offset.
    *
-   * @param start the offset that the next micro-batch starts after
+   * @param start the starting progress boundary of the next micro-batch
    * @param limit the limit on the data after start
    * @param runEnd the offset that a run of Trigger.AvailableNow reads up to, or null
    */

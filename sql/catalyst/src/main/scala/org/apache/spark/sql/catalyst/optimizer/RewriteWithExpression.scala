@@ -459,10 +459,6 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             refToExpr(ref.id)
         }
 
-      case i: MergeRows.Instruction =>
-        // Instructions may be skipped, so their definitions must not be projected below MERGE.
-        inlineWithsThatGainNothing(i)
-
       case c: ConditionalExpression =>
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
           rewriteWithExprAndInputPlans(
@@ -472,6 +468,13 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // while the branch may not be. It stays where it is and memoizes its definition per entry
         // instead, but only the definitions that gain something from it.
         inlineWithsThatGainNothing(newExpr)
+
+      // `MergeRowsExec` evaluates an instruction only for the rows of its kind (matched, not
+      // matched or not matched by source) that no earlier instruction of that kind took, and its
+      // outputs only for the rows its condition selects. So a whole instruction is a conditional
+      // branch: a project under `MergeRows` would evaluate a definition for every joined row, and
+      // could fail the MERGE on a row that never selects the clause.
+      case i: MergeRows.Instruction => inlineWithsThatGainNothing(i)
 
       case other => other.mapChildren(
         rewriteWithExprAndInputPlans(

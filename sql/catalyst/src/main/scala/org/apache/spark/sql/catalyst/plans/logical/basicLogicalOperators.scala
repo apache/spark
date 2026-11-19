@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedException, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -752,12 +752,12 @@ case class Join(
 
   override lazy val maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter
           if left.maxRows.isDefined && right.maxRows.isDefined =>
         val leftMaxRows = BigInt(left.maxRows.get)
         val rightMaxRows = BigInt(right.maxRows.get)
         val minRows = joinType match {
-          case LeftOuter | LeftSingle => leftMaxRows
+          case LeftOuter => leftMaxRows
           case RightOuter => rightMaxRows
           case FullOuter => leftMaxRows + rightMaxRows
           case _ => BigInt(0)
@@ -769,7 +769,7 @@ case class Join(
           None
         }
 
-      case LeftSemi | LeftAnti =>
+      case LeftSemi | LeftAnti | LeftSingle =>
         left.maxRows
 
       case _ =>
@@ -848,9 +848,10 @@ case class Join(
     patterns
   }
 
-  // Ignore hint for canonicalization
+  // Ignore hint for canonicalization, and normalize the join type, see `JoinType.canonicalized`.
   protected override def doCanonicalize(): LogicalPlan =
-    super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+    super.doCanonicalize().asInstanceOf[Join].copy(
+      joinType = joinType.canonicalized, hint = JoinHint.NONE)
 
   // Do not include an empty join hint in string description
   protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
@@ -1931,6 +1932,79 @@ object BinBy {
       s"appends=${refs(appendedAttributes)}") ++
       timeZoneId.map(z => s"zone=$z")
   }
+}
+
+/**
+ * How a column in the GAP FILL `FILL` clause is filled in the rows that GAP FILL adds.
+ */
+sealed trait GapFillMethod
+
+object GapFillMethod {
+  case object Linear extends GapFillMethod
+  case object ForwardFill extends GapFillMethod
+  case object BackwardFill extends GapFillMethod
+  /** Fills with a fixed value. */
+  case class Constant(value: Expression) extends GapFillMethod
+  case object Null extends GapFillMethod
+}
+
+/**
+ * One entry of the GAP FILL `FILL` clause. It holds the column and how it is filled. For example,
+ * `FILL (status CONSTANT upper('unknown'))` gives
+ * `GapFillColumn('status, Constant('upper('unknown')))`.
+ *
+ * It is an [[Expression]] whose children are the column and the CONSTANT value, like
+ * [[Assignment]], so that plan walkers such as `QueryPlan.expressions` and
+ * `transformExpressions` reach both. A tuple or a plain case class would hide them from the
+ * analyzer.
+ */
+case class GapFillColumn(column: Expression, method: GapFillMethod)
+  extends Expression with Unevaluable {
+  override def children: Seq[Expression] = method match {
+    case GapFillMethod.Constant(value) => Seq(column, value)
+    case _ => Seq(column)
+  }
+  override def nullable: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): GapFillColumn = method match {
+    case GapFillMethod.Constant(_) =>
+      copy(column = newChildren.head, method = GapFillMethod.Constant(newChildren(1)))
+    case _ => copy(column = newChildren.head)
+  }
+}
+
+/**
+ * An output column that GAP FILL adds when it is asked for with BIN_START or IS_GENERATED.
+ * `alias` is the name given with AS. `None` requests the default name, `bin_start` or
+ * `is_generated`.
+ */
+case class GapFillOutputColumn(alias: Option[String])
+
+/**
+ * Unresolved counterpart of the GAP FILL relation operator, produced by the parser.
+ * `binStart` and `isGenerated` are set only when the BIN_START or IS_GENERATED column is
+ * requested.
+ */
+case class UnresolvedGapFill(
+    partitionColumns: Seq[Expression],
+    timeColumn: Expression,
+    binWidthExpr: Expression,
+    originExpr: Option[Expression],
+    rangeStartExpr: Option[Expression],
+    rangeEndExpr: Option[Expression],
+    fillColumns: Seq[GapFillColumn],
+    maxGapExpr: Option[Expression],
+    binStart: Option[GapFillOutputColumn],
+    isGenerated: Option[GapFillOutputColumn],
+    child: LogicalPlan) extends UnresolvedUnaryNode {
+  require(rangeStartExpr.isDefined == rangeEndExpr.isDefined,
+    "The GAP FILL range has both bounds, or neither.")
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_GAP_FILL)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedGapFill =
+    copy(child = newChild)
 }
 
 /**

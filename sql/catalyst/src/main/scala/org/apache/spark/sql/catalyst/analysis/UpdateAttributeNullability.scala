@@ -48,19 +48,25 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
       // For an Attribute used by the current LogicalPlan, if it is from its children,
       // we fix the nullable field by using the nullability setting of the corresponding
       // output Attribute from the children.
-      val updated = p.transformExpressions {
+      val newPlan = p.transformExpressions {
         case attr: Attribute if nullabilities.contains(attr.exprId) =>
           attr.withNullability(nullabilities(attr.exprId))
       }
-      updated match {
-        case m: MergeRows =>
-          // UDF null handling can make instruction outputs nullable after MERGE is rewritten.
-          val outputs = m.outputs.map(_.toIndexedSeq)
-          val attrs = m.output.zipWithIndex.map { case (attr, index) =>
-            attr.withNullability(outputs.exists(_(index).nullable))
-          }
-          m.copy(output = attrs)
-        case other => other
+      newPlan match {
+        case m: MergeRows => widenOutputNullability(m)
+        case _ => newPlan
       }
+  }
+
+  // MergeRows derives the nullability of its new output attributes from the outputs of its
+  // instructions when MERGE is rewritten. The outputs may become nullable later, for instance,
+  // when HandleNullInputsForUDF makes a Scala UDF return null for null inputs, so widen the
+  // nullability of the output attributes accordingly, keeping their expression IDs.
+  private def widenOutputNullability(m: MergeRows): MergeRows = {
+    val outputs = m.outputs.map(_.toIndexedSeq)
+    val newOutput = m.output.zipWithIndex.map { case (attr, index) =>
+      attr.withNullability(attr.nullable || outputs.exists(output => output(index).nullable))
+    }
+    if (newOutput == m.output) m else m.copy(output = newOutput)
   }
 }

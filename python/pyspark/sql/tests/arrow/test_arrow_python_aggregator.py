@@ -21,10 +21,13 @@ from decimal import Decimal
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PySparkValueError
 from pyspark.sql import functions as sf
 from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
     CharType,
     DecimalType,
     DoubleType,
     LongType,
+    StringType,
     StructField,
     StructType,
 )
@@ -111,6 +114,80 @@ if have_pyarrow:
 
         def finish(self, buffer):
             return buffer[0]
+
+    class CollectList(Aggregator):
+        # Updates its list buffer in place and returns that very list from ``finish``, as the
+        # Aggregator contract allows.
+        @property
+        def bufferSchema(self):
+            return StructType([StructField("values", ArrayType(DoubleType()))])
+
+        @property
+        def outputType(self):
+            return ArrayType(DoubleType())
+
+        def zero(self):
+            return ([],)
+
+        def reduce(self, buffer, value):
+            (v,) = value
+            if v is not None:  # skip nulls, like collect_list
+                buffer[0].append(v)
+            return buffer
+
+        def merge(self, b1, b2):
+            b1[0].extend(b2[0])
+            return b1
+
+        def finish(self, buffer):
+            return buffer[0]
+
+    class CollectListStruct(CollectList):
+        # Like CollectList, but nests the buffer's list in a struct, so a shallow copy of the
+        # ``finish`` result would still share it with the buffer.
+        @property
+        def outputType(self):
+            return StructType([StructField("values", ArrayType(DoubleType()))])
+
+        def finish(self, buffer):
+            return (buffer[0],)
+
+    class ConcatStrings(Aggregator):
+        # Appends each non-null value to a bytearray in place, comma-separated like
+        # ``concat_ws(",", collect_list(...))``, and returns that very bytearray from ``finish``:
+        # a mutable value of a string type, which is not nested.
+        @property
+        def bufferSchema(self):
+            return StructType([StructField("s", BinaryType())])
+
+        @property
+        def outputType(self):
+            return StringType()
+
+        def zero(self):
+            return (bytearray(),)
+
+        def reduce(self, buffer, value):
+            (s,) = value
+            if s is not None:
+                if buffer[0]:
+                    buffer[0].extend(b",")
+                buffer[0].extend(s.encode("utf-8"))
+            return buffer
+
+        def merge(self, b1, b2):
+            if b1[0] and b2[0]:
+                b1[0].extend(b",")
+            b1[0].extend(b2[0])
+            return b1
+
+        def finish(self, buffer):
+            return buffer[0]
+
+    class ConcatBinary(ConcatStrings):
+        @property
+        def outputType(self):
+            return BinaryType()
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -461,6 +538,71 @@ class ArrowPythonAggregatorTestsMixin:
         self.assertEqual(len(result), len(expected))
         for r, e in zip(result, expected):
             self.assertAlmostEqual(r["m"], e["m"], places=6)
+
+    def _data_with_ties_and_nulls(self):
+        # 60 rows across 3 keys, with ties and nulls in ``v``, and ``v`` as a string in ``s``.
+        # Each key has two nulls, which an ordered window sorts first. ``id`` breaks the ties of
+        # ROWS frames, so that every frame is deterministic; a RANGE frame includes all peers of a
+        # row, which share ``v`` and ``s``.
+        return (
+            self.spark.range(0, 60)
+            .select(
+                "id",
+                (sf.col("id") % 3).alias("k"),
+                sf.when(sf.col("id") % 11 == 0, sf.lit(None))
+                .otherwise((sf.col("id") % 4).cast("double"))
+                .alias("v"),
+            )
+            .withColumn("s", sf.col("v").cast("string"))
+            .repartition(4, sf.col("id") % 2)
+        )
+
+    def test_window_frames_with_in_place_buffer(self):
+        # ``reduce`` may update its buffer in place, and while a frame's lower bound stays fixed,
+        # later rows keep reducing into the buffer that earlier rows were finished from. Each row
+        # must still get its own frame's value when ``finish`` returns the buffer's list, nests it
+        # in a struct, or returns its bytearray as a string or binary value.
+        df = self._data_with_ties_and_nulls()
+        by_v = Window.partitionBy("k").orderBy("v")
+        by_v_id = Window.partitionBy("k").orderBy("v", "id")
+        frames = {
+            # RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW. The peers of a row (its ties and
+            # nulls in ``v``) share its frame, so ``finish`` runs again on a buffer that did not
+            # grow.
+            "default": by_v,
+            "rows": by_v_id.rowsBetween(Window.unboundedPreceding, Window.currentRow),
+            # The upper bound runs ahead of the current row.
+            "range": by_v.rangeBetween(Window.unboundedPreceding, 1),
+            # The lower bound stays at the first row for the first three rows, then advances.
+            # The third row extends the buffer that the first two (nulls) were finished from.
+            "sliding": by_v_id.rowsBetween(-2, Window.currentRow),
+        }
+        for name, w in frames.items():
+            with self.subTest(frame=name):
+                result = (
+                    df.select(
+                        "id",
+                        udaf(CollectList())(sf.col("v")).over(w).alias("l"),
+                        udaf(CollectListStruct())(sf.col("v")).over(w).alias("ls"),
+                        udaf(ConcatStrings())(sf.col("s")).over(w).alias("cs"),
+                        udaf(ConcatBinary())(sf.col("s")).over(w).alias("cb"),
+                    )
+                    .orderBy("id")
+                    .collect()
+                )
+                concat = sf.concat_ws(",", sf.collect_list("s").over(w))
+                expected = (
+                    df.select(
+                        "id",
+                        sf.collect_list("v").over(w).alias("l"),
+                        sf.struct(sf.collect_list("v").over(w).alias("values")).alias("ls"),
+                        concat.alias("cs"),
+                        concat.cast("binary").alias("cb"),
+                    )
+                    .orderBy("id")
+                    .collect()
+                )
+                self.assertEqual(result, expected)
 
     def test_window_decimal_output(self):
         # A non-trivial (Decimal) output type over a window, exercising the explicit

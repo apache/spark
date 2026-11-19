@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CheckInvariant, Coalesce, EqualTo, Exists, Expression, InSubquery, IsNull, ListQuery, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 
@@ -160,5 +161,65 @@ class RewriteSubquerySuite extends PlanTest {
     val existsOptimized = OptimizeWithPullup.execute(existsQuery.analyze)
     val existsExpected = LocalRelation(existsQuery.analyze.output).analyze
     comparePlans(existsOptimized, existsExpected)
+  }
+
+  test("SPARK-61444: keep the result on zero rows of an Aggregate that fails to evaluate") {
+    def resultOnZeroRows(divisor: Expression): (Aggregate, Expression) = {
+      val agg = LocalRelation($"v".int)
+        .groupBy()((Literal(10) / divisor).as("d"))
+        .analyze.asInstanceOf[Aggregate]
+      (agg, RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(agg)(
+        agg.aggregateExpressions.head.exprId))
+    }
+    // 10 / 0 fails with DIVIDE_BY_ZERO in ANSI mode. The expression is kept without its Alias,
+    // and tagged so that ConstantFolding does not evaluate it again. Only the result is tagged,
+    // not the expression in the Aggregate, also when the result is a constant expression that
+    // the rewrite does not copy.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(Coalesce(Seq(max($"v"), Literal(0))), Literal(0)).foreach { divisor =>
+        val (agg, result) = resultOnZeroRows(divisor)
+        assert(!result.isInstanceOf[Literal], result)
+        assert(result.find(_.isInstanceOf[Alias]).isEmpty, result)
+        assert(result.containsTag(ConstantFolding.FAILED_TO_EVALUATE), result)
+        assert(agg.aggregateExpressions.head.collectFirst {
+          case e if e.containsTag(ConstantFolding.FAILED_TO_EVALUATE) => e
+        }.isEmpty, agg)
+      }
+    }
+    // Without ANSI mode, it evaluates to null.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val (_, result) = resultOnZeroRows(Coalesce(Seq(max($"v"), Literal(0))))
+      assert(result.isInstanceOf[Literal] && result.asInstanceOf[Literal].value == null, result)
+    }
+  }
+
+  test("SPARK-61927: keep a throwable predicate above the join of a predicate subquery") {
+    val relation = LocalRelation($"a".int, $"b".int)
+    val relInSubquery = LocalRelation($"x".int)
+    // A CHECK constraint fails on a violating row, so it must not see the rows that the subquery
+    // removes.
+    val check = CheckInvariant($"b" > 0, Seq("b" -> $"b"), "positive_b", "b > 0")
+
+    val query = relation.where($"a".in(ListQuery(relInSubquery.select($"x"))) && check)
+    val correctAnswer = relation.join(relInSubquery, LeftSemi, Some($"a" === $"x")).where(check)
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-61927: keep a throwable predicate below the join if it is not written last") {
+    val relation = LocalRelation($"a".int, $"b".int)
+    val relInSubquery = LocalRelation($"x".int)
+    val inSubquery = $"a".in(ListQuery(relInSubquery.select($"x")))
+    val check = CheckInvariant($"b" > 0, Seq("b" -> $"b"), "positive_b", "b > 0")
+
+    // The subquery or the condition written after a throwable predicate must not be evaluated on
+    // the rows that it removes, so it stays below the join in the written order.
+    Seq(
+      (check && inSubquery) -> check,
+      (inSubquery && check && $"a" > 1) -> (check && $"a" > 1)).foreach {
+      case (condition, belowJoin) =>
+        val correctAnswer =
+          relation.where(belowJoin).join(relInSubquery, LeftSemi, Some($"a" === $"x"))
+        comparePlans(Optimize.execute(relation.where(condition).analyze), correctAnswer.analyze)
+    }
   }
 }

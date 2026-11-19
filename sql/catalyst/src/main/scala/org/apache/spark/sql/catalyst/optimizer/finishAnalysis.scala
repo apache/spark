@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampLTZNanos, convertSpecialTimestampNTZ, convertSpecialTimestampNTZNanos, instantToMicros, localDateTimeToMicros}
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDay, instantToTimestampNanos, localDateTimeToTimestampNanos, truncateTimeToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -299,10 +299,13 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
  * if the input strings are foldable.
  */
 object SpecialDatetimeValues extends Rule[LogicalPlan] {
-  private val conv = Map[DataType, (String, java.time.ZoneId) => Option[Any]](
-    DateType -> convertSpecialDate,
-    TimestampType -> convertSpecialTimestamp,
-    TimestampNTZType -> convertSpecialTimestampNTZ)
+  private val conv: PartialFunction[DataType, (String, ZoneId) => Option[Any]] = {
+    case DateType => convertSpecialDate
+    case TimestampType => convertSpecialTimestamp
+    case TimestampNTZType => convertSpecialTimestampNTZ
+    case TimestampLTZNanosType(p) => convertSpecialTimestampLTZNanos(_, _, p)
+    case TimestampNTZNanosType(p) => convertSpecialTimestampNTZNanos(_, _, p)
+  }
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST))(specialDatetimeRewrite)
   }
@@ -318,19 +321,20 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   }
 
   /** Whether this rule may replace a cast to `dt`. */
-  private[sql] def rewrites(dt: DataType): Boolean = conv.contains(dt)
+  private[sql] def rewrites(dt: DataType): Boolean = conv.isDefinedAt(dt)
 
   /**
    * Whether this rule replaces a cast of `s` to `dt` with a value that reads the current date, that
    * is, the value of a special value other than 'epoch'.
    */
   private[sql] def readsCurrentDate(s: UTF8String, dt: DataType): Boolean =
-    conv.get(dt).exists(_(s.toString, java.time.ZoneOffset.UTC).isDefined) &&
+    conv.lift(dt).exists(_(s.toString, java.time.ZoneOffset.UTC).isDefined) &&
       !DateTimeUtils.isEpochSpecialValue(s.toString)
 
   /**
    * The constant string that `cast` casts, or None if it casts something else or evaluating the
-   * string fails. Unlike the rule, this does not throw.
+   * string fails. Unlike the rule on a cast to DATE, TIMESTAMP or TIMESTAMP_NTZ, this does not
+   * throw.
    */
   private[sql] def constantString(cast: Cast): Option[UTF8String] = cast.child match {
     case e if isConstantString(e) =>
@@ -344,7 +348,13 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
     case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
-      Option(e.eval())
+      val str = dt match {
+        // A nanos cast keeps a failing input, so that it fails only if evaluated. The other
+        // types evaluate the input eagerly.
+        case _: AnyTimestampNanoType => constantString(cast)
+        case _ => Option(e.eval())
+      }
+      str
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
         .map(Literal(_, dt))
         .getOrElse(cast)
