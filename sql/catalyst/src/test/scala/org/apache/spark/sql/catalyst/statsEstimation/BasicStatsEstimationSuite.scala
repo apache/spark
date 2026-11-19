@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Cast, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftSingle, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
@@ -425,6 +425,21 @@ test("range with invalid long value") {
       JoinHint.NONE)
     checkStats(join, Statistics(
       sizeInBytes = 2 * 10 * (8 + 4 + 1),
+      rowCount = Some(10),
+      attributeStats = AttributeMap(Seq(attribute -> colStat))))
+  }
+
+  test("SPARK-61891: a left single join is estimated from its left side") {
+    // It outputs each of the 10 rows of `left` once, with the column of `other` added. The size
+    // of `left` is twice its row count times its row width, so a size computed from the row count
+    // and the column stats, as `JoinEstimation` computes it for a left semi join, would be half.
+    val left = plan.copy(size = Some(2 * 10 * (8 + 4)))
+    val otherKey = attr("other")
+    val other = StatsTestPlan(outputList = Seq(otherKey), rowCount = 1000,
+      attributeStats = AttributeMap(Seq(otherKey -> colStat)), size = Some(1000 * (8 + 4)))
+    val join = Join(left, other, LeftSingle, Some(attribute === otherKey), JoinHint.NONE)
+    checkStats(join, Statistics(
+      sizeInBytes = 2 * 10 * (8 + 4 + 4),
       rowCount = Some(10),
       attributeStats = AttributeMap(Seq(attribute -> colStat))))
   }

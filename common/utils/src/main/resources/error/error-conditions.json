@@ -1999,7 +1999,7 @@
       },
       "BLOOM_FILTER_BINARY_OP_WRONG_TYPE" : {
         "message" : [
-          "The Bloom filter binary input to <functionName> should be either a constant value or a scalar subquery expression, but it's <actual>."
+          "The Bloom filter binary input to <functionName> should be a constant value, an uncorrelated scalar subquery expression or an expression without subqueries, but it's <actual>."
         ]
       },
       "BLOOM_FILTER_WRONG_TYPE" : {
@@ -3227,19 +3227,19 @@
   },
   "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY" : {
     "message" : [
-      "The FILE type cannot be a map key in the return type of <routineType> <routineName>. Use FILE only as a map value, array element, or struct field."
+      "The FILE type cannot be a map key in the return type of <routineName>. Use FILE only as a map value, array element, or struct field."
     ],
     "sqlState" : "42601"
   },
   "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER" : {
     "message" : [
-      "The FILE type in <routineType> <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
+      "The FILE type in the signature of <routineName> does not support the EXTERNAL qualifier. Use FILE without a qualifier."
     ],
     "sqlState" : "42601"
   },
   "FILE_TYPE_MISSING_QUALIFIER" : {
     "message" : [
-      "FILE type requires the EXTERNAL qualifier in a column definition. Use FILE EXTERNAL."
+      "The column <colName> of type <dataType> holds a FILE without a qualifier. A FILE in a column definition requires the EXTERNAL qualifier. Use FILE EXTERNAL."
     ],
     "sqlState" : "42601"
   },
@@ -3254,6 +3254,16 @@
       "The column <colName> of type <dataType> holds a FILE, which is not comparable."
     ],
     "subClass" : {
+      "BUCKET_COLUMN" : {
+        "message" : [
+          "It cannot be a bucket column."
+        ]
+      },
+      "BUCKET_SORT_COLUMN" : {
+        "message" : [
+          "It cannot be a column that sorts the buckets."
+        ]
+      },
       "CLUSTERING_COLUMN" : {
         "message" : [
           "It cannot be a clustering column."
@@ -5612,11 +5622,6 @@
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
         ]
       },
-      "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
-        "message" : [
-          "In-process Python UDFs require <plugin>, or a subclass of it, in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
-        ]
-      },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
@@ -5635,11 +5640,6 @@
       "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
         "message" : [
           "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
-        ]
-      },
-      "UNSUPPORTED_IN_PROCESS_PYTHON_UDF" : {
-        "message" : [
-          "In-process Python UDFs do not support <config>. Unset this configuration or use Python worker UDFs."
         ]
       }
     },
@@ -7677,6 +7677,12 @@
     ],
     "sqlState" : "42K08"
   },
+  "SESSION_DEPENDENT_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The check constraint `<checkCondition>` has a different meaning under the SQL configs of this session, such as `spark.sql.parser.escapedStringLiterals` or `spark.sql.ansi.doubleQuotedIdentifiers`, than under the default values of those configs, which a later write uses to read the condition. Rewrite the condition, or set these configs to their default values and run the statement again."
+    ],
+    "sqlState" : "42621"
+  },
   "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
     "message" : [
       "SHOW COLUMNS with conflicting namespaces: <namespaceA> != <namespaceB>."
@@ -9141,6 +9147,13 @@
     ],
     "sqlState" : "42704"
   },
+  "UNRESOLVABLE_CHECK_CONSTRAINT" : {
+    "message" : [
+      "The CHECK constraint <constraintName> with condition `<checkCondition>` cannot be enforced on this write because the condition cannot be resolved:",
+      "<cause>"
+    ],
+    "sqlState" : "42621"
+  },
   "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
     "message" : [
       "Could not resolve <name> to a table-valued function.",
@@ -9672,6 +9685,11 @@
       "EXTERNAL_UDF_WITH_MULTIPLE_CHILDREN" : {
         "message" : [
           "External UDF <funcName> uses columns from more than one input relation. Rewrite the query so the UDF is evaluated after the inputs are combined."
+        ]
+      },
+      "GAP_FILL" : {
+        "message" : [
+          "The GAP FILL relation operator is not yet supported."
         ]
       },
       "GEOSPATIAL_DISABLED" : {

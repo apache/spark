@@ -4818,6 +4818,13 @@ def xxh3_128(col: "ColumnOrName") -> Column:
 xxh3_128.__doc__ = pysparkfuncs.xxh3_128.__doc__
 
 
+def farm_fingerprint(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("farm_fingerprint", col)
+
+
+farm_fingerprint.__doc__ = pysparkfuncs.farm_fingerprint.__doc__
+
+
 def sha1(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("sha1", col)
 

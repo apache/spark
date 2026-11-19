@@ -48,9 +48,9 @@ import org.apache.spark.util.Utils
  * tasks, so it holds only what they need; the plan node and its scan stay on the driver.
  *
  * An evaluator joins its partition one batch of up to `maxParameterRowsPerRequest` stream rows at
- * a time, or, with `oneKeyPerBatch`, of up to
- * [[ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST]] stream rows that share one key, whose
- * request holds one parameter row, whatever the source's limit. For each batch it sends one
+ * a time, or, with `oneKeyPerBatch`, of stream rows that share one key, whose request holds one
+ * parameter row, whatever the source's limit. Either batch takes at most `maxStreamRowsPerBatch`
+ * stream rows, Spark's own cap, or fewer in real-time mode. For each batch it sends one
  * request with the distinct parameters that can match and are not cached, and streams the
  * connector's result rows into output rows. Parameters are deduplicated within a batch. With the
  * cache enabled, a key whose complete result an earlier request of the same input partition
@@ -83,6 +83,7 @@ class ExternalLookupJoinEvaluatorFactory(
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,
     oneKeyPerBatch: Boolean,
+    maxStreamRowsPerBatch: Int,
     maxBatchBytes: Long,
     cacheOptions: ExternalLookupCacheOptions,
     cacheTicker: Ticker,
@@ -138,15 +139,19 @@ class ExternalLookupJoinEvaluatorFactory(
       batch.next()
     }
 
-    /** Reads more only when nothing is buffered; safe to call repeatedly. */
+    /**
+     * Reads more only when nothing is buffered; safe to call repeatedly. It looks for more input
+     * only after a batch's output is read: in real-time mode, the look waits for the next row or
+     * the end of the batch, and the output of a sent request, with its open cursor, would wait too.
+     */
     private def tryAdvance(): Unit = {
       while (!batch.hasNext && !inputExhausted) {
         val next = readBatch()
         if (next.rows.nonEmpty) {
-          batch = new BatchJoinIterator(next, parameters, resultRows, transforms, joinOutput,
-            cache, inputRemains = () => !inputExhausted, reader = reader)
+          batch = new BatchJoinIterator(
+            next, parameters, resultRows, transforms, joinOutput, cache, reader)
         }
-        inputExhausted = !hasInput
+        inputExhausted = next.endedInput
       }
       // No later batch reads the cache, so neither it nor the drained batch is kept.
       if (inputExhausted && !batch.hasNext) {
@@ -176,10 +181,10 @@ class ExternalLookupJoinEvaluatorFactory(
     private var keptRequestRow: UnsafeRow = null
 
     // A batch of one key holds one parameter row in its request, whatever the source's limit, so
-    // only Spark's own cap and maxBatchBytes end it before another key does.
+    // only Spark's own row cap and maxBatchBytes end it before another key does.
     private val maxBatchRows =
-      if (oneKeyPerBatch) ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST
-      else maxParameterRowsPerRequest
+      if (oneKeyPerBatch) maxStreamRowsPerBatch
+      else math.min(maxStreamRowsPerBatch, maxParameterRowsPerRequest)
 
     private def hasInput: Boolean = heldRow != null || input.hasNext
 
@@ -220,14 +225,17 @@ class ExternalLookupJoinEvaluatorFactory(
     // maxBatchBytes, keeping the row that reaches it, and at maxBatchRows rows. A batch of one key
     // also stops at another key. It always keeps one row, when one remains. It decides once for
     // each row whether the row can match, and groups the rows that can by their request row, a
-    // copy of which each group keeps.
+    // copy of which each group keeps. Last, it tells whether it stopped because the input ended.
+    // A batch that stops for another reason does not look for more input, so it is not known as
+    // the last even when no input remains.
     private def readBatch(): StreamBatch = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       val keyEntries = mutable.LinkedHashMap.empty[UnsafeRow, KeyEntry]
       val rowsThatCannotMatch = mutable.ArrayBuffer.empty[Int]
       var bytes = 0L
       var keyChanged = false
-      while (!keyChanged && rows.length < maxBatchRows && bytes < maxBatchBytes && hasInput) {
+      def full: Boolean = keyChanged || rows.length >= maxBatchRows || bytes >= maxBatchBytes
+      while (!full && hasInput) {
         val row = nextKeptRow()
         if (row != null) {
           val requestRow = keptRequestRow
@@ -253,7 +261,7 @@ class ExternalLookupJoinEvaluatorFactory(
           }
         }
       }
-      StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray)
+      StreamBatch(rows.toArray, keyEntries.values.toArray, rowsThatCannotMatch.toArray, !full)
     }
   }
 
@@ -267,12 +275,13 @@ class ExternalLookupJoinEvaluatorFactory(
    * The stream rows of a batch, with one entry for each distinct request row that can match, in
    * the order of first occurrence, and the positions of the rows that a left outer or left anti
    * join keeps although they cannot match, because they fail the stream condition or have a null
-   * parameter that is not null-safe.
+   * parameter that is not null-safe, and whether the end of the input stopped the batch.
    */
   private case class StreamBatch(
       rows: Array[InternalRow],
       keyEntries: Array[KeyEntry],
-      rowsThatCannotMatch: Array[Int])
+      rowsThatCannotMatch: Array[Int],
+      endedInput: Boolean)
 
   /**
    * Joins one batch of stream rows. Rows whose parameters are equal under Spark equality share
@@ -290,7 +299,6 @@ class ExternalLookupJoinEvaluatorFactory(
       transforms: LookupTransforms,
       joinOutput: JoinOutput,
       cache: Option[LookupCache],
-      inputRemains: () => Boolean,
       reader: LookupReader) extends Iterator[InternalRow] {
     private val rows = batch.rows
     metrics.inputRows += rows.length
@@ -325,9 +333,14 @@ class ExternalLookupJoinEvaluatorFactory(
       }
 
     // Only a later batch of the partition reads what this one caches, so the last batch caches
-    // nothing. The partition knows whether input remains once the request is sent, before its
-    // results are read.
-    private lazy val cacheWriter = if (!inputRemains()) None else {
+    // nothing. A last batch that stopped full is not known as the last. This is not limited to an
+    // input that ends at a full batch: when a batch takes one row, as with a source that allows
+    // one parameter row per request, or by default in real-time mode, every batch stops full, so
+    // the last batch of every partition is one. It caches what no batch reads, and a left semi or
+    // left anti join whose residual condition reads a lookup column then reads every row of a key
+    // to complete the cache, rather than stopping at the first match. Both are bounded, by the
+    // cache and by the rows of the batch's keys, and the output does not change.
+    private lazy val cacheWriter = if (batch.endedInput) None else {
       cache.map(new CacheWriter(_, keyEntries.map(_.requestRow)))
     }
 

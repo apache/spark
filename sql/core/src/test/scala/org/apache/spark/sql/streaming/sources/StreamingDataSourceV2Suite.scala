@@ -41,7 +41,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
-@SlowSQLTest
 class FakeDataStream extends MicroBatchStream with ContinuousStream {
   override def deserializeOffset(json: String): Offset = RateStreamOffset(Map())
   override def commit(end: Offset): Unit = {}
