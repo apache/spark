@@ -200,7 +200,7 @@ class GroupState:
                 errorClass="VALUE_NOT_POSITIVE",
                 messageParameters={
                     "arg_name": "durationMs",
-                    "arg_value": type(durationMs).__name__,
+                    "arg_value": str(durationMs),
                 },
             )
         self._timeout_timestamp = durationMs + self._batch_processing_time_ms
@@ -229,7 +229,7 @@ class GroupState:
                 errorClass="VALUE_NOT_POSITIVE",
                 messageParameters={
                     "arg_name": "timestampMs",
-                    "arg_value": type(timestampMs).__name__,
+                    "arg_value": str(timestampMs),
                 },
             )
 
