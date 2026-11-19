@@ -3204,19 +3204,19 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * calling a UDF that can fail, ahead of some of the conditions written before it, and so can a
    * condition over a throwable alias computed in a lower layer, which no longer makes it throwable
    * there, or over an alias computed in a lower layer that can fail, which is computed where it is
-   * first read under whole-stage codegen: one that only reads aliases computed in a lower layer is
-   * cheap there, and this rule pushes it, as it does any cheap condition that is not throwable, no
-   * lower than the filter of the highest layer that computes an expensive alias it reads. It does
-   * not move past the filter of a non-deterministic condition, which `CombineFilters` neither
-   * merges into nor moves into the filter below, and which this rule does not push a filter
-   * through. If they shared a filter, this rule would move a deterministic condition written after
-   * the non-deterministic one that is not throwable and only reads aliases computed below ahead of
-   * it, and this rule would push the non-deterministic one, when it only reads aliases computed
-   * below, ahead of the conditions written before it. That is why a non-deterministic condition
-   * gets a filter of its own in the split. So, when the split places at least one condition, the
-   * caller gives each non-deterministic condition it leaves above the projection a filter of its
-   * own too. The projection on top computes the aliases of the conditions left above it, as without
-   * the split.
+   * first read under whole-stage codegen (SPARK-62077): one that only reads aliases computed in a
+   * lower layer is cheap there, and this rule pushes it, as it does any cheap condition that is not
+   * throwable, no lower than the filter of the highest layer that computes an expensive alias it
+   * reads. It does not move past the filter of a non-deterministic condition, which
+   * `CombineFilters` neither merges into nor moves into the filter below, and which this rule does
+   * not push a filter through. If they shared a filter, this rule would move a deterministic
+   * condition written after the non-deterministic one that is not throwable and only reads aliases
+   * computed below ahead of it, and this rule would push the non-deterministic one, when it only
+   * reads aliases computed below, ahead of the conditions written before it. That is why a
+   * non-deterministic condition gets a filter of its own in the split. So, when the split places at
+   * least one condition, the caller gives each non-deterministic condition it leaves above the
+   * projection a filter of its own too. The projection on top computes the aliases of the
+   * conditions left above it, as without the split.
    *
    * Whole-stage codegen already defers a projected expression past a filter that does not need
    * it (`CodegenSupport.evaluateRequiredVariables`), so this rule only buys the same saving on
