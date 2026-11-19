@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.time.Duration
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Literal, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Expression, Literal, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper
@@ -70,6 +70,39 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     val predicate = predicates.left.get.asInstanceOf[JoinStateValueWatermarkPredicate]
     assert(predicate.expr.references === AttributeSet(leftTime))
     assert(predicate.prevStateWatermark === Some(99999L))
+
+    // In a later batch of a run, the previous batch evicted leftTime up to its own cutoff, which
+    // the scan start caps at the late watermark.
+    val later = StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+      Seq(leftTime, expiry), Seq(rightTime), Nil, Nil, Some(condition), Some(200000L),
+      Some(100000L), useFirstEventTimeColumn = false, isFirstBatch = false)
+    assert(later.left.get.asInstanceOf[JoinStateValueWatermarkPredicate].prevStateWatermark ===
+      Some(100000L))
+  }
+
+  test("value predicate bounds its column only when the default mode picks the column") {
+    val watermark = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 0L).build()
+    val leftTime = AttributeReference("leftTime", TimestampType, metadata = watermark)()
+    val expiry = AttributeReference("expiry", TimestampType)()
+    val leftDate = AttributeReference("leftDate", DateType)()
+    val rightTime = AttributeReference("rightTime", TimestampType, metadata = watermark)()
+    def predicate(condition: Expression, legacyMode: Boolean, isFirstBatch: Boolean = true)
+        : JoinStateValueWatermarkPredicate =
+      StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+        Seq(leftTime, expiry, leftDate), Seq(rightTime), Nil, Nil, Some(condition),
+        Some(200000L), Some(100000L), legacyMode, isFirstBatch)
+        .left.get.asInstanceOf[JoinStateValueWatermarkPredicate]
+    assert(predicate(rightTime <= expiry, legacyMode = false).conditionBoundsColumn)
+    assert(!predicate(rightTime <= expiry, legacyMode = true).conditionBoundsColumn)
+    // The condition bounds only leftDate, so the input falls back to its event time and keeps the
+    // scan start solved over the whole input in every batch.
+    val castBounded = Cast(leftDate, TimestampType, Some("UTC")) >= rightTime
+    Seq(true, false).foreach { isFirstBatch =>
+      val p = predicate(castBounded, legacyMode = false, isFirstBatch)
+      assert(p.expr.references === AttributeSet(leftTime))
+      assert(!p.conditionBoundsColumn)
+      assert(p.prevStateWatermark === Some(99999L))
+    }
   }
 
   test("empty") {
