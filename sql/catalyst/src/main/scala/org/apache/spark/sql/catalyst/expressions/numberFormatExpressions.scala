@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -312,7 +313,10 @@ case class ToCharacter(left: Expression, right: Expression)
   private lazy val numberFormatter = {
     val value = right.eval()
     if (value != null) {
-      new ToNumberParser(value.toString.toUpperCase(Locale.ROOT), true)
+      new ToNumberParser(
+        value.toString.toUpperCase(Locale.ROOT),
+        errorOnFail = true,
+        legacyFormatZeroAsBlank = SQLConf.get.getConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK))
     } else {
       null
     }
