@@ -86,27 +86,21 @@ object EstimationUtils {
       attributeStats: AttributeMap[ColumnStat],
       rowCount: BigInt): Seq[(Attribute, ColumnStat)] = {
     expressions.collect {
-      case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
-        alias.toAttribute -> attributeStats(attr)
-      // Read-side CHAR padding wraps each CHAR column of a scan. With padding on, ANALYZE TABLE
-      // reads the table through it as well, so the statistics already describe padded values.
-      // Statistics collected otherwise (with padding off, or reported by a connector) can
-      // describe shorter values, and every non-null padded value has at least N characters.
-      // A distinct count of 0 means no non-null values, so there is nothing to pad (ANALYZE
-      // then stores the type's default size as the lengths). The distinct count is left as is.
-      // It is too high only when stored values differ just in trailing spaces, which the
-      // padding makes equal.
-      case alias @ Alias(CharVarcharUtils.ReadSidePadding(attr: Attribute, n), _)
+      // A cast to STRING that keeps the value keeps the column's statistics, e.g. the cast that a
+      // union with a STRING column adds to a CHAR or VARCHAR column as a first-class type.
+      case alias @ Alias(WithoutCastToPlainString(attr: Attribute), _)
           if attributeStats.contains(attr) =>
-        alias.toAttribute -> padToCharLength(attributeStats(attr), n)
-      // Under standard CHAR/VARCHAR semantics the scan wraps CHAR and VARCHAR columns in
-      // read-side checks instead, and ANALYZE TABLE reads through those as well. The CHAR check
-      // pads like the padding above. The VARCHAR check never makes a value longer, so its
-      // lengths are kept.
-      case alias @ Alias(CharVarcharUtils.ReadSideCheck(attr: Attribute, n, isChar), _)
+        alias.toAttribute -> attributeStats(attr)
+      // A scan wraps each CHAR column in read-side padding, or under standard CHAR/VARCHAR
+      // semantics each CHAR and VARCHAR column in a read-side check. ANALYZE TABLE reads the table
+      // through them as well, so the statistics already describe the values they return.
+      // Statistics collected otherwise (with padding off, or reported by a connector) can describe
+      // shorter values. The VARCHAR check never makes a value longer.
+      case alias @ Alias(WithoutCastToPlainString(
+          CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, n, padsToLength)), _)
           if attributeStats.contains(attr) =>
         val stat = attributeStats(attr)
-        alias.toAttribute -> (if (isChar) padToCharLength(stat, n) else stat)
+        alias.toAttribute -> (if (padsToLength) padToCharLength(stat, n) else stat)
       case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
         val value = expr.eval(EmptyRow)
         val size = expr.dataType.defaultSize
@@ -119,7 +113,12 @@ object EstimationUtils {
     }
   }
 
-  /** Raises the lengths of a column with values to the length N of the CHAR it is padded to. */
+  /**
+   * Raises the lengths of a column to the length N of the CHAR its non-null values are padded to.
+   * A distinct count of 0 means no non-null values, so there is nothing to pad (ANALYZE then stores
+   * the type's default size as the lengths). The distinct count is left as is. It is too high only
+   * when stored values differ just in trailing spaces, which the padding makes equal.
+   */
   private def padToCharLength(stat: ColumnStat, n: Int): ColumnStat = {
     if (stat.distinctCount.contains(BigInt(0))) {
       stat
@@ -137,6 +136,10 @@ object EstimationUtils {
     case Cast(child, to: StringType, _, _) if StringHelper.plainStringType(child.dataType) == to =>
       child
     case _ => e
+  }
+
+  private object WithoutCastToPlainString {
+    def unapply(e: Expression): Some[Expression] = Some(stripCastToPlainString(e))
   }
 
   def getSizePerRow(

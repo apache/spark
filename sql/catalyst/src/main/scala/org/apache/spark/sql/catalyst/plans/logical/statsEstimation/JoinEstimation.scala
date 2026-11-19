@@ -58,11 +58,14 @@ case class JoinEstimation(join: Join) extends Logging {
 
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
-      val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
-      val leftSideUniqueness = left.distinctKeys.exists(
-        _.subsetOf(ExpressionSet(leftKeys.map(stripCastToPlainString))))
-      val rightSideUniqueness = right.distinctKeys.exists(
-        _.subsetOf(ExpressionSet(rightKeys.map(stripCastToPlainString))))
+      // A key cast to a STRING that keeps its value is estimated as the key itself.
+      val strippedLeftKeys = leftKeys.map(stripCastToPlainString)
+      val strippedRightKeys = rightKeys.map(stripCastToPlainString)
+      val joinKeyPairs = extractJoinKeysWithColStats(strippedLeftKeys, strippedRightKeys)
+      val leftSideUniqueness =
+        left.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedLeftKeys)))
+      val rightSideUniqueness =
+        right.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedRightKeys)))
       val (numInnerJoinedRows, keyStatsAfterJoin) =
         computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
 
@@ -356,10 +359,10 @@ case class JoinEstimation(join: Join) extends Logging {
   private def extractJoinKeysWithColStats(
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
-    leftKeys.zip(rightKeys).map { case (lk, rk) =>
-      (stripCastToPlainString(lk), stripCastToPlainString(rk))
-    }.collect {
+    leftKeys.zip(rightKeys).collect {
       // Currently we don't deal with equal joins like key1 = key2 + 5.
+      // TODO(SPARK-61871): nor with keys of CHAR or VARCHAR columns of different types, which are
+      // wrapped in a cast to a CHAR or VARCHAR type, or in rpad for CHAR keys of different lengths.
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
       case (lk: AttributeReference, rk: AttributeReference)

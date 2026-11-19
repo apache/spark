@@ -405,17 +405,21 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
-   * Matches the read-side checks that [[addPaddingForScan]] wraps a column in under standard
-   * CHAR/VARCHAR semantics and extracts the checked expression, the length, and whether it is the
-   * CHAR check. Unlike [[ReadSidePadding]], the checks trim trailing spaces and fail on values
-   * still longer than the length, so they must not be compiled as padding.
+   * Matches what [[addPaddingForScan]] wraps a column in: the read-side CHAR padding, or under
+   * standard CHAR/VARCHAR semantics one of the read-side checks. Extracts the wrapped expression,
+   * the length, and whether shorter values are padded to that length, as the padding and the CHAR
+   * check do. Unlike [[ReadSidePadding]] it also matches the checks, which trim trailing spaces and
+   * fail on values still longer than the length, so it must not be used to compile padding.
    */
-  private[sql] object ReadSideCheck {
+  private[sql] object ReadSidePaddingOrCheck {
     def unapply(e: Expression): Option[(Expression, Int, Boolean)] = e match {
       case s @ StaticInvoke(_, _, name, Seq(child, Literal(n: Int, _)), _, _, _, _, None)
-          if s.staticObject == classOf[CharVarcharCodegenUtils] &&
-            (name == CHAR_TYPE_READ_SIDE_CHECK || name == VARCHAR_TYPE_READ_SIDE_CHECK) =>
-        Some((child, n, name == CHAR_TYPE_READ_SIDE_CHECK))
+          if s.staticObject == classOf[CharVarcharCodegenUtils] =>
+        name match {
+          case READ_SIDE_PADDING | CHAR_TYPE_READ_SIDE_CHECK => Some((child, n, true))
+          case VARCHAR_TYPE_READ_SIDE_CHECK => Some((child, n, false))
+          case _ => None
+        }
       case _ => None
     }
   }

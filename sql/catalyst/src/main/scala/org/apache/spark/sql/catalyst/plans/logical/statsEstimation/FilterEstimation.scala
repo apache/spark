@@ -262,8 +262,7 @@ case class FilterEstimation(
    */
   private def unwrapCharVarcharRead(e: Expression): Expression = {
     stripCastToPlainString(e) match {
-      case CharVarcharUtils.ReadSidePadding(attr: Attribute, _) => attr
-      case CharVarcharUtils.ReadSideCheck(attr: Attribute, _, _) => attr
+      case CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, _, _) => attr
       case attr: Attribute => attr
       case _ => e
     }

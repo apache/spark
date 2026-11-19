@@ -1000,36 +1000,37 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 9)
   }
 
-  test("SPARK-60830: predicates on a CHAR/VARCHAR column under a read-side check") {
+  test("SPARK-60830: predicates on a CHAR/VARCHAR column read as a first-class type") {
     // colStatString has 10 distinct values and no nulls over 10 rows.
     val child = childStatsTestPlan(Seq(attrString), tableRowCount = 10L)
     val childWithNulls = childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
       attributeMap = AttributeMap(Seq(attrString -> colStatString.copy(nullCount = Some(4)))))
-    Seq(charAttr("cstring", 2), varcharAttr("cstring", 2)).foreach { column =>
-      val checked = readSideCheck(column.withExprId(attrString.exprId))
-      assert(checked match {
-        case CharVarcharUtils.ReadSideCheck(a: Attribute, 2, _) => a.exprId == attrString.exprId
-        case _ => false
-      }, s"expected a read-side check over cstring, got $checked")
-      // Under first-class CHAR/VARCHAR types a comparison with a STRING casts the column to it.
-      val cast = Cast(checked, StringType)
+    val reads = for {
+      column <- Seq(charAttr("cstring", 2), varcharAttr("cstring", 2))
+      standardSemantics <- Seq(true, false)
+    } yield firstClassRead(column.withExprId(attrString.exprId), standardSemantics)
+    reads.foreach { read =>
+      assert(Seq(CharType(2), VarcharType(2)).contains(read.dataType) &&
+        read.references.toSeq.map(_.exprId) == Seq(attrString.exprId), read)
+      // A comparison with a STRING casts the column to it.
+      val cast = Cast(read, StringType)
       Seq(
         EqualTo(cast, Literal("A0")) -> 1,
         EqualTo(Literal("A0"), cast) -> 1,
         EqualNullSafe(cast, Literal("A0")) -> 1,
         In(cast, Seq(Literal("A0"), Literal("A1"))) -> 2,
         InSet(cast, Set(UTF8String.fromString("A0"), UTF8String.fromString("A1"))) -> 2,
-        IsNull(checked) -> 0,
+        IsNull(read) -> 0,
         Not(EqualTo(cast, Literal("A0"))) -> 9,
         // Casts to another collation or to a length-checked type can change what matches.
-        EqualTo(Cast(checked, StringType("UTF8_LCASE")), Literal("A0")) -> 10,
-        EqualTo(Cast(checked, VarcharType(1)), Literal("A")) -> 10).foreach {
+        EqualTo(Cast(read, StringType("UTF8_LCASE")), Literal("A0")) -> 10,
+        EqualTo(Cast(read, VarcharType(1)), Literal("A")) -> 10).foreach {
         case (condition, expectedRows) =>
           assert(Filter(condition, child).stats.rowCount.contains(BigInt(expectedRows)), condition)
       }
       // The update lands on the column's own stat, as for the read-side padding.
       validateEstimatedStats(
-        Filter(IsNotNull(checked), childWithNulls),
+        Filter(IsNotNull(read), childWithNulls),
         Seq(attrString -> colStatString.copy(distinctCount = Some(6), nullCount = Some(0))),
         expectedRowCount = 6)
     }

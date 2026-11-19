@@ -292,6 +292,17 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   private val firstClassCharVarcharConfs = Seq(
     SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
 
+  // 1000 rows of 10 distinct 5-character values, which CHAR(5) stores without padding, so that
+  // the predicates below match the same rows for CHAR(5), VARCHAR(5) and STRING.
+  private val fiveCharValues = "CAST(10000 + id % 10 AS STRING) FROM range(1000)"
+
+  /** Asserts both the estimated and the actual row count of the node `pick` selects. */
+  private def checkRows(query: String, expectedRows: Long, clue: String)(
+      pick: PartialFunction[LogicalPlan, LogicalPlan]): Unit = {
+    assert(estimatedRows(query)(pick).contains(BigInt(expectedRows)), s"$clue, $query")
+    assert(sql(query).count() == expectedRows, s"$clue, $query")
+  }
+
   test("SPARK-60830: CBO keeps CHAR/VARCHAR column statistics as first-class types") {
     for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {
@@ -301,25 +312,31 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           sql(s"CREATE TABLE $tableName(c $colType) USING parquet")
           sql(s"CREATE TABLE $stringTable(s STRING) USING parquet")
           Seq(tableName, stringTable).foreach { t =>
-            sql(s"INSERT INTO $t SELECT CAST(id % 10 AS STRING) FROM range(1000)")
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
           }
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
           sql(s"ANALYZE TABLE $stringTable COMPUTE STATISTICS FOR COLUMNS s")
 
           val clue = s"${mode.key}, $colType"
-          assert(estimatedRows(s"SELECT c, count(*) FROM $tableName GROUP BY c") {
+          checkRows(s"SELECT c, count(*) FROM $tableName GROUP BY c", 10, clue) {
             case a: Aggregate => a
-          }.contains(BigInt(10)), clue)
-          Seq("c = '3'" -> 100, "c IN ('3', '4')" -> 200, "c IS NULL" -> 0).foreach {
-            case (condition, expectedRows) =>
-              assert(estimatedRows(s"SELECT * FROM $tableName WHERE $condition") {
-                case f: Filter => f
-              }.contains(BigInt(expectedRows)), s"$clue, $condition")
           }
-          // The join key of the CHAR/VARCHAR column is cast to STRING.
-          assert(estimatedRows(s"SELECT * FROM $tableName JOIN $stringTable ON c = s") {
-            case j: Join => j
-          }.contains(BigInt(100000)), clue)
+          Seq("c = '10003'" -> 100, "c IN ('10003', '10004')" -> 200, "c IS NULL" -> 0).foreach {
+            case (condition, expectedRows) =>
+              checkRows(s"SELECT * FROM $tableName WHERE $condition", expectedRows, clue) {
+                case f: Filter => f
+              }
+          }
+          // The join key of the CHAR/VARCHAR column is cast to STRING, on either side.
+          Seq(s"$tableName JOIN $stringTable ON c = s", s"$stringTable JOIN $tableName ON s = c")
+            .foreach { join =>
+              checkRows(s"SELECT * FROM $join", 100000, clue) { case j: Join => j }
+            }
+          // So is the column in a union with a STRING column.
+          checkRows(s"SELECT k, count(*) FROM (SELECT c AS k FROM $tableName UNION ALL " +
+              s"SELECT s FROM $stringTable) GROUP BY k", 10, clue) {
+            case a: Aggregate => a
+          }
         }
       }
     }
@@ -331,15 +348,16 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         val tableName = "char_varchar_partition_pruning_stats"
         withTable(tableName) {
           sql(s"CREATE TABLE $tableName(v INT, p $colType) USING parquet PARTITIONED BY (p)")
-          sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), CAST(id % 10 AS STRING) " +
-            "FROM range(1000)")
+          sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), $fiveCharValues")
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS v, p")
 
-          val plan = sql(s"SELECT * FROM $tableName WHERE p = '3'").queryExecution.optimizedPlan
+          val query = s"SELECT * FROM $tableName WHERE p = '10003'"
+          val plan = sql(query).queryExecution.optimizedPlan
           val prunedStats = plan.collectFirst {
             case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
           }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
           assert(prunedStats.rowCount.contains(BigInt(100)), s"${mode.key}, $colType")
+          assert(sql(query).count() == 100, s"${mode.key}, $colType")
         }
       }
     }

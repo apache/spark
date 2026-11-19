@@ -64,12 +64,24 @@ trait StatsEstimationTestBase extends SparkFunSuite {
     DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
       StructType(Seq(StructField(colName, VarcharType(n))))).head)
 
-  /** A CHAR or VARCHAR scan column wrapped as standard CHAR/VARCHAR semantics read it. */
-  def readSideCheck(attr: Attribute): Expression = {
+  /**
+   * A CHAR or VARCHAR scan column as a scan reads it when CHAR and VARCHAR are first-class types:
+   * in a read-side check under standard semantics, and under `preserveCharVarcharTypeInfo` alone
+   * in the read-side padding for CHAR and as is for VARCHAR. The read has the CHAR or VARCHAR type.
+   */
+  def firstClassRead(attr: Attribute, standardSemantics: Boolean): Expression = {
     val conf = SQLConf.get.clone()
-    conf.setConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS, true)
-    SQLConf.withExistingConf(conf)(CharVarcharUtils.addPaddingForScan(attr))
+    conf.setConf(if (standardSemantics) SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS
+      else SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO, true)
+    SQLConf.withExistingConf(conf)(CharVarcharUtils.addPaddingForScan(attr)) match {
+      case a: Attribute =>
+        a.withDataType(CharVarcharUtils.getRawType(a.metadata).getOrElse(fail(s"not CHAR: $a")))
+      case read => read
+    }
   }
+
+  /** A CHAR or VARCHAR scan column wrapped as standard CHAR/VARCHAR semantics read it. */
+  def readSideCheck(attr: Attribute): Expression = firstClassRead(attr, standardSemantics = true)
 
   /** Convert (column name, column stat) pairs to an AttributeMap based on plan output. */
   def toAttributeMap(colStats: Seq[(String, ColumnStat)], plan: LogicalPlan)

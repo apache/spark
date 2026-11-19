@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
@@ -248,6 +248,30 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     val v = varcharAttr("v", 5)
     assert(checkedStat(v, stat).contains(stat))
     assert(checkedStat(varcharAttr("w", 30), nullStat).contains(nullStat))
+  }
+
+  test("SPARK-60830: column stats survive a cast of a CHAR/VARCHAR read to STRING") {
+    // E.g. the cast that a union with a STRING column adds to a first-class CHAR or VARCHAR
+    // column. Short values, so that a CHAR read raises the lengths to 5.
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(3), maxLen = Some(4))
+    for {
+      column <- Seq(charAttr("c", 5), varcharAttr("c", 5))
+      standardSemantics <- Seq(true, false)
+    } {
+      val read = firstClassRead(column, standardSemantics)
+      val child = StatsTestPlan(Seq(column), 1000, AttributeMap(Seq(column -> stat)))
+      val expected = if (read.dataType == CharType(5)) {
+        stat.copy(avgLen = Some(5), maxLen = Some(5))
+      } else {
+        stat
+      }
+      val proj = Project(Seq(Alias(Cast(read, StringType), "c")()), child)
+      assert(proj.stats.attributeStats.get(proj.output.head).contains(expected), read)
+      // A cast to a length-checked type is not stripped.
+      val toVarchar = Project(Seq(Alias(Cast(read, VarcharType(2)), "c")()), child)
+      assert(toVarchar.stats.attributeStats.get(toVarchar.output.head).isEmpty, read)
+    }
   }
 
   private def checkProjectStats(
