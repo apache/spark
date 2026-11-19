@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, S
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2018,6 +2019,41 @@ class DataFrameSuite extends SharedSparkSession
       checkAnswer(
         df.filter("col1 = 'abc' OR (col1 != 'abc' AND col2 == 3)"),
         Row ("abc", 1))
+    }
+  }
+
+  test("SPARK-61938: do not evaluate an expression that can fail ahead of its guard") {
+    val df = spark.range(3).toDF()
+    val all = Seq(Row(0L), Row(1L), Row(2L))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val d = "10 / (id - 1) > 1"
+      checkAnswer(df.where(s"(id < 5 OR $d) AND id >= 5"), Seq.empty)
+      checkAnswer(df.where(s"(id >= 5 AND $d) OR id < 5"), all)
+    }
+    val r = "raise_error('boom') IS NULL"
+    // Subexpression elimination evaluates a duplicated raise_error ahead of its guards by itself.
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      checkAnswer(df.where(s"(id < 5 OR $r) AND (id > -5 OR $r)"), all)
+      checkAnswer(df.where(s"(id > 5 AND $r) OR (id < -5 AND $r)"), Seq.empty)
+    }
+    // The check runs only on the joined rows, and t1.k = 3 has no match.
+    withTempView("t1", "t2") {
+      spark.range(4).selectExpr("id AS k", "id % 2 AS a",
+        "CASE WHEN id = 3 THEN -1 ELSE 1 END AS v").createOrReplaceTempView("t1")
+      spark.range(3).selectExpr("id AS k", "id AS b").createOrReplaceTempView("t2")
+      val c = "CASE WHEN t1.v < 0 THEN raise_error('bad v') ELSE TRUE END"
+      val c2 = "CASE WHEN t1.v < 0 THEN raise_error('bad v2') ELSE TRUE END"
+      Seq(
+        s"(t1.k = t2.k AND $c AND t1.a = 1) OR (t1.k = t2.k AND $c AND t2.b = 2)",
+        s"t1.k = t2.k AND ((t1.a = 1 AND $c) OR (t2.b = 2 AND $c))",
+        s"t1.k = t2.k AND ((t1.a = 1 AND $c) OR (t2.b = 2 AND $c2))").foreach { cond =>
+        val joined = sql(s"SELECT t1.k, t2.k FROM t1 JOIN t2 ON $cond")
+        checkAnswer(joined, Seq(Row(1L, 1L), Row(2L, 2L)))
+        // `t1.k = t2.k` stays an equi-join key.
+        assert(collect(joined.queryExecution.executedPlan) {
+          case j: BroadcastNestedLoopJoinExec => j
+        }.isEmpty)
+      }
     }
   }
 

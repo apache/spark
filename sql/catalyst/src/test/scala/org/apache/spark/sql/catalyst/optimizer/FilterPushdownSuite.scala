@@ -2445,6 +2445,19 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-61938: do not push down throwable predicates of a join condition") {
+    val x = testStringRelation.subquery("x")
+    val y = testStringRelation.subquery("y")
+
+    // `(x.a = 1 AND rx) OR x.a = 3` and `y.a = 2 OR (y.a = 4 AND ry)` below the join would
+    // evaluate `rx` and `ry` also on the rows that have no match on `b`.
+    val rx = IsNull(RaiseError($"x.e"))
+    val ry = IsNull(RaiseError($"y.e"))
+    val query = x.join(y, condition = Some($"x.b" === $"y.b" &&
+      (($"x.a" === 1 && rx && $"y.a" === 2) || ($"x.a" === 3 && $"y.a" === 4 && ry)))).analyze
+    comparePlans(Optimize.execute(query), query)
+  }
+
   test("push down predicates(with NOT predicate) through inner join") {
     val x = testRelation.subquery("x")
     val y = testRelation.subquery("y")

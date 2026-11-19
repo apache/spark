@@ -559,7 +559,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
     case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
     // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
-    case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
+    // And(b, c) evaluates b also on the rows where a is true. If b can fail, Not(a) is evaluated
+    // first. It is used instead of c, which can have the operands of a in another order.
+    case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) =>
+      if (ExprUtils.canEvaluateUnconditionally(b)) And(b, c) else And(Not(a), b)
     // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
     case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
 
@@ -568,7 +571,10 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
     case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
     // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
-    case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
+    // Or(b, c) evaluates b also on the rows where a is false. If b can fail, Not(a) is evaluated
+    // first. It is used instead of c, which can have the operands of a in another order.
+    case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) =>
+      if (ExprUtils.canEvaluateUnconditionally(b)) Or(b, c) else Or(Not(a), b)
     // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
     case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
 
@@ -576,16 +582,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case and @ (left And right) =>
       // 1. Split left and right to get the disjunctive predicates,
       //    i.e. lhs = (a || b), rhs = (a || c)
-      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). A throwable
+      //    one is left out where the formula evaluates it on more rows, see `commonFactors`.
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
       // 4. If common is non-empty, apply the formula to get the optimized predicate:
       //    common || (ldiff && rdiff)
-      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      // 5. Else, split left and right to get the conjunctive predicates.
       //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
       //    optimized predicate: (a && b && c)
       val lhs = splitDisjunctivePredicates(left)
       val rhs = splitDisjunctivePredicates(right)
-      val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+      val common = commonFactors(lhs, rhs)
       if (common.nonEmpty) {
         val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
         val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
@@ -598,11 +605,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
         }
       } else {
-        // No common factors from disjunctive predicates, reduce common factor from conjunction
+        // No common factor to extract from disjunctive predicates, reduce one from conjunction
         val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
         val distinct = ExpressionSet(all)
         if (all.size == distinct.size) {
-          // No common factors, return the original predicate
+          // No duplicates, return the original predicate
           and
         } else {
           // (a && b) && a && (a && c) => a && b && c
@@ -614,16 +621,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case or @ (left Or right) =>
       // 1. Split left and right to get the conjunctive predicates,
       //    i.e.  lhs = (a && b), rhs = (a && c)
-      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+      // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a). A throwable
+      //    one is left out where the formula evaluates it on more rows, see `commonFactors`.
       // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
       // 4. If common is non-empty, apply the formula to get the optimized predicate:
       //    common && (ldiff || rdiff)
-      // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+      // 5. Else, split left and right to get the conjunctive predicates.
       // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
       // optimized predicate: (a || b || c)
       val lhs = splitConjunctivePredicates(left)
       val rhs = splitConjunctivePredicates(right)
-      val common = lhs.filter(e => rhs.exists(e.semanticEquals))
+      val common = commonFactors(lhs, rhs)
       if (common.nonEmpty) {
         val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
         val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
@@ -636,11 +644,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
         }
       } else {
-        // No common factors in conjunctive predicates, reduce common factor from disjunction
+        // No common factor to extract from conjunctive predicates, reduce one from disjunction
         val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
         val distinct = ExpressionSet(all)
         if (all.size == distinct.size) {
-          // No common factors, return the original predicate
+          // No duplicates, return the original predicate
           or
         } else {
           // (a || b) || a || (a || c) => a || b || c
@@ -649,6 +657,29 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     case not: Not => simplifyNot(not)
+  }
+
+  /**
+   * Returns the operands of `lhs` that are also in `rhs` and are to be evaluated ahead of the other
+   * operands, in their order in `lhs`. A throwable one is returned only if it is the same in `lhs`
+   * and `rhs`, and if, in `lhs` or in `rhs`, only the ones returned before it come before it.
+   * Otherwise, evaluating it ahead would also run it on rows where an operand before it decides the
+   * result of both `lhs` and `rhs`, or would run its own operands in an order that
+   * `semanticEquals` ignores. As in PushPredicateThroughJoin, one that can fail without being
+   * throwable, such as a division in ANSI mode, is returned anyway: it can be a join key, which a
+   * hash join evaluates on every row.
+   */
+  private def commonFactors(lhs: Seq[Expression], rhs: Seq[Expression]): Seq[Expression] = {
+    lhs.filter(e => rhs.exists(e.semanticEquals)).foldLeft(Seq.empty[Expression]) { (common, e) =>
+      def onlyCommonBefore(operands: Seq[Expression]): Boolean =
+        operands.takeWhile(!_.semanticEquals(e)).forall(o => common.exists(o.semanticEquals))
+      if (!e.throwable ||
+          (rhs.contains(e) && (onlyCommonBefore(lhs) || onlyCommonBefore(rhs)))) {
+        common :+ e
+      } else {
+        common
+      }
+    }
   }
 
   /**
