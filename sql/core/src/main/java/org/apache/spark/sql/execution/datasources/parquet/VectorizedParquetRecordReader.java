@@ -294,11 +294,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
     columnarBatch = new ColumnarBatch(vectors);
 
-    boolean fillNullsAndWideDecimalDefaults = !configuration.getBoolean(
-      SQLConf$.MODULE$.LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT().key(),
-      (boolean) SQLConf$.MODULE$
-        .LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT()
-        .defaultValue().get());
     columnVectors = new ParquetColumnVector[sparkSchema.fields().length];
     for (int i = 0; i < columnVectors.length; i++) {
       Object defaultValue = null;
@@ -307,7 +302,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
         (WritableColumnVector) vectors[i], capacity, missingColumns, /* isTopLevel= */ true,
-        defaultValue, fillNullsAndWideDecimalDefaults);
+        defaultValue);
     }
 
     if (partitionColumns != null) {

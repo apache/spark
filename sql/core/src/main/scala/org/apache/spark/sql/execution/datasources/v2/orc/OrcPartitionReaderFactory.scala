@@ -64,8 +64,6 @@ case class OrcPartitionReaderFactory(
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
   private val orcFilterPushDown = sqlConf.orcFilterPushDown
-  private val fillNullsAndWideDecimalDefaults =
-    !sqlConf.getConf(SQLConf.LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT)
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -150,8 +148,7 @@ case class OrcPartitionReaderFactory(
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val batchReader =
-        new OrcColumnarBatchReader(capacity, memoryMode, fillNullsAndWideDecimalDefaults)
+      val batchReader = new OrcColumnarBatchReader(capacity, memoryMode)
       batchReader.initialize(fileSplit, taskAttemptContext, readerOptions.getOrcTail,
         pushDownPredicates(orcSchema).orNull)
       val requestedPartitionColIds =

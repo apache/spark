@@ -845,32 +845,17 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Appends multiple copies of a Java Object to the vector using the corresponding append* method
-   * above. Same as `appendObjects(length, value, true)`.
+   * above. A NULL nested in a struct or array, and a decimal whose unscaled value overflows a
+   * long, are appended too, unless the value contains a map: the map branch does not give each
+   * row its own entries yet (SPARK-60940), so such a value keeps failing as it did before, with
+   * Optional.empty() for the NULL and ArithmeticException for the decimal.
    * @param length: The number of instances to append
    * @param value value to append to the vector
    * @return the number of values appended if the value maps to one of the append* methods above,
    * or Optional.empty() otherwise.
    */
   public Optional<Integer> appendObjects(int length, Object value) {
-    return appendObjects(length, value, true);
-  }
-
-  /**
-   * Appends multiple copies of a Java Object to the vector using the corresponding append* method
-   * above.
-   * @param length: The number of instances to append
-   * @param value value to append to the vector
-   * @param fillNullsAndWideDecimals whether to append a NULL nested in a struct or array, and a
-   *   decimal whose unscaled value overflows a long. When false, the former returns
-   *   Optional.empty() and the latter throws ArithmeticException, as before Spark 5.0. A value
-   *   that contains a map keeps that behavior either way, because the map branch does not give
-   *   each row its own entries yet (SPARK-60940).
-   * @return the number of values appended if the value maps to one of the append* methods above,
-   * or Optional.empty() otherwise.
-   */
-  public Optional<Integer> appendObjects(
-      int length, Object value, boolean fillNullsAndWideDecimals) {
-    return appendObjectsImpl(length, value, fillNullsAndWideDecimals && !containsMap(value));
+    return appendObjectsImpl(length, value, !containsMap(value));
   }
 
   private Optional<Integer> appendObjectsImpl(
@@ -902,7 +887,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         return Optional.of(appendLongs(length, decimal.toUnscaledLong()));
       } else {
         if (!fillNullsAndWideDecimals) {
-          // The old code called toUnscaledLong() first, which throws when the value overflows.
+          // Keeps the old ArithmeticException for a value that contains a map.
           decimal.toUnscaledLong();
         }
         BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
@@ -969,12 +954,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         for (Object key : data.keyArray().array()) {
-          if (childColumns[0].appendObjectsImpl(1, key, false).isEmpty()) {
+          if (childColumns[0].appendObjectsImpl(1, key, fillNullsAndWideDecimals).isEmpty()) {
             return Optional.empty();
           }
         }
         for (Object val: data.valueArray().array()) {
-          if (childColumns[1].appendObjectsImpl(1, val, false).isEmpty()) {
+          if (childColumns[1].appendObjectsImpl(1, val, fillNullsAndWideDecimals).isEmpty()) {
             return Optional.empty();
           }
         }

@@ -177,8 +177,6 @@ class OrcFileFormat
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val orcFilterPushDown = sqlConf.orcFilterPushDown
     val archiveFormatEnabled = sqlConf.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
-    val fillNullsAndWideDecimalDefaults =
-      !sqlConf.getConf(SQLConf.LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT)
     val fileSourceOptions = new FileSourceOptions(options)
 
     def readSingleFile(file: PartitionedFile): Iterator[InternalRow] = {
@@ -218,8 +216,7 @@ class OrcFileFormat
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
         if (enableVectorizedReader) {
-          val batchReader =
-            new OrcColumnarBatchReader(capacity, memoryMode, fillNullsAndWideDecimalDefaults)
+          val batchReader = new OrcColumnarBatchReader(capacity, memoryMode)
           // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
           // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
           // after opening a file.

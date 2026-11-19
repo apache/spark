@@ -6834,19 +6834,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val LEGACY_VECTORIZED_READER_FAIL_ON_NULL_FIELD_OR_WIDE_DECIMAL_DEFAULT =
-    buildConf("spark.sql.legacy.vectorizedReader.failOnNullFieldOrWideDecimalDefault")
-      .internal()
-      .doc("When true, the vectorized Parquet and ORC readers fail on a missing " +
-        "column whose existence default contains no map and holds a NULL inside a struct or " +
-        "array or a decimal whose unscaled value overflows a long, as before Spark 5.0. When " +
-        "false (the default), they return the default value. Defaults that contain a map fail " +
-        "either way.")
-      .version("5.0.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(false)
-
   val GENERATED_COLUMN_ALLOW_NULLABLE_INGEST =
     buildConf("spark.sql.generatedColumn.allowNullableIngest.enabled")
       .doc("When true, writing to a table with generated columns allows omitting nullable " +
