@@ -22,7 +22,8 @@ import java.sql.Timestamp
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore}
@@ -51,6 +52,80 @@ class MultiStatefulOperatorsSuite
     Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
       test(s"$testName - $outputMode")(testBody(outputMode))
     }
+  }
+
+  Seq(true, false).foreach { reuseEnabled =>
+    test("SPARK-60862: watermark propagates through reused exchange - " +
+        s"exchange reuse enabled: $reuseEnabled") {
+      withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> reuseEnabled.toString) {
+        val inputData = MemoryStream[Int]
+
+        val aggregated = inputData.toDF()
+          .withColumn("eventTime", timestamp_seconds($"value"))
+          .withWatermark("eventTime", "0 seconds")
+          .groupBy(window($"eventTime", "5 seconds").as("window"), ($"value" % 2).as("key"))
+          .agg(count("*").as("count"))
+          .select($"window.start".cast("long").as("windowStart"), $"key", $"count")
+
+        val stream = aggregated.select(lit("left").as("branch"), $"*")
+          .union(aggregated.select(lit("right").as("branch"), $"*"))
+          .as[(String, Long, Int, Long)]
+
+        testStream(stream)(
+          AddData(inputData, 0, 1, 2, 3, 4),
+          CheckNewAnswer(),
+          AddData(inputData, 10),
+          CheckNewAnswer(
+            ("left", 0L, 0, 3L), ("left", 0L, 1, 2L),
+            ("right", 0L, 0, 3L), ("right", 0L, 1, 2L)),
+          AssertOnQuery { query =>
+            val plan = query.lastExecution.executedPlan
+            val reusedExchanges = plan.collect { case r: ReusedExchangeExec => r }
+            assert(reusedExchanges.nonEmpty === reuseEnabled,
+              s"Expected ReusedExchangeExec only when reuse is enabled. Plan: $plan")
+
+            val evictionWatermarks = plan.collect {
+              case s: StateStoreSaveExec => s.eventTimeWatermarkForEviction
+            }
+            assert(evictionWatermarks === Seq(Some(10000L), Some(10000L)))
+            true
+          },
+          assertNumStateRows(Seq(1, 1))
+        )
+      }
+    }
+  }
+
+  test("SPARK-60862: independently applied watermarks remain distinct") {
+    val inputData = MemoryStream[Int]
+    val source = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+
+    val left = source
+      .withWatermark("eventTime", "0 seconds")
+      .select($"value".as("leftValue"), $"eventTime".as("leftTime"))
+    val right = source
+      .withWatermark("eventTime", "0 seconds")
+      .select($"value".as("rightValue"), $"eventTime".as("rightTime"))
+    val stream = left.join(right,
+      $"leftValue" === $"rightValue" && $"leftTime" === $"rightTime")
+      .select($"leftValue", $"rightValue")
+      .as[(Int, Int)]
+
+    testStream(stream)(
+      AddData(inputData, 1, 2),
+      CheckNewAnswer((1, 1), (2, 2)),
+      AssertOnQuery { query =>
+        val plan = query.lastExecution.executedPlan
+        val watermarkNodes = plan.collect { case w: EventTimeWatermarkExec => w }
+        assert(watermarkNodes.size === 2, s"Expected two watermark nodes. Plan: $plan")
+        assert(watermarkNodes.map(_.nodeId).distinct.size === 2,
+          s"Expected distinct watermark node IDs. Plan: $plan")
+        assert(!plan.exists(_.isInstanceOf[ReusedExchangeExec]),
+          s"Exchange reuse must not cross distinct watermark nodes. Plan: $plan")
+        true
+      }
+    )
   }
 
   test("window agg -> window agg, append mode") {

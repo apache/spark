@@ -24,8 +24,6 @@ import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.python.DechunkedInputStream
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Dataset, Encoders, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -43,9 +41,8 @@ import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.PythonWorkerLogBlockId
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
-private[sql] object PythonSQLUtils extends Logging {
+private[sql] object PythonSQLUtils {
   private def withInternalRowPickler(f: Pickler => Array[Byte]): Array[Byte] = {
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(true, false)
@@ -132,19 +129,6 @@ private[sql] object PythonSQLUtils extends Logging {
     val internalRow =
         fromJava(withInternalRowUnpickler(_.loads(arr))).asInstanceOf[InternalRow]
     deserializer(internalRow)
-  }
-
-  /**
-   * Internal-only helper for Spark Connect's local mode. This is only used for
-   * local development, not for production. This method should not be used in
-   * production code path.
-   */
-  def addJarToCurrentClassLoader(path: String): Unit = {
-    Utils.getContextOrSparkClassLoader match {
-      case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
-      case cl => logWarning(log"Unsupported class loader ${MDC(CLASS_LOADER, cl)} will not " +
-        log"update jars in the thread class loader.")
-    }
   }
 
   def jsonToDDL(json: String): String = {

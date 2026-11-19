@@ -22,8 +22,10 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType}
 
 /**
  * Unit tests for constant propagation in expressions.
@@ -213,5 +215,159 @@ class ConstantPropagationSuite extends PlanTest {
     comparePlans(
       Optimize.execute(testRelation.where(Not(columnA === 1 && columnA === columnA + 2)).analyze),
       testRelation.where(Not(columnA === 1) || Not(columnA === columnA + 2)).analyze)
+  }
+
+  test("SPARK-60983: Do not propagate a constant into an expression that can fail") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      def divide(e: Expression): Expression = Divide(Literal(10.0), e.cast(DoubleType))
+
+      // The conjunct can also run on rows where `b` is not 0. With `b` replaced, it would divide by
+      // zero on such a row with `c` = 0, where `c - b` is not 0.
+      val notConstant =
+        testRelation.where(divide(columnC - columnB) > Literal(0.0) && columnB === 0).analyze
+      comparePlans(Optimize.execute(notConstant), notConstant)
+
+      // It can become constant, but keeps the attribute if it fails: no row may reach it.
+      val failsToFold = testRelation.where(columnB === 0 && columnA > divide(columnB)).analyze
+      comparePlans(Optimize.execute(failsToFold), failsToFold)
+
+      comparePlans(
+        Optimize.execute(testRelation.where(columnB === 2 && columnA > divide(columnB)).analyze),
+        testRelation.where(columnB === 2 && columnA > Literal(5.0)).analyze)
+
+      // An expression that fails on its own does not stop the other side of the comparison.
+      comparePlans(
+        Optimize.execute(testRelation.where(columnB === 2 && divide(columnC) > columnB).analyze),
+        testRelation.where(columnB === 2 && divide(columnC) > Literal(2.0)).analyze)
+
+      // The guard `b <> 0` becomes TRUE, so the equality goes ahead of the conjunct that keeps `b`.
+      val guarded = Optimize.execute(testRelation
+        .where(columnB =!= 0 && divide(columnC - columnB) > Literal(0.0) && columnB === 5).analyze)
+      comparePlans(guarded,
+        testRelation.where(columnB === 5 && divide(columnC - columnB) > Literal(0.0)).analyze)
+      val Filter(guardedCondition, _) = guarded
+      assert(splitConjunctivePredicates(guardedCondition).head.sql == "(b = 5)")
+
+      // The condition of an IF decides whether the branch that can fail runs.
+      val conditional = testRelation
+        .where(If(columnC > columnB, Literal(true), divide(columnC) > Literal(0.0)) &&
+          columnB === 0).analyze
+      comparePlans(Optimize.execute(conditional), conditional)
+    }
+  }
+
+  test("SPARK-61033: Do not propagate a constant into an operand that guards an expression " +
+      "that can fail") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      def divide(e: Expression): Expression = Divide(Literal(10.0), e.cast(DoubleType))
+      def first(plan: LogicalPlan): String = plan match {
+        case Filter(condition, _) => splitConjunctivePredicates(condition).head.sql
+      }
+
+      // `a < 3` and `a > 3` decide whether the division runs. With `a` replaced, it would run on a
+      // row with `a` = 1 and `c` = 0. The conjunct keeps `a`, so the equality goes first.
+      val nested = testRelation.where(
+        (columnA < 3 || (columnA > 3 && divide(columnC) > Literal(1.0))) && columnA === 5).analyze
+      val optimizedNested = Optimize.execute(nested)
+      comparePlans(optimizedNested, nested)
+      assert(first(optimizedNested) == "(a = 5)")
+
+      // With `k` replaced, the map lookup can be NULL on a row with another `k`.
+      val maps = LocalRelation($"k".string, Symbol("m").map(StringType, DoubleType), $"x".int)
+      val inComparison = maps.where(Coalesce(Seq(GetMapValue($"m", $"k"), divide($"x"))) >
+        Literal(0.0) && $"k" === "a").analyze
+      comparePlans(Optimize.execute(inComparison), inComparison)
+
+      // A conjunct guards the ones after it as well. It is rewritten, and the equality goes first.
+      val conjunct = Optimize.execute(testRelation
+        .where(columnA > 0 && divide(columnC) > Literal(0.0) && columnA === 1).analyze)
+      comparePlans(conjunct,
+        testRelation.where(columnA === 1 && divide(columnC) > Literal(0.0)).analyze)
+      assert(first(conjunct) == "(a = 1)")
+    }
+  }
+
+  test("SPARK-60882: Propagate a constant into an expression that can not fail") {
+    // An addition with ANSI mode off can not fail, so `b` is replaced in it, although `c` is not.
+    val legacy = NumericEvalContext(EvalMode.LEGACY)
+    comparePlans(
+      Optimize.execute(
+        testRelation.where(columnA > Add(columnC, columnB, legacy) && columnB === 2).analyze),
+      testRelation.where(columnA > Add(columnC, Literal(2), legacy) && columnB === 2).analyze)
+
+    // In ANSI mode it can overflow, so it keeps `b`, and the equality goes first.
+    val ansi = NumericEvalContext(EvalMode.ANSI)
+    comparePlans(
+      Optimize.execute(
+        testRelation.where(columnA > Add(columnC, columnB, ansi) && columnB === 2).analyze),
+      testRelation.where(columnB === 2 && columnA > Add(columnC, columnB, ansi)).analyze)
+
+    // Also under a `COLLATE`.
+    val strings = LocalRelation($"s".string, $"n".int)
+    comparePlans(
+      Optimize.execute(strings.where($"s" === "ab" &&
+        Length(Collate(Substring($"s", Literal(1), $"n"), ResolvedCollation("UNICODE_CI"))) > 1)
+        .analyze),
+      strings.where($"s" === "ab" &&
+        Length(Collate(Substring(Literal("ab"), Literal(1), $"n"), ResolvedCollation("UNICODE_CI")))
+          > 1).analyze)
+
+    // Not into a cast of a DOUBLE to a string: a row with `x` = -0.0 passes `x = 0.0`, but
+    // `CAST(x * y AS STRING)` keeps the sign.
+    val doubles = LocalRelation($"x".double, $"y".double)
+    val signed = doubles.where($"x" === 0.0 &&
+      Cast(Multiply($"x", $"y", ansi), StringType) === "-0.0").analyze
+    comparePlans(Optimize.execute(signed), signed)
+
+    // Nor a string of a trim collation into `length`: a row with `s` = 'a ' passes `s = 'a'`.
+    val trimmed = LocalRelation(AttributeReference("s", StringType("UTF8_BINARY_RTRIM"))())
+    val lengthOfTrimmed = trimmed.where($"s" === "a" && Length($"s") === 2).analyze
+    comparePlans(Optimize.execute(lengthOfTrimmed), lengthOfTrimmed)
+  }
+
+  test("SPARK-61704: Do not propagate an EqualTo with a NULL literal under a NOT") {
+    val nullInt = Literal(null, IntegerType)
+    // `d = NULL` is NULL on every row, so the condition under the `NOT` is NULL or FALSE.
+    // Replacing `d` with NULL would make `d + 0 <=> 5` FALSE, and the condition FALSE where it is
+    // NULL, or, below an `OR`, `d > b` NULL, and the `AND` NULL where it is FALSE.
+    Seq(
+      Not(columnD === nullInt && (columnD + 0 <=> 5)),
+      Not(nullInt === columnD && (columnD + 0 <=> 5)),
+      Not((columnD === nullInt && columnD > columnB) || columnB > 0)
+    ).foreach { condition =>
+      val withNull = testRelation.where(condition).analyze
+      comparePlans(ConstantPropagation(withNull), withNull)
+    }
+    // An `EqualTo` with another literal on the left is still propagated, as one on the right is in
+    // the SPARK-30447 test.
+    comparePlans(
+      ConstantPropagation(testRelation.where(Not(Literal(1) === columnD && columnD > columnB))
+        .analyze),
+      testRelation.where(Not(Literal(1) === columnD && Literal(1) > columnB)).analyze)
+    // Outside a `NOT`, where NULL counts as FALSE, the condition is never TRUE whatever `a` is
+    // replaced with, so it is still propagated, as before.
+    Seq(columnA === nullInt, nullInt === columnA).foreach { equality =>
+      comparePlans(
+        ConstantPropagation(testRelation.where(equality && columnA > 5).analyze),
+        testRelation.where(equality && nullInt > 5).analyze)
+    }
+    // An `EqualNullSafe` with a NULL literal is TRUE exactly where the attribute is NULL, so
+    // it is still propagated ...
+    Seq(columnA <=> nullInt, nullInt <=> columnA).foreach { nullSafe =>
+      comparePlans(
+        Optimize.execute(testRelation.where(nullSafe && (columnA + 0 <=> 5)).analyze),
+        testRelation.where(Literal(false)).analyze)
+    }
+    // ... also under a `NOT`, for an attribute that is not nullable ...
+    Seq(columnD <=> nullInt, nullInt <=> columnD).foreach { nullSafe =>
+      comparePlans(
+        ConstantPropagation(testRelation.where(Not(nullSafe && columnD > columnB)).analyze),
+        testRelation.where(Not(nullSafe && nullInt > columnB)).analyze)
+    }
+    // ... but, as before, not over a nullable one.
+    Seq(columnA <=> nullInt, nullInt <=> columnA).foreach { nullSafe =>
+      val nullable = testRelation.where(Not(nullSafe && columnA > columnB)).analyze
+      comparePlans(ConstantPropagation(nullable), nullable)
+    }
   }
 }

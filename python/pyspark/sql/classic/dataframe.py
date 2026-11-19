@@ -60,6 +60,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
+from pyspark.sql.dataframe import _validate_approx_quantile_probabilities
 from pyspark.sql.functions import builtin as F
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -1720,27 +1721,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 )
         col = _to_list(self._sc, cast(List["ColumnOrName"], col))
 
-        if not isinstance(probabilities, (list, tuple)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "expected_type": "list or tuple",
-                    "arg_type": type(probabilities).__name__,
-                },
-            )
-        if isinstance(probabilities, tuple):
-            probabilities = list(probabilities)
-        for p in probabilities:
-            if not isinstance(p, (float, int)) or p < 0 or p > 1:
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "expected_type": "list[float, int]",
-                        "arg_type": type(p).__name__,
-                    },
-                )
+        probabilities = _validate_approx_quantile_probabilities(probabilities)
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
         if not isinstance(relativeError, (float, int)):

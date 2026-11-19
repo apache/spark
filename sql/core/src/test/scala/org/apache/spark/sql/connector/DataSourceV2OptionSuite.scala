@@ -60,6 +60,7 @@ import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 class LoadCountingInMemoryCatalog extends InMemoryCatalog {
   val singleArgLoads = new AtomicInteger(0)
@@ -214,6 +215,7 @@ class DispatchTrackingRelationCatalog extends InMemoryRelationCatalog {
   }
 }
 
+@DataSourceV2Test
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
 
@@ -1640,7 +1642,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           java.util.Map.of("snapshot", "s1", "split-size", "9"))))
       val writeRef = V2Reference.createForWriteTarget(original)
       var sharedRelationCacheLookups = 0
-      val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
+      val sharedRelationCache: RelationCache = (_, _, _, _) => {
         sharedRelationCacheLookups += 1
         None
       }
@@ -1716,7 +1718,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           java.util.Map.of("snapshot", "s1", "split-size", "9"))),
         Seq("state_view"))
       var sharedRelationCacheLookups = 0
-      val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
+      val sharedRelationCache: RelationCache = (_, _, _, _) => {
         sharedRelationCacheLookups += 1
         Some(cached)
       }

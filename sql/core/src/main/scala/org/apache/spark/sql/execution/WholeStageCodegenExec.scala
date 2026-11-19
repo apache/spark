@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, BroadcastRangeJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -57,6 +57,9 @@ trait CodegenSupport extends SparkPlan {
     case _: BroadcastHashJoinExec => "bhj"
     case _: ShuffledHashJoinExec => "shj"
     case _: SortMergeJoinExec => "smj"
+    // A skewed join is named "SortMergeAsOfJoin(skew=true)", which is not a valid Java name.
+    case _: SortMergeAsOfJoinExec => "smaj"
+    case _: BroadcastRangeJoinExec => "brj"
     case _: BroadcastNestedLoopJoinExec => "bnlj"
     case _: RDDScanExec => "rdd"
     case _: OneRowRelationExec => "orr"
@@ -629,9 +632,8 @@ object WholeStageCodegenExec {
    * method sizes, so the class is then dropped and compiled again. A hit happens where the class
    * is cached while the decision for its code is not: the decision was evicted, or the same body
    * was compiled earlier without being decided - with the split off, whose code is the recorded
-   * code without its marks, but for the compacted-slot rule, or under another limit. Should
-   * another thread load the class again in between, the second compile is a hit as well, and the
-   * sizes are unknown.
+   * code without its marks, or under another limit. Should another thread load the class again
+   * in between, the second compile is a hit as well, and the sizes are unknown.
    */
   private[execution] def trialCompile(
       code: CodeAndComment,
@@ -774,11 +776,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
    * one piece, with the code of each expression a split could take marked, and only where there
    * is one is that code compiled to choose which expressions to split ([[chooseCode]]). A stage
    * the JIT compiles whole keeps that code, which a split's calls would only slow down; the trial
-   * compile of the code kept is the one [[doExecute]] finds in the compile cache. That code
-   * differs from the code with the conf off in one place: a slot of a compacted mutable state
-   * array counts as the field it is when code moves into a method (`CodegenContext.collectInputs`).
-   * An operator's method that took it as a parameter, and failed to compile, now compiles; a
-   * `With` definition reading one, which stayed inline, gets its method.
+   * compile of the code kept is the one [[doExecute]] finds in the compile cache.
    *
    * @return the tuple of the codegen context and the actual generated source.
    */
@@ -1200,16 +1198,24 @@ case class CollapseCodegenStages(
     codegenStageCounter: AtomicInteger = new AtomicInteger(0))
   extends Rule[SparkPlan] {
 
-  private def supportCodegen(e: Expression): Boolean = e match {
+  private def supportCodegen(e: Expression, evaluated: Boolean): Boolean = e match {
     case e: LeafExpression => true
     // CodegenFallback requires the input to be an InternalRow
     case e: CodegenFallback => false
+    // A partition transform generates the code of its function call, which is not a child.
+    case t: TransformExpression =>
+      !evaluated || (t.evaluableFunction.isDefined && !t.fallsBackToEval)
     case _ => true
   }
 
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
-      val willFallback = plan.expressions.exists(_.exists(e => !supportCodegen(e)))
+      // A node does not evaluate the partitioning it reports, such as the one an `RDDScanExec`
+      // holds. So the check skips a partition transform there.
+      val willFallback = plan.expressions.exists { e =>
+        val evaluated = !e.isInstanceOf[Partitioning]
+        e.exists(child => !supportCodegen(child, evaluated))
+      }
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
         WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
@@ -1233,6 +1239,10 @@ case class CollapseCodegenStages(
           child => InputAdapter(insertWholeStageCodegen(child))))
       case j: ShuffledHashJoinExec =>
         // The children of ShuffledHashJoin should do codegen separately.
+        j.withNewChildren(j.children.map(
+          child => InputAdapter(insertWholeStageCodegen(child))))
+      case j: SortMergeAsOfJoinExec =>
+        // The children of SortMergeAsOfJoin should do codegen separately.
         j.withNewChildren(j.children.map(
           child => InputAdapter(insertWholeStageCodegen(child))))
       case p => p.withNewChildren(p.children.map(insertInputAdapter))

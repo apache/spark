@@ -202,10 +202,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       pythonUDFArrowFallbackOnUDT: Boolean): Boolean = {
     e.children match {
       case Seq(child: PythonUDF) =>
-        // The in-process evaluator accepts JVM expressions as inputs. Extract nested calls
-        // into separate operators instead of serializing a chain for a Python worker.
-        PythonUDF.chainsInWorker(e) &&
-          correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
+        correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
           correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
           e.elementwiseNestingDepth == child.elementwiseNestingDepth &&
           shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
@@ -343,7 +340,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                   log"${MDC(REASON, "UDT input or return type")}. " +
                   log"Falling back to non-Arrow-optimized UDF execution.")
               }
-              BatchEvalPython(validUdfs, resultAttrs, child)
+              BatchEvalPython(validUdfs, child.output, resultAttrs, child)
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF
                  | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                  | PythonEvalType.SQL_ARROW_BATCHED_UDF
@@ -353,9 +350,8 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
                  | PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_UDF
-                 | PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
-              ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
+              ArrowEvalPython(validUdfs, child.output, resultAttrs, child, evalType)
             case _ =>
               throw SparkException.internalError("Unexpected UDF evalType")
           }

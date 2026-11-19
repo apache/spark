@@ -114,9 +114,11 @@ case class GroupPartitionsExec(
    * `plannedPartitioning` rebuilds its keyed members on top of the grouping. A rule that hands this
    * node a child reporting something else invalidates both, so the keyed claim is dropped and only
    * the physical output count is reported. `ValidateRequirements` then finds the parent's
-   * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite, which is what an
-   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on. Only an `AQEShuffleReadRule`
-   * is validated that way, so `checkChildStillMatches` covers the rest at execution.
+   * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite. A coalesced
+   * `AQEShuffleReadExec` over a keyed stage also reports `UnknownPartitioning` itself, so
+   * validation can reject it even without this node. Only an `AQEShuffleReadRule` is validated
+   * that way, so a retained node also checks its child at execution with `checkChildStillMatches`.
+   * A side whose identity node was skipped has no such execution-time check.
    *
    * Re-deriving instead would apply a recipe chosen for one pairing to a different child, yielding
    * a claim nothing validated against the other side. It would also buy nothing today: no rule is
@@ -126,9 +128,9 @@ case class GroupPartitionsExec(
    * The comparison is by reference for a child that reports the same object, which the columnar and
    * codegen wrappers do. A rule that rewrites a subquery in the runtime or storage filters of a
    * `BatchScanExec` after `EnsureRequirements` rebuilds it, so there it compares the partition keys
-   * by value, and reads equal only while the connector returns the same input partitions for the
-   * same scan. Such rules are `PlanAdaptiveDynamicPruningFilters` and `ReuseAdaptiveSubquery` with
-   * AQE, and `ReuseExchangeAndSubquery` without it.
+   * by value. Such rules are `PlanAdaptiveDynamicPruningFilters` and `ReuseAdaptiveSubquery` with
+   * AQE, and `ReuseExchangeAndSubquery` without it. The rebuilt node shares the input partitions
+   * the first one planned (`PlannedScan`), so its keys come from the same partitions.
    *
    * Asked on the read rather than in `withNewChildInternal` because canonicalization rebuilds this
    * node over a canonicalized child whose partitioning cannot be read at all: a canonicalized
@@ -228,17 +230,19 @@ case class GroupPartitionsExec(
   //
   // --- Concrete example of an unsafe operator: SortExec + SortMergeJoinExec ---
   //
-  // SortExec stores its active sorter in a plain var field (`rowSorter`) on the plan node.
-  // When the k-way merge initialises its N partition iterators, each one drives the same SortExec
-  // instance and calls createSorter(), which assigns rowSorter = newSorter -- overwriting the
-  // field each time. After all N iterators are initialised, rowSorter holds only the sorter
-  // created for the *last* partition.
+  // SortExec stores its active sorter in a plain var field (`rowSorter`) of its
+  // `SortExecSorterHolder`, one per SortExec instance in a task. When the k-way merge
+  // initialises its N partition iterators, each one drives the same SortExec instance and calls
+  // createSorter() on its holder, which assigns rowSorter = newSorter -- overwriting the field
+  // each time. After all N iterators are initialised, rowSorter holds only the sorter created for
+  // the *last* partition.
   //
   // SortMergeJoinExec performs eager resource cleanup: when a join partition is exhausted it
-  // calls cleanupResources() on its children, which reaches SortExec.cleanupResources(). That
-  // method calls rowSorter.cleanupResources() -- but rowSorter now holds the last-created sorter,
-  // not the one belonging to the just-exhausted partition. If that last sorter is still being
-  // actively read by another partition in the k-way merge, freeing it causes a use-after-free.
+  // closes the sorters of the SortExecs below it, through their holders (`taskResourceCleaner`).
+  // That calls rowSorter.cleanupResources() -- but
+  // rowSorter now holds the last-created sorter, not the one belonging to the just-exhausted
+  // partition. If that last sorter is still being actively read by another partition in the
+  // k-way merge, freeing it causes a use-after-free.
   //
   // To be conservative, we use a whitelist. An unknown node type counts as unsafe, so the merge
   // is not planned and the node concatenates. Only node types explicitly confirmed to store no

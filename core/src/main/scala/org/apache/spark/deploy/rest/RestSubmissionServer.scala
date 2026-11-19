@@ -19,7 +19,7 @@ package org.apache.spark.deploy.rest
 
 import java.nio.charset.StandardCharsets
 import java.util.EnumSet
-import java.util.concurrent.{Executors, ExecutorService}
+import java.util.concurrent.Executors
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import jakarta.servlet.DispatcherType
@@ -99,11 +99,8 @@ private[spark] abstract class RestSubmissionServer(
   private def doStart(startPort: Int): (Server, Int) = {
     val threadPool = new QueuedThreadPool(masterConf.get(MASTER_REST_SERVER_MAX_THREADS))
     threadPool.setName(getClass().getSimpleName())
-    if (Utils.isJavaVersionAtLeast21 && masterConf.get(MASTER_REST_SERVER_VIRTUAL_THREADS)) {
-      val newVirtualThreadPerTaskExecutor =
-        classOf[Executors].getMethod("newVirtualThreadPerTaskExecutor")
-      val service = newVirtualThreadPerTaskExecutor.invoke(null).asInstanceOf[ExecutorService]
-      threadPool.setVirtualThreadsExecutor(service)
+    if (masterConf.get(MASTER_REST_SERVER_VIRTUAL_THREADS)) {
+      threadPool.setVirtualThreadsExecutor(Executors.newVirtualThreadPerTaskExecutor())
     }
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
