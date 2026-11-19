@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.execution.{ConditionalUDFEvaluation, UnaryExecNode}
 
 object EvalPythonExec {
   /**
@@ -37,11 +39,13 @@ object EvalPythonExec {
  * A physical plan that evaluates a [[PythonUDF]], one partition of tuples at a time.
  *
  * Python evaluation works by sending the necessary (projected) input data via a socket to an
- * external Python process, and combine the result from the Python process with the original row.
+ * external Python process, and combine the result from the Python process with the columns of the
+ * original row that are passed through (`requiredChildOutput`).
  *
- * For each row we send to Python, we also put it in a queue first. For each output row from Python,
- * we drain the queue to find the original input row. Note that if the Python process is way too
- * slow, this could lead to the queue growing unbounded and spill into disk when run out of memory.
+ * For each row we send to Python, we also put its pass-through columns in a queue first. For each
+ * output row from Python, we drain the queue to find them. Note that if the Python process is way
+ * too slow, this could lead to the queue growing unbounded and spill into disk when run out of
+ * memory. If no column is passed through, the results from Python are the output rows.
  *
  * Here is a diagram to show how this works:
  *
@@ -61,17 +65,48 @@ object EvalPythonExec {
  */
 trait EvalPythonExec extends UnaryExecNode {
   def udfs: Seq[PythonUDF]
+
+  /** The columns of the child that are passed through to the output. */
+  def requiredChildOutput: Seq[Attribute]
+
   def resultAttrs: Seq[Attribute]
+
+  /** Returns a copy that passes through `requiredChildOutput` of the child. */
+  def withRequiredChildOutput(requiredChildOutput: Seq[Attribute]): EvalPythonExec
 
   protected def evaluatorFactory: EvalPythonEvaluatorFactory
 
-  override def output: Seq[Attribute] = child.output ++ resultAttrs
+  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
+  /**
+   * If defined, the UDFs are evaluated only for the child rows where this deterministic
+   * condition is true, and their results are null for the other rows (see `EvalOnlyWhen`).
+   */
+  def evalCondition: Option[Expression] = None
+
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
-    if (conf.usePartitionEvaluator) {
+    if (evalCondition.isDefined) {
+      val condition = evalCondition.get
+      val factory = evaluatorFactory
+      val childOutput = child.output
+      val passThrough = requiredChildOutput
+      val results = resultAttrs
+      // The UDFs' results do not depend on the row when they are deterministic and their
+      // arguments have no references (as for a marked zero-row result); then the first evaluated
+      // row's results can be reused, which avoids buffering the skipped rows.
+      val resultIsConstant = ConditionalUDFEvaluation.resultIsRowIndependent(udfs)
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
+        ConditionalUDFEvaluation(
+          iter, condition, childOutput, passThrough, results, TaskContext.get(), pipelined,
+          resultIsConstant) {
+          rows => factory.createEvaluator().eval(index, rows)
+        }
+      }
+    } else if (conf.usePartitionEvaluator) {
       inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
       inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>

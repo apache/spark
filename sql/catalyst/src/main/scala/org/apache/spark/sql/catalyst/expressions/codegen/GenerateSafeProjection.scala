@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -136,8 +135,14 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[MapData]))
   }
 
-  @tailrec
   private def convertToSafe(
+      ctx: CodegenContext,
+      input: ExprValue,
+      dataType: DataType): ExprCode =
+    TypeOps(dataType).flatMap(_.rowRepresentationType).map(convertToSafe(ctx, input, _))
+      .getOrElse(convertToSafeDefault(ctx, input, dataType))
+
+  private def convertToSafeDefault(
       ctx: CodegenContext,
       input: ExprValue,
       dataType: DataType): ExprCode = dataType match {

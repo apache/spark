@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId}
 
 object JoinType {
 
@@ -55,6 +55,12 @@ object JoinType {
 
 sealed abstract class JoinType {
   def sql: String
+
+  /**
+   * Returns this join type without cosmetic variations, for plan canonicalization. Only an
+   * [[ExistenceJoin]] has one, the exprId of its `exists` attribute.
+   */
+  def canonicalized: JoinType = this
 }
 
 /**
@@ -105,6 +111,13 @@ case class ExistenceJoin(exists: Attribute) extends JoinType {
     // generate SQL for this join type
     throw SparkUnsupportedOperationException()
   }
+
+  // A join type is not an `Expression`, so `QueryPlan.doCanonicalize` keeps the exprId of
+  // `exists`, and the join nodes call this instead. The exprId only names the column this join
+  // produces, and the parent normalizes its references to it by their ordinal in the join output.
+  // So it is normalized like the first attribute a node produces in `QueryPlan.doCanonicalize`.
+  override def canonicalized: JoinType =
+    ExistenceJoin(exists.withExprId(ExprId(0)).canonicalized.asInstanceOf[Attribute])
 }
 
 case class NaturalJoin(tpe: JoinType) extends JoinType {
@@ -163,26 +176,32 @@ case object Nearest extends AsOfJoinDirection
 sealed abstract class MatchComparisonOperator {
   def sql: String
   def flip: MatchComparisonOperator
+  /** The direction when the left table's operand is first, e.g. `l.ts >= r.ts` is [[Backward]]. */
+  def direction: AsOfJoinDirection
 }
 
 case object GreaterThanOrEqualOp extends MatchComparisonOperator {
   override def sql: String = ">="
   override def flip: MatchComparisonOperator = LessThanOrEqualOp
+  override def direction: AsOfJoinDirection = Backward
 }
 
 case object GreaterThanOp extends MatchComparisonOperator {
   override def sql: String = ">"
   override def flip: MatchComparisonOperator = LessThanOp
+  override def direction: AsOfJoinDirection = Backward
 }
 
 case object LessThanOrEqualOp extends MatchComparisonOperator {
   override def sql: String = "<="
   override def flip: MatchComparisonOperator = GreaterThanOrEqualOp
+  override def direction: AsOfJoinDirection = Forward
 }
 
 case object LessThanOp extends MatchComparisonOperator {
   override def sql: String = "<"
   override def flip: MatchComparisonOperator = GreaterThanOp
+  override def direction: AsOfJoinDirection = Forward
 }
 
 object LateralJoinType {

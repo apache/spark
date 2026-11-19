@@ -22,12 +22,15 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Exists
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class GroupBasedMergeIntoTableNoCodegenSuite extends GroupBasedMergeIntoTableSuite {
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "false")
 }
 
+@DataSourceV2Test
 class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
 
   import testImplicits._
@@ -51,6 +54,58 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
            |USING source s
            |ON t.pk = s.pk
            |WHEN MATCHED AND t.pk != 7 THEN
+           | UPDATE SET t.salary = t.salary + 1
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
+           |WHEN NOT MATCHED BY SOURCE AND pk = 1 THEN
+           | DELETE
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(2, 200, "software"), // unchanged
+          Row(3, 301, "hr"), // update
+          Row(4, 401, "hr"), // update
+          Row(5, 501, "hr"), // update
+          Row(6, 0, "new"), // insert
+          Row(7, 700, "hr"))) // unchanged
+
+      checkLastWriteInfo(
+        expectedRowSchema = table.schema,
+        expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+
+      checkLastWriteLog(
+        writeWithMetadataLogEntry(metadata = Row("software", 0), data = Row(2, 200, "software")),
+        writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(3, 301, "hr")),
+        writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(4, 401, "hr")),
+        writeWithMetadataLogEntry(metadata = Row("hr", null), data = Row(5, 501, "hr")),
+        writeLogEntry(data = Row(6, 0, "new")),
+        writeWithMetadataLogEntry(metadata = Row("hr", 4), data = Row(7, 700, "hr")))
+    }
+  }
+
+  test("SPARK-60667: merge with type coercion handles metadata columns correctly") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "hr" }
+          |{ "pk": 5, "salary": 500, "dep": "hr" }
+          |{ "pk": 7, "salary": 700, "dep": "hr" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(3, 4, 5, 6, 7).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // the MATCHED condition references a metadata column and needs type coercion
+      // (`t.salary < 600.5`), so the MERGE is resolved only in a later iteration of the analyzer
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND t._partition = 'hr' AND t.salary < 600.5 THEN
            | UPDATE SET t.salary = t.salary + 1
            |WHEN NOT MATCHED THEN
            | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
@@ -121,6 +176,42 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
     }
   }
 
+  test("SPARK-60710: merge runtime group filtering with source metadata column in ON condition") {
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT, dep STRING) PARTITIONED BY (dep)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 'hr'), (3, 'software'), (5, 'hr')")
+
+    Seq(sourceNameAsString, s"(SELECT pk, dep FROM $sourceNameAsString)").foreach { source =>
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hr" }
+          |{ "pk": 3, "salary": 300, "dep": "software" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |""".stripMargin)
+
+      executeAndCheckScans(
+        s"""MERGE INTO $tableNameAsString t
+           |USING $source s
+           |ON t.pk = s.pk AND s._partition = 'hr'
+           |WHEN MATCHED THEN
+           | UPDATE SET t.salary = -1
+           |""".stripMargin,
+        primaryScanSchema = "pk INT, salary INT, dep STRING, _partition STRING, index INT",
+        groupFilterScanSchema = Some("pk INT, dep STRING"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, -1, "hr"), // update
+          Row(2, 200, "hr"), // unchanged
+          Row(3, 300, "software"), // unchanged
+          Row(4, 400, "software"))) // unchanged
+
+      checkReplacedPartitions(Seq("hr"))
+
+      sql(s"DROP TABLE $tableNameAsString")
+    }
+  }
+
   test("merge runtime group filtering (DPP enabled)") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       checkMergeRuntimeGroupFiltering()
@@ -179,6 +270,40 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(4, 400, "software"), // unchanged
           Row(5, 500, "software"), // unchanged
           Row(6, 0, "hr"))) // insert
+
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
+  test("SPARK-60668: merge runtime group filtering with metadata column in ON condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hr" }
+          |{ "pk": 3, "salary": 300, "dep": "software" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 3).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      executeAndCheckScans(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk AND t._partition = 'hr'
+           |WHEN MATCHED THEN
+           | UPDATE SET t.salary = -1
+           |""".stripMargin,
+        primaryScanSchema = "pk INT, salary INT, dep STRING, _partition STRING, index INT",
+        groupFilterScanSchema = Some("pk INT, dep STRING, _partition STRING"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, -1, "hr"), // update
+          Row(2, 200, "hr"), // unchanged
+          Row(3, 300, "software"), // unchanged
+          Row(4, 400, "software"))) // unchanged
 
       checkReplacedPartitions(Seq("hr"))
     }

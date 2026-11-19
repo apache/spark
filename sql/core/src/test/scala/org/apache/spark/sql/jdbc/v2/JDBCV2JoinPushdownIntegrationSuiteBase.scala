@@ -229,8 +229,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   protected val supportsColumnPruning: Boolean = true
 
-  protected val supportsJoinPushdown: Boolean = true
-
   // Condition-less joins are not supported in join pushdown
   test("Test that 2-way join without condition should not have join pushed down") {
     val sqlQuery =
@@ -298,6 +296,31 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       )
       // scalastyle:on line.size.limit
       checkAnswer(df, rows)
+    }
+  }
+
+  gridTest("Join pushdown preserves partitioned input reads")(Seq(1, 2)) { numPartitions =>
+    val tableOptions = s"""WITH (
+      |'partitionColumn' '${caseConvert("id")}',
+      |'lowerBound' '0',
+      |'upperBound' '11',
+      |'numPartitions' '$numPartitions')""".stripMargin
+    val sqlQuery = s"""
+      |SELECT a.id, b.id
+      |FROM $catalogAndNamespace.$casedJoinTableName1 $tableOptions a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 $tableOptions b ON a.id = b.id + 1
+      |""".stripMargin
+
+    val expectedRows = for {
+      (leftId, _, _) <- table1Data
+      (rightId, _, _) <- table1Data
+      if leftId == rightId + 1
+    } yield Row(leftId, rightId)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      checkJoinNotPushed(df)
+      checkAnswer(df, expectedRows)
     }
   }
 
@@ -479,6 +502,42 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     }
   }
 
+  test("Join pushdown preserves aliases in partially pushed averages") {
+    assume(supportsAggregatePushdown, "Aggregate pushdown is not supported")
+    def sqlPartitionedQuery(numPartitions: Int): String = {
+      val idCol = caseConvert("id")
+      // numPartitions alone is valid and selects the partial aggregate path when greater than 1.
+      val tableOptions = s"WITH ('numPartitions' '$numPartitions')"
+      // Some databases return an integer for AVG over integer input, so use decimal input.
+      s"""
+        |SELECT avg(CAST(b.$idCol AS DECIMAL(10, 2)))
+        |FROM $catalogAndNamespace.$casedJoinTableName1 $tableOptions a
+        |JOIN $catalogAndNamespace.$casedJoinTableName1 $tableOptions b ON a.$idCol = b.$idCol + 1
+        |""".stripMargin
+    }
+
+    val rowsWithJoinPushdown = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val completeAgg = sql(sqlPartitionedQuery(numPartitions = 1))
+      checkJoinPushed(completeAgg)
+      checkAggregateRemoved(completeAgg, pushed = true)
+      val expectedRows = completeAgg.collect().toSeq
+      assert(expectedRows.head.get(0) != null)
+
+      val partialAgg = sql(sqlPartitionedQuery(numPartitions = 2))
+      checkJoinPushed(partialAgg)
+      checkAggregateRemoved(partialAgg, pushed = false)
+      checkAnswer(partialAgg, expectedRows)
+      expectedRows
+    }
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      val df = sql(sqlPartitionedQuery(numPartitions = 2))
+      checkJoinNotPushed(df)
+      checkAggregateRemoved(df, pushed = false)
+      checkAnswer(df, rowsWithJoinPushdown)
+    }
+  }
+
   test("Test aggregate on top of multi-way self join") {
     val sqlQuery = s"""
       |SELECT min(a.id + b.id), min(a.id), min(c.id - 2)
@@ -494,6 +553,55 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
       checkAnswer(df, rows)
+    }
+  }
+
+  test("Test aggregate with group by on top of join") {
+    val sqlQuery =
+      s"""
+         |SELECT t1.id, t1.address, min(t2.salary)
+         |FROM $catalogAndNamespace.$casedJoinTableName1 t1
+         |JOIN $catalogAndNamespace.$casedJoinTableName2 t2 ON t1.id = t2.id
+         |WHERE t1.amount > 1000
+         |GROUP BY t1.id, t1.address
+         |""".stripMargin
+
+    val rowsNoPushdown = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    assert(rowsNoPushdown.nonEmpty)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      checkJoinPushed(df)
+      checkAggregateRemoved(df, supportsAggregatePushdown)
+      checkAnswer(df, rowsNoPushdown)
+    }
+  }
+
+  test("Test multi-way join with function in join condition") {
+    val sqlQuery =
+      s"""
+         |SELECT a.id, c.address, d.address, a.amount
+         |FROM $catalogAndNamespace.$casedJoinTableName1 a
+         |JOIN $catalogAndNamespace.$casedJoinTableName1 c
+         |  ON a.address = c.address
+         |JOIN $catalogAndNamespace.$casedJoinTableName1 d
+         |  ON IF(a.id > 5, a.id - 1, a.id + 1) = d.id
+         |WHERE a.amount >= 1000
+         |""".stripMargin
+
+    val rowsNoPushdown = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    assert(rowsNoPushdown.nonEmpty)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      checkJoinPushed(df)
+      checkAnswer(df, rowsNoPushdown)
     }
   }
 

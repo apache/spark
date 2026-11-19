@@ -17,11 +17,27 @@
 
 package org.apache.spark.api.python
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, Closeable, DataInputStream, DataOutputStream, EOFException, IOException}
+import java.net.{InetAddress, InetSocketAddress, SocketException, SocketTimeoutException, StandardSocketOptions}
+import java.nio.ByteBuffer
+import java.nio.channels.{AsynchronousCloseException, Channels, ClosedByInterruptException, ClosedChannelException, SelectionKey, ServerSocketChannel, SocketChannel}
+import java.nio.charset.StandardCharsets
+import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 
-class BasePythonRunnerSuite extends SparkFunSuite {
+import com.fasterxml.jackson.core.StreamReadConstraints
+import com.google.common.util.concurrent.Uninterruptibles
+import org.apache.logging.log4j.Level
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
+
+import org.apache.spark.{SharedSparkContext, SparkConf, SparkEnv, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.util.TaskCompletionListener
+
+class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
   test("SPARK-58192: pipelined writer pool admits more concurrent writers than processors") {
     // A fractional spark.task.cpus admits more concurrent tasks -- each holding one writer
@@ -45,6 +61,632 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     } finally {
       release.countDown()
       futures.foreach(_.get(1, TimeUnit.MINUTES))
+    }
+  }
+
+  /**
+   * A writer that, once started, runs `onStart` and then keeps running until `release` is
+   * counted down, ignoring interrupts the way a writer in the middle of copying a row into a
+   * HybridRowQueue page does.
+   */
+  private class UninterruptibleWriter(
+      onStart: UninterruptibleWriter => Unit = _ => ()) extends Runnable {
+    val started = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    @volatile var exited = false
+
+    override def run(): Unit = {
+      try {
+        onStart(this)
+        started.countDown()
+        awaitIgnoringInterrupts(release)
+      } finally {
+        exited = true
+      }
+    }
+  }
+
+  /** Waits for `latch`, ignoring interrupts like a writer in the middle of a row copy. */
+  private def awaitIgnoringInterrupts(latch: CountDownLatch): Unit =
+    Uninterruptibles.awaitUninterruptibly(latch)
+
+  /** Blocks until this thread is interrupted, like a writer that exits on an interrupt. */
+  private def awaitInterrupt(): Unit = {
+    try {
+      new CountDownLatch(1).await()
+    } catch {
+      case _: InterruptedException =>
+    }
+  }
+
+  /** Adds a completion listener that records whether `writer` had exited when it ran. */
+  private def addCleanupListener(
+      context: TaskContext,
+      writer: UninterruptibleWriter): AtomicReference[Option[Boolean]] = {
+    val exitedBeforeCleanup = new AtomicReference[Option[Boolean]](None)
+    context.addTaskCompletionListener[Unit] { _ => exitedBeforeCleanup.set(Some(writer.exited)) }
+    exitedBeforeCleanup
+  }
+
+  /**
+   * Adds a pre-completion listener that runs right before the one added by
+   * `startPipelinedWriter`, so that the test knows task completion has reached the writer.
+   */
+  private def addReachedListener(context: TaskContext): CountDownLatch = {
+    val reached = new CountDownLatch(1)
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = reached.countDown()
+    })
+    reached
+  }
+
+  private def startThread(body: => Unit): Thread = {
+    val thread = new Thread(() => body)
+    thread.setDaemon(true)
+    thread.start()
+    thread
+  }
+
+  test("SPARK-60113: task completion waits for the pipelined writer to exit") {
+    val context = TaskContext.empty()
+    val stopListenerAdded = new CountDownLatch(1)
+    @volatile var cleanupAddedByWriter: AtomicReference[Option[Boolean]] = null
+    val writer = new UninterruptibleWriter(self => {
+      // Like an upstream reader that adds its close listener when the writer first pulls it.
+      // Waits so that it is always added after the stop listener, as when the writer pulls its
+      // input after startPipelinedWriter returns, which an ordinary completion listener for the
+      // stop would let run first.
+      awaitIgnoringInterrupts(stopListenerAdded)
+      cleanupAddedByWriter = addCleanupListener(context, self)
+    })
+    // Like the listener that closes the HybridRowQueue, added on the task thread before the
+    // writer starts.
+    val cleanupAddedBefore = addCleanupListener(context, writer)
+    var completion: Thread = null
+    try {
+      BasePythonRunner.startPipelinedWriter(writer, context)
+      stopListenerAdded.countDown()
+      assert(writer.started.await(1, TimeUnit.MINUTES))
+      val reached = addReachedListener(context)
+
+      completion = startThread(context.markTaskCompleted(None))
+      assert(reached.await(1, TimeUnit.MINUTES))
+      // Task completion must stay blocked while the writer is still running.
+      completion.join(500)
+      assert(completion.isAlive)
+      assert(cleanupAddedBefore.get.isEmpty)
+      assert(cleanupAddedByWriter.get.isEmpty)
+    } finally {
+      stopListenerAdded.countDown()
+      writer.release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(cleanupAddedBefore.get === Some(true))
+    assert(cleanupAddedByWriter.get === Some(true))
+  }
+
+  test("SPARK-60113: a listener the writer adds once completion has started waits for it") {
+    val context = TaskContext.empty()
+    val addNow = new CountDownLatch(1)
+    val added = new CountDownLatch(1)
+    // Whether the writer had exited, and the thread, when the listener added by the writer ran.
+    val lateCleanup = new AtomicReference[Option[(Boolean, Thread)]](None)
+    val writerStarted = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    // Like a writer that adds a listener when it pulls more input after completion has started.
+    val lateWriter: Runnable = new Runnable {
+      @volatile var exited = false
+      override def run(): Unit = {
+        try {
+          writerStarted.countDown()
+          awaitIgnoringInterrupts(addNow)
+          context.addTaskCompletionListener[Unit] { _ =>
+            lateCleanup.set(Some((exited, Thread.currentThread())))
+          }
+          added.countDown()
+          awaitIgnoringInterrupts(release)
+        } finally {
+          exited = true
+        }
+      }
+    }
+    var completion: Thread = null
+    try {
+      BasePythonRunner.startPipelinedWriter(lateWriter, context)
+      assert(writerStarted.await(1, TimeUnit.MINUTES))
+      val reached = addReachedListener(context)
+
+      completion = startThread(context.markTaskCompleted(None))
+      assert(reached.await(1, TimeUnit.MINUTES))
+      addNow.countDown()
+      assert(added.await(1, TimeUnit.MINUTES))
+      // The writer thread only queued the listener: task completion still waits for the writer.
+      completion.join(500)
+      assert(completion.isAlive)
+      assert(lateCleanup.get.isEmpty)
+    } finally {
+      addNow.countDown()
+      release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(lateCleanup.get === Some((true, completion)))
+  }
+
+  test("SPARK-60113: an interrupt does not stop the wait and is not passed to later listeners") {
+    val context = TaskContext.empty()
+    val writer = new UninterruptibleWriter
+    val cleanup = addCleanupListener(context, writer)
+    val interruptedInCleanup = new AtomicReference[Option[Boolean]](None)
+    context.addTaskCompletionListener[Unit] { _ =>
+      interruptedInCleanup.set(Some(Thread.currentThread().isInterrupted))
+    }
+    var completion: Thread = null
+    try {
+      BasePythonRunner.startPipelinedWriter(writer, context)
+      assert(writer.started.await(1, TimeUnit.MINUTES))
+      val reached = addReachedListener(context)
+
+      completion = startThread(context.markTaskCompleted(None))
+      assert(reached.await(1, TimeUnit.MINUTES))
+      // Interrupt the completion thread once it blocks in the wait, e.g. a task kill that lands
+      // while the listeners run.
+      eventually(timeout(1.minute)) {
+        assert(completion.getState == Thread.State.TIMED_WAITING)
+      }
+      completion.interrupt()
+      completion.join(500)
+      assert(completion.isAlive)
+      assert(cleanup.get.isEmpty)
+    } finally {
+      writer.release.countDown()
+    }
+    completion.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!completion.isAlive)
+    assert(cleanup.get === Some(true))
+    assert(interruptedInCleanup.get === Some(false))
+  }
+
+  test("SPARK-60113: a writer started after the task completed never runs") {
+    // Like startPipelinedWriter called on a helper thread (e.g. PipedRDD's stdin writer) after
+    // the task completed: the stop listener runs at once and keeps the writer from starting.
+    val context = TaskContext.empty()
+    context.markTaskCompleted(None)
+    val ran = new CountDownLatch(1)
+    BasePythonRunner.startPipelinedWriter(() => ran.countDown(), context)
+    assert(!ran.await(500, TimeUnit.MILLISECONDS))
+  }
+
+  test("SPARK-60113: a writer started while another thread runs the listeners never runs") {
+    // Like startPipelinedWriter called on a helper thread (e.g. PipedRDD's stdin writer) after
+    // the task completed, while the completing thread runs the completion listeners: the stop
+    // listener is then only queued, so the writer must not be submitted at all.
+    val context = TaskContext.empty()
+    val ran = new CountDownLatch(1)
+    context.addTaskCompletionListener[Unit] { _ =>
+      val helper =
+        startThread(BasePythonRunner.startPipelinedWriter(() => ran.countDown(), context))
+      helper.join(TimeUnit.MINUTES.toMillis(1))
+      assert(!helper.isAlive)
+    }
+    context.markTaskCompleted(None)
+    assert(!ran.await(500, TimeUnit.MILLISECONDS))
+  }
+
+  test("SPARK-60113: a failure to interrupt the writer does not end the wait") {
+    val writer = new UninterruptibleWriter
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(
+      writer, TaskContext.empty(), "test task", warnIntervalMs = 100)
+    val interruptFailure = new IllegalStateException("cannot interrupt")
+    // The first interrupt and the ones on every warning fail.
+    val writerThread = new Thread(() => writerTask.run()) {
+      override def interrupt(): Unit = throw interruptFailure
+    }
+    writerThread.setDaemon(true)
+    writerThread.start()
+    val stopFailure = new AtomicReference[Option[Throwable]](None)
+    var stopper: Thread = null
+    try {
+      assert(writer.started.await(1, TimeUnit.MINUTES))
+      stopper = startThread {
+        try {
+          writerTask.stopAndAwaitExit()
+        } catch {
+          case t: Throwable => stopFailure.set(Some(t))
+        }
+      }
+      // Several warnings pass, and their interrupts fail, while the writer still runs.
+      stopper.join(500)
+      assert(stopper.isAlive)
+      assert(stopFailure.get.isEmpty)
+    } finally {
+      writer.release.countDown()
+    }
+    stopper.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!stopper.isAlive)
+    // Thrown once the writer has exited.
+    assert(writer.exited)
+    assert(stopFailure.get === Some(interruptFailure))
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+  }
+
+  test("SPARK-60113: a pipelined writer stopped before it starts never runs") {
+    val writer = new UninterruptibleWriter
+    val writerTask =
+      new BasePythonRunner.PipelinedWriterTask(writer, TaskContext.empty(), "test task")
+    // The pool has not started the writer yet: stopping must not wait for it.
+    writerTask.stopAndAwaitExit()
+    // Stopping again does not wait either.
+    writerTask.stopAndAwaitExit()
+    // Even if the pool thread reaches the task afterwards, the writer must not run. Release it
+    // up front so that a writer that wrongly runs fails the test instead of hanging it.
+    writer.release.countDown()
+    writerTask.run()
+    assert(writer.started.getCount === 1)
+    assert(!writer.exited)
+  }
+
+  test("SPARK-60113: a fatal error of the pipelined writer is logged") {
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(
+      // scalastyle:off throwerror
+      () => throw new LinkageError("fatal writer error"), TaskContext.empty(), "test task")
+      // scalastyle:on throwerror
+    val logAppender = new LogAppender("pipelined writer failure")
+    withLogAppender(logAppender) {
+      intercept[LinkageError] {
+        writerTask.run()
+      }
+    }
+    assert(logAppender.loggingEvents.exists { event =>
+      event.getLevel == Level.ERROR &&
+        event.getMessage.getFormattedMessage.contains("Pipelined Python writer of test task") &&
+        event.getThrown.getMessage == "fatal writer error"
+    })
+    // The writer has exited, so stopping does not wait.
+    writerTask.stopAndAwaitExit()
+  }
+
+  test("SPARK-60113: stopping on the writer thread itself does not wait for the writer") {
+    val taskRef = new AtomicReference[BasePythonRunner.PipelinedWriterTask]()
+    val stopReturned = new CountDownLatch(1)
+    val interruptedAfterStop = new AtomicReference[Option[Boolean]](None)
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
+      // Like task completion listeners handed to the writer thread while it pulls its input.
+      taskRef.get.stopAndAwaitExit()
+      interruptedAfterStop.set(Some(Thread.currentThread().isInterrupted))
+      stopReturned.countDown()
+    }, TaskContext.empty(), "test task")
+    taskRef.set(writerTask)
+    val writerThread = startThread(writerTask.run())
+    assert(stopReturned.await(1, TimeUnit.MINUTES))
+    // Stopping leaves the interrupt status of the thread it runs on as it was, so that the
+    // listeners that run next on it can clean up.
+    assert(interruptedAfterStop.get === Some(false))
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!writerThread.isAlive)
+    // The writer has exited, so stopping from another thread does not wait either.
+    writerTask.stopAndAwaitExit()
+  }
+
+  /**
+   * Runs a writer that consumes the first interrupt and stops at the second one, on a thread made
+   * by `newThread`, stops it, and returns the failure that stopping threw, if any. Fails if
+   * stopping does not return.
+   */
+  private def stopWriterThatConsumesAnInterrupt(
+      newThread: Runnable => Thread): (Int, Option[Throwable]) = {
+    val interrupts = new AtomicInteger(0)
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
+      // Like upstream code that catches the first InterruptedException and carries on, and then
+      // blocks again (e.g. in channel.write), where the next interrupt stops it.
+      val blocker = new CountDownLatch(1)
+      var stopped = false
+      while (!stopped) {
+        try {
+          blocker.await()
+        } catch {
+          case _: InterruptedException =>
+            stopped = interrupts.incrementAndGet() >= 2
+        }
+      }
+    }, TaskContext.empty(), "test task", warnIntervalMs = 100)
+    val writerThread = newThread(() => writerTask.run())
+    writerThread.setDaemon(true)
+    writerThread.start()
+    eventually(timeout(1.minute)) {
+      assert(writerThread.getState == Thread.State.WAITING)
+    }
+
+    val stopFailure = new AtomicReference[Option[Throwable]](None)
+    val stopper = startThread {
+      try {
+        writerTask.stopAndAwaitExit()
+      } catch {
+        case t: Throwable => stopFailure.set(Some(t))
+      }
+    }
+    stopper.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!stopper.isAlive)
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+    (interrupts.get, stopFailure.get)
+  }
+
+  test("SPARK-60113: the writer is interrupted again if it consumed the interrupt") {
+    val (interrupts, stopFailure) = stopWriterThatConsumesAnInterrupt(new Thread(_))
+    assert(interrupts >= 2)
+    assert(stopFailure.isEmpty)
+  }
+
+  test("SPARK-60113: a failing warning does not skip the repeated interrupt") {
+    // The warning fails on every tick, since it takes the writer thread's stack trace.
+    val warningFailure = new IllegalStateException("cannot take the stack trace")
+    val (interrupts, stopFailure) = stopWriterThatConsumesAnInterrupt { runnable =>
+      new Thread(runnable) {
+        override def getStackTrace: Array[StackTraceElement] = throw warningFailure
+      }
+    }
+    assert(interrupts >= 2)
+    assert(stopFailure === Some(warningFailure))
+  }
+
+  test("SPARK-60113: an interrupt pending before stopping the writer is kept") {
+    // The writer never started.
+    val notStarted =
+      new BasePythonRunner.PipelinedWriterTask(() => (), TaskContext.empty(), "test task")
+    // The writer runs and exits once interrupted.
+    val running = new BasePythonRunner.PipelinedWriterTask(() => {
+      awaitInterrupt()
+    }, TaskContext.empty(), "test task")
+    val writerThread = startThread(running.run())
+    eventually(timeout(1.minute)) {
+      assert(writerThread.getState == Thread.State.WAITING)
+    }
+
+    Seq(notStarted, running).foreach { writerTask =>
+      val interruptedAfterStop = new AtomicReference[Option[Boolean]](None)
+      val stopper = startThread {
+        Thread.currentThread().interrupt()
+        writerTask.stopAndAwaitExit()
+        interruptedAfterStop.set(Some(Thread.currentThread().isInterrupted))
+      }
+      stopper.join(TimeUnit.MINUTES.toMillis(1))
+      assert(interruptedAfterStop.get === Some(true))
+    }
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+  }
+
+  test("SPARK-60113: stopping interrupts a running writer right away") {
+    // A writer that exits once interrupted, with no warning (and so no repeated interrupt)
+    // before the test times out.
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
+      awaitInterrupt()
+    }, TaskContext.empty(), "test task", warnIntervalMs = TimeUnit.MINUTES.toMillis(10))
+    val writerThread = startThread(writerTask.run())
+    eventually(timeout(1.minute)) {
+      assert(writerThread.getState == Thread.State.WAITING)
+    }
+    val stopper = startThread(writerTask.stopAndAwaitExit())
+    stopper.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!stopper.isAlive)
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!writerThread.isAlive)
+  }
+
+  test("SPARK-60113: an interrupt that arrives while stopping the writer is not passed on") {
+    val writerTask =
+      new BasePythonRunner.PipelinedWriterTask(() => (), TaskContext.empty(), "test task")
+    val interruptedAfterStop = new AtomicReference[Option[Boolean]](None)
+    var stopper: Thread = null
+    writerTask.synchronized {
+      // Blocks on the task's lock, where the interrupt then arrives.
+      stopper = startThread {
+        writerTask.stopAndAwaitExit()
+        interruptedAfterStop.set(Some(Thread.currentThread().isInterrupted))
+      }
+      eventually(timeout(1.minute)) {
+        assert(stopper.getState == Thread.State.BLOCKED)
+      }
+      stopper.interrupt()
+    }
+    stopper.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!stopper.isAlive)
+    assert(interruptedAfterStop.get === Some(false))
+  }
+
+  test("SPARK-60113: the writer is not interrupted while it creates a resource uninterruptibly") {
+    val context = TaskContext.empty()
+    val inBuilder = new CountDownLatch(1)
+    val releaseBuilder = new CountDownLatch(1)
+    val interruptedInBuilder = new AtomicReference[Option[Boolean]](None)
+    val writerTask = new BasePythonRunner.PipelinedWriterTask(() => {
+      // Like an upstream scan that opens a file through createResourceUninterruptibly.
+      context.createResourceUninterruptibly {
+        inBuilder.countDown()
+        var interrupted = false
+        var done = false
+        while (!done) {
+          try {
+            done = releaseBuilder.await(1, TimeUnit.MINUTES)
+          } catch {
+            case _: InterruptedException => interrupted = true
+          }
+        }
+        interruptedInBuilder.set(Some(interrupted || Thread.currentThread().isInterrupted))
+        new Closeable {
+          override def close(): Unit = {}
+        }
+      }
+      // Then blocks until it is interrupted.
+      awaitInterrupt()
+    }, context, "test task", warnIntervalMs = 100)
+    val writerThread = startThread(writerTask.run())
+    var stopper: Thread = null
+    try {
+      assert(inBuilder.await(1, TimeUnit.MINUTES))
+      stopper = startThread(writerTask.stopAndAwaitExit())
+      // Several warnings pass while the writer is in the builder.
+      stopper.join(500)
+      assert(stopper.isAlive)
+    } finally {
+      releaseBuilder.countDown()
+    }
+    stopper.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!stopper.isAlive)
+    assert(interruptedInBuilder.get === Some(false))
+    writerThread.join(TimeUnit.MINUTES.toMillis(1))
+  }
+
+  /**
+   * Runs `f` with a runner, and with a writer of it whose input is written by `writeNextInput`
+   * and that writes nothing else. By default it has no input.
+   */
+  private def withRunnerAndWriter(
+      worker: PythonWorker,
+      context: TaskContext,
+      writeNextInput: DataOutputStream => Boolean = _ => false)(
+      f: (PythonRunner, BasePythonRunner[Array[Byte], Array[Byte]]#Writer) => Unit): Unit = {
+    val func = SimplePythonFunction(
+      Seq.empty, Collections.emptyMap(), Collections.emptyList(), "python3", "3",
+      Collections.emptyList(), null)
+    val runner = new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), None)
+    val writer = new runner.Writer(SparkEnv.get, worker, Iterator.empty, 0, context) {
+      override def open(dataOut: DataOutputStream): Unit = {}
+      override protected def writeCommand(dataOut: DataOutputStream): Unit = {}
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean =
+        writeNextInput(dataOut)
+      override def close(dataOut: DataOutputStream): Unit = {}
+    }
+    f(runner, writer)
+  }
+
+  /**
+   * Runs a real `PipelinedWriterRunnable` whose input is written by `writeNextInput`, against a
+   * socket pair standing in for the Python worker, using the suite's shared SparkContext. Reads
+   * from the Python side of the socket through its input stream time out after a minute. Then
+   * calls `check` with the writer and the Python side of the socket. `run` runs the runnable and
+   * may expect it to throw.
+   */
+  private def withPipelinedWriterRunnable(
+      writeNextInput: DataOutputStream => Boolean)(
+      run: Runnable => Unit)(
+      check: (BasePythonRunner[Array[Byte], Array[Byte]]#Writer, SocketChannel) => Unit): Unit = {
+    val server = ServerSocketChannel.open()
+    try {
+      server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+      val channel = SocketChannel.open(server.getLocalAddress)
+      val pythonSide = server.accept()
+      try {
+        // So that reads through the socket adaptor fail instead of blocking forever.
+        pythonSide.socket().setSoTimeout(TimeUnit.MINUTES.toMillis(1).toInt)
+        val context = TaskContext.empty()
+        val worker = PythonWorker(channel)
+        withRunnerAndWriter(worker, context, writeNextInput) { (runner, writer) =>
+          run(new runner.PipelinedWriterRunnable(
+            worker, writer.asInstanceOf[runner.Writer], 1024, context))
+          check(writer, pythonSide)
+        }
+      } finally {
+        pythonSide.close()
+        channel.close()
+      }
+    } finally {
+      server.close()
+    }
+  }
+
+  test("SPARK-60113: a fatal error of the pipelined writer is passed to the reader") {
+    withPipelinedWriterRunnable { _ =>
+      // scalastyle:off throwerror
+      throw new LinkageError("fatal writer error")
+      // scalastyle:on throwerror
+    } { runnable =>
+      intercept[LinkageError] {
+        runnable.run()
+      }
+    } { (writer, pythonSide) =>
+      // The reader rethrows the error instead of waiting for the Python worker, which sees the
+      // end of its input.
+      assert(writer.exception.map(_.getMessage) === Some("fatal writer error"))
+      assert(pythonSide.socket().getInputStream.read() === -1)
+    }
+  }
+
+  test("SPARK-60113: an interrupted Arrow-style write leaves the writer's buffer usable") {
+    var calls = 0
+    withPipelinedWriterRunnable { dataOut =>
+      calls += 1
+      if (calls == 1) {
+        // Fills the first buffer, so that the interrupted write below goes through the stream
+        // that the writer creates after flushing it.
+        dataOut.write(new Array[Byte](2000))
+        true
+      } else {
+        // Like an Arrow writer, which writes through Channels.newChannel(dataOut), interrupted by
+        // the thread that stops the writer.
+        Thread.currentThread().interrupt()
+        try {
+          Channels.newChannel(dataOut).write(ByteBuffer.wrap(Array[Byte](1, 2)))
+        } catch {
+          case _: ClosedByInterruptException =>
+        } finally {
+          Thread.interrupted()
+        }
+        // Fails if the interrupt freed the buffer behind dataOut.
+        dataOut.writeInt(42)
+        false
+      }
+    } { runnable =>
+      runnable.run()
+    } { (writer, pythonSide) =>
+      assert(writer.exception.isEmpty)
+      val input = new DataInputStream(pythonSide.socket().getInputStream)
+      input.readFully(new Array[Byte](2000))
+      // The bytes copied by the interrupted write, which the JDK copies after closing the
+      // stream, and then the next write.
+      assert(input.readByte() === 1)
+      assert(input.readByte() === 2)
+      assert(input.readInt() === 42)
+    }
+  }
+
+  test("SPARK-60343: pipelined writer uses a new DataOutputStream for every buffer") {
+    val func = SimplePythonFunction(Seq.empty, Collections.emptyMap(), Collections.emptyList(),
+      "python3", "3", Collections.emptyList(), null)
+    val runner = new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), None)
+    val server = ServerSocketChannel.open()
+      .bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+    val channel = SocketChannel.open(server.getLocalAddress)
+    val peer = server.accept()
+    try {
+      val worker = PythonWorker(channel)
+      val context = TaskContext.empty()
+      // The size of the stream at the start of each call. Each call writes 300 bytes.
+      val startSizes = ArrayBuffer.empty[Int]
+      val writer = new runner.Writer(SparkEnv.get, worker, Iterator.empty, 0, context) {
+        override def open(dataOut: DataOutputStream): Unit = {}
+        override protected def writeCommand(dataOut: DataOutputStream): Unit = {}
+        override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+          startSizes += dataOut.size()
+          dataOut.write(new Array[Byte](300))
+          startSizes.length < 20
+        }
+      }
+      new runner.PipelinedWriterRunnable(worker, writer, 1024, context).run()
+      assert(writer.exception.isEmpty)
+      // The runners measure pythonDataSent with DataOutputStream.size(), which saturates at
+      // Int.MaxValue. Like ReaderInputStream, every buffer of about 1024 bytes gets a new stream.
+      assert(startSizes.toSeq === Seq.fill(5)(Seq(0, 300, 600, 900)).flatten)
+
+      // All the data and END_OF_STREAM still reach the worker.
+      channel.shutdownOutput()
+      val sent = ByteBuffer.wrap(Channels.newInputStream(peer).readAllBytes())
+      assert(sent.limit() === 20 * 300 + 4)
+      assert(sent.getInt(sent.limit() - 4) === SpecialLengths.END_OF_STREAM)
+    } finally {
+      peer.close()
+      channel.close()
+      server.close()
     }
   }
 
@@ -87,6 +729,781 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     // 1 MiB; only an explicit budget of 0 disables the limit.
     intercept[SparkException] {
       BasePythonRunner.getWorkerMemoryMb(Some(1L), 2)
+    }
+  }
+
+  private val metricsReport =
+    "{\"bootTimestampMs\":1250,\"initTimestampMs\":2500," +
+      "\"finishTimestampMs\":3750,\"pythonExecutionDurationMs\":42," +
+      "\"memoryBytesSpilled\":7,\"diskBytesSpilled\":9}"
+  private val expectedMetrics = Map(
+    "bootTimestampMs" -> 1250L,
+    "initTimestampMs" -> 2500L,
+    "finishTimestampMs" -> 3750L,
+    "pythonExecutionDurationMs" -> 42L,
+    "memoryBytesSpilled" -> 7L,
+    "diskBytesSpilled" -> 9L)
+
+  private def framedMetricsStream(json: String, declaredLength: Option[Int] = None,
+      endMarkers: Boolean = true): DataInputStream = {
+    val bytes = json.getBytes(StandardCharsets.UTF_8)
+    val buffer = new ByteArrayOutputStream()
+    val output = new DataOutputStream(buffer)
+    output.writeInt(declaredLength.getOrElse(bytes.length))
+    output.write(bytes)
+    if (endMarkers) {
+      output.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+      output.writeInt(0) // No accumulator updates.
+      output.writeInt(SpecialLengths.END_OF_STREAM)
+    }
+    new DataInputStream(new ByteArrayInputStream(buffer.toByteArray))
+  }
+
+  private def checkEndMarkers(stream: DataInputStream): Unit = {
+    assert(stream.readInt() == SpecialLengths.END_OF_DATA_SECTION)
+    assert(stream.readInt() == 0)
+    assert(stream.readInt() == SpecialLengths.END_OF_STREAM)
+    assert(stream.read() == -1)
+  }
+
+  test("SPARK-59773: read worker metrics and leave the following sections aligned") {
+    val withExtra = metricsReport.dropRight(1) + ",\"futureMetric\":17,\"zeroMetric\":0}"
+    val stream = framedMetricsStream(withExtra)
+    val result = BasePythonRunner.readWorkerMetrics(stream)
+    assert(result == expectedMetrics ++ Map("futureMetric" -> 17L, "zeroMetric" -> 0L))
+    checkEndMarkers(stream)
+  }
+
+  test("SPARK-59993: decode worker metric names independently of lifecycle and SQL consumers") {
+    val stream = framedMetricsStream("{\"futureDuration\":42}")
+    val result = BasePythonRunner.readWorkerMetrics(stream)
+    assert(result == Map("futureDuration" -> 42L))
+    checkEndMarkers(stream)
+  }
+
+  test("SPARK-59773: worker metric decoder rejects non-int64 values") {
+    val invalidValues = Seq("null", "true", "\"42\"", "42.0", "[]", "{}",
+      "9223372036854775808", "-9223372036854775809")
+    val reportWithExtra = metricsReport.dropRight(1) + ",\"futureMetric\":17}"
+    val fields = Seq("pythonExecutionDurationMs" -> 42,
+      "memoryBytesSpilled" -> 7, "diskBytesSpilled" -> 9, "futureMetric" -> 17)
+    for {
+      (name, originalValue) <- fields
+      value <- invalidValues
+    } {
+      val field = "\"" + name + "\":"
+      val json = reportWithExtra.replace(field + originalValue, field + value)
+      val stream = framedMetricsStream(json)
+      val error = intercept[SparkException] {
+        BasePythonRunner.readWorkerMetrics(stream)
+      }
+      assert(error.getMessage.contains(name))
+      checkEndMarkers(stream)
+    }
+  }
+
+  test("SPARK-59773: worker metrics preserve int64 values exactly") {
+    Seq(Long.MinValue, 9007199254740993L, Long.MaxValue).foreach { value =>
+      val json = metricsReport.replace(
+        "\"pythonExecutionDurationMs\":42", "\"pythonExecutionDurationMs\":" + value)
+        .replace("\"memoryBytesSpilled\":7", "\"memoryBytesSpilled\":" + value)
+        .replace("\"diskBytesSpilled\":9", "\"diskBytesSpilled\":" + value)
+      val stream = framedMetricsStream(json)
+      assert(BasePythonRunner.readWorkerMetrics(stream) ==
+        expectedMetrics ++ Map("pythonExecutionDurationMs" -> value,
+          "memoryBytesSpilled" -> value, "diskBytesSpilled" -> value))
+      checkEndMarkers(stream)
+    }
+  }
+
+  test("SPARK-59773: worker metrics reject malformed, duplicate, and non-object JSON") {
+    val invalid = Seq("[]", "null", "42", metricsReport.dropRight(1), metricsReport + "{}",
+      metricsReport.dropRight(1) + ",\"bootTimestampMs\":9}", "{\"future\":1,\"future\":2}")
+    invalid.foreach { json =>
+      val stream = framedMetricsStream(json)
+      intercept[SparkException] {
+        BasePythonRunner.readWorkerMetrics(stream)
+      }
+      checkEndMarkers(stream)
+    }
+  }
+
+  test("SPARK-59773: worker metrics reject invalid lengths and truncated frames") {
+    Seq(-1, 0).foreach { length =>
+      intercept[SparkException] {
+        BasePythonRunner.readWorkerMetrics(framedMetricsStream(metricsReport, Some(length)))
+      }
+    }
+
+    val truncated = framedMetricsStream(metricsReport,
+      Some(metricsReport.getBytes(StandardCharsets.UTF_8).length + 1), endMarkers = false)
+    intercept[EOFException] {
+      BasePythonRunner.readWorkerMetrics(truncated)
+    }
+  }
+
+  test("SPARK-59773: worker metrics accept a larger report with an additional field") {
+    val json = metricsReport.dropRight(1) + ",\"futureMetric\":17" + (" " * (70 * 1024)) + "}"
+    val stream = framedMetricsStream(json)
+    val result = BasePythonRunner.readWorkerMetrics(stream)
+    assert(result == expectedMetrics + ("futureMetric" -> 17L))
+    checkEndMarkers(stream)
+  }
+
+  private val initErrorJson =
+    "{\"error\":{\"message\":\"bad\",\"traceback\":\"Traceback ...\\nValueError: bad\"," +
+      "\"errorClass\":\"ValueError\",\"isPayloadError\":true}}"
+
+  test("SPARK-60613: read an init response and leave the following sections aligned") {
+    Seq("{}", "{\"futureField\":1}").foreach { json =>
+      val stream = framedMetricsStream(json)
+      assert(BasePythonRunner.readInitResponse(stream).isEmpty)
+      checkEndMarkers(stream)
+    }
+  }
+
+  test("SPARK-60613: decode the init error in an init response") {
+    val stream = framedMetricsStream(initErrorJson)
+    assert(BasePythonRunner.readInitResponse(stream) === Some(PythonWorkerInitError(
+      message = "bad",
+      traceback = "Traceback ...\nValueError: bad",
+      errorClass = "ValueError",
+      isPayloadError = true)))
+    checkEndMarkers(stream)
+  }
+
+  test("SPARK-60613: decode an init error longer than Jackson's default string limit") {
+    val traceback = "x" * (StreamReadConstraints.DEFAULT_MAX_STRING_LEN + 1)
+    val json = initErrorJson.replace("Traceback ...\\nValueError: bad", traceback)
+    val stream = framedMetricsStream(json)
+    assert(BasePythonRunner.readInitResponse(stream).map(_.traceback) === Some(traceback))
+    checkEndMarkers(stream)
+  }
+
+  test("SPARK-60613: init response rejects malformed JSON and invalid init errors") {
+    val invalid = Seq("[]", "null", "{", "{}{}", "{\"error\":1}", "{\"error\":null}",
+      initErrorJson.replace("\"message\":\"bad\",", ""),
+      initErrorJson.replace("\"errorClass\":\"ValueError\"", "\"errorClass\":1"),
+      initErrorJson.replace("\"isPayloadError\":true", "\"isPayloadError\":\"true\""))
+    invalid.foreach { json =>
+      val stream = framedMetricsStream(json)
+      intercept[SparkException] {
+        BasePythonRunner.readInitResponse(stream)
+      }
+      checkEndMarkers(stream)
+    }
+    Seq(-1, 0).foreach { length =>
+      intercept[SparkException] {
+        BasePythonRunner.readInitResponse(framedMetricsStream("{}", Some(length)))
+      }
+    }
+  }
+
+  /** A worker handle that records how often it was asked to terminate the worker. */
+  private class RecordingWorkerHandle(
+      alive: Boolean = true,
+      destroyIssued: Boolean = true,
+      diagnostics: Option[String] = None,
+      onDestroy: () => Unit = () => ()) extends PythonWorkerHandle {
+    val destroyCalls = new AtomicInteger(0)
+    override def isAlive(): Boolean = alive
+    override def destroy(): Boolean = {
+      destroyCalls.incrementAndGet()
+      onDestroy()
+      destroyIssued
+    }
+    override def terminationDiagnostics(): Option[String] = diagnostics
+  }
+
+  /**
+   * Runs `f` with a worker whose channel is one end of a loopback connection, and with the
+   * other end. With `blocking`, the worker is set up like in pipelined mode, without a selector.
+   * Otherwise the worker only waits for output, like a worker whose input was sent completely.
+   */
+  private def withIdleWorker(blocking: Boolean)(f: (PythonWorker, SocketChannel) => Unit): Unit = {
+    val server = ServerSocketChannel.open()
+    try {
+      server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress, 0))
+      val worker = PythonWorker(SocketChannel.open(server.getLocalAddress))
+      try {
+        val accepted = server.accept()
+        try {
+          worker.channel.configureBlocking(blocking)
+          worker.refresh()
+          if (!blocking) {
+            worker.selectionKey.interestOps(SelectionKey.OP_READ)
+          }
+          f(worker, accepted)
+        } finally {
+          accepted.close()
+        }
+      } finally {
+        worker.stop()
+      }
+    } finally {
+      server.close()
+    }
+  }
+
+  private val idleTimeoutLoggerName = "org.apache.spark.api.python.IdleTimeoutTestRunner"
+
+  /** Runs `f` and returns the warnings logged under `idleTimeoutLoggerName`. */
+  private def idleTimeoutWarnings(f: => Unit): Seq[String] = {
+    val logAppender = new LogAppender("idle timeout")
+    withLogAppender(logAppender, loggerNames = Seq(idleTimeoutLoggerName)) {
+      f
+    }
+    logAppender.loggingEvents.toSeq.map { event =>
+      assert(event.getLevel === Level.WARN)
+      assert(event.getLoggerName === idleTimeoutLoggerName)
+      event.getMessage.getFormattedMessage
+    }
+  }
+
+  private val nonBlockingWorkerStatus = "handle.map(_.isAlive) = Some(true), " +
+    "channel.isConnected = true, channel.isBlocking = false, selector.isOpen = true, " +
+    "selectionKey.isValid = true, selectionKey.interestOps = 1, "
+
+  test("idle timeout on the selector kills the worker once and fails the read at the end " +
+      "of the stream") {
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle(diagnostics = Some("worker stack"))
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      val task = "task 0.0 in stage 0 (TID 0)"
+
+      val firstTimeout = idleTimeoutWarnings {
+        handler.select(hasInputs = false)
+      }
+      assert(firstTimeout === Seq(
+        "Idle timeout reached for Python worker (timeout: 1 seconds). " +
+          "No data received from the worker process - " + nonBlockingWorkerStatus +
+          s"hasInputs = false - $task",
+        s"Terminating Python worker process due to idle timeout (timeout: 1 seconds) - $task"))
+      assert(handle.destroyCalls.get() === 1)
+
+      // Until the worker closes the connection, later timeouts are only logged.
+      val secondTimeout = idleTimeoutWarnings {
+        handler.onIdleTimeout(hasInputs = true)
+      }
+      assert(secondTimeout === Seq(
+        "Waiting for Python worker process to terminate after idle timeout: " +
+          nonBlockingWorkerStatus + "hasInputs = true"))
+      assert(handle.destroyCalls.get() === 1)
+
+      // A read that returns no data yet, or data, does not fail; the end of the stream does.
+      val buf = ByteBuffer.allocate(8)
+      assert(handler.read(buf) === 0)
+      peer.write(ByteBuffer.wrap(new Array[Byte](1)))
+      handler.select(hasInputs = false)
+      assert(handler.read(buf) === 1)
+      peer.close()
+      handler.select(hasInputs = false)
+      val e = intercept[PythonWorkerException] {
+        handler.read(buf)
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 1 seconds): worker stack")
+      assert(e.getCause === null)
+    }
+  }
+
+  test("idle timeout on the selector is not handled when the worker has output or when " +
+      "there is no idle timeout") {
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle()
+      val warnings = idleTimeoutWarnings {
+        peer.write(ByteBuffer.wrap(new Array[Byte](1)))
+        new BasePythonRunner.IdleTimeoutHandler(
+          worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+          Some(TaskContext.empty()), idleTimeoutLoggerName).select(hasInputs = false)
+        assert(worker.selectionKey.isReadable)
+        // Without an idle timeout the wait has no limit, so the pending output ends it.
+        val noTimeoutHandler = new BasePythonRunner.IdleTimeoutHandler(
+          worker, Some(handle), idleTimeoutSeconds = 0, killOnIdleTimeout = true,
+          Some(TaskContext.empty()), idleTimeoutLoggerName)
+        noTimeoutHandler.select(hasInputs = false)
+        // With no kill, the end of the stream is returned as is.
+        val buf = ByteBuffer.allocate(8)
+        assert(noTimeoutHandler.read(buf) === 1)
+        peer.close()
+        noTimeoutHandler.select(hasInputs = false)
+        assert(noTimeoutHandler.read(buf) === -1)
+      }
+      assert(warnings.isEmpty)
+      assert(handle.destroyCalls.get() === 0)
+    }
+  }
+
+  test("idle timeout without killOnIdleTimeout only logs, without a task and with another " +
+      "worker name") {
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = false,
+        None, idleTimeoutLoggerName, workerName = "Python planner worker")
+      val expected = "Idle timeout reached for Python planner worker (timeout: 1 seconds). " +
+        "No data received from the worker process: " + nonBlockingWorkerStatus +
+        "hasInputs = true"
+      // Every timeout is logged the same way, since the worker is never killed.
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(expected))
+      assert(handle.destroyCalls.get() === 0)
+      peer.close()
+      handler.select(hasInputs = false)
+      assert(handler.read(ByteBuffer.allocate(8)) === -1)
+    }
+
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        None, idleTimeoutLoggerName, workerName = "Python planner worker")
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = false)) === Seq(
+        "Idle timeout reached for Python planner worker (timeout: 1 seconds). " +
+          "No data received from the worker process: " + nonBlockingWorkerStatus +
+          "hasInputs = false",
+        "Terminating Python planner worker process due to idle timeout (timeout: 1 seconds)"))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = false)) === Seq(
+        "Waiting for Python planner worker process to terminate after idle timeout: " +
+          nonBlockingWorkerStatus + "hasInputs = false"))
+      assert(handle.destroyCalls.get() === 1)
+      peer.close()
+      handler.select(hasInputs = false)
+      val e = intercept[PythonWorkerException] {
+        handler.read(ByteBuffer.allocate(8))
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 1 seconds)")
+      assert(e.getCause === null)
+    }
+  }
+
+  test("idle timeout reported by a blocking read, as in pipelined mode") {
+    val blockingWorkerStatus =
+      "channel.isConnected = true, channel.isBlocking = true, hasInputs = true"
+    val task = "task 0.0 in stage 0 (TID 0)"
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Idle timeout reached for Python worker (timeout: 3 seconds). " +
+          "No data received from the worker process - handle.map(_.isAlive) = Some(true), " +
+          s"$blockingWorkerStatus - $task",
+        s"Terminating Python worker process due to idle timeout (timeout: 3 seconds) - $task"))
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Waiting for Python worker process to terminate after idle timeout: " +
+          s"handle.map(_.isAlive) = Some(true), $blockingWorkerStatus"))
+      assert(handle.destroyCalls.get() === 1)
+      val e = intercept[PythonWorkerException] {
+        handler.readBlocking(-1)
+      }
+      assert(e.getMessage ===
+        "Python worker process terminated due to idle timeout (timeout: 3 seconds)")
+    }
+
+    // The worker does not count as killed if no termination request was issued, so the next
+    // timeout tries again and the end of the stream is not attributed to the idle timeout.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle(destroyIssued = false)
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)).length === 2)
+      assert(handle.destroyCalls.get() === 2)
+      assert(handler.readBlocking(-1) === -1)
+    }
+
+    // A worker that has already exited is not asked to terminate and does not count as killed.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle(alive = false)
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Idle timeout reached for Python worker (timeout: 3 seconds). " +
+          "No data received from the worker process - handle.map(_.isAlive) = Some(false), " +
+          s"$blockingWorkerStatus - $task"))
+      assert(handle.destroyCalls.get() === 0)
+      assert(handler.readBlocking(-1) === -1)
+    }
+
+    // Without a handle there is nothing to kill.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, None, idleTimeoutSeconds = 3, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      assert(idleTimeoutWarnings(handler.onIdleTimeout(hasInputs = true)) === Seq(
+        "Idle timeout reached for Python worker (timeout: 3 seconds). " +
+          "No data received from the worker process - handle.map(_.isAlive) = None, " +
+          s"$blockingWorkerStatus - $task"))
+      assert(handler.readBlocking(-1) === -1)
+    }
+  }
+
+  /**
+   * Closes `peer` so that the other end of the connection sees a reset instead of the end of
+   * the stream, like the connection of a worker that is killed while it has unread input.
+   */
+  private def reset(peer: SocketChannel): Unit = {
+    peer.setOption[Integer](StandardSocketOptions.SO_LINGER, 0)
+    peer.close()
+  }
+
+  private val idleTimeoutError =
+    "Python worker process terminated due to idle timeout (timeout: 1 seconds)"
+
+  test("a read that fails after the idle timeout killed the worker reports the idle timeout") {
+    // Pipelined mode: the read times out, the worker is killed, and the read that is tried
+    // again fails with a connection reset.
+    withIdleWorker(blocking = true) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle(
+        diagnostics = Some("worker stack"), onDestroy = () => reset(peer))
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      // The handler does not measure how long the read waited, so a short timeout is enough.
+      worker.channel.socket().setSoTimeout(10)
+      val in = worker.channel.socket().getInputStream
+      val e = intercept[PythonWorkerException] {
+        handler.readBlocking(in.read())
+      }
+      assert(e.getMessage === s"$idleTimeoutError: worker stack")
+      assert(e.getCause.isInstanceOf[SocketException], e.getCause)
+      assert(handle.destroyCalls.get() === 1)
+    }
+
+    // Selector based streams: the worker is killed, and the read from the channel fails with
+    // a connection reset.
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle(onDestroy = () => reset(peer))
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        None, idleTimeoutLoggerName)
+      handler.onIdleTimeout(hasInputs = false)
+      assert(handle.destroyCalls.get() === 1)
+      handler.select(hasInputs = false)
+      assert(worker.selectionKey.isReadable)
+      val e = intercept[PythonWorkerException] {
+        handler.read(ByteBuffer.allocate(8))
+      }
+      assert(e.getMessage === idleTimeoutError)
+      assert(e.getCause.isInstanceOf[IOException], e.getCause)
+    }
+  }
+
+  test("a read that times out after the idle timeout killed the worker is tried again") {
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      var reads = 0
+      var e: PythonWorkerException = null
+      val warnings = idleTimeoutWarnings {
+        e = intercept[PythonWorkerException] {
+          handler.readBlocking {
+            reads += 1
+            if (reads <= 2) throw new SocketTimeoutException("Read timed out") else -1
+          }
+        }
+      }
+      // The second timeout comes while the killed worker is still terminating. It neither
+      // fails the read nor kills the worker again.
+      assert(reads === 3)
+      assert(handle.destroyCalls.get() === 1)
+      assert(warnings.length === 3)
+      assert(warnings(0).startsWith("Idle timeout reached for Python worker"))
+      assert(warnings(1).startsWith("Terminating Python worker process due to idle timeout"))
+      assert(warnings(2).startsWith(
+        "Waiting for Python worker process to terminate after idle timeout"))
+      assert(e.getMessage === idleTimeoutError)
+      assert(e.getCause === null)
+    }
+  }
+
+  test("a write that fails after the idle timeout killed the worker reports the idle timeout") {
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle(onDestroy = () => reset(peer))
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = true,
+        None, idleTimeoutLoggerName)
+      assert(handler.write(ByteBuffer.wrap(new Array[Byte](4))) === 4)
+      handler.onIdleTimeout(hasInputs = true)
+      // Wait for the reset to arrive.
+      handler.select(hasInputs = true)
+      val e = intercept[PythonWorkerException] {
+        handler.write(ByteBuffer.wrap(new Array[Byte](4)))
+      }
+      assert(e.getMessage === idleTimeoutError)
+      assert(e.getCause.isInstanceOf[IOException], e.getCause)
+    }
+  }
+
+  test("a failure that is not caused by the idle timeout kill is not attributed to it") {
+    // No timeout was reached: the worker closed the connection on its own.
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val handle = new RecordingWorkerHandle()
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(handle), idleTimeoutSeconds = 60, killOnIdleTimeout = true,
+        Some(TaskContext.empty()), idleTimeoutLoggerName)
+      reset(peer)
+      handler.select(hasInputs = false)
+      val e = intercept[IOException] {
+        handler.read(ByteBuffer.allocate(8))
+      }
+      assert(!e.isInstanceOf[SocketTimeoutException], e)
+      intercept[IOException] {
+        handler.write(ByteBuffer.wrap(new Array[Byte](4)))
+      }
+      assert(handle.destroyCalls.get() === 0)
+    }
+
+    // The timeout was reached but the worker is not killed, so the read is tried again and
+    // its failure is not attributed to the idle timeout.
+    Seq(
+      (new RecordingWorkerHandle(), false),
+      (new RecordingWorkerHandle(destroyIssued = false), true),
+      (new RecordingWorkerHandle(alive = false), true)
+    ).foreach { case (handle, killOnIdleTimeout) =>
+      withIdleWorker(blocking = true) { (worker, _) =>
+        val handler = new BasePythonRunner.IdleTimeoutHandler(
+          worker, Some(handle), idleTimeoutSeconds = 1, killOnIdleTimeout = killOnIdleTimeout,
+          Some(TaskContext.empty()), idleTimeoutLoggerName)
+        val failure = new IOException("Connection reset")
+        var reads = 0
+        val e = intercept[IOException] {
+          handler.readBlocking {
+            reads += 1
+            throw (if (reads == 1) new SocketTimeoutException("Read timed out") else failure)
+          }
+        }
+        assert(e eq failure)
+        assert(reads === 2)
+      }
+    }
+
+    // After the kill, a failure that is not an I/O failure, or that comes from this side
+    // closing the channel or interrupting the thread, is thrown as is.
+    withIdleWorker(blocking = false) { (worker, _) =>
+      val handler = new BasePythonRunner.IdleTimeoutHandler(
+        worker, Some(new RecordingWorkerHandle()), idleTimeoutSeconds = 1,
+        killOnIdleTimeout = true, None, idleTimeoutLoggerName)
+      handler.onIdleTimeout(hasInputs = false)
+      Seq(
+        new IllegalStateException("not I/O"),
+        new ClosedByInterruptException(),
+        new AsynchronousCloseException(),
+        new ClosedChannelException()
+      ).foreach { failure =>
+        assert(intercept[Exception](handler.readBlocking(throw failure)) eq failure)
+      }
+      worker.channel.close()
+      intercept[ClosedChannelException] {
+        handler.read(ByteBuffer.allocate(8))
+      }
+      intercept[ClosedChannelException] {
+        handler.write(ByteBuffer.wrap(new Array[Byte](4)))
+      }
+    }
+  }
+
+  test("ReaderInputStream reports the idle timeout when the read from the killed worker " +
+      "fails") {
+    withIdleWorker(blocking = false) { (worker, peer) =>
+      val context = TaskContext.empty()
+      withRunnerAndWriter(worker, context) { (runner, writer) =>
+        val handle = new RecordingWorkerHandle(onDestroy = () => reset(peer))
+        val in = new runner.ReaderInputStream(
+          worker, writer.asInstanceOf[runner.Writer], Some(handle), idleTimeoutSeconds = 1,
+          killOnIdleTimeout = true, context)
+        val e = intercept[PythonWorkerException] {
+          in.read(new Array[Byte](8))
+        }
+        assert(e.getMessage === idleTimeoutError)
+        assert(e.getCause.isInstanceOf[IOException], e.getCause)
+        assert(handle.destroyCalls.get() === 1)
+      }
+    }
+  }
+
+  test("the idle timeout is reported when the pipelined writer fails because of the kill") {
+    // What the reader does with `readerFailure` when the writer failed with `writerFailure`.
+    def handle(
+        readerFailure: Exception,
+        writerFailure: Throwable,
+        whileWritingToWorker: Boolean): Throwable = {
+      var thrown: Throwable = null
+      withIdleWorker(blocking = true) { (worker, _) =>
+        val context = TaskContext.empty()
+        withRunnerAndWriter(worker, context) { (runner, anyWriter) =>
+          val writer = anyWriter.asInstanceOf[runner.Writer]
+          writer.setException(writerFailure, whileWritingToWorker)
+          class TestReaderIterator extends runner.ReaderIterator(
+              new DataInputStream(new ByteArrayInputStream(Array.emptyByteArray)), writer, 0L,
+              SparkEnv.get, worker, None, new AtomicBoolean(false), context) {
+            override protected def read(): Array[Byte] = null
+            def handleFailure(e: Exception): Array[Byte] = {
+              try throw e catch handleException
+            }
+          }
+          thrown = intercept[Throwable] {
+            new TestReaderIterator().handleFailure(readerFailure)
+          }
+        }
+      }
+      thrown
+    }
+
+    val idleTimeout = new PythonWorkerException(idleTimeoutError)
+    val brokenPipe = new IOException("Broken pipe")
+    // The writer failed to write to the killed worker: the idle timeout is the error.
+    assert(handle(idleTimeout, brokenPipe, whileWritingToWorker = true) eq idleTimeout)
+    assert(idleTimeout.getSuppressed === Array(brokenPipe))
+    // A read that calls itself handles the same exception once per level. The failure of the
+    // writer is added only once.
+    assert(handle(idleTimeout, brokenPipe, whileWritingToWorker = true) eq idleTimeout)
+    assert(idleTimeout.getSuppressed === Array(brokenPipe))
+    // The writer failed to produce the input: its failure stays the error, also when the
+    // worker was killed afterwards because it no longer responded.
+    val inputFailure = new IOException("failed to read the input")
+    assert(handle(new PythonWorkerException(idleTimeoutError), inputFailure,
+      whileWritingToWorker = false) eq inputFailure)
+    // A failed write to a worker that was not killed stays the error as well.
+    assert(handle(new EOFException(), brokenPipe, whileWritingToWorker = true) eq brokenPipe)
+  }
+
+  test("a failure of the pipelined writer that is found before a read reports the idle " +
+      "timeout after the kill") {
+    // What a read throws when the writer failed with `writerFailure` before it, without
+    // reading from the worker. With `nested`, the read is one that a read calls itself.
+    def read(
+        killed: Boolean,
+        writerFailure: Throwable,
+        whileWritingToWorker: Boolean,
+        nested: Boolean = false): Throwable = {
+      var thrown: Throwable = null
+      withIdleWorker(blocking = true) { (worker, _) =>
+        val context = TaskContext.empty()
+        withRunnerAndWriter(worker, context) { (runner, anyWriter) =>
+          val writer = anyWriter.asInstanceOf[runner.Writer]
+          val handler = new BasePythonRunner.IdleTimeoutHandler(
+            worker, Some(new RecordingWorkerHandle()), idleTimeoutSeconds = 1,
+            killOnIdleTimeout = killed, Some(context), idleTimeoutLoggerName)
+          handler.onIdleTimeout(hasInputs = true)
+          writer.pipelinedIdleTimeoutHandler = Some(handler)
+          writer.setException(writerFailure, whileWritingToWorker)
+          class TestReaderIterator extends runner.ReaderIterator(
+              new DataInputStream(new ByteArrayInputStream(Array.emptyByteArray)), writer, 0L,
+              SparkEnv.get, worker, None, new AtomicBoolean(false), context) {
+            override protected def read(): Array[Byte] = null
+            def checkWriter(): Array[Byte] = {
+              throwIfWriterFailed()
+              null
+            }
+            def checkWriterInNestedRead(): Array[Byte] = {
+              try checkWriter() catch handleException
+            }
+          }
+          val iter = new TestReaderIterator()
+          thrown = intercept[Throwable] {
+            if (nested) iter.checkWriterInNestedRead() else iter.checkWriter()
+          }
+        }
+      }
+      thrown
+    }
+
+    val brokenPipe = new IOException("Broken pipe")
+    // The writer failed to write to the killed worker: the idle timeout is the error.
+    Seq(false, true).foreach { nested =>
+      val e = read(killed = true, brokenPipe, whileWritingToWorker = true, nested)
+      assert(e.isInstanceOf[PythonWorkerException], e)
+      assert(e.getMessage === idleTimeoutError)
+      assert(e.getCause === null)
+      assert(e.getSuppressed === Array(brokenPipe))
+    }
+    // The same failure with no kill stays the error.
+    Seq(false, true).foreach { nested =>
+      assert(read(killed = false, brokenPipe, whileWritingToWorker = true, nested) eq brokenPipe)
+    }
+    // So does a writer that failed to produce the input, also after the kill.
+    val inputFailure = new IOException("failed to read the input")
+    assert(read(killed = true, inputFailure, whileWritingToWorker = false) eq inputFailure)
+  }
+
+  test("the pipelined writer records whether it failed writing to the worker") {
+    // The worker stops reading and resets the connection while the writer still has input.
+    val reachedInput = new CountDownLatch(1)
+    val writerThread = new AtomicReference[Thread]()
+    withPipelinedWriterRunnable { dataOut =>
+      reachedInput.countDown()
+      dataOut.write(new Array[Byte](1024))
+      true
+    } { runnable =>
+      writerThread.set(startThread(runnable.run()))
+    } { (writer, pythonSide) =>
+      assert(reachedInput.await(1, TimeUnit.MINUTES))
+      reset(pythonSide)
+      writerThread.get().join(TimeUnit.MINUTES.toMillis(1))
+      assert(!writerThread.get().isAlive)
+      assert(writer.exception.exists(_.isInstanceOf[IOException]), writer.exception)
+      assert(writer.failedWritingToWorker)
+    }
+
+    // The writer fails to produce the input.
+    withPipelinedWriterRunnable { _ =>
+      throw new IOException("failed to read the input")
+    } { runnable =>
+      runnable.run()
+    } { (writer, _) =>
+      assert(writer.exception.map(_.getMessage) === Some("failed to read the input"))
+      assert(!writer.failedWritingToWorker)
+    }
+
+    // The write fails because this side shut down the output, not because of the worker.
+    withIdleWorker(blocking = true) { (worker, _) =>
+      val context = TaskContext.empty()
+      withRunnerAndWriter(worker, context, { dataOut =>
+        worker.channel.shutdownOutput()
+        dataOut.write(new Array[Byte](2048))
+        true
+      }) { (runner, writer) =>
+        new runner.PipelinedWriterRunnable(
+          worker, writer.asInstanceOf[runner.Writer], 1024, context).run()
+        assert(writer.exception.exists(_.isInstanceOf[ClosedChannelException]), writer.exception)
+        assert(!writer.failedWritingToWorker)
+      }
+    }
+  }
+
+  test("SPARK-61764: the idle timeout is limited to what fits in an Int of milliseconds") {
+    import org.apache.spark.internal.config.Python._
+
+    val maxSeconds = PYTHON_WORKER_MAX_IDLE_TIMEOUT_SECONDS
+    assert(maxSeconds === 2147483L)
+    // The largest idle timeout converts to a socket read timeout without overflow.
+    assert(Math.toIntExact(TimeUnit.SECONDS.toMillis(maxSeconds)) === 2147483000)
+
+    def idleTimeout(value: String): Long =
+      new SparkConf(false).set(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS.key, value)
+        .get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
+
+    assert(idleTimeout("0") === 0L)
+    assert(idleTimeout("120") === 120L)
+    assert(idleTimeout("2m") === 120L)
+    assert(idleTimeout(maxSeconds.toString) === maxSeconds)
+
+    // With Int arithmetic, the first two of these gave a negative socket read timeout, which
+    // fails the task, the third gave 704 milliseconds, and the last gave 0, no timeout.
+    Seq((maxSeconds + 1).toString, "30d", "4294968", "4294967296").foreach { value =>
+      val e = intercept[IllegalArgumentException](idleTimeout(value))
+      assert(e.getMessage.contains(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS.key))
+      assert(e.getMessage.contains(s"at most $maxSeconds seconds"))
     }
   }
 }

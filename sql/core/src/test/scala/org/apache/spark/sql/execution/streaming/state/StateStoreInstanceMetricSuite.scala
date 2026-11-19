@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import scala.concurrent.duration.DurationInt
-import scala.jdk.CollectionConverters.MapHasAsScala
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
@@ -57,6 +58,14 @@ class HDFSBackedSkipMaintenanceOnCertainPartitionsProvider extends HDFSBackedSta
 @ExtendedSQLTest
 class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBFeatures {
   import testImplicits._
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // The maintenance task is shared by the JVM and keeps the interval of the test that
+    // started it. Stop it so that each test starts one with its own configuration.
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
 
   private val SNAPSHOT_LAG_METRIC_PREFIX = "SnapshotLastUploaded.partition_"
 
@@ -486,6 +495,45 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
         }
       }
   }
+
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-59174: StateStoreWriter uses single accumulator for instance metrics"
+  ) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
+    ) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS().dropDuplicates()
+
+        testStream(result, outputMode = OutputMode.Update)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a", "b", "c"),
+          ProcessAllAvailable(),
+          Execute { q =>
+            val stateOp = q.lastExecution.executedPlan.collectFirst {
+              case s: StateStoreWriter => s
+            }.get
+            // Verify the accumulator is a PartitionKeyedAccumulator (not a CollectionAccumulator),
+            // has entries for the executed partitions, and does not allocate individual
+            // per-partition SQLMetrics on the plan.
+            val accValue = stateOp.instanceMetricsAccumulator.value
+            assert(!accValue.isEmpty, "accumulator should have entries after processing data")
+            // Each partition's metrics are stored as a Map; flatten all metric keys.
+            val allMetricKeys = accValue.values().asScala.flatMap(_.keys)
+            assert(
+              allMetricKeys.forall(_.name.startsWith(SNAPSHOT_LAG_METRIC_PREFIX)),
+              s"unexpected metric keys: ${allMetricKeys.map(_.name).mkString(", ")}")
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
 }
 
 /**

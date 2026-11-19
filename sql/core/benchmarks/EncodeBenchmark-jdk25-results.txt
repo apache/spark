@@ -1,8 +1,8 @@
-OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 encode:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UTF-32                                            59465          59568         146          0.2        5946.5       1.0X
-UTF-16                                            54141          54294         216          0.2        5414.1       1.1X
-UTF-8                                             34002          34083         114          0.3        3400.2       1.7X
+UTF-32                                            60485          60561         109          0.2        6048.5       1.0X
+UTF-16                                            56151          56151           0          0.2        5615.1       1.1X
+UTF-8                                             32411          32546         191          0.3        3241.1       1.9X
 

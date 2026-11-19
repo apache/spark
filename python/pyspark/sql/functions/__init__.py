@@ -291,6 +291,7 @@ __all__ = [  # noqa: F405
     "year",
     # Hash Functions
     "crc32",
+    "farm_fingerprint",
     "hash",
     "md5",
     "sha",

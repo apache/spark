@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -54,11 +55,7 @@ object FunctionType {
   case object NotFound extends FunctionType
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.{
-  AggregateFunction => V2AggregateFunction,
-  ScalarFunction,
-  UnboundFunction
-}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
@@ -128,7 +125,9 @@ class FunctionResolution(
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      sqlResolutionPathEntriesForAnalysis.map(_ ++ nameParts)
+      // Built lazily so an early-returning consumer (built-in hit, routed direct-star owner walk)
+      // skips concatenating the unused PATH suffix; consumers walk candidates in order.
+      sqlResolutionPathEntriesForAnalysis.to(LazyList).map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
@@ -190,6 +189,20 @@ class FunctionResolution(
 
   def resolveFunction(unresolvedFunc: UnresolvedFunction): Expression = {
     withPosition(unresolvedFunc) {
+      // Preprocessing already bound this call's owner (a shadow of a routed SQL/JSON built-in) and
+      // expanded its star. Resolve only that candidate so a shadow dropped since then fails here
+      // instead of falling through the PATH to the stock built-in.
+      unresolvedFunc.boundOwner match {
+        case Some(candidate) =>
+          return resolveFunctionCandidate(candidate, unresolvedFunc).getOrElse {
+            throw QueryCompilationErrors.unresolvedRoutineError(
+              unresolvedFunc.nameParts,
+              sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+              unresolvedFunc.origin)
+          }
+        case None =>
+      }
+
       // Internal functions resolve via the internal registry when the parser marks them as
       // internal; they are not resolved via the search path.
       if (unresolvedFunc.isInternal && unresolvedFunc.nameParts.size == 1) {
@@ -403,7 +416,23 @@ class FunctionResolution(
    * `system.builtin` actually defines a function of this name, so calling it for a non-builtin name
    * would wrongly report builtin ownership.
    */
-  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean = {
+  def unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow(functionName: String): Boolean =
+    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Builtin)
+
+  /**
+   * Whether a temp function owns an unqualified name: it comes first in the effective SQL PATH,
+   * before `system.builtin` and any persistent function. Same precondition as
+   * [[unqualifiedFunctionResolvesToBuiltinBeforeAnyShadow]].
+   */
+  def unqualifiedFunctionResolvesToTemp(functionName: String): Boolean =
+    unqualifiedFunctionOwnerKind(functionName).contains(SessionCatalog.Temp)
+
+  /**
+   * The kind of the first PATH entry that owns an unqualified name: `Builtin`, `Temp`, or None for
+   * a persistent function (or no owner).
+   */
+  private def unqualifiedFunctionOwnerKind(
+      functionName: String): Option[SessionCatalog.SessionFunctionKind] = {
     // Walk the PATH in order and stop at the first entry that owns the name. The default order puts
     // system.builtin first, so the common case returns on the first entry with no catalog lookup;
     // only a custom PATH that lists a persistent catalog ahead of system.builtin reaches the probe
@@ -411,24 +440,24 @@ class FunctionResolution(
     sqlResolutionPathEntriesForAnalysis.foreach { pathEntry =>
       val candidate = pathEntry :+ functionName
       FunctionResolution.sessionNamespaceKind(candidate) match {
-        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin) =>
-          return true
-        case Some(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp) =>
+        case Some(SessionCatalog.Builtin) =>
+          return Some(SessionCatalog.Builtin)
+        case Some(SessionCatalog.Temp) =>
           // A visible temp scalar function shadows the builtin; a visible temp *table* function
           // makes scalar resolution terminal at this PATH entry (NOT_A_SCALAR_FUNCTION). Either way
           // the name never reaches system.builtin, mirroring `resolveFunctionCandidate`.
           val ident = FunctionIdentifier(functionName)
           if (v1SessionCatalog.isTemporaryScalarFunctionVisible(ident) ||
               v1SessionCatalog.isTemporaryTableFunctionVisible(ident)) {
-            return false
+            return Some(SessionCatalog.Temp)
           }
         case None =>
           if (persistentFunctionExists(candidate)) {
-            return false
+            return None
           }
       }
     }
-    false
+    None
   }
 
   /**
@@ -456,20 +485,86 @@ class FunctionResolution(
     }
   }
 
-  // All routed SQL/JSON functions (JSON_ARRAY, JSON_VALUE, JSON_QUERY, JSON_EXISTS) forbid a direct
-  // star argument (a bare `*` or a qualified `t.*`). Derived from the single registry list so a
-  // newly routed function is covered without editing this file too.
+  /**
+   * Like [[functionNameResolvesToBuiltin]], but false for an `injectFunction` replacement: it keeps
+   * the built-in name, yet must be called like an ordinary function.
+   */
+  def functionNameResolvesToStockBuiltin(nameParts: Seq[String], expectedName: String): Boolean = {
+    functionNameResolvesToBuiltin(nameParts, expectedName) &&
+      v1SessionCatalog.isStockBuiltinFunction(expectedName)
+  }
+
+  /**
+   * Whether a routine or an `injectFunction` replacement, not the built-in, owns a routed JSON
+   * constructor call.
+   */
+  def routesJsonConstructorToFunction(j: UnresolvedJsonConstructor): Boolean = {
+    j.routeThroughResolution &&
+      !functionNameResolvesToStockBuiltin(Seq(j.prettyName), j.prettyName)
+  }
+
+  // All routed SQL/JSON functions forbid a direct star argument (a bare `*` or a qualified
+  // `t.*`). Derived from the single registry list so a newly routed function is covered without
+  // editing this file too.
   private val starDisallowedSqlJsonFunctions = FunctionRegistry.routedSqlJsonFunctionNames
 
   /**
-   * True if `nameParts` resolves to Spark's stock built-in routed SQL/JSON function that forbids a
-   * direct star. The `isStockBuiltinFunction` check excludes an `injectFunction` replacement of
-   * the name, whose expanded star is passed through rather than rejected.
+   * Resolves, once, who owns a routed SQL/JSON call (e.g. `json_array(*)`) that carries a direct
+   * star, so direct-star preprocessing and the later [[resolveFunction]] consume a single SQL PATH
+   * decision. Otherwise each phase probes ownership independently, and a temp/persistent shadow
+   * dropped between them lets preprocessing expand the star for the shadow while resolution falls
+   * through to the stock built-in, which no longer sees a [[Star]] and skips
+   * `INVALID_USAGE_OF_STAR_OR_REGEX`. See [[RoutedSqlJsonStarOwner]] for outcomes.
    */
-  def resolvesToStarDisallowedSqlJsonFunction(nameParts: Seq[String]): Boolean =
-    starDisallowedSqlJsonFunctions.exists { name =>
-      functionNameResolvesToBuiltin(nameParts, name) &&
-        v1SessionCatalog.isStockBuiltinFunction(name)
+  def selectRoutedSqlJsonDirectStarOwner(nameParts: Seq[String]): RoutedSqlJsonStarOwner = {
+    routedSqlJsonBuiltinName(nameParts) match {
+      case None => RoutedSqlJsonStarOwner.NoBinding
+      case Some(name) => routedSqlJsonStarOwnerFromPath(nameParts, name)
+    }
+  }
+
+  /**
+   * One ordered pass over the SQL PATH candidates: bind the first shadow that owns the call ahead
+   * of the stock `system.builtin`; reach `system.builtin` first and the stock builder owns it
+   * (reject the star, unless an injectFunction replacement holds the slot -- keep pass-through).
+   * A single pass avoids two independent probes disagreeing when a shadow is dropped between them,
+   * which could bind the stock built-in with the [[Star]] already expanded away.
+   */
+  private def routedSqlJsonStarOwnerFromPath(
+      nameParts: Seq[String],
+      name: String): RoutedSqlJsonStarOwner = {
+    for (candidate <- resolutionCandidates(nameParts)) {
+      if (isSystemBuiltinCandidate(candidate)) {
+        return if (v1SessionCatalog.isStockBuiltinFunction(name)) {
+          RoutedSqlJsonStarOwner.RejectStockBuiltin
+        } else {
+          RoutedSqlJsonStarOwner.NoBinding
+        }
+      } else if (candidateOwnsFunction(candidate)) {
+        return RoutedSqlJsonStarOwner.BindShadowOwner(candidate)
+      }
+    }
+    RoutedSqlJsonStarOwner.NoBinding
+  }
+
+  /** The routed SQL/JSON built-in name this unqualified/`builtin`-qualified call could refer to. */
+  private def routedSqlJsonBuiltinName(nameParts: Seq[String]): Option[String] =
+    starDisallowedSqlJsonFunctions.find { name =>
+      FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, name)
+    }
+
+  /** Whether `candidate` is the stock `system.builtin.<name>` terminus of the PATH walk. */
+  private def isSystemBuiltinCandidate(candidate: Seq[String]): Boolean =
+    isSystemCatalogQualified(candidate) &&
+      candidate(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+
+  /** Whether `candidate` owns a function, branching as [[resolveFunctionCandidate]] does. */
+  private def candidateOwnsFunction(candidate: Seq[String]): Boolean =
+    if (isSystemCatalogQualified(candidate)) {
+      lookupBuiltinOrTempFunction(candidate, None).isDefined ||
+        lookupBuiltinOrTempTableFunction(candidate).isDefined
+    } else {
+      persistentFunctionExists(candidate)
     }
 
   private def persistentFunctionExists(nameParts: Seq[String]): Boolean = {
@@ -622,7 +717,7 @@ class FunctionResolution(
         // clauses (DISTINCT / FILTER / ORDER BY / IGNORE NULLS). They have dedicated physical
         // operators that do not honor them, so reject rather than silently drop the clause.
         if (agg.isInstanceOf[PythonUDAF] || agg.isInstanceOf[PythonAggregate]) {
-          checkUnsupportedAggregateClause(agg, unresolvedFunc)
+          checkUnsupportedAggregateClause(agg.prettyName, unresolvedFunc)
         }
         // After parse, the functions not set the ordering within group yet.
         val newAgg = agg match {
@@ -654,7 +749,7 @@ class FunctionResolution(
         aggFunc.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
       // This function is not an aggregate function, just return the resolved one.
       case other =>
-        checkUnsupportedAggregateClause(other, unresolvedFunc)
+        checkUnsupportedAggregateClause(other.prettyName, unresolvedFunc)
         if (other.isInstanceOf[String2TrimExpression] && numArgs == 2) {
           if (trimWarningEnabled.get) {
             log.warn(
@@ -670,21 +765,21 @@ class FunctionResolution(
   }
 
   private def checkUnsupportedAggregateClause(
-      func: Expression,
+      funcName: String,
       unresolvedFunc: UnresolvedFunction): Unit = {
     if (unresolvedFunc.isDistinct) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(func.prettyName, "DISTINCT")
+      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(funcName, "DISTINCT")
     }
     if (unresolvedFunc.filter.isDefined) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        func.prettyName,
+        funcName,
         "FILTER clause"
       )
     }
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        func.prettyName,
+        funcName,
         "IGNORE NULLS"
       )
     }
@@ -732,78 +827,26 @@ class FunctionResolution(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
       unresolvedFunc: UnresolvedFunction): Expression = {
-    val inputType = StructType(arguments.zipWithIndex.map {
-      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
-    })
-    val bound = try {
-      unbound.bind(inputType)
-    } catch {
-      case unsupported: UnsupportedOperationException =>
-        throw QueryCompilationErrors.functionCannotProcessInputError(
-          unbound,
-          arguments,
-          unsupported
-        )
-    }
-
-    if (bound.inputTypes().length != arguments.length) {
-      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(bound, arguments)
-    }
-
-    bound match {
-      case scalarFunc: ScalarFunction[_] =>
-        processV2ScalarFunction(scalarFunc, arguments, unresolvedFunc)
-      case aggFunc: V2AggregateFunction[_, _] =>
-        processV2AggregateFunction(aggFunc, arguments, unresolvedFunc)
-      case _ =>
-        failAnalysis(
-          errorClass = "INVALID_UDF_IMPLEMENTATION",
-          messageParameters = Map("funcName" -> toSQLId(bound.name()))
-        )
-    }
-  }
-
-  private def processV2ScalarFunction(
-      scalarFunc: ScalarFunction[_],
-      arguments: Seq[Expression],
-      unresolvedFunc: UnresolvedFunction): Expression = {
-    if (unresolvedFunc.isDistinct) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(scalarFunc.name(), "DISTINCT")
-    } else if (unresolvedFunc.filter.isDefined) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        scalarFunc.name(),
-        "FILTER clause"
-      )
-    } else if (unresolvedFunc.ignoreNulls.contains(true)) {
-      // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        scalarFunc.name(),
-        "IGNORE NULLS"
-      )
-    } else {
-      V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments)
+    V2ExpressionUtils.bindFunction(unbound, arguments) match {
+      case aggregator: V2Aggregator[_, _] =>
+        processV2AggregateFunction(aggregator, unresolvedFunc)
+      case scalarExpr =>
+        checkUnsupportedAggregateClause(unbound.name(), unresolvedFunc)
+        scalarExpr
     }
   }
 
   private def processV2AggregateFunction(
-      aggFunc: V2AggregateFunction[_, _],
-      arguments: Seq[Expression],
+      aggregator: V2Aggregator[_, _],
       unresolvedFunc: UnresolvedFunction): Expression = {
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        aggFunc.name(),
+        aggregator.aggrFunc.name(),
         "IGNORE NULLS"
       )
     }
-    val aggregator = V2Aggregator(aggFunc, arguments)
     aggregator.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
-  }
-
-  private def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
-    throw new AnalysisException(
-      errorClass = errorClass,
-      messageParameters = messageParameters)
   }
 
   /**
@@ -830,7 +873,11 @@ class FunctionResolution(
             case pc: ProcedureCatalog =>
               try {
                 val procedure = pc.loadProcedure(ident)
-                return ResolvedProcedure(pc, ident, procedure)
+                // A null means the catalog has no such procedure. Treat it as a miss, so an
+                // unqualified name keeps searching PATH and a qualified one fails as unresolved.
+                if (procedure != null) {
+                  return ResolvedProcedure(pc, ident, procedure)
+                }
               } catch {
                 // ProcedureCatalog has no standard "not found" exception type today. For
                 // unqualified names searched through PATH, treat candidate failures as misses and
@@ -940,4 +987,24 @@ object FunctionResolution {
     nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName)) &&
       (nameParts.length == 1 || maybeBuiltinFunctionName(nameParts))
   }
+}
+
+/**
+ * Who owns a routed SQL/JSON call carrying a direct star, resolved once during star preprocessing
+ * (see [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]]) so later resolution reuses it.
+ */
+sealed trait RoutedSqlJsonStarOwner
+object RoutedSqlJsonStarOwner {
+  /** Spark's stock routed SQL/JSON builder owns the call; reject the direct star. */
+  case object RejectStockBuiltin extends RoutedSqlJsonStarOwner
+
+  /**
+   * A temp/persistent shadow owns the call. `candidate` is the winning SQL PATH candidate; bind it
+   * via [[UnresolvedFunction.boundOwner]] so later resolution resolves it (or fails), never the
+   * stock built-in.
+   */
+  case class BindShadowOwner(candidate: Seq[String]) extends RoutedSqlJsonStarOwner
+
+  /** Not a routed built-in, or an injectFunction replacement owns the slot: expand the star. */
+  case object NoBinding extends RoutedSqlJsonStarOwner
 }

@@ -17,8 +17,16 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
+
+import com.github.luben.zstd.Zstd
 import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
-import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
+import org.apache.arrow.memory.{ArrowBuf, BufferAllocator, OutOfMemoryException}
+import org.apache.arrow.util.AutoCloseables
+import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.vector.compression.{CompressionCodec, CompressionUtil, NoCompressionCodec}
+import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 
 import org.apache.spark.SparkException
 
@@ -34,17 +42,172 @@ private[sql] object ArrowCompressionUtils {
    * carry a compression level, so that factory overload always builds a codec at the default
    * level, silently dropping the configured one. The level only matters on the write side; the
    * read side looks up the codec by the type recorded in the IPC message, so it is unaffected.
+   *
+   * For zstd it must also be a [[BoundedZstdCompressionCodec]], which neither factory overload
+   * returns, not even `createCodec(codecType, compressionLevel)`, which does keep the level.
    */
   def createCompressionCodec(
       codecName: String,
       zstdCompressionLevel: Int): CompressionCodec = {
     codecName match {
       case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" => new ZstdCompressionCodec(zstdCompressionLevel)
-      case "lz4" => new Lz4CompressionCodec()
+      case "zstd" =>
+        new BoundedZstdCompressionCodec(zstdCompressionLevel) with UncompressedEmptyBuffers
+      case "lz4" => new Lz4CompressionCodec with UncompressedEmptyBuffers
       case other =>
         throw SparkException.internalError(
           s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
     }
   }
+
+  /**
+   * Creates the [[VectorUnloader]] that turns `root` into record batches compressed with `codec`,
+   * with null counts and aligned buffers.
+   *
+   * With a compressing codec, the unloader releases what it holds for a batch when compressing
+   * the batch fails, e.g. on a direct memory OOM. Arrow Java before 20.0.0 leaks the buffer being
+   * compressed and the buffers already compressed for the batch (apache/arrow-java#1234), and
+   * they stay allocated until the JVM exits.
+   */
+  def createVectorUnloader(root: VectorSchemaRoot, codec: CompressionCodec): VectorUnloader = {
+    if (codec.getCodecType == CompressionUtil.CodecType.NO_COMPRESSION) {
+      new VectorUnloader(root, true, codec, true)
+    } else {
+      new ReleasingVectorUnloader(root, new TrackingCompressionCodec(codec))
+    }
+  }
+}
+
+/**
+ * A [[ZstdCompressionCodec]] that never lets zstd write past its output buffer and that does not
+ * keep that buffer for an output that needs much less memory.
+ *
+ * arrow-java up to 19.0 passes `compressBound(len) + 8` as the destination capacity while pointing
+ * zstd 8 bytes into a buffer of that size, so zstd can overrun it by up to 8 bytes; here the
+ * capacity is `compressBound(len)`. Remove `doCompress` once on Arrow 20.0.0
+ * (apache/arrow-java#1119).
+ *
+ * arrow-java also leaves the output in that buffer, whose size the allocator rounds up to a power
+ * of two below 16 MiB, and `VectorUnloader` keeps the output of every vector buffer until the
+ * record batch is closed. So a batch would hold about as much direct memory as its uncompressed
+ * vectors, whatever the compression ratio.
+ */
+private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
+  extends ZstdCompressionCodec(compressionLevel) {
+  import BoundedZstdCompressionCodec._
+
+  override protected def doCompress(
+      allocator: BufferAllocator,
+      uncompressedBuffer: ArrowBuf): ArrowBuf = {
+    val srcSize = uncompressedBuffer.writerIndex()
+    val maxSize = Zstd.compressBound(srcSize)
+    val compressedBuffer = allocator.buffer(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH + maxSize)
+    val bytesWritten = Zstd.compressUnsafe(
+      compressedBuffer.memoryAddress() + CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH,
+      maxSize,
+      uncompressedBuffer.memoryAddress(),
+      srcSize,
+      compressionLevel)
+    if (Zstd.isError(bytesWritten)) {
+      compressedBuffer.close()
+      throw SparkException.internalError("Error compressing: " + Zstd.getErrorName(bytesWritten))
+    }
+    compressedBuffer.writerIndex(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH + bytesWritten)
+    compressedBuffer
+  }
+
+  override def compress(allocator: BufferAllocator, uncompressedBuffer: ArrowBuf): ArrowBuf = {
+    val compressed = super.compress(allocator, uncompressedBuffer)
+    val length = compressed.writerIndex()
+    val roundedLength = allocator.getRoundingPolicy.getRoundedSize(length)
+    // Requiring at least half of the buffer back also limits the extra memory that the copy needs
+    // while both buffers are alive. Empty and raw outputs are already in a buffer of their size.
+    if (roundedLength > compressed.capacity() / 2 ||
+        compressed.capacity() - roundedLength < MIN_SHRINK_SAVING_BYTES) {
+      compressed
+    } else {
+      try {
+        val shrunk = allocator.buffer(length)
+        shrunk.setBytes(0, compressed, 0, length)
+        shrunk.writerIndex(length)
+        compressed.close()
+        shrunk
+      } catch {
+        // The output is complete, so this only gives up the saving. Failing would also be wrong:
+        // the input is already released, and TrackingCompressionCodec would release it again.
+        case _: OutOfMemoryException => compressed
+      }
+    }
+  }
+}
+
+private object BoundedZstdCompressionCodec {
+  // A smaller saving does not pay for another allocation, copy and release, which a small batch,
+  // e.g. a group of a grouped Python UDF, would do for each of its buffers.
+  val MIN_SHRINK_SAVING_BYTES = 4 * 1024
+}
+
+/**
+ * A [[CompressionCodec]] mixin that gives an empty buffer the `-1` (stored uncompressed) length
+ * prefix. arrow-java up to 19.0 writes a `0` prefix and no compressed data, so Arrow C++ (and
+ * PyArrow) decompresses a zero-byte body, which LZ4 rejects with "Lz4 compressed input contains
+ * less than one frame". Remove once on Arrow 20.0.0 (apache/arrow-java#1248).
+ */
+private[sql] trait UncompressedEmptyBuffers extends CompressionCodec {
+
+  abstract override def compress(
+      allocator: BufferAllocator,
+      uncompressedBuffer: ArrowBuf): ArrowBuf = {
+    if (uncompressedBuffer.writerIndex() == 0L) {
+      val compressedBuffer = allocator.buffer(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH)
+      compressedBuffer.setLong(0, CompressionUtil.NO_COMPRESSION_LENGTH)
+      compressedBuffer.writerIndex(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH)
+      // Like `super.compress`, release the input only on success. TrackingCompressionCodec relies
+      // on this to release it on failure.
+      uncompressedBuffer.close()
+      compressedBuffer
+    } else {
+      super.compress(allocator, uncompressedBuffer)
+    }
+  }
+}
+
+/**
+ * A [[VectorUnloader]] that releases the buffers it holds for a batch it fails to unload. Remove
+ * once on Arrow 20.0.0, which releases them itself, so they would be released twice
+ * (apache/arrow-java#1290).
+ */
+private class ReleasingVectorUnloader(root: VectorSchemaRoot, codec: TrackingCompressionCodec)
+  extends VectorUnloader(root, true, codec, true) {
+
+  override def getRecordBatch(): ArrowRecordBatch = {
+    try {
+      super.getRecordBatch()
+    } catch {
+      case t: Throwable =>
+        AutoCloseables.close(t, codec.heldBuffers.asJava)
+        throw t
+    } finally {
+      // A returned batch owns the buffers now.
+      codec.heldBuffers.clear()
+    }
+  }
+}
+
+/** Delegates to `codec` and keeps, for each call, the buffer that the batch holds afterwards. */
+private class TrackingCompressionCodec(codec: CompressionCodec) extends CompressionCodec {
+  val heldBuffers = new ArrayBuffer[ArrowBuf]
+
+  override def compress(allocator: BufferAllocator, input: ArrowBuf): ArrowBuf = {
+    // The unloader retained `input` for `codec`, which releases it only when it succeeds.
+    heldBuffers += input
+    val output = codec.compress(allocator, input)
+    heldBuffers(heldBuffers.length - 1) = output
+    output
+  }
+
+  override def decompress(allocator: BufferAllocator, input: ArrowBuf): ArrowBuf =
+    codec.decompress(allocator, input)
+
+  override def getCodecType: CompressionUtil.CodecType = codec.getCodecType
 }

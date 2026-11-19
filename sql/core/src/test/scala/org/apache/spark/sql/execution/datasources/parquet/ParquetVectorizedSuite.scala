@@ -17,20 +17,30 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.{File, IOException}
 import java.util.{Optional, PrimitiveIterator}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
-import org.apache.parquet.column.{ColumnDescriptor, ParquetProperties}
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapreduce.TaskAttemptID
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.parquet.bytes.BytesInput
+import org.apache.parquet.column.{ColumnDescriptor, Encoding, ParquetProperties}
 import org.apache.parquet.column.impl.ColumnWriteStoreV1
 import org.apache.parquet.column.page._
-import org.apache.parquet.column.page.mem.MemPageStore
+import org.apache.parquet.column.page.mem.{MemPageReader, MemPageStore}
+import org.apache.parquet.column.statistics.Statistics
+import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
+import org.apache.spark.TestUtils
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,8 +48,10 @@ import org.apache.spark.sql.catalyst.expressions.{RowOrdering, SpecificInternalR
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ParquetRowGroupReader
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -52,6 +64,11 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
   private val NUM_VALUES: Int = VALUES.length
   private val BATCH_SIZE_CONFIGS: Seq[Int] = Seq(1, 3, 5, 7, 10, 20, 40)
   private val PAGE_SIZE_CONFIGS: Seq[Seq[Int]] = Seq(Seq(6, 6, 7, 7), Seq(4, 9, 4, 9))
+  // The definition levels of 4 non-null values: the length 2, then an RLE run of 4 x 1.
+  private val fourNonNullValues = Array[Byte](2, 0, 0, 0, 4 << 1, 1)
+  // One non-null value: the definition levels (length 2, an RLE run of 1 x 1), then the
+  // dictionary ids (bit width 2, an RLE run of 1 x 0).
+  private val oneValueWithDictionaryId0 = Array[Byte](2, 0, 0, 0, 2, 1, 2, 2, 0)
 
   implicit def toStrings(ints: Seq[Int]): Seq[String] = ints.map(i => ('a' + i).toChar.toString)
 
@@ -481,6 +498,263 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-60490: primitive type - PLAIN page followed by a dictionary page in the same batch") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      "message root { optional int32 a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    // The dictionary page repeats values, otherwise the writer falls back to PLAIN.
+    val dictValues = Seq.fill(5)(7) :+ 8
+    val readStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 1, Seq(
+      EncodedPage(Seq.fill(3)(0), Seq.fill(3)(1), Seq(1, 2, 3), dictionaryEncoded = false),
+      EncodedPage(Seq.fill(6)(0), Seq.fill(6)(1), dictValues, dictionaryEncoded = true)))
+    // Any batch size above 3 reads the PLAIN page and the start of the dictionary page into the
+    // same batch.
+    for (batchSize <- 4 to 9; useOffHeap <- Seq(false, true)) {
+      checkAnswer(9, parquetSchema, readStore, (Seq(1, 2, 3) ++ dictValues).map(Row(_)),
+        batchSize, useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: nested type - PLAIN page followed by a dictionary page in the same batch") {
+    val (parquetSchema, cd) = arraySchema("int32")
+    // One element per row: the batch holds no more values than rows.
+    val singleElementValues = Seq.fill(5)(7) :+ 8
+    val singleElementStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(Seq(0, 0), Seq(3, 3), Seq(1, 2), dictionaryEncoded = false),
+      EncodedPage(Seq.fill(6)(0), Seq.fill(6)(3), singleElementValues, dictionaryEncoded = true)))
+    for (batchSize <- 3 to 8; useOffHeap <- Seq(false, true)) {
+      checkAnswer(8, parquetSchema, singleElementStore,
+        (Seq(1, 2) ++ singleElementValues).map(i => Row(Seq(i))), batchSize,
+        useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: nested type - PLAIN page followed by a dictionary page, multi-element rows") {
+    val (parquetSchema, cd) = arraySchema("int32")
+    // Five elements per row: the batch holds more values than rows.
+    val rls = Seq(0, 1, 1, 1, 1, 0, 1, 1, 1, 1)
+    val multiElementValues = Seq.fill(5)(7) ++ Seq.fill(5)(8)
+    val multiElementStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(rls, Seq.fill(10)(3), 1 to 10, dictionaryEncoded = false),
+      EncodedPage(rls, Seq.fill(10)(3), multiElementValues, dictionaryEncoded = true)))
+    for (batchSize <- 3 to 4; useOffHeap <- Seq(false, true)) {
+      checkAnswer(4, parquetSchema, multiElementStore,
+        ((1 to 10) ++ multiElementValues).grouped(5).map(Row(_)).toSeq, batchSize,
+        useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: PLAIN page followed by a dictionary page in the same batch, with row ranges") {
+    // Row ranges skip rows at the start of both pages, so the first rows a batch reads from the
+    // dictionary page are not the first rows of the page, and a batch can start in the middle of
+    // the dictionary page.
+    val ranges = Some(Seq((1L, 1L), (4L, 8L)))
+    val primitiveSchema = MessageTypeParser.parseMessageType(
+      "message root { optional int32 a; }")
+    val ty = primitiveSchema.asGroupType().getType("a").asPrimitiveType()
+    val primitiveStore = writeMixedEncodingPages(new ColumnDescriptor(Array("a"), ty, 0, 1),
+      maxDefinitionLevel = 1, Seq(
+        EncodedPage(Seq.fill(3)(0), Seq.fill(3)(1), Seq(1, 2, 3), dictionaryEncoded = false),
+        EncodedPage(Seq.fill(6)(0), Seq.fill(6)(1), Seq(7, 7, 7, 7, 7, 8),
+          dictionaryEncoded = true)),
+      ranges)
+    for (batchSize <- 1 to 6; useOffHeap <- Seq(false, true)) {
+      checkAnswer(6, primitiveSchema, primitiveStore, Seq(2, 7, 7, 7, 7, 8).map(Row(_)),
+        batchSize, useOffHeap = useOffHeap)
+    }
+
+    val (nestedSchema, cd) = arraySchema("int32")
+    val rls = Seq(0, 1, 0, 1, 0, 1)
+    val nestedStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(rls, Seq.fill(6)(3), 1 to 6, dictionaryEncoded = false),
+      EncodedPage(rls ++ rls, Seq.fill(12)(3), Seq.fill(10)(7) ++ Seq(8, 8),
+        dictionaryEncoded = true)),
+      ranges)
+    val nestedExpected = Seq(Seq(3, 4), Seq(7, 7), Seq(7, 7), Seq(7, 7), Seq(7, 7), Seq(8, 8))
+    for (batchSize <- 1 to 6; useOffHeap <- Seq(false, true)) {
+      checkAnswer(6, nestedSchema, nestedStore, nestedExpected.map(Row(_)), batchSize,
+        useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-60490: nested type - dictionary, PLAIN and dictionary pages in the same batch") {
+    // A string array column whose pages fall back from dictionary to PLAIN and then return to
+    // dictionary encoding. Some writers do this, unlike parquet-mr, whose fallback to PLAIN is
+    // permanent for the column chunk.
+    val (parquetSchema, cd) = arraySchema("binary", Some("UTF8"))
+    val rls = Seq(0, 1, 1, 0, 1)
+    val dls = Seq.fill(5)(3)
+    val readStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+      EncodedPage(rls, dls, Seq("x", "x", "x", "x", "y"), dictionaryEncoded = true),
+      EncodedPage(rls, dls, Seq("a", "b", "c", "d", "e"), dictionaryEncoded = false),
+      EncodedPage(rls, dls, Seq("x", "y", "y", "y", "y"), dictionaryEncoded = true)))
+    val expected = Seq(
+      Seq("x", "x", "x"), Seq("x", "y"),
+      Seq("a", "b", "c"), Seq("d", "e"),
+      Seq("x", "y", "y"), Seq("y", "y")).map(Row(_))
+    for (batchSize <- 1 to 6; useOffHeap <- Seq(false, true)) {
+      checkAnswer(6, parquetSchema, readStore, expected, batchSize, useOffHeap = useOffHeap)
+    }
+  }
+
+  test("SPARK-59831: BYTE_STREAM_SPLIT page of a required column with a wrong value count") {
+    // A required column has no definition levels, so its page value count must match the
+    // encoded values exactly. The page has 3 encoded values but claims 4. The batch size is
+    // smaller than the page, so that the page is rejected when it is initialized rather than
+    // when a read runs past its last encoded value.
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      "message root { required float a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 0)
+    // BYTE_STREAM_SPLIT stores byte b of value i at b * (number of values) + i.
+    val values = Seq(1.0f, 2.0f, 3.0f)
+    val data = new Array[Byte](4 * values.length)
+    values.zipWithIndex.foreach { case (v, i) =>
+      val bits = java.lang.Float.floatToIntBits(v)
+      (0 until 4).foreach(b => data(b * values.length + i) = (bits >> (8 * b)).toByte)
+    }
+
+    Seq(false, true).foreach { pageV2 =>
+      val memPageStore = new MemPageStore(4)
+      val pageWriter = memPageStore.getPageWriter(cd)
+      if (pageV2) {
+        pageWriter.writePageV2(4, 0, 4, BytesInput.empty(), BytesInput.empty(),
+          Encoding.BYTE_STREAM_SPLIT, BytesInput.from(data), Statistics.createStats(ty))
+      } else {
+        pageWriter.writePage(BytesInput.from(data), 4, 4, Statistics.createStats(ty),
+          Encoding.RLE, Encoding.RLE, Encoding.BYTE_STREAM_SPLIT)
+      }
+      val recordReader = new VectorizedParquetRecordReader(
+        DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 2)
+      try {
+        recordReader.initialize(parquetSchema, parquetSchema,
+          TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), 4)
+        val e = intercept[ParquetDecodingException](recordReader.nextKeyValue())
+        assert(e.getMessage.contains("3 encoded values do not match the page value count 4"),
+          s"page v2: $pageV2")
+      } finally {
+        recordReader.close()
+      }
+    }
+  }
+
+  test("SPARK-59832: a corrupted dictionary page reports the column") {
+    // A PLAIN INT32 dictionary page that declares 3 entries but holds only 2.
+    val e = readCorruptedPage("int32", Some(new DictionaryPage(
+      BytesInput.from(Array[Byte](1, 0, 0, 0, 2, 0, 0, 0)), 3, Encoding.PLAIN_DICTIONARY)),
+      oneValueWithDictionaryId0, 1, Encoding.RLE_DICTIONARY)
+    assert(e.getMessage.contains("could not decode the dictionary for [a]"), e.getMessage)
+    assert(e.getMessage.contains(e.getCause.getMessage), e.getMessage)
+    assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+  }
+
+  test("SPARK-60262: a column requested twice fails instead of leaving a vector unwritten") {
+    // The requested schema lists column `a` twice, as it would if two requested fields selected
+    // it, one by field id and one by name. Parquet's own page stores hand out a single page reader
+    // per column, which every reader of that column shares, so the reader of the first copy drains
+    // the pages and the reader of the second finds none. `MemPageStore` would give each its own.
+    val fileSchema = MessageTypeParser.parseMessageType("message root { optional int32 a; }")
+    val requestedSchema = MessageTypeParser.parseMessageType(
+      "message root { optional int32 a; optional int32 a; }")
+    val ty = fileSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    val memPageStore = new MemPageStore(3)
+    // Three non-null values: the definition levels (length 2, an RLE run of 3 x 1), then the
+    // PLAIN int32 values 1, 2 and 3.
+    memPageStore.getPageWriter(cd).writePage(
+      BytesInput.from(Array[Byte](2, 0, 0, 0, 6, 1, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0)), 3, 3,
+      Statistics.createStats(ty), Encoding.RLE, Encoding.RLE, Encoding.PLAIN)
+    val sharedReader = memPageStore.getPageReader(cd)
+    val sharedStore = new PageReadStore {
+      override def getPageReader(descriptor: ColumnDescriptor): PageReader = sharedReader
+      override def getRowCount: Long = 3
+    }
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 3)
+    try {
+      recordReader.initialize(fileSchema, requestedSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(sharedStore, Seq(0L)))), 3)
+      val e = intercept[ParquetDecodingException](recordReader.nextKeyValue())
+      assert(e.getMessage.contains("ran out of pages"), e.getMessage)
+      assert(e.getMessage.contains("[a]"), e.getMessage)
+    } finally {
+      recordReader.close()
+    }
+  }
+
+  test("SPARK-59854: a decoding error in a batch reports the page and the column") {
+    Seq(
+      // Dictionary ids (bit width 1) with an RLE run of only 2 of the 4 values.
+      ("Corrupted RLE data: reading past the end of the encoded values", Some(new DictionaryPage(
+        BytesInput.from(Array[Byte](1, 0, 0, 0, 2, 0, 0, 0)), 2, Encoding.PLAIN_DICTIONARY)),
+        Array[Byte](1, 2 << 1, 0), Encoding.RLE_DICTIONARY),
+      // 2 of the 4 PLAIN values.
+      ("Failed to read 16 bytes", None, Array[Byte](1, 0, 0, 0, 2, 0, 0, 0), Encoding.PLAIN),
+      // A DELTA_BINARY_PACKED block of 128 values in 4 mini blocks, with 4 values and the first
+      // value 0, then the min delta 0 and the mini block bit widths 65, 0, 0 and 0. The second
+      // value unpacks the first mini block.
+      ("Invalid DELTA_BINARY_PACKED mini block bit width: 65 (must be at most 64)", None,
+        Array[Byte](0x80.toByte, 1, 4, 4, 0, 0, 65, 0, 0, 0), Encoding.DELTA_BINARY_PACKED)
+    ).foreach { case (error, dictionaryPage, values, encoding) =>
+      val e = readCorruptedPage("int32", dictionaryPage, fourNonNullValues ++ values, 4, encoding)
+      assert(e.getMessage.startsWith("could not decode page Page [bytes.size="), e.getMessage)
+      assert(e.getMessage.contains(s"in col [a] optional int32 a: $error"), e.getMessage)
+      assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+      assert(e.getCause.getMessage == error, e)
+    }
+  }
+
+  test("SPARK-59854: a dictionary that cannot be decoded reports the column") {
+    Seq(
+      // A PLAIN BINARY dictionary page that declares 3 entries but holds only 1, which cuts off
+      // the length of the second entry.
+      ("binary", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0, 'x')), 3,
+        Encoding.PLAIN_DICTIONARY), classOf[IndexOutOfBoundsException]),
+      // A dictionary page with a negative dictionary size.
+      ("int32", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0)), -1,
+        Encoding.PLAIN_DICTIONARY), classOf[NegativeArraySizeException]),
+      // A dictionary page with an encoding that has no dictionary.
+      ("int32", new DictionaryPage(BytesInput.from(Array[Byte](1, 0, 0, 0)), 1,
+        Encoding.DELTA_BINARY_PACKED), classOf[UnsupportedOperationException])
+    ).foreach { case (columnType, dictionaryPage, errorClass) =>
+      val e = readCorruptedPage(columnType, Some(dictionaryPage), oneValueWithDictionaryId0, 1,
+        Encoding.RLE_DICTIONARY)
+      assert(e.getMessage.startsWith(
+        s"could not decode the dictionary for [a] optional $columnType a: ${errorClass.getName}"),
+        e.getMessage)
+      assert(e.getCause.getClass == errorClass, e)
+    }
+  }
+
+  test("SPARK-59854: an invalid DELTA_BINARY_PACKED header reports the column") {
+    // One non-null value. The header has a block of 128 values in 3 mini blocks.
+    val e = readCorruptedPage("int32", None,
+      Array[Byte](2, 0, 0, 0, 2, 1, 0x80.toByte, 1, 3, 1, 0), 1, Encoding.DELTA_BINARY_PACKED)
+    assert(e.getMessage.contains("in col [a] optional int32 a: Invalid DELTA_BINARY_PACKED " +
+      "mini block count: 3 (block size in values: 128, the mini block size must be a multiple " +
+      "of 8)"), e.getMessage)
+    assert(e.getCause.isInstanceOf[ParquetDecodingException], e)
+  }
+
+  test("SPARK-59854: a column chunk without values reports the column") {
+    val parquetSchema = MessageTypeParser.parseMessageType("message root { optional int32 a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val memPageStore = new MemPageStore(1)
+    // The column has a page writer, so the page store has a page reader for it, but no page.
+    memPageStore.getPageWriter(new ColumnDescriptor(Array("a"), ty, 0, 1))
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, 1)
+    try {
+      recordReader.initialize(parquetSchema, parquetSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), 1)
+      val e = intercept[IOException](recordReader.nextKeyValue())
+      assert(e.getMessage == "totalValueCount == 0 in col [a] optional int32 a")
+    } finally {
+      recordReader.close()
+    }
+  }
+
   truncateTypeTest("primitive type", IntegerType, LongType, IntegerType)
 
   truncateTypeTest("basic struct",
@@ -636,6 +910,120 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       .add("_2", IntegerType)
   )
 
+  test("SPARK-60098: Vectorized reader closes column vectors when missing all struct fields") {
+    withTempPath { dir =>
+      val data = Seq(
+        Tuple1((1, "a")),
+        Tuple1((2, null)),
+        Tuple1(null)
+      )
+      spark.createDataFrame(data).coalesce(1).write.parquet(dir.getCanonicalPath)
+
+      Seq(true, false).foreach { offheapEnabled =>
+        val readSchema = new StructType().add("_1",
+          new StructType()
+            .add("_3", IntegerType, nullable = true)
+            .add("_4", LongType, nullable = true),
+          nullable = true
+        )
+        val file = TestUtils.listDirectory(dir).head
+        val reader = createVectorizedReader(file, readSchema, offheapEnabled)
+        try {
+          while (reader.nextKeyValue()) {}
+        } finally {
+          reader.close()
+          checkColumnVectorsAreClosed(reader)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60098: Vectorized reader closes variant type column vectors") {
+    withTempPath { dir =>
+      val scalarTypes = Array(IntegerType, StringType)
+      val variantBuilder = new VariantBuilder(false)
+      scalarTypes.indices.map(_.toString).foreach(variantBuilder.addKey)
+      val rows = Seq(
+        Row(
+          Row(
+            variantBuilder.result().getMetadata,
+            null,
+            Row.fromSeq(Seq[Any](3, "str10").map(Row(null, _)))
+          )
+        )
+      )
+      val writeSchema =
+        StructType(
+          Array(
+            StructField(
+              "v",
+              SparkShreddingUtils.variantShreddingSchema(
+                StructType(
+                  scalarTypes.zipWithIndex.map { case (t, i) => StructField(i.toString, t) }
+                )
+              )
+            )
+          )
+        )
+
+      spark
+        .createDataFrame(spark.sparkContext.parallelize(rows, numSlices = 1), writeSchema)
+        .write
+        .parquet(dir.getCanonicalPath)
+
+      Seq(true, false).foreach { offheapEnabled =>
+        val readSchema = new StructType().add("v", VariantType, nullable = true)
+        val file = TestUtils.listDirectory(dir).head
+        val reader = createVectorizedReader(file, readSchema, offheapEnabled)
+        try {
+          while (reader.nextKeyValue()) {}
+        } finally {
+          reader.close()
+          checkColumnVectorsAreClosed(reader)
+        }
+      }
+    }
+  }
+
+  test("SPARK-61460: Vectorized reader resets the levels of a NullType field for each batch") {
+    withTempPath { dir =>
+      val schema = new StructType().add("c",
+        ArrayType(new StructType().add("n", NullType).add("a", IntegerType)))
+      val rows = (0 until 3).map(i => Row(Seq(Row(null, i))))
+      spark.createDataFrame(spark.sparkContext.parallelize(rows, numSlices = 1), schema)
+        .write.parquet(dir.getCanonicalPath)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "1") {
+        val file = TestUtils.listDirectory(dir).head
+        val reader = createVectorizedReader(file, schema, offheapEnabled = false)
+        try {
+          var numBatches = 0
+          while (reader.nextKeyValue()) {
+            // The i-th batch has one row, whose `c` is `[{null, i}]`.
+            val batch = reader.resultBatch()
+            assert(batch.numRows == 1)
+            val c = batch.column(0).getArray(0)
+            assert(c.numElements == 1)
+            val element = c.getStruct(0, 2)
+            assert(element.isNullAt(0))
+            assert(element.getInt(1) == numBatches)
+
+            // `n` is not the last field, so the struct does not share and reset its levels.
+            val n = ParquetTestAccess.columnVectors(reader).head
+              .asInstanceOf[ParquetColumnVector].getLeaves.get(0)
+            assert(n.getValueVector.dataType == NullType)
+            assert(n.getRepetitionLevelVector.getElementsAppended == 1)
+            assert(n.getDefinitionLevelVector.getElementsAppended == 1)
+            numBatches += 1
+          }
+          assert(numBatches == 3)
+        } finally {
+          reader.close()
+        }
+      }
+    }
+  }
+
   private def truncateTypeTest(
     testName: String,
     readType: DataType,
@@ -783,12 +1171,130 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     columnWriterStore.flush()
   }
 
+  /**
+   * The file schema and the element column of an optional array column `_1`, whose elements are
+   * of the Parquet primitive type `elementType`, annotated with `logicalType` if given.
+   */
+  private def arraySchema(
+      elementType: String,
+      logicalType: Option[String] = None): (MessageType, ColumnDescriptor) = {
+    val annotation = logicalType.map(t => s" ($t)").getOrElse("")
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      s"""message root {
+         |  optional group _1 (LIST) {
+         |    repeated group list {
+         |      optional $elementType a$annotation;
+         |    }
+         |  }
+         |}
+         |""".stripMargin)
+    val ty = parquetSchema.getType("_1", "list", "a").asPrimitiveType()
+    (parquetSchema, new ColumnDescriptor(Array("_1", "list", "a"), ty, 1, 3))
+  }
+
+  /** A data page given as its repetition levels, definition levels and values. */
+  private case class EncodedPage(
+      repetitionLevels: Seq[Int],
+      definitionLevels: Seq[Int],
+      values: Seq[Any],
+      dictionaryEncoded: Boolean)
+
+  /**
+   * Returns a row group with a single column chunk made of `pages`, in order, each PLAIN or
+   * dictionary encoded. Each dictionary-encoded `writeDataPage` call writes its own dictionary
+   * page, and a `MemPageStore` allows only one per column, so each page is written to its own
+   * store and the data pages are then combined behind a single dictionary page. The
+   * dictionary pages are written separately, so they must have the same distinct values in the
+   * same order of first appearance for their dictionaries to match. `rowIndexRanges` are the row
+   * ranges to read, as returned by column index filtering.
+   */
+  private def writeMixedEncodingPages(
+      columnDesc: ColumnDescriptor,
+      maxDefinitionLevel: Int,
+      pages: Seq[EncodedPage],
+      rowIndexRanges: Option[Seq[(Long, Long)]] = None): PageReadStore = {
+    import scala.jdk.CollectionConverters._
+
+    val written = pages.map { page =>
+      val store = new MemPageStore(page.repetitionLevels.count(_ == 0))
+      writeDataPage(columnDesc, store, page.repetitionLevels, page.definitionLevels, page.values,
+        maxDefinitionLevel, page.dictionaryEncoded)
+      val reader = store.getPageReader(columnDesc)
+      val dictionary = Option(reader.readDictionaryPage())
+      val dataPage = reader.readPage().asInstanceOf[DataPageV1]
+      assert(dataPage.getValueEncoding.usesDictionary == page.dictionaryEncoded,
+        s"the page was written with ${dataPage.getValueEncoding}")
+      (dictionary, dataPage)
+    }
+    val dictionaries = written.flatMap(_._1).map { d =>
+      (d.getBytes.toByteArray.toSeq, d.getDictionarySize, d.getEncoding)
+    }.distinct
+    assert(dictionaries.length <= 1, "the dictionary pages have different dictionaries")
+    val dictionary = dictionaries.headOption.map { case (bytes, size, encoding) =>
+      new DictionaryPage(BytesInput.from(bytes.toArray), size, encoding)
+    }.orNull
+
+    val numRows = pages.map(_.repetitionLevels.count(_ == 0))
+    val numValues = pages.map(_.repetitionLevels.length).sum
+    val chunk = new PageReadStore {
+      override def getPageReader(descriptor: ColumnDescriptor): PageReader =
+        new MemPageReader(numValues, written.map(_._2: DataPage).iterator.asJava, dictionary)
+      // With row ranges, the row count is the number of rows to read, as with column index
+      // filtering.
+      override def getRowCount: Long =
+        rowIndexRanges.map(_.map { case (start, end) => end - start + 1 }.sum)
+          .getOrElse(numRows.sum.toLong)
+    }
+    TestPageReadStore(chunk, numRows.scanLeft(0L)(_ + _).init, rowIndexRanges)
+  }
+
+  /**
+   * Reads a row group of the optional column `a` of type `columnType`, with an optional
+   * dictionary page and one data page of `valueCount` values, and returns the error of reading
+   * it with the vectorized reader.
+   */
+  private def readCorruptedPage(
+      columnType: String,
+      dictionaryPage: Option[DictionaryPage],
+      data: Array[Byte],
+      valueCount: Int,
+      valuesEncoding: Encoding): ParquetDecodingException = {
+    val parquetSchema =
+      MessageTypeParser.parseMessageType(s"message root { optional $columnType a; }")
+    val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
+    val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
+    val memPageStore = new MemPageStore(valueCount)
+    val pageWriter = memPageStore.getPageWriter(cd)
+    dictionaryPage.foreach(pageWriter.writeDictionaryPage)
+    pageWriter.writePage(BytesInput.from(data), valueCount, valueCount,
+      Statistics.createStats(ty), Encoding.RLE, Encoding.RLE, valuesEncoding)
+    val recordReader = new VectorizedParquetRecordReader(
+      DateTimeUtils.getZoneId("EST"), "CORRECTED", "UTC", "CORRECTED", "UTC", true, valueCount)
+    try {
+      recordReader.initialize(parquetSchema, parquetSchema,
+        TestParquetRowGroupReader(Seq(TestPageReadStore(memPageStore, Seq(0L)))), valueCount)
+      intercept[ParquetDecodingException](recordReader.nextKeyValue())
+    } finally {
+      recordReader.close()
+    }
+  }
+
   private def checkAnswer(
       totalRowCount: Int,
       fileSchema: MessageType,
       readStore: PageReadStore,
       expected: Seq[Row],
       batchSize: Int): Unit = {
+    checkAnswer(totalRowCount, fileSchema, readStore, expected, batchSize, useOffHeap = true)
+  }
+
+  private def checkAnswer(
+      totalRowCount: Int,
+      fileSchema: MessageType,
+      readStore: PageReadStore,
+      expected: Seq[Row],
+      batchSize: Int,
+      useOffHeap: Boolean): Unit = {
     import scala.jdk.CollectionConverters._
 
     val recordReader = new VectorizedParquetRecordReader(
@@ -797,7 +1303,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       "UTC",
       "CORRECTED",
       "UTC",
-      true,
+      useOffHeap,
       batchSize)
     recordReader.initialize(fileSchema, fileSchema,
       TestParquetRowGroupReader(Seq(readStore)), totalRowCount)
@@ -819,6 +1325,12 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       })
       i += 1
     }
+    assert(!expectedRowIt.hasNext, s"the reader returned only $i of ${expected.length} rows")
+    assert(!recordReader.nextKeyValue(), s"the reader returned more than ${expected.length} rows")
+
+    // SPARK-60098: Verify correct closure.
+    recordReader.close()
+    checkColumnVectorsAreClosed(recordReader)
   }
 
   private def toDebugString(schema: StructType, row: InternalRow): String = {
@@ -842,6 +1354,67 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       }
       fieldStrings.mkString(", ")
     }
+  }
+
+  private def createVectorizedReader(
+      file: String,
+      readSchema: StructType,
+      offheapEnabled: Boolean): VectorizedParquetRecordReader = {
+    val conf = spark.sessionState.conf
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
+    hadoopConf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, readSchema.json)
+    Seq(
+      SQLConf.CASE_SENSITIVE,
+      SQLConf.PARQUET_BINARY_AS_STRING,
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP,
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED,
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG
+    ).foreach { entry =>
+      hadoopConf.set(entry.key, conf.getConfString(entry.key))
+    }
+
+    val split = new FileSplit(new Path(file), 0, new File(file).length(), Array.empty[String])
+    val context = new TaskAttemptContextImpl(hadoopConf, new TaskAttemptID())
+    val reader = new VectorizedParquetRecordReader(
+      offheapEnabled,
+      conf.parquetVectorizedReaderBatchSize
+    )
+
+    try {
+      reader.enableReturningBatches()
+      reader.initialize(split, context)
+    } catch {
+      case NonFatal(e) =>
+        reader.close()
+        throw e
+    }
+
+    reader
+  }
+
+  private def checkColumnVectorsAreClosed(reader: VectorizedParquetRecordReader): Unit = {
+    val columnVectors = ParquetTestAccess.columnVectors(reader)
+    if (columnVectors != null) {
+      columnVectors.foreach(v => checkIsClosed(v.asInstanceOf[ParquetColumnVector]))
+    }
+  }
+
+  private def checkIsClosed(parquetColumnVector: ParquetColumnVector): Unit = {
+    val vector = parquetColumnVector.getValueVector
+    assert(vector.isFree)
+
+    val definitionsVector = parquetColumnVector.getDefinitionLevelVector
+    if (definitionsVector != null) {
+      assert(definitionsVector.isFree)
+    }
+
+    val repetitionsVector = parquetColumnVector.getRepetitionLevelVector
+    if (repetitionsVector != null) {
+      assert(repetitionsVector.isFree)
+    }
+
+    parquetColumnVector.getChildren.forEach(checkIsClosed)
   }
 
   case class TestParquetRowGroupReader(groups: Seq[PageReadStore]) extends ParquetRowGroupReader {

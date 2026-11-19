@@ -29,6 +29,7 @@ import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableSca
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
 abstract class V1ReadFallbackSuite extends SharedSparkSession {
   protected def baseTableScan(): DataFrame
@@ -75,12 +76,14 @@ abstract class V1ReadFallbackSuite extends SharedSparkSession {
   }
 }
 
+@DataSourceV2Test
 class V1ReadFallbackWithDataFrameReaderSuite extends V1ReadFallbackSuite {
   override protected def baseTableScan(): DataFrame = {
     spark.read.format(classOf[V1ReadFallbackTableProvider].getName).load()
   }
 }
 
+@DataSourceV2Test
 class V1ReadFallbackWithCatalogSuite extends V1ReadFallbackSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()

@@ -320,6 +320,16 @@ private[ops] object TimestampNanosParquetOps {
   private def epochNanosInRange(encode: => JLong): Boolean =
     try { encode; true } catch { case _: ArithmeticException => false }
 
+  // Below nanosecond precision, the reader truncates the stored epoch-nanoseconds to the read
+  // precision (see nanosConverter and TimestampNanosVectorUpdater), while a pushed down predicate
+  // compares the stored epoch-nanoseconds. E.g. a stored 00:00:00.123456789 is read as
+  // 00:00:00.1234567 for TIMESTAMP_NTZ(7), so a pushed down `ts = 00:00:00.1234567` would skip it.
+  private def acceptsNanosReadType(readType: DataType): Boolean = readType match {
+    case t: TimestampLTZNanosType => t.precision == TimestampLTZNanosType.NANOS_PRECISION
+    case t: TimestampNTZNanosType => t.precision == TimestampNTZNanosType.NANOS_PRECISION
+    case _ => true
+  }
+
   /**
    * Parquet filter-pushdown ops for the nanosecond timestamp types, registered in
    * [[ParquetTypeOps.filterOpsList]]. Filter dispatch is keyed on the file's on-disk encoding, so
@@ -339,6 +349,8 @@ private[ops] object TimestampNanosParquetOps {
       case _ => false
     }
 
+    override def acceptsReadType(readType: DataType): Boolean = acceptsNanosReadType(readType)
+
     override protected def toLong(value: Any): JLong =
       instantToEpochNanos(value.asInstanceOf[Instant])
   }
@@ -351,6 +363,8 @@ private[ops] object TimestampNanosParquetOps {
       case ldt: LocalDateTime => epochNanosInRange(localDateTimeToEpochNanos(ldt))
       case _ => false
     }
+
+    override def acceptsReadType(readType: DataType): Boolean = acceptsNanosReadType(readType)
 
     override protected def toLong(value: Any): JLong =
       localDateTimeToEpochNanos(value.asInstanceOf[LocalDateTime])

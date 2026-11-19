@@ -169,6 +169,7 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.SparkVersion
             .newBuilder()
             .setVersion(session.version)
+            .addCapabilities("serverSideMavenArtifacts.v1")
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.DDL_PARSE =>

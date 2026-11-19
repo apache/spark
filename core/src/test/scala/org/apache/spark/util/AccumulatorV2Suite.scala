@@ -17,7 +17,10 @@
 
 package org.apache.spark.util
 
+import java.util.Properties
+
 import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
 
 class AccumulatorV2Suite extends SparkFunSuite {
 
@@ -127,6 +130,65 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc3.value.isEmpty)
   }
 
+  test("SPARK-59845: a subclass is registered only once it is fully deserialized") {
+    // Deserialization registers the accumulator with the `TaskContext`, which publishes it to other
+    // threads -- in production the executor heartbeater, which calls `isZero` on every registered
+    // accumulator. Registering before the subclass's fields have been read exposes state that is
+    // still unset, so a subclass holding its state in a plain `val` would see a null there.
+    // Probe from `registerAccumulator` to observe that instant without racing a real reader.
+    val acc = new NaiveStateAccumulator
+    acc.metadata = AccumulatorMetadata(AccumulatorContext.newId(), None, countFailedValues = false)
+    AccumulatorContext.register(acc)
+
+    var probed = false
+    val taskContext = new TaskContextImpl(
+      stageId = 0,
+      stageAttemptNumber = 0,
+      partitionId = 0,
+      taskAttemptId = 0L,
+      attemptNumber = 0,
+      numPartitions = 1,
+      taskMemoryManager = null,
+      localProperties = new Properties,
+      metricsSystem = null,
+      taskMetrics = TaskMetrics.empty,
+      cpuAmount = BigDecimal(1)) {
+      private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
+        assert(a.isZero, "accumulator state should be readable as soon as it is registered")
+        probed = true
+      }
+    }
+
+    TaskContext.setTaskContext(taskContext)
+    try {
+      Utils.deserialize[NaiveStateAccumulator](Utils.serialize(acc))
+    } finally {
+      TaskContext.unset()
+      AccumulatorContext.remove(acc.id)
+    }
+    assert(probed, "the accumulator was never registered, so nothing was verified")
+  }
 }
 
 class MyData(val i: Int) extends Serializable
+
+/**
+ * Holds its state the way a subclass naturally would, in a `val` dereferenced by `isZero`, with no
+ * null handling. Registration must therefore happen only after this field has been deserialized.
+ */
+private class NaiveStateAccumulator extends AccumulatorV2[Int, java.util.List[Int]] {
+  private val state = new java.util.ArrayList[Int]()
+
+  override def isZero: Boolean = state.isEmpty
+  override def copyAndReset(): NaiveStateAccumulator = new NaiveStateAccumulator
+  override def copy(): NaiveStateAccumulator = {
+    val newAcc = new NaiveStateAccumulator
+    newAcc.state.addAll(state)
+    newAcc
+  }
+  override def reset(): Unit = state.clear()
+  override def add(v: Int): Unit = state.add(v)
+  override def merge(other: AccumulatorV2[Int, java.util.List[Int]]): Unit =
+    state.addAll(other.value)
+  override def value: java.util.List[Int] = state
+}

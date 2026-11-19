@@ -54,13 +54,16 @@ if should_test_connect:
         WriteOperation,
     )
     from pyspark.sql.connect.readwriter import DataFrameReader
+    from pyspark.sql.connect.streaming.readwriter import DataStreamReader
     from pyspark.sql.connect.types import (
         proto_schema_to_pyspark_data_type,
         pyspark_types_to_proto_types,
     )
     from pyspark.sql.types import (
         ArrayType,
+        CharType,
         DoubleType,
+        FileType,
         IntegerType,
         MapType,
         StringType,
@@ -68,6 +71,7 @@ if should_test_connect:
         StructType,
         TimestampLTZNanosType,
         TimestampNTZNanosType,
+        VarcharType,
     )
 
 
@@ -76,9 +80,77 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
 
+    def test_char_varchar_collation_type_round_trip(self):
+        data_types = [
+            CharType(4),
+            CharType(4, "UTF8_BINARY"),
+            CharType(4, "UTF8_LCASE"),
+            VarcharType(6),
+            VarcharType(6, "UTF8_BINARY"),
+            VarcharType(6, "UNICODE_CI"),
+            StructType(
+                [
+                    StructField("c", CharType(4, "UTF8_LCASE")),
+                    StructField("v", ArrayType(VarcharType(6, "UNICODE_CI"))),
+                ]
+            ),
+        ]
+
+        for data_type in data_types:
+            proto_type = pyspark_types_to_proto_types(data_type)
+            self.assertEqual(data_type, proto_schema_to_pyspark_data_type(proto_type))
+
+        default_char = pyspark_types_to_proto_types(CharType(4)).char
+        self.assertFalse(default_char.HasField("collation"))
+        explicit_binary_char = pyspark_types_to_proto_types(CharType(4, "UTF8_BINARY")).char
+        self.assertTrue(explicit_binary_char.HasField("collation"))
+        self.assertEqual(explicit_binary_char.collation, "UTF8_BINARY")
+
     def test_sql_project(self):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
         self.assertEqual(plan.root.sql.query, "SELECT 1")
+
+    def test_bin_by(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        result = df.binBy("start", "end", lit(datetime.timedelta(minutes=5)), ["value"])
+        plan = result._plan.to_proto(self.connect)
+        node = plan.root.bin_by
+        self.assertEqual(node.input.read.named_table.unparsed_identifier, self.tbl_name)
+        self.assertEqual(node.range_start.unresolved_attribute.unparsed_identifier, "start")
+        self.assertEqual(node.range_end.unresolved_attribute.unparsed_identifier, "end")
+        self.assertEqual(node.bin_width.literal.day_time_interval, 300000000)
+        self.assertEqual(len(node.distribute_uniform), 1)
+        self.assertEqual(
+            node.distribute_uniform[0].unresolved_attribute.unparsed_identifier, "value"
+        )
+        self.assertFalse(node.HasField("align_to"))
+        self.assertFalse(node.HasField("bin_start_name"))
+        self.assertFalse(node.HasField("bin_end_name"))
+        self.assertFalse(node.HasField("bin_distribute_ratio_name"))
+
+    def test_bin_by_optional_fields_and_bound_columns(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        result = df.binBy(
+            df["start"],
+            df["end"],
+            lit(datetime.timedelta(minutes=5)),
+            (df["value"], df["value2"]),
+            alignTo=lit(None).cast("timestamp"),
+            binStartName="bin.start",
+            binEndName="bin`end",
+            binDistributeRatioName="",
+        )
+        plan = result._plan.to_proto(self.connect)
+        node = plan.root.bin_by
+        for expression in [node.range_start, node.range_end, *node.distribute_uniform]:
+            self.assertEqual(expression.unresolved_attribute.plan_id, df._plan._plan_id)
+        self.assertEqual(len(node.distribute_uniform), 2)
+        self.assertTrue(node.HasField("align_to"))
+        self.assertTrue(node.align_to.cast.expr.literal.HasField("null"))
+        self.assertEqual(node.bin_start_name, "bin.start")
+        self.assertEqual(node.bin_end_name, "bin`end")
+        self.assertTrue(node.HasField("bin_distribute_ratio_name"))
+        self.assertEqual(node.bin_distribute_ratio_name, "")
 
     def test_simple_project(self):
         plan = self.connect.readTable(table_name=self.tbl_name)._plan.to_proto(self.connect)
@@ -772,6 +844,42 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
 
+    def test_streaming_table_source_name(self):
+        for source_name in (None, "orders_source"):
+            with self.subTest(source_name=source_name):
+                reader = DataStreamReader(self.connect).option("maxFilesPerTrigger", "1")
+                if source_name is not None:
+                    reader.name(source_name)
+                plan = reader.table("db.orders")._plan.to_proto(self.connect)
+                self.assertTrue(plan.root.read.is_streaming)
+                named_table = plan.root.read.named_table
+                self.assertEqual(named_table.unparsed_identifier, "db.orders")
+                self.assertEqual(dict(named_table.options), {"maxFilesPerTrigger": "1"})
+                self.assertEqual(named_table.HasField("source_name"), source_name is not None)
+                if source_name is not None:
+                    self.assertEqual(named_table.source_name, source_name)
+                self.assertEqual(proto.Plan.FromString(plan.SerializeToString()), plan)
+
+        batch_plan = DataFrameReader(self.connect).table("db.orders")._plan.to_proto(self.connect)
+        self.assertFalse(batch_plan.root.read.is_streaming)
+        self.assertFalse(batch_plan.root.read.named_table.HasField("source_name"))
+
+    def test_reader_options_case_insensitive(self):
+        reader = DataFrameReader(self.connect)
+        df = (
+            reader.option("versionAsOf", 0)
+            .option("versionasof", 1)
+            .option("versionAsOf", 2)
+            .table("myTable")
+        )
+        options = df._plan.to_proto(self.connect).root.read.named_table.options
+        self.assertEqual(dict(options), {"versionAsOf": "2"})
+
+        reader = DataFrameReader(self.connect)
+        df = reader.option("header", False).option("HEADER", True).load(format="csv")
+        options = df._plan.to_proto(self.connect).root.read.data_source.options
+        self.assertEqual(dict(options), {"HEADER": "true"})
+
     def test_relation_changes(self):
         reader = DataFrameReader(self.connect)
         df = reader.option("startingVersion", "1").option("endingVersion", "5").changes("myTable")
@@ -965,6 +1073,39 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         new_plan = df.to(schema)._plan.to_proto(self.connect)
         self.assertEqual(pyspark_types_to_proto_types(schema), new_plan.root.to_schema.schema)
+
+    def test_file_datatype_conversion(self):
+        for dt in [
+            FileType(),
+            FileType.external(),
+            ArrayType(FileType.external()),
+            MapType(StringType(), FileType()),
+            StructType([StructField("f", FileType.external()), StructField("g", FileType())]),
+        ]:
+            with self.subTest(dt=repr(dt)):
+                self.assertEqual(
+                    dt, proto_schema_to_pyspark_data_type(pyspark_types_to_proto_types(dt))
+                )
+
+        self.assertEqual(
+            proto.DataType.FILE_TYPE_MODE_EXTERNAL,
+            pyspark_types_to_proto_types(FileType.external()).file.mode,
+        )
+        self.assertEqual(
+            proto.DataType.FILE_TYPE_MODE_UNKNOWN,
+            pyspark_types_to_proto_types(FileType()).file.mode,
+        )
+        # A file without a mode, or with a mode this side does not know, such as the reserved
+        # value 2 or a value added later, is an unknown file.
+        for file in [
+            proto.DataType.File(),
+            proto.DataType.File(mode=2),
+            proto.DataType.File(mode=42),
+        ]:
+            with self.subTest(file=str(file)):
+                self.assertEqual(
+                    FileType(), proto_schema_to_pyspark_data_type(proto.DataType(file=file))
+                )
 
     def test_timestamp_nanos_datatype_conversion(self):
         # SPARK-57462: the nanosecond timestamp types round-trip through the DataType proto.

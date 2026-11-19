@@ -26,7 +26,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class LocalScanSuite extends SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()

@@ -105,6 +105,23 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
   }
 
   /**
+   * Merges the ID mappings of both join sides. It also keeps the IDs of hidden columns like `d.k`,
+   * so a copy of the same table on the other side can't remap them. Operators that map an already
+   * resolved column again, like `d.*` or an ASOF JOIN `MATCH_CONDITION`, would otherwise read the
+   * copy's column.
+   */
+  protected def mergeChildMappings(leftNameScope: NameScope, rightNameScope: NameScope): Unit = {
+    val qualifiedAccessOnlyColumnIds =
+      (leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
+        .filter(_.qualifiedAccessOnly)
+        .map(_.exprId)
+    expressionIdAssigner.createMappingFromChildMappings(
+      newOutputIds =
+        leftNameScope.getOutputIds ++ rightNameScope.getOutputIds ++ qualifiedAccessOnlyColumnIds
+    )
+  }
+
+  /**
    * Resolves the join condition against __all__ attributes from child scopes. We overwrite the
    * current scope first to prepare for
    * [[ExpressionResolver.resolveExpressionTreeInOperator]]. The join will actually produce a

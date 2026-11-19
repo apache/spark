@@ -684,6 +684,77 @@ Project [rtrim(cast(utf8_binary#x as string collate UTF8_LCASE), Some(collate(AB
 
 
 -- !query
+select trim(s), length(trim(s)), octet_length(trim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query analysis
+Project [trim(s#x, None) AS trim(s)#x, length(trim(s#x, None)) AS length(trim(s))#x, octet_length(trim(s#x, None)) AS octet_length(trim(s))#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [collate(concat(chr(cast(160 as bigint)), abc, chr(cast(160 as bigint))), unicode_ci) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
+select trim(' ' collate unicode_ci, s), length(trim(' ' collate unicode_ci, s)),
+       octet_length(trim(' ' collate unicode_ci, s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query analysis
+Project [trim(s#x, Some(collate( , unicode_ci))) AS TRIM(BOTH collate( , unicode_ci) FROM s)#x, length(trim(s#x, Some(collate( , unicode_ci)))) AS length(TRIM(BOTH collate( , unicode_ci) FROM s))#x, octet_length(trim(s#x, Some(collate( , unicode_ci)))) AS octet_length(TRIM(BOTH collate( , unicode_ci) FROM s))#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [collate(concat(chr(cast(160 as bigint)), abc, chr(cast(160 as bigint))), unicode_ci) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
+select ltrim(s), length(ltrim(s)), octet_length(ltrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query analysis
+Project [ltrim(s#x, None) AS ltrim(s)#x, length(ltrim(s#x, None)) AS length(ltrim(s))#x, octet_length(ltrim(s#x, None)) AS octet_length(ltrim(s))#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [collate(concat(chr(cast(160 as bigint)), abc, chr(cast(160 as bigint))), unicode_ci) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
+select rtrim(s), length(rtrim(s)), octet_length(rtrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode_ci as s)
+-- !query analysis
+Project [rtrim(s#x, None) AS rtrim(s)#x, length(rtrim(s#x, None)) AS length(rtrim(s))#x, octet_length(rtrim(s#x, None)) AS octet_length(rtrim(s))#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [collate(concat(chr(cast(160 as bigint)), abc, chr(cast(160 as bigint))), unicode_ci) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
+select trim(s), length(trim(s)), octet_length(trim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s)
+-- !query analysis
+Project [trim(s#x, None) AS trim(s)#x, length(trim(s#x, None)) AS length(trim(s))#x, octet_length(trim(s#x, None)) AS octet_length(trim(s))#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [collate(concat(chr(cast(160 as bigint)), abc, chr(cast(160 as bigint))), unicode) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
+select ltrim(s), length(ltrim(s)), octet_length(ltrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s)
+-- !query analysis
+Project [ltrim(s#x, None) AS ltrim(s)#x, length(ltrim(s#x, None)) AS length(ltrim(s))#x, octet_length(ltrim(s#x, None)) AS octet_length(ltrim(s))#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [collate(concat(chr(cast(160 as bigint)), abc, chr(cast(160 as bigint))), unicode) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
+select rtrim(s), length(rtrim(s)), octet_length(rtrim(s))
+  from (select concat(chr(160), 'abc', chr(160)) collate unicode as s)
+-- !query analysis
+Project [rtrim(s#x, None) AS rtrim(s)#x, length(rtrim(s#x, None)) AS length(rtrim(s))#x, octet_length(rtrim(s#x, None)) AS octet_length(rtrim(s))#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [collate(concat(chr(cast(160 as bigint)), abc, chr(cast(160 as bigint))), unicode) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
 drop table t1
 -- !query analysis
 DropTable false, false

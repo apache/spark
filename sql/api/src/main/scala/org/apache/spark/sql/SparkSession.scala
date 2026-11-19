@@ -561,7 +561,18 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Add a single artifact to the current session.
    *
-   * Currently only local files with extensions .jar and .class are supported.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
+   * URIs use `spark.jars.ivySettings` when configured. Spark Connect resolves them on the client
+   * by default, using the session's settings file if its path is exposed and readable locally.
+   * Enable `spark.connect.session.serverSideMavenResolution.enabled` to resolve URIs without
+   * `repos` on a supporting server.
+   *
+   * Since 4.4.0, it also supports native data source packages: local files with the extension
+   * .sparkpkg, which make the native data sources that they contain available to the session. It
+   * fails for a file that is not a valid package, for a package whose version Spark does not
+   * support, or that has no library for the platform of the driver; the session then does not get
+   * the package. With `spark.sql.dataSource.native.enabled` set to false, such a file is added as
+   * a file of the session, without the check.
    *
    * @since 4.0.0
    */
@@ -571,7 +582,15 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Add a single artifact to the current session.
    *
-   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs.
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
+   * resolution follows the same settings as `addArtifact(String)`.
+   *
+   * Since 4.4.0, it also supports native data source packages: local files with the extension
+   * .sparkpkg, which make the native data sources that they contain available to the session. It
+   * fails for a file that is not a valid package, for a package whose version Spark does not
+   * support, or that has no library for the platform of the driver; the session then does not get
+   * the package. With `spark.sql.dataSource.native.enabled` set to false, such a file is added as
+   * a file of the session, without the check.
    *
    * @since 4.0.0
    */
@@ -583,7 +602,12 @@ abstract class SparkSession extends Serializable with Closeable {
    * specified by `target` under the session's working directory of that particular file
    * extension.
    *
-   * Supported target file extensions are .jar and .class.
+   * Supported target file extensions are .jar and .class, and since 4.4.0, .sparkpkg for native
+   * data source packages, which make the native data sources that they contain available to the
+   * session. It fails for a file that is not a valid package, for a package whose version Spark
+   * does not support, or that has no library for the platform of the driver; the session then
+   * does not get the package. With `spark.sql.dataSource.native.enabled` set to false, such a
+   * file is added as a file of the session, without the check.
    *
    * ==Example==
    * {{{
@@ -603,7 +627,12 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add a single artifact to the session while preserving the directory structure specified by
    * `target` under the session's working directory of that particular file extension.
    *
-   * Supported target file extensions are .jar and .class.
+   * Supported target file extensions are .jar and .class, and since 4.4.0, .sparkpkg for native
+   * data source packages, which make the native data sources that they contain available to the
+   * session. It fails for a file that is not a valid package, for a package whose version Spark
+   * does not support, or that has no library for the platform of the driver; the session then
+   * does not get the package. With `spark.sql.dataSource.native.enabled` set to false, such a
+   * file is added as a file of the session, without the check.
    *
    * ==Example==
    * {{{
@@ -622,7 +651,16 @@ abstract class SparkSession extends Serializable with Closeable {
   /**
    * Add one or more artifacts to the session.
    *
-   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs
+   * Currently it supports local files with extensions .jar and .class and Apache Ivy URIs. Ivy
+   * resolution follows the same settings as `addArtifact(String)`.
+   *
+   * Since 4.4.0, it also supports native data source packages: local files with the extension
+   * .sparkpkg, which make the native data sources that they contain available to the session. A
+   * file that is not a valid package, or a package whose version Spark does not support, or that
+   * has no library for the platform of the driver, is rejected: the session does not get it, and
+   * the call fails after it adds the other artifacts. With `spark.sql.dataSource.native.enabled`
+   * set to false, such a file is added as a file of the session, without the check. A file that
+   * does not exist or cannot be read stops the call, as for the other artifacts.
    *
    * @since 4.0.0
    */
