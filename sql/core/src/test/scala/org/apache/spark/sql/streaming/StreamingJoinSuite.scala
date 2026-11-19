@@ -327,7 +327,6 @@ abstract class StreamingJoinSuite
   }
 }
 
-@SlowSQLTest
 abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
@@ -1351,7 +1350,6 @@ abstract class StreamingInnerJoinSuite extends StreamingInnerJoinBase {
   }
 }
 
-@SlowSQLTest
 abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
@@ -2137,7 +2135,6 @@ abstract class StreamingOuterJoinSuite extends StreamingOuterJoinBase {
   }
 }
 
-@SlowSQLTest
 abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
@@ -2379,7 +2376,6 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
 /** No V3-specific tests for full outer joins. */
 abstract class StreamingFullOuterJoinSuite extends StreamingFullOuterJoinBase
 
-@SlowSQLTest
 abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
 
   import testImplicits._

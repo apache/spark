@@ -39,7 +39,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{ERROR, RATIO, SIZE, TIME}
+import org.apache.spark.internal.LogKeys.{CONFIG, ERROR, RATIO, SIZE, TIME}
 import org.apache.spark.internal.config.ConfigReader
 import org.apache.spark.sql.connect.RuntimeConfig
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -62,8 +62,8 @@ private[sql] class SparkConnectClient(
   if (configuration.metadata.keys.exists(
       _.equalsIgnoreCase(SparkConnectClient.OPERATION_ID_HEADER))) {
     logWarning(
-      s"Connection option ${SparkConnectClient.OPERATION_ID_HEADER} is ignored because " +
-        "Spark Connect sets it for each ExecutePlan request.")
+      log"Connection option ${MDC(CONFIG, SparkConnectClient.OPERATION_ID_HEADER)} is ignored " +
+        log"because Spark Connect sets it for each ExecutePlan request.")
   }
 
   private[this] val bstub =

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -85,19 +84,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
       p.setLogicalLink(logicalPlan)
       p
-    }
-  }
-
-  /**
-   * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
-   * relation carries a real-time mode duration -- the same signal that decides whether to plan
-   * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
-   */
-  private def isRealTimeMode(plan: LogicalPlan): Boolean = {
-    plan.collectLeaves().exists {
-      case s: StreamingDataSourceV2ScanRelation =>
-        s.relation.realTimeModeDuration.isDefined
-      case _ => false
     }
   }
 
@@ -431,11 +417,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /** Plans AS-OF joins whose analyzed node selects the sort-merge operator. */
-  object AsOfJoinSelection extends Strategy with PredicateHelper {
+  object AsOfJoinSelection extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case j: AsOfJoin if j.requiresSortMergeAsOfJoin =>
         val (leftKeys, rightKeys, residual) = j.condition match {
-          case Some(cond) => extractEquiJoinKeys(cond, j.left, j.right)
+          case Some(cond) => AsOfJoin.extractEquiJoinKeys(cond, j.left, j.right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
         }
 
@@ -453,42 +439,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           codegenEnabled = conf.getConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN)
         ) :: Nil
       case _ => Nil
-    }
-
-    /**
-     * Extract equi-join key pairs and residual (non-equi) condition
-     * from a conjunction. Only EqualTo is treated as equi-key;
-     * EqualNullSafe is excluded because the scanner implements EqualTo
-     * null semantics (left rows with any null equi-key never match and
-     * are skipped or null-padded), whereas EqualNullSafe requires null
-     * keys to match. Such predicates fall through to the residual
-     * condition, which evaluates them per candidate pair.
-     */
-    private def extractEquiJoinKeys(
-        condition: Expression,
-        left: LogicalPlan,
-        right: LogicalPlan): (Seq[Expression], Seq[Expression], Option[Expression]) = {
-      val leftKeys =
-        new scala.collection.mutable.ArrayBuffer[Expression]()
-      val rightKeys =
-        new scala.collection.mutable.ArrayBuffer[Expression]()
-      val residuals =
-        new scala.collection.mutable.ArrayBuffer[Expression]()
-
-      splitConjunctivePredicates(condition).foreach {
-        case EqualTo(l, r)
-            if l.references.subsetOf(left.outputSet) &&
-              r.references.subsetOf(right.outputSet) =>
-          leftKeys += l; rightKeys += r
-        case EqualTo(l, r)
-            if r.references.subsetOf(left.outputSet) &&
-              l.references.subsetOf(right.outputSet) =>
-          leftKeys += r; rightKeys += l
-        case other =>
-          residuals += other
-      }
-      val residual = residuals.reduceOption(And)
-      (leftKeys.toSeq, rightKeys.toSeq, residual)
     }
   }
 
@@ -568,7 +518,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // result back for the whole batch. Plan the streamline operator instead, which merges
             // each input row against state; Update mode can emit an intermediate result per
             // input.
-            if (isRealTimeMode(child) ||
+            if (SparkStrategies.isRealTimeMode(child) ||
               conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
               AggUtils.planStreamlineStreamingAggregation(
                 normalizedGroupingExpressions,
@@ -905,7 +855,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           eventTimeWatermarkForEviction = None,
           planLater(child),
           isStreaming = true,
-          isRealTimeMode = isRealTimeMode(plan),
+          isRealTimeMode = SparkStrategies.isRealTimeMode(plan),
           hasInitialState,
           initialStateGroupingAttrs,
           initialStateDataAttrs,
@@ -975,17 +925,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case e @ ArrowEvalPython(
-          udfs, requiredChildOutput, resultAttrs, child,
-          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
-        InProcessPythonUDFBuilder.checkConfiguration(conf)
-        // The in-process evaluator passes through the whole child, so drop what is not required.
-        val exec = InProcessArrowEvalPythonExec(udfs, resultAttrs, planLater(child))
-        if (requiredChildOutput == child.output) {
-          exec :: Nil
-        } else {
-          ProjectExec(e.output, exec) :: Nil
-        }
       case ArrowEvalPython(udfs, requiredChildOutput, resultAttrs, child, evalType) =>
         ArrowEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child), evalType)(
           conf.arrowPySparkUDFColumnarInputEnabled) :: Nil
@@ -1288,6 +1227,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         r.name
       case _ =>
         "unknown"
+    }
+  }
+}
+
+object SparkStrategies {
+  /**
+   * Whether this plan reads a streaming source in Real-Time Mode, which is the case when the
+   * relation carries a real-time mode duration -- the same signal that decides whether to plan
+   * a [[org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec]] for it.
+   */
+  private[sql] def isRealTimeMode(plan: LogicalPlan): Boolean = {
+    plan.collectLeaves().exists {
+      case s: StreamingDataSourceV2ScanRelation =>
+        s.relation.realTimeModeDuration.isDefined
+      case _ => false
     }
   }
 }

@@ -21,11 +21,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, LiteralValue}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter._
 import org.apache.spark.sql.execution.datasources.v2.V2PredicateSuite.ref
 import org.apache.spark.sql.internal.connector.PredicateUtils
-import org.apache.spark.sql.sources.{AlwaysFalse => V1AlwaysFalse, AlwaysTrue => V1AlwaysTrue, And => V1And, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not => V1Not, Or => V1Or, StringContains, StringEndsWith, StringStartsWith}
+import org.apache.spark.sql.sources.{AlwaysFalse => V1AlwaysFalse, AlwaysTrue => V1AlwaysTrue, And => V1And, EqualNullSafe, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not => V1Not, Or => V1Or, StringContains, StringEndsWith, StringStartsWith}
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
@@ -302,6 +303,39 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate3).get == v1Filter2)
     assert(PredicateUtils.toV1(v1Filter2.toV2).get == v1Filter2)
     assert(PredicateUtils.toV1(predicate3).get.toV2 == predicate3)
+  }
+
+  test("SPARK-61684: CHAR_READ_SIDE_PADDING compared with literals") {
+    def str(s: String, dt: StringType = StringType): Literal[_] =
+      LiteralValue(UTF8String.fromString(s), dt)
+    def toV1(name: String, length: Int, literals: Literal[_]*): Option[Filter] = {
+      val pad = new GeneralScalarExpression(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
+        Array[Expression](ref("c"), LiteralValue(length, IntegerType), str(" ")))
+      PredicateUtils.toV1(new Predicate(name, (pad +: literals).toArray[Expression]))
+    }
+
+    // the stored values that a read pads to 'a  '
+    val in = In("c", Array("a", "a ", "a  "))
+    assert(toV1("=", 3, str("a  ")) === Some(in))
+    assert(toV1("<>", 3, str("a  ")) === Some(V1Not(in)))
+    // NULL <=> 'a  ' is false, so it must stay false under a NOT
+    assert(toV1("<=>", 3, str("a  ")) === Some(V1And(IsNotNull("c"), in)))
+    assert(toV1("IN", 3, str("a  "), str("bc ")) ===
+      Some(In("c", Array("a", "a ", "a  ", "bc", "bc "))))
+    // U+1F600 is one character, but 4 bytes in UTF-8 and 2 chars in UTF-16
+    val e = new String(Character.toChars(0x1F600))
+    assert(toV1("=", 3, str(e + "  ")) === Some(In("c", Array(e, e + " ", e + "  "))))
+    // a literal without trailing spaces matches only itself
+    assert(toV1("=", 2, str("ab")) === Some(EqualTo("c", "ab")))
+    assert(toV1("<=>", 2, str("ab")) === Some(EqualNullSafe("c", "ab")))
+
+    // not converted: a non-binary collation, a literal not padded to the length, too many values
+    assert(toV1("=", 3, str("a  ", StringType("UTF8_LCASE"))).isEmpty)
+    assert(toV1("=", 3, str("a")).isEmpty)
+    assert(toV1("=", 255, str(" " * 255)).get.asInstanceOf[In].values.length === 256)
+    assert(toV1("=", 256, str(" " * 256)).isEmpty)
+    // the bound applies to the total: each literal needs 200 values, together 400
+    assert(toV1("IN", 200, str("a" + " " * 199), str("b" + " " * 199)).isEmpty)
   }
 
   test("IsNull") {

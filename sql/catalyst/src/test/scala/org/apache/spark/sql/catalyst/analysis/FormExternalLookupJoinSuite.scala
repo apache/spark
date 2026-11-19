@@ -229,6 +229,19 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     }
   }
 
+  test("a cross join over a lookup-only table forms an inner lookup join") {
+    // As for an ordinary join, where a cross join is an inner one, predicate pushdown can then
+    // move a key into it from a filter above.
+    Seq(stream.join(lookupOnly, Cross), stream.join(lookupOnly, Cross, Some(idsEqual))).foreach {
+      plan =>
+        val analyzed = analyze(plan)
+        CheckExternalLookupJoin(analyzed)
+        val formed = FormExternalLookupJoin(analyzed).asInstanceOf[ExternalLookupJoin]
+        assert(formed.joinType === Inner)
+        assert(formed.condition === analyzed.asInstanceOf[Join].condition)
+    }
+  }
+
   test("validation and conversion reject a lookup-only join with the same reason") {
     Seq(
       // Only a stream-static join, with the lookup-only table on the right side.
@@ -238,9 +251,6 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
         Map.empty[String, String]),
       (stream.join(lookupOnly, RightOuter, Some(idsEqual)), "JOIN_TYPE",
         joinType("RIGHT OUTER")),
-      // A cross join fails with its join type, with or without a later filter.
-      (stream.join(lookupOnly, Cross), "JOIN_TYPE", joinType("CROSS")),
-      (stream.join(lookupOnly, Cross).where(idsEqual), "JOIN_TYPE", joinType("CROSS")),
       // No join strategy hint applies to an external lookup join; sort merge is named MERGE.
       (stream.hint("broadcast").join(lookupOnly, Inner, Some(idsEqual)),
         "CONFLICTING_JOIN_STRATEGY", Map("strategy" -> "BROADCAST")),
@@ -345,23 +355,9 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
     assert(FormExternalLookupJoin(analyzed).isInstanceOf[ExternalLookupJoin])
   }
 
-  test("a join without a condition passes analysis and fails when optimization starts") {
-    // Even when a later filter holds the condition, which operator optimization would push
-    // into the join.
-    Seq(
-      stream.join(lookupOnly),
-      stream.join(lookupOnly).where(idsEqual)).foreach { plan =>
-      val analyzed = analyze(plan)
-      // The classic Dataset API analyzes a USING join first as a join without a condition.
-      CheckExternalLookupJoin(analyzed)
-      checkError(
-        exception = intercept[AnalysisException] { FormExternalLookupJoin(analyzed) },
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
-    }
-  }
-
-  test("validation of a streaming write rejects a join without a condition") {
+  test("a join without a condition passes analysis and is formed without one") {
+    // As for an ordinary join, operator optimization can push a key from a later filter into the
+    // join. Lookup planning reports a join that has none then.
     def write(query: LogicalPlan): WriteToStream = WriteToStream("query", None, "/checkpoint",
       LookupCapabilityTable(Set.empty), OutputMode.Append(), deleteCheckpointOnStop = false,
       query, None, None)
@@ -369,13 +365,13 @@ class FormExternalLookupJoinSuite extends AnalysisTest {
       stream.join(lookupOnly),
       stream.join(lookupOnly).where(idsEqual)).foreach { plan =>
       val analyzed = analyze(plan)
-      // The query of a streaming write is analyzed in full, so the condition cannot come later.
-      checkError(
-        exception = intercept[AnalysisException] { CheckExternalLookupJoin(write(analyzed)) },
-        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-        parameters = Map.empty)
+      CheckExternalLookupJoin(analyzed)
+      CheckExternalLookupJoin(write(analyzed))
+      val formed = FormExternalLookupJoin(analyzed).collectFirst {
+        case join: ExternalLookupJoin => join
+      }
+      assert(formed.map(_.condition) === Some(None))
     }
-    CheckExternalLookupJoin(write(analyze(innerJoinOnId(lookupOnly))))
   }
 
   test("validation leaves a join that is not resolved to the analyzer's join checks") {

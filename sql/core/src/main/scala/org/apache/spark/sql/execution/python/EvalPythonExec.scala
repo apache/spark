@@ -78,11 +78,8 @@ trait EvalPythonExec extends UnaryExecNode {
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
-  /** The input rows of the evaluator, copied unless it consumes each before the next. */
-  protected def evaluatorInput: RDD[InternalRow] = child.execute().map(_.copy())
-
   protected override def doExecute(): RDD[InternalRow] = {
-    val inputRDD = evaluatorInput
+    val inputRDD = child.execute().map(_.copy())
     if (conf.usePartitionEvaluator) {
       inputRDD.mapPartitionsWithEvaluator(evaluatorFactory)
     } else {

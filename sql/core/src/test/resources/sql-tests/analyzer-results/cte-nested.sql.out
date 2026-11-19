@@ -93,6 +93,323 @@ Project [scalar-subquery#x [id#xL] AS scalarsubquery(id)#xL]
 
 
 -- !query
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+) FROM VALUES (0) AS o(id)
+-- !query analysis
+Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias correlated
+:     :     +- Project [id#x]
+:     :        +- Filter (id#x = outer(id#x))
+:     :           +- SubqueryAlias r
+:     :              +- LocalRelation [id#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias unreferenced
+:     :     +- Project [id#x, id#x]
+:     :        +- Join LeftOuter, (id#x = id#x)
+:     :           :- SubqueryAlias l
+:     :           :  +- LocalRelation [id#x]
+:     :           +- SubqueryAlias correlated
+:     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+:     +- Project [1 AS 1#x]
+:        +- OneRowRelation
++- SubqueryAlias o
+   +- LocalRelation [id#x]
+
+
+-- !query
+SELECT (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id)
+  SELECT count(*) FROM correlated
+) FROM VALUES (0) AS o(id)
+-- !query analysis
+Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#xL]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias correlated
+:     :     +- Project [id#x]
+:     :        +- Filter (id#x = outer(id#x))
+:     :           +- SubqueryAlias r
+:     :              +- LocalRelation [id#x]
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias unreferenced
+:     :     +- Project [id#x, id#x]
+:     :        +- Join LeftOuter, (id#x = id#x)
+:     :           :- SubqueryAlias l
+:     :           :  +- LocalRelation [id#x]
+:     :           +- SubqueryAlias correlated
+:     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+:     +- Aggregate [count(1) AS count(1)#xL]
+:        +- SubqueryAlias correlated
+:           +- CTERelationRef xxxx, true, [id#x], false, false, 2
++- SubqueryAlias o
+   +- LocalRelation [id#x]
+
+
+-- !query
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT 1
+)
+-- !query analysis
+Project [id#x]
++- Filter exists#x [id#x]
+   :  +- WithCTE
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias correlated
+   :     :     +- Project [id#x]
+   :     :        +- Filter (id#x = outer(id#x))
+   :     :           +- SubqueryAlias r
+   :     :              +- LocalRelation [id#x]
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias unreferenced
+   :     :     +- Project [id#x, id#x]
+   :     :        +- Join FullOuter, (id#x = id#x)
+   :     :           :- SubqueryAlias l
+   :     :           :  +- LocalRelation [id#x]
+   :     :           +- SubqueryAlias correlated
+   :     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+   :     +- Project [1 AS 1#x]
+   :        +- OneRowRelation
+   +- SubqueryAlias o
+      +- LocalRelation [id#x]
+
+
+-- !query
+SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+  WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id),
+  unreferenced AS (SELECT * FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id)
+  SELECT * FROM correlated
+)
+-- !query analysis
+Project [id#x]
++- Filter exists#x [id#x]
+   :  +- WithCTE
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias correlated
+   :     :     +- Project [id#x]
+   :     :        +- Filter (id#x = outer(id#x))
+   :     :           +- SubqueryAlias r
+   :     :              +- LocalRelation [id#x]
+   :     :- CTERelationDef xxxx, false
+   :     :  +- SubqueryAlias unreferenced
+   :     :     +- Project [id#x, id#x]
+   :     :        +- Join FullOuter, (id#x = id#x)
+   :     :           :- SubqueryAlias l
+   :     :           :  +- LocalRelation [id#x]
+   :     :           +- SubqueryAlias correlated
+   :     :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+   :     +- Project [id#x]
+   :        +- SubqueryAlias correlated
+   :           +- CTERelationRef xxxx, true, [id#x], false, false, 2
+   +- SubqueryAlias o
+      +- LocalRelation [id#x]
+
+
+-- !query
+set spark.sql.analyzer.singlePassResolver.dualRunWithLegacy = false
+-- !query analysis
+SetCommand (spark.sql.analyzer.singlePassResolver.dualRunWithLegacy,Some(false))
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias unreferenced
+:     +- Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#xL]
+:        :  +- WithCTE
+:        :     :- CTERelationDef xxxx, false
+:        :     :  +- SubqueryAlias correlated
+:        :     :     +- Project [id#x]
+:        :     :        +- Filter (id#x = outer(id#x))
+:        :     :           +- SubqueryAlias r
+:        :     :              +- LocalRelation [id#x]
+:        :     +- Aggregate [count(1) AS count(1)#xL]
+:        :        +- Join LeftOuter, (id#x = id#x)
+:        :           :- SubqueryAlias l
+:        :           :  +- LocalRelation [id#x]
+:        :           +- SubqueryAlias correlated
+:        :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+:        +- SubqueryAlias o
+:           +- LocalRelation [id#x]
++- Project [1 AS 1#x]
+   +- OneRowRelation
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+),
+other_unreferenced AS (SELECT * FROM unreferenced)
+SELECT 1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias unreferenced
+:     +- Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#xL]
+:        :  +- WithCTE
+:        :     :- CTERelationDef xxxx, false
+:        :     :  +- SubqueryAlias correlated
+:        :     :     +- Project [id#x]
+:        :     :        +- Filter (id#x = outer(id#x))
+:        :     :           +- SubqueryAlias r
+:        :     :              +- LocalRelation [id#x]
+:        :     +- Aggregate [count(1) AS count(1)#xL]
+:        :        +- Join LeftOuter, (id#x = id#x)
+:        :           :- SubqueryAlias l
+:        :           :  +- LocalRelation [id#x]
+:        :           +- SubqueryAlias correlated
+:        :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+:        +- SubqueryAlias o
+:           +- LocalRelation [id#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias other_unreferenced
+:     +- Project [scalarsubquery(id)#xL]
+:        +- SubqueryAlias unreferenced
+:           +- CTERelationRef xxxx, true, [scalarsubquery(id)#xL], false, false, 1
++- Project [1 AS 1#x]
+   +- OneRowRelation
+
+
+-- !query
+WITH unreferenced AS (
+  SELECT * FROM VALUES (0) AS o(id) WHERE EXISTS (
+    SELECT * FROM VALUES (0) AS m(id) WHERE EXISTS (
+      WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = m.id)
+      SELECT 1 FROM VALUES (0), (1) AS l(id) FULL OUTER JOIN correlated ON l.id = correlated.id
+    )
+  )
+)
+SELECT 1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias unreferenced
+:     +- Project [id#x]
+:        +- Filter exists#x []
+:           :  +- Project [id#x]
+:           :     +- Filter exists#x [id#x]
+:           :        :  +- WithCTE
+:           :        :     :- CTERelationDef xxxx, false
+:           :        :     :  +- SubqueryAlias correlated
+:           :        :     :     +- Project [id#x]
+:           :        :     :        +- Filter (id#x = outer(id#x))
+:           :        :     :           +- SubqueryAlias r
+:           :        :     :              +- LocalRelation [id#x]
+:           :        :     +- Project [1 AS 1#x]
+:           :        :        +- Join FullOuter, (id#x = id#x)
+:           :        :           :- SubqueryAlias l
+:           :        :           :  +- LocalRelation [id#x]
+:           :        :           +- SubqueryAlias correlated
+:           :        :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+:           :        +- SubqueryAlias m
+:           :           +- LocalRelation [id#x]
+:           +- SubqueryAlias o
+:              +- LocalRelation [id#x]
++- Project [1 AS 1#x]
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE VIEW unreferenced_cte_view AS
+WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1 AS one
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`unreferenced_cte_view`, WITH unreferenced AS (
+  SELECT (
+    WITH correlated AS (SELECT * FROM VALUES (0), (1) AS r(id) WHERE r.id = o.id)
+    SELECT count(*) FROM VALUES (0), (1) AS l(id) LEFT JOIN correlated ON l.id = correlated.id
+  ) FROM VALUES (0) AS o(id)
+)
+SELECT 1 AS one, false, true, PersistedView, COMPENSATION, true
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias unreferenced
+      :     +- Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#xL]
+      :        :  +- WithCTE
+      :        :     :- CTERelationDef xxxx, false
+      :        :     :  +- SubqueryAlias correlated
+      :        :     :     +- Project [id#x]
+      :        :     :        +- Filter (id#x = outer(id#x))
+      :        :     :           +- SubqueryAlias r
+      :        :     :              +- LocalRelation [id#x]
+      :        :     +- Aggregate [count(1) AS count(1)#xL]
+      :        :        +- Join LeftOuter, (id#x = id#x)
+      :        :           :- SubqueryAlias l
+      :        :           :  +- LocalRelation [id#x]
+      :        :           +- SubqueryAlias correlated
+      :        :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+      :        +- SubqueryAlias o
+      :           +- LocalRelation [id#x]
+      +- Project [1 AS one#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM unreferenced_cte_view
+-- !query analysis
+Project [one#x]
++- SubqueryAlias spark_catalog.default.unreferenced_cte_view
+   +- View (`spark_catalog`.`default`.`unreferenced_cte_view`, [one#x])
+      +- Project [cast(one#x as int) AS one#x]
+         +- WithCTE
+            :- CTERelationDef xxxx, false
+            :  +- SubqueryAlias unreferenced
+            :     +- Project [scalar-subquery#x [id#x] AS scalarsubquery(id)#xL]
+            :        :  +- WithCTE
+            :        :     :- CTERelationDef xxxx, false
+            :        :     :  +- SubqueryAlias correlated
+            :        :     :     +- Project [id#x]
+            :        :     :        +- Filter (id#x = outer(id#x))
+            :        :     :           +- SubqueryAlias r
+            :        :     :              +- LocalRelation [id#x]
+            :        :     +- Aggregate [count(1) AS count(1)#xL]
+            :        :        +- Join LeftOuter, (id#x = id#x)
+            :        :           :- SubqueryAlias l
+            :        :           :  +- LocalRelation [id#x]
+            :        :           +- SubqueryAlias correlated
+            :        :              +- CTERelationRef xxxx, true, [id#x], false, false, 2
+            :        +- SubqueryAlias o
+            :           +- LocalRelation [id#x]
+            +- Project [1 AS one#x]
+               +- OneRowRelation
+
+
+-- !query
+DROP VIEW unreferenced_cte_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`unreferenced_cte_view`, false, true, false
+
+
+-- !query
+reset spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+-- !query analysis
+ResetCommand spark.sql.analyzer.singlePassResolver.dualRunWithLegacy
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))
