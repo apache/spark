@@ -3877,6 +3877,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "invalidValue" -> toSQLValue(value, StringType)))
   }
 
+  /** A NULL element or field of a parse_sql context argument. The value is named as is. */
+  def invalidParseSqlContextNull(parameter: String, nullPart: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT",
+      messageParameters = Map(
+        "functionName" -> toSQLId("parse_sql"),
+        "parameter" -> toSQLId(parameter),
+        "invalidValue" -> nullPart))
+  }
+
   def parseSqlAnalyzeRequiresSession(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "PARSE_SQL_ANALYZE_REQUIRES_SESSION",

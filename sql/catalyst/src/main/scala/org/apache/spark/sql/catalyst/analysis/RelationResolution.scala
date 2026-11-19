@@ -162,6 +162,19 @@ class RelationResolution(
   def resolveRelation(
       u: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
+    if (u.getTagValue(SuppliedRelationRegistry.CATALOG_TARGET_TAG).isDefined) {
+      // A catalog-only command target is never replaced by a supplied relation.
+      SuppliedRelationRegistry.create(Nil).runWith {
+        resolveAnyRelation(u, timeTravelSpec)
+      }
+    } else {
+      resolveAnyRelation(u, timeTravelSpec)
+    }
+  }
+
+  private def resolveAnyRelation(
+      u: UnresolvedRelation,
+      timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     val isWriteTarget = u.options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
     val hasTimeTravelWriteOptions =
       isWriteTarget && CatalogV2Util.containsTimeTravelOptions(u.options)

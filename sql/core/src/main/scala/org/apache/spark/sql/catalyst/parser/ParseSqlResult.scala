@@ -216,10 +216,12 @@ object ParseSqlResult {
                 inCallConf(callConf) { successJson(plan, None, Some(e), Some(scope), span) }
               case scala.Right((variables, relations, markers)) =>
                 // Caller-supplied overlays eclipse the real objects for this statement only.
-                val (analyzed, error) = SuppliedVariableRegistry.create(variables).runWith {
-                  SuppliedRelationRegistry.create(relations).runWith {
-                    inCallConf(callConf) {
-                      analyze(session, analyzerOpt, plan, markers)
+                val (analyzed, error) = CallAnalyzerRegistry.create(analyzerOpt).runWith {
+                  SuppliedVariableRegistry.create(variables).runWith {
+                    SuppliedRelationRegistry.create(relations).runWith {
+                      inCallConf(callConf) {
+                        analyze(session, analyzerOpt, plan, markers)
+                      }
                     }
                   }
                 }
@@ -367,6 +369,8 @@ object ParseSqlResult {
       state.resourceLoader,
       state.catalog.functionExpressionBuilder)
     state.catalog.copyStateTo(catalog)
+    // The function registries are shared with the session, so load through its monitor.
+    catalog.registryMonitor = state.catalog
     catalog
   }
 
@@ -521,6 +525,15 @@ object ParseSqlResult {
    * arguments would be. Markers the plan does not use leave it unchanged.
    */
   private def bindSuppliedParameterMarkers(
+      plan: LogicalPlan,
+      markers: Seq[(String, DataType)]): LogicalPlan = plan match {
+    // EXPLAIN and DESCRIBE QUERY hold the statement they supervise, so its markers are bound there.
+    case s: SupervisingCommand if markers.nonEmpty =>
+      s.withTransformedSupervisedPlan(bindSuppliedParameterMarkers(_, markers))
+    case _ => bindOwnParameterMarkers(plan, markers)
+  }
+
+  private def bindOwnParameterMarkers(
       plan: LogicalPlan,
       markers: Seq[(String, DataType)]): LogicalPlan = {
     val used = if (markers.isEmpty) None else collectPlanReferences(plan).parameterMarkers
@@ -761,6 +774,10 @@ object ParseSqlResult {
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case i: InsertIntoStatement =>
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
+      case i: InsertIntoSuppliedRelation =>
+        // The supplied relation is the target, held outside the children.
+        visitPlan(i.table, scope, TableRefRole.Target)(f)
+        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
         visitPlan(c.query, nextScope, TableRefRole.Source)(f)
@@ -986,7 +1003,12 @@ object ParseSqlResult {
           add(catalogIdentParts(r.catalog.name(), r.identifier))
         case l: LocalRelation =>
           // A caller-supplied relation (relations overlay) is named by its canonical identity.
-          l.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG).foreach(add)
+          // A global temp view's identity holds only the database name, so it is qualified here.
+          l.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG).foreach {
+            case Seq(db, name) if db == SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE) =>
+              add(globalTempIdent(name))
+            case identity => add(identity)
+          }
         case _ =>
       }
     }
@@ -1279,16 +1301,24 @@ object ParseSqlResult {
     }
     // An unqualified name takes the first entry of the statement's path that has it, as in
     // FunctionResolution. Without SET PATH the path follows the session function order.
-    def onPath(name: String): Option[Seq[String]] =
-      scope.catalogManager.resolutionPathEntriesForAnalysis(None, Nil).iterator.map { e =>
+    def onPath(name: String): Option[Seq[String]] = {
+      val entries = scope.catalogManager.resolutionPathEntriesForAnalysis(None, Nil)
+      // The current catalog and schema, which the fallback below qualifies with. A last entry
+      // equal to it would only repeat that fallback, so its metastore probe is skipped.
+      val fallback = scope.catalogManager.currentCatalog.name() +:
+        scope.catalogManager.currentNamespace.toSeq
+      entries.iterator.zipWithIndex.map { case (e, i) =>
         if (isSystemEntry(e, CatalogManager.BUILTIN_NAMESPACE)) {
           Option.when(isBuiltin(name) || isSessionBuiltin(name))(builtinIdent(name))
         } else if (isSystemEntry(e, CatalogManager.SESSION_NAMESPACE)) {
           Option.when(isTemp(name))(sessionIdent(name))
+        } else if (i == entries.size - 1 && e == fallback) {
+          None
         } else {
           persistentIn(e, name)
         }
       }.collectFirst { case Some(ident) => ident }
+    }
     parts match {
       case Seq(name) =>
         onPath(name).getOrElse(qualifyWithCurrentNamespace(parts, scope))
@@ -1341,6 +1371,7 @@ object ParseSqlResult {
     case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
     case i: InsertIntoStatement => primaryQueryPlan(i.query)
+    case i: InsertIntoSuppliedRelation => primaryQueryPlan(i.query)
     case d: DataWritingCommand => primaryQueryPlan(d.query)
     // Row-level rewrites add internal columns; leave them out of select_list.
     case _: ReplaceData | _: WriteDelta => plan

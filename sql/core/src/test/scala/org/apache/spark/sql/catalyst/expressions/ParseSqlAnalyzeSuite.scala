@@ -1485,11 +1485,13 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       sql("DECLARE VARIABLE parse_sql_existing_v INT DEFAULT 1")
       try {
+        // The overlay shadows the declared variable with a STRING type for this call only.
         val json = spark.sql(
           """SELECT parse_sql(
-            |  'SELECT system.session.v AS x',
+            |  'SELECT system.session.parse_sql_existing_v AS x',
             |  'ANALYZE',
-            |  variables => array(named_struct('name', 'system.session.v', 'type', 'INT')))
+            |  variables => array(named_struct(
+            |    'name', 'system.session.parse_sql_existing_v', 'type', 'STRING')))
             |""".stripMargin).head().getString(0)
         val analyzed = parse(json) match {
           case JArray(List(value: JObject)) => value
@@ -1497,7 +1499,10 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
         }
         assert(analyzed \ "analyze_success" === JBool(true), json)
         assert(analyzed \ "select_list" === JArray(List(
-          JObject("name" -> JArray(List(JString("x"))), "type" -> jsonInt))))
+          JObject("name" -> JArray(List(JString("x"))), "type" -> jsonString))))
+        // The overlay is gone after the call, so the declared INT variable is typed as before.
+        assert(spark.sql("SELECT parse_sql_existing_v").schema.head.dataType ===
+          DataTypes.IntegerType)
         assert(spark.sql("SELECT parse_sql_existing_v").head().getInt(0) === 1)
       } finally {
         sql("DROP TEMPORARY VARIABLE parse_sql_existing_v")
@@ -1960,6 +1965,218 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       assert(results.map(_ \ "analyze_success") === List(JBool(true), JBool(true)))
       assert(results(0) \ "select_list" === typedColumns("x" -> jsonInt))
       assert(results(1) \ "select_list" === typedColumns("v" -> jsonInt))
+    }
+  }
+
+
+  test("ANALYZE reports a supplied global temp relation under the global temp database") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val globalDb = spark.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val result = evalCall(
+        s"SELECT parse_sql('SELECT a FROM $globalDb.parse_sql_gt; " +
+          s"INSERT INTO $globalDb.parse_sql_gt SELECT 1', 'ANALYZE', " +
+          s"relations => array(named_struct('name', '$globalDb.parse_sql_gt', 'schema', 'a INT')))")
+      assert(result.head \ "source_table_references" === JArray(List(
+        ref("spark_catalog", globalDb, "parse_sql_gt"))), result)
+      assert(result(1) \ "analyze_success" === JBool(true), result)
+      assert(result(1) \ "target_table_references" === JArray(List(
+        ref("spark_catalog", globalDb, "parse_sql_gt"))), result)
+    }
+  }
+
+  test("ANALYZE reports an INSERT target on a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val result = evalCall(
+        "SELECT parse_sql('INSERT INTO parse_sql_ins SELECT 1, ''x''', 'ANALYZE', " +
+          "relations => array(named_struct('name', 'parse_sql_ins', 'schema', 'a INT, b STRING')))")
+      assert(result.head \ "analyze_success" === JBool(true), result)
+      assert(result.head \ "target_table_references" === JArray(List(
+        ref("spark_catalog", "default", "parse_sql_ins"))), result)
+      assert(result.head \ "select_list" === typedColumns("a" -> jsonInt, "b" -> jsonString),
+        result)
+    }
+  }
+
+  test("ANALYZE qualifies an unqualified supplied relation with the call's schema") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withDatabase("parse_sql_rs") {
+        sql("CREATE DATABASE parse_sql_rs")
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM parse_sql_rs_u', 'ANALYZE', " +
+            "current_schema => 'parse_sql_rs', " +
+            "relations => array(named_struct('name', 'parse_sql_rs_u', 'schema', 'a INT')))")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "source_table_references" === JArray(List(
+          ref("spark_catalog", "parse_sql_rs", "parse_sql_rs_u"))), result)
+      }
+    }
+  }
+
+  test("ANALYZE resolves a view body in the view's own schema") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withDatabase("parse_sql_vw_a", "parse_sql_vw_b") {
+        sql("CREATE DATABASE parse_sql_vw_a")
+        sql("CREATE DATABASE parse_sql_vw_b")
+        sql("CREATE TABLE parse_sql_vw_a.t (a INT) USING parquet")
+        sql("CREATE TABLE parse_sql_vw_b.t (a STRING) USING parquet")
+        // The body names `t` unqualified, so it is created while parse_sql_vw_a is current.
+        sql("USE parse_sql_vw_a")
+        try {
+          sql("CREATE VIEW v AS SELECT a FROM t")
+        } finally {
+          sql("USE default")
+        }
+        val result = evalCall(
+          "SELECT parse_sql('SELECT a FROM parse_sql_vw_a.v', 'ANALYZE', " +
+            "current_schema => 'parse_sql_vw_b')")
+        assert(result.head \ "analyze_success" === JBool(true), result)
+        assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+      }
+    }
+  }
+
+  test("ANALYZE resolves an EXECUTE IMMEDIATE body under the call's schema") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withDatabase("parse_sql_ei_s") {
+        sql("CREATE DATABASE parse_sql_ei_s")
+        sql("CREATE TABLE parse_sql_ei_s.parse_sql_ei_t (a INT) USING parquet")
+        withTable("parse_sql_ei_t") {
+          sql("CREATE TABLE parse_sql_ei_t (a STRING) USING parquet")
+          val result = evalCall(
+            "SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT a FROM parse_sql_ei_t''', " +
+              "'ANALYZE', current_schema => 'parse_sql_ei_s')")
+          assert(result.head \ "analyze_success" === JBool(true), result)
+          // The default table is a STRING, so the INT type shows the call's schema was used.
+          assert(result.head \ "select_list" === typedColumns("a" -> jsonInt), result)
+        }
+      }
+    }
+  }
+
+  test("ANALYZE hides supplied locals from an EXECUTE IMMEDIATE body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "variables => array(named_struct('name', 'proc.p', 'type', 'INT'))"
+      val direct = evalCall(s"SELECT parse_sql('SELECT proc.p AS x', 'ANALYZE', $overlay)")
+      assert(direct.head \ "analyze_success" === JBool(true), direct)
+      val dynamic = evalCall(
+        s"SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT proc.p AS x''', 'ANALYZE', $overlay)")
+      assert(dynamic.head \ "analyze_success" === JBool(false), dynamic)
+    }
+  }
+
+  test("ANALYZE shows session variables to an EXECUTE IMMEDIATE body") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "variables => array(named_struct('name', 'v', 'type', 'INT'))"
+      val dynamic = evalCall(
+        s"SELECT parse_sql('EXECUTE IMMEDIATE ''SELECT v AS x''', 'ANALYZE', $overlay)")
+      assert(dynamic.head \ "analyze_success" === JBool(true), dynamic)
+      assert(dynamic.head \ "select_list" === typedColumns("x" -> jsonInt), dynamic)
+    }
+  }
+
+  test("ANALYZE checks the REPLACE forms of an INSERT into a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "relations => array(named_struct('name', 'parse_sql_rep', 'schema', 'a INT'))"
+      def analyzeInsert(insert: String): JObject =
+        evalCall(s"SELECT parse_sql('$insert', 'ANALYZE', $overlay)").head
+
+      val where = analyzeInsert("INSERT INTO parse_sql_rep REPLACE WHERE a > 0 SELECT 1")
+      assert(where \ "analyze_success" === JBool(true), where)
+
+      val notBoolean = analyzeInsert("INSERT INTO parse_sql_rep REPLACE WHERE a SELECT 1")
+      assert(notBoolean \ "analyze_success" === JBool(false), notBoolean)
+      assert(errorClass(notBoolean) === JString("DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN"),
+        notBoolean)
+
+      val usingForm = analyzeInsert("INSERT INTO parse_sql_rep REPLACE USING (a) SELECT 1")
+      assert(usingForm \ "analyze_success" === JBool(false), usingForm)
+    }
+  }
+
+  test("ANALYZE types an INSERT with a static partition or BY NAME on a supplied relation") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "relations => array(named_struct('name', 'parse_sql_part', " +
+        "'schema', 'a INT, b STRING'))"
+      val partition = evalCall(
+        s"SELECT parse_sql('INSERT INTO parse_sql_part PARTITION (b = ''x'') SELECT 1', " +
+          s"'ANALYZE', $overlay)")
+      assert(partition.head \ "analyze_success" === JBool(true), partition)
+      val byName = evalCall(
+        s"SELECT parse_sql('INSERT INTO parse_sql_part BY NAME SELECT ''y'' AS b, 1 AS a', " +
+          s"'ANALYZE', $overlay)")
+      assert(byName.head \ "analyze_success" === JBool(true), byName)
+    }
+  }
+
+  test("ANALYZE does not let a supplied relation stand in for a catalog command target") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val overlay = "relations => array(named_struct('name', 'parse_sql_tgt', 'schema', 'a INT'))"
+      val statements = Seq(
+        "ALTER TABLE parse_sql_tgt ADD CONSTRAINT c CHECK (a > 0)",
+        "CACHE TABLE parse_sql_tgt",
+        "UNCACHE TABLE parse_sql_tgt")
+      statements.foreach { statement =>
+        // The catalog has no parse_sql_tgt, so the target must not resolve to the overlay.
+        val j = evalCall(s"SELECT parse_sql('$statement', 'ANALYZE', $overlay)").head
+        assert(j \ "analyze_success" === JBool(false), j)
+        assert(errorClass(j) === JString("TABLE_OR_VIEW_NOT_FOUND"), j)
+      }
+    }
+  }
+
+  test("ANALYZE binds markers inside EXPLAIN and DESCRIBE QUERY") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val explain = evalCall(
+        "SELECT parse_sql('EXPLAIN SELECT ? AS x', 'ANALYZE', " +
+          "parameter_markers => array(named_struct('name', '?', 'type', 'INT')))")
+      assert(explain.head \ "analyze_success" === JBool(true), explain)
+      val describe = evalCall(
+        "SELECT parse_sql('DESCRIBE QUERY SELECT :p AS x', 'ANALYZE', " +
+          "parameter_markers => array(named_struct('name', 'p', 'type', 'STRING')))")
+      assert(describe.head \ "analyze_success" === JBool(true), describe)
+    }
+  }
+
+  test("ANALYZE names a NULL context field without quotes") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val e = intercept[Exception] {
+        spark.sql("SELECT parse_sql('SELECT 1', 'ANALYZE', relations => array(" +
+          "named_struct('name', CAST(NULL AS STRING), 'schema', 'a INT')))").collect()
+      }
+      assert(e.getMessage.contains("but got NULL name"), e.getMessage)
+      assert(!e.getMessage.contains("'NULL name'"), e.getMessage)
+    }
+  }
+
+  test("ANALYZE reports a malformed relation schema on each statement") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val result = evalCall(
+        "SELECT parse_sql('SELECT 1; SELECT 2', 'ANALYZE', " +
+          "relations => array(named_struct('name', 'parse_sql_bad', 'schema', 'a')))")
+      assert(result.length === 2, result)
+      result.foreach { j =>
+        assert(j \ "analyze_success" === JBool(false), j)
+        assert(errorClass(j) === JString("INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT"), j)
+      }
+    }
+  }
+
+  test("ANALYZE fails the outer query for a blank current_catalog") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val e = intercept[Exception] {
+        spark.sql("SELECT parse_sql('SELECT 1', 'ANALYZE', current_catalog => ' ')").collect()
+      }
+      assert(e.getMessage.contains("PARSE_SQL_CONTEXT"), e.getMessage)
+    }
+  }
+
+  test("ANALYZE rejects a column as a context argument") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val e = intercept[AnalysisException] {
+        spark.sql("SELECT parse_sql('SELECT 1', 'ANALYZE', current_schema => c) " +
+          "FROM VALUES ('s') AS t(c)").collect()
+      }
+      assert(e.getMessage.contains("current_schema"), e.getMessage)
     }
   }
 

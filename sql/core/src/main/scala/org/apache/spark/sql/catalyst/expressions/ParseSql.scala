@@ -71,10 +71,11 @@ import org.apache.spark.unsafe.types.UTF8String
     `parse_sql` does not lend it its locals or cursors. `ANALYZE` uses the invoker's current
     catalog, schema, and SQL path unless `current_catalog`, `current_schema`, or
     `current_path` gives one for the call; the session is not changed. The body of an
-    `EXECUTE IMMEDIATE` is analyzed with the invoker's catalog, schema, and path even when
-    the call gives its own. It sees the call's `variables` and `relations`, whose
-    unqualified names are qualified with the call's catalog and schema. Analysis may still
-    run time-travel subqueries, infer file schemas, and call Python UDTF `analyze`.
+    `EXECUTE IMMEDIATE` is analyzed with the call's catalog, schema, and path. It sees the
+    call's session variables and `relations`, whose unqualified names are qualified with the
+    call's catalog and schema, but not its supplied locals such as a procedure parameter.
+    Analysis may still run time-travel subqueries, infer file schemas, and call Python UDTF
+    `analyze`.
     Statement length excludes surrounding
     whitespace and the terminating semicolon. Session parser extensions are not applied.
     The JSON contract may still change while spark.sql.function.parseSql.enabled remains
@@ -218,8 +219,8 @@ case class ParseSql(
 
   override val nodePatterns: Seq[TreePattern] = Seq(PARSE_SQL)
 
-  // A NULL current_catalog or current_schema is valid, so null propagation must not
-  // rewrite the call. eval returns NULL itself for a NULL statement or mode.
+  // Every context argument defaults to a NULL literal, so null propagation would fold every
+  // call that omits one to NULL. eval returns NULL itself for a NULL statement or mode.
   override def nullIntolerant: Boolean = false
 
   override def dataType: DataType = StringType
@@ -383,12 +384,12 @@ object ParseSql extends ExpressionBuilder {
       val n = arr.numElements()
       (0 until n).map { i =>
         if (arr.isNullAt(i)) {
-          throw QueryExecutionErrors.invalidParseSqlContext(parameter, "NULL")
+          throw QueryExecutionErrors.invalidParseSqlContextNull(parameter, "NULL")
         }
         val row = arr.getStruct(i, 2)
         def field(ord: Int, fieldName: String): String = {
           if (row.isNullAt(ord)) {
-            throw QueryExecutionErrors.invalidParseSqlContext(
+            throw QueryExecutionErrors.invalidParseSqlContextNull(
               parameter, s"NULL $fieldName")
           }
           val text = row.getUTF8String(ord).toString

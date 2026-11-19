@@ -17,7 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  AddCheckConstraint,
+  CacheTable,
+  Filter,
+  LogicalPlan,
+  SubqueryAlias,
+  UncacheTable
+}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.{
@@ -52,6 +59,27 @@ private[sql] object SuppliedRelationRegistry
     get().flatMap(_.collectFirst {
       case (providedName, schema) if sameName(providedName, nameParts, resolver) => schema
     })
+  }
+
+  /**
+   * Set on the relation that ADD CONSTRAINT, CACHE TABLE, or UNCACHE TABLE acts on. Such a target
+   * names a catalog object, so no supplied relation stands in for it.
+   */
+  val CATALOG_TARGET_TAG: TreeNodeTag[Unit] = TreeNodeTag[Unit]("suppliedCatalogTarget")
+
+  /** Tags the catalog-only command targets in `plan`. Does nothing without supplied relations. */
+  def markCatalogTargets(plan: LogicalPlan): Unit = {
+    if (get().nonEmpty) {
+      plan.foreach {
+        case AddCheckConstraint(Filter(_, u: UnresolvedRelation), _, _) =>
+          u.setTagValue(CATALOG_TARGET_TAG, ())
+        case CacheTable(u: UnresolvedRelation, _, _, _, _) =>
+          u.setTagValue(CATALOG_TARGET_TAG, ())
+        case UncacheTable(u: UnresolvedRelation, _, _) =>
+          u.setTagValue(CATALOG_TARGET_TAG, ())
+        case _ =>
+      }
+    }
   }
 
   def isSupplied(plan: LogicalPlan): Boolean = plan match {

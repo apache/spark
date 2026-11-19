@@ -1349,8 +1349,13 @@ class Analyzer(
       }
     }
 
-    def apply(plan: LogicalPlan)
-        : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      SuppliedRelationRegistry.markCatalogTargets(plan)
+      applyRule(plan)
+    }
+
+    private def applyRule(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
@@ -1594,6 +1599,23 @@ class Analyzer(
         i: InsertIntoStatement,
         local: LocalRelation): LogicalPlan = {
       val name = local.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG).getOrElse(Nil).quoted
+      i.replaceCriteriaOpt.foreach {
+        case criteria if criteria.isReplaceOnOrUsing =>
+          throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(name)
+        case InsertReplaceWhere(cond) =>
+          // Same check as a DSv2 table's REPLACE WHERE: the condition resolves against the
+          // target's columns and must be boolean.
+          val condition = resolveExpressionByPlanOutput(cond, local, throws = true)
+          if (condition.dataType != BooleanType) {
+            condition.failAnalysis(
+              errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+              messageParameters = Map(
+                "sqlExpr" -> toSQLExpr(condition),
+                "filter" -> toSQLExpr(condition),
+                "type" -> toSQLType(condition.dataType)))
+          }
+        case _ =>
+      }
       val byName = i.byName || i.userSpecifiedCols.nonEmpty
       val query =
         if (i.userSpecifiedCols.nonEmpty) createProjectForByNameQuery(name, i) else i.query

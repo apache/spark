@@ -49,6 +49,15 @@ private[sql] object SuppliedVariableRegistry
     })
   }
 
+  /**
+   * Runs `f` with only the session-shaped entries visible. Supplied script locals and function
+   * parameters are hidden, as they are for EXECUTE IMMEDIATE payloads.
+   */
+  def withoutLocals[A](f: => A): A = {
+    val sessionOnly = get().map(_.filter { case (name, _) => isSessionName(name) })
+    createHandle(sessionOnly.filter(_.nonEmpty)).runWith(f)
+  }
+
   def isSessionName(nameParts: Seq[String]): Boolean = nameParts.length == 1 || {
     if (nameParts.length == 2) {
       nameParts.head.equalsIgnoreCase(SESSION_NAMESPACE)
