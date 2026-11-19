@@ -850,8 +850,7 @@ class FilterPushdownSuite extends PlanTest {
         assert(filterConjuncts(optimized) === filterConjuncts(correctAnswer.analyze))
       }
 
-      // `f AND g != j AND j` (example 3 of the review): (g != j) ends the split, and j is
-      // filtered on below it.
+      // `f AND g != j AND j`: (g != j) ends the split, and j is filtered on below it.
       check(Optimize.execute(query($"f" && Not($"g" === $"j") && $"j")),
         testStringRelation
           .select($"a", $"b", $"e", f as "f")
@@ -891,10 +890,10 @@ class FilterPushdownSuite extends PlanTest {
       val two = query($"f" && Not($"g" === $"j") && $"j" && (Not($"j") || $"f"))
       check(Optimize.execute(two), twoAnswer)
       check(PushPredicateThroughNonJoin(two), twoAnswer)
-      // Also when that alias, computed in an earlier layer, can fail: only the aliases not
-      // computed yet are inlined, as a later pass reads the computed ones as columns. Checked
-      // after one application of the rule: later passes would place the condition there even if
-      // this one did not, so the whole batch cannot tell.
+      // Also when that alias, computed in an earlier layer, can fail, as the filter of that layer
+      // reads it, which computes it on every row that reaches the next one. Checked after one
+      // application of the rule: later passes would place the condition there even if this one
+      // did not, so the whole batch cannot tell.
       val udfF = ScalaUDF((s: String) => s.isEmpty, BooleanType, Seq($"e"), Seq(None),
         udfDeterministic = true)
       check(PushPredicateThroughNonJoin(testStringRelation
@@ -924,7 +923,7 @@ class FilterPushdownSuite extends PlanTest {
           .where($"j"))
 
       val twoAliases = testStringRelation.select($"a", f as "f", g as "g")
-      // `f != g AND f` (example 2 of the review): f is filtered on below (f != g).
+      // `f != g AND f`: f is filtered on below (f != g).
       check(Optimize.execute(twoAliases.where(Not($"f" === $"g") && $"f").analyze),
         testStringRelation
           .select($"a", $"b", $"e", f as "f")
@@ -1043,6 +1042,24 @@ class FilterPushdownSuite extends PlanTest {
             .where(Not($"g" === $"j") && $"j")
             .analyze)
       }
+      // Nor when a condition after the one that ends the split reads an alias that can fail,
+      // which a lower layer computes as it shares work with the alias read there, but no filter
+      // there reads: under whole-stage codegen, the layer's filter would compute it first. One
+      // application of the rule, as a later pass pushes `f2 > 0` below the top projection anyway.
+      val shared = ScalaUDF((s: String) => s, StringType, Seq($"e"), Seq(None),
+        udfDeterministic = true)
+      val failing = ScalaUDF((s: String) => s.length, IntegerType, Seq(shared), Seq(None),
+        udfDeterministic = true)
+      comparePlans(PushPredicateThroughNonJoin(testStringRelation
+          .select($"a", shared as "g2", failing as "f2", g as "g", j as "j")
+          .where($"g2" =!= "x" && Not($"g" === $"j") && $"f2" > 0)
+          .analyze),
+        testStringRelation
+          .select($"a", $"b", $"e", shared as "g2", failing as "f2")
+          .where($"g2" =!= "x")
+          .select($"a", $"g2", $"f2", g as "g", j as "j")
+          .where(Not($"g" === $"j") && $"f2" > 0)
+          .analyze)
       // Nor when the layer would also compute an alias that can fail and that no condition
       // reads, as it shares the regex of j: h calls a UDF over it.
       val udfOverRegex = ScalaUDF((s: Boolean) => s, BooleanType, Seq(j), Seq(None),

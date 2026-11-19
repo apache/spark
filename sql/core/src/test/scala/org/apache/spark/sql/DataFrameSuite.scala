@@ -3058,15 +3058,11 @@ class DataFrameSuite extends SharedSparkSession
       assert(split === unsplit)
     }
 
-    // With UDF results that can be null, the optimizer adds `isnotnull` checks for the columns
-    // of the later conditions (`InferFiltersFromConstraints`), which the split-off plan can
-    // evaluate ahead of the non-deterministic condition: without codegen ahead of all the
-    // conditions, with codegen just before the first condition reading the column, here the
-    // non-deterministic one in the second query. The split, which places these conditions before
-    // the checks are inferred, keeps the non-deterministic condition ahead of the conditions
-    // written after it, so, with and without codegen, it returns the rows that evaluating the
-    // conditions as written gives: `rand(10)` sees every row, and the first condition holds
-    // where it is above 0.5.
+    // With UDF results that can be null too, the split keeps the non-deterministic condition
+    // ahead of the conditions written after it, so, with and without codegen, it returns the rows
+    // that evaluating the conditions as written gives: `rand(10)` sees every row, and the first
+    // condition holds where it is above 0.5. `InferFiltersFromConstraints` infers no `isnotnull`
+    // check over these columns, as they can fail (SPARK-61823).
     val nullableF = udf((i: Long) => if (i % 7 == 3) null else java.lang.Long.valueOf(i))
     val nullableH = udf((i: Long) => if (i % 5 == 1) null else java.lang.Long.valueOf(i))
     def nullableDf: DataFrame = spark.range(0, 100, 1, 1)

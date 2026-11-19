@@ -852,4 +852,17 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       RLike(str, str), RLike(str, Upper(Literal("x"))))
       .foreach(r => assert(!r.cannotFailPattern, r))
   }
+
+  test("SPARK-60731: patterns that cannotFailPattern accepts match a long input") {
+    // `java.util.regex` matches `*` over a single character in a loop, where a quantified group
+    // or a `{}` quantifier recurses (see `isStackSafePattern`). 4 MB of supplementary characters
+    // around the match, in interpreted and codegen mode.
+    val half = new String(Character.toChars(0x1F600)) * (1 << 20)
+    val input = Literal(half + "a" + half)
+    Seq[StringRegexExpression](RLike(input, Literal(".*a.*")), Like(input, Literal("%a%_"), '\\'))
+      .foreach { r =>
+        assert(r.cannotFailPattern, r)
+        checkEvaluation(r, true)
+      }
+  }
 }
