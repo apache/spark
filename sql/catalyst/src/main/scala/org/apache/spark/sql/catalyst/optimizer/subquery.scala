@@ -771,9 +771,9 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // of DecorrelateInnerQuery are known not to work, so as not to make such queries worse
         // than before: where the outer input may give other rows when computed again (see
         // repeatableInput and mayMoveIntoOuterInput), and for outer references that are not
-        // orderable, for which the domain joins fail. So does a subquery with a Python or external
-        // UDF when DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED is off, since
-        // the UDF would then run on the values over no rows for every outer row (SPARK-61482).
+        // orderable, for which the domain joins fail. So does a subquery with a scalar Python or
+        // external UDF anywhere when the conditional evaluation of SPARK-61482 is off, since one
+        // in a value over no rows would then run for every outer row.
         // A filter above can also inline another subquery of `plan` through its alias, so those
         // are checked as well.
         lazy val domainJoinsWork = inputRepeatable &&
