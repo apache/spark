@@ -281,6 +281,9 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       ("TIMESTAMP_NTZ", "CAST(TIME '23:59:59.999999' AS TIMESTAMP_NTZ)", "localtimestamp()",
         "INTERVAL 1 DAY"),
       ("TIMESTAMP_NTZ", "CAST('now' AS TIMESTAMP_NTZ)", "localtimestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP_NTZ(9)", "CAST('now' AS TIMESTAMP_NTZ(9))", "localtimestamp()", "INTERVAL 1 DAY"),
+      ("TIMESTAMP_LTZ(9)", "CAST('now' AS TIMESTAMP_LTZ(9))", "current_timestamp()",
+        "INTERVAL 1 DAY"),
       ("DATE", "current_date()", "current_date()", "1"),
       ("DATE", "CAST('today' AS DATE)", "current_date()", "2")
     ).foreach { case (dataType, now, current, step) =>
@@ -356,11 +359,13 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   test("SPARK-60032: Check constraint added by ALTER TABLE on a fixed datetime") {
     // 'epoch' and a full datetime string do not read the current date, so the predicate is kept.
     Seq(
-      "created >= CAST('epoch' AS TIMESTAMP)",
-      "created >= 'epoch'",
-      "created >= CAST('2020-01-01 00:00:00' AS TIMESTAMP)").foreach { cond =>
+      "TIMESTAMP" -> "created >= CAST('epoch' AS TIMESTAMP)",
+      "TIMESTAMP" -> "created >= 'epoch'",
+      "TIMESTAMP" -> "created >= CAST('2020-01-01 00:00:00' AS TIMESTAMP)",
+      "TIMESTAMP_NTZ(9)" -> "created >= CAST('epoch' AS TIMESTAMP_NTZ(9))",
+      "TIMESTAMP_LTZ(9)" -> "created >= 'epoch'").foreach { case (dataType, cond) =>
       withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-        sql(s"CREATE TABLE $t (id INT, created TIMESTAMP) $defaultUsing")
+        sql(s"CREATE TABLE $t (id INT, created $dataType) $defaultUsing")
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
         assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
           cond)
@@ -2046,6 +2051,44 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         checkAnswer(spark.table(target),
           Seq(Row(1, 10, Seq(5, 6)), Row(2, 20, Seq(7, 8)),
             Row(3, 30, null), Row(4, 40, null)))
+      }
+    }
+  }
+
+  test("SPARK-61927: Check constraint is not evaluated on rows a join or a subquery removes") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", nonPartitionCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $source VALUES (-1, 10), (1, 20)")
+
+        sql(s"INSERT INTO $target SELECT s.id, s.value FROM $source s " +
+          "JOIN VALUES (20) AS v(value) ON s.value = v.value")
+        sql(s"INSERT INTO $target SELECT id, value FROM $source " +
+          "WHERE value IN (SELECT * FROM VALUES (20))")
+        checkAnswer(spark.table(target), Seq(Row(1, 20), Row(1, 20)))
+      }
+    }
+  }
+
+  test("SPARK-61927: Check constraint is not evaluated on source rows a merge does not insert") {
+    withNamespaceAndTable("ns", "tbl", rowLevelOPCatalog) { target =>
+      withNamespaceAndTable("ns", "tbl2", rowLevelOPCatalog) { source =>
+        sql(s"CREATE TABLE $target (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK (id > 0)) $defaultUsing")
+        sql(s"CREATE TABLE $source (id INT, value INT) $defaultUsing")
+        sql(s"INSERT INTO $target VALUES (5, 10)")
+        sql(s"INSERT INTO $source VALUES (-1, 10), (1, 20)")
+
+        sql(
+          s"""
+             |MERGE INTO $target t
+             |USING $source s
+             |ON t.value = s.value
+             |WHEN NOT MATCHED THEN INSERT(id, value) VALUES (s.id, s.value)
+             |""".stripMargin)
+        checkAnswer(spark.table(target), Seq(Row(5, 10), Row(1, 20)))
       }
     }
   }
