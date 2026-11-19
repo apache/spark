@@ -637,8 +637,11 @@ private[spark] object PythonWorkerFactory {
    * whose worker factories use it stops, so that it does not outlive its `SparkContext`.
    */
   private[spark] def clearGlobalPythonModulesDirectory(): Unit = synchronized {
-    globalPythonModules.foreach { case (_, dir) => Utils.deleteRecursively(dir) }
-    globalPythonModules = None
+    try {
+      globalPythonModules.foreach { case (_, dir) => Utils.deleteRecursively(dir) }
+    } finally {
+      globalPythonModules = None
+    }
   }
 
   /**
