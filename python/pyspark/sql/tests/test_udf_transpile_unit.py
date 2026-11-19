@@ -132,7 +132,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         class UnsupportedEx:
             def __call__(self, col):
                 if col is not None:
-                    return col in "4"
+                    return col in ["4"]
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": True}):
             call = UnsupportedEx()
@@ -2616,6 +2616,36 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         with self.sql_conf(_TRANSPILE_ON):
             self._fallback_reason(starts_at, B)
             u, _ = self._udf_and_warnings(up_guarded, S)
+            df = self.spark.createDataFrame([("a",)], "s string")
+            self.assertNotIn("raise_error", self._optimized_plan(df.select(u("s"))))
+
+    def test_udf_transpile_string_in(self):
+        # SPARK-XXXXX: `p in s` and `p not in s` lower to Catalyst contains and match
+        # Python, including the empty substring. A NULL operand raises like CPython,
+        # a proven-non-null branch skips the guard, and a non-string column or a
+        # list on the right falls back to Python.
+        S, B = StringType(), BooleanType()
+        has = lambda p, s: p in s  # noqa: E731
+        lacks = lambda p, s: p not in s  # noqa: E731
+        branch = lambda s: "y" if "ab" in s else "n"  # noqa: E731
+        has_guarded = lambda s: "a" in s if s is not None else None  # noqa: E731
+        in_list = lambda s: s in ["a", "b"]  # noqa: E731
+        pairs = [("ab", "abc"), ("b", "abc"), ("", "abc"), ("a", ""), ("ß", "straße")]
+        for func, rt, schema, rows in [
+            (has, B, "p string, s string", pairs),
+            (lacks, B, "p string, s string", pairs),
+            (branch, S, "s string", [("cab",), ("ba",)]),
+        ]:
+            with self.subTest(func=func):
+                expected = [func(*r) for r in rows]
+                self.assertEqual(self._vals(func, rt, schema, rows), expected)
+        self.assertEqual(self._vals(has_guarded, B, "s string", [("a",), (None,)]), [True, None])
+        self._raises(has, "p string, s string", [("a", None)], needle="`in`", return_type=B)
+        self._raises(lacks, "p string, s string", [(None, "a")], needle="`in`", return_type=B)
+        self._raises(has, "p long, s string", [(5, "a")], needle="", return_type=B)
+        with self.sql_conf(_TRANSPILE_ON):
+            self._fallback_reason(in_list, B)
+            u, _ = self._udf_and_warnings(has_guarded, B)
             df = self.spark.createDataFrame([("a",)], "s string")
             self.assertNotIn("raise_error", self._optimized_plan(df.select(u("s"))))
 
