@@ -21,10 +21,10 @@ import java.io.File
 import java.nio.file.{Files, Paths}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.Python.PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED
+import org.apache.spark.{SparkConf, SparkFiles}
+import org.apache.spark.internal.config.Python.{PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED, PYTHON_USE_DAEMON}
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonTableFunction, shouldTestPythonUDFs}
+import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonTableFunction, pysparkPythonPath, pythonPath, shouldTestPythonUDFs}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -36,6 +36,19 @@ import org.apache.spark.util.Utils
 class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
 
   private lazy val filesDir = Utils.createTempDir()
+
+  /** Writes an archive that holds the package `name` whose `value` is `value`. */
+  private def writePackage(archive: File, name: String, value: String): File = {
+    val out = new ZipOutputStream(Files.newOutputStream(archive.toPath))
+    try {
+      out.putNextEntry(new ZipEntry(s"$name/__init__.py"))
+      out.write(s"value = '$value'".getBytes("UTF-8"))
+      out.closeEntry()
+    } finally {
+      out.close()
+    }
+    archive
+  }
 
   // The application's Python files: a module, a package in a zip file, and a module whose name
   // a session can also use.
@@ -67,7 +80,12 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
     } finally {
       shadowOut.close()
     }
-    Seq(module, clash, pkg, token, shadow).map(_.getAbsolutePath)
+    // Packages in archives of each kind that PySpark adds, one with an upper-case extension.
+    val egg = writePackage(new File(dir, "global_py_files_egg.egg"), "global_py_files_egg", "egg")
+    val jar = writePackage(new File(dir, "global_py_files_jar.jar"), "global_py_files_jar", "jar")
+    val upper = writePackage(
+      new File(dir, "GLOBAL_PY_FILES_UPPER.ZIP"), "global_py_files_upper", "upper")
+    Seq(module, clash, pkg, token, shadow, egg, jar, upper).map(_.getAbsolutePath)
   }
 
   // Another file of the application: a module that is not one of its Python files.
@@ -88,12 +106,23 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
         .map(f => new File("/nonexistent", new File(f).getName).getPath).mkString(","))
 
   private val udtfName = "global_py_files_udtf"
+  private val countUDTFName = "global_py_files_count_udtf"
+  private def workerPythonPath: Seq[String] = Seq(pysparkPythonPath, pythonPath).filter(_.nonEmpty)
 
   // `analyze` runs in a Python worker on the driver, and `eval` in one on an executor.
   private val udtfScript =
     s"""
        |from pyspark.sql.functions import AnalyzeResult
        |from pyspark.sql.types import StringType, StructType
+       |
+       |def check_archives():
+       |    import global_py_files_egg
+       |    import global_py_files_jar
+       |    import global_py_files_upper
+       |    values = [m.value for m in [
+       |        global_py_files_egg, global_py_files_jar, global_py_files_upper]]
+       |    if values != ["egg", "jar", "upper"]:
+       |        raise Exception(f"Unexpected archive values {values}")
        |
        |def check_start_path():
        |    # The application's Python files are added after the worker has started.
@@ -114,6 +143,7 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
        |        except ModuleNotFoundError:
        |            pass
        |        check_start_path()
+       |        check_archives()
        |        return AnalyzeResult(
        |            schema=StructType()
        |                .add("module", StringType())
@@ -130,6 +160,7 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
        |        except ModuleNotFoundError:
        |            pass
        |        check_start_path()
+       |        check_archives()
        |        yield (
        |            global_py_files_module.value,
        |            global_py_files_pkg.value,
@@ -161,6 +192,57 @@ class PythonGlobalPyFilesSuite extends QueryTest with SharedSparkSession {
       session.artifactManager.addArtifact(
         Paths.get("pyfiles/global_py_files_clash.py"), clash.toPath, None)
       assert(runUDTF(session) === Seq(Row("global module", "global package", "session clash")))
+    }
+  }
+
+  test("SPARK-62000: Isolated session imports the Python files of the application without daemon") {
+    assume(shouldTestPythonUDFs)
+    val conf = spark.sparkContext.conf
+    conf.set(PYTHON_USE_DAEMON, false)
+    try {
+      // A new session gets a new Python worker factory, which starts simple workers.
+      assert(runUDTF(spark.newSession()) ===
+        Seq(Row("global module", "global package", "global clash")))
+    } finally {
+      conf.remove(PYTHON_USE_DAEMON)
+    }
+  }
+
+  test("SPARK-62000: Archive already on the start path of the workers is added once") {
+    assume(shouldTestPythonUDFs)
+    val countScript =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult
+         |from pyspark.sql.types import IntegerType, StructType
+         |
+         |class $countUDTFName:
+         |    @staticmethod
+         |    def analyze():
+         |        return AnalyzeResult(schema=StructType().add("entries", IntegerType()))
+         |
+         |    def eval(self):
+         |        import os
+         |        import sys
+         |        import global_py_files_pkg
+         |        archive = os.path.realpath(global_py_files_pkg.__file__.rsplit(".zip", 1)[0])
+         |        yield (sum(os.path.realpath(p) == archive + ".zip" for p in sys.path),)
+         |""".stripMargin
+    withTempDir { dir =>
+      // The workers start with a PYTHONPATH that names the archive's copy through another
+      // spelling of its path, as YARN's does on its executors.
+      val link = new File(dir, "link").toPath
+      Files.createSymbolicLink(link, Paths.get(SparkFiles.getRootDirectory()).toAbsolutePath)
+      val session = spark.newSession()
+      // The session's PYTHONPATH replaces the one of the test's Python functions, which finds
+      // pyspark, so it names that path too.
+      session.conf.set("spark.pythonWorkerEnv.PYTHONPATH",
+        (link.resolve("global_py_files_pkg.zip").toString +: workerPythonPath).mkString(":"))
+      session.udtf.registerPython(countUDTFName,
+        createUserDefinedPythonTableFunction(countUDTFName, countScript, returnType = None))
+      val rows = session.artifactManager.withResources {
+        session.sql(s"SELECT * FROM $countUDTFName()").collect().toSeq
+      }
+      assert(rows === Seq(Row(1)))
     }
   }
 

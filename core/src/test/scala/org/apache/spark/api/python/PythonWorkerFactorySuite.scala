@@ -17,7 +17,9 @@
 
 package org.apache.spark.api.python
 
+import java.io.File
 import java.net.SocketTimeoutException
+import java.nio.file.Files
 
 import scala.collection.mutable
 // scalastyle:off executioncontextglobal
@@ -29,10 +31,43 @@ import scala.concurrent.duration._
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 // Tests for PythonWorkerFactory.
 class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
+
+  test("SPARK-62000: Copies of the application's Python modules are cached and cleared") {
+    val conf = sc.getConf
+    val dir = Utils.createTempDir()
+    def module(name: String): File = {
+      val file = new File(dir, name)
+      Files.writeString(file.toPath, s"value = '$name'")
+      file
+    }
+    val first = module("cache_first.py")
+    val second = module("cache_second.py")
+    try {
+      val copies = PythonWorkerFactory.globalPythonModulesDirectory(conf, Seq(first))
+      val copy = new File(copies, first.getName)
+      assert(Files.readString(copy.toPath) === "value = 'cache_first.py'")
+      // The same modules share their copies.
+      assert(PythonWorkerFactory.globalPythonModulesDirectory(conf, Seq(first)) === copies)
+      // Other modules get a directory of their own.
+      val others = PythonWorkerFactory.globalPythonModulesDirectory(conf, Seq(first, second))
+      assert(others !== copies)
+      assert(new File(others, second.getName).isFile)
+      // A removed directory is made again.
+      Utils.deleteRecursively(others)
+      val again = PythonWorkerFactory.globalPythonModulesDirectory(conf, Seq(first, second))
+      assert(new File(again, second.getName).isFile)
+      // Clearing, as SparkEnv.stop does, deletes the directory.
+      PythonWorkerFactory.clearGlobalPythonModulesDirectory()
+      assert(!again.exists())
+    } finally {
+      PythonWorkerFactory.clearGlobalPythonModulesDirectory()
+      Utils.deleteRecursively(dir)
+    }
+  }
 
   test("createSimpleWorker() fails with a timeout error if worker does not connect back") {
     // It verifies that server side times out in accept(), if the worker does not connect back.

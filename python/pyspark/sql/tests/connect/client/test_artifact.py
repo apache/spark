@@ -278,6 +278,20 @@ class GlobalPyFilesPrecedenceTestsMixin:
             rows = session.range(1).select(func("id")).collect()
             self.assertEqual([r[0] for r in rows], ["global module, session clash"])
 
+    def test_global_py_files_session_archive_precedence(self):
+        # A session's archive is added in front of the application's files.
+        session = SparkSession.builder.remote(
+            f"sc://localhost:{DefaultChannelBuilder.default_port()}"
+        ).create()
+        with tempfile.TemporaryDirectory(prefix="test_global_py_files_archive_precedence") as d:
+            path = os.path.join(d, "session_clash.zip")
+            with zipfile.ZipFile(path, "w") as zf:
+                zf.writestr("global_py_files_clash.py", "value = 'session zip clash'")
+            session.addArtifacts(path, pyfile=True)
+            func = self.global_py_files_udf()
+            rows = session.range(1).select(func("id")).collect()
+            self.assertEqual([r[0] for r in rows], ["global module, session zip clash"])
+
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
 class GlobalPyFilesTests(

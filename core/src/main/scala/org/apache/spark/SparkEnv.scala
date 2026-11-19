@@ -291,6 +291,8 @@ class SparkEnv (
     }
     if (shouldStop) {
       pythonWorkers.values.foreach(_.stop())
+      // After the factories, whose workers import from it, have stopped.
+      PythonWorkerFactory.clearGlobalPythonModulesDirectory()
       udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
       _streamingShuffleOutputTracker.foreach(_.stop())

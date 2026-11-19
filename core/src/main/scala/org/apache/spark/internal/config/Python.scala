@@ -107,11 +107,15 @@ private[spark] object Python {
         "deploy mode get none. The workers add these files when they set up a task, and the " +
         "session's own files still come first. Workers started without the session's artifact " +
         "state, such as the Spark Connect foreachBatch and streaming listener workers, keep " +
-        "their previous path. Set to false when starting the application to restore the " +
+        "their previous path. The archives include the jars that --packages resolves for " +
+        "applications such as the Spark Connect server, and each of these workers reads the " +
+        "index of every listed archive, so large archives make its first tasks slower and use " +
+        "memory. Set to false when starting the application to avoid this and to restore the " +
         "previous behavior, where these workers can only import the session's own Python " +
         "files, except on YARN's application master and executors, which YARN gives these " +
         "files on their PYTHONPATH.")
       .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 

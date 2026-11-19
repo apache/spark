@@ -169,8 +169,10 @@ private[spark] class PythonWorkerFactory(
    * It takes the copies of these files in the default files directory, so that it works on every
    * host. spark-submit makes them in client mode outside YARN, and PySpark when it starts the
    * driver. A JVM driver on YARN in client mode and an application in standalone cluster deploy
-   * mode get no copies. It adds only the modules and the `.zip`, `.egg` and `.jar` archives, as
-   * PySpark does, not the rest of that directory.
+   * mode get no copies. It adds only the modules and the archives with PySpark's extensions,
+   * `.zip`, `.egg` and `.jar`, not the rest of that directory, which PySpark puts on its path. It
+   * leaves out an archive that the PYTHONPATH the workers start with already names, as YARN's
+   * does on its executors, so that the workers read it once.
    */
   private def globalPythonFilesPath: String = {
     val jobArtifactUUID = envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
@@ -184,8 +186,11 @@ private[spark] class PythonWorkerFactory(
         .distinct
         .filter(_.isFile)
       val modules = files.filter(_.getName.endsWith(".py"))
+      val startPath = pythonPath.split(File.pathSeparator).map(new File(_))
+        .filter(_.isAbsolute).map(_.getCanonicalPath).toSet
       val packages = files.filter { file =>
-        Seq(".zip", ".egg", ".jar").exists(file.getName.toLowerCase(Locale.ROOT).endsWith)
+        Seq(".zip", ".egg", ".jar").exists(file.getName.toLowerCase(Locale.ROOT).endsWith) &&
+          !startPath.contains(file.getCanonicalPath)
       }
       // A package is imported from its archive, and a module from a directory, which holds
       // only the modules.
@@ -628,11 +633,20 @@ private[spark] object PythonWorkerFactory {
   private var globalPythonModules: Option[(Seq[String], File)] = None
 
   /**
+   * Deletes the directory of copies of the application's Python modules, when the `SparkEnv`
+   * whose worker factories use it stops, so that it does not outlive its `SparkContext`.
+   */
+  private[spark] def clearGlobalPythonModulesDirectory(): Unit = synchronized {
+    globalPythonModules.foreach { case (_, dir) => Utils.deleteRecursively(dir) }
+    globalPythonModules = None
+  }
+
+  /**
    * Returns a directory under the local directory that holds copies of `modules`, the
    * application's Python modules, and nothing else, like `__pyfiles__` on YARN. It is created
    * once for each set of modules, which does not change while an application runs.
    */
-  private def globalPythonModulesDirectory(conf: SparkConf, modules: Seq[File]): File =
+  private[python] def globalPythonModulesDirectory(conf: SparkConf, modules: Seq[File]): File =
     synchronized {
       val paths = modules.map(_.getPath)
       globalPythonModules.collect {
