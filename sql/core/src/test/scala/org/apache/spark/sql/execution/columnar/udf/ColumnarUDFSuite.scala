@@ -161,11 +161,11 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   import testImplicits._
 
   private val addOne =
-    ColumnarUserDefinedFunction("add_one", Seq(LongType), LongType, Some(new AddOneFunction))
+    ColumnarUserDefinedFunction.create("add_one", Seq(LongType), LongType, new AddOneFunction)
   private val add =
-    ColumnarUserDefinedFunction("add", Seq(LongType, LongType), LongType, Some(new AddFunction))
+    ColumnarUserDefinedFunction.create("add", Seq(LongType, LongType), LongType, new AddFunction)
   private val shout =
-    ColumnarUserDefinedFunction("shout", Seq(StringType), StringType, Some(new ShoutFunction))
+    ColumnarUserDefinedFunction.create("shout", Seq(StringType), StringType, new ShoutFunction)
 
   private def evalNodes(plan: SparkPlan): Seq[EvalColumnarUDFsExec] = collect(plan) {
     case e: EvalColumnarUDFsExec => e
@@ -412,8 +412,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a function that is not deterministic in grouping and sort keys") {
-    val counter = ColumnarUserDefinedFunction(
-      "counter", Seq(LongType), LongType, Some(new CounterFunction), deterministic = false)
+    val counter = ColumnarUserDefinedFunction.create(
+      "counter", Seq(LongType), LongType, new CounterFunction).asNondeterministic()
     val grouped = spark.range(0, 10, 1, 1).groupBy(counter(col("id"))).count()
     checkAnswer(grouped, (1 to 10).map(i => Row(i.toLong, 1L)))
     val sorted = spark.range(0, 10, 1, 1).orderBy(counter(col("id")).desc)
@@ -466,8 +466,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("equal calls of a function that is not deterministic are evaluated separately") {
-    val counter = ColumnarUserDefinedFunction(
-      "counter", Seq(LongType), LongType, Some(new CounterFunction), deterministic = false)
+    val counter = ColumnarUserDefinedFunction.create(
+      "counter", Seq(LongType), LongType, new CounterFunction).asNondeterministic()
     val df = spark.range(0, 10, 1, 1).select(counter(col("id")), counter(col("id")))
     val rows = df.collect()
     assert(rows.length == 10)
@@ -494,10 +494,9 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a function that Spark cannot run fails when it is executed") {
-    val engineOnly = ColumnarUserDefinedFunction(
-      "engine_only", Seq(LongType), LongType,
-      engineImplementations = Seq(
-        ColumnarUDFImplementation("some-engine", Map("library" -> "/lib.so", "name" -> "f"))))
+    val engineOnly = ColumnarUserDefinedFunction.create("engine_only", Seq(LongType), LongType)
+      .withEngineImplementation(ColumnarUDFImplementation.create(
+        "some-engine", Map("library" -> "/lib.so", "name" -> "f")))
     val df = spark.range(5).select(engineOnly(col("id")))
     // It is planned, with its implementations on the node, for an engine to replace.
     val node = evalNodes(df.queryExecution.executedPlan).head
@@ -509,8 +508,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a function that returns one of its arguments fails") {
-    val identity = ColumnarUserDefinedFunction(
-      "identity", Seq(LongType), LongType, Some(new ReturnArgumentFunction))
+    val identity = ColumnarUserDefinedFunction.create(
+      "identity", Seq(LongType), LongType, new ReturnArgumentFunction)
     withTempPath { path =>
       spark.range(10).write.parquet(path.getCanonicalPath)
       // Over a columnar scan, and over a row-based child.
@@ -524,8 +523,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a function that returns a vector of another type fails") {
-    val wrongType = ColumnarUserDefinedFunction(
-      "wrong_type", Seq(StringType), LongType, Some(new ShoutFunction))
+    val wrongType = ColumnarUserDefinedFunction.create(
+      "wrong_type", Seq(StringType), LongType, new ShoutFunction)
     val df = Seq("a").toDF("s").select(wrongType(col("s")))
     checkError(
       exception = intercept[SparkRuntimeException](df.collect()),
@@ -536,8 +535,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("a function that returns a field of one of its arguments fails") {
     val structType = StructType(Seq(StructField("id", LongType)))
-    val field = ColumnarUserDefinedFunction(
-      "field", Seq(structType), LongType, Some(new ReturnFieldFunction))
+    val field = ColumnarUserDefinedFunction.create(
+      "field", Seq(structType), LongType, new ReturnFieldFunction)
     val df = spark.range(10).select(field(struct(col("id"))))
     checkError(
       exception = intercept[SparkRuntimeException](df.collect()),
@@ -546,10 +545,10 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a function that returns the elements or the keys of one of its arguments fails") {
-    val element = ColumnarUserDefinedFunction(
-      "element", Seq(ArrayType(LongType)), LongType, Some(new ReturnFieldFunction))
-    val key = ColumnarUserDefinedFunction(
-      "key", Seq(MapType(LongType, LongType)), LongType, Some(new ReturnFieldFunction))
+    val element = ColumnarUserDefinedFunction.create(
+      "element", Seq(ArrayType(LongType)), LongType, new ReturnFieldFunction)
+    val key = ColumnarUserDefinedFunction.create(
+      "key", Seq(MapType(LongType, LongType)), LongType, new ReturnFieldFunction)
     withTempPath { path =>
       spark.range(10).select(array(col("id")).as("a"), map(col("id"), col("id")).as("m"))
         .write.parquet(path.getCanonicalPath)
@@ -571,8 +570,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a function that returns no vector fails") {
-    val noVector = ColumnarUserDefinedFunction(
-      "no_vector", Seq(LongType), LongType, Some(new NullFunction))
+    val noVector = ColumnarUserDefinedFunction.create(
+      "no_vector", Seq(LongType), LongType, new NullFunction)
     checkError(
       exception = intercept[SparkRuntimeException] {
         spark.range(5).select(noVector(col("id"))).collect()
@@ -583,8 +582,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a function that fails") {
-    val failing = ColumnarUserDefinedFunction(
-      "failing", Seq(LongType), LongType, Some(new FailingFunction))
+    val failing = ColumnarUserDefinedFunction.create(
+      "failing", Seq(LongType), LongType, new FailingFunction)
     val e = intercept[SparkException] {
       spark.range(5).select(failing(col("id"))).collect()
     }
@@ -600,15 +599,15 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
   }
 
   test("a result of a user-defined type") {
-    val point = ColumnarUserDefinedFunction(
-      "point", Seq(LongType), new ExamplePointUDT, Some(new PointFunction))
+    val point = ColumnarUserDefinedFunction.create(
+      "point", Seq(LongType), new ExamplePointUDT, new PointFunction)
     val df = spark.range(3).select(point(col("id")))
     checkAnswer(df, (0 until 3).map(i => Row(new ExamplePoint(i.toDouble, i.toDouble))))
   }
 
   test("the nodes of a stage do not share an instance of a function") {
-    val counter = ColumnarUserDefinedFunction(
-      "counter", Seq(LongType), LongType, Some(new CounterFunction), deterministic = false)
+    val counter = ColumnarUserDefinedFunction.create(
+      "counter", Seq(LongType), LongType, new CounterFunction).asNondeterministic()
     // Nested calls are evaluated by two nodes. With an instance of its own, the outer one
     // counts from one.
     val df = spark.range(0, 5, 1, 1).select(counter(counter(col("id"))))
@@ -695,8 +694,8 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
 
   test("a qualified FILE result type cannot be registered") {
     withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "true") {
-      val file = ColumnarUserDefinedFunction(
-        "file_udf", Seq(LongType), FileType.external, Some(new AddOneFunction))
+      val file = ColumnarUserDefinedFunction.create(
+        "file_udf", Seq(LongType), FileType.external, new AddOneFunction)
       checkError(
         exception = intercept[AnalysisException](spark.udf.registerColumnar(file)),
         condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",

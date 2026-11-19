@@ -24,6 +24,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A columnar user-defined function: a scalar function that is evaluated one batch at a time,
@@ -31,19 +32,23 @@ import org.apache.spark.sql.types.DataType
  *
  * A function has any number of implementations, and whoever provides them makes sure that they
  * return the same results:
- *  - `function` is the one that Spark runs, in the JVM;
- *  - `engineImplementations` are for engines that replace Spark's operators, such as native
- *    engines, which run them with their own operator.
+ *  - a `ColumnarScalarFunction` is the one that Spark runs, in the JVM;
+ *  - the `ColumnarUDFImplementation`s are for engines that replace Spark's operators, such as
+ *    native engines, which run them with their own operator.
  *
- * A function may have no `function`. A query that calls it then fails when Spark has to run
- * the call itself.
+ * A function may have no implementation that Spark runs. A query that calls it then fails when
+ * Spark has to run the call itself.
+ *
+ * A function is created with `ColumnarUserDefinedFunction.create`, and is not changed
+ * afterwards: `withEngineImplementation`, `asNondeterministic` and `asNonNullable` return a new
+ * definition.
  *
  * A function can be applied to columns, or registered to be called from SQL. The registration
  * is a method of the classic `UDFRegistration`, which is the one of a session that runs in the
  * same JVM as the driver:
  *
  * {{{
- *   val addOne = ColumnarUserDefinedFunction("add_one", Seq(LongType), LongType, Some(new AddOne))
+ *   val addOne = ColumnarUserDefinedFunction.create("add_one", Seq(LongType), LongType, new AddOne)
  *   df.select(addOne(col("id")))
  *   spark.udf.asInstanceOf[org.apache.spark.sql.classic.UDFRegistration].registerColumnar(addOne)
  *   spark.sql("SELECT add_one(id) FROM t")
@@ -67,24 +72,48 @@ import org.apache.spark.sql.types.DataType
  *    expressions that compute its arguments, which can then fail for rows that the branch
  *    would have skipped.
  *
- * @param name the name of the function
- * @param inputTypes the types of the arguments, which the arguments of a call are cast to
- * @param dataType the type of the result
- * @param function the implementation that Spark runs, if there is one
- * @param engineImplementations the implementations for other engines
- * @param deterministic whether the function returns the same result for the same arguments
- * @param nullable whether the function can return null
  * @since 4.4.0
  */
 @Evolving
-case class ColumnarUserDefinedFunction(
-    name: String,
-    inputTypes: Seq[DataType],
-    dataType: DataType,
-    function: Option[ColumnarScalarFunction] = None,
-    engineImplementations: Seq[ColumnarUDFImplementation] = Nil,
-    deterministic: Boolean = true,
-    nullable: Boolean = true) {
+final class ColumnarUserDefinedFunction private (
+    /** The name of the function. */
+    val name: String,
+    /** The types of the arguments, which the arguments of a call are cast to. */
+    val inputTypes: Seq[DataType],
+    /** The type of the result. */
+    val dataType: DataType,
+    private[sql] val function: Option[ColumnarScalarFunction],
+    private[sql] val engineImplementations: Seq[ColumnarUDFImplementation],
+    /** Whether the function returns the same result for the same arguments. */
+    val deterministic: Boolean,
+    /** Whether the function can return null. */
+    val nullable: Boolean) extends Serializable {
+
+  /**
+   * Returns this function with one more implementation for an engine other than Spark.
+   */
+  def withEngineImplementation(
+      implementation: ColumnarUDFImplementation): ColumnarUserDefinedFunction = {
+    new ColumnarUserDefinedFunction(
+      name, inputTypes, dataType, function, engineImplementations :+ implementation,
+      deterministic, nullable)
+  }
+
+  /**
+   * Returns this function as one that may return different results for the same arguments.
+   */
+  def asNondeterministic(): ColumnarUserDefinedFunction = {
+    new ColumnarUserDefinedFunction(
+      name, inputTypes, dataType, function, engineImplementations, false, nullable)
+  }
+
+  /**
+   * Returns this function as one that never returns null.
+   */
+  def asNonNullable(): ColumnarUserDefinedFunction = {
+    new ColumnarUserDefinedFunction(
+      name, inputTypes, dataType, function, engineImplementations, deterministic, false)
+  }
 
   private[sql] def builder(children: Seq[Expression]): Expression = {
     if (children.exists(_.isInstanceOf[NamedArgumentExpression])) {
@@ -102,4 +131,73 @@ case class ColumnarUserDefinedFunction(
   /** Returns a `Column` that evaluates this function with the given arguments. */
   @scala.annotation.varargs
   def apply(cols: Column*): Column = Column(builder(cols.map(expression)))
+
+  override def toString: String = {
+    s"ColumnarUserDefinedFunction($name, ${inputTypes.map(_.sql).mkString("(", ", ", ")")}, " +
+      s"${dataType.sql})"
+  }
+}
+
+/**
+ * @since 4.4.0
+ */
+@Evolving
+object ColumnarUserDefinedFunction {
+
+  /**
+   * Creates a deterministic function that can return null, with an implementation that Spark
+   * runs.
+   *
+   * @param name the name of the function
+   * @param inputTypes the types of the arguments, which the arguments of a call are cast to
+   * @param dataType the type of the result
+   * @param function the implementation that Spark runs, in the JVM
+   */
+  def create(
+      name: String,
+      inputTypes: Seq[DataType],
+      dataType: DataType,
+      function: ColumnarScalarFunction): ColumnarUserDefinedFunction = {
+    require(function != null, "The function of a columnar user-defined function cannot be null.")
+    new ColumnarUserDefinedFunction(name, inputTypes, dataType, Some(function), Nil, true, true)
+  }
+
+  /**
+   * Creates a deterministic function that can return null, with an implementation that Spark
+   * runs. This is the variant for Java.
+   */
+  def create(
+      name: String,
+      inputTypes: Array[DataType],
+      dataType: DataType,
+      function: ColumnarScalarFunction): ColumnarUserDefinedFunction = {
+    create(name, inputTypes.toImmutableArraySeq, dataType, function)
+  }
+
+  /**
+   * Creates a deterministic function that can return null, with no implementation that Spark
+   * runs. Its implementations for other engines are added with `withEngineImplementation`, and
+   * a query that calls it fails when Spark has to run the call itself.
+   *
+   * @param name the name of the function
+   * @param inputTypes the types of the arguments, which the arguments of a call are cast to
+   * @param dataType the type of the result
+   */
+  def create(
+      name: String,
+      inputTypes: Seq[DataType],
+      dataType: DataType): ColumnarUserDefinedFunction = {
+    new ColumnarUserDefinedFunction(name, inputTypes, dataType, None, Nil, true, true)
+  }
+
+  /**
+   * Creates a deterministic function that can return null, with no implementation that Spark
+   * runs. This is the variant for Java.
+   */
+  def create(
+      name: String,
+      inputTypes: Array[DataType],
+      dataType: DataType): ColumnarUserDefinedFunction = {
+    create(name, inputTypes.toImmutableArraySeq, dataType)
+  }
 }

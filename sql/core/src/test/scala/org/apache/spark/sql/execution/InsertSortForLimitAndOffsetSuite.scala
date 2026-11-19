@@ -32,7 +32,7 @@ class InsertSortForLimitAndOffsetSuite extends SharedSparkSession
   import testImplicits._
 
   private val columnarTestUDF =
-    ColumnarUserDefinedFunction("add_one", Seq(LongType), LongType, Some(new AddOneFunction))
+    ColumnarUserDefinedFunction.create("add_one", Seq(LongType), LongType, new AddOneFunction)
 
   private def assertHasTopKSort(plan: SparkPlan): Unit = {
     assert(find(plan) {

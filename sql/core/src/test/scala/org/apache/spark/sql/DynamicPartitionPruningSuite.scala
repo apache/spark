@@ -2564,8 +2564,8 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
   }
 
   test("no standalone DPP subquery for a filtering side with a columnar UDF") {
-    val addOne = ColumnarUserDefinedFunction(
-      "dpp_add_one", Seq(LongType), LongType, Some(new AddOneFunction))
+    val addOne = ColumnarUserDefinedFunction.create(
+      "dpp_add_one", Seq(LongType), LongType, new AddOneFunction)
     withUserDefinedFunction("dpp_add_one" -> true) {
       spark.udf.registerColumnar(addOne)
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.columnar
 
+import java.util.{Collections, HashMap => JHashMap, Map => JMap}
+
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.annotation.Evolving
 
 /**
@@ -27,11 +31,51 @@ import org.apache.spark.annotation.Evolving
  * Whoever provides several implementations of a function makes sure that they return the same
  * results.
  *
- * @param kind the kind of the implementation, which names the engine or the format that it is
- *             for.
- * @param properties what the engine needs to find and to load the implementation, such as the
- *                   path of a library and the name of the function in it.
+ * An implementation is created with `ColumnarUDFImplementation.create`.
+ *
  * @since 4.4.0
  */
 @Evolving
-case class ColumnarUDFImplementation(kind: String, properties: Map[String, String])
+final class ColumnarUDFImplementation private (
+    /** The kind of the implementation, which names the engine or the format that it is for. */
+    val kind: String,
+    /**
+     * What the engine needs to find and to load the implementation, such as the path of a library
+     * and the name of the function in it. The map cannot be modified.
+     */
+    val properties: JMap[String, String]) extends Serializable {
+
+  override def equals(other: Any): Boolean = other match {
+    case that: ColumnarUDFImplementation => kind == that.kind && properties == that.properties
+    case _ => false
+  }
+
+  override def hashCode(): Int = 31 * kind.hashCode + properties.hashCode
+
+  override def toString: String = s"ColumnarUDFImplementation($kind, $properties)"
+}
+
+/**
+ * @since 4.4.0
+ */
+@Evolving
+object ColumnarUDFImplementation {
+
+  /**
+   * Creates an implementation of the given kind.
+   *
+   * @param kind the kind of the implementation, which names the engine or the format that it is
+   *             for.
+   * @param properties what the engine needs to find and to load the implementation, such as the
+   *                   path of a library and the name of the function in it.
+   */
+  def create(kind: String, properties: JMap[String, String]): ColumnarUDFImplementation = {
+    new ColumnarUDFImplementation(
+      kind, Collections.unmodifiableMap(new JHashMap[String, String](properties)))
+  }
+
+  /** Creates an implementation of the given kind, from a Scala map. */
+  def create(kind: String, properties: Map[String, String]): ColumnarUDFImplementation = {
+    create(kind, properties.asJava)
+  }
+}

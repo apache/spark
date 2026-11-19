@@ -175,7 +175,7 @@ class BenchFnv extends ColumnarScalarFunction {
 object ColumnarUDFBenchmark extends SqlBasedBenchmark {
 
   private def columnar(name: String, in: DataType, out: DataType, f: ColumnarScalarFunction) =
-    ColumnarUserDefinedFunction(name, Seq(in), out, Some(f))
+    ColumnarUserDefinedFunction.create(name, Seq(in), out, f)
 
   private val addOneColumnar = columnar("add_one", LongType, LongType, new BenchAddOne)
   private val mixColumnar = columnar("mix", LongType, LongType, new BenchMix)
