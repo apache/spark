@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -926,22 +925,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case e @ ArrowEvalPython(
-          udfs, requiredChildOutput, resultAttrs, child,
-          PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
-        InProcessPythonUDFBuilder.checkConfiguration(conf)
-        // The in-process evaluator passes through the whole child, so drop what is not required.
-        val exec = InProcessArrowEvalPythonExec(udfs, resultAttrs, planLater(child))
-        if (requiredChildOutput == child.output) {
-          exec :: Nil
-        } else {
-          ProjectExec(e.output, exec) :: Nil
-        }
-      case ArrowEvalPython(udfs, requiredChildOutput, resultAttrs, child, evalType) =>
-        ArrowEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child), evalType)(
-          conf.arrowPySparkUDFColumnarInputEnabled) :: Nil
-      case BatchEvalPython(udfs, requiredChildOutput, resultAttrs, child) =>
-        BatchEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
+      case ArrowEvalPython(
+          udfs, requiredChildOutput, resultAttrs, child, evalType, evalCondition) =>
+        ArrowEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child), evalType,
+          evalCondition)(conf.arrowPySparkUDFColumnarInputEnabled) :: Nil
+      case BatchEvalPython(udfs, requiredChildOutput, resultAttrs, child, evalCondition) =>
+        BatchEvalPythonExec(udfs, requiredChildOutput, resultAttrs, planLater(child),
+          evalCondition) :: Nil
       case BatchEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child) =>
         BatchEvalPythonUDTFExec(udtf, requiredChildOutput, resultAttrs, planLater(child)) :: Nil
       case ArrowEvalPythonUDTF(udtf, requiredChildOutput, resultAttrs, child, evalType) =>
@@ -1048,9 +1038,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.MapInArrow(func, output, child, isBarrier, profile) =>
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
-      case logical.ExecuteExternalUDF(udf, resultAttr, child) =>
+      case logical.ExecuteExternalUDF(udf, resultAttr, child, evalCondition) =>
         execution.externalUDF.ExecuteExternalUDFExec(
-          udf, resultAttr, planLater(child)) :: Nil
+          udf, resultAttr, planLater(child), evalCondition) :: Nil
       case logical.MapPartitionsExternalUDF(
           functionExpr, isBarrier, profile, child) =>
         execution.externalUDF.MapPartitionsExternalUDFExec(
